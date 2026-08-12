@@ -1,10 +1,10 @@
 # Implementation Status
 
-- **Current phase:** Phase 0 — architecture and documentation foundation
-- **Status:** Complete
-- **Last completed checkpoint:** Phase 0 documentation and repository instructions completed and reviewed
-- **Currently working on:** Nothing; Phase 0 is complete and approved
-- **Last successful verification/test:** Documentation checks, required-content checks, secret-pattern scan, and Git diff review passed; n8n MCP inspection remained read-only
-- **Next action:** Define the scope of the first implementation phase
+- **Current phase:** Phase 1 — local persistent storage and n8n filesystem access
+- **Status:** COMPLETE
+- **Last completed checkpoint:** Phase 1 storage boundary, live bind mount, permissions, documentation, and cleanup verified
+- **Currently working on:** Nothing; Phase 1 is complete
+- **Last successful verification/test:** Compose validation passed; both services are running; persistent n8n data is present; container-user filesystem smoke test passed and was cleaned up; symlink and secret checks passed
+- **Next action:** Review and commit the Phase 1 documentation changes when approved; design workflows only in a later phase
 - **Blockers:** None
-- **Relevant files/workflows:** `AGENTS.md`, `docs/architecture/`, `docs/workflows/`, `docs/decisions/`, `docs/implementation/STATUS.md`, `docs/infrastructure/`; n8n workflow `MCP Test` (inspection only)
+- **Relevant files/workflows:** `/data/odyssey`, `/home/ragdehl/docker/n8n/compose.yaml`, `docs/architecture/storage.md`, `docs/implementation/STATUS.md`; no Odyssey workflow is in scope
