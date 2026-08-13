@@ -1,10 +1,10 @@
 # Implementation Status
 
-- **Current phase:** Phase 1.5 — simplify the knowledge model before implementation
+- **Current phase:** Phase 2 — note schema and controlled note types
 - **Status:** COMPLETE
-- **Last completed checkpoint:** Phase 1.5 lightweight typed-note model, untyped-by-default wikilinks, four conceptual V1 primitives, and incremental search architecture documented
-- **Currently working on:** Nothing; Phase 1.5 is complete
-- **Last successful verification/test:** Documentation consistency searches, changed-file scope review, `git diff --check`, secret-pattern scan, full diff review, storage-boundary check, and workflow/runtime/Docker non-modification check passed; no repository documentation check runner exists
-- **Next action:** Review and commit the Phase 1.5 documentation changes when approved; do not begin Phase 2 until explicitly requested
+- **Last completed checkpoint:** Revised canonical schema version 1 with ten controlled note types, lightweight type-specific properties, controlled subtype policy, single-source-of-truth documentation, deterministic validator, and repeatable standard-library tests implemented
+- **Currently working on:** Nothing; Phase 2 review feedback is addressed
+- **Last successful verification/test:** Canonical validator and 27 unit tests passed; JSON validity, functional docstring coverage, schema/property structure and minimum architectural invariants, `git diff --check`, secret-pattern scan, complete diff and changed-file scope, and workflow/runtime/Docker non-modification checks passed
+- **Next action:** Continue review of Phase 2 through Pull Request #2; do not begin Phase 3 until explicitly requested
 - **Blockers:** None
-- **Relevant files/workflows:** `docs/architecture/overview.md`, `docs/architecture/ontology.md`, `docs/implementation/STATUS.md`; no workflow, runtime data, Docker, or storage change is in scope
+- **Relevant files/workflows:** `config/note-schema.json`, schema validation/tests, `docs/architecture/ontology.md`, `docs/architecture/note-schema.md`, `AGENTS.md`, and this status file; no n8n workflow, runtime data, Docker, or storage change is in scope

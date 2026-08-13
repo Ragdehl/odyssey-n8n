@@ -41,6 +41,7 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Use custom code only when it provides a clear advantage over native n8n functionality.
 - Avoid modifying unrelated files or workflows.
 - Prefer small, testable changes.
+- All functions and methods must have functional docstrings that describe their domain responsibility, parameters, returned values when applicable, and relevant errors. Explain what the function does rather than narrating implementation details.
 - Keep `docs/implementation/STATUS.md` current so interrupted work can be resumed safely.
 - Verify every workflow before declaring it complete, and propose a Git commit only after verification succeeds.
 - Never silently change the ontology schema; schema changes require an explicit proposal and normally human approval.

@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "metadata_fields": [
+    {
+      "id": "id",
+      "value_type": "string",
+      "required": true,
+      "description": "Stable identifier for the logical note or entity; independent of the filename and unchanged when the note is renamed.",
+      "constraints": {"non_empty": true, "stable": true, "filename_independent": true}
+    },
+    {
+      "id": "type",
+      "value_type": "string",
+      "required": true,
+      "description": "Canonical note type selected from the type registry.",
+      "constraints": {"registry": "types", "controlled": true}
+    },
+    {
+      "id": "subtype",
+      "value_type": "string",
+      "required": false,
+      "description": "Optional controlled subtype registered under the selected parent type.",
+      "constraints": {"registry": "types[].subtypes", "parent_field": "type", "controlled": true, "allow_unregistered": false}
+    },
+    {
+      "id": "created_at",
+      "value_type": "string",
+      "required": true,
+      "description": "Timestamp when Odyssey created the note.",
+      "constraints": {"format": "date-time"}
+    },
+    {
+      "id": "updated_at",
+      "value_type": "string",
+      "required": true,
+      "description": "Timestamp of the latest Odyssey modification to the note.",
+      "constraints": {"format": "date-time"}
+    },
+    {
+      "id": "created_by",
+      "value_type": "string",
+      "required": true,
+      "description": "Application or process that originally created the note.",
+      "constraints": {"non_empty": true}
+    },
+    {
+      "id": "updated_by",
+      "value_type": "string",
+      "required": true,
+      "description": "Application or process responsible for the latest note modification.",
+      "constraints": {"non_empty": true}
+    },
+    {
+      "id": "revision",
+      "value_type": "integer",
+      "required": true,
+      "description": "Positive integer incremented whenever Odyssey updates the note.",
+      "constraints": {"minimum": 1}
+    },
+    {
+      "id": "schema_version",
+      "value_type": "integer",
+      "required": true,
+      "description": "Version of the note metadata and schema format.",
+      "constraints": {"minimum": 1}
+    },
+    {
+      "id": "aliases",
+      "value_type": "array[string]",
+      "required": false,
+      "description": "Alternative names useful for entity resolution; aliases do not create separate entities.",
+      "constraints": {"unique_items": true}
+    }
+  ],
+  "types": [
+    {
+      "id": "concept",
+      "name": "Concept",
+      "description": "Reusable idea, subject, fact cluster, or knowledge item that does not fit a more specific canonical type.",
+      "examples": ["Entity resolution", "Photosynthesis"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "project",
+      "name": "Project",
+      "description": "Goal-oriented initiative or area of work that can accumulate knowledge and tasks.",
+      "examples": ["Odyssey", "Kitchen renovation"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "task",
+      "name": "Task",
+      "description": "Action that can be managed by a task workflow without defining task-specific lifecycle fields in the canonical note schema.",
+      "examples": ["Renew passport", "Review Odyssey schema"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "description": "Physical or virtual establishment where purchases can occur.",
+      "examples": ["Carrefour Balma", "Lidl"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "product",
+      "name": "Product",
+      "description": "Identifiable product that can recur across purchases or other knowledge contexts.",
+      "examples": ["Leche Lactel", "Arduino Uno"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "purchase",
+      "name": "Purchase",
+      "description": "Human-readable record of a purchase occurrence that can link naturally to stores and products.",
+      "examples": ["Compra Carrefour 2026-08-13", "Online hardware order"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "recipe",
+      "name": "Recipe",
+      "description": "Reusable cooking recipe that can link naturally to product or ingredient notes.",
+      "examples": ["Tortilla española", "Tomato soup"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "document",
+      "name": "Document",
+      "description": "Document or document-like artifact worth representing as an independent knowledge object.",
+      "examples": ["Apartment lease", "Project requirements brief"],
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "person",
+      "name": "Person",
+      "description": "Person with a reusable identity that can be referenced from personal knowledge and domain notes.",
+      "examples": ["Carlos García", "Ada Lovelace"],
+      "subtypes": [],
+      "properties": [
+        {
+          "id": "birth_date",
+          "value_type": "date",
+          "required": false,
+          "description": "Known date of birth of the person."
+        },
+        {
+          "id": "relationship_to_user",
+          "value_type": "string",
+          "required": false,
+          "description": "How the person is related to the user."
+        }
+      ]
+    },
+    {
+      "id": "journal_entry",
+      "name": "Journal Entry",
+      "description": "Diary or journal entry describing a day, experience, reflection, or personal occurrence.",
+      "examples": ["13 August 2026", "First day in Madrid"],
+      "subtypes": [],
+      "properties": [
+        {
+          "id": "entry_date",
+          "value_type": "date",
+          "required": true,
+          "description": "Date the journal entry refers to."
+        }
+      ]
+    }
+  ]
+}
