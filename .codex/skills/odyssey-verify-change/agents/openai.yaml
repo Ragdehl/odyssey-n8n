@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Verify Change"
+  short_description: "Run the scope-aware Odyssey quality gate"
+  default_prompt: "Use $odyssey-verify-change to verify the current Odyssey changes."

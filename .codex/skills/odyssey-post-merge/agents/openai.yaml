@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Post-Merge"
+  short_description: "Safely synchronize Odyssey after a merged PR"
+  default_prompt: "Use $odyssey-post-merge to synchronize Odyssey after my merged pull request."

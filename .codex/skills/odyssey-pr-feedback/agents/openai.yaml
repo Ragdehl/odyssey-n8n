@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey PR Feedback"
+  short_description: "Process Odyssey pull request review feedback"
+  default_prompt: "Use $odyssey-pr-feedback to inspect and address feedback on the current Odyssey pull request."
