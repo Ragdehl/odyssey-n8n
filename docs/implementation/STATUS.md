@@ -1,10 +1,10 @@
 # Implementation Status
 
-- **Current phase:** Phase 1 — local persistent storage and n8n filesystem access
+- **Current phase:** Phase 1.5 — simplify the knowledge model before implementation
 - **Status:** COMPLETE
-- **Last completed checkpoint:** Phase 1 storage boundary, live bind mount, permissions, documentation, and cleanup verified
-- **Currently working on:** Nothing; Phase 1 is complete
-- **Last successful verification/test:** Compose validation passed; both services are running; persistent n8n data is present; container-user filesystem smoke test passed and was cleaned up; symlink and secret checks passed
-- **Next action:** Review and commit the Phase 1 documentation changes when approved; design workflows only in a later phase
+- **Last completed checkpoint:** Phase 1.5 lightweight typed-note model, untyped-by-default wikilinks, four conceptual V1 primitives, and incremental search architecture documented
+- **Currently working on:** Nothing; Phase 1.5 is complete
+- **Last successful verification/test:** Documentation consistency searches, changed-file scope review, `git diff --check`, secret-pattern scan, full diff review, storage-boundary check, and workflow/runtime/Docker non-modification check passed; no repository documentation check runner exists
+- **Next action:** Review and commit the Phase 1.5 documentation changes when approved; do not begin Phase 2 until explicitly requested
 - **Blockers:** None
-- **Relevant files/workflows:** `/data/odyssey`, `/home/ragdehl/docker/n8n/compose.yaml`, `docs/architecture/storage.md`, `docs/implementation/STATUS.md`; no Odyssey workflow is in scope
+- **Relevant files/workflows:** `docs/architecture/overview.md`, `docs/architecture/ontology.md`, `docs/implementation/STATUS.md`; no workflow, runtime data, Docker, or storage change is in scope
