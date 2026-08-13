@@ -22,10 +22,12 @@ Raspberry Pi host                n8n container
 The directories have distinct responsibilities:
 
 - `vault/` holds the authoritative Markdown knowledge that Obsidian will eventually use.
-- `config/` is reserved for ontology and schema configuration. Phase 1 does not create that schema.
+- `config/` is reserved for runtime or deployment configuration if a demonstrated need emerges. The canonical application schema is version-controlled in the Git repository at `config/note-schema.json` and is not copied here in Phase 2.
 - `runtime/` holds derived indexes, caches, and other disposable runtime state. Everything here must be rebuildable from the authoritative files and configuration.
 
 Workflows use `/odyssey` and never the Raspberry Pi host path. This storage boundary keeps ontology logic independent of deployment-specific paths and allows the physical storage implementation to change without rewriting ontology workflows.
+
+The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema will be decided when a workflow needs it; Phase 2 adds no deployment step or Docker mount.
 
 `~/odyssey-data` is only a convenience symlink to `/data/odyssey` for interactive host use. It is not a second data location and workflows must not depend on it.
 

@@ -86,28 +86,13 @@ A future rebuildable index may infer machine-oriented relationships from source 
 
 ## Frontmatter philosophy
 
-Initial frontmatter should primarily contain generic technical metadata useful across domains. Conceptual candidates include `id`, `type`, `subtype`, `created_at`, `updated_at`, `created_by`, `updated_by`, `revision`, and `schema_version`. Optional universal metadata such as aliases or provenance should be added only when justified.
-
-The exact schema belongs to Phase 2. Phase 1.5 neither creates it nor selects speculative domain properties.
+Initial frontmatter contains the generic technical metadata defined by the canonical schema. The required fields are `id`, `type`, `created_at`, `updated_at`, `created_by`, `updated_by`, `revision`, and `schema_version`; `subtype` and `aliases` are optional. See [Canonical Note Schema](note-schema.md) for the registry and field definitions. Speculative universal or domain-specific properties are not part of the canonical schema.
 
 ## Schema and instances
 
 Normal note creation changes instance data. Adding a canonical note type changes the ontology schema and has wider consequences. These operations must not be treated as equivalent.
 
-Note types will be descriptive schema objects rather than a bare string list. Conceptually, a type definition may have an identifier, human-readable name, description, and examples. The exact fields and final type registry are deliberately deferred to Phase 2.
-
-Candidate concepts such as `concept`, `project`, `store`, `product`, `purchase`, `task`, and `recipe` illustrate why controlled types are useful; they do not constitute the registry. A future descriptive type object might conceptually resemble:
-
-```yaml
-- id: store
-  name: Store
-  description: Physical or virtual establishment represented as an Odyssey note.
-  examples:
-    - Carrefour Balma
-    - Lidl
-```
-
-This phase does not define a final type catalog, validation language, or Markdown serialization format. V1 does not require a global typed-relation schema.
+Canonical note types are descriptive schema objects rather than a bare string list. Each definition has an identifier, human-readable name, description, illustrative examples, and a controlled subtype registry. The initial registry is defined in `config/note-schema.json` and documented in [Canonical Note Schema](note-schema.md). V1 does not have a global typed-relation schema.
 
 ## Schema evolution
 
@@ -126,6 +111,6 @@ human review
 approve_type
 ```
 
-Type proposals should explain the observed need, alternatives considered, compatibility impact, and migration implications. Human-in-the-loop approval is the normal path because a type change can affect domain workflows, existing notes, and future interpretation. These management operations are conceptual and are not implemented in this phase.
+Type proposals should explain the observed need, alternatives considered, compatibility impact, and migration implications. Human-in-the-loop approval is the normal path because a type change can affect domain workflows, existing notes, and future interpretation. These management operations are conceptual and are not implemented in Phase 2.
 
 Significant accepted schema decisions should be documented. Routine creation or enrichment of entities does not require an architecture decision record.
