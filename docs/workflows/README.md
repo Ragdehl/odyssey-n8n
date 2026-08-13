@@ -16,4 +16,6 @@ Each workflow document should contain:
 
 Documentation should distinguish a planned contract from an implemented and verified one. Record the n8n workflow name and stable identifier when one exists, but do not include credentials, tokens, sensitive payloads, or exported secrets.
 
+Implementation changes are normally reviewed through GitHub Pull Requests before they are merged into `main`.
+
 Reusable subworkflows should expose a narrow contract and hide implementation details from their callers. Update the workflow document and `docs/implementation/STATUS.md` whenever implementation status or a public contract changes.
