@@ -180,6 +180,57 @@ def _validate_metadata_fields(metadata_fields: Any) -> None:
         _require_non_empty_string(field["description"], f"metadata field {field_id!r} description")
         definitions[field_id] = field
 
+    _validate_architectural_metadata_invariants(definitions)
+
+
+def _validate_architectural_metadata_invariants(
+    definitions: dict[str, dict[str, Any]],
+) -> None:
+    """Protect the minimum metadata invariants required by Odyssey's note model.
+
+    Args:
+        definitions: Validated metadata definitions indexed by their stable IDs.
+
+    Returns:
+        None.
+
+    Raises:
+        SchemaValidationError: If identity, type control, or subtype control is missing.
+    """
+    identity = definitions.get("id")
+    if identity is None:
+        raise SchemaValidationError("Odyssey metadata must define the id field")
+    if identity["required"] is not True:
+        raise SchemaValidationError("Odyssey metadata field 'id' must be required")
+
+    note_type = definitions.get("type")
+    if note_type is None:
+        raise SchemaValidationError("Odyssey metadata must define the type field")
+    if note_type["required"] is not True:
+        raise SchemaValidationError("Odyssey metadata field 'type' must be required")
+    type_constraints = note_type.get("constraints")
+    if not isinstance(type_constraints, dict) or not (
+        type_constraints.get("registry") == "types"
+        and type_constraints.get("controlled") is True
+    ):
+        raise SchemaValidationError("type must be controlled by the canonical types registry")
+
+    subtype = definitions.get("subtype")
+    if subtype is None:
+        raise SchemaValidationError("Odyssey metadata must define the optional subtype field")
+    if subtype["required"] is not False:
+        raise SchemaValidationError("Odyssey metadata field 'subtype' must be optional")
+    subtype_constraints = subtype.get("constraints")
+    if not isinstance(subtype_constraints, dict) or not (
+        subtype_constraints.get("registry") == "types[].subtypes"
+        and subtype_constraints.get("parent_field") == "type"
+        and subtype_constraints.get("controlled") is True
+        and subtype_constraints.get("allow_unregistered") is False
+    ):
+        raise SchemaValidationError(
+            "subtype must be controlled by its parent type and disallow unregistered values"
+        )
+
 
 def validate_schema(schema: Any) -> None:
     """Validate that data follows the canonical Odyssey schema-definition contract.

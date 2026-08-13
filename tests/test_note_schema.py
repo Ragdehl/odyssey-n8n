@@ -164,6 +164,79 @@ class NoteSchemaValidationTests(unittest.TestCase):
         schema["metadata_fields"][0]["required"] = 1
         self.assert_invalid(schema, "required must be boolean")
 
+    def test_missing_identity_metadata_fails(self) -> None:
+        """Require the stable identity field that makes every Odyssey note addressable."""
+        schema = copy.deepcopy(self.schema)
+        schema["metadata_fields"] = [
+            field for field in schema["metadata_fields"] if field["id"] != "id"
+        ]
+        self.assert_invalid(schema, "must define the id field")
+
+    def test_optional_identity_metadata_fails(self) -> None:
+        """Require stable identity on every Odyssey note."""
+        schema = copy.deepcopy(self.schema)
+        identity = next(field for field in schema["metadata_fields"] if field["id"] == "id")
+        identity["required"] = False
+        self.assert_invalid(schema, "field 'id' must be required")
+
+    def test_missing_type_metadata_fails(self) -> None:
+        """Require every Odyssey note to participate in the controlled type model."""
+        schema = copy.deepcopy(self.schema)
+        schema["metadata_fields"] = [
+            field for field in schema["metadata_fields"] if field["id"] != "type"
+        ]
+        self.assert_invalid(schema, "must define the type field")
+
+    def test_optional_type_metadata_fails(self) -> None:
+        """Require a controlled type selection on every Odyssey note."""
+        schema = copy.deepcopy(self.schema)
+        note_type = next(field for field in schema["metadata_fields"] if field["id"] == "type")
+        note_type["required"] = False
+        self.assert_invalid(schema, "field 'type' must be required")
+
+    def test_uncontrolled_type_metadata_fails(self) -> None:
+        """Require note types to come from the canonical registry."""
+        schema = copy.deepcopy(self.schema)
+        note_type = next(field for field in schema["metadata_fields"] if field["id"] == "type")
+        note_type["constraints"]["controlled"] = False
+        self.assert_invalid(schema, "type must be controlled by the canonical types registry")
+
+    def test_required_subtype_metadata_fails(self) -> None:
+        """Keep controlled subtype selection optional for Odyssey notes."""
+        schema = copy.deepcopy(self.schema)
+        subtype = next(field for field in schema["metadata_fields"] if field["id"] == "subtype")
+        subtype["required"] = True
+        self.assert_invalid(schema, "field 'subtype' must be optional")
+
+    def test_missing_subtype_metadata_fails(self) -> None:
+        """Preserve Odyssey's optional controlled-subtype capability in the metadata model."""
+        schema = copy.deepcopy(self.schema)
+        schema["metadata_fields"] = [
+            field for field in schema["metadata_fields"] if field["id"] != "subtype"
+        ]
+        self.assert_invalid(schema, "must define the optional subtype field")
+
+    def test_uncontrolled_subtype_metadata_fails(self) -> None:
+        """Require subtype values to remain controlled by a registry."""
+        schema = copy.deepcopy(self.schema)
+        subtype = next(field for field in schema["metadata_fields"] if field["id"] == "subtype")
+        subtype["constraints"]["controlled"] = False
+        self.assert_invalid(schema, "subtype must be controlled by its parent type")
+
+    def test_subtype_with_wrong_parent_fails(self) -> None:
+        """Require subtype values to be selected from their note type's own registry."""
+        schema = copy.deepcopy(self.schema)
+        subtype = next(field for field in schema["metadata_fields"] if field["id"] == "subtype")
+        subtype["constraints"]["parent_field"] = "id"
+        self.assert_invalid(schema, "subtype must be controlled by its parent type")
+
+    def test_subtype_allowing_unregistered_values_fails(self) -> None:
+        """Reject subtype policies that permit values outside the parent registry."""
+        schema = copy.deepcopy(self.schema)
+        subtype = next(field for field in schema["metadata_fields"] if field["id"] == "subtype")
+        subtype["constraints"]["allow_unregistered"] = True
+        self.assert_invalid(schema, "disallow unregistered values")
+
 
 if __name__ == "__main__":
     unittest.main()
