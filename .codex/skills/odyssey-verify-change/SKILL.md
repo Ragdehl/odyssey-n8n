@@ -17,11 +17,15 @@ Determine the changed scope first, then run the repository-defined checks that p
 3. Run `git diff --check` against the intended change.
 4. Run the repository's established secret-pattern scan. If no scan command is documented, use a high-confidence credential/private-key pattern scan that excludes `.git`; state the fallback used.
 5. Review the changed-file list and full diff for correctness, unrelated edits, generated artifacts, credentials, and unintended architecture changes.
-6. Check protected out-of-scope areas explicitly. Confirm no task-created modifications under `/data/odyssey`, Docker configuration, or n8n workflows unless the request placed that area in scope. Never print secret values.
+6. Check protected out-of-scope areas explicitly, especially `/data/odyssey`, Docker configuration, and n8n workflows unless the request placed an area in scope:
+   - when a reliable before/after baseline exists, compare against it and report whether the area is verified unchanged;
+   - otherwise inspect the operations performed during the current task and report whether any operation targeted the area;
+   - when only task-action evidence exists, state that limitation and do not claim the external area is unchanged, because changes outside the observed task cannot be excluded.
+   Never print secret values.
 7. Confirm behavior or architecture documentation changed when needed. When the work represents a phase checkpoint, confirm `docs/implementation/STATUS.md` accurately records the verified state; do not mark completion before checks pass.
 8. Confirm the final Git working-tree state and distinguish intentional uncommitted changes from unexpected files.
 9. Return `PASS` only when every applicable required check ran and passed. Otherwise return `FAIL`, name each failure or skipped required check, and do not claim readiness.
 
 ## Report
 
-Report PASS or FAIL, scope examined, commands/checks run with results, changed and protected-area findings, documentation/status accuracy, working-tree state, and blockers.
+Report PASS or FAIL, scope examined, commands/checks run with results, changed and protected-area findings with their evidence level, documentation/status accuracy, working-tree state, and blockers. Distinguish `verified unchanged`, `no task operation targeted the area`, and `unable to prove external state did not change`.
