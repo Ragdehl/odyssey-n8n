@@ -46,3 +46,27 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Never silently change the ontology schema; schema changes require an explicit proposal and normally human approval.
 - Do not expose, print, commit, or store secrets or credentials in project files.
 - Before making potentially destructive changes, explain what will be changed and why.
+
+## GitHub review workflow
+
+Before continuing implementation on a branch that has an open Pull Request, inspect the Pull Request feedback first. Read:
+
+- general Pull Request comments;
+- submitted reviews;
+- inline review comments associated with changed lines;
+- unresolved review threads where accessible.
+
+Treat those comments as implementation feedback.
+
+Apply straightforward requested changes autonomously when they remain within the approved architecture.
+
+If a review comment conflicts with another comment, the approved architecture, or a material requirement, ask the user rather than guessing.
+
+After addressing review feedback:
+
+- run the relevant tests;
+- update documentation when needed;
+- commit the corrections;
+- push them to the same feature branch so the existing Pull Request is updated.
+
+Do not require the user to copy GitHub review comments back into the terminal.
