@@ -47,9 +47,9 @@ This Git repository contains code, application configuration and schema, tests, 
 
 ## Current status
 
-The foundational architecture, local storage boundary, simplified ontology, and canonical note schema are complete. Reusable Codex development skills are also in place. The next implementation phase is storage primitives, beginning with `storage_read`; it has not started.
+The foundational architecture and local storage boundary are complete. The simplified ontology and canonical note schema are established, and reusable Codex development workflows are in place.
 
-See [Implementation Status](docs/implementation/STATUS.md) for the current source of truth.
+See [Implementation Status](docs/implementation/STATUS.md) for the current phase, verification state, and next action.
 
 ## Repository guide
 
