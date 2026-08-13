@@ -86,13 +86,15 @@ A future rebuildable index may infer machine-oriented relationships from source 
 
 ## Frontmatter philosophy
 
-Initial frontmatter contains the generic technical metadata defined by the canonical schema. The required fields are `id`, `type`, `created_at`, `updated_at`, `created_by`, `updated_by`, `revision`, and `schema_version`; `subtype` and `aliases` are optional. See [Canonical Note Schema](note-schema.md) for the registry and field definitions. Speculative universal or domain-specific properties are not part of the canonical schema.
+Initial frontmatter combines universal technical metadata with the minimum type-specific properties justified by deterministic processing needs. The exact canonical definitions live only in [`config/note-schema.json`](../../config/note-schema.json); [Canonical Note Schema](note-schema.md) explains how to interpret them.
+
+A property being possible does not mean Odyssey should add it now. Markdown content and wikilinks remain the preferred human-first representation when a fact does not need deterministic structure.
 
 ## Schema and instances
 
 Normal note creation changes instance data. Adding a canonical note type changes the ontology schema and has wider consequences. These operations must not be treated as equivalent.
 
-Canonical note types are descriptive schema objects rather than a bare string list. Each definition has an identifier, human-readable name, description, illustrative examples, and a controlled subtype registry. The initial registry is defined in `config/note-schema.json` and documented in [Canonical Note Schema](note-schema.md). V1 does not have a global typed-relation schema.
+Canonical note types are descriptive schema objects rather than a bare string list. Each definition describes its identity and purpose, illustrative examples, controlled subtypes, and any justified type-specific properties. The registry is defined in [`config/note-schema.json`](../../config/note-schema.json). V1 does not have a global typed-relation schema.
 
 ## Schema evolution
 

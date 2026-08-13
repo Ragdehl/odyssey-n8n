@@ -78,56 +78,100 @@
       "name": "Concept",
       "description": "Reusable idea, subject, fact cluster, or knowledge item that does not fit a more specific canonical type.",
       "examples": ["Entity resolution", "Photosynthesis"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "project",
       "name": "Project",
       "description": "Goal-oriented initiative or area of work that can accumulate knowledge and tasks.",
       "examples": ["Odyssey", "Kitchen renovation"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "task",
       "name": "Task",
       "description": "Action that can be managed by a task workflow without defining task-specific lifecycle fields in the canonical note schema.",
       "examples": ["Renew passport", "Review Odyssey schema"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "store",
       "name": "Store",
       "description": "Physical or virtual establishment where purchases can occur.",
       "examples": ["Carrefour Balma", "Lidl"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "product",
       "name": "Product",
       "description": "Identifiable product that can recur across purchases or other knowledge contexts.",
       "examples": ["Leche Lactel", "Arduino Uno"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "purchase",
       "name": "Purchase",
       "description": "Human-readable record of a purchase occurrence that can link naturally to stores and products.",
       "examples": ["Compra Carrefour 2026-08-13", "Online hardware order"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "recipe",
       "name": "Recipe",
       "description": "Reusable cooking recipe that can link naturally to product or ingredient notes.",
       "examples": ["Tortilla española", "Tomato soup"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
     },
     {
       "id": "document",
       "name": "Document",
       "description": "Document or document-like artifact worth representing as an independent knowledge object.",
       "examples": ["Apartment lease", "Project requirements brief"],
-      "subtypes": []
+      "subtypes": [],
+      "properties": []
+    },
+    {
+      "id": "person",
+      "name": "Person",
+      "description": "Person with a reusable identity that can be referenced from personal knowledge and domain notes.",
+      "examples": ["Carlos García", "Ada Lovelace"],
+      "subtypes": [],
+      "properties": [
+        {
+          "id": "birth_date",
+          "value_type": "date",
+          "required": false,
+          "description": "Known date of birth of the person."
+        },
+        {
+          "id": "relationship_to_user",
+          "value_type": "string",
+          "required": false,
+          "description": "How the person is related to the user."
+        }
+      ]
+    },
+    {
+      "id": "journal_entry",
+      "name": "Journal Entry",
+      "description": "Diary or journal entry describing a day, experience, reflection, or personal occurrence.",
+      "examples": ["13 August 2026", "First day in Madrid"],
+      "subtypes": [],
+      "properties": [
+        {
+          "id": "entry_date",
+          "value_type": "date",
+          "required": true,
+          "description": "Date the journal entry refers to."
+        }
+      ]
     }
   ]
 }

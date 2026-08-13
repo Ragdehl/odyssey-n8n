@@ -16,31 +16,23 @@ The source-of-truth boundaries are:
 
 Phase 2 does not copy the schema to `/data/odyssey/config`, add a Docker mount, or decide how n8n obtains it. That runtime boundary will be chosen when a workflow demonstrates the need.
 
-## Generic metadata
+## Universal metadata and type-specific properties
 
-Every note has these required generic fields:
+Universal metadata supplies the technical fields shared by every note, such as stable identity, controlled type, revision information, and provenance. Type-specific properties hold deterministic domain information that belongs only to one note type. The exact field IDs, requirements, descriptions, and constraints for both are defined only in [`config/note-schema.json`](../../config/note-schema.json).
 
-- `id`: stable logical identity, independent of the filename and preserved across renames.
-- `type`: controlled ID from the canonical type registry.
-- `created_at`: note creation timestamp.
-- `updated_at`: timestamp of the latest Odyssey modification.
-- `created_by`: application or process that originally created the note.
-- `updated_by`: application or process responsible for the latest modification.
-- `revision`: positive integer incremented when Odyssey updates the note.
-- `schema_version`: version of the note metadata/schema format.
+Every type definition has `id`, `name`, `description`, `examples`, `subtypes`, and `properties`. `properties` is always an array, including when empty. Each property is a lightweight definition with a stable `id`, non-empty `value_type`, boolean `required` marker, and non-empty `description`. This is intentionally not a general property language or JSON Schema system.
 
-The optional generic fields are:
-
-- `subtype`: controlled subtype registered under the selected parent type.
-- `aliases`: alternative names used for entity resolution; aliases do not create separate entities.
-
-The schema deliberately adds no speculative universal or domain-specific metadata. Deterministic domain fields may be introduced later only when a demonstrated query or processing requirement justifies them.
+A possible property is not automatically a property Odyssey should add. Structured properties are introduced only for a demonstrated deterministic query or processing requirement. Otherwise, Markdown and wikilinks remain the clearer human-first representation.
 
 ## Controlled note types
 
-The initial registry contains `concept`, `project`, `task`, `store`, `product`, `purchase`, `recipe`, and `document`. Each registry entry is a descriptive object with an ID, name, semantic boundary, illustrative examples, and a subtype registry. Examples explain intended use; they are not hard-coded entities.
+Each registry entry defines a note type's semantic boundary without duplicating the complete canonical catalog in documentation. Consult [`config/note-schema.json`](../../config/note-schema.json) for the current registry. Examples in type definitions explain intended use; they are not hard-coded entities.
 
-`concept` is the fallback only when no more specific canonical type applies. A `purchase` is a human-readable occurrence note, while `product` identifies something reusable across purchases and `store` identifies the establishment. A `task` represents an action, but task lifecycle fields are outside this phase.
+Two personal-knowledge boundaries are worth clarifying. A `person` gives an individual reusable identity so journal entries, projects, documents, tasks, and other notes can link to the same person. Its initial structured properties are deliberately limited to demonstrated personal use. A `journal_entry` represents a diary entry about a day, experience, reflection, or occurrence.
+
+The journal entry's `entry_date` is distinct from universal creation metadata: it records the day described, while `created_at` records when Odyssey created the note. For example, an entry about 2026-08-13 may be written on 2026-08-14.
+
+A general `event` type is intentionally deferred. An occurrence such as “Dinner with [[Carlos]]” belongs naturally in a journal entry and does not need a second entity. An event type may become justified later when an occurrence needs reusable identity across several notes or applications—for example, `[[Trip to Madrid August 2026]]` linked from journal entries, expenses, people, photos, and tasks.
 
 ## Subtype policy
 
@@ -51,6 +43,8 @@ Agents and workflows must not silently create canonical subtypes. Future subtype
 ## Relationships remain wikilinks
 
 Ordinary Obsidian `[[wikilinks]]` are Odyssey's default relationship mechanism. The canonical schema has no relation registry and requires no typed edge such as `purchased_at` or `ingredient_of`. A purchase or recipe expresses useful relationships naturally in readable prose and links. Domain-specific structured fields remain possible later, but only for a demonstrated deterministic need.
+
+Journal entries use the same approach: people, projects, places, and concepts are ordinary wikilinks. Odyssey does not add relationship fields such as `met_person`, `discussed_project`, or `visited_store` merely to label those links.
 
 For example:
 
