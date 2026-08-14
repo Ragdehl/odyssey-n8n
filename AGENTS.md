@@ -44,7 +44,7 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Prefer small, testable changes.
 - All functions and methods must have functional docstrings that describe their domain responsibility, parameters, returned values when applicable, and relevant errors. Explain what the function does rather than narrating implementation details.
 - Keep `docs/implementation/STATUS.md` current so interrupted work can be resumed safely.
-- Verify every workflow before declaring it complete, and propose a Git commit only after verification succeeds.
+- Verify every workflow before declaring it complete or ready. Verification must pass for completion or readiness, but a safe checkpoint commit may be made after a failure when it is clearly marked as such.
 - Never silently change the ontology schema; schema changes require an explicit proposal and normally human approval.
 - Do not expose, print, commit, or store secrets or credentials in project files.
 - Before making potentially destructive changes, explain what will be changed and why.
