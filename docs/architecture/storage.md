@@ -27,6 +27,8 @@ The directories have distinct responsibilities:
 
 Workflows use `/odyssey` and never the Raspberry Pi host path. This storage boundary keeps ontology logic independent of deployment-specific paths and allows the physical storage implementation to change without rewriting ontology workflows.
 
+n8n's native file nodes must be restricted at runtime with `N8N_RESTRICT_FILE_ACCESS_TO=/odyssey/vault`. This is the deployment security boundary for note-file access: it permits vault reads while rejecting resolved paths under `/odyssey/config`, `/odyssey/runtime`, other container locations, and symlink escapes from the vault. Workflow path validation remains a separate defense and must accept only safe vault-relative targets.
+
 The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema will be decided when a workflow needs it; Phase 2 adds no deployment step or Docker mount.
 
 `~/odyssey-data` is only a convenience symlink to `/data/odyssey` for interactive host use. It is not a second data location and workflows must not depend on it.

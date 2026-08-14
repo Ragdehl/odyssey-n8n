@@ -35,6 +35,7 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Do not introduce infrastructure merely because it may be useful someday.
 - Explain important architectural trade-offs before making large changes.
 - Document significant architecture decisions when they are made.
+- When documenting workflows, architecture, decision flows, or component interactions, include a concise text/ASCII diagram when it materially improves understanding or recall. Prefer simple structural or flow diagrams; omit decorative or redundant diagrams when prose is clearer.
 - Keep components modular so they can be replaced later.
 - Prefer reusable subworkflows with clear input and output contracts.
 - Prefer native n8n nodes when they solve the problem cleanly.
