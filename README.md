@@ -28,9 +28,9 @@ stable Custom GPT Action
   ↓
 n8n webhook
   ↓
-Odyssey Agent
+integration and orchestration
   ↓
-domain workflows / knowledge primitives
+Odyssey Core (Python)
   ↓
 Markdown on Raspberry Pi
   ↓
@@ -41,7 +41,7 @@ ChatGPT provides the conversational and reasoning layer. n8n and Odyssey provide
 
 ## Repository and data boundaries
 
-This Git repository contains code, application configuration and schema, tests, Codex skills, architecture documentation, and future version-controlled workflows.
+This Git repository contains code, application configuration and schema, tests, Codex skills, architecture documentation, and version-controlled workflows. `workflows/` contains n8n integration/orchestration workflows; `odyssey_core/` contains the Python application/domain core.
 
 `/data/odyssey` is separate from Git. It contains authoritative personal Markdown knowledge and rebuildable runtime data. See [Local Storage Boundary](docs/architecture/storage.md) for the precise ownership and path model.
 
@@ -53,6 +53,8 @@ This Git repository contains code, application configuration and schema, tests, 
 - [Canonical Note Schema](docs/architecture/note-schema.md) — how the note schema works.
 - [Machine-readable note schema](config/note-schema.json) — canonical schema definitions.
 - [Local Storage Boundary](docs/architecture/storage.md) — repository, personal-data, and runtime boundaries.
+- [`odyssey_core/`](odyssey_core/) — bootstrapped Python application/domain core.
+- [`workflows/`](workflows/) — n8n integration and orchestration workflows.
 - [Codex project skills](.codex/skills/) — reusable development workflows.
 
 Project-development state is represented by Git branches and commits, Pull Requests, and test results. Architecture documentation records durable decisions rather than manual checkpoint status.

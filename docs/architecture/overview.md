@@ -21,7 +21,7 @@ Odyssey turns unstructured input into reusable personal knowledge. It starts wit
                integration orchestration
                            |
                            v
-                ODYSSEY CORE (planned)
+              ODYSSEY CORE (Python)
                            |
              domain and note logic
                            |
@@ -47,17 +47,17 @@ ChatGPT is the initial user-facing interface. It should call one stable Action r
 
 n8n remains part of Odyssey. Its long-term role is integrations, triggers, OAuth and credentials, scheduling, webhooks, external-service orchestration, retries, observability, and human-in-the-loop flows.
 
-After the low-level storage layer is complete, domain logic should not be implemented as independent n8n workflows by default. Search, entity resolution and upsert, context assembly, knowledge saving, and note manipulation are planned to move into a code-based `odyssey-core`, initially Python. Odyssey Core should eventually be the normal and sole writer of knowledge notes.
+Domain logic should not be implemented as independent n8n workflows by default. Search, entity resolution and upsert, context assembly, knowledge saving, and note manipulation belong in the Python package at `odyssey_core/`. Odyssey Core should eventually be the normal and sole writer of knowledge notes.
 
-This direction does not add an API or implement Odyssey Core yet. It also does not introduce LangGraph, a database, or an index.
+The package is currently bootstrapped but does not yet implement a vault repository or domain primitives. This phase does not add an API, CLI, LangGraph, database, or index.
 
 ### Odyssey Core
 
-The planned core will own domain and note logic while preserving small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. Its detailed design belongs to later work.
+The core owns the application boundary for domain and note logic, including search and entity resolution, note semantics, Markdown interpretation and serialization, normal vault access, coherence, and idempotency. It preserves small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. `odyssey_core/storage/` establishes storage ownership only; read, write, list, path safety, Markdown parsing and serialization, and create/update semantics are deliberately deferred to the future VaultRepository phase.
 
 ### Storage layer
 
-The current low-level n8n storage layer consists of `storage_read`, `storage_write`, and `storage_list`. Together they hide physical file handling behind a small contract. They may remain as V1 administrative, reference, or testing tools after Odyssey Core takes ownership of normal knowledge-note writes.
+The current low-level n8n storage layer consists of `storage_read`, `storage_write`, and `storage_list`. They remain available as V1 administrative, reference, or testing tools and are not moved or deleted by the Python bootstrap. Odyssey Core will later gain its own normal vault-access repository and eventually take ownership of normal knowledge-note writes.
 
 The physical mapping is currently:
 
