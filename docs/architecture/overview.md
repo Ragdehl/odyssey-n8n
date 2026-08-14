@@ -49,15 +49,15 @@ n8n remains part of Odyssey. Its long-term role is integrations, triggers, OAuth
 
 Domain logic should not be implemented as independent n8n workflows by default. Search, entity resolution and upsert, context assembly, knowledge saving, and note manipulation belong in the Python package at `odyssey_core/`. Odyssey Core should eventually be the normal and sole writer of knowledge notes.
 
-The package is currently bootstrapped but does not yet implement a vault repository or domain primitives. This phase does not add an API, CLI, LangGraph, database, or index.
+The package now includes the filesystem-only `VaultRepository`, but it does not yet implement Markdown interpretation or domain primitives. There is no API, CLI, LangGraph, database, or index.
 
 ### Odyssey Core
 
-The core owns the application boundary for domain and note logic, including search and entity resolution, note semantics, Markdown interpretation and serialization, normal vault access, coherence, and idempotency. It preserves small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. `odyssey_core/storage/` establishes storage ownership only; read, write, list, path safety, Markdown parsing and serialization, and create/update semantics are deliberately deferred to the future VaultRepository phase.
+The core owns the application boundary for domain and note logic, including search and entity resolution, note semantics, Markdown interpretation and serialization, normal vault access, coherence, and idempotency. It preserves small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. `odyssey_core/storage/` owns safe raw-text filesystem access. Markdown parsing, serialization, schema validation, updates, and domain behavior remain separate later-layer responsibilities.
 
 ### Storage layer
 
-The current low-level n8n storage layer consists of `storage_read`, `storage_write`, and `storage_list`. They remain available as V1 administrative, reference, or testing tools and are not moved or deleted by the Python bootstrap. Odyssey Core will later gain its own normal vault-access repository and eventually take ownership of normal knowledge-note writes.
+The current low-level n8n storage layer consists of `storage_read`, `storage_write`, and `storage_list`. They remain available as V1 administrative, reference, or testing tools. Odyssey Core's `VaultRepository` is the normal Python filesystem boundary and is intended to support the Core eventually becoming the sole normal writer of knowledge notes.
 
 The physical mapping is currently:
 

@@ -33,6 +33,23 @@ The initial write boundary is deliberately create-only. `storage_write` checks t
 
 `storage_read`, `storage_write`, and `storage_list` complete the current low-level n8n storage layer. The list primitive uses n8n's fixed native recursive Markdown glob, returns only sorted vault-relative paths, and exposes neither file content nor domain semantics. Because the installed native node materializes matches while enumerating them, this V1 implementation may read files internally before discarding their binary data; avoiding that cost does not justify new infrastructure for an administrative/reference primitive.
 
+Odyssey Core uses a separate, small Python filesystem boundary:
+
+```text
+Odyssey domain/note layer        (later phases)
+            |
+            v
+Markdown codec / note model      (Phase 8)
+            |
+            v
+VaultRepository                  (Phase 7)
+            |
+            v
+filesystem
+```
+
+`VaultRepository` receives its vault root when constructed and provides contained UTF-8 reads, exclusive create-only writes, and deterministic recursive Markdown path listing. Paths are literal vault-relative POSIX paths rather than n8n glob selectors. The repository returns and stores raw Markdown text unchanged; it does not parse frontmatter, validate schemas, serialize notes, or apply domain semantics. Parent directories must already exist when creating a note.
+
 The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema will be decided when a workflow needs it; Phase 2 adds no deployment step or Docker mount.
 
 `~/odyssey-data` is only a convenience symlink to `/data/odyssey` for interactive host use. It is not a second data location and workflows must not depend on it.
