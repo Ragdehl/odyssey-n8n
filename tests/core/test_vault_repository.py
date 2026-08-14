@@ -71,6 +71,13 @@ class VaultRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repository.read_text("root.md"), root_content)
         self.assertEqual(self.repository.read_text("people/niño.md"), nested_content)
 
+    def test_read_preserves_newline_sequences_exactly(self) -> None:
+        """Return CRLF, CR, and LF sequences without text-mode normalization."""
+        content = "# Mixed\r\n\r\nCR only\rLF only\nEnd\r\n"
+        (self.vault / "mixed-newlines.md").write_bytes(content.encode("utf-8"))
+
+        self.assertEqual(self.repository.read_text("mixed-newlines.md"), content)
+
     def test_reads_literal_names_that_are_not_glob_selectors(self) -> None:
         """Treat glob metacharacters as ordinary filename characters on the local filesystem."""
         literal_name = "[draft]*question?.md"
@@ -121,6 +128,15 @@ class VaultRepositoryTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "must be text"):
             self.repository.create_text("invalid.md", b"bytes")  # type: ignore[arg-type]
         self.assertFalse((self.vault / "invalid.md").exists())
+
+    def test_create_encoding_failure_leaves_no_target(self) -> None:
+        """Validate UTF-8 encoding before exclusive creation can leave a target behind."""
+        target = self.vault / "unencodable.md"
+
+        with self.assertRaises(VaultAccessError):
+            self.repository.create_text("unencodable.md", "invalid surrogate: \ud800")
+
+        self.assertFalse(target.exists())
 
     def test_create_refuses_overwrite_and_preserves_original_content(self) -> None:
         """Use exclusive creation so an existing target is never replaced."""

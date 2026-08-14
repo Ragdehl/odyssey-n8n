@@ -92,7 +92,8 @@ class VaultRepository:
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}")
 
         try:
-            return target.read_text(encoding="utf-8")
+            with target.open("r", encoding="utf-8", newline="") as note_file:
+                return note_file.read()
         except (FileNotFoundError, IsADirectoryError):
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
         except (OSError, UnicodeError):
@@ -116,6 +117,10 @@ class VaultRepository:
         relative_path = self._validate_note_path(path)
         if not isinstance(content, str):
             raise TypeError("Note content must be text")
+        try:
+            encoded_content = content.encode("utf-8")
+        except UnicodeEncodeError:
+            raise VaultAccessError("Unable to create note") from None
 
         try:
             parent = self._root.joinpath(*relative_path.parts[:-1]).resolve(strict=True)
@@ -127,13 +132,13 @@ class VaultRepository:
 
         target = parent / relative_path.name
         try:
-            with target.open("x", encoding="utf-8", newline="") as note_file:
-                note_file.write(content)
+            with target.open("xb") as note_file:
+                note_file.write(encoded_content)
         except FileExistsError:
             raise NoteAlreadyExistsError(
                 f"Note already exists: {relative_path.as_posix()}"
             ) from None
-        except (OSError, UnicodeError):
+        except OSError:
             raise VaultAccessError("Unable to create note") from None
 
     def list_markdown_paths(self) -> list[str]:
