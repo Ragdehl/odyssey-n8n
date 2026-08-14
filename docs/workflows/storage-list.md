@@ -37,12 +37,13 @@ An unexpected native filesystem failure returns:
 
 ```text
 storage_list Input (no parameters)
+  → normalize invocation to exactly one empty item
   → native Read/Write Files from Disk (`/odyssey/vault/**/*.md`)
       ├─ matches → discard binary data → normalize and sort relative paths
       └─ error   → empty match becomes `paths: []`; other failures become `LIST_ERROR`
 ```
 
-The fixed native selector is internal and cannot be changed by a caller. n8n 2.33.7 has no native metadata-only filesystem-list node; its supported glob reader materializes each matched file before returning file identity. This V1 administrative primitive accepts that internal cost, immediately discards binary data, and never exposes note content. Adding a service, dependency, shell workflow, database, or index solely to avoid that read would add disproportionate complexity.
+The normalization step discards all caller item values and always emits one empty item, so the native glob runs exactly once even when the caller supplies multiple items. The fixed native selector is internal and cannot be changed by a caller. n8n 2.33.7 has no native metadata-only filesystem-list node; its supported glob reader materializes each matched file before returning file identity. This V1 administrative primitive accepts that internal cost, immediately discards binary data, and never exposes note content. Adding a service, dependency, shell workflow, database, or index solely to avoid that read would add disproportionate complexity.
 
 The native file node resolves every matched file through `N8N_RESTRICT_FILE_ACCESS_TO=/odyssey/vault`. That unchanged runtime boundary blocks paths outside the vault and symlink escapes. The shaping step independently rejects any native identity that is not a contained Markdown path.
 

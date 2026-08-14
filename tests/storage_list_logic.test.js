@@ -50,6 +50,25 @@ function fileItem(directory, fileName) {
 
 const shapeListCode = loadCode('SHAPE_LIST_CODE');
 const shapeListErrorCode = loadCode('SHAPE_LIST_ERROR_CODE');
+const normalizeInvocationCode = loadCode('NORMALIZE_INVOCATION_CODE');
+
+test('enumerates each path once when the caller supplies multiple input items', () => {
+  const normalized = runAllItemsCode(normalizeInvocationCode, [
+    { json: { callerValue: 'first' } },
+    { json: { callerValue: 'second' } },
+    { json: { callerValue: 'third' } },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized)), [{ json: {} }]);
+
+  const nativeOutput = normalized.flatMap(() => [
+    fileItem('/odyssey/vault', 'root.md'),
+    fileItem('/odyssey/vault/people', 'carlos.md'),
+  ]);
+  const result = runAllItemsCode(shapeListCode, nativeOutput).json;
+  assert.deepEqual(Array.from(result.paths), ['people/carlos.md', 'root.md']);
+  assert.equal(result.paths.filter((notePath) => notePath === 'root.md').length, 1);
+  assert.equal(result.paths.filter((notePath) => notePath === 'people/carlos.md').length, 1);
+});
 
 test('returns root and nested Markdown paths in deterministic lexical order', () => {
   const result = runAllItemsCode(shapeListCode, [
