@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import unittest
 from pathlib import Path
 
@@ -116,6 +117,17 @@ class MarkdownCodecTests(unittest.TestCase):
         self.assertEqual(parsed, note)
         self.assertEqual(reparsed, parsed)
         self.assertEqual(parsed.content, body)
+
+    def test_round_trip_preserves_positive_and_negative_float_zero(self) -> None:
+        """Keep zero-valued floats distinct from integers and retain the negative sign."""
+        note = Note(metadata={"negative_zero": -0.0, "zero": 0.0}, content="")
+
+        parsed = parse_note(serialize_note(note))
+
+        self.assertIsInstance(parsed.metadata["zero"], float)
+        self.assertIsInstance(parsed.metadata["negative_zero"], float)
+        self.assertEqual(math.copysign(1.0, parsed.metadata["zero"]), 1.0)
+        self.assertEqual(math.copysign(1.0, parsed.metadata["negative_zero"]), -1.0)
 
     def test_content_need_not_have_a_heading_or_be_non_empty(self) -> None:
         """Accept empty and ordinary prose bodies without domain interpretation."""

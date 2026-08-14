@@ -42,7 +42,7 @@ def _serialize_scalar(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, float) and math.isfinite(value):
-        return "0" if value == 0 else repr(value)
+        return repr(value)
     raise NoteFormatError("Metadata values must be supported finite scalars")
 
 
