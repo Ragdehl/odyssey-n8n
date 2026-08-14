@@ -20,6 +20,7 @@ A single input may result in:
 
 For now:
 - n8n handles orchestration and workflows
+- `odyssey_core/` is the Python application/domain core
 - Markdown files are the source of truth
 - LLM APIs may be used for extraction, classification, reasoning, and note generation
 - external interfaces and input channels will be decided later
@@ -40,6 +41,7 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Prefer reusable subworkflows with clear input and output contracts.
 - Prefer native n8n nodes when they solve the problem cleanly.
 - Use custom code only when it provides a clear advantage over native n8n functionality.
+- Put new Odyssey domain and note logic in `odyssey_core/` by default; use `workflows/` for n8n integration and orchestration behavior.
 - Avoid modifying unrelated files or workflows.
 - Prefer small, testable changes.
 - All functions and methods must have functional docstrings that describe their domain responsibility, parameters, returned values when applicable, and relevant errors. Explain what the function does rather than narrating implementation details.

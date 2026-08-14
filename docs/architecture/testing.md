@@ -37,6 +37,16 @@ Each reusable n8n subworkflow should have documented input and output schemas, s
 
 Contract tests should verify validation, mapping, branch behavior, error propagation, and output shape. Native n8n workflow validation is useful but does not replace behavioral assertions against expected output and state.
 
+## Python core testing
+
+Python application-core tests live under `tests/core/` and use the standard-library `unittest` framework. Run them from the repository root so `odyssey_core/` imports directly without a packaging or installation step:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+The initial test is structural only because the bootstrapped package has no domain or vault-repository behavior yet. Future tests should assert real contracts as those capabilities are deliberately introduced.
+
 ## Integration testing
 
 Integration tests verify composition across boundaries, such as:
