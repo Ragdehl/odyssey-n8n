@@ -42,7 +42,7 @@ Execute Workflow Trigger
 
 Path validation accepts only normalized vault-relative POSIX paths ending in `.md`. The native file node depends on the restricted deployment boundary documented in [Local Storage Boundary](../architecture/storage.md); resolved outside-vault paths and symlink escapes are blocked there.
 
-The deterministic parser supports flat top-level keys with strings, quoted strings, booleans, numbers, nulls, flat block arrays, and flat inline arrays. It rejects nested mappings/arrays, multiline scalars, tags, anchors, aliases, inline comments, duplicate keys, and malformed quoting. Parsing is serialization handling only: the workflow does not load or validate against the [canonical note schema](../architecture/note-schema.md).
+A valid Odyssey note requires a supported frontmatter block. The deterministic parser supports flat top-level keys with strings, quoted strings, booleans, numbers, nulls, flat block arrays, and flat inline arrays. It rejects missing or malformed delimiters, nested mappings/arrays, multiline scalars, tags, anchors, aliases, inline comments, duplicate keys, and malformed quoting. Parsing is serialization handling only: the workflow does not load or validate against the [canonical note schema](../architecture/note-schema.md).
 
 It does not perform ontology validation, search, entity resolution, wikilink extraction, inference, writes, listing, indexing, or any Phase 4 behavior.
 

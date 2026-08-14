@@ -62,10 +62,12 @@ test('parses block arrays and preserves Markdown body text', () => {
   assert.equal(result.content, '# Carlos\n\nLine 1\n\nLine 2\n');
 });
 
-test('accepts a readable note without frontmatter and rejects unsupported structures', () => {
+test('rejects plain Markdown without frontmatter and unsupported structures', () => {
   const plain = runCode(parseCode, { markdown: '# Plain\n' }, { 'Normalize Note Path': { path: 'plain.md' } }).json;
-  assert.equal(plain.ok, true);
-  assert.deepEqual(JSON.parse(JSON.stringify(plain.metadata)), {});
+  assert.deepEqual(JSON.parse(JSON.stringify(plain)), {
+    ok: false,
+    error: { code: 'INVALID_NOTE_FORMAT', message: 'Invalid note format' },
+  });
   const malformed = runCode(parseCode, { markdown: '---\nid: abc\nnested:\n  child: value\n---\nBody' }, { 'Normalize Note Path': { path: 'bad.md' } }).json;
   assert.equal(malformed.error.code, 'INVALID_NOTE_FORMAT');
 });
