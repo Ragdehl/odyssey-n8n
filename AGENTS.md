@@ -50,6 +50,14 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Before making potentially destructive changes, explain what will be changed and why.
 - Never delete an unmerged branch or a branch whose merge status or relationship to the completed work is uncertain.
 
+## Development autonomy and confirmation
+
+On a feature branch, proceed autonomously with routine, reversible actions that are in scope for the approved task. This includes repository edits and tests; repeated test or validator iterations; development/test n8n workflow creation, execution, inspection, restart, and straightforward review fixes; isolated disposable fixtures and non-destructive probes; routine retries; commits and pushes to the current feature branch; and creating or updating a Draft Pull Request. Multiple n8n executions, probes, fixtures, or test iterations do not by themselves require confirmation, and an explicitly in-scope Odyssey development workflow is not sensitive merely because it is live.
+
+Ask before actions with material data, security, architecture, or irreversibility risk: modifying or deleting real personal data in `/data/odyssey/vault`; destructive migrations with unclear rollback; deleting Docker volumes or resetting databases; destructive changes to important live workflows; credential, secret, OAuth-scope, permission, filesystem, network, or other security-boundary changes; new services or significant infrastructure; material architecture changes outside the approved scope; force-pushes or destructive Git history rewrites; direct pushes to `main`; merging a Pull Request; or material product/contract ambiguity that cannot be inferred safely.
+
+Routine implementation risk means proceed autonomously; material data, security, architecture, or irreversibility risk means ask. A failed final verification means the work is not ready or complete, not that it should be discarded. Preserve coherent, reviewable implementation on the feature branch and record failed checks or blockers in `docs/implementation/STATUS.md` and, when useful, a commit or Draft Pull Request. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
+
 ## GitHub review workflow
 
 Before continuing implementation on a branch that has an open Pull Request, use the repository's `odyssey-pr-feedback` skill to inspect and process review feedback.

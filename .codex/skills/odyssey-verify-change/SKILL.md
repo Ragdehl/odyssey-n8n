@@ -7,6 +7,8 @@ description: Run Odyssey's scope-aware quality gate before declaring work comple
 
 Determine the changed scope first, then run the repository-defined checks that provide meaningful evidence for that scope. Fail clearly when a required check cannot run.
 
+Run routine verification actions autonomously when they are reversible, isolated, and within the approved scope. Repeated test runs, n8n workflow executions, non-destructive probes, and disposable test fixtures do not require separate confirmation merely because verification needs several iterations. Follow `AGENTS.md` for the repository's authoritative safety boundaries.
+
 ## Workflow
 
 1. Read `AGENTS.md`, `docs/implementation/STATUS.md`, repository test documentation, and validation scripts relevant to the changed files. Inspect the current branch, working tree, changed-file list, and full diff against the appropriate base.
@@ -24,7 +26,7 @@ Determine the changed scope first, then run the repository-defined checks that p
    Never print secret values.
 7. Confirm behavior or architecture documentation changed when needed. When the work represents a phase checkpoint, confirm `docs/implementation/STATUS.md` accurately records the verified state; do not mark completion before checks pass.
 8. Confirm the final Git working-tree state and distinguish intentional uncommitted changes from unexpected files.
-9. Return `PASS` only when every applicable required check ran and passed. Otherwise return `FAIL`, name each failure or skipped required check, and do not claim readiness.
+9. Return `PASS` only when every applicable required check ran and passed. Otherwise return `FAIL`, name each failure or skipped required check, and do not claim readiness. `FAIL` means not ready, not automatic rollback: preserve coherent, reviewable work on the feature branch; record failures and blockers in status and, when useful, a checkpoint commit or Draft Pull Request. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
 
 ## Report
 
