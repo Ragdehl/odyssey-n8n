@@ -1,10 +1,10 @@
 # Implementation Status
 
-- **Current phase:** Inter-phase Codex autonomy/process mini-stage
-- **Status:** COMPLETE — PR pending review/merge
-- **Last completed checkpoint:** Phase 3 — `storage_read` is complete; PR #5 is merged and post-merge synchronization/cleanup is complete
-- **Currently working on:** Mini-stage implementation and verification are complete; awaiting review/merge
-- **Last successful verification/test:** Scope-aware process/config verification passed: policy and skill consistency, `git diff --check`, changed-file secret scan, strict Codex config parsing, changed-file review, and protected-path/Phase 4 diff checks all passed. No n8n execution was required because no workflow or runtime behavior changed.
-- **Next action:** Complete and merge this mini-stage; Phase 4 — `storage_write` is the next major implementation phase, but has not started
+- **Current phase:** Phase 4 — `storage_write`
+- **Status:** COMPLETE — Draft PR pending review/merge
+- **Last completed checkpoint:** Phase 3 and the Codex autonomy/process mini-stage are complete; PR #6 is merged and post-merge synchronization/cleanup is complete
+- **Currently working on:** Phase 4 implementation and verification are complete; awaiting review/merge
+- **Last successful verification/test:** Live n8n verification on workflow `Odyssey — storage_write` (`yIg02EH2IotEHOkS`) passed for root and nested creation, exact deterministic serialization, `storage_read` round-trip compatibility, repeated-write `ALREADY_EXISTS` with unchanged content, invalid path/input errors, and symlink/outside-vault containment. Workflow SDK validation passed with 12 nodes, JavaScript Code-node tests passed 5/5, `storage_read` regressions passed 6/6, schema validation and Python regressions passed 27/27, and every disposable fixture was removed.
+- **Next action:** Review and merge the Phase 4 Draft PR; do not begin later-phase ontology or controlled-update behavior
 - **Blockers:** None
-- **Relevant files/workflows:** `AGENTS.md`, `.codex/skills/odyssey-verify-change/SKILL.md`, this status file, and the local Codex CLI approval configuration; no n8n workflow behavior is being changed and no Phase 4 work has started
+- **Relevant files/workflows:** `workflows/storage-write.ts`, `tests/storage_write_logic.test.js`, `docs/workflows/storage-write.md`, `docs/architecture/storage.md`, and this status file; the canonical ontology schema is unchanged
