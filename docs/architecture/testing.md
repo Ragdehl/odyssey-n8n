@@ -57,4 +57,4 @@ Expected results may combine exact assertions for structured fields with bounded
 
 ## Completion evidence
 
-A workflow is complete only after its applicable validation and tests pass. Its documentation and `docs/implementation/STATUS.md` should record the last successful verification, relevant fixtures or commands, and any known limitation. A Git commit should be proposed only after verification succeeds.
+A workflow is complete only after its applicable validation and tests pass. Its behavior documentation should record repeatable verification commands and any durable limitation. Git branches, commits, Pull Requests, and test results track development state.

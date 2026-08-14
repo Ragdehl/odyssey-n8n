@@ -45,12 +45,6 @@ This Git repository contains code, application configuration and schema, tests, 
 
 `/data/odyssey` is separate from Git. It contains authoritative personal Markdown knowledge and rebuildable runtime data. See [Local Storage Boundary](docs/architecture/storage.md) for the precise ownership and path model.
 
-## Current status
-
-The foundational architecture and local storage boundary are complete. The simplified ontology and canonical note schema are established, and reusable Codex development workflows are in place.
-
-See [Implementation Status](docs/implementation/STATUS.md) for the current phase, verification state, and next action.
-
 ## Repository guide
 
 - [AGENTS.md](AGENTS.md) — project rules for agents and contributors.
@@ -59,5 +53,6 @@ See [Implementation Status](docs/implementation/STATUS.md) for the current phase
 - [Canonical Note Schema](docs/architecture/note-schema.md) — how the note schema works.
 - [Machine-readable note schema](config/note-schema.json) — canonical schema definitions.
 - [Local Storage Boundary](docs/architecture/storage.md) — repository, personal-data, and runtime boundaries.
-- [Implementation Status](docs/implementation/STATUS.md) — current implementation status.
 - [Codex project skills](.codex/skills/) — reusable development workflows.
+
+Project-development state is represented by Git branches and commits, Pull Requests, and test results. Architecture documentation records durable decisions rather than manual checkpoint status.

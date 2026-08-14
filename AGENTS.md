@@ -43,7 +43,7 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Avoid modifying unrelated files or workflows.
 - Prefer small, testable changes.
 - All functions and methods must have functional docstrings that describe their domain responsibility, parameters, returned values when applicable, and relevant errors. Explain what the function does rather than narrating implementation details.
-- Keep `docs/implementation/STATUS.md` current so interrupted work can be resumed safely.
+- Use Git branches, commits, Pull Request state, tests, and architecture documentation as the source of project-development state.
 - Verify every workflow before declaring it complete or ready. Verification must pass for completion or readiness, but a safe checkpoint commit may be made after a failure when it is clearly marked as such.
 - Never silently change the ontology schema; schema changes require an explicit proposal and normally human approval.
 - Do not expose, print, commit, or store secrets or credentials in project files.
@@ -56,7 +56,7 @@ On a feature branch, proceed autonomously with routine, reversible actions that 
 
 Ask before actions with material data, security, architecture, or irreversibility risk: modifying or deleting real personal data in `/data/odyssey/vault`; destructive migrations with unclear rollback; deleting Docker volumes or resetting databases; destructive changes to important live workflows; credential, secret, OAuth-scope, permission, filesystem, network, or other security-boundary changes; new services or significant infrastructure; material architecture changes outside the approved scope; force-pushes or destructive Git history rewrites; direct pushes to `main`; merging a Pull Request; or material product/contract ambiguity that cannot be inferred safely.
 
-Routine implementation risk means proceed autonomously; material data, security, architecture, or irreversibility risk means ask. A failed final verification means the work is not ready or complete, not that it should be discarded. Preserve coherent, reviewable implementation on the feature branch and record failed checks or blockers in `docs/implementation/STATUS.md` and, when useful, a commit or Draft Pull Request. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
+Routine implementation risk means proceed autonomously; material data, security, architecture, or irreversibility risk means ask. A failed final verification means the work is not ready or complete, not that it should be discarded. Preserve coherent, reviewable implementation on the feature branch and record failed checks or blockers in a commit or Draft Pull Request when useful. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
 
 ## GitHub review workflow
 

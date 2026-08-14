@@ -9,7 +9,7 @@ Process all available review surfaces before editing, keep changes traceable to 
 
 ## Workflow
 
-1. Read `AGENTS.md`, `docs/implementation/STATUS.md`, and architecture relevant to the change. Inspect the current branch, working tree, upstream, and diff.
+1. Read `AGENTS.md` and architecture relevant to the change. Inspect the current branch, working tree, upstream, and diff.
 2. Resolve the repository and target PR. Confirm the local feature branch matches the PR head before editing or pushing.
 3. Read PR metadata, the current PR diff, general comments, submitted reviews, inline comments, and review threads. Use a thread-aware GitHub read when unresolved, resolved, or outdated state matters.
 4. Group feedback into:
