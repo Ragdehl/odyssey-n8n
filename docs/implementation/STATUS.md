@@ -1,7 +1,7 @@
 # Implementation Status
 
 - **Current phase:** Inter-phase Codex autonomy/process mini-stage
-- **Status:** COMPLETE — Draft PR pending review/merge
+- **Status:** COMPLETE — PR pending review/merge
 - **Last completed checkpoint:** Phase 3 — `storage_read` is complete; PR #5 is merged and post-merge synchronization/cleanup is complete
 - **Currently working on:** Mini-stage implementation and verification are complete; awaiting review/merge
 - **Last successful verification/test:** Scope-aware process/config verification passed: policy and skill consistency, `git diff --check`, changed-file secret scan, strict Codex config parsing, changed-file review, and protected-path/Phase 4 diff checks all passed. No n8n execution was required because no workflow or runtime behavior changed.
