@@ -45,7 +45,7 @@ Python application-core tests live under `tests/core/` and use the standard-libr
 python3 -m unittest discover -s tests -v
 ```
 
-The initial test is structural only because the bootstrapped package has no domain or vault-repository behavior yet. Future tests should assert real contracts as those capabilities are deliberately introduced.
+The suite includes structural coverage for the package boundary and focused temporary-directory contract tests for `VaultRepository`. Future tests should continue to assert real behavior as Markdown and domain capabilities are deliberately introduced.
 
 ## Integration testing
 
