@@ -45,7 +45,7 @@ Python application-core tests live under `tests/core/` and use the standard-libr
 python3 -m unittest discover -s tests -v
 ```
 
-The suite includes structural coverage for the package boundary and focused temporary-directory contract tests for `VaultRepository`. Future tests should continue to assert real behavior as Markdown and domain capabilities are deliberately introduced.
+The suite includes structural coverage for the package boundary, focused temporary-directory contract tests for `VaultRepository`, and isolated tests for the generic Note, constrained Markdown codec, and canonical schema-driven note validation. Future tests should continue to assert real behavior as domain capabilities are deliberately introduced.
 
 ## Integration testing
 

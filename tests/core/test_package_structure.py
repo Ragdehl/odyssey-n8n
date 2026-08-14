@@ -3,7 +3,7 @@
 import unittest
 
 import odyssey_core
-from odyssey_core import storage
+from odyssey_core import notes, storage
 
 
 class OdysseyCorePackageTests(unittest.TestCase):
@@ -13,6 +13,7 @@ class OdysseyCorePackageTests(unittest.TestCase):
         """Expose the bootstrapped core and storage namespaces without domain behavior."""
         self.assertEqual(odyssey_core.__package__, "odyssey_core")
         self.assertEqual(storage.__package__, "odyssey_core.storage")
+        self.assertEqual(notes.__package__, "odyssey_core.notes")
 
 
 if __name__ == "__main__":
