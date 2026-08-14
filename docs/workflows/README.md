@@ -20,4 +20,4 @@ Implementation changes are normally reviewed through GitHub Pull Requests before
 
 Permanent credential-free workflows are represented under the repository's top-level `workflows/` directory with the n8n Workflow SDK. Each representation is the reviewable source used to validate and reconstruct its corresponding live workflow.
 
-Reusable subworkflows should expose a narrow contract and hide implementation details from their callers. Update the workflow document and `docs/implementation/STATUS.md` whenever implementation status or a public contract changes.
+Reusable subworkflows should expose a narrow contract and hide implementation details from their callers. Update the workflow document whenever behavior or a public contract changes.

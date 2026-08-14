@@ -18,34 +18,16 @@ Odyssey turns unstructured input into reusable personal knowledge. It starts wit
                      n8n Webhook
                            |
                            v
-                    Odyssey Agent
+               integration orchestration
                            |
-                high-level domain tools
+                           v
+                ODYSSEY CORE (planned)
                            |
-          +----------------+----------------+
-          |                |                |
-          v                v                v
-   save_knowledge    process_receipt    future tools
-          |                |
-          +--------+-------+
-                   |
-                   v
-             ONTOLOGY CORE
-                   |
-     +-------------+-------------+-------------+
-     |             |             |             |
-     v             v             v             v
-resolve_entity  upsert_entity  search      get_context
-                   |
-                   v
-              STORAGE LAYER
-                   |
-       +-----------+-----------+
-       |           |           |
-       v           v           v
-      read        write        list
-                   |
-                   v
+             domain and note logic
+                           |
+                           v
+              Markdown storage
+                           |
            Markdown files
            on Raspberry Pi
                    |
@@ -53,7 +35,7 @@ resolve_entity  upsert_entity  search      get_context
                 Obsidian
 ```
 
-The names in this diagram describe intended boundaries, not an already implemented API. Exact contracts and the ontology schema will be designed and tested in later phases.
+The names in this diagram describe intended boundaries, not an implemented API.
 
 ## Layer responsibilities
 
@@ -61,32 +43,21 @@ The names in this diagram describe intended boundaries, not an already implement
 
 ChatGPT is the initial user-facing interface. It should call one stable Action rather than expose storage details or a large collection of internal primitives. Other interfaces may be added later without changing the knowledge model.
 
-### n8n webhook and Odyssey agent
+### n8n boundary
 
-n8n receives the request, authenticates and routes it, and orchestrates the work. The Odyssey agent interprets intent and selects an appropriate high-level domain tool. n8n remains the orchestration platform unless an observed requirement demonstrates that it cannot handle the job simply.
+n8n remains part of Odyssey. Its long-term role is integrations, triggers, OAuth and credentials, scheduling, webhooks, external-service orchestration, retries, observability, and human-in-the-loop flows.
 
-### Domain workflows
+After the low-level storage layer is complete, domain logic should not be implemented as independent n8n workflows by default. Search, entity resolution and upsert, context assembly, knowledge saving, and note manipulation are planned to move into a code-based `odyssey-core`, initially Python. Odyssey Core should eventually be the normal and sole writer of knowledge notes.
 
-Domain workflows such as `save_knowledge` and `process_receipt` translate a user goal into calls to ontology primitives. They own domain-specific validation and sequencing while sharing the same ontology core.
+This direction does not add an API or implement Odyssey Core yet. It also does not introduce LangGraph, a database, or an index.
 
-For example, receipt processing may resolve a store and purchased-item entities, then create or enrich a purchase note whose human-readable content links to those notes. This reuses the same primitives as general knowledge capture instead of building a receipt-specific storage model.
+### Odyssey Core
 
-### Ontology core
-
-The ontology core uses small, atomic or near-atomic notes with stable identity, a controlled note type, human-readable content, and optional ordinary Obsidian wikilinks. Linked notes form a lightweight graph, but links do not require machine-defined relation types.
-
-The conceptual V1 core has four primitives:
-
-- `resolve_entity` identifies the best existing note and is the main defense against duplicates.
-- `upsert_entity` creates a note when necessary or enriches an existing note, including its content and wikilinks.
-- `search` finds knowledge through names, aliases when supported, note types, metadata, Markdown content, and useful link information.
-- `get_context` returns a note plus useful linked and backlinked context.
-
-Separate `link_entities`, `add_fact`, and `record_event` primitives are not required in V1. Their useful behavior can initially be expressed through note content, note types, wikilinks, and `upsert_entity`. They may be introduced later if an observed requirement justifies distinct contracts.
+The planned core will own domain and note logic while preserving small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. Its detailed design belongs to later work.
 
 ### Storage layer
 
-The storage layer hides physical file handling behind a small contract, initially resembling read, write, list, and—only when explicitly justified—delete. This keeps ontology logic independent of Raspberry Pi host paths and Markdown serialization details.
+The current low-level n8n storage layer consists of `storage_read`, `storage_write`, and `storage_list`. Together they hide physical file handling behind a small contract. They may remain as V1 administrative, reference, or testing tools after Odyssey Core takes ownership of normal knowledge-note writes.
 
 The physical mapping is currently:
 
@@ -112,19 +83,7 @@ Agents should normally see domain tools rather than orchestrate many low-level o
 
 Low-level primitives remain reusable building blocks for deterministic subworkflows and carefully controlled internal composition. They are not the default public surface for an agent.
 
-## Workflow composition
-
-```text
-domain workflow
-    |
-    +--> validate domain input
-    +--> resolve and reuse existing entities
-    +--> compose ontology primitives
-    +--> persist through the storage contract
-    +--> return a stable result or structured error
-```
-
-Each reusable subworkflow should have an explicit input contract, output contract, error behavior, dependencies, and repeatable tests. Native n8n nodes are preferred when they express the behavior cleanly; custom code is reserved for cases where it has a clear advantage.
+Each reusable n8n subworkflow should have an explicit input contract, output contract, error behavior, dependencies, and repeatable tests. Native n8n nodes are preferred when they express integration and orchestration behavior cleanly; custom code is reserved for cases where it has a clear advantage.
 
 ## Search evolution
 

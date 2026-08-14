@@ -11,7 +11,7 @@ Run routine verification actions autonomously when they are reversible, isolated
 
 ## Workflow
 
-1. Read `AGENTS.md`, `docs/implementation/STATUS.md`, repository test documentation, and validation scripts relevant to the changed files. Inspect the current branch, working tree, changed-file list, and full diff against the appropriate base.
+1. Read `AGENTS.md`, repository test documentation, and validation scripts relevant to the changed files. Inspect the current branch, working tree, changed-file list, and full diff against the appropriate base.
 2. Derive the verification matrix from the change:
    - run relevant functional and unit tests;
    - run validators for each changed schema, workflow, or component;
@@ -24,10 +24,10 @@ Run routine verification actions autonomously when they are reversible, isolated
    - otherwise inspect the operations performed during the current task and report whether any operation targeted the area;
    - when only task-action evidence exists, state that limitation and do not claim the external area is unchanged, because changes outside the observed task cannot be excluded.
    Never print secret values.
-7. Confirm behavior or architecture documentation changed when needed. When the work represents a phase checkpoint, confirm `docs/implementation/STATUS.md` accurately records the verified state; do not mark completion before checks pass.
+7. Confirm behavior or architecture documentation changed when needed. Do not mark completion before checks pass.
 8. Confirm the final Git working-tree state and distinguish intentional uncommitted changes from unexpected files.
-9. Return `PASS` only when every applicable required check ran and passed. Otherwise return `FAIL`, name each failure or skipped required check, and do not claim readiness. `FAIL` means not ready, not automatic rollback: preserve coherent, reviewable work on the feature branch; record failures and blockers in status and, when useful, a checkpoint commit or Draft Pull Request. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
+9. Return `PASS` only when every applicable required check ran and passed. Otherwise return `FAIL`, name each failure or skipped required check, and do not claim readiness. `FAIL` means not ready, not automatic rollback: preserve coherent, reviewable work on the feature branch and record failures or blockers in a checkpoint commit or Draft Pull Request when useful. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
 
 ## Report
 
-Report PASS or FAIL, scope examined, commands/checks run with results, changed and protected-area findings with their evidence level, documentation/status accuracy, working-tree state, and blockers. Distinguish `verified unchanged`, `no task operation targeted the area`, and `unable to prove external state did not change`.
+Report PASS or FAIL, scope examined, commands/checks run with results, changed and protected-area findings with their evidence level, documentation accuracy, working-tree state, and blockers. Distinguish `verified unchanged`, `no task operation targeted the area`, and `unable to prove external state did not change`.
