@@ -30,6 +30,22 @@ Errors use `{ "ok": false, "error": { "code": "...", "message": "..." } }`:
 - `INVALID_NOTE_FORMAT`: a readable note is outside the supported serialization subset.
 - `READ_ERROR`: another unexpected native read/runtime failure occurred.
 
+```text
+input
+  |
+  v
+is the caller path invalid?
+  +-- yes --> INVALID_PATH
+  +-- no
+       |
+       v
+    attempt native read
+       +-- no accessible Odyssey note --> NOT_FOUND
+       +-- note readable
+            +-- missing/invalid frontmatter --> INVALID_NOTE_FORMAT
+            +-- supported serialization --> OK
+```
+
 ## Flow and responsibilities
 
 ```text
@@ -40,7 +56,7 @@ Execute Workflow Trigger
   → parse frontmatter and shape public result
 ```
 
-Path validation accepts only normalized vault-relative POSIX paths ending in `.md`. The native file node depends on the restricted deployment boundary documented in [Local Storage Boundary](../architecture/storage.md); resolved outside-vault paths and symlink escapes are blocked there.
+Path validation accepts only normalized, literal vault-relative POSIX paths ending in `.md`; glob/pattern metacharacters are invalid because the input identifies one note rather than a file selector. The native file node depends on the restricted deployment boundary documented in [Local Storage Boundary](../architecture/storage.md); resolved outside-vault paths and symlink escapes are blocked there.
 
 A valid Odyssey note requires a supported frontmatter block. The deterministic parser supports flat top-level keys with strings, quoted strings, booleans, numbers, nulls, flat block arrays, and flat inline arrays. It rejects missing or malformed delimiters, nested mappings/arrays, multiline scalars, tags, anchors, aliases, inline comments, duplicate keys, and malformed quoting. Parsing is serialization handling only: the workflow does not load or validate against the [canonical note schema](../architecture/note-schema.md).
 

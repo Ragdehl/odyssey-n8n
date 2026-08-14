@@ -39,7 +39,7 @@ const readErrorCode = loadCode('SHAPE_READ_ERROR_CODE');
 
 test('normalizes harmless POSIX segments and rejects unsafe targets', () => {
   assert.equal(runCode(normalizeCode, { path: 'people/./archive/../carlos.md' }).json.path, 'people/carlos.md');
-  for (const candidate of [undefined, '', '/odyssey/vault/a.md', '/data/odyssey/a.md', '../a.md', 'a/../../b.md', 'a.txt', 'a\\b.md']) {
+  for (const candidate of [undefined, '', '/odyssey/vault/a.md', '/data/odyssey/a.md', '../a.md', 'a/../../b.md', 'a.txt', 'a\\b.md', 'people/*.md', 'people/carl?s.md', 'people/[abc].md', 'people/{carlos,carla}.md']) {
     assert.equal(runCode(normalizeCode, { path: candidate }).json.result.error.code, 'INVALID_PATH');
   }
 });
