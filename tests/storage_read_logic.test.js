@@ -37,9 +37,11 @@ const normalizeCode = loadCode('NORMALIZE_PATH_CODE');
 const parseCode = loadCode('PARSE_NOTE_CODE');
 const readErrorCode = loadCode('SHAPE_READ_ERROR_CODE');
 
-test('normalizes harmless POSIX segments and rejects unsafe or pattern targets', () => {
+test('normalizes harmless POSIX segments and rejects unsafe or active pattern targets', () => {
   assert.equal(runCode(normalizeCode, { path: 'people/./archive/../carlos.md' }).json.path, 'people/carlos.md');
-  for (const candidate of [undefined, '', '/odyssey/vault/a.md', '/data/odyssey/a.md', '../a.md', 'a/../../b.md', 'a.txt', 'a\\b.md', 'people/*.md', 'people/carl?s.md', 'people/[abc].md', 'people/{carlos,carla}.md', 'people/(carlos|carla).md', 'people/@(carlos|carla).md']) {
+  assert.equal(runCode(normalizeCode, { path: 'people/Carlos (work).md' }).json.path, 'people/Carlos (work).md');
+  assert.equal(runCode(normalizeCode, { path: 'people/[Draft] Carlos.md' }).json.path, 'people/[Draft] Carlos.md');
+  for (const candidate of [undefined, '', '/odyssey/vault/a.md', '/data/odyssey/a.md', '../a.md', 'a/../../b.md', 'a.txt', 'a\\b.md', 'people/*.md', 'people/carl?s.md', 'people/{carlos,carla}.md', 'people/(carlos|carla).md', 'people/@(carlos|carla).md']) {
     assert.equal(runCode(normalizeCode, { path: candidate }).json.result.error.code, 'INVALID_PATH');
   }
 });
