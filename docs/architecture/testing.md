@@ -104,6 +104,17 @@ pre-commit run --all-files
 and schema hooks deliberately ignore filenames supplied by pre-commit so each always runs its full
 intended suite.
 
+Pre-commit and GitHub CI have complementary responsibilities:
+
+```text
+pre-commit = fast local feedback before a commit
+GitHub CI  = independent server-side validation attached to commits and pull requests
+```
+
+Neither replaces the other. The `Python CI` workflow runs the deterministic Python checks on every
+pull request targeting `main` and every push to `main`, without requiring credentials, live vault
+access, Docker, or n8n.
+
 ## Integration testing
 
 Integration tests verify composition across boundaries, such as:

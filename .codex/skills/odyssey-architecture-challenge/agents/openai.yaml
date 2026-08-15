@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Architecture Challenge"
+  short_description: "Challenge significant Odyssey phase architecture"
+  default_prompt: "Use $odyssey-architecture-challenge to challenge this proposed Odyssey phase before implementation."
