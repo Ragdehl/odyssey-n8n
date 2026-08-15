@@ -54,8 +54,9 @@ python -m pip install -r requirements-dev.txt
 
 The first command creates the repository-local virtual environment, the second activates it for the
 current shell, and the final command installs the exact development-tool versions recorded in
-`requirements-dev.txt`. This is development setup only; Odyssey remains an unpackaged application
-with no added runtime dependencies.
+`requirements-dev.txt`; pip's `-r` flag tells it to read package requirements from that file. This
+is development setup only; Odyssey remains an unpackaged application with no added runtime
+dependencies.
 
 Run the complete Python suite:
 

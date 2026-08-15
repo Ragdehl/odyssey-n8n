@@ -18,6 +18,6 @@ repos:
       - id: validate-note-schema
         name: validate canonical note schema
         entry: python scripts/validate_note_schema.py
-        language: system
+        language: python
         pass_filenames: false
         always_run: true
