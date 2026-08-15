@@ -58,7 +58,16 @@ current shell, and the final command installs the exact development-tool version
 is development setup only; Odyssey remains an unpackaged application with no added runtime
 dependencies.
 
-Run the complete Python suite:
+During implementation, run the narrowest useful tests for the behavior being changed. Concise output
+keeps the feedback loop readable; `--tb=short` is useful when a failure traceback would otherwise be
+noisy. For example:
+
+```bash
+pytest tests/core/test_notes.py -q --tb=short
+```
+
+Repeat focused tests until the implementation is stable. Run the complete Python suite directly
+when the change is broad or when diagnosing the pytest pre-commit hook:
 
 ```bash
 pytest
@@ -100,9 +109,12 @@ against every tracked file with:
 pre-commit run --all-files
 ```
 
-`--all-files` checks the repository rather than only changes staged for the next commit. The pytest
-and schema hooks deliberately ignore filenames supplied by pre-commit so each always runs its full
-intended suite.
+`--all-files` checks the repository rather than only changes staged for the next commit. It is the
+final complete local deterministic gate and covers Ruff lint, Ruff's format check, the complete
+pytest suite, and the canonical schema validator. The pytest and schema hooks deliberately ignore
+filenames supplied by pre-commit so each always runs its full intended suite. Do not immediately
+duplicate these four checks with separate commands when this gate has passed against the unchanged
+tree; use an individual command to diagnose a failed hook when needed.
 
 Pre-commit and GitHub CI have complementary responsibilities:
 
@@ -114,6 +126,33 @@ GitHub CI  = independent server-side validation attached to commits and pull req
 Neither replaces the other. The `Python CI` workflow runs the deterministic Python checks on every
 pull request targeting `main` and every push to `main`, without requiring credentials, live vault
 access, Docker, or n8n.
+
+The normal verification loop is:
+
+```text
+implementation iteration
+    |
+    v
+focused tests until stable
+    |
+    v
+pre-commit run --all-files
+    |
+    v
+odyssey-verify-change (remaining scope and evidence review)
+    |
+    v
+push
+    |
+    v
+GitHub CI independently reruns deterministic gates
+```
+
+`odyssey-verify-change` may reuse a fresh successful gate from the same unchanged tree, then performs
+its distinct diff, scope, secret, protected-area, documentation, and working-tree checks. Any
+relevant file change makes earlier evidence stale and requires the affected gate to run again.
+Deterministic validation is retained; the workflow avoids repeating identical local work without
+new evidence value.
 
 ## Integration testing
 
