@@ -49,11 +49,13 @@ n8n remains part of Odyssey. Its long-term role is integrations, triggers, OAuth
 
 Domain logic should not be implemented as independent n8n workflows by default. Search, entity resolution and upsert, context assembly, knowledge saving, and note manipulation belong in the Python package at `odyssey_core/`. Odyssey Core should eventually be the normal and sole writer of knowledge notes.
 
-The package now includes the filesystem-only `VaultRepository`, but it does not yet implement Markdown interpretation or domain primitives. There is no API, CLI, LangGraph, database, or index.
+The package includes the filesystem-only `VaultRepository` plus a separate generic `Note`, constrained Markdown codec, and canonical schema-driven note-instance validator. Search, updates, lifecycle behavior, and other domain primitives remain later work. There is no API, CLI, LangGraph, database, or index.
 
 ### Odyssey Core
 
-The core owns the application boundary for domain and note logic, including search and entity resolution, note semantics, Markdown interpretation and serialization, normal vault access, coherence, and idempotency. It preserves small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. `odyssey_core/storage/` owns safe raw-text filesystem access. Markdown parsing, serialization, schema validation, updates, and domain behavior remain separate later-layer responsibilities.
+The core owns the application boundary for domain and note logic, including eventual search and entity resolution, note semantics, Markdown interpretation and serialization, normal vault access, coherence, and idempotency. It preserves small, atomic or near-atomic notes with stable identity, controlled note types, human-readable content, and ordinary Obsidian wikilinks. `odyssey_core/storage/` owns safe raw-text filesystem access; `odyssey_core/notes/` owns the generic path-independent note representation, constrained serialization syntax, and isolated note-instance validation as separate responsibilities.
+
+Odyssey uses one generic Python note representation rather than one class per canonical note type. [`config/note-schema.json`](../../config/note-schema.json) remains the single canonical type and structured-property registry, so Python code does not duplicate the ontology. Ordinary `[[wikilinks]]` in Markdown remain the default relationship representation; the codec preserves body text without interpreting links or prose.
 
 ### Storage layer
 

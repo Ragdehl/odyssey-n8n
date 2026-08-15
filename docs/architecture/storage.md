@@ -36,10 +36,13 @@ The initial write boundary is deliberately create-only. `storage_write` checks t
 Odyssey Core uses a separate, small Python filesystem boundary:
 
 ```text
-Odyssey domain/note layer        (later phases)
+domain/search logic              (later phases)
             |
             v
-Markdown codec / note model      (Phase 8)
+Note + validation                (Phase 8)
+            |
+            v
+Markdown codec                  (Phase 8)
             |
             v
 VaultRepository                  (Phase 7)
@@ -49,6 +52,8 @@ filesystem
 ```
 
 `VaultRepository` receives its vault root when constructed and provides contained UTF-8 reads, exclusive create-only writes, and deterministic recursive Markdown path listing. Paths are literal vault-relative POSIX paths rather than n8n glob selectors. The repository returns and stores raw Markdown text unchanged; it does not parse frontmatter, validate schemas, serialize notes, or apply domain semantics. Parent directories must already exist when creating a note.
+
+The Phase 8 Markdown codec is the separate serialization boundary immediately above the repository. It converts constrained YAML-frontmatter Markdown to and from a generic `Note(metadata, content)` without knowing which ontology fields are valid. Canonical note-instance validation is another separate layer above the codec and receives the parsed canonical schema explicitly. The generic note has no filesystem path: metadata such as `id` represents logical identity while vault placement remains a storage concern.
 
 The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema will be decided when a workflow needs it; Phase 2 adds no deployment step or Docker mount.
 

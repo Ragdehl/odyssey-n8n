@@ -76,6 +76,6 @@ python3 scripts/validate_note_schema.py
 python3 -m unittest discover -s tests -v
 ```
 
-The validator checks the schema structure, controlled-field semantics, stable ID syntax, uniqueness, and descriptive registry entries without external dependencies.
+The schema-definition validator checks the schema structure, controlled-field semantics, stable ID syntax, uniqueness, and descriptive registry entries without external dependencies. Separately, `odyssey_core.notes.validate_note` validates one generic note against an explicitly supplied parsed schema: required and allowed fields, controlled type and subtype, declared value constraints, type-specific properties, and compatible `schema_version`. It does not load a repository path or attempt historical lifecycle checks such as whether identity and revision stayed stable across earlier versions.
 
 The top-level `schema_version` starts at `1`. A future schema change must be explicit, reviewed for compatibility and migration impact, documented when significant, and reflected in this version as appropriate. Human approval is normally required for ontology changes. Phase 2 establishes the controlled schema but does not implement schema-evolution or approval workflows.
