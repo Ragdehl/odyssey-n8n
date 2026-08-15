@@ -51,6 +51,7 @@ This Git repository contains code, application configuration and schema, tests, 
 - [Architecture Overview](docs/architecture/overview.md) — high-level system architecture.
 - [Ontology Principles](docs/architecture/ontology.md) — knowledge-model principles.
 - [Canonical Note Schema](docs/architecture/note-schema.md) — how the note schema works.
+- [Development Pipeline](docs/architecture/development-pipeline.md) — phase contracts and the evidence-led development-process roadmap.
 - [Machine-readable note schema](config/note-schema.json) — canonical schema definitions.
 - [Local Storage Boundary](docs/architecture/storage.md) — repository, personal-data, and runtime boundaries.
 - [`odyssey_core/`](odyssey_core/) — bootstrapped Python application/domain core.

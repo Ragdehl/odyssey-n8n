@@ -65,6 +65,8 @@ Routine implementation risk means proceed autonomously; material data, security,
 
 ## GitHub review workflow
 
+Before beginning each significant new functional Odyssey phase, use the repository's `odyssey-architecture-challenge` skill as a reasoning checkpoint before implementation. It is not required for tiny bug fixes, straightforward review feedback, formatting, documentation typo fixes, routine test corrections, or post-merge cleanup.
+
 Before continuing implementation on a branch that has an open Pull Request, use the repository's `odyssey-pr-feedback` skill to inspect and process review feedback.
 
 If a review comment conflicts with another comment, the approved architecture, or a material requirement, ask the user rather than guessing.
