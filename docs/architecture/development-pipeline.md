@@ -52,6 +52,9 @@ human review and merge
   Draft PR, semantic review, and human merge.
 - **D1 — Architecture Challenge + GitHub CI:** add a pre-implementation reasoning checkpoint and
   independent deterministic Python validation.
+- **D1.1 — public readiness + verification efficiency:** remove unnecessary operational identifiers
+  from public-facing content and avoid redundant local verification while preserving the complete
+  deterministic gate.
 - **D2 — independent Codex reviewer experiment:** evaluate only as a bounded later experiment.
 - **D3 — semantic-review gate + GitHub auto-merge:** consider only after review evidence is reliable;
   GitHub continues to own merge policy.
@@ -67,6 +70,8 @@ They do not authorize speculative infrastructure.
 
 ## Required-check follow-up
 
-The stable GitHub status-check name is `Python CI / Python deterministic checks`. After GitHub has
-registered a successful run, configure `main` protection to require that exact check. Repository
-protection is a GitHub setting and must not be changed implicitly by repository code.
+The stable GitHub status-check name is `Python CI / Python deterministic checks`. After the
+public-readiness change is merged, synchronize `main`, change repository visibility through GitHub,
+verify repository and Actions access, then configure `main` protection to require that exact check
+and prevent merging when it fails. Repository visibility and protection are GitHub settings and
+must not be changed implicitly by repository code.
