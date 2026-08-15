@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias
 
-
-MetadataScalar: TypeAlias = str | int | float | bool | None
-MetadataValue: TypeAlias = MetadataScalar | list[MetadataScalar]
+type MetadataScalar = str | int | float | bool | None
+type MetadataValue = MetadataScalar | list[MetadataScalar]
 
 
 @dataclass(slots=True)

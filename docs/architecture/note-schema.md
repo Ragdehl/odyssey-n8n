@@ -73,7 +73,7 @@ Run the deterministic validator and its standard-library tests from the reposito
 
 ```bash
 python3 scripts/validate_note_schema.py
-python3 -m unittest discover -s tests -v
+pytest
 ```
 
 The schema-definition validator checks the schema structure, controlled-field semantics, stable ID syntax, uniqueness, and descriptive registry entries without external dependencies. Separately, `odyssey_core.notes.validate_note` validates one generic note against an explicitly supplied parsed schema: required and allowed fields, controlled type and subtype, declared value constraints, type-specific properties, and compatible `schema_version`. It does not load a repository path or attempt historical lifecycle checks such as whether identity and revision stayed stable across earlier versions.

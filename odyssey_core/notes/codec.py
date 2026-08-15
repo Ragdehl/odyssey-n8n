@@ -9,11 +9,8 @@ from typing import Any
 
 from .model import MetadataScalar, Note
 
-
 _KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
-_NUMBER_PATTERN = re.compile(
-    r"^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$"
-)
+_NUMBER_PATTERN = re.compile(r"^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
 _PROPERTY_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):(?:[ \t]*(.*))$")
 
 
@@ -32,6 +29,10 @@ def _serialize_scalar(value: Any) -> str:
 
     Raises:
         NoteFormatError: If the value is not a supported finite scalar.
+
+    Example:
+        ``_serialize_scalar('Ada "Lovelace"')`` returns
+        ``'"Ada \\"Lovelace\\""'``.
     """
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
@@ -57,6 +58,13 @@ def serialize_note(note: Note) -> str:
 
     Raises:
         NoteFormatError: If the note or its metadata cannot be represented by the format.
+
+    Example:
+        A small note receives sorted, canonical frontmatter::
+
+            serialize_note(Note(metadata={"type": "person", "id": "ada"}, content="# Ada"))
+
+        returns ``'---\\nid: "ada"\\ntype: "person"\\n---\\n\\n# Ada'``.
     """
     if not isinstance(note, Note):
         raise NoteFormatError("Expected an Odyssey Note")
@@ -92,6 +100,10 @@ def _split_inline_array(source: str) -> list[str]:
 
     Raises:
         NoteFormatError: If quoting, nesting, or item separation is malformed.
+
+    Example:
+        ``_split_inline_array('"Ada, Countess", pioneer')`` returns
+        ``['"Ada, Countess"', 'pioneer']``; the comma inside quotes is preserved.
     """
     if not source.strip():
         return []
@@ -100,6 +112,7 @@ def _split_inline_array(source: str) -> list[str]:
     quote: str | None = None
     escaped = False
     index = 0
+    # Scan character by character because commas separate values only outside quoted strings.
     while index < len(source):
         char = source[index]
         if quote == '"':
@@ -153,6 +166,9 @@ def _parse_scalar(source: str, *, allow_array: bool = True) -> Any:
 
     Raises:
         NoteFormatError: If syntax is malformed, ambiguous, nested, or unsupported.
+
+    Example:
+        ``_parse_scalar('["Ada", 2, false]')`` returns ``["Ada", 2, False]``.
     """
     value = source.strip()
     if not value:
@@ -161,8 +177,7 @@ def _parse_scalar(source: str, *, allow_array: bool = True) -> Any:
         if not allow_array or not value.endswith("]"):
             raise NoteFormatError("Nested or malformed arrays are unsupported")
         return [
-            _parse_scalar(token, allow_array=False)
-            for token in _split_inline_array(value[1:-1])
+            _parse_scalar(token, allow_array=False) for token in _split_inline_array(value[1:-1])
         ]
     if any(character in value for character in "[]{}"):
         raise NoteFormatError("Nested metadata structures are unsupported")
@@ -213,6 +228,10 @@ def _parse_frontmatter(source: str) -> dict[str, Any]:
 
     Raises:
         NoteFormatError: If a property is duplicated, nested, or malformed.
+
+    Example:
+        ``_parse_frontmatter('id: ada\\naliases: ["Enchantress"]')`` returns
+        ``{"id": "ada", "aliases": ["Enchantress"]}``.
     """
     metadata: dict[str, Any] = {}
     lines = re.split(r"\r?\n", source)
@@ -237,6 +256,7 @@ def _parse_frontmatter(source: str) -> dict[str, Any]:
 
         values: list[MetadataScalar] = []
         index += 1
+        # An empty value introduces only Odyssey's supported two-space block-list form.
         while index < len(lines) and lines[index].startswith("  - "):
             item = lines[index][4:]
             values.append(_parse_scalar(item, allow_array=False))
@@ -258,6 +278,10 @@ def parse_note(markdown: str) -> Note:
 
     Raises:
         NoteFormatError: If delimiters or supported frontmatter syntax are malformed.
+
+    Example:
+        ``parse_note('---\\nid: ada\\n---\\n\\n# Ada')`` returns
+        ``Note(metadata={"id": "ada"}, content="# Ada")``.
     """
     if not isinstance(markdown, str):
         raise NoteFormatError("Markdown note must be text")
@@ -270,8 +294,9 @@ def parse_note(markdown: str) -> Note:
         raise NoteFormatError("Markdown note is missing closing frontmatter")
     absolute_closing = start + closing.start()
     metadata_source = markdown[start:absolute_closing]
-    content = markdown[start + closing.end():]
+    content = markdown[start + closing.end() :]
     closing_newline = closing.group(1)
+    # The first newline separates frontmatter from the body; it is not note content.
     if closing_newline and content.startswith(closing_newline):
-        content = content[len(closing_newline):]
+        content = content[len(closing_newline) :]
     return Note(metadata=_parse_frontmatter(metadata_source), content=content)

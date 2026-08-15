@@ -9,7 +9,6 @@ from pathlib import Path
 
 from scripts.validate_note_schema import SchemaValidationError, load_schema, validate_schema
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_SCHEMA = REPOSITORY_ROOT / "config" / "note-schema.json"
 
@@ -113,7 +112,9 @@ class NoteSchemaValidationTests(unittest.TestCase):
     def test_journal_entry_date_exists_and_is_required(self) -> None:
         """Record a journal entry's subject date as required structured information."""
         journal_entry = self.type_definition("journal_entry")
-        entry_date = next(item for item in journal_entry["properties"] if item["id"] == "entry_date")
+        entry_date = next(
+            item for item in journal_entry["properties"] if item["id"] == "entry_date"
+        )
         self.assertEqual(entry_date["value_type"], "date")
         self.assertIs(entry_date["required"], True)
 

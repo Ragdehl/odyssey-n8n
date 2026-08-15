@@ -16,7 +16,6 @@ from odyssey_core.notes import (
     validate_note,
 )
 
-
 CANONICAL_SCHEMA = Path(__file__).resolve().parents[2] / "config" / "note-schema.json"
 
 

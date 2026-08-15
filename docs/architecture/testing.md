@@ -39,13 +39,69 @@ Contract tests should verify validation, mapping, branch behavior, error propaga
 
 ## Python core testing
 
-Python application-core tests live under `tests/core/` and use the standard-library `unittest` framework. Run them from the repository root so `odyssey_core/` imports directly without a packaging or installation step:
+Python tests live under `tests/`. Pytest is the official runner and discovers the existing
+`unittest` suite without requiring a mass migration. New tests should normally use native pytest
+style, including fixtures and parametrization when they improve clarity. Existing unittest tests
+may be migrated incrementally when functional work already modifies them.
+
+From the repository root, create an isolated development environment and install the pinned tools:
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
 ```
 
-The suite includes structural coverage for the package boundary, focused temporary-directory contract tests for `VaultRepository`, and isolated tests for the generic Note, constrained Markdown codec, and canonical schema-driven note validation. Future tests should continue to assert real behavior as domain capabilities are deliberately introduced.
+The first command creates the repository-local virtual environment, the second activates it for the
+current shell, and the final command installs the exact development-tool versions recorded in
+`requirements-dev.txt`. This is development setup only; Odyssey remains an unpackaged application
+with no added runtime dependencies.
+
+Run the complete Python suite:
+
+```bash
+pytest
+```
+
+Pytest reads `testpaths` from `pyproject.toml`, so this runs every Python test beneath `tests/`.
+The suite includes structural package checks, temporary-directory `VaultRepository` contract tests,
+and isolated note codec, note validation, and schema tests.
+
+Run Ruff's defect and consistency checks across all tracked Python locations:
+
+```bash
+ruff check odyssey_core scripts tests
+```
+
+Format those locations in place:
+
+```bash
+ruff format odyssey_core scripts tests
+```
+
+To verify formatting without changing files, add `--check`:
+
+```bash
+ruff format --check odyssey_core scripts tests
+```
+
+Install the Git pre-commit hook once per clone:
+
+```bash
+pre-commit install
+```
+
+This writes the local Git hook that runs Ruff linting, Ruff's format check, the complete pytest
+suite, and the canonical schema validator before each ordinary commit. Run the same gates manually
+against every tracked file with:
+
+```bash
+pre-commit run --all-files
+```
+
+`--all-files` checks the repository rather than only changes staged for the next commit. The pytest
+and schema hooks deliberately ignore filenames supplied by pre-commit so each always runs its full
+intended suite.
 
 ## Integration testing
 

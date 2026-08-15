@@ -22,6 +22,10 @@ def _validate_value(field_id: str, value: Any, definition: dict[str, Any]) -> No
 
     Raises:
         NoteValidationError: If the value violates its declared type or constraints.
+
+    Example:
+        A definition with ``{"value_type": "integer", "constraints": {"minimum": 1}}``
+        accepts ``1`` and raises :class:`NoteValidationError` for ``0``.
     """
     value_type = definition.get("value_type")
     if value_type == "string":
@@ -97,6 +101,14 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     Raises:
         NoteValidationError: If note content, metadata, type, subtype, or schema version
             violates the supplied schema contract.
+
+    Example:
+        Load the canonical JSON schema, then validate a parsed or constructed note::
+
+            validate_note(note, schema)
+
+        Successful validation returns ``None``; a contract violation raises
+        :class:`NoteValidationError` with the failing field or invariant.
     """
     if not isinstance(note, Note):
         raise NoteValidationError("Expected an Odyssey Note")
@@ -111,8 +123,11 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     except (KeyError, TypeError):
         raise NoteValidationError("Supplied schema is not a usable canonical schema") from None
 
+    # Universal requirements are checked before selecting a note type because type-specific
+    # validation depends on a valid universal ``type`` field.
     missing_universal = sorted(
-        field_id for field_id, definition in universal.items()
+        field_id
+        for field_id, definition in universal.items()
         if definition.get("required") is True and field_id not in note.metadata
     )
     if missing_universal:
@@ -132,7 +147,8 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     if unknown:
         raise NoteValidationError(f"Unknown metadata fields for type {note_type_id!r}: {unknown}")
     missing_properties = sorted(
-        field_id for field_id, definition in properties.items()
+        field_id
+        for field_id, definition in properties.items()
         if definition.get("required") is True and field_id not in note.metadata
     )
     if missing_properties:
