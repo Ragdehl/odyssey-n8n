@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "types"}
 REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "subtypes", "properties"}
@@ -98,7 +97,9 @@ def _validate_properties(properties: Any, type_id: str) -> None:
         if not isinstance(property_id, str) or not ID_PATTERN.fullmatch(property_id):
             raise SchemaValidationError(f"{location} has invalid id {property_id!r}")
         if property_id in seen:
-            raise SchemaValidationError(f"duplicate property id {property_id!r} in type {type_id!r}")
+            raise SchemaValidationError(
+                f"duplicate property id {property_id!r} in type {type_id!r}"
+            )
         seen.add(property_id)
         _require_non_empty_string(
             property_definition["value_type"], f"property {property_id!r} value_type"
@@ -210,8 +211,7 @@ def _validate_architectural_metadata_invariants(
         raise SchemaValidationError("Odyssey metadata field 'type' must be required")
     type_constraints = note_type.get("constraints")
     if not isinstance(type_constraints, dict) or not (
-        type_constraints.get("registry") == "types"
-        and type_constraints.get("controlled") is True
+        type_constraints.get("registry") == "types" and type_constraints.get("controlled") is True
     ):
         raise SchemaValidationError("type must be controlled by the canonical types registry")
 
@@ -243,6 +243,10 @@ def validate_schema(schema: Any) -> None:
 
     Raises:
         SchemaValidationError: If the schema shape or definitions are inconsistent.
+
+    Example:
+        ``validate_schema({"schema_version": 1, "metadata_fields": ..., "types": ...})``
+        returns ``None`` when every definition and architectural invariant is valid.
     """
     if not isinstance(schema, dict):
         raise SchemaValidationError("schema root must be an object")
@@ -270,6 +274,9 @@ def load_schema(path: Path) -> Any:
 
     Raises:
         SchemaValidationError: If the file cannot be read or does not contain valid JSON.
+
+    Example:
+        ``load_schema(Path("config/note-schema.json"))`` returns the parsed JSON value.
     """
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -285,7 +292,9 @@ def main() -> int:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "schema", nargs="?", type=Path,
+        "schema",
+        nargs="?",
+        type=Path,
         default=Path(__file__).resolve().parents[1] / "config" / "note-schema.json",
     )
     args = parser.parse_args()

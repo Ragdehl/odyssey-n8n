@@ -79,9 +79,15 @@ class VaultRepository:
             InvalidNotePath: If the caller path violates the repository contract.
             NoteUnavailableError: If the valid path is missing, not a file, or escapes containment.
             VaultAccessError: If another filesystem or decoding failure occurs.
+
+        Example:
+            Given ``people/ada.md`` beneath the configured root::
+
+                markdown = repository.read_text("people/ada.md")
         """
         relative_path = self._validate_note_path(path)
         try:
+            # Resolve before opening so a symlink cannot redirect a read outside the vault.
             target = self._root.joinpath(*relative_path.parts).resolve(strict=True)
         except (FileNotFoundError, RuntimeError):
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
@@ -113,6 +119,11 @@ class VaultRepository:
             TypeError: If content is not text.
             NoteAlreadyExistsError: If any filesystem entry already occupies the target.
             VaultAccessError: If the parent is unavailable or another filesystem failure occurs.
+
+        Example:
+            Create a note only after its parent collection already exists::
+
+                repository.create_text("people/ada.md", "# Ada Lovelace\n")
         """
         relative_path = self._validate_note_path(path)
         if not isinstance(content, str):
@@ -123,6 +134,8 @@ class VaultRepository:
             raise VaultAccessError("Unable to create note") from None
 
         try:
+            # Resolve the parent before opening the target so a symlink cannot redirect
+            # creation outside the configured vault.
             parent = self._root.joinpath(*relative_path.parts[:-1]).resolve(strict=True)
         except (FileNotFoundError, OSError, RuntimeError):
             raise VaultAccessError("Note parent is unavailable") from None
@@ -149,6 +162,11 @@ class VaultRepository:
 
         Raises:
             VaultAccessError: If filesystem traversal cannot complete safely.
+
+        Example:
+            A vault containing ``index.md`` and ``people/ada.md`` returns::
+
+                ["index.md", "people/ada.md"]
         """
         paths: list[str] = []
         directories = [self._root]
@@ -157,6 +175,8 @@ class VaultRepository:
                 directory = directories.pop()
                 with os.scandir(directory) as entries:
                     for entry in entries:
+                        # Symlinks are excluded entirely: even an in-vault target could be
+                        # replaced between discovery and later access by a caller.
                         if entry.is_symlink():
                             continue
                         if entry.is_dir(follow_symlinks=False):

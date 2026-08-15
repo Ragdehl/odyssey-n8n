@@ -45,6 +45,9 @@ Do not introduce LangGraph, databases, vector databases, additional services, or
 - Avoid modifying unrelated files or workflows.
 - Prefer small, testable changes.
 - All functions and methods must have functional docstrings that describe their domain responsibility, parameters, returned values when applicable, and relevant errors. Explain what the function does rather than narrating implementation details.
+- Write production Python for a human reader: add concise concrete examples to non-trivial functions when they materially clarify inputs, outputs, or transformations, but omit them from trivial accessors and tests where they add noise.
+- Add production-code comments when security reasoning, parsing state, or a transformation is not obvious. Comments should explain purpose or intent rather than restating the syntax.
+- Use Ruff for Python linting and formatting, and pytest as the official Python test runner. New tests should normally use native pytest style; preserve existing unittest tests and migrate them only when functional work already requires modification.
 - Use Git branches, commits, Pull Request state, tests, and architecture documentation as the source of project-development state.
 - Verify every workflow before declaring it complete or ready. Verification must pass for completion or readiness, but a safe checkpoint commit may be made after a failure when it is clearly marked as such.
 - Never silently change the ontology schema; schema changes require an explicit proposal and normally human approval.
