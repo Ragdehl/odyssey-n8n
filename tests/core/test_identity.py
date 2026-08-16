@@ -9,7 +9,7 @@ import pytest
 
 from odyssey_core import (
     EntityCandidate,
-    EntitySearchError,
+    EntityLookupError,
     MatchKind,
     ResolutionOutcome,
     find_entity_candidates,
@@ -134,6 +134,56 @@ def test_type_filter_excludes_exact_cross_type_match(
     assert [candidate.id for candidate in candidates] == ["store-1"]
 
 
+def test_same_exact_name_across_types_is_ambiguous_without_type_filter(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
+    """Preserve cross-type ambiguity when the caller supplies no type constraint."""
+    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
+    _write_note(repository, "documents/Carrefour.md", note_id="doc-1", note_type="document")
+
+    resolution = resolve_entity(repository, schema, "Carrefour")
+
+    assert resolution.outcome is ResolutionOutcome.AMBIGUOUS
+    assert [(candidate.type, candidate.id) for candidate in resolution.candidates] == [
+        ("document", "doc-1"),
+        ("store", "store-1"),
+    ]
+
+
+def test_candidate_order_is_deterministic_across_repeated_discovery(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
+    """Order primary matches first, then normalized names and paths deterministically."""
+    _write_note(repository, "stores/Carrefour.md", note_id="store-main", note_type="store")
+    _write_note(repository, "documents/Carrefour.md", note_id="doc-main", note_type="document")
+    _write_note(
+        repository,
+        "stores/alpha.md",
+        note_id="store-alpha",
+        note_type="store",
+        aliases=["Carrefour"],
+    )
+    _write_note(
+        repository,
+        "documents/Alpha.md",
+        note_id="doc-alpha",
+        note_type="document",
+        aliases=["Carrefour"],
+    )
+
+    first = find_entity_candidates(repository, schema, "Carrefour")
+    second = find_entity_candidates(repository, schema, "Carrefour")
+
+    expected_paths = [
+        "documents/Carrefour.md",
+        "stores/Carrefour.md",
+        "documents/Alpha.md",
+        "stores/alpha.md",
+    ]
+    assert [candidate.path for candidate in first] == expected_paths
+    assert second == first
+
+
 def test_resolve_entity_represents_all_three_normal_outcomes(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
@@ -199,7 +249,7 @@ def test_invalid_existing_note_fails_closed(
     """Refuse a potentially unsafe not-found result when any existing note is invalid."""
     repository.create_text("broken.md", markdown)
 
-    with pytest.raises(EntitySearchError, match="broken.md"):
+    with pytest.raises(EntityLookupError, match="broken.md"):
         resolve_entity(repository, schema, "Carrefour", type="store")
 
 

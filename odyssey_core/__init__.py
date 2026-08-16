@@ -2,8 +2,8 @@
 
 from .identity import (
     EntityCandidate,
+    EntityLookupError,
     EntityResolution,
-    EntitySearchError,
     MatchKind,
     ResolutionOutcome,
     find_entity_candidates,
@@ -12,8 +12,8 @@ from .identity import (
 
 __all__ = [
     "EntityCandidate",
+    "EntityLookupError",
     "EntityResolution",
-    "EntitySearchError",
     "MatchKind",
     "ResolutionOutcome",
     "find_entity_candidates",

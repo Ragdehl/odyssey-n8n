@@ -13,9 +13,10 @@ writing.
 
 ## Capability hierarchy
 
-This is a conceptual capability map, not a mandatory pipeline. Retrieval does not traverse the write
-branch, `resolve_entity` does not necessarily lead to an upsert, and a mixed request may use both
-branches.
+This is a conceptual capability map, not a mandatory pipeline. Retrieval does not traverse the
+write branch, and a mixed request may use both branches. A `KnowledgeUnit` is a knowledge object,
+not necessarily an entity: only entity references that require identity lookup pass through
+`resolve_entity`.
 
 ```text
 USER / AGENT
@@ -35,40 +36,47 @@ get_context                    decompose_knowledge
                                      v
                                KnowledgePlan
                                      |
-                          +----------+----------+
-                          |          |          |
-                          v          v          v
-                       Unit A     Unit B      Unit C
-                          |          |          |
-                          +----------+----------+
+                          +----------+-----------+
+                          |                      |
+                          v                      v
+                  Knowledge units       entity references that
+                  and their facts       require identity lookup
+                          |                      |
+                          |                      v
+                          |               resolve_entity
+                          |                   [PHASE 9]
+                          |                      |
+                          |                      v
+                          |          find_entity_candidates
+                          |                   [PHASE 9]
+                          |                      |
+                          +----------+-----------+
                                      |
                                      v
-                              resolve_entity
-                                  [PHASE 9]
+                       planned domain/write decisions
+                  upsert_entity / save_knowledge [PLANNED]
                                      |
                                      v
-                         find_entity_candidates
-                                  [PHASE 9]
-                                     |
-                                     v
-                              upsert_entity
-                                 [PLANNED]
-                                     |
-                                     v
-                              save_knowledge
-                                 [PLANNED]
-                                     |
-                                     v
-                                   Note
-                                     |
-                          parse / validate / serialize
-                                     |
-                                     v
-                              VaultRepository
-                                     |
-                                     v
-                              Markdown vault
+                          validated Note persistence
 ```
+
+A purchase, event, task, journal entry, or document remains knowledge in its own right. For
+example, a purchase unit sends its store and product references to identity resolution while its
+purchase facts remain attached to the purchase:
+
+```text
+Purchase unit
+    |
+    +--> store reference ----> resolve_entity("Carrefour Balma", type="store")
+    |
+    +--> product reference --> resolve_entity("Lactel", type="product")
+    |
+    +--> purchase facts ------> remain purchase knowledge
+```
+
+After the referenced identities are settled, later planned domain behavior may construct and save
+the purchase. Odyssey does not yet permanently classify every possible unit or implement a generic
+routing framework.
 
 The Phase 9 call direction is narrower:
 
@@ -84,8 +92,28 @@ find_entity_candidates
       +--> validate_note
 ```
 
-`VaultRepository` remains raw filesystem access. It does not parse Markdown, load schema meaning,
-discover identity candidates, resolve identities, or make domain decisions.
+Read and write transformations run in opposite directions:
+
+```text
+READ
+VaultRepository.read_text
+    -> raw Markdown
+    -> parse_note
+    -> Note
+    -> validate_note
+
+WRITE
+planned domain / knowledge outcome
+    -> Note
+    -> validate_note
+    -> serialize_note
+    -> raw Markdown
+    -> VaultRepository.create_text / future update boundary
+```
+
+`parse_note` never writes, `serialize_note` never reads, and `validate_note` can participate in
+either direction. `VaultRepository` remains raw filesystem access: it does not parse Markdown, load
+schema meaning, discover identity candidates, resolve identities, or make domain decisions.
 
 ## Capability contracts
 
@@ -192,11 +220,11 @@ Future orchestration may parallelize independent, read-only work:
 ```text
 KnowledgePlan
     |
-    +---- Carrefour unit ---- resolve_entity ----+
-    |                                            |
-    +---- Lactel unit ------- resolve_entity ----+  PARALLEL OK
-    |                                            |
-    +---- another entity ---- resolve_entity ----+
+    +---- Carrefour reference ---- resolve_entity ----+
+    |                                                 |
+    +---- Lactel reference ------- resolve_entity ----+  PARALLEL OK
+    |                                                 |
+    +---- another entity reference -> resolve_entity -+
 ```
 
 Dependencies still determine ordering:
@@ -208,10 +236,12 @@ resolve Carrefour
 create Purchase referring to Carrefour identity
 ```
 
-Several facts targeting the same logical entity must be coalesced before mutation rather than race
-as independent writes. The rule is: parallelize independent work; serialize or coalesce
-dependency-sensitive and same-entity mutations. This property does not require or authorize a DAG
-engine, scheduler, LangGraph, workflow engine, or parallel execution framework in Phase 9.
+Only references requiring identity decisions are resolved; a knowledge unit is not passed wholesale
+to `resolve_entity`. Several facts targeting the same logical entity must be coalesced before
+mutation rather than race as independent writes. The rule is: parallelize independent work;
+serialize or coalesce dependency-sensitive and same-entity mutations. This property does not
+require or authorize a DAG engine, scheduler, LangGraph, workflow engine, or parallel execution
+framework in Phase 9.
 
 ### `upsert_entity` — decide reuse, creation, or update
 
@@ -279,7 +309,7 @@ engine, scheduler, LangGraph, workflow engine, or parallel execution framework i
 
   Zero candidates produce the same structure with `outcome=ResolutionOutcome.NOT_FOUND` and
   `candidates=()`. Several exact candidates produce `ResolutionOutcome.AMBIGUOUS` and retain every
-  candidate. A malformed or schema-invalid existing note raises `EntitySearchError` because lookup
+  candidate. A malformed or schema-invalid existing note raises `EntityLookupError` because lookup
   cannot decide safely.
 
 ### `find_entity_candidates` — exact identity-candidate discovery
@@ -320,7 +350,7 @@ No punctuation rewriting, stemming, edit distance, phonetics, transliteration, e
 “only candidate” heuristic participates.
 
 Every listed Markdown note is read, parsed, and validated before results are returned, even when a
-type filter would later exclude it. A parse or validation failure raises `EntitySearchError` with
+type filter would later exclude it. A parse or validation failure raises `EntityLookupError` with
 the relative path and preserves the original error as its cause. Silently skipping an invalid note
 could produce a false `NOT_FOUND` and enable a future duplicate.
 
@@ -526,16 +556,18 @@ conceptual and **PLANNED**; Phase 9 implements identity resolution only.
    Repeated store information is grouped. The purchase retains references to the related units
    instead of duplicating all their context.
 
-4. **Independent identity resolution — Phase 9**
+4. **Independent reference resolution — Phase 9**
 
    ```python
    store_result = resolve_entity(repository, schema, "Carrefour Balma", type="store")
    product_result = resolve_entity(repository, schema, "Lactel", type="product")
    ```
 
-   These read-only scans are independent and may be orchestrated in parallel in the future. Each
-   calls `find_entity_candidates`, which lists paths, reads raw Markdown, parses `Note` values, and
-   validates them before returning exact evidence.
+   Only the store and product references require identity resolution; the purchase unit itself is
+   not treated as an entity query, and its facts remain purchase knowledge. These read-only scans
+   are independent and may be orchestrated in parallel in the future. Each calls
+   `find_entity_candidates`, which follows the read direction: list paths, read raw Markdown, parse
+   `Note` values, then validate before returning exact evidence.
 
 5. **Dependency-sensitive writing — conceptual**
 
@@ -565,10 +597,11 @@ conceptual and **PLANNED**; Phase 9 implements identity resolution only.
    )
    ```
 
-   `validate_note(note, schema)` returns `None`, `serialize_note(note)` returns raw Markdown, and
-   `repository.create_text("stores/Carrefour Balma.md", markdown)` persists it. Planning decides
-   relationships; `Note` carries metadata and content; serialization produces text; the repository
-   sees only the chosen path and that text.
+   In the write direction, `validate_note(note, schema)` returns `None`, `serialize_note(note)`
+   returns raw Markdown, and `repository.create_text("stores/Carrefour Balma.md", markdown)`
+   persists it. Planning decides relationships; `Note` carries metadata and content; serialization
+   produces text; the repository sees only the chosen path and that text. `parse_note` is not part
+   of this write path.
 
 ## Why Phase 9 is not general search
 

@@ -11,7 +11,7 @@ from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note,
 from odyssey_core.storage import VaultRepository
 
 
-class EntitySearchError(RuntimeError):
+class EntityLookupError(RuntimeError):
     """Indicate that a vault note could not safely participate in entity lookup."""
 
 
@@ -138,7 +138,7 @@ def find_entity_candidates(
 
     Raises:
         ValueError: If the query is empty or the type/schema is not canonical.
-        EntitySearchError: If a Markdown note cannot be parsed or validated safely.
+        EntityLookupError: If a Markdown note cannot be parsed or validated safely.
         VaultRepository exceptions: If listing or raw note access fails.
 
     Example:
@@ -158,7 +158,7 @@ def find_entity_candidates(
             note = parse_note(repository.read_text(path))
             validate_note(note, schema)
         except (NoteFormatError, NoteValidationError) as error:
-            raise EntitySearchError(f"Cannot safely inspect invalid note: {path}") from error
+            raise EntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
 
         note_type = cast(str, note.metadata["type"])
         if type is not None and note_type != type:
@@ -222,7 +222,7 @@ def resolve_entity(
 
     Raises:
         ValueError: If the query, type, or schema is invalid.
-        EntitySearchError: If an existing note cannot safely participate in lookup.
+        EntityLookupError: If an existing note cannot safely participate in lookup.
         VaultRepository exceptions: If listing or raw note access fails.
     """
     normalized_query = query.strip() if isinstance(query, str) else query
