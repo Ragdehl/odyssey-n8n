@@ -54,6 +54,10 @@ get_context                    decompose_knowledge
                           |     find_exact_entity_candidates
                           |                   [PHASE 9]
                           |                      |
+                          |                      v
+                          |   find_semantic_entity_candidates
+                          |                  [PHASE 10]
+                          |                      |
                           +----------+-----------+
                                      |
                                      v
@@ -96,6 +100,23 @@ find_exact_entity_candidates
       +--> validate_note
 ```
 
+The Phase 10 semantic layer is a separate candidate-only fallback over a disposable derived index:
+
+```text
+SemanticEntityIndex.rebuild
+      +--> list/read authoritative Markdown
+      +--> parse and validate every Note
+      +--> build one retrieval projection per note
+      +--> local multilingual embedding
+      +--> atomically replace derived SQLite index
+
+find_semantic_entity_candidates
+      +--> embed reference + caller context locally
+      +--> optional canonical type filter
+      +--> exact cosine ranking
+      +--> Top N candidate evidence (never an identity decision)
+```
+
 Read and write transformations run in opposite directions:
 
 ```text
@@ -121,8 +142,8 @@ schema meaning, discover identity candidates, resolve identities, or make domain
 
 ## Capability contracts
 
-Every conceptual output below is illustrative unless the capability is marked implemented. Phase 9
-does not freeze request-plan or knowledge-plan Python APIs or JSON schemas.
+Every conceptual output below is illustrative unless the capability is marked implemented. Phases
+9 and 10 do not freeze request-plan or knowledge-plan Python APIs or JSON schemas.
 
 ### `interpret_request` — understand the requested operations
 
@@ -163,8 +184,8 @@ does not freeze request-plan or knowledge-plan Python APIs or JSON schemas.
 - **Output:** a future context package grounded in Odyssey notes.
 - **Can see:** the interpreted question and results from future retrieval capabilities.
 - **Must not know or do:** equate semantic relevance with entity identity or mutate notes.
-- **Status:** **PLANNED**. Text, metadata, wikilink, graph, index, or semantic retrieval choices are
-  deliberately not selected in Phase 9.
+- **Status:** **PLANNED**. Phase 10's entity-candidate index does not define general knowledge
+  retrieval, linked-note traversal, or the future context-package contract.
 - **Concrete conceptual example:** input `previous Lactel purchase price`; output might identify the
   source purchase note and a recorded price, with enough provenance to answer the user. The exact
   package shape remains undecided.
@@ -245,7 +266,7 @@ to `resolve_entity`. Several facts targeting the same logical entity must be coa
 mutation rather than race as independent writes. The rule is: parallelize independent work;
 serialize or coalesce dependency-sensitive and same-entity mutations. This property does not
 require or authorize a DAG engine, scheduler, LangGraph, workflow engine, or parallel execution
-framework in Phase 9.
+framework in Phases 9 or 10.
 
 ### `upsert_entity` — decide reuse, creation, or update
 
@@ -256,7 +277,7 @@ framework in Phase 9.
 - **Must not know or do:** reinterpret the full user request, treat `NO_EXACT_MATCH` as proof of
   absence or unconditional creation permission, bypass validation, or silently change the
   canonical schema.
-- **Status:** **PLANNED** for Phase 10; Phase 9 performs no create or update behavior.
+- **Status:** **PLANNED**; Phase 10 performs no create or update behavior.
 - **Concrete conceptual example:** a future fully resolved Carrefour identity may be reused;
   `NO_EXACT_MATCH` must continue through later resolution rather than authorize creation, and
   unresolved ambiguity may require clarification. The permanent write-result shape is not defined
@@ -270,7 +291,7 @@ framework in Phase 9.
 - **Can see:** approved domain outcomes and note-domain contracts.
 - **Must not know or do:** manipulate raw files directly, ignore dependencies, or invent ontology
   schema.
-- **Status:** **PLANNED**; Phase 9 does not implement its write behavior.
+- **Status:** **PLANNED**; Phase 10 does not implement its write behavior.
 - **Concrete conceptual example:** after store and product identities are settled, save a purchase
   note linking those entities and report the affected notes. Exact contracts remain a future
   architecture decision.
@@ -285,7 +306,8 @@ framework in Phase 9.
 - **Can see:** the original reference and context plus evidence returned by its lower layers.
 - **Must not know or do:** equate semantic similarity with identity, invent certainty, authorize
   automatic creation after no exact match, or make an LLM scan the entire vault.
-- **Status:** **PLANNED**. Phase 9 intentionally exposes no Python function with this name.
+- **Status:** **PLANNED** for contextual resolution after Phase 10. No Python function with this
+  name exists yet.
 - **Concrete conceptual example:** `"the other Beatriz"` may have no exact match. Structured and
   semantic retrieval may narrow candidates to the user's spouse and Xavi's partner; contextual
   evidence may resolve the latter or retain ambiguity when evidence is insufficient.
@@ -306,7 +328,7 @@ unique exact match       no/ambiguous exact match
                                   |
                                   v
                          semantic/vector retrieval
-                               [PLANNED]
+                              [PHASE 10]
                                   |
                                   v
                          contextual resolver
@@ -325,19 +347,20 @@ The future layered resolver may also accept a stable ID as decisive exact eviden
 already has one. The implemented Phase 9 API deliberately preserves its narrower contract: it
 matches only filename-derived primary names and aliases, with optional canonical type filtering.
 
-Semantic/vector retrieval is now an expected future component unless a simpler approach proves
-sufficient. The demonstrated need is identity expressed through roles, relationships, contextual
+Semantic/vector candidate retrieval is implemented in Phase 10 for identity expressed through
+roles, relationships, contextual
 descriptions, paraphrases, and informal names such as `"my wife"`, `"the mother of my children"`,
 `"Xavi's wife"`, or `"the other Beatriz"`. A derived index may use stable ID, type, primary name,
-aliases, selected metadata, relationships/context, note text, and embeddings to return a small
-likely candidate set. Phase 9 selects no vector technology, embedding model, threshold, or index
-contract. Markdown remains authoritative; any index must be disposable and rebuildable.
+aliases, selected metadata, relationships/context, note text, and one local multilingual embedding
+per note to return a small likely candidate set. The index is a disposable SQLite file using exact
+cosine ranking at current scale. Similarity is never identity confidence. See
+[`semantic-retrieval.md`](semantic-retrieval.md) for the implemented contract and benchmark.
 
 The contextual resolver may later give an LLM the reference, original surrounding context, and
 only that small candidate set with evidence. For example, in `"Yesterday we had dinner with Xavi
 and the other Beatriz said..."`, candidates may include the user's spouse and a Beatriz recorded as
 Xavi's partner. The context may support the latter. If evidence remains insufficient, the result
-must remain ambiguous or unresolved. Phase 9 freezes no prompt, response schema, or confidence
+must remain ambiguous or unresolved. Phase 10 freezes no prompt, response schema, or confidence
 threshold.
 
 ### Resolution before canonical link creation
@@ -598,7 +621,8 @@ schema proposal and human approval.
 ## End-to-end multi-unit example
 
 The following shows representations at each boundary. All request and knowledge planning is
-conceptual and **PLANNED**; Phase 9 implements identity resolution only.
+conceptual and **PLANNED**; Phases 9 and 10 implement exact lookup and semantic candidate retrieval
+only.
 
 1. **Arbitrary user input**
 
@@ -665,7 +689,7 @@ conceptual and **PLANNED**; Phase 9 implements identity resolution only.
    A purchase write waits until its store and product references have settled. `NO_EXACT_MATCH`
    continues to later planned resolution and never authorizes creation by itself;
    `AMBIGUOUS_EXACT_MATCH` also requires later evidence or clarification. No such write logic exists
-   in Phase 9.
+   in Phase 10.
 
 6. **Note transformation — implemented infrastructure, future application composition**
 
@@ -694,7 +718,7 @@ conceptual and **PLANNED**; Phase 9 implements identity resolution only.
    produces text; the repository sees only the chosen path and that text. `parse_note` is not part
    of this write path.
 
-## Why Phase 9 is only exact resolution
+## Why exact and semantic candidate retrieval remain separate
 
 These capabilities answer different questions:
 
@@ -705,13 +729,16 @@ resolve_exact_entity("Carrefour", type="store")
 resolve_entity("the other Beatriz", context=...)  [PLANNED]
     -> Which entity does this contextual reference identify, if evidence is sufficient?
 
+find_semantic_entity_candidates("the other Beatriz", context=...)
+    -> Which small ranked set should a later resolver consider?
+
 search("What stores do I normally use and what do I buy there?")  [FUTURE]
     -> Which knowledge is relevant to this natural-language question?
 ```
 
-The generic names `resolve_entity` and `search` are reserved for future hybrid identity resolution
-and general knowledge retrieval respectively. Phase 9 uses exact primary names, aliases, canonical
-types, and stable IDs; it adds no database, vector index, embeddings, LLM calls, graph traversal, or
+The generic names `resolve_entity` and `search` remain reserved for future hybrid identity
+resolution and general knowledge retrieval. Phase 9 owns deterministic exact evidence. Phase 10
+owns semantic candidate ranking only; it adds no LLM, graph traversal, note mutation, watcher, or
 additional service.
 
 ## n8n and the legacy/admin storage path
@@ -751,11 +778,10 @@ Raspberry Pi host             n8n container
 ```
 
 Markdown under `/data/odyssey` is authoritative and remains readable through Obsidian and ordinary
-file tools. Role-, relationship-, and context-based identity references now demonstrate a likely
-need for semantic/vector candidate retrieval in the future hybrid resolver unless a simpler
-solution proves sufficient. Any cache, graph projection, text index, or vector index remains
-derived, disposable, and rebuildable from Markdown. Its technology is a later architecture
-decision. Phase 9 performs a straightforward linear scan and does not access a derived store.
+file tools. Phase 10's semantic SQLite index is derived, disposable, and explicitly rebuildable from
+validated Markdown. It belongs under runtime storage rather than the vault, uses a local embedding
+model, and remains only ranking evidence for the future hybrid resolver. Phase 9 continues to
+perform its independent exact linear scan and does not access the derived store.
 
 Odyssey Core should eventually be the sole normal writer of knowledge notes. High-level domain
 tools provide agents with stable intent-level contracts, centralize validation and idempotency, and
