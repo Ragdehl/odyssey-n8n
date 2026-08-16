@@ -39,9 +39,31 @@ class VaultRepository:
         except (FileNotFoundError, OSError, RuntimeError, TypeError):
             raise VaultAccessError("Vault root is unavailable") from None
 
-        if not root.is_dir() or not os.access(root, os.R_OK | os.W_OK | os.X_OK):
+        if not root.is_dir() or not os.access(root, os.R_OK | os.X_OK):
             raise VaultAccessError("Vault root is unusable")
         self._root = root
+
+    def contains_filesystem_path(self, path: Path) -> bool:
+        """Report whether a filesystem path resolves beneath the configured vault.
+
+        This containment check lets derived-storage callers prevent accidental placement inside
+        authoritative vault knowledge. It does not require the candidate path to exist.
+
+        Args:
+            path: Filesystem path whose resolved location should be checked.
+
+        Returns:
+            ``True`` when the path is the vault root or is contained beneath it.
+
+        Raises:
+            TypeError: If ``path`` is not a ``pathlib.Path``.
+        """
+        if not isinstance(path, Path):
+            raise TypeError("Filesystem path must be a pathlib.Path")
+        try:
+            return path.resolve(strict=False).is_relative_to(self._root)
+        except (OSError, RuntimeError):
+            return False
 
     @staticmethod
     def _validate_note_path(path: str) -> PurePosixPath:

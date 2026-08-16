@@ -1,0 +1,98 @@
+{
+  "notes": [
+    {
+      "id": "person-beatriz-a",
+      "path": "people/Beatriz Alonso.md",
+      "type": "person",
+      "text": "Name: Beatriz Alonso\nAliases: Bea\nType: person\nRelationship to user: spouse\nMy wife and the mother of my children."
+    },
+    {
+      "id": "person-beatriz-b",
+      "path": "people/Beatriz Costa.md",
+      "type": "person",
+      "text": "Name: Beatriz Costa\nType: person\nXavi's wife and partner. Often meets us together with Xavi."
+    },
+    {
+      "id": "person-xavi",
+      "path": "people/Xavi.md",
+      "type": "person",
+      "text": "Name: Xavi\nType: person\nFriend of the user. Partner of Beatriz Costa."
+    },
+    {
+      "id": "person-carlos",
+      "path": "people/Carlos.md",
+      "type": "person",
+      "text": "Name: Carlos\nType: person\nA colleague from work."
+    },
+    {
+      "id": "store-carrefour-balma",
+      "path": "stores/Carrefour Balma.md",
+      "type": "store",
+      "text": "Name: Carrefour Balma\nAliases: Carrefour de Balma\nType: store\nThe Carrefour supermarket in Balma. My usual grocery store; I normally shop here."
+    },
+    {
+      "id": "store-carrefour-labege",
+      "path": "stores/Carrefour Labège.md",
+      "type": "store",
+      "text": "Name: Carrefour Labège\nAliases: Carrefour de Labège\nType: store\nThe Carrefour supermarket in Labège."
+    },
+    {
+      "id": "store-lidl",
+      "path": "stores/Lidl.md",
+      "type": "store",
+      "text": "Name: Lidl\nType: store\nA discount supermarket used occasionally."
+    },
+    {
+      "id": "project-odyssey",
+      "path": "projects/Odyssey.md",
+      "type": "project",
+      "text": "Name: Odyssey\nType: project\nPersonal knowledge system that turns unstructured information into atomic Markdown notes."
+    },
+    {
+      "id": "project-kitchen",
+      "path": "projects/Kitchen renovation.md",
+      "type": "project",
+      "text": "Name: Kitchen renovation\nType: project\nProject to redesign and renovate the kitchen."
+    },
+    {
+      "id": "concept-atomic-notes",
+      "path": "concepts/Atomic notes.md",
+      "type": "concept",
+      "text": "Name: Atomic notes\nType: concept\nOne independently identifiable concept, person, place, or project per Markdown note."
+    }
+  ],
+  "queries": [
+    {"reference": "my wife", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "mi mujer", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "ma femme", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "mother of my children", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "la madre de mis hijos", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "la mère de mes enfants", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "la meva dona", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "la mare dels meus fills", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "Xavi's wife", "context": "", "expected_id": "person-beatriz-b"},
+    {"reference": "la dona d'en Xavi", "context": "", "expected_id": "person-beatriz-b"},
+    {
+      "reference": "the other Beatriz",
+      "context": "We had dinner with Xavi and the other Beatriz.",
+      "expected_id": "person-beatriz-b"
+    },
+    {"reference": "Carrefour de Balma", "context": "", "expected_id": "store-carrefour-balma"},
+    {"reference": "le Carrefour de Balma", "context": "", "expected_id": "store-carrefour-balma"},
+    {
+      "reference": "the Carrefour I normally use",
+      "context": "I need groceries after work.",
+      "expected_id": "store-carrefour-balma"
+    },
+    {
+      "reference": "my personal knowledge system",
+      "context": "The project creates Markdown notes.",
+      "expected_id": "project-odyssey"
+    },
+    {
+      "reference": "one idea per note",
+      "context": "How should knowledge be organized?",
+      "expected_id": "concept-atomic-notes"
+    }
+  ]
+}
