@@ -1,4 +1,4 @@
-"""Deterministic entity lookup over validated Odyssey notes."""
+"""Deterministic exact entity lookup over validated Odyssey notes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note,
 from odyssey_core.storage import VaultRepository
 
 
-class EntityLookupError(RuntimeError):
+class ExactEntityLookupError(RuntimeError):
     """Indicate that a vault note could not safely participate in entity lookup."""
 
 
@@ -22,16 +22,16 @@ class MatchKind(Enum):
     ALIAS = "alias"
 
 
-class ResolutionOutcome(Enum):
-    """Describe the normal domain outcome of resolving one entity reference."""
+class ExactResolutionOutcome(Enum):
+    """Describe the outcome of exact deterministic identity resolution."""
 
-    RESOLVED = "resolved"
-    NOT_FOUND = "not_found"
-    AMBIGUOUS = "ambiguous"
+    EXACT_MATCH = "exact_match"
+    NO_EXACT_MATCH = "no_exact_match"
+    AMBIGUOUS_EXACT_MATCH = "ambiguous_exact_match"
 
 
 @dataclass(frozen=True, slots=True)
-class EntityCandidate:
+class ExactEntityCandidate:
     """Expose the useful identity evidence for one matching validated note.
 
     Attributes:
@@ -52,25 +52,25 @@ class EntityCandidate:
 
 
 @dataclass(frozen=True, slots=True)
-class EntityResolution:
-    """Represent a conservative entity-resolution outcome and its evidence.
+class ExactEntityResolution:
+    """Represent an exact deterministic resolution outcome and its evidence.
 
     Attributes:
-        outcome: Resolved, not-found, or ambiguous domain outcome.
+        outcome: Unique, absent, or ambiguous exact-match outcome.
         query: Trimmed entity reference evaluated by the resolver.
         type: Optional canonical type constraint applied to the lookup.
         candidates: Deterministically ordered exact identity candidates.
     """
 
-    outcome: ResolutionOutcome
+    outcome: ExactResolutionOutcome
     query: str
     type: str | None
-    candidates: tuple[EntityCandidate, ...]
+    candidates: tuple[ExactEntityCandidate, ...]
 
     @property
-    def candidate(self) -> EntityCandidate | None:
-        """Return the uniquely resolved candidate, or ``None`` for other outcomes."""
-        if self.outcome is ResolutionOutcome.RESOLVED:
+    def candidate(self) -> ExactEntityCandidate | None:
+        """Return the unique exact candidate, or ``None`` for other outcomes."""
+        if self.outcome is ExactResolutionOutcome.EXACT_MATCH:
             return self.candidates[0]
         return None
 
@@ -113,18 +113,18 @@ def _canonical_types(schema: dict[str, Any]) -> set[str]:
     return type_ids
 
 
-def find_entity_candidates(
+def find_exact_entity_candidates(
     repository: VaultRepository,
     schema: dict[str, Any],
     query: str,
     *,
     type: str | None = None,
-) -> tuple[EntityCandidate, ...]:
+) -> tuple[ExactEntityCandidate, ...]:
     """Find deterministic exact-name and exact-alias candidates in a Markdown vault.
 
     Every listed note is read, parsed, and validated before a result is returned. This
     fail-closed policy prevents a malformed existing note from being silently ignored and
-    producing an unsafe ``NOT_FOUND`` decision in duplicate-prevention workflows.
+    producing an unsafe ``NO_EXACT_MATCH`` decision in duplicate-prevention workflows.
 
     Args:
         repository: Raw filesystem boundary used to list and read Markdown text.
@@ -138,12 +138,12 @@ def find_entity_candidates(
 
     Raises:
         ValueError: If the query is empty or the type/schema is not canonical.
-        EntityLookupError: If a Markdown note cannot be parsed or validated safely.
+        ExactEntityLookupError: If a Markdown note cannot be parsed or validated safely.
         VaultRepository exceptions: If listing or raw note access fails.
 
     Example:
-        ``find_entity_candidates(repository, schema, " carrefour ", type="store")`` can return a
-        filename match for ``stores/Carrefour.md`` or an alias match on another store.
+        ``find_exact_entity_candidates(repository, schema, " carrefour ", type="store")`` can
+        return a filename match for ``stores/Carrefour.md`` or an alias match on another store.
     """
     normalized_query = _normalize_reference(query)
     if not normalized_query:
@@ -152,13 +152,13 @@ def find_entity_candidates(
     if type is not None and (not isinstance(type, str) or type not in canonical_types):
         raise ValueError(f"Unknown canonical note type: {type!r}")
 
-    candidates: list[EntityCandidate] = []
+    candidates: list[ExactEntityCandidate] = []
     for path in repository.list_markdown_paths():
         try:
             note = parse_note(repository.read_text(path))
             validate_note(note, schema)
         except (NoteFormatError, NoteValidationError) as error:
-            raise EntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
+            raise ExactEntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
 
         note_type = cast(str, note.metadata["type"])
         if type is not None and note_type != type:
@@ -180,7 +180,7 @@ def find_entity_candidates(
 
         if match_kind is not None:
             candidates.append(
-                EntityCandidate(
+                ExactEntityCandidate(
                     path=path,
                     id=cast(str, note.metadata["id"]),
                     type=note_type,
@@ -201,13 +201,13 @@ def find_entity_candidates(
     return tuple(candidates)
 
 
-def resolve_entity(
+def resolve_exact_entity(
     repository: VaultRepository,
     schema: dict[str, Any],
     query: str,
     *,
     type: str | None = None,
-) -> EntityResolution:
+) -> ExactEntityResolution:
     """Resolve an already-extracted entity reference using exact identity evidence.
 
     Args:
@@ -217,23 +217,24 @@ def resolve_entity(
         type: Optional canonical type constraint used to avoid cross-type collisions.
 
     Returns:
-        ``RESOLVED`` for one exact candidate, ``NOT_FOUND`` for none, or ``AMBIGUOUS``
-        for several. All matching candidates remain available as evidence.
+        ``EXACT_MATCH`` for one exact candidate, ``NO_EXACT_MATCH`` for none, or
+        ``AMBIGUOUS_EXACT_MATCH`` for several. All exact candidates remain available as evidence.
+        ``NO_EXACT_MATCH`` does not establish that the entity is absent from Odyssey.
 
     Raises:
         ValueError: If the query, type, or schema is invalid.
-        EntityLookupError: If an existing note cannot safely participate in lookup.
+        ExactEntityLookupError: If an existing note cannot safely participate in lookup.
         VaultRepository exceptions: If listing or raw note access fails.
     """
     normalized_query = query.strip() if isinstance(query, str) else query
-    candidates = find_entity_candidates(repository, schema, query, type=type)
+    candidates = find_exact_entity_candidates(repository, schema, query, type=type)
     if not candidates:
-        outcome = ResolutionOutcome.NOT_FOUND
+        outcome = ExactResolutionOutcome.NO_EXACT_MATCH
     elif len(candidates) == 1:
-        outcome = ResolutionOutcome.RESOLVED
+        outcome = ExactResolutionOutcome.EXACT_MATCH
     else:
-        outcome = ResolutionOutcome.AMBIGUOUS
-    return EntityResolution(
+        outcome = ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
+    return ExactEntityResolution(
         outcome=outcome,
         query=normalized_query,
         type=type,

@@ -1,21 +1,21 @@
 """Odyssey's Python application and domain core."""
 
 from .identity import (
-    EntityCandidate,
-    EntityLookupError,
-    EntityResolution,
+    ExactEntityCandidate,
+    ExactEntityLookupError,
+    ExactEntityResolution,
+    ExactResolutionOutcome,
     MatchKind,
-    ResolutionOutcome,
-    find_entity_candidates,
-    resolve_entity,
+    find_exact_entity_candidates,
+    resolve_exact_entity,
 )
 
 __all__ = [
-    "EntityCandidate",
-    "EntityLookupError",
-    "EntityResolution",
+    "ExactEntityCandidate",
+    "ExactEntityLookupError",
+    "ExactEntityResolution",
+    "ExactResolutionOutcome",
     "MatchKind",
-    "ResolutionOutcome",
-    "find_entity_candidates",
-    "resolve_entity",
+    "find_exact_entity_candidates",
+    "resolve_exact_entity",
 ]

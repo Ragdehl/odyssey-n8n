@@ -44,10 +44,14 @@ get_context                    decompose_knowledge
                           |                      |
                           |                      v
                           |               resolve_entity
+                          |                  [PLANNED]
+                          |                      |
+                          |                      v
+                          |          resolve_exact_entity
                           |                   [PHASE 9]
                           |                      |
                           |                      v
-                          |          find_entity_candidates
+                          |     find_exact_entity_candidates
                           |                   [PHASE 9]
                           |                      |
                           +----------+-----------+
@@ -78,13 +82,13 @@ After the referenced identities are settled, later planned domain behavior may c
 the purchase. Odyssey does not yet permanently classify every possible unit or implement a generic
 routing framework.
 
-The Phase 9 call direction is narrower:
+The Phase 9 call direction is the exact layer only:
 
 ```text
-resolve_entity
+resolve_exact_entity
       |
       v
-find_entity_candidates
+find_exact_entity_candidates
       |
       +--> VaultRepository.list_markdown_paths
       +--> VaultRepository.read_text
@@ -249,12 +253,14 @@ framework in Phase 9.
 - **Input:** a structured entity unit plus resolution evidence.
 - **Output:** a future validated entity-write outcome.
 - **Can see:** grouped entity facts, resolution outcomes, and note-domain contracts.
-- **Must not know or do:** reinterpret the full user request, treat `NOT_FOUND` as unconditional
-  creation permission, bypass validation, or silently change the canonical schema.
+- **Must not know or do:** reinterpret the full user request, treat `NO_EXACT_MATCH` as proof of
+  absence or unconditional creation permission, bypass validation, or silently change the
+  canonical schema.
 - **Status:** **PLANNED** for Phase 10; Phase 9 performs no create or update behavior.
-- **Concrete conceptual example:** `Carrefour` plus a `RESOLVED` candidate may be reused;
-  `NOT_FOUND` requires a later create/reuse decision; `AMBIGUOUS` may require agent or human
-  clarification. The permanent write-result shape is not defined here.
+- **Concrete conceptual example:** a future fully resolved Carrefour identity may be reused;
+  `NO_EXACT_MATCH` must continue through later resolution rather than authorize creation, and
+  unresolved ambiguity may require clarification. The permanent write-result shape is not defined
+  here.
 
 ### `save_knowledge` — persist approved knowledge changes
 
@@ -269,33 +275,115 @@ framework in Phase 9.
   note linking those entities and report the affected notes. Exact contracts remain a future
   architecture decision.
 
-### `resolve_entity` — conservative identity decision
+### `resolve_entity` — layered hybrid identity resolution
 
-- **Purpose:** determine whether an already-extracted entity reference maps confidently to an
-  existing Odyssey entity.
+- **Purpose:** eventually resolve an entity reference by composing exact lookup, cheap structured
+  narrowing, semantic retrieval, and contextual reasoning while preserving uncertainty.
+- **Input:** an extracted reference, original surrounding request context, repository/schema access,
+  and any available deterministic constraints.
+- **Output:** a future resolved, ambiguous, or unresolved outcome with supporting evidence.
+- **Can see:** the original reference and context plus evidence returned by its lower layers.
+- **Must not know or do:** equate semantic similarity with identity, invent certainty, authorize
+  automatic creation after no exact match, or make an LLM scan the entire vault.
+- **Status:** **PLANNED**. Phase 9 intentionally exposes no Python function with this name.
+- **Concrete conceptual example:** `"the other Beatriz"` may have no exact match. Structured and
+  semantic retrieval may narrow candidates to the user's spouse and Xavi's partner; contextual
+  evidence may resolve the latter or retain ambiguity when evidence is insufficient.
+
+```text
+reference + original request context
+                |
+                v
+       resolve_exact_entity
+                |
+       +--------+----------------+
+       |                         |
+unique exact match       no/ambiguous exact match
+       |                         |
+       v                         v
+    resolved          structured candidate narrowing
+                               [PLANNED]
+                                  |
+                                  v
+                         semantic/vector retrieval
+                               [PLANNED]
+                                  |
+                                  v
+                         contextual resolver
+                               [PLANNED]
+                                  |
+                       +----------+----------+
+                       |          |          |
+                    resolved   ambiguous   unresolved
+```
+
+A unique exact match is the cheapest and safest completion path. Otherwise structured narrowing
+may use canonical type, metadata, explicit relationships, caller context, or other cheap
+deterministic constraints. This does not freeze a filter API or query language.
+
+The future layered resolver may also accept a stable ID as decisive exact evidence when a caller
+already has one. The implemented Phase 9 API deliberately preserves its narrower contract: it
+matches only filename-derived primary names and aliases, with optional canonical type filtering.
+
+Semantic/vector retrieval is now an expected future component unless a simpler approach proves
+sufficient. The demonstrated need is identity expressed through roles, relationships, contextual
+descriptions, paraphrases, and informal names such as `"my wife"`, `"the mother of my children"`,
+`"Xavi's wife"`, or `"the other Beatriz"`. A derived index may use stable ID, type, primary name,
+aliases, selected metadata, relationships/context, note text, and embeddings to return a small
+likely candidate set. Phase 9 selects no vector technology, embedding model, threshold, or index
+contract. Markdown remains authoritative; any index must be disposable and rebuildable.
+
+The contextual resolver may later give an LLM the reference, original surrounding context, and
+only that small candidate set with evidence. For example, in `"Yesterday we had dinner with Xavi
+and the other Beatriz said..."`, candidates may include the user's spouse and a Beatriz recorded as
+Xavi's partner. The context may support the latter. If evidence remains insufficient, the result
+must remain ambiguous or unresolved. Phase 9 freezes no prompt, response schema, or confidence
+threshold.
+
+### Resolution before canonical link creation
+
+The planning/LLM layer may identify semantic references, but Odyssey Core must resolve them before
+final Markdown persistence. After identity is settled, rendering may produce canonical wikilinks
+that preserve the user's wording as link text:
+
+```markdown
+[[Beatriz Hidalgo|my wife]]
+[[Carrefour Balma|Carrefour]]
+```
+
+One occurrence of `"my wife"` or `"Carrefour"` in prose does not automatically add that phrase to
+the target note's aliases. Aliases remain meaningful identity synonyms, not a repair mechanism for
+arbitrary generated links. Automated persistence should not emit broken wikilinks by default.
+
+### `resolve_exact_entity` — deterministic exact identity decision
+
+- **Purpose:** determine whether an already-extracted reference has zero, one, or several exact
+  identity matches.
 - **Input:** a `VaultRepository`, parsed canonical schema, query, and optional canonical type.
-- **Output:** an `EntityResolution` with all exact candidates and one of `RESOLVED`, `NOT_FOUND`, or
-  `AMBIGUOUS`; its `candidate` property is populated only for `RESOLVED`.
+- **Output:** an `ExactEntityResolution` with all exact candidates and one of `EXACT_MATCH`,
+  `NO_EXACT_MATCH`, or `AMBIGUOUS_EXACT_MATCH`; its `candidate` property is populated only for
+  `EXACT_MATCH`.
 - **Can see:** exact structured candidates containing stable ID, canonical type, primary lookup
   name, vault-relative path, matched stored value, and match kind.
-- **Must not know or do:** interpret a full user sentence, use semantic or partial similarity,
-  choose among several exact candidates, create an entity, or write anything.
+- **Must not know or do:** inspect prose or relationships for identity, interpret a full user
+  sentence, use semantic or partial similarity, choose among several exact candidates, conclude
+  that an entity is absent after no exact match, create an entity, or write anything.
 - **Status:** **PHASE 9 — IMPLEMENTED**.
 - **Concrete example:**
 
   ```python
-  resolve_entity(repository, schema, "Carrefour", type="store")
+  resolve_exact_entity(repository, schema, "Carrefour", type="store")
   ```
 
   With one alias match, the actual result shape is:
 
   ```python
-  EntityResolution(
-      outcome=ResolutionOutcome.RESOLVED,
+  ExactEntityResolution(
+      outcome=ExactResolutionOutcome.EXACT_MATCH,
       query="Carrefour",
       type="store",
       candidates=(
-          EntityCandidate(
+          ExactEntityCandidate(
               path="stores/Carrefour Balma.md",
               id="store-carrefour-balma",
               type="store",
@@ -307,17 +395,18 @@ framework in Phase 9.
   )
   ```
 
-  Zero candidates produce the same structure with `outcome=ResolutionOutcome.NOT_FOUND` and
-  `candidates=()`. Several exact candidates produce `ResolutionOutcome.AMBIGUOUS` and retain every
-  candidate. A malformed or schema-invalid existing note raises `EntityLookupError` because lookup
-  cannot decide safely.
+  Zero candidates produce the same structure with
+  `outcome=ExactResolutionOutcome.NO_EXACT_MATCH` and `candidates=()`. This means only that exact
+  evidence was absent; it does not mean the entity is absent. Several exact candidates produce
+  `ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH` and retain every candidate. A malformed or
+  schema-invalid existing note raises `ExactEntityLookupError` because lookup cannot decide safely.
 
-### `find_entity_candidates` — exact identity-candidate discovery
+### `find_exact_entity_candidates` — exact identity-candidate discovery
 
 - **Purpose:** discover explainable exact identity candidates across validated Markdown notes.
 - **Input:** a `VaultRepository`, parsed canonical schema, already-extracted entity name, and
   optional canonical type constraint.
-- **Output:** an immutable, deterministically ordered tuple of `EntityCandidate` values.
+- **Output:** an immutable, deterministically ordered tuple of `ExactEntityCandidate` values.
 - **Can see:** vault-relative paths, raw Markdown supplied by the repository, parsed `Note` values,
   and the supplied schema. The filename stem is available here as storage context.
 - **Must not know or do:** perform general knowledge search, interpret prose or wikilinks, return
@@ -326,14 +415,14 @@ framework in Phase 9.
 - **Concrete example:**
 
   ```python
-  find_entity_candidates(repository, schema, "Carrefour", type="store")
+  find_exact_entity_candidates(repository, schema, "Carrefour", type="store")
   ```
 
   can return:
 
   ```python
   (
-      EntityCandidate(
+      ExactEntityCandidate(
           path="stores/Carrefour Balma.md",
           id="store-carrefour-balma",
           type="store",
@@ -350,9 +439,9 @@ No punctuation rewriting, stemming, edit distance, phonetics, transliteration, e
 “only candidate” heuristic participates.
 
 Every listed Markdown note is read, parsed, and validated before results are returned, even when a
-type filter would later exclude it. A parse or validation failure raises `EntityLookupError` with
+type filter would later exclude it. A parse or validation failure raises `ExactEntityLookupError` with
 the relative path and preserves the original error as its cause. Silently skipping an invalid note
-could produce a false `NOT_FOUND` and enable a future duplicate.
+could produce a false `NO_EXACT_MATCH` and enable a future duplicate.
 
 ### Primary lookup name and logical identity
 
@@ -556,25 +645,27 @@ conceptual and **PLANNED**; Phase 9 implements identity resolution only.
    Repeated store information is grouped. The purchase retains references to the related units
    instead of duplicating all their context.
 
-4. **Independent reference resolution — Phase 9**
+4. **Independent exact reference resolution — Phase 9**
 
    ```python
-   store_result = resolve_entity(repository, schema, "Carrefour Balma", type="store")
-   product_result = resolve_entity(repository, schema, "Lactel", type="product")
+   store_result = resolve_exact_entity(repository, schema, "Carrefour Balma", type="store")
+   product_result = resolve_exact_entity(repository, schema, "Lactel", type="product")
    ```
 
    Only the store and product references require identity resolution; the purchase unit itself is
    not treated as an entity query, and its facts remain purchase knowledge. These read-only scans
    are independent and may be orchestrated in parallel in the future. Each calls
-   `find_entity_candidates`, which follows the read direction: list paths, read raw Markdown, parse
-   `Note` values, then validate before returning exact evidence.
+   `find_exact_entity_candidates`, which follows the read direction: list paths, read raw Markdown,
+   parse `Note` values, then validate before returning exact evidence. A future `resolve_entity`
+   will compose this exact step with later layers when exact evidence is insufficient.
 
 5. **Dependency-sensitive writing — conceptual**
 
    The store facts are coalesced into one store mutation. The product facts are likewise grouped.
-   A purchase write waits until its store and product references have settled. `NOT_FOUND` needs a
-   later create/reuse decision; `AMBIGUOUS` may need clarification. No such write logic exists in
-   Phase 9.
+   A purchase write waits until its store and product references have settled. `NO_EXACT_MATCH`
+   continues to later planned resolution and never authorizes creation by itself;
+   `AMBIGUOUS_EXACT_MATCH` also requires later evidence or clarification. No such write logic exists
+   in Phase 9.
 
 6. **Note transformation — implemented infrastructure, future application composition**
 
@@ -603,22 +694,25 @@ conceptual and **PLANNED**; Phase 9 implements identity resolution only.
    produces text; the repository sees only the chosen path and that text. `parse_note` is not part
    of this write path.
 
-## Why Phase 9 is not general search
+## Why Phase 9 is only exact resolution
 
 These capabilities answer different questions:
 
 ```text
-resolve_entity("Carrefour", type="store")
-    -> Which existing store has this exact identity reference?
+resolve_exact_entity("Carrefour", type="store")
+    -> Which notes have this exact primary name or alias?
+
+resolve_entity("the other Beatriz", context=...)  [PLANNED]
+    -> Which entity does this contextual reference identify, if evidence is sufficient?
 
 search("What stores do I normally use and what do I buy there?")  [FUTURE]
     -> Which knowledge is relevant to this natural-language question?
 ```
 
-The generic name `search` is reserved for future knowledge retrieval. It might later use text,
-metadata, wikilinks, graph or index retrieval, or semantic/vector techniques if a demonstrated need
-justifies them. Phase 9 uses exact primary names, aliases, canonical types, and stable IDs; it adds
-no database, vector index, embeddings, LLM calls, graph traversal, or additional service.
+The generic names `resolve_entity` and `search` are reserved for future hybrid identity resolution
+and general knowledge retrieval respectively. Phase 9 uses exact primary names, aliases, canonical
+types, and stable IDs; it adds no database, vector index, embeddings, LLM calls, graph traversal, or
+additional service.
 
 ## n8n and the legacy/admin storage path
 
@@ -657,9 +751,11 @@ Raspberry Pi host             n8n container
 ```
 
 Markdown under `/data/odyssey` is authoritative and remains readable through Obsidian and ordinary
-file tools. A future cache, graph projection, text index, or vector index must address an observed
-need and remain rebuildable from Markdown. Phase 9 performs a straightforward linear scan and does
-not access a derived store.
+file tools. Role-, relationship-, and context-based identity references now demonstrate a likely
+need for semantic/vector candidate retrieval in the future hybrid resolver unless a simpler
+solution proves sufficient. Any cache, graph projection, text index, or vector index remains
+derived, disposable, and rebuildable from Markdown. Its technology is a later architecture
+decision. Phase 9 performs a straightforward linear scan and does not access a derived store.
 
 Odyssey Core should eventually be the sole normal writer of knowledge notes. High-level domain
 tools provide agents with stable intent-level contracts, centralize validation and idempotency, and
