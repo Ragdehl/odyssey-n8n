@@ -1,21 +1,21 @@
 """Odyssey's Python application and domain core."""
 
 from .identity import (
+    EntityCandidate,
     EntityResolution,
     EntitySearchError,
     MatchKind,
     ResolutionOutcome,
-    SearchCandidate,
+    find_entity_candidates,
     resolve_entity,
-    search,
 )
 
 __all__ = [
+    "EntityCandidate",
     "EntityResolution",
     "EntitySearchError",
     "MatchKind",
     "ResolutionOutcome",
-    "SearchCandidate",
+    "find_entity_candidates",
     "resolve_entity",
-    "search",
 ]

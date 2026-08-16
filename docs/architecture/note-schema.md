@@ -60,9 +60,9 @@ revision: 1
 schema_version: 1
 ---
 
-# Compra [[Carrefour Balma]]
+# Purchase at [[Carrefour Balma]]
 
-Compré [[Leche Lactel]] y [[Tomates]].
+I bought [[Lactel Milk]] and [[Tomatoes]].
 ```
 
 The links are readable and useful without a mandatory `store` field or typed relation.

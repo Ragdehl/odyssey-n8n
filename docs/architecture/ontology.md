@@ -63,9 +63,9 @@ revision: 1
 schema_version: 1
 ---
 
-# Compra [[Carrefour Balma]]
+# Purchase at [[Carrefour Balma]]
 
-Compré [[Leche Lactel]] y [[Tomates]].
+I bought [[Lactel Milk]] and [[Tomatoes]].
 ```
 
 If the linked notes have types `store` and `product`, they already provide machine-readable node type information. This is preferred over adding a `store: "[[Carrefour Balma]]"` property when that property solves no demonstrated query or processing requirement. Odyssey does not require every link to also carry a generic `relation_type` and target, and V1 has no predefined generic relation vocabulary.

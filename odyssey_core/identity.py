@@ -31,7 +31,7 @@ class ResolutionOutcome(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class SearchCandidate:
+class EntityCandidate:
     """Expose the useful identity evidence for one matching validated note.
 
     Attributes:
@@ -65,10 +65,10 @@ class EntityResolution:
     outcome: ResolutionOutcome
     query: str
     type: str | None
-    candidates: tuple[SearchCandidate, ...]
+    candidates: tuple[EntityCandidate, ...]
 
     @property
-    def candidate(self) -> SearchCandidate | None:
+    def candidate(self) -> EntityCandidate | None:
         """Return the uniquely resolved candidate, or ``None`` for other outcomes."""
         if self.outcome is ResolutionOutcome.RESOLVED:
             return self.candidates[0]
@@ -113,13 +113,13 @@ def _canonical_types(schema: dict[str, Any]) -> set[str]:
     return type_ids
 
 
-def search(
+def find_entity_candidates(
     repository: VaultRepository,
     schema: dict[str, Any],
     query: str,
     *,
     type: str | None = None,
-) -> tuple[SearchCandidate, ...]:
+) -> tuple[EntityCandidate, ...]:
     """Find deterministic exact-name and exact-alias candidates in a Markdown vault.
 
     Every listed note is read, parsed, and validated before a result is returned. This
@@ -142,7 +142,7 @@ def search(
         VaultRepository exceptions: If listing or raw note access fails.
 
     Example:
-        ``search(repository, schema, " carrefour ", type="store")`` can return a
+        ``find_entity_candidates(repository, schema, " carrefour ", type="store")`` can return a
         filename match for ``stores/Carrefour.md`` or an alias match on another store.
     """
     normalized_query = _normalize_reference(query)
@@ -152,13 +152,13 @@ def search(
     if type is not None and (not isinstance(type, str) or type not in canonical_types):
         raise ValueError(f"Unknown canonical note type: {type!r}")
 
-    candidates: list[SearchCandidate] = []
+    candidates: list[EntityCandidate] = []
     for path in repository.list_markdown_paths():
         try:
             note = parse_note(repository.read_text(path))
             validate_note(note, schema)
         except (NoteFormatError, NoteValidationError) as error:
-            raise EntitySearchError(f"Cannot safely search invalid note: {path}") from error
+            raise EntitySearchError(f"Cannot safely inspect invalid note: {path}") from error
 
         note_type = cast(str, note.metadata["type"])
         if type is not None and note_type != type:
@@ -180,7 +180,7 @@ def search(
 
         if match_kind is not None:
             candidates.append(
-                SearchCandidate(
+                EntityCandidate(
                     path=path,
                     id=cast(str, note.metadata["id"]),
                     type=note_type,
@@ -212,7 +212,7 @@ def resolve_entity(
 
     Args:
         repository: Raw filesystem boundary for the Markdown vault.
-        schema: Parsed canonical schema used by deterministic search.
+        schema: Parsed canonical schema used by deterministic candidate discovery.
         query: Entity name extracted by a higher-level caller, not a full user request.
         type: Optional canonical type constraint used to avoid cross-type collisions.
 
@@ -226,7 +226,7 @@ def resolve_entity(
         VaultRepository exceptions: If listing or raw note access fails.
     """
     normalized_query = query.strip() if isinstance(query, str) else query
-    candidates = search(repository, schema, query, type=type)
+    candidates = find_entity_candidates(repository, schema, query, type=type)
     if not candidates:
         outcome = ResolutionOutcome.NOT_FOUND
     elif len(candidates) == 1:

@@ -1,4 +1,4 @@
-"""Tests for deterministic search and conservative entity resolution."""
+"""Tests for deterministic candidate discovery and conservative entity resolution."""
 
 from __future__ import annotations
 
@@ -8,11 +8,12 @@ from pathlib import Path
 import pytest
 
 from odyssey_core import (
+    EntityCandidate,
     EntitySearchError,
     MatchKind,
     ResolutionOutcome,
+    find_entity_candidates,
     resolve_entity,
-    search,
 )
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.storage import VaultRepository
@@ -44,7 +45,7 @@ def _write_note(
     note_type: str,
     aliases: list[str] | None = None,
 ) -> None:
-    """Create one valid search fixture through the raw repository boundary."""
+    """Create one valid identity fixture through the raw repository boundary."""
     metadata: dict[str, object] = {
         "id": note_id,
         "type": note_type,
@@ -60,15 +61,16 @@ def _write_note(
     repository.create_text(path, serialize_note(Note(metadata=metadata, content="")))  # type: ignore[arg-type]
 
 
-def test_search_finds_primary_name_with_unicode_casefold_and_whitespace(
+def test_find_entity_candidates_finds_primary_name_with_unicode_casefold_and_whitespace(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Match a filename stem exactly after minimal deterministic normalization."""
     _write_note(repository, "stores/Straße.md", note_id="store-1", note_type="store")
 
-    candidates = search(repository, schema, "  STRASSE  ", type="store")
+    candidates = find_entity_candidates(repository, schema, "  STRASSE  ", type="store")
 
     assert len(candidates) == 1
+    assert isinstance(candidates[0], EntityCandidate)
     assert candidates[0].path == "stores/Straße.md"
     assert candidates[0].id == "store-1"
     assert candidates[0].type == "store"
@@ -77,7 +79,7 @@ def test_search_finds_primary_name_with_unicode_casefold_and_whitespace(
     assert candidates[0].matched_value == "Straße"
 
 
-def test_search_finds_alias_and_primary_name_takes_precedence(
+def test_find_entity_candidates_finds_alias_and_primary_name_takes_precedence(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Use exact aliases while reporting a simultaneous primary-name match as stronger."""
@@ -96,7 +98,7 @@ def test_search_finds_alias_and_primary_name_takes_precedence(
         aliases=["Carrefour"],
     )
 
-    candidates = search(repository, schema, "carrefour", type="store")
+    candidates = find_entity_candidates(repository, schema, "carrefour", type="store")
 
     assert [candidate.id for candidate in candidates] == ["store-main", "store-balma"]
     assert [candidate.match_kind for candidate in candidates] == [
@@ -105,7 +107,7 @@ def test_search_finds_alias_and_primary_name_takes_precedence(
     ]
 
 
-def test_empty_valid_alias_does_not_break_search(
+def test_empty_valid_alias_does_not_break_candidate_discovery(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Ignore a canonically valid empty alias while evaluating a non-empty query."""
@@ -117,7 +119,7 @@ def test_empty_valid_alias_does_not_break_search(
         aliases=[""],
     )
 
-    assert search(repository, schema, "Auchan", type="store") == ()
+    assert find_entity_candidates(repository, schema, "Auchan", type="store") == ()
 
 
 def test_type_filter_excludes_exact_cross_type_match(
@@ -127,7 +129,7 @@ def test_type_filter_excludes_exact_cross_type_match(
     _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
     _write_note(repository, "documents/Carrefour.md", note_id="doc-1", note_type="document")
 
-    candidates = search(repository, schema, "Carrefour", type="store")
+    candidates = find_entity_candidates(repository, schema, "Carrefour", type="store")
 
     assert [candidate.id for candidate in candidates] == ["store-1"]
 
@@ -166,7 +168,7 @@ def test_partial_name_is_not_a_candidate_or_resolution(
     """Never promote a sole partial name to an identity match."""
     _write_note(repository, "stores/Carrefour Balma.md", note_id="store-1", note_type="store")
 
-    assert search(repository, schema, "Carre", type="store") == ()
+    assert find_entity_candidates(repository, schema, "Carre", type="store") == ()
     assert (
         resolve_entity(repository, schema, "Carre", type="store").outcome
         is ResolutionOutcome.NOT_FOUND
@@ -179,9 +181,9 @@ def test_invalid_query_and_unknown_type_fail_before_scanning(
     """Reject unusable references and non-canonical type constraints explicitly."""
     for query in ("", "   ", None):
         with pytest.raises(ValueError):
-            search(repository, schema, query, type="store")  # type: ignore[arg-type]
+            find_entity_candidates(repository, schema, query, type="store")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Unknown canonical note type"):
-        search(repository, schema, "Carrefour", type="supermarket")
+        find_entity_candidates(repository, schema, "Carrefour", type="supermarket")
 
 
 @pytest.mark.parametrize(
@@ -201,7 +203,9 @@ def test_invalid_existing_note_fails_closed(
         resolve_entity(repository, schema, "Carrefour", type="store")
 
 
-def test_search_is_read_only(repository: VaultRepository, schema: dict[str, object]) -> None:
+def test_candidate_discovery_is_read_only(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
     """Leave note content and vault paths unchanged after lookup."""
     _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
     before = repository.read_text("stores/Carrefour.md")

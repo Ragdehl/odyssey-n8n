@@ -2,178 +2,327 @@
 
 ## Purpose
 
-Odyssey turns unstructured input into reusable personal knowledge. Markdown files remain
-authoritative and human-readable; Python owns note and domain behavior; n8n owns integration and
-orchestration. The system adds infrastructure only when an observed requirement cannot be met by
-these boundaries.
+Odyssey turns arbitrary user messages into reusable personal knowledge and grounded retrieval.
+Markdown files remain authoritative and human-readable; Python owns note and domain behavior; n8n
+owns integration and orchestration. The system adds infrastructure only when an observed requirement
+cannot be met by these boundaries.
+
+A message is not assumed to represent one note or one operation. It may ask a question, provide or
+modify knowledge, describe several subjects, include a task or event, or combine retrieval and
+writing.
 
 ## Capability hierarchy
 
-This is the normal future application path. A higher layer receives a more meaningful but less
-storage-specific representation than the layer below it.
+This is a conceptual capability map, not a mandatory pipeline. Retrieval does not traverse the write
+branch, `resolve_entity` does not necessarily lead to an upsert, and a mixed request may use both
+branches.
 
 ```text
-USER / AGENT INTENT
-        |
-        v
-HIGH-LEVEL APPLICATION CAPABILITIES
-    save_knowledge       [PLANNED]
-    get_context          [PLANNED]
-        |
-        v
-DOMAIN / IDENTITY CAPABILITIES
-    upsert_entity        [PLANNED]
-    resolve_entity       [PHASE 9]
-    search               [PHASE 9]
-        |
-        v
-NOTE INFRASTRUCTURE
-    validate_note        [IMPLEMENTED]
-    parse_note           [IMPLEMENTED]
-    serialize_note       [IMPLEMENTED]
-    Note                 [IMPLEMENTED]
-        |
-        v
-STORAGE BOUNDARY
-    VaultRepository      [IMPLEMENTED]
-        |
-   +----+------+
-   |    |      |
- read create  list
-        |
-        v
-FILESYSTEM
-        |
-        v
-MARKDOWN VAULT (source of truth)
+USER / AGENT
+     |
+     v
+interpret_request                 [PLANNED]
+     |
+     +-------------------------------+
+     |                               |
+     v                               v
+RETRIEVAL INTENT                WRITE INTENT
+     |                               |
+     v                               v
+get_context                    decompose_knowledge
+  [PLANNED]                       [PLANNED]
+                                     |
+                                     v
+                               KnowledgePlan
+                                     |
+                          +----------+----------+
+                          |          |          |
+                          v          v          v
+                       Unit A     Unit B      Unit C
+                          |          |          |
+                          +----------+----------+
+                                     |
+                                     v
+                              resolve_entity
+                                  [PHASE 9]
+                                     |
+                                     v
+                         find_entity_candidates
+                                  [PHASE 9]
+                                     |
+                                     v
+                              upsert_entity
+                                 [PLANNED]
+                                     |
+                                     v
+                              save_knowledge
+                                 [PLANNED]
+                                     |
+                                     v
+                                   Note
+                                     |
+                          parse / validate / serialize
+                                     |
+                                     v
+                              VaultRepository
+                                     |
+                                     v
+                              Markdown vault
 ```
 
-The Phase 9 call direction is deliberately compositional:
+The Phase 9 call direction is narrower:
 
 ```text
-VaultRepository.list_markdown_paths + read_text
-                    |
-                    v
-              raw Markdown
-                    |
-                    v
-                parse_note
-                    |
-                    v
-                   Note
-                    |
-                    v
-               validate_note
-                    |
-                    v
-                  search
-                    |
-                    v
-              resolve_entity
+resolve_entity
+      |
+      v
+find_entity_candidates
+      |
+      +--> VaultRepository.list_markdown_paths
+      +--> VaultRepository.read_text
+      +--> parse_note
+      +--> validate_note
 ```
 
 `VaultRepository` remains raw filesystem access. It does not parse Markdown, load schema meaning,
-search, resolve identities, or make domain decisions.
+discover identity candidates, resolve identities, or make domain decisions.
 
 ## Capability contracts
 
-### User or agent intent — application input
+Every conceptual output below is illustrative unless the capability is marked implemented. Phase 9
+does not freeze request-plan or knowledge-plan Python APIs or JSON schemas.
 
-- **Purpose:** express what the person ultimately wants Odyssey to remember or retrieve.
-- **Input:** an unstructured request, for example `"Compré leche Lactel en Carrefour"`.
-- **Output:** input to a future high-level application capability.
-- **Can see:** the complete user request and conversation context supplied by the interface.
-- **Must not know or do:** choose vault paths, parse Markdown, infer repository operations, or call
-  storage primitives as if they were domain tools.
-- **Status:** **PLANNED** application boundary; ChatGPT is the initial intended interface.
+### `interpret_request` — understand the requested operations
 
-### `save_knowledge` — high-level write intent
+- **Purpose:** understand what the user wants and plan one or more retrieval or write operations.
+- **Input:** the original message and applicable conversation context.
+- **Output:** a conceptual request plan which may be retrieval-oriented, write-oriented, or mixed.
+- **Can see:** original user language and caller-supplied conversational context.
+- **Must not know or do:** open Markdown files, resolve identity, decide that a referenced entity
+  exists, or decide to create a new entity.
+- **Status:** **PLANNED**. `RETRIEVE`, `WRITE`, and `MIXED` describe expected outcomes without
+  freezing an enum or permanent API.
+- **Concrete conceptual example:**
 
-- **Purpose:** turn one unstructured knowledge input into validated creations, updates, and links.
-- **Input:** a full user statement plus applicable caller context.
-- **Output:** a future structured summary of knowledge safely saved or requiring clarification.
-- **Can see:** the full semantic request and results from lower domain capabilities.
-- **Must not know or do:** manipulate raw files directly or silently invent ontology schema.
-- **Status:** **PLANNED** for Phase 12. Phase 9 does not implement any part of its write behavior.
+  Input:
 
-### `get_context` — high-level retrieval intent
+  ```text
+  What did I pay for Lactel last time?
+  Also remember that I bought two bottles today at Carrefour.
+  ```
+
+  Output:
+
+  ```text
+  RequestPlan
+    retrieval:
+      - previous Lactel purchase price
+    write:
+      - today's purchase of two Lactel bottles at Carrefour
+  ```
+
+  This is a mixed request. Interpretation may identify a store reference with
+  `name="Carrefour", type="store"`; only the later resolver can determine whether it exists.
+
+### `get_context` — retrieve relevant knowledge
 
 - **Purpose:** assemble knowledge relevant to a user or application question.
-- **Input:** a higher-level request such as “What supermarkets do I normally use and what do I buy
-  there?”
+- **Input:** a retrieval intent such as `previous Lactel purchase price`.
 - **Output:** a future context package grounded in Odyssey notes.
-- **Can see:** the semantic user question and lower-level lookup results.
+- **Can see:** the interpreted question and results from future retrieval capabilities.
 - **Must not know or do:** equate semantic relevance with entity identity or mutate notes.
-- **Status:** **PLANNED** for Phase 11. Semantic, graph, or vector retrieval is not Phase 9.
+- **Status:** **PLANNED**. Text, metadata, wikilink, graph, index, or semantic retrieval choices are
+  deliberately not selected in Phase 9.
+- **Concrete conceptual example:** input `previous Lactel purchase price`; output might identify the
+  source purchase note and a recorded price, with enough provenance to answer the user. The exact
+  package shape remains undecided.
 
-### Higher-level interpretation — extracted references
+### `decompose_knowledge` — build related knowledge work
 
-- **Purpose:** identify entity references and facts in an original request before identity lookup.
-- **Input:** unstructured text such as `"Compré leche Lactel en Carrefour"`.
-- **Output:** structured references such as `name="Carrefour", type="store"` and
-  `name="Lactel", type="product"`.
-- **Can see:** the original language and any interpretation context supplied by its caller.
-- **Must not know or do:** decide that a semantically related note is the same entity, or create a
-  note merely because resolution returned no exact match.
-- **Status:** **PLANNED**; its final application/API placement is not decided in Phase 9.
+- **Purpose:** transform the write-oriented part of a request into related conceptual knowledge
+  units while retaining relationships and required context.
+- **Input:** interpreted write intent and applicable request context.
+- **Output:** a conceptual `KnowledgePlan` containing related `KnowledgeUnit` values.
+- **Can see:** write intent, subjects, facts, relationships, and context supplied by interpretation.
+- **Must not know or do:** split text into unrelated fragments, resolve identities, choose storage
+  paths, write notes, or freeze a permanent plan schema.
+- **Status:** **PLANNED**. `KnowledgePlan` and `KnowledgeUnit` are architecture vocabulary only.
+- **Concrete conceptual example:**
 
-### `upsert_entity` — domain write decision
+  Input:
+
+  ```text
+  Today I bought Lactel milk at Carrefour Balma.
+  Carrefour Balma closes at 21:00.
+  Lactel is my usual milk.
+  ```
+
+  Output:
+
+  ```text
+  KnowledgePlan
+    Unit A:
+      subject: Carrefour Balma
+      type: store
+      facts:
+        - closes at 21:00
+    Unit B:
+      subject: Lactel
+      type: product
+      facts:
+        - usual milk
+    Unit C:
+      type: purchase
+      references:
+        store -> Unit A
+        product -> Unit B
+      facts:
+        - occurred today
+  ```
+
+Information about one subject is grouped even when it occurs in separate sentences. For example,
+closing time, normal Saturday visits, and parking information about Carrefour Balma belong to one
+unit rather than three sentence fragments. A unit may reference another unit instead of duplicating
+all context into every future note.
+
+### Parallel and ordered plan processing
+
+Future orchestration may parallelize independent, read-only work:
+
+```text
+KnowledgePlan
+    |
+    +---- Carrefour unit ---- resolve_entity ----+
+    |                                            |
+    +---- Lactel unit ------- resolve_entity ----+  PARALLEL OK
+    |                                            |
+    +---- another entity ---- resolve_entity ----+
+```
+
+Dependencies still determine ordering:
+
+```text
+resolve Carrefour
+      |
+      v
+create Purchase referring to Carrefour identity
+```
+
+Several facts targeting the same logical entity must be coalesced before mutation rather than race
+as independent writes. The rule is: parallelize independent work; serialize or coalesce
+dependency-sensitive and same-entity mutations. This property does not require or authorize a DAG
+engine, scheduler, LangGraph, workflow engine, or parallel execution framework in Phase 9.
+
+### `upsert_entity` — decide reuse, creation, or update
 
 - **Purpose:** eventually reuse, enrich, or create an entity after safe identity resolution.
-- **Input:** a structured entity and resolution evidence.
+- **Input:** a structured entity unit plus resolution evidence.
 - **Output:** a future validated entity-write outcome.
-- **Can see:** entity facts, resolution outcomes, and note-domain contracts.
-- **Must not know or do:** treat `NOT_FOUND` as permission to bypass validation or change the
-  canonical schema.
+- **Can see:** grouped entity facts, resolution outcomes, and note-domain contracts.
+- **Must not know or do:** reinterpret the full user request, treat `NOT_FOUND` as unconditional
+  creation permission, bypass validation, or silently change the canonical schema.
 - **Status:** **PLANNED** for Phase 10; Phase 9 performs no create or update behavior.
+- **Concrete conceptual example:** `Carrefour` plus a `RESOLVED` candidate may be reused;
+  `NOT_FOUND` requires a later create/reuse decision; `AMBIGUOUS` may require agent or human
+  clarification. The permanent write-result shape is not defined here.
+
+### `save_knowledge` — persist approved knowledge changes
+
+- **Purpose:** coordinate validated creations, updates, and links from resolved knowledge units.
+- **Input:** dependency-aware knowledge work after required identity and upsert decisions.
+- **Output:** a future summary of knowledge saved or requiring clarification.
+- **Can see:** approved domain outcomes and note-domain contracts.
+- **Must not know or do:** manipulate raw files directly, ignore dependencies, or invent ontology
+  schema.
+- **Status:** **PLANNED**; Phase 9 does not implement its write behavior.
+- **Concrete conceptual example:** after store and product identities are settled, save a purchase
+  note linking those entities and report the affected notes. Exact contracts remain a future
+  architecture decision.
 
 ### `resolve_entity` — conservative identity decision
 
 - **Purpose:** determine whether an already-extracted entity reference maps confidently to an
   existing Odyssey entity.
-- **Input:** a `VaultRepository`, parsed canonical schema, entity query such as `"Carrefour"`, and
-  optional canonical `type="store"` constraint.
-- **Output:** `EntityResolution` with `RESOLVED`, `NOT_FOUND`, or `AMBIGUOUS`, plus all exact
-  candidates. Its `candidate` convenience property is populated only for `RESOLVED`.
-- **Can see:** structured candidates containing stable ID, canonical type, primary lookup name,
-  vault-relative path, stored matched value, and match kind.
-- **Must not know or do:** interpret the original full user sentence, use semantic similarity,
-  resolve a partial match, choose among multiple exact candidates, or write anything.
+- **Input:** a `VaultRepository`, parsed canonical schema, query, and optional canonical type.
+- **Output:** an `EntityResolution` with all exact candidates and one of `RESOLVED`, `NOT_FOUND`, or
+  `AMBIGUOUS`; its `candidate` property is populated only for `RESOLVED`.
+- **Can see:** exact structured candidates containing stable ID, canonical type, primary lookup
+  name, vault-relative path, matched stored value, and match kind.
+- **Must not know or do:** interpret a full user sentence, use semantic or partial similarity,
+  choose among several exact candidates, create an entity, or write anything.
 - **Status:** **PHASE 9 — IMPLEMENTED**.
+- **Concrete example:**
 
-Normal domain outcomes are data, not runtime failures:
+  ```python
+  resolve_entity(repository, schema, "Carrefour", type="store")
+  ```
 
-```text
-zero exact candidates   -> NOT_FOUND
-one exact candidate     -> RESOLVED
-multiple exact matches  -> AMBIGUOUS
-invalid existing note   -> EntitySearchError (lookup could not decide safely)
-```
+  With one alias match, the actual result shape is:
 
-### `search` — deterministic candidate retrieval
+  ```python
+  EntityResolution(
+      outcome=ResolutionOutcome.RESOLVED,
+      query="Carrefour",
+      type="store",
+      candidates=(
+          EntityCandidate(
+              path="stores/Carrefour Balma.md",
+              id="store-carrefour-balma",
+              type="store",
+              primary_name="Carrefour Balma",
+              match_kind=MatchKind.ALIAS,
+              matched_value="Carrefour",
+          ),
+      ),
+  )
+  ```
 
-- **Purpose:** retrieve explainable identity candidates from all existing Markdown notes.
+  Zero candidates produce the same structure with `outcome=ResolutionOutcome.NOT_FOUND` and
+  `candidates=()`. Several exact candidates produce `ResolutionOutcome.AMBIGUOUS` and retain every
+  candidate. A malformed or schema-invalid existing note raises `EntitySearchError` because lookup
+  cannot decide safely.
+
+### `find_entity_candidates` — exact identity-candidate discovery
+
+- **Purpose:** discover explainable exact identity candidates across validated Markdown notes.
 - **Input:** a `VaultRepository`, parsed canonical schema, already-extracted entity name, and
   optional canonical type constraint.
-- **Output:** an immutable, deterministically ordered tuple of `SearchCandidate` values. Each value
-  exposes `path`, `id`, `type`, `primary_name`, `match_kind`, and `matched_value`.
+- **Output:** an immutable, deterministically ordered tuple of `EntityCandidate` values.
 - **Can see:** vault-relative paths, raw Markdown supplied by the repository, parsed `Note` values,
-  and the supplied schema. The filename stem is available only here as storage context.
-- **Must not know or do:** infer meaning from prose or wikilinks, return fuzzy/partial candidates,
-  rank semantically, modify notes, or move schema behavior into `VaultRepository`.
-- **Status:** **PHASE 9 — IMPLEMENTED** as a deterministic linear scan.
+  and the supplied schema. The filename stem is available here as storage context.
+- **Must not know or do:** perform general knowledge search, interpret prose or wikilinks, return
+  fuzzy or partial matches, rank semantically, modify notes, or move domain behavior into storage.
+- **Status:** **PHASE 9 — IMPLEMENTED** as a read-only linear scan.
+- **Concrete example:**
 
-Matching uses only surrounding-whitespace removal and Unicode-aware `casefold()`. Primary filename
+  ```python
+  find_entity_candidates(repository, schema, "Carrefour", type="store")
+  ```
+
+  can return:
+
+  ```python
+  (
+      EntityCandidate(
+          path="stores/Carrefour Balma.md",
+          id="store-carrefour-balma",
+          type="store",
+          primary_name="Carrefour Balma",
+          match_kind=MatchKind.ALIAS,
+          matched_value="Carrefour",
+      ),
+  )
+  ```
+
+Matching removes surrounding whitespace and applies Unicode `casefold()` only. Primary filename
 stem matches sort before alias matches; remaining ordering uses primary name, path, and stable ID.
 No punctuation rewriting, stemming, edit distance, phonetics, transliteration, embeddings, or
-“only candidate” heuristic participates in identity decisions.
+“only candidate” heuristic participates.
 
-Search reads, parses, and validates every listed Markdown note before returning—even when a type
-filter would later exclude that note. A parse or validation failure raises `EntitySearchError` with
-the vault-relative path and preserves the original `NoteFormatError` or `NoteValidationError` as
-its cause. Silently skipping the note could produce a false `NOT_FOUND` and enable a future
-duplicate, so failing closed is part of the duplicate-prevention contract. Repository listing and
-read failures retain their existing storage exceptions.
+Every listed Markdown note is read, parsed, and validated before results are returned, even when a
+type filter would later exclude it. A parse or validation failure raises `EntitySearchError` with
+the relative path and preserves the original error as its cause. Silently skipping an invalid note
+could produce a false `NOT_FOUND` and enable a future duplicate.
 
 ### Primary lookup name and logical identity
 
@@ -186,185 +335,261 @@ stable id:     metadata["id"]
 aliases:       metadata.get("aliases", [])
 ```
 
-This is a deliberately small V1 composition choice, not a canonical-schema change. `Note` remains
-path-independent, and `metadata["id"]` remains the stable logical identity when a file is renamed.
-The consequence is explicit: renaming the file changes its primary human-readable lookup name.
-Aliases remain alternative identity references. If this limitation causes concrete failures, a
-universal canonical `name` field may be proposed as a schema change with human approval; Phase 9
-does not add `name`, `title`, or `display_name` silently.
+This is a small V1 composition choice, not a schema change. `Note` remains path-independent, and
+the metadata ID remains stable when a file is renamed. Renaming a file changes its primary lookup
+name. If this causes demonstrated failures, a universal canonical name field requires a separate
+schema proposal and human approval.
+
+### `VaultRepository.list_markdown_paths` — path discovery
+
+- **Purpose:** list contained regular Markdown files deterministically.
+- **Input:** `repository.list_markdown_paths()`.
+- **Output:** sorted vault-relative POSIX paths.
+- **Can see:** contained filesystem entries and paths only.
+- **Must not know or do:** read note content, understand what names mean, or match a query.
+- **Status:** **IMPLEMENTED**.
+- **Concrete example:**
+
+  ```python
+  ["products/Lactel.md", "stores/Carrefour Balma.md"]
+  ```
+
+### `VaultRepository.read_text` — raw note read
+
+- **Purpose:** read one contained Markdown file as UTF-8 text.
+- **Input:** `repository.read_text("stores/Carrefour Balma.md")`.
+- **Output:** raw text unchanged.
+- **Can see:** the relative path and raw UTF-8 text.
+- **Must not know or do:** parse, validate, infer identity, or interpret Carrefour.
+- **Status:** **IMPLEMENTED**.
+- **Concrete example output:**
+
+  ```markdown
+  ---
+  aliases: ["Carrefour"]
+  created_at: "2026-08-16T08:00:00Z"
+  created_by: "odyssey"
+  id: "store-carrefour-balma"
+  revision: 1
+  schema_version: 1
+  type: "store"
+  updated_at: "2026-08-16T08:00:00Z"
+  updated_by: "odyssey"
+  ---
+
+  # Carrefour Balma
+
+  Closes at 21:00.
+  ```
+
+### `VaultRepository.create_text` — create-only persistence
+
+- **Purpose:** create one new contained Markdown file without overwriting an existing file.
+- **Input:** a safe relative `.md` path and raw text.
+- **Output:** `None` on success or a focused storage exception.
+- **Can see:** the target path and text bytes.
+- **Must not know or do:** infer metadata, create parent trees, update existing notes, or resolve
+  identities.
+- **Status:** **IMPLEMENTED**.
+- **Concrete example:**
+  `repository.create_text("products/Lactel.md", markdown)` returns `None` after creating that file.
+
+### `parse_note` — Markdown decoding
+
+- **Purpose:** decode Odyssey's constrained flat frontmatter and preserve the Markdown body.
+- **Input:** complete raw Markdown text.
+- **Output:** a path-independent generic `Note`; malformed supported syntax raises
+  `NoteFormatError`.
+- **Can see:** serialization syntax, metadata values, and unchanged body text.
+- **Must not know or do:** load the schema, validate ontology meaning, infer a filesystem path, or
+  resolve entities.
+- **Status:** **IMPLEMENTED**.
+- **Concrete example output:**
+
+  ```python
+  Note(
+      metadata={
+          "id": "store-carrefour-balma",
+          "type": "store",
+          "aliases": ["Carrefour"],
+          "created_at": "2026-08-16T08:00:00Z",
+          "updated_at": "2026-08-16T08:00:00Z",
+          "created_by": "odyssey",
+          "updated_by": "odyssey",
+          "revision": 1,
+          "schema_version": 1,
+      },
+      content="# Carrefour Balma\n\nCloses at 21:00.\n",
+  )
+  ```
+
+  No path is present: parsing understands serialization, not storage placement.
 
 ### `validate_note` — canonical instance validation
 
 - **Purpose:** prove that one parsed generic note conforms to an explicitly supplied canonical
   schema.
-- **Input:** `Note` plus parsed `config/note-schema.json` data.
-- **Output:** `None` on success; `NoteValidationError` for an invalid instance or unusable schema.
+- **Input:** `validate_note(note, schema)`.
+- **Output:** `None` on success; `NoteValidationError` for invalid data or an unusable schema.
 - **Can see:** structured metadata, uninterpreted body text, and schema definitions.
-- **Must not know or do:** read files, infer a filename/name, resolve entities, inspect revision
-  history, or alter the note.
+- **Must not know or do:** read files, infer names, resolve entities, or alter the note.
 - **Status:** **IMPLEMENTED**.
-
-### `parse_note` — Markdown decoding
-
-- **Purpose:** decode Odyssey’s constrained flat frontmatter and preserve the Markdown body.
-- **Input:** complete raw Markdown text.
-- **Output:** a path-independent generic `Note`; malformed supported syntax raises
-  `NoteFormatError`.
-- **Can see:** serialization syntax, metadata scalar/array values, and unchanged body text.
-- **Must not know or do:** load the canonical schema, validate note meaning, interpret wikilinks or
-  prose, infer filesystem placement, or resolve entities.
-- **Status:** **IMPLEMENTED**.
+- **Concrete example:** the `Note` above and the canonical schema return `None`. This proves schema
+  validity; it does not prove that the query `"Carrefour"` matches the note.
 
 ### `serialize_note` — Markdown encoding
 
-- **Purpose:** encode a generic note into Odyssey’s deterministic constrained Markdown format.
-- **Input:** a `Note` containing supported metadata values and body text.
-- **Output:** canonical Markdown text; unsupported values raise `NoteFormatError`.
-- **Can see:** generic note metadata and uninterpreted body text.
-- **Must not know or do:** validate canonical ontology meaning, choose a path, write a file, or
-  update revisions.
+- **Purpose:** encode a generic note into Odyssey's deterministic constrained Markdown format.
+- **Input:** a `Note` containing supported metadata and body text.
+- **Output:** a raw Markdown string; unsupported values raise `NoteFormatError`.
+- **Can see:** generic metadata and uninterpreted body text.
+- **Must not know or do:** validate ontology meaning, choose a path, write a file, or resolve an
+  entity.
 - **Status:** **IMPLEMENTED**.
+- **Concrete example:** `serialize_note(Note(metadata={...}, content="# Lactel\n"))` returns text
+  beginning with `---`, deterministic frontmatter, a closing `---`, and `# Lactel`. It does not
+  choose `products/Lactel.md` or persist anything.
 
-### `Note` — path-independent note representation
+### `Note` — path-independent representation
 
 - **Purpose:** carry generic structured metadata together with Markdown content.
-- **Input:** a metadata mapping and body string supplied by a parser or caller.
-- **Output:** a Python value used by codec, validation, and later domain composition.
+- **Input:** metadata and a body string supplied by a parser or caller.
+- **Output:** a Python value used by codec, validation, and domain composition.
 - **Can see:** metadata values and body text only.
-- **Must not know or do:** contain a vault path, implement one class per note type, perform I/O, or
-  validate itself against a global schema.
+- **Must not know or do:** contain a filesystem path or repository, understand user intent, carry
+  entity-resolution state, perform I/O, or validate itself globally.
 - **Status:** **IMPLEMENTED**.
+- **Concrete example:**
 
-### `VaultRepository` — raw storage boundary
-
-- **Purpose:** provide contained filesystem access beneath one configured vault root.
-- **Input:** a vault root at construction and safe vault-relative Markdown paths for operations.
-- **Output:** raw text, deterministic Markdown path lists, create-only persistence, or focused
-  storage exceptions.
-- **Can see:** filesystem entries, relative paths, bytes, and UTF-8 text.
-- **Must not know or do:** parse Markdown, load schema, model notes, search, resolve entities,
-  follow unsafe symlinks, or add domain behavior.
-- **Status:** **IMPLEMENTED**.
-
-Its operations have narrower contracts:
-
-| Operation | Purpose | Input | Output | Must not do | Status |
-| --- | --- | --- | --- | --- | --- |
-| `read_text` | Read one contained note unchanged | vault-relative `.md` path | raw UTF-8 text | parse, validate, interpret | **IMPLEMENTED** |
-| `create_text` | Persist a new note without overwrite | relative path and raw text | `None` or storage exception | update, create parent trees, infer metadata | **IMPLEMENTED** |
-| `list_markdown_paths` | Discover contained regular Markdown files | no query | sorted relative path list | read content, follow symlinks, search meaning | **IMPLEMENTED** |
+  ```python
+  Note(metadata={"id": "product-lactel", "type": "product", ...}, content="# Lactel\n")
+  ```
 
 ### Filesystem and Markdown vault — authoritative persistence
 
 - **Purpose:** retain portable, human-readable personal knowledge.
-- **Input:** UTF-8 Markdown written through approved storage/application boundaries.
+- **Input:** UTF-8 Markdown written through approved storage or application boundaries.
 - **Output:** ordinary files readable by Odyssey, Obsidian, backup tools, and humans.
 - **Can see:** directories, filenames, frontmatter text, body text, and wikilinks.
-- **Must not know or do:** make domain decisions or become dependent on a derived index.
+- **Must not know or do:** make domain decisions or depend on a derived index.
 - **Status:** **IMPLEMENTED** and the source of truth.
+- **Concrete example:** `stores/Carrefour Balma.md` contains canonical frontmatter and ordinary
+  Markdown; the filesystem does not know that its alias matched a request.
 
-## End-to-end representation example
+## End-to-end multi-unit example
 
-For the input:
+The following shows representations at each boundary. All request and knowledge planning is
+conceptual and **PLANNED**; Phase 9 implements identity resolution only.
 
-```text
-Compré leche Lactel en Carrefour
-```
-
-the layers transform representations as follows. Planned steps explain the intended boundary; they
-are not Phase 9 implementation claims.
-
-1. **User intent (planned application input)**
-
-   Input: the full Spanish sentence. Output: the same unstructured request to a future
-   `save_knowledge`/interpretation layer. It can see semantic intent but no vault paths.
-
-2. **Higher-level interpretation (planned)**
-
-   Input: the full sentence. Example output:
+1. **Arbitrary user input**
 
    ```text
-   entity reference: {name: "Carrefour", type: "store"}
-   entity reference: {name: "Lactel", type: "product"}
-   fact: purchase of Lactel at Carrefour
+   What did I pay for Lactel last time?
+   Today I bought Lactel milk at Carrefour Balma.
+   Carrefour Balma closes at 21:00, and I normally go there on Saturday.
+   Lactel is my usual milk.
    ```
 
-   This is where natural language becomes structured references. Phase 9 does not perform it.
+2. **`interpret_request` output — conceptual**
 
-3. **`resolve_entity` (Phase 9)**
+   ```text
+   RequestPlan
+     retrieval:
+       - previous Lactel purchase price
+     write:
+       - today's purchase
+       - facts about Carrefour Balma
+       - fact about Lactel
+   ```
 
-   Input for one reference:
+3. **`decompose_knowledge` output — conceptual**
+
+   ```text
+   KnowledgePlan
+     Store unit:
+       reference: {name: "Carrefour Balma", type: "store"}
+       facts:
+         - closes at 21:00
+         - normally visited on Saturday
+     Product unit:
+       reference: {name: "Lactel", type: "product"}
+       facts:
+         - usual milk
+     Purchase unit:
+       references:
+         store -> Store unit
+         product -> Product unit
+       facts:
+         - occurred today
+   ```
+
+   Repeated store information is grouped. The purchase retains references to the related units
+   instead of duplicating all their context.
+
+4. **Independent identity resolution — Phase 9**
 
    ```python
-   resolve_entity(repository, schema, "Carrefour", type="store")
+   store_result = resolve_entity(repository, schema, "Carrefour Balma", type="store")
+   product_result = resolve_entity(repository, schema, "Lactel", type="product")
    ```
 
-   It asks only “Does this extracted store identity already exist?” It does not ask what notes are
-   broadly relevant to shopping or supermarkets.
+   These read-only scans are independent and may be orchestrated in parallel in the future. Each
+   calls `find_entity_candidates`, which lists paths, reads raw Markdown, parses `Note` values, and
+   validates them before returning exact evidence.
 
-4. **`search` (Phase 9)**
+5. **Dependency-sensitive writing — conceptual**
 
-   Input: query `"Carrefour"`, canonical type `"store"`. It lists paths and composes repository,
-   parser, and validator. Given:
+   The store facts are coalesced into one store mutation. The product facts are likewise grouped.
+   A purchase write waits until its store and product references have settled. `NOT_FOUND` needs a
+   later create/reuse decision; `AMBIGUOUS` may need clarification. No such write logic exists in
+   Phase 9.
 
-   ```text
-   stores/Carrefour Balma.md
-     metadata: {id: "store-abc123", type: "store", aliases: ["Carrefour"], ...}
-   ```
+6. **Note transformation — implemented infrastructure, future application composition**
 
-   output is conceptually:
+   A future domain capability can construct:
 
-   ```text
-   SearchCandidate(
-       path="stores/Carrefour Balma.md",
-       id="store-abc123",
-       type="store",
-       primary_name="Carrefour Balma",
-       match_kind=ALIAS,
-       matched_value="Carrefour",
+   ```python
+   Note(
+       metadata={
+           "id": "store-carrefour-balma",
+           "type": "store",
+           "aliases": ["Carrefour"],
+           "created_at": "2026-08-16T08:00:00Z",
+           "updated_at": "2026-08-16T08:00:00Z",
+           "created_by": "odyssey",
+           "updated_by": "odyssey",
+           "revision": 1,
+           "schema_version": 1,
+       },
+       content="# Carrefour Balma\n\nCloses at 21:00.\nUsually visited on Saturday.\n",
    )
    ```
 
-5. **Resolution result (Phase 9)**
+   `validate_note(note, schema)` returns `None`, `serialize_note(note)` returns raw Markdown, and
+   `repository.create_text("stores/Carrefour Balma.md", markdown)` persists it. Planning decides
+   relationships; `Note` carries metadata and content; serialization produces text; the repository
+   sees only the chosen path and that text.
 
-   If that is the only exact typed candidate, output is `RESOLVED` with the candidate. Two store
-   notes carrying the exact alias produce `AMBIGUOUS`. No exact primary/alias match produces
-   `NOT_FOUND`. A filename `Carrefour Balma.md` without alias `Carrefour` does not resolve the
-   shorter query.
+## Why Phase 9 is not general search
 
-6. **Future write behavior (planned, not Phase 9)**
-
-   A future `upsert_entity`/`save_knowledge` may reuse `store-abc123`, resolve Lactel separately,
-   and save purchase knowledge. Phase 9 stops at identity evidence and performs no creation,
-   enrichment, link generation, metadata update, or revision change.
-
-7. **Storage representation (implemented infrastructure)**
-
-   The repository sees only a relative path and raw Markdown. The filesystem sees a Markdown file;
-   neither layer knows that `Carrefour` was extracted from a purchase sentence.
-
-## Why Phase 9 is not semantic search
-
-These questions have different evidence requirements:
+These capabilities answer different questions:
 
 ```text
 resolve_entity("Carrefour", type="store")
     -> Which existing store has this exact identity reference?
 
-search("What supermarkets do I normally use and what do I buy there?")
-    -> Which knowledge is semantically relevant to this natural-language idea?
+search("What stores do I normally use and what do I buy there?")  [FUTURE]
+    -> Which knowledge is relevant to this natural-language question?
 ```
 
-Only the first is Phase 9. In a vault containing `stores/Carrefour.md`,
-`stores/Carrefour Balma.md`, `purchases/Compra Carrefour agosto.md`, and `stores/Auchan.md`, vector
-similarity may retrieve related purchase and store documents but cannot establish canonical entity
-identity. Exact primary names, aliases, type, and stable IDs are better identity evidence. Vectors
-may become useful later for demonstrated semantic retrieval needs, but no database, vector index,
-embedding generation, graph traversal, fuzzy library, or additional service is justified here.
+The generic name `search` is reserved for future knowledge retrieval. It might later use text,
+metadata, wikilinks, graph or index retrieval, or semantic/vector techniques if a demonstrated need
+justifies them. Phase 9 uses exact primary names, aliases, canonical types, and stable IDs; it adds
+no database, vector index, embeddings, LLM calls, graph traversal, or additional service.
 
 ## n8n and the legacy/admin storage path
 
-n8n remains Odyssey’s integration boundary for triggers, webhooks, credentials, scheduling,
+n8n remains Odyssey's integration boundary for triggers, webhooks, credentials, scheduling,
 external-service orchestration, retries, observability, and future human-in-the-loop flows. Its
 existing storage primitives remain administrative, reference, and testing tools—not the normal
 future application/domain path:
