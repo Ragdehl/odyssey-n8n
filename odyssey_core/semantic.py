@@ -19,6 +19,11 @@ from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse
 from odyssey_core.storage import VaultRepository
 
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+_INDEX_MARKERS = {
+    "application": "odyssey",
+    "format": "semantic-entity-index",
+    "format_version": "1",
+}
 _TECHNICAL_METADATA = {
     "id",
     "created_at",
@@ -324,6 +329,7 @@ class SemanticEntityIndex:
                 connection.executemany(
                     "INSERT INTO metadata(key, value) VALUES (?, ?)",
                     (
+                        *_INDEX_MARKERS.items(),
                         ("model_name", embedder.model_name),
                         ("model_version", embedder.model_version),
                         ("dimension", str(dimension)),
@@ -353,15 +359,24 @@ class SemanticEntityIndex:
         return len(projected)
 
     def delete(self) -> None:
-        """Delete only this disposable derived index file when it exists.
+        """Delete this file only after verifying Odyssey semantic-index markers.
 
         Raises:
-            SemanticIndexError: If the derived file cannot be deleted.
+            SemanticIndexError: If the existing target is not a compatible Odyssey semantic index
+                or cannot be deleted.
         """
+        if not self.path.exists():
+            return
         try:
+            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+            if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                raise SemanticIndexError("Refusing to delete an unverified semantic index")
             self.path.unlink(missing_ok=True)
-        except OSError as error:
-            raise SemanticIndexError("Unable to delete semantic index") from error
+        except SemanticIndexError:
+            raise
+        except (OSError, sqlite3.Error) as error:
+            raise SemanticIndexError("Refusing to delete an unverified semantic index") from error
 
     def find_candidates(
         self,

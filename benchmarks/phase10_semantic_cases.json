@@ -68,7 +68,10 @@
     {"reference": "mother of my children", "context": "", "expected_id": "person-beatriz-a"},
     {"reference": "la madre de mis hijos", "context": "", "expected_id": "person-beatriz-a"},
     {"reference": "la mère de mes enfants", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "la meva dona", "context": "", "expected_id": "person-beatriz-a"},
+    {"reference": "la mare dels meus fills", "context": "", "expected_id": "person-beatriz-a"},
     {"reference": "Xavi's wife", "context": "", "expected_id": "person-beatriz-b"},
+    {"reference": "la dona d'en Xavi", "context": "", "expected_id": "person-beatriz-b"},
     {
       "reference": "the other Beatriz",
       "context": "We had dinner with Xavi and the other Beatriz.",

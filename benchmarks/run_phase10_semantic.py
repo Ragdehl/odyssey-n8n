@@ -5,12 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from fastembed import TextEmbedding
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from odyssey_core.semantic import _normalized_vector  # noqa: E402
 
 DEFAULT_MODELS = (
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -52,11 +57,15 @@ def run_model(model_name: str, cases: dict[str, Any], *, limit: int) -> dict[str
     notes = cases["notes"]
     queries = cases["queries"]
     started = time.perf_counter()
-    note_vectors = np.asarray(list(model.embed([note["text"] for note in notes])))
+    note_vectors = np.asarray(
+        [_normalized_vector(vector) for vector in model.embed([note["text"] for note in notes])]
+    )
     query_texts = [
         f"Reference: {query['reference']}\nContext: {query['context']}" for query in queries
     ]
-    query_vectors = np.asarray(list(model.query_embed(query_texts)))
+    query_vectors = np.asarray(
+        [_normalized_vector(vector) for vector in model.query_embed(query_texts)]
+    )
     execution_seconds = time.perf_counter() - started
 
     rankings = []

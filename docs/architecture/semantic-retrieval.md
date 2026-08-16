@@ -42,8 +42,10 @@ because it adds no useful semantic identity evidence. There is no chunking or gr
 `SemanticEntityIndex.rebuild(repository, schema, embedder)` lists, reads, parses, and validates the
 entire Markdown vault before atomically replacing one SQLite file. It records stable ID, path,
 canonical type, primary name, SHA-256 source hash, model/runtime identity, and one normalized
-float32 embedding per note. Duplicate IDs and invalid notes fail closed; a failed rebuild preserves
-the previous index. `delete()` removes only the explicitly configured derived file.
+float32 embedding per note. Explicit Odyssey application, index-format, and format-version markers
+identify the disposable file. Duplicate IDs and invalid notes fail closed; a failed rebuild
+preserves the previous index. `delete()` refuses to unlink a file unless those markers verify it as
+an Odyssey semantic index.
 
 The caller must place the index outside canonical vault knowledge, for example:
 
@@ -76,13 +78,13 @@ must match.
 ## Model and backend decision
 
 The synthetic dataset in `benchmarks/phase10_semantic_cases.json` contains people, stores, a project,
-and a concept, with English, Spanish, and French references. Both benchmarked FastEmbed models put
-the expected entity in Top 5 for all 13 cases on ARM64:
+and a concept, with English, Spanish, French, and Catalan references. Both benchmarked FastEmbed
+models put the expected entity in Top 5 for all 16 cases on ARM64:
 
 | Model | Recall@5 | Model size | Embed + query time |
 | --- | ---: | ---: | ---: |
-| multilingual MiniLM L12 v2 | 13/13 | about 220 MB | 0.42 s |
-| multilingual MPNet base v2 | 13/13 | about 1 GB | 1.58 s |
+| multilingual MiniLM L12 v2 | 16/16 | about 220 MB | 0.49 s |
+| multilingual MPNet base v2 | 16/16 | about 1 GB | 1.54 s |
 
 The selected V1 model is
 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` through FastEmbed 0.7.3. The smaller

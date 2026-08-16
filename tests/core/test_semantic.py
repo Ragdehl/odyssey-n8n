@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -125,6 +126,40 @@ def test_rebuild_replaces_and_delete_removes_only_derived_index(
         assert source.read_bytes() == original
     finally:
         source.chmod(source_mode)
+
+
+def test_delete_refuses_arbitrary_existing_file(tmp_path: Path) -> None:
+    """Leave an arbitrary configured file untouched when index identity cannot be verified."""
+    target = tmp_path / "important.txt"
+    target.write_text("canonical data", encoding="utf-8")
+
+    with pytest.raises(SemanticIndexError, match="unverified semantic index"):
+        SemanticEntityIndex(target).delete()
+
+    assert target.read_text(encoding="utf-8") == "canonical data"
+
+
+@pytest.mark.parametrize("malformed", [True, False])
+def test_delete_refuses_non_odyssey_sqlite(tmp_path: Path, *, malformed: bool) -> None:
+    """Leave malformed and structurally valid non-Odyssey SQLite files untouched."""
+    target = tmp_path / "other.sqlite3"
+    if malformed:
+        target.write_bytes(b"not sqlite")
+    else:
+        with sqlite3.connect(target) as connection:
+            connection.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            connection.execute("INSERT INTO metadata VALUES ('application', 'someone-else')")
+    before = target.read_bytes()
+
+    with pytest.raises(SemanticIndexError, match="unverified semantic index"):
+        SemanticEntityIndex(target).delete()
+
+    assert target.read_bytes() == before
+
+
+def test_delete_missing_index_is_a_no_op(tmp_path: Path) -> None:
+    """Allow cleanup callers to delete an already-absent index harmlessly."""
+    SemanticEntityIndex(tmp_path / "missing.sqlite3").delete()
 
 
 def test_type_filter_top_n_context_and_candidate_only_contract(
