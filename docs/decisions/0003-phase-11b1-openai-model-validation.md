@@ -101,30 +101,42 @@ unchanged.
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | `gpt-5.6-luna` | 34 / 26 / 26 | 1 | 1 | 86/90 (95.56%) | 0 | Failed safety; escalate |
 | `gpt-5.6-terra` | 35 / 26 / 26 | 2 | 1 | 87/90 (96.67%) | 0 | Failed safety; escalate |
-| `gpt-5.6-sol` | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed provisionally** |
+| `gpt-5.6-sol` run 1 | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed provisionally** |
+| `gpt-5.6-sol` repeat | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed provisionally** |
 
 Luna and Terra crossed the overall-accuracy threshold but retained clear false resolutions, so each
 failed and triggered the next cost tier. Sol passed every gate. It changed four decisions relative to
 its zero-shot run and corrected all four clear zero-shot errors; disputed E13 remained its only
-frozen-label error. Sol was not repeated because the human required review before consistency spend.
+frozen-label error. After human review, one Sol consistency repeat was authorized. It reproduced all
+90 outcome/ID decisions exactly, again passed every gate, and incurred no invalid response or clear
+false resolution. No other model or paid evaluation was run for consistency.
 
 | Model | Zero-shot → few-shot | Same decisions | Few-shot input / cache write / output | Calculated 1b spend |
 | --- | ---: | ---: | ---: | ---: |
 | Luna | 82/90 → 86/90 | 84/90 | 248,727 / 248,457 / 4,848 | $0.067986 |
 | Terra | 82/90 → 87/90 | 84/90 | 248,727 / 248,457 / 3,866 | $0.668075 |
 | Sol | 85/90 → 89/90 | 86/90 | 248,727 / 248,457 / 2,564 | $1.631126 |
+| Sol repeat | — | 90/90 versus Sol run 1 | 248,727 / 248,457 / 2,889 | $1.640876 |
 
-Phase 11B.1b calculated spend was $2.367187; calculated spend across 11B.1a and 11B.1b was
-$2.787243. These figures use actual API token counters and dated list prices, including the reported
+Phase 11B.1b calculated spend was $4.008063; calculated spend across 11B.1a and 11B.1b was
+$4.428119. These figures use actual API token counters and dated list prices, including the reported
 cache-write tokens at 1.25x input price. They are not an independent provider invoice. No cached-input
 tokens or retries were reported.
+
+### Follow-up: input-cost optimization
+
+Input cost is now the primary optimization opportunity because the ten frozen examples substantially
+expand the static prefix repeated for every request. Later work may separately evaluate explicit
+prompt caching of that prefix, fewer or smaller examples, and lower reasoning effort. None is assumed
+to preserve the measured quality or safety; each requires controlled evaluation before adoption.
 
 ## Decision and consequences
 
 Phase 11B.1a selected no model under its zero-shot prompt. Phase 11B.1b identifies Sol as the
 provisional cheapest passing prompt-parity candidate because both cheaper tiers failed the unchanged
-safety gate. This is not a final production-model selection: consistency is unmeasured, and any repeat
-or adoption remains a human decision. No further paid evaluation is authorized by this ADR.
+safety gate. The independent repeat's 90/90 decision consistency strengthens that provisional result.
+This is not a final production-model selection; adoption remains a human decision. No further paid
+evaluation is authorized by this ADR.
 
 Phase 11B production work remains open. Before real personal data is sent externally it must minimize
 candidate evidence, investigate useful pseudonymization or anonymization, and explicitly review API
@@ -134,7 +146,8 @@ chains, human-in-the-loop behavior, multi-provider infrastructure, `upsert_entit
 ## Limitations
 
 - The evidence is synthetic and covers one frozen 90-case set.
-- Each model has one run per prompt variant; few-shot consistency is therefore unmeasured.
+- Luna and Terra have one run per prompt variant; Sol few-shot consistency has two runs on one frozen
+  90-case set and does not establish broader repeatability.
 - Frozen accuracy treats disputed E13 as wrong, as required.
 - Token-based calculated cost may differ from the provider's final invoice.
 - A benchmark result does not establish production privacy readiness or safe end-to-end entity writes.

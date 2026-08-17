@@ -56,6 +56,7 @@ evaluation turn remained blind, and all other request and scoring controls were 
 | `gpt-5.6-luna` / 1b | 34 / 26 / 26 | 1 | 1 | 86/90 (95.56%) | 34/36 (94.44%) | 36/90 (40.00%) | 0 |
 | `gpt-5.6-terra` / 1b | 35 / 26 / 26 | 2 | 1 | 87/90 (96.67%) | 35/38 (92.11%) | 38/90 (42.22%) | 0 |
 | `gpt-5.6-sol` / 1b | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 35/36 (97.22%) | 36/90 (40.00%) | 0 |
+| `gpt-5.6-sol` / 1b repeat | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 35/36 (97.22%) | 36/90 (40.00%) | 0 |
 
 | Model | Zero-shot → few-shot overall | Decision consistency | Clear false R | Gate |
 | --- | ---: | ---: | ---: | --- |
@@ -72,18 +73,21 @@ four of its clear zero-shot errors; disputed E13 remained its only frozen-label 
 | `gpt-5.6-luna` / 1b | 1.425 / 1.252 / 2.317 s | 248,727 | 248,457 | 0 | 4,848 | 2,568 | $0.067986 |
 | `gpt-5.6-terra` / 1b | 1.307 / 1.189 / 2.147 s | 248,727 | 248,457 | 0 | 3,866 | 1,615 | $0.668075 |
 | `gpt-5.6-sol` / 1b | 1.797 / 1.683 / 2.760 s | 248,727 | 248,457 | 0 | 2,564 | 385 | $1.631126 |
-| **1b total** | — | **746,181** | **745,371** | **0** | **11,278** | **4,568** | **$2.367187** |
+| `gpt-5.6-sol` / 1b repeat | 1.938 / 1.770 / 3.078 s | 248,727 | 248,457 | 0 | 2,889 | 698 | $1.640876 |
+| **1b total** | — | **994,908** | **993,828** | **0** | **14,167** | **5,266** | **$4.008063** |
 
-All three few-shot runs reported cache-write tokens but no cached-input tokens. The calculated spend
+All few-shot runs reported cache-write tokens but no cached-input tokens. The calculated spend
 uses the same dated standard prices as Phase 11B.1a, including OpenAI's 1.25x input rate for cache
-writes. Across both API phases the calculated total is $2.787243. There were no retries.
+writes. Across both API phases the calculated total is $4.428119. There were no retries.
 
 Sol is the provisional cheapest passing prompt-parity candidate because both cheaper models failed
-the unchanged safety gate. It was not repeated. Consistency across independent few-shot runs remains
-unmeasured and requires human review before additional spend.
+the unchanged safety gate. Its one authorized consistency repeat reproduced all 90 outcome/ID
+decisions exactly (90/90, 100% decision consistency), including zero clear false resolutions and
+disputed E13 as the sole frozen-label error. No further paid evaluation was performed.
 
 The separate compact Phase 11B.1b per-case records are:
 
 - [`phase11b1b_luna_run1.json`](phase11b1b_luna_run1.json)
 - [`phase11b1b_terra_run1.json`](phase11b1b_terra_run1.json)
 - [`phase11b1b_sol_run1.json`](phase11b1b_sol_run1.json)
+- [`phase11b1b_sol_run2.json`](phase11b1b_sol_run2.json)
