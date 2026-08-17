@@ -373,10 +373,12 @@ resolutions for standalone production use. Later blind strong-reasoner experimen
 feasibility under the tested contract, not proof for every strong LLM or a specific API model. Core
 must validate the output schema, ensure a selected ID belongs to the supplied candidate set, and fail
 closed on invalid output. The reasoner makes a contextual decision; Core remains authoritative.
-Phase 11B.1 benchmarked three OpenAI models without production wiring. None passed every frozen gate:
-Sol was the only model with zero clear false resolutions but reached 94.44% rather than the required
-95% overall accuracy. Production model selection, integration, privacy, retention, evidence
-minimization, and fallback choices remain pending human decisions. See
+Phase 11B.1 benchmarked three OpenAI models without production wiring. The initial zero-shot prompt
+selected none. A controlled prompt-parity follow-up reused the ten pre-existing Phase 11A calibration
+examples; Sol then passed provisionally with zero clear false resolutions and 98.89% frozen-label
+accuracy after both cheaper models retained clear false resolutions. Consistency, final production
+model selection, integration, privacy, retention, evidence minimization, and fallback choices remain
+pending human decisions. See
 [`ADR 0003`](../decisions/0003-phase-11b1-openai-model-validation.md).
 
 ### Resolution before canonical link creation

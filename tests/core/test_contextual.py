@@ -8,7 +8,9 @@ import pytest
 
 from odyssey_core.contextual import (
     ContextualCandidate,
+    ContextualResolutionDecision,
     ContextualResolutionError,
+    ContextualResolutionExample,
     ContextualResolutionRequest,
     build_openai_payload,
     validate_contextual_decision,
@@ -51,6 +53,32 @@ def test_expected_labels_cannot_enter_payload_through_request_contract() -> None
         "entity_type",
         "candidates",
     }
+
+
+def test_frozen_examples_are_compact_turns_and_evaluation_stays_blind() -> None:
+    """Include labelled calibration turns without leaking evaluation identity or truth."""
+    example = ContextualResolutionExample(
+        request=request(),
+        decision=ContextualResolutionDecision("RESOLVED", "beatriz-costa"),
+    )
+    evaluation = ContextualResolutionRequest(
+        reference="EVALUATION-REFERENCE",
+        context="EVALUATION-CONTEXT",
+        entity_type="person",
+        candidates=(ContextualCandidate("evaluation-candidate", "EVALUATION-EVIDENCE"),),
+    )
+
+    payload = build_openai_payload(evaluation, "gpt-5.6-luna", examples=(example,))
+    turns = payload["input"]
+
+    assert [turn["role"] for turn in turns] == ["system", "user", "assistant", "user"]
+    assert json.loads(turns[2]["content"]) == {
+        "outcome": "RESOLVED",
+        "id": "beatriz-costa",
+    }
+    assert sum("EVALUATION-REFERENCE" in turn["content"] for turn in turns) == 1
+    assert sum("EVALUATION-CONTEXT" in turn["content"] for turn in turns) == 1
+    assert "case_id" not in json.dumps(payload).casefold()
 
 
 @pytest.mark.parametrize(

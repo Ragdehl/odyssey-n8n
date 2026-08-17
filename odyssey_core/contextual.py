@@ -58,6 +58,19 @@ class ContextualResolutionDecision:
     id: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ContextualResolutionExample:
+    """Pair one pre-existing calibration request with its frozen valid decision.
+
+    Attributes:
+        request: Label-free contextual evidence shown as a user turn.
+        decision: Frozen answer shown as the corresponding assistant turn.
+    """
+
+    request: ContextualResolutionRequest
+    decision: ContextualResolutionDecision
+
+
 class ContextualReasoner(Protocol):
     """Define a provider-independent boundary for one contextual decision."""
 
@@ -79,7 +92,11 @@ the closest candidate. If evidence is insufficient, abstain. Return only the req
 
 
 def build_openai_payload(
-    request: ContextualResolutionRequest, model: str, *, reasoning_effort: str = "medium"
+    request: ContextualResolutionRequest,
+    model: str,
+    *,
+    reasoning_effort: str = "medium",
+    examples: tuple[ContextualResolutionExample, ...] = (),
 ) -> dict[str, Any]:
     """Build one blind Responses API request with strict Structured Outputs.
 
@@ -87,6 +104,7 @@ def build_openai_payload(
         request: Reference, context, type, and supplied candidate evidence.
         model: Exact OpenAI model identifier to benchmark.
         reasoning_effort: Responses API reasoning effort.
+        examples: Pre-existing labelled calibration turns shared by every evaluated model.
 
     Returns:
         JSON-compatible payload containing no benchmark labels, scoring metadata, or case identity.
@@ -94,33 +112,33 @@ def build_openai_payload(
     Raises:
         ValueError: If candidate identities are empty or duplicated.
     """
-    candidate_ids = [candidate.id for candidate in request.candidates]
-    if not candidate_ids or any(not identity for identity in candidate_ids):
-        raise ValueError("Contextual resolution requires non-empty candidate identities")
-    if len(candidate_ids) != len(set(candidate_ids)):
-        raise ValueError("Contextual resolution candidate identities must be unique")
-
-    candidate_evidence = [
-        {"id": candidate.id, "evidence": candidate.evidence} for candidate in request.candidates
-    ]
-    user_evidence = {
-        "reference": request.reference,
-        "context": request.context,
-        "entity_type": request.entity_type,
-        "candidates": candidate_evidence,
-    }
+    _validate_request(request)
+    input_turns: list[dict[str, str]] = [{"role": "system", "content": _SYSTEM_INSTRUCTIONS}]
+    for example in examples:
+        _validate_request(example.request)
+        validate_contextual_decision(
+            {"outcome": example.decision.outcome, "id": example.decision.id},
+            frozenset(candidate.id for candidate in example.request.candidates),
+        )
+        input_turns.extend(
+            (
+                {"role": "user", "content": _render_user_evidence(example.request)},
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {"outcome": example.decision.outcome, "id": example.decision.id},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                },
+            )
+        )
+    input_turns.append({"role": "user", "content": _render_user_evidence(request)})
     return {
         "model": model,
         "store": False,
         "reasoning": {"effort": reasoning_effort},
-        "input": [
-            {"role": "system", "content": _SYSTEM_INSTRUCTIONS},
-            {
-                "role": "user",
-                "content": "Resolve this synthetic entity reference:\n"
-                + json.dumps(user_evidence, ensure_ascii=False, separators=(",", ":")),
-            },
-        ],
+        "input": input_turns,
         "text": {
             "format": {
                 "type": "json_schema",
@@ -138,6 +156,30 @@ def build_openai_payload(
             }
         },
     }
+
+
+def _validate_request(request: ContextualResolutionRequest) -> None:
+    """Reject empty or duplicate candidate identities before constructing a provider payload."""
+    candidate_ids = [candidate.id for candidate in request.candidates]
+    if not candidate_ids or any(not identity for identity in candidate_ids):
+        raise ValueError("Contextual resolution requires non-empty candidate identities")
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise ValueError("Contextual resolution candidate identities must be unique")
+
+
+def _render_user_evidence(request: ContextualResolutionRequest) -> str:
+    """Render one label-free contextual request identically for calibration and evaluation turns."""
+    evidence = {
+        "reference": request.reference,
+        "context": request.context,
+        "entity_type": request.entity_type,
+        "candidates": [
+            {"id": candidate.id, "evidence": candidate.evidence} for candidate in request.candidates
+        ],
+    }
+    return "Resolve this synthetic entity reference:\n" + json.dumps(
+        evidence, ensure_ascii=False, separators=(",", ":")
+    )
 
 
 def validate_contextual_decision(
@@ -186,11 +228,17 @@ class OpenAIContextualReasoner:
     """
 
     def __init__(
-        self, model: str, *, reasoning_effort: str = "medium", timeout_seconds: float = 120.0
+        self,
+        model: str,
+        *,
+        reasoning_effort: str = "medium",
+        timeout_seconds: float = 120.0,
+        examples: tuple[ContextualResolutionExample, ...] = (),
     ) -> None:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = timeout_seconds
+        self.examples = examples
 
     def resolve(
         self, request: ContextualResolutionRequest
@@ -209,7 +257,12 @@ class OpenAIContextualReasoner:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise ContextualResolutionError("OPENAI_API_KEY is required for the live benchmark")
-        payload = build_openai_payload(request, self.model, reasoning_effort=self.reasoning_effort)
+        payload = build_openai_payload(
+            request,
+            self.model,
+            reasoning_effort=self.reasoning_effort,
+            examples=self.examples,
+        )
         http_request = urllib.request.Request(
             "https://api.openai.com/v1/responses",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),

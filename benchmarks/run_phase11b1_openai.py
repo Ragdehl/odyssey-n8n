@@ -13,7 +13,9 @@ from typing import Any
 from odyssey_core.contextual import (
     ContextualCandidate,
     ContextualProviderError,
+    ContextualResolutionDecision,
     ContextualResolutionError,
+    ContextualResolutionExample,
     ContextualResolutionRequest,
     OpenAIContextualReasoner,
     validate_contextual_decision,
@@ -96,6 +98,40 @@ def load_blocking_cases(cache_dir: Path) -> list[dict[str, Any]]:
     if missing:
         raise ValueError(f"Phase 10 omitted expected candidates for: {', '.join(missing)}")
     return ranked
+
+
+def load_calibration_examples(cache_dir: Path) -> tuple[ContextualResolutionExample, ...]:
+    """Load the ten pre-existing Phase 11A examples as compact labelled prompt turns.
+
+    Args:
+        cache_dir: Existing local Phase 10 embedding-model cache.
+
+    Returns:
+        Ten examples in their frozen dataset order, with no case IDs or scoring metadata.
+
+    Raises:
+        ValueError: If the frozen source no longer contains exactly ten valid examples.
+    """
+    from benchmarks.run_phase11a_contextual_resolution import build_phase10_candidates
+
+    base = json.loads(PHASE11A_CASES.read_text(encoding="utf-8"))
+    calibration = [case for case in base["cases"] if case["split"] == "calibration"]
+    if len(calibration) != 10:
+        raise ValueError("Phase 11B.1b requires exactly ten frozen calibration examples")
+    ranked = build_phase10_candidates(
+        {"notes": base["notes"], "cases": calibration}, cache_dir=cache_dir
+    )
+    examples = []
+    for case in ranked:
+        identity = case.get("expected_id") if case["expected"] == "RESOLVED" else None
+        request = blind_request(case)
+        decision = ContextualResolutionDecision(outcome=case["expected"], id=identity)
+        validate_contextual_decision(
+            {"outcome": decision.outcome, "id": decision.id},
+            {candidate.id for candidate in request.candidates},
+        )
+        examples.append(ContextualResolutionExample(request=request, decision=decision))
+    return tuple(examples)
 
 
 def blind_request(case: dict[str, Any]) -> ContextualResolutionRequest:
@@ -244,19 +280,29 @@ def main() -> None:
     parser.add_argument("--model", choices=tuple(MODEL_PRICES_PER_MILLION), required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--prompt-variant", choices=("zero-shot", "frozen-few-shot"), default="zero-shot"
+    )
     parser.add_argument("--embedding-cache-dir", type=Path, default=DEFAULT_CACHE)
     args = parser.parse_args()
     if args.output.exists():
         raise SystemExit(f"Refusing to overwrite existing benchmark run: {args.output}")
 
     cases = load_blocking_cases(args.embedding_cache_dir)
-    reasoner = OpenAIContextualReasoner(args.model, reasoning_effort="medium")
+    examples = (
+        load_calibration_examples(args.embedding_cache_dir)
+        if args.prompt_variant == "frozen-few-shot"
+        else ()
+    )
+    reasoner = OpenAIContextualReasoner(args.model, reasoning_effort="medium", examples=examples)
     result: dict[str, Any] = {
-        "phase": "11B.1",
+        "phase": "11B.1b" if examples else "11B.1a",
         "synthetic_only": True,
         "model": args.model,
         "reasoning_effort": "medium",
         "store": False,
+        "prompt_variant": args.prompt_variant,
+        "calibration_examples": len(examples),
         "run_id": args.run_id,
         "attempts": 0,
         "transient_retries": [],

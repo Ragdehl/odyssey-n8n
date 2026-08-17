@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from odyssey_core.contextual import build_openai_payload
 
@@ -52,3 +54,43 @@ def test_blind_projection_excludes_every_frozen_answer_field() -> None:
         "0.98",
     ):
         assert forbidden not in serialized
+
+
+def test_frozen_calibration_source_is_exactly_ten_predating_examples(monkeypatch) -> None:
+    """Load every and only calibration row without deriving examples from evaluation failures."""
+    runner = load_runner()
+    captured = {}
+
+    def fake_candidates(data, cache_dir):
+        captured["ids"] = [case["id"] for case in data["cases"]]
+        notes = data["notes"]
+        return [
+            {
+                **case,
+                "candidates": [
+                    {**note, "score": 1.0} for note in notes if note["type"] == case["type"]
+                ],
+            }
+            for case in data["cases"]
+        ]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "benchmarks.run_phase11a_contextual_resolution",
+        SimpleNamespace(build_phase10_candidates=fake_candidates),
+    )
+    examples = runner.load_calibration_examples(Path("unused"))
+
+    assert len(examples) == 10
+    assert captured["ids"] == [
+        "cal-en-wife",
+        "cal-es-xavi-wife",
+        "cal-fr-usual-store",
+        "cal-en-atlas-colleague",
+        "cal-es-beatriz",
+        "cal-fr-xavi",
+        "cal-en-unknown-doctor",
+        "cal-fr-unknown-project",
+        "cal-es-odyssey",
+        "cal-en-carrefour",
+    ]

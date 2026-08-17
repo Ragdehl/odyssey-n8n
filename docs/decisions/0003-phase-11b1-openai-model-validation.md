@@ -1,6 +1,6 @@
 # ADR 0003: Phase 11B.1 OpenAI contextual-reasoner validation
 
-- Status: Benchmark complete; no model selected; human decision required
+- Status: Sol provisionally passes prompt-parity gate; human decision required
 - Date: 2026-08-18
 
 ## Context
@@ -40,7 +40,7 @@ A model provisionally passed only with zero clear false `RESOLVED`, zero invalid
 `AMBIGUOUS`, retains its `label_disputed` annotation, and is reported separately from clear false
 resolutions.
 
-## Evidence and escalation
+## Phase 11B.1a: zero-shot evidence and escalation
 
 | Model | Correct R / A / U | Clear false R | E13 disputed R | Overall | Invalid | Result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -76,12 +76,55 @@ Complete compact results are version controlled in
 [`phase11b1_openai_results.md`](../../benchmarks/phase11b1_openai_results.md) and the three linked
 per-case JSON artifacts. Raw Responses API documents and logs are not retained.
 
+The original Phase 11B.1a conclusion remains: under the zero-shot prompt, no model passed every gate.
+This evidence is preserved unchanged rather than reinterpreted after the later prompt-parity review.
+
+## Phase 11B.1b: frozen few-shot prompt parity
+
+Architecture review identified a material experimental mismatch: the successful manual Phase
+11A.2/11A.3 configuration had used the ten labelled calibration examples already frozen in
+`phase11a_contextual_resolution_cases.json`, while Phase 11B.1a had tested only abstract outcome
+definitions. The mismatch was especially relevant because Sol's four clear zero-shot errors were
+conservative `AMBIGUOUS`→`UNRESOLVED` distinctions.
+
+Phase 11B.1b therefore added every and only those ten pre-existing examples. They predate the API
+results and were not selected or changed in response to observed failures. Each example used the same
+label-free request shape and Phase 10 Top-5 evidence as an evaluation case, followed by its frozen
+decision as an assistant turn. Case IDs, split/category/language metadata, retrieval scores, and
+plausible-ID scoring metadata were omitted. Evaluation truth remained outside the provider contract.
+
+The system instructions, evaluation cases, model output contract, `store: false`, Structured Outputs,
+medium reasoning, deterministic validation, gate, scoring, and sequential cost policy were otherwise
+unchanged.
+
+| Model | Correct R / A / U | Clear false R | E13 disputed R | Overall | Invalid | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `gpt-5.6-luna` | 34 / 26 / 26 | 1 | 1 | 86/90 (95.56%) | 0 | Failed safety; escalate |
+| `gpt-5.6-terra` | 35 / 26 / 26 | 2 | 1 | 87/90 (96.67%) | 0 | Failed safety; escalate |
+| `gpt-5.6-sol` | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed provisionally** |
+
+Luna and Terra crossed the overall-accuracy threshold but retained clear false resolutions, so each
+failed and triggered the next cost tier. Sol passed every gate. It changed four decisions relative to
+its zero-shot run and corrected all four clear zero-shot errors; disputed E13 remained its only
+frozen-label error. Sol was not repeated because the human required review before consistency spend.
+
+| Model | Zero-shot → few-shot | Same decisions | Few-shot input / cache write / output | Calculated 1b spend |
+| --- | ---: | ---: | ---: | ---: |
+| Luna | 82/90 → 86/90 | 84/90 | 248,727 / 248,457 / 4,848 | $0.067986 |
+| Terra | 82/90 → 87/90 | 84/90 | 248,727 / 248,457 / 3,866 | $0.668075 |
+| Sol | 85/90 → 89/90 | 86/90 | 248,727 / 248,457 / 2,564 | $1.631126 |
+
+Phase 11B.1b calculated spend was $2.367187; calculated spend across 11B.1a and 11B.1b was
+$2.787243. These figures use actual API token counters and dated list prices, including the reported
+cache-write tokens at 1.25x input price. They are not an independent provider invoice. No cached-input
+tokens or retries were reported.
+
 ## Decision and consequences
 
-No tested model meets every approved Phase 11B.1 gate, so no provisional production model is selected.
-Sol is the strongest and only tested model with zero clear false resolutions, but adopting it, revising
-the accuracy gate, changing the prompt, changing reasoning effort, or funding another run is a human
-decision. No further paid evaluation is authorized by this ADR.
+Phase 11B.1a selected no model under its zero-shot prompt. Phase 11B.1b identifies Sol as the
+provisional cheapest passing prompt-parity candidate because both cheaper tiers failed the unchanged
+safety gate. This is not a final production-model selection: consistency is unmeasured, and any repeat
+or adoption remains a human decision. No further paid evaluation is authorized by this ADR.
 
 Phase 11B production work remains open. Before real personal data is sent externally it must minimize
 candidate evidence, investigate useful pseudonymization or anonymization, and explicitly review API
@@ -91,7 +134,7 @@ chains, human-in-the-loop behavior, multi-provider infrastructure, `upsert_entit
 ## Limitations
 
 - The evidence is synthetic and covers one frozen 90-case set.
-- Each model has one run only because none provisionally passed; consistency is therefore unmeasured.
+- Each model has one run per prompt variant; few-shot consistency is therefore unmeasured.
 - Frozen accuracy treats disputed E13 as wrong, as required.
 - Token-based calculated cost may differ from the provider's final invoice.
 - A benchmark result does not establish production privacy readiness or safe end-to-end entity writes.
