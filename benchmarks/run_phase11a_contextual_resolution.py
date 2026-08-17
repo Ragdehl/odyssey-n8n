@@ -58,6 +58,27 @@ def system_memory() -> dict[str, int]:
     return values
 
 
+def process_memory(pid: int) -> dict[str, int]:
+    """Read peak RSS and swap counters for a local model-server process.
+
+    Args:
+        pid: Linux process identifier for the benchmark server.
+
+    Returns:
+        Available procfs counters in KiB, or an empty mapping if the process ended.
+    """
+    path = Path(f"/proc/{pid}/status")
+    if not path.exists():
+        return {}
+    names = {"VmHWM": "peak_rss_kib", "VmRSS": "rss_kib", "VmSwap": "swap_kib"}
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        name, value = line.split(":", maxsplit=1)
+        if name in names:
+            values[names[name]] = int(value.strip().split()[0])
+    return values
+
+
 def package_versions() -> dict[str, str]:
     """Return exact installed versions relevant to this benchmark."""
     versions = {}
@@ -67,6 +88,20 @@ def package_versions() -> dict[str, str]:
         except importlib.metadata.PackageNotFoundError:
             continue
     return versions
+
+
+def artifact_bytes(path: Path) -> int:
+    """Measure a model file or recursively total a model directory in bytes.
+
+    Args:
+        path: Existing benchmark artifact.
+
+    Returns:
+        File size or sum of regular files below a directory.
+    """
+    if path.is_file():
+        return path.stat().st_size
+    return sum(child.stat().st_size for child in path.rglob("*") if child.is_file())
 
 
 def load_dataset(path: Path) -> dict[str, Any]:
@@ -98,17 +133,24 @@ def load_dataset(path: Path) -> dict[str, Any]:
     return data
 
 
-def build_phase10_candidates(data: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
+def build_phase10_candidates(
+    data: dict[str, Any], limit: int = 5, cache_dir: Path | None = None
+) -> list[dict[str, Any]]:
     """Create the current Phase 10 cosine-ranked evidence for every case.
 
     Args:
         data: Benchmark dataset containing notes and cases.
         limit: Maximum candidates retained after canonical-type filtering.
+        cache_dir: Existing local FastEmbed artifact directory.
 
     Returns:
         Cases augmented with candidate documents and cosine scores.
     """
-    model = TextEmbedding(model_name=EMBEDDING_MODEL, local_files_only=True)
+    model = TextEmbedding(
+        model_name=EMBEDDING_MODEL,
+        cache_dir=str(cache_dir) if cache_dir else None,
+        local_files_only=True,
+    )
     notes = data["notes"]
     note_vectors = np.asarray(list(model.embed([note["text"] for note in notes])))
     note_vectors /= np.linalg.norm(note_vectors, axis=1, keepdims=True)
@@ -467,11 +509,13 @@ def main() -> None:
     parser.add_argument("--quantization")
     parser.add_argument("--model-load-seconds", type=float)
     parser.add_argument("--server-peak-rss-kib", type=int)
+    parser.add_argument("--server-pid", type=int)
+    parser.add_argument("--embedding-cache-dir", type=Path)
     args = parser.parse_args()
     memory_before = system_memory()
     started = time.perf_counter()
     dataset = load_dataset(args.cases)
-    cases = build_phase10_candidates(dataset)
+    cases = build_phase10_candidates(dataset, cache_dir=args.embedding_cache_dir)
     if args.max_cases is not None:
         cases = cases[: args.max_cases]
     load_and_candidate_seconds = time.perf_counter() - started
@@ -509,7 +553,13 @@ def main() -> None:
                 )
             summaries.append(summarize(cases, predictions))
             repeat_usage.append(usages)
-        comparable = [json.dumps(summary["cases"], sort_keys=True) for summary in summaries]
+        comparable = [
+            tuple(
+                (case["case_id"], case["outcome"], case.get("id"), case.get("parse_error"))
+                for case in summary["cases"]
+            )
+            for summary in summaries
+        ]
         metadata["repeatability_identical"] = len(set(comparable)) == 1
         for field in ("input_tokens", "output_tokens", "tokens_per_second"):
             values = [
@@ -527,7 +577,7 @@ def main() -> None:
     if args.artifact is not None:
         artifact = {
             "path": str(args.artifact),
-            "bytes": args.artifact.stat().st_size,
+            "bytes": artifact_bytes(args.artifact),
             "quantization": args.quantization,
         }
     result = {
@@ -564,6 +614,7 @@ def main() -> None:
         "memory": {
             "process_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "server_peak_rss_kib": args.server_peak_rss_kib,
+            "server_process": process_memory(args.server_pid) if args.server_pid else None,
             "system_before": memory_before,
             "system_after": system_memory(),
         },

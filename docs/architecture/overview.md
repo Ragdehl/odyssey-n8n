@@ -356,12 +356,14 @@ per note to return a small likely candidate set. The index is a disposable SQLit
 cosine ranking at current scale. Similarity is never identity confidence. See
 [`semantic-retrieval.md`](semantic-retrieval.md) for the implemented contract and benchmark.
 
-The contextual resolver may later give an LLM the reference, original surrounding context, and
-only that small candidate set with evidence. For example, in `"Yesterday we had dinner with Xavi
+The contextual resolver may later use the reference, original surrounding context, and only that
+small candidate set with evidence. For example, in `"Yesterday we had dinner with Xavi
 and the other Beatriz said..."`, candidates may include the user's spouse and a Beatriz recorded as
 Xavi's partner. The context may support the latter. If evidence remains insufficient, the result
-must remain ambiguous or unresolved. Phase 10 freezes no prompt, response schema, or confidence
-threshold.
+must remain ambiguous or unresolved. Phase 11A found that cosine, a Cross-Encoder, and two small
+local LLMs all produced too many false resolutions for standalone production use. Phase 11B remains
+unimplemented and the final technology choice remains human. See
+[`ADR 0002`](../decisions/0002-phase-11a-contextual-resolution-benchmark.md).
 
 ### Resolution before canonical link creation
 
