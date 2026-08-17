@@ -55,6 +55,18 @@ timings, categories, language metrics, and exact artifact identities are durably
 `/data/odyssey/runtime/phase11a-benchmark/results/`. The version-controlled dataset and runner in
 `benchmarks/` reproduce the comparison when the model artifacts are available.
 
+## Benchmark artifact cleanup
+
+The Phase 11A runtime directory used 2,306,901,405 apparent bytes at its measured peak (about
+2.15 GiB), including the newly materialized Phase 10 embedding cache. After results and this record
+were persisted, the losing benchmark-only Cross-Encoder, both GGUFs, llama.cpp binaries, and the
+llama.cpp archive were removed. The retained results and Phase 10 MiniLM cache use 252,413,481
+apparent bytes (about 241 MiB), a reduction of 2,054,487,924 bytes (about 1.91 GiB).
+
+The Phase 10 dataset and runner in Git were retained: they are decision evidence, not disposable
+runtime artifacts. No clearly Odyssey-owned obsolete Phase 10 index or comparison cache was found.
+Artifacts of uncertain ownership were not deleted.
+
 ## Recommendation
 
 Do not use any tested method as the standalone production Phase 11 resolver. If future work is
