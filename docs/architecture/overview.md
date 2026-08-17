@@ -375,10 +375,11 @@ must validate the output schema, ensure a selected ID belongs to the supplied ca
 closed on invalid output. The reasoner makes a contextual decision; Core remains authoritative.
 Phase 11B.1 benchmarked three OpenAI models without production wiring. The initial zero-shot prompt
 selected none. A controlled prompt-parity follow-up reused the ten pre-existing Phase 11A calibration
-examples; Sol then passed provisionally with zero clear false resolutions and 98.89% frozen-label
-accuracy after both cheaper models retained clear false resolutions. Consistency, final production
-model selection, integration, privacy, retention, evidence minimization, and fallback choices remain
-pending human decisions. See
+examples; Sol then passed with zero clear false resolutions and 98.89% frozen-label accuracy after
+both cheaper models retained clear false resolutions. A repeat reproduced all 90 outcome/ID
+decisions. The human selected Sol with medium reasoning and the frozen ten-example prompt as the
+Phase 11 quality baseline; any cost optimization must preserve its measured safety and quality.
+Integration, privacy, retention, evidence minimization, and fallback choices remain pending. See
 [`ADR 0003`](../decisions/0003-phase-11b1-openai-model-validation.md).
 
 ### Resolution before canonical link creation

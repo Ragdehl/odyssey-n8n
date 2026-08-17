@@ -1,6 +1,6 @@
 # ADR 0003: Phase 11B.1 OpenAI contextual-reasoner validation
 
-- Status: Sol provisionally passes prompt-parity gate; human decision required
+- Status: Accepted — Sol selected as the Phase 11 contextual-resolution quality baseline
 - Date: 2026-08-18
 
 ## Context
@@ -15,7 +15,11 @@ therefore tested models sequentially and stopped at the first sufficiently safe 
 benchmarking for global model strength:
 
 ```text
-Luna --fails--> Terra --fails--> Sol --fails accuracy gate--> human decision
+11B.1a zero-shot:    Luna --fails--> Terra --fails--> Sol --fails accuracy--> no passing model
+11B.1b few-shot:     Luna --fails safety--> Terra --fails safety--> Sol --passes
+                                                                         |
+                                                                         +--> repeat passes
+                                                                              (90/90 identical decisions)
 ```
 
 ## Decision boundary
@@ -68,9 +72,16 @@ clear unsafe link. The frozen gate is applied as approved rather than changed af
 | Sol | 34,977 | 0 | 3,810 | 1,613 | $0.289185 |
 | **Total** | **104,931** | **0** | **12,934** | **6,267** | **$0.420056** |
 
-Costs use actual API-reported tokens and official standard list prices checked on 2026-08-17. They
-are calculated spend, not an independent provider invoice. No call reported cached input or cache
-writes. There were 270 evaluated requests, no retries, and no extra smoke test.
+Costs use actual API-reported tokens and the official standard list prices checked on the 2026-08-17
+benchmark date: Luna $0.20/$0.02/$1.20, Terra $2.00/$0.20/$12.00, and Sol
+$5.00/$0.50/$30.00 per million input/cached-input/output tokens. Current official model
+documentation was rechecked on 2026-08-18 and lists the same
+[Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna) and
+[Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra) prices; Sol remains
+$5.00/$0.50/$30.00. Both price bases charge cache writes at 1.25x uncached input. These figures are
+calculated estimates from the recorded counters, not an independent provider invoice. No call
+reported cached input or cache writes. There were 270 evaluated requests, no retries, and no extra
+smoke test.
 
 Complete compact results are version controlled in
 [`phase11b1_openai_results.md`](../../benchmarks/phase11b1_openai_results.md) and the three linked
@@ -101,8 +112,8 @@ unchanged.
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | `gpt-5.6-luna` | 34 / 26 / 26 | 1 | 1 | 86/90 (95.56%) | 0 | Failed safety; escalate |
 | `gpt-5.6-terra` | 35 / 26 / 26 | 2 | 1 | 87/90 (96.67%) | 0 | Failed safety; escalate |
-| `gpt-5.6-sol` run 1 | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed provisionally** |
-| `gpt-5.6-sol` repeat | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed provisionally** |
+| `gpt-5.6-sol` run 1 | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed** |
+| `gpt-5.6-sol` repeat | 35 / 28 / 26 | **0** | 1 | **89/90 (98.89%)** | 0 | **Passed** |
 
 Luna and Terra crossed the overall-accuracy threshold but retained clear false resolutions, so each
 failed and triggered the next cost tier. Sol passed every gate. It changed four decisions relative to
@@ -119,24 +130,27 @@ false resolution. No other model or paid evaluation was run for consistency.
 | Sol repeat | — | 90/90 versus Sol run 1 | 248,727 / 248,457 / 2,889 | $1.640876 |
 
 Phase 11B.1b calculated spend was $4.008063; calculated spend across 11B.1a and 11B.1b was
-$4.428119. These figures use actual API token counters and dated list prices, including the reported
-cache-write tokens at 1.25x input price. They are not an independent provider invoice. No cached-input
-tokens or retries were reported.
+$4.428119. These estimates use the unchanged benchmark-date price basis documented above and actual
+API token counters, including the reported cache-write tokens at 1.25x input price. Recalculating from
+the recorded counters with the current 2026-08-18 Luna and Terra prices produces the same figures.
+They are not an independent provider invoice. No cached-input tokens or retries were reported.
 
 ### Follow-up: input-cost optimization
 
-Input cost is now the primary optimization opportunity because the ten frozen examples substantially
-expand the static prefix repeated for every request. Later work may separately evaluate explicit
-prompt caching of that prefix, fewer or smaller examples, and lower reasoning effort. None is assumed
-to preserve the measured quality or safety; each requires controlled evaluation before adoption.
+The selected baseline currently repeats a large static ten-example prefix. Later work may separately
+evaluate explicit prompt caching, fewer or shorter examples, and lower reasoning effort. No
+optimization is accepted until controlled evaluation proves that it matches the selected Sol
+baseline's safety and quality.
 
 ## Decision and consequences
 
-Phase 11B.1a selected no model under its zero-shot prompt. Phase 11B.1b identifies Sol as the
-provisional cheapest passing prompt-parity candidate because both cheaper tiers failed the unchanged
-safety gate. The independent repeat's 90/90 decision consistency strengthens that provisional result.
-This is not a final production-model selection; adoption remains a human decision. No further paid
-evaluation is authorized by this ADR.
+Phase 11B.1a selected no model under its zero-shot prompt. For Phase 11 contextual resolution, the
+human selects GPT-5.6 Sol with medium reasoning and the frozen ten-example few-shot prompt as the
+quality baseline. It achieved 35/35 correct `RESOLVED`, zero clear false `RESOLVED`, zero invalid
+outputs, and 89/90 official frozen-label accuracy, with disputed E13 as its sole official error. An
+independent repeat reproduced all 90 outcome/ID decisions exactly. Human selection is complete;
+future cost optimizations must prove that they preserve this baseline's safety and quality before
+replacing it. No further paid evaluation is authorized by this ADR.
 
 Phase 11B production work remains open. Before real personal data is sent externally it must minimize
 candidate evidence, investigate useful pseudonymization or anonymization, and explicitly review API
