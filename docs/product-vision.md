@@ -4,6 +4,9 @@ Odyssey turns unstructured personal information into durable, reusable knowledge
 second system authoritative over the user's Markdown. The product should help a person capture,
 connect, retrieve, and revise knowledge while keeping every stored result inspectable and portable.
 
+Its enduring product promise is: **Capture without friction, organize automatically, and retrieve the
+right information when it becomes useful.**
+
 ## Product promise
 
 - Accept information expressed naturally, including messages that mention several distinct things.
@@ -48,3 +51,19 @@ identity guarantee. A production contextual resolver must preserve three meaning
 
 Phase 11A evaluated possible contextual decision technologies but did not implement the production
 resolver. See [ADR 0002](decisions/0002-phase-11a-contextual-resolution-benchmark.md).
+
+## Later product direction: proactive resurfacing
+
+Odyssey may later resurface old knowledge when it becomes relevant because of context, time, an active
+project, a new entry, or related incoming information. This is a future capability, not part of the
+current roadmap or Phase 11 implementation. It should remain low-friction and non-disruptive.
+
+Related future possibilities include derived, recomputable identity/disambiguation health for notes
+that lack distinctive evidence relative to nearby notes, and proactive opportunities to enrich such
+notes. Odyssey does not add a canonical `incomplete` boolean now: a stored flag could become stale and
+would silently change the note schema.
+
+Human clarification may remain an exceptional fallback when automatic resolution cannot proceed safely,
+but it is not the normal interaction model. Automatic, low-friction resolution remains the preferred UX.
+Future resolution evidence may also include recent conversation or entities, the active project, recent
+notes, and existing links or relationships. These signals are possibilities rather than current contracts.

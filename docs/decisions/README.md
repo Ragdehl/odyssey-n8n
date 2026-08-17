@@ -8,5 +8,6 @@ When an ADR adds real value, it should state the context, decision, alternatives
 
 ## Decision history
 
+- [0000: Foundational knowledge and application boundaries](0000-foundational-architecture.md)
 - [0001: Phase 10 semantic candidate retrieval](0001-phase-10-semantic-candidate-retrieval.md)
 - [0002: Phase 11A contextual-resolution benchmark](0002-phase-11a-contextual-resolution-benchmark.md)
