@@ -332,7 +332,7 @@ unique exact match       no/ambiguous exact match
                                   |
                                   v
                     strong contextual reasoner
-                               [PREFERRED]
+                               [APPROVED DIRECTION]
                                   |
                        +----------+----------+
                        |          |          |
@@ -361,8 +361,8 @@ per note to return a small likely candidate set. The index is a disposable SQLit
 cosine ranking at current scale. Similarity is never identity confidence. See
 [`semantic-retrieval.md`](semantic-retrieval.md) for the implemented contract and benchmark.
 
-The preferred Phase 11B direction lets a sufficiently capable contextual reasoner use the reference,
-original surrounding context, and only the small candidate set with evidence. For example, in
+The approved Phase 11 architecture direction lets a sufficiently capable contextual reasoner use the
+reference, original surrounding context, and only the small candidate set with evidence. For example, in
 `"Yesterday we had dinner with Xavi
 and the other Beatriz said..."`, candidates may include the user's spouse and a Beatriz recorded as
 Xavi's partner. The context may support the latter. If evidence remains insufficient, the result
@@ -373,8 +373,8 @@ resolutions for standalone production use. Later blind strong-reasoner experimen
 feasibility under the tested contract, not proof for every strong LLM or a specific API model. Core
 must validate the output schema, ensure a selected ID belongs to the supplied candidate set, and fail
 closed on invalid output. The reasoner makes a contextual decision; Core remains authoritative.
-Phase 11B remains unimplemented and provider, model, API, privacy, cost, and fallback choices remain
-human decisions. See
+Phase 11B remains unimplemented. Provider, model, API, privacy, cost, and fallback choices remain
+pending Phase 11B decisions. See
 [`ADR 0002`](../decisions/0002-phase-11a-contextual-resolution-benchmark.md).
 
 ### Resolution before canonical link creation
