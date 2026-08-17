@@ -16,6 +16,7 @@ The system is intentionally simple. Additional structure and infrastructure shou
 - Prefer the simplest working architecture.
 
 See [Ontology Principles](docs/architecture/ontology.md) for the authoritative knowledge-model guidance.
+See [Product Vision](docs/product-vision.md) for the product promise and safety priorities.
 
 ## High-level architecture
 
@@ -49,6 +50,8 @@ This Git repository contains code, application configuration and schema, tests, 
 
 - [AGENTS.md](AGENTS.md) — project rules for agents and contributors.
 - [Architecture Overview](docs/architecture/overview.md) — high-level system architecture.
+- [Product Vision](docs/product-vision.md) — durable product outcomes and responsibility boundaries.
+- [Architecture decision history](docs/decisions/README.md) — measured significant decisions and proposals.
 - [Ontology Principles](docs/architecture/ontology.md) — knowledge-model principles.
 - [Canonical Note Schema](docs/architecture/note-schema.md) — how the note schema works.
 - [Development Pipeline](docs/architecture/development-pipeline.md) — phase contracts and the evidence-led development-process roadmap.
