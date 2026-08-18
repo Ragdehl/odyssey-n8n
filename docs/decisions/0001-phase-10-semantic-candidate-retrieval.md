@@ -47,3 +47,17 @@ contextual decision and must distinguish retrieval misses from decision failures
 
 The complete implemented contract remains in
 [`semantic-retrieval.md`](../architecture/semantic-retrieval.md).
+
+## Phase 11B.1c scale stress follow-up
+
+A deterministic 1,000-note, 40-query adversarial stress test found 77.5% Recall@5 and Recall@10 for
+the unchanged dense retriever, substantially below the original 16/16 small benchmark. One local
+hybrid experiment using name/alias overlap, NLTK WordNet/OMW 1.4 synonym evidence, and reciprocal-rank
+fusion reached 80.0% Recall@5 and Recall@10 but caused five new Top-5 misses, had important
+multilingual gaps, and added disproportionate resource and deployment complexity. It is
+rejected/deferred; Phase 10 production behavior is unchanged. Full evidence is recorded in
+[`phase11b1c_retrieval_stress_results.md`](../../benchmarks/phase11b1c_retrieval_stress_results.md).
+
+Retrieval must be re-evaluated against real Odyssey data as the vault grows. This synthetic
+1,000-note stress test demonstrates a scale risk; it is not evidence that retrieval will remain
+adequate at 10,000 or 100,000 real notes.

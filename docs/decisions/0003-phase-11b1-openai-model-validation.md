@@ -156,6 +156,13 @@ Phase 11B.1c investigated only three bounded opportunities against the selected 
   spend was $0.021142. Cache reuse therefore succeeded. This was transport validation only, not a
   quality benchmark, and the baseline prompt and contract remain unchanged.
 
+The provider's explicit GPT-5.6 cache TTL is approximately 30 minutes and refreshes when the cached
+prefix is reused. Caching is therefore useful mainly for bursts or sessions containing several
+requests. For isolated Odyssey captures separated by hours, the entry may expire before reuse and
+cache writing can cost more than uncached input. Prompt caching is an opportunistic optimization,
+not the foundation of Odyssey's cost model. Final production activation policy remains deferred to
+Phase 11B.2 or later integration; no scheduler or session manager is introduced here.
+
 Future resolver-cost architecture remains deliberately deferred to later phases. The eventual
 `interpret_request` + entity-reference extraction + `decompose_knowledge` flow should be one
 intelligent model operation, benchmarked cheapest-first independently of Sol. Known names and
