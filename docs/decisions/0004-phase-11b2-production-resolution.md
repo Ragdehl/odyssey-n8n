@@ -34,6 +34,10 @@ within the supplied candidate set; Core remains authoritative for schema, outcom
 candidate-ID validation. Provider failures remain exceptions and are not converted to `UNRESOLVED`;
 there are no automatic retries.
 
+The production resolver requires callers to choose `semantic_limit` explicitly. Phase 11B.1c showed
+that Top-5 recall is not a safe implicit large-vault assumption, and no production candidate count
+has been accepted. Candidate reduction remains deferred to issue #20.
+
 The provider evidence boundary is deterministic and currently includes the canonical filename name,
 aliases, type, subtype and other identity-relevant structured metadata, human-readable linked names,
 and the note body. The body remains because relationships, negative evidence, and context-dependent
@@ -70,8 +74,11 @@ Sources consulted on 2026-08-18:
 
 ## Consequences
 
-Exact unique references avoid provider disclosure entirely. Other references disclose only the
-supplied resolution context and the minimized evidence for the deterministic candidate set, never
-the full conversation, unrelated notes, or global user profile. A future live quality benchmark is
-required to validate that removing technical metadata preserved identity quality; this ADR does not
-authorize or perform that paid benchmark.
+Exact unique and local-no-candidate references avoid contextual-provider disclosure entirely.
+`CONTEXTUAL` results mean exactly one contextual reasoner call occurred; their `candidate_ids` are
+exactly the IDs supplied to that call, while local results return no candidate IDs. Returned usage
+metadata is strict-allowlisted to known operational counters and never carries arbitrary provider
+strings or content. Other references disclose only the supplied resolution context and minimized
+candidate evidence, never the full conversation, unrelated notes, or global user profile. A future
+live quality benchmark is required to validate parity with the accepted baseline; it remains pending
+human approval and is not authorized or performed by this ADR.

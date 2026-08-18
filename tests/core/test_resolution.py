@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -107,6 +108,7 @@ def run_resolution(
     *,
     context: str = "",
     type: str | None = "person",
+    semantic_limit: int,
 ) -> object:
     """Invoke the production boundary with the fixture dependencies."""
     return resolve_existing_entity(
@@ -118,6 +120,7 @@ def run_resolution(
         semantic_index=index,  # type: ignore[arg-type]
         embedder=FakeEmbedder(),  # type: ignore[arg-type]
         contextual_reasoner=reasoner,  # type: ignore[arg-type]
+        semantic_limit=semantic_limit,
     )
 
 
@@ -127,11 +130,18 @@ def test_exact_unique_short_circuits_without_contextual_call(
     """Resolve one exact primary name locally and never invoke the provider."""
     write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
     reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada"})
-    result = run_resolution(tmp_path, schema, "Ada", FakeIndex(), reasoner)
+    result = run_resolution(tmp_path, schema, "Ada", FakeIndex(), reasoner, semantic_limit=5)
     assert result.outcome is ExistingEntityOutcome.RESOLVED
     assert result.id == "ada"
     assert result.source is ResolutionSource.EXACT_LOCAL
+    assert result.candidate_ids == ()
     assert reasoner.requests == []
+
+
+def test_semantic_limit_is_an_explicit_required_orchestration_choice() -> None:
+    """Prevent a retrieval-count default from becoming an implicit production policy."""
+    parameter = inspect.signature(resolve_existing_entity).parameters["semantic_limit"]
+    assert parameter.default is inspect.Parameter.empty
 
 
 def test_exact_absent_uses_one_contextual_call(tmp_path: Path, schema: dict[str, Any]) -> None:
@@ -139,8 +149,11 @@ def test_exact_absent_uses_one_contextual_call(tmp_path: Path, schema: dict[str,
     write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
     index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
     reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada"})
-    result = run_resolution(tmp_path, schema, "the engineer", index, reasoner, context="At work")
+    result = run_resolution(
+        tmp_path, schema, "the engineer", index, reasoner, context="At work", semantic_limit=5
+    )
     assert result.id == "ada"
+    assert result.source is ResolutionSource.CONTEXTUAL
     assert len(reasoner.requests) == 1
     assert result.candidate_ids == ("ada",)
 
@@ -159,7 +172,7 @@ def test_ambiguous_exact_candidates_are_never_dropped_by_semantic_top_n(
     )
     index = FakeIndex((candidate("ada-one", "people/Ada One.md", "Ada One"),))
     reasoner = FakeReasoner({"outcome": "AMBIGUOUS", "id": None})
-    result = run_resolution(tmp_path, schema, "Ada", index, reasoner)
+    result = run_resolution(tmp_path, schema, "Ada", index, reasoner, semantic_limit=5)
     request = reasoner.requests[0]
     assert result.outcome is ExistingEntityOutcome.AMBIGUOUS
     assert result.candidate_ids == ("ada-one", "ada-two")
@@ -169,10 +182,46 @@ def test_ambiguous_exact_candidates_are_never_dropped_by_semantic_top_n(
 def test_no_semantic_candidates_is_local_unresolved(tmp_path: Path, schema: dict[str, Any]) -> None:
     """Return a legitimate local abstention without making a provider call."""
     reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "never"})
-    result = run_resolution(tmp_path, schema, "missing", FakeIndex(), reasoner)
+    result = run_resolution(tmp_path, schema, "missing", FakeIndex(), reasoner, semantic_limit=5)
     assert result.outcome is ExistingEntityOutcome.UNRESOLVED
     assert result.id is None
+    assert result.source is ResolutionSource.LOCAL_NO_CANDIDATES
+    assert result.candidate_ids == ()
     assert reasoner.requests == []
+
+
+def test_usage_metadata_has_a_strict_operational_allowlist(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Retain known counters while dropping arbitrary provider content and credentials."""
+    write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
+    index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
+    reasoner = FakeReasoner(
+        {"outcome": "RESOLVED", "id": "ada"},
+        {
+            "response_id": "resp-1",
+            "input_tokens": 1000,
+            "cached_input_tokens": 10,
+            "cache_write_tokens": 20,
+            "output_tokens": 30,
+            "reasoning_tokens": 5,
+            "prompt": "private content",
+            "response_text": "private content",
+            "authorization": "Bearer secret",
+            "candidate_evidence": "private content",
+        },
+    )
+
+    result = run_resolution(tmp_path, schema, "unknown", index, reasoner, semantic_limit=5)
+
+    assert result.usage == {
+        "response_id": "resp-1",
+        "input_tokens": 1000,
+        "cached_input_tokens": 10,
+        "cache_write_tokens": 20,
+        "output_tokens": 30,
+        "reasoning_tokens": 5,
+    }
 
 
 @pytest.mark.parametrize(
@@ -190,7 +239,7 @@ def test_invalid_contextual_output_fails_closed(
     write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
     index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
     with pytest.raises(ContextualResolutionError):
-        run_resolution(tmp_path, schema, "unknown", index, FakeReasoner(output))
+        run_resolution(tmp_path, schema, "unknown", index, FakeReasoner(output), semantic_limit=5)
 
 
 def test_provider_failure_is_not_converted_to_unresolved(
@@ -212,7 +261,7 @@ def test_provider_failure_is_not_converted_to_unresolved(
 
     reasoner = FailingReasoner()
     with pytest.raises(ContextualProviderError):
-        run_resolution(tmp_path, schema, "unknown", index, reasoner)
+        run_resolution(tmp_path, schema, "unknown", index, reasoner, semantic_limit=5)
     assert reasoner.calls == 1
 
 
@@ -249,5 +298,5 @@ def test_invalid_candidate_note_is_rejected_before_provider_evidence(
     index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
     reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada"})
     with pytest.raises(ExactEntityLookupError):
-        run_resolution(tmp_path, schema, "unknown", index, reasoner)
+        run_resolution(tmp_path, schema, "unknown", index, reasoner, semantic_limit=5)
     assert reasoner.requests == []

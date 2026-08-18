@@ -35,9 +35,10 @@ class ExistingEntityResolutionError(RuntimeError):
 
 
 class ResolutionSource(Enum):
-    """Identify whether a valid result came from local exact or contextual reasoning."""
+    """Identify whether contextual-provider disclosure occurred for a result."""
 
     EXACT_LOCAL = "exact_local"
+    LOCAL_NO_CANDIDATES = "local_no_candidates"
     CONTEXTUAL = "contextual"
 
 
@@ -56,8 +57,8 @@ class ExistingEntityResolution:
     Attributes:
         outcome: Resolved, ambiguous, or unresolved semantic outcome.
         id: The selected canonical note ID, or ``None`` when abstaining.
-        source: Local exact or contextual decision source.
-        candidate_ids: IDs supplied to the contextual reasoner, useful for diagnostics.
+        source: Local exact, local no-candidate, or contextual decision source.
+        candidate_ids: IDs supplied to the contextual reasoner, or empty for local results.
         usage: Provider counters only; never prompt, response, or credential content.
     """
 
@@ -136,7 +137,7 @@ def resolve_existing_entity(
     semantic_index: SemanticEntityIndex,
     embedder: TextEmbedder,
     contextual_reasoner: ContextualReasoner,
-    semantic_limit: int = 5,
+    semantic_limit: int,
 ) -> ExistingEntityResolution:
     """Resolve one extracted entity reference against existing validated notes.
 
@@ -155,7 +156,9 @@ def resolve_existing_entity(
         semantic_index: Existing Phase 10 derived retrieval index.
         embedder: Matching local Phase 10 query embedder.
         contextual_reasoner: Provider-independent one-call contextual boundary.
-        semantic_limit: Maximum semantic candidates before exact-collision union.
+        semantic_limit: Explicit maximum semantic candidates before exact-collision union. No
+            production default is chosen because Phase 11B.1c showed that Top-5 recall is not a
+            safe large-vault assumption; callers must make this retrieval decision explicitly.
 
     Returns:
         A typed local or contextual production result.
@@ -173,7 +176,7 @@ def resolve_existing_entity(
             outcome=ExistingEntityOutcome.RESOLVED,
             id=candidate.id,
             source=ResolutionSource.EXACT_LOCAL,
-            candidate_ids=(candidate.id,),
+            candidate_ids=(),
         )
 
     semantic_candidates = find_semantic_entity_candidates(
@@ -189,7 +192,8 @@ def resolve_existing_entity(
         return ExistingEntityResolution(
             outcome=ExistingEntityOutcome.UNRESOLVED,
             id=None,
-            source=ResolutionSource.CONTEXTUAL,
+            source=ResolutionSource.LOCAL_NO_CANDIDATES,
+            candidate_ids=(),
         )
 
     contextual_candidates = tuple(
@@ -244,11 +248,19 @@ def _load_provider_evidence(repository: VaultRepository, schema: dict[str, Any],
 
 
 def _safe_usage(usage: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    """Keep only scalar operational usage metadata and discard provider content fields."""
+    """Keep only the fixed operational usage contract and discard all other provider fields."""
     if usage is None:
         return None
+    allowed = frozenset(
+        {
+            "response_id",
+            "input_tokens",
+            "cached_input_tokens",
+            "cache_write_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+        }
+    )
     return {
-        str(key): value
-        for key, value in usage.items()
-        if isinstance(key, str) and isinstance(value, (str, int, float, bool, type(None)))
+        str(key): value for key, value in usage.items() if key in allowed and isinstance(key, str)
     }
