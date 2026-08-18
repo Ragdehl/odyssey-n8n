@@ -193,7 +193,7 @@ def _render_user_evidence(request: ContextualResolutionRequest) -> str:
             {"id": candidate.id, "evidence": candidate.evidence} for candidate in request.candidates
         ],
     }
-    return "Resolve this synthetic entity reference:\n" + json.dumps(
+    return "Resolve this already-extracted entity reference:\n" + json.dumps(
         evidence, ensure_ascii=False, separators=(",", ":")
     )
 

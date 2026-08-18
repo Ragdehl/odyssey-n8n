@@ -9,6 +9,14 @@ from .identity import (
     find_exact_entity_candidates,
     resolve_exact_entity,
 )
+from .resolution import (
+    ExistingEntityOutcome,
+    ExistingEntityResolution,
+    ExistingEntityResolutionError,
+    ResolutionSource,
+    build_provider_evidence,
+    resolve_existing_entity,
+)
 from .semantic import (
     DEFAULT_EMBEDDING_MODEL,
     FastEmbedTextEmbedder,
@@ -36,4 +44,10 @@ __all__ = [
     "TextEmbedder",
     "build_semantic_retrieval_text",
     "find_semantic_entity_candidates",
+    "ExistingEntityOutcome",
+    "ExistingEntityResolution",
+    "ExistingEntityResolutionError",
+    "ResolutionSource",
+    "build_provider_evidence",
+    "resolve_existing_entity",
 ]
