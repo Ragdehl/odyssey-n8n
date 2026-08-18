@@ -123,6 +123,40 @@ class VaultRepositoryTests(unittest.TestCase):
             self.repository.create_text("missing/note.md", "# Missing")
         self.assertFalse((self.vault / "missing").exists())
 
+    def test_replaces_existing_note_with_exact_utf8_content(self) -> None:
+        """Replace an existing contained note without changing its path."""
+        target = self.vault / "replace.md"
+        target.write_text("old", encoding="utf-8", newline="")
+
+        self.repository.replace_text("replace.md", "nuevo ☕\n")
+
+        self.assertEqual(target.read_text(encoding="utf-8", newline=""), "nuevo ☕\n")
+
+    def test_replace_does_not_create_missing_target(self) -> None:
+        """Require replacement targets to exist before writing a temporary file."""
+        with self.assertRaises(NoteUnavailableError):
+            self.repository.replace_text("missing.md", "content")
+        self.assertFalse((self.vault / "missing.md").exists())
+
+    def test_replace_rejects_outside_symlink_without_modifying_target(self) -> None:
+        """Reject a symlink target even when replacement could otherwise follow it."""
+        outside = Path(self.temporary_directory.name) / "outside.md"
+        outside.write_text("outside", encoding="utf-8")
+        (self.vault / "escape.md").symlink_to(outside)
+
+        with self.assertRaises(NoteUnavailableError):
+            self.repository.replace_text("escape.md", "changed")
+        self.assertEqual(outside.read_text(encoding="utf-8"), "outside")
+
+    def test_replace_encoding_failure_leaves_existing_content(self) -> None:
+        """Encode before replacement so invalid UTF-8 cannot damage the authoritative note."""
+        target = self.vault / "safe.md"
+        target.write_text("original", encoding="utf-8")
+
+        with self.assertRaises(VaultAccessError):
+            self.repository.replace_text("safe.md", "invalid surrogate: \ud800")
+        self.assertEqual(target.read_text(encoding="utf-8"), "original")
+
     def test_create_accepts_text_only(self) -> None:
         """Reject non-text content before any target is created."""
         with self.assertRaisesRegex(TypeError, "must be text"):

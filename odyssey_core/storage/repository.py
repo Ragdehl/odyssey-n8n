@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path, PurePosixPath
 
 
@@ -175,6 +176,70 @@ class VaultRepository:
             ) from None
         except OSError:
             raise VaultAccessError("Unable to create note") from None
+
+    def replace_text(self, path: str, content: str) -> None:
+        """Atomically replace one existing contained Markdown file with UTF-8 text.
+
+        Args:
+            path: Vault-relative POSIX Markdown path identifying an existing file.
+            content: Replacement text to encode as UTF-8.
+
+        Raises:
+            InvalidNotePath: If the caller path violates the repository contract.
+            TypeError: If content is not text.
+            NoteUnavailableError: If the target is missing, not regular, or unsafe.
+            VaultAccessError: If encoding, temporary-file, or replacement I/O fails.
+
+        The temporary file is created beside the target so ``os.replace`` provides an
+        atomic authoritative-file transition without creating parent directories.
+        """
+        relative_path = self._validate_note_path(path)
+        if not isinstance(content, str):
+            raise TypeError("Note content must be text")
+        try:
+            encoded_content = content.encode("utf-8")
+        except UnicodeEncodeError:
+            raise VaultAccessError("Unable to replace note") from None
+
+        candidate = self._root.joinpath(*relative_path.parts)
+        try:
+            parent = candidate.parent.resolve(strict=True)
+            target = parent / candidate.name
+            resolved_target = target.resolve(strict=True)
+        except (FileNotFoundError, RuntimeError):
+            raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
+        except OSError:
+            raise VaultAccessError("Unable to replace note") from None
+
+        if (
+            not parent.is_relative_to(self._root)
+            or target.is_symlink()
+            or not resolved_target.is_relative_to(self._root)
+            or not resolved_target.is_file()
+        ):
+            raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}")
+
+        temporary_path: str | None = None
+        try:
+            descriptor, temporary_path = tempfile.mkstemp(
+                prefix=f".{target.name}.", suffix=".tmp", dir=parent
+            )
+            with os.fdopen(descriptor, "wb") as temporary_file:
+                temporary_file.write(encoded_content)
+                temporary_file.flush()
+                os.fsync(temporary_file.fileno())
+            os.replace(temporary_path, target)
+            temporary_path = None
+        except OSError:
+            raise VaultAccessError("Unable to replace note") from None
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    pass
 
     def list_markdown_paths(self) -> list[str]:
         """List contained regular Markdown files without reading or following symlinks.

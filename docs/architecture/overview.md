@@ -62,7 +62,7 @@ get_context                    decompose_knowledge
                                      |
                                      v
                        planned domain/write decisions
-                  upsert_entity / save_knowledge [PLANNED]
+             create_entity / update_entity [PHASE 12]
                                      |
                                      v
                           validated Note persistence
@@ -133,7 +133,7 @@ planned domain / knowledge outcome
     -> validate_note
     -> serialize_note
     -> raw Markdown
-    -> VaultRepository.create_text / future update boundary
+    -> VaultRepository.create_text / VaultRepository.replace_text
 ```
 
 `parse_note` never writes, `serialize_note` never reads, and `validate_note` can participate in
@@ -268,20 +268,15 @@ serialize or coalesce dependency-sensitive and same-entity mutations. This prope
 require or authorize a DAG engine, scheduler, LangGraph, workflow engine, or parallel execution
 framework in Phases 9 or 10.
 
-### `upsert_entity` — decide reuse, creation, or update
+### `create_entity` / `update_entity` — persist explicit entity decisions
 
-- **Purpose:** eventually reuse, enrich, or create an entity after safe identity resolution.
-- **Input:** a structured entity unit plus resolution evidence.
-- **Output:** a future validated entity-write outcome.
-- **Can see:** grouped entity facts, resolution outcomes, and note-domain contracts.
-- **Must not know or do:** reinterpret the full user request, treat `NO_EXACT_MATCH` as proof of
-  absence or unconditional creation permission, bypass validation, or silently change the
-  canonical schema.
-- **Status:** **PLANNED**; Phase 10 performs no create or update behavior.
-- **Concrete conceptual example:** a future fully resolved Carrefour identity may be reused;
-  `NO_EXACT_MATCH` must continue through later resolution rather than authorize creation, and
-  unresolved ambiguity may require clarification. The permanent write-result shape is not defined
-  here.
+- **Purpose:** persist an explicit caller decision as a validated canonical entity note.
+- **Input:** an explicit create request or path-plus-ID-guarded metadata/body mutation.
+- **Output:** a deterministic created, updated, or no-change result.
+- **Can see:** caller-decided domain metadata/content, lifecycle inputs, and the canonical schema.
+- **Must not know or do:** infer meaning, resolve identity, treat `UNRESOLVED` as creation
+  permission, or perform an automatic update-or-insert.
+- **Status:** **IMPLEMENTED** in Phase 12; future orchestration composes these operations.
 
 ### `save_knowledge` — persist approved knowledge changes
 
@@ -379,7 +374,8 @@ examples; Sol then passed with zero clear false resolutions and 98.89% frozen-la
 both cheaper models retained clear false resolutions. A repeat reproduced all 90 outcome/ID
 decisions. The human selected Sol with medium reasoning and the frozen ten-example prompt as the
 Phase 11 quality baseline; any cost optimization must preserve its measured safety and quality.
-Integration, privacy, retention, evidence minimization, and fallback choices remain pending. See
+Integration, privacy, retention, evidence minimization, and fallback choices were addressed in
+Phase 11B.2. See
 [`ADR 0003`](../decisions/0003-phase-11b1-openai-model-validation.md).
 
 Phase 11B.1c is complete. The accepted resolution direction is exact unique matching resolved
@@ -391,8 +387,8 @@ and is rejected. On the frozen 1,000-note fixture, contextual-only MiniLM reache
 fixture, not proof of arbitrary real-vault recall. The tested WordNet/OMW hybrid and mMARCO
 Cross-Encoder reranker are rejected/deferred; no production retrieval dependency or pipeline change
 was adopted. Future candidate reduction and compact retrieval summaries are tracked in GitHub issue
-#20. Phase 11B.2 remains the next planned phase: production integration plus privacy/evidence
-minimization.
+#20. Phase 11B.2 production contextual resolution is complete; its accepted integration and
+privacy/evidence-minimization contract is documented in [`ADR 0004`](../decisions/0004-phase-11b2-production-resolution.md).
 
 ### Resolution before canonical link creation
 
