@@ -1,6 +1,6 @@
 # ADR 0004: Phase 11B.2 production contextual resolution and evidence minimization
 
-- Status: Accepted for Phase 11B.2 implementation
+- Status: Accepted — Phase 11B.2 complete; pending human merge review
 - Date: 2026-08-18
 
 ## Context
@@ -40,9 +40,11 @@ has been accepted. Candidate reduction remains deferred to issue #20.
 
 The provider evidence boundary is deterministic and currently includes the canonical filename name,
 aliases, type, subtype and other identity-relevant structured metadata, human-readable linked names,
-and the note body. The body remains because relationships, negative evidence, and context-dependent
-facts can be identity-bearing; this phase removes clearly unnecessary evidence rather than deleting
-useful evidence for a theoretical minimum payload. It excludes `created_at`, `updated_at`,
+and the note body. Wikilinks are rendered to display names only: vault-relative path components and
+heading fragments are removed, while explicit visible aliases are preserved. The body remains because
+relationships, negative evidence, and context-dependent facts can be identity-bearing; this phase
+removes clearly unnecessary evidence rather than deleting useful evidence for a theoretical minimum
+payload. It excludes `created_at`, `updated_at`,
 `created_by`, `updated_by`, `revision`, `schema_version`, source hashes, filesystem/runtime data,
 and semantic similarity/rank. No raw provider payload or response is persisted or returned.
 
@@ -79,6 +81,21 @@ Exact unique and local-no-candidate references avoid contextual-provider disclos
 exactly the IDs supplied to that call, while local results return no candidate IDs. Returned usage
 metadata is strict-allowlisted to known operational counters and never carries arbitrary provider
 strings or content. Other references disclose only the supplied resolution context and minimized
-candidate evidence, never the full conversation, unrelated notes, or global user profile. A future
-live quality benchmark is required to validate parity with the accepted baseline; it remains pending
-human approval and is not authorized or performed by this ADR.
+candidate evidence, never the full conversation, unrelated notes, or global user profile. The bounded
+production-parity checkpoint below validates the provider boundary without establishing a general
+large-vault retrieval guarantee.
+
+## Bounded production-parity validation
+
+The frozen synthetic Phase 11B.2 production-evidence checkpoint completed on 2026-08-18 using the
+existing ten calibration cases and twelve selected evaluation cases. All twelve requests used
+canonical synthetic notes routed through `build_provider_evidence`, the current production wording,
+Sol with medium reasoning, strict Structured Outputs, `store:false`, and caching disabled. Results
+were 12/12 correct, 7 `RESOLVED`, 3 `AMBIGUOUS`, 2 `UNRESOLVED`, zero clear false `RESOLVED`, and
+zero invalid decisions. The measured cost was $0.226770 using the dated Phase 11B.1 standard-price
+methodology, including cache-write tokens at 1.25x input pricing. The safe result is recorded in
+[`phase11b2_sol_parity_12.json`](../../benchmarks/phase11b2_sol_parity_12.json).
+
+This bounded checkpoint did not run the remaining 78 cases or a full 90-case rerun. It is accepted
+as the Phase 11B.2 parity checkpoint; future candidate reduction and `retrieval_summary` remain in
+issue #20, and Phase 12 remains next.

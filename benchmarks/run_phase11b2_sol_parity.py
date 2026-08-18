@@ -167,11 +167,15 @@ def _calibration_examples(
 
 def estimated_cost_from_tokens(tokens: Counter[str]) -> float:
     """Estimate cost using the documented historical Sol price methodology."""
-    ordinary = max(0, tokens["input_tokens"] - tokens["cached_input_tokens"])
+    ordinary = max(
+        0,
+        tokens["input_tokens"] - tokens["cached_input_tokens"] - tokens["cache_write_tokens"],
+    )
     return round(
         (
             ordinary * MODEL_PRICES_PER_MILLION["input"]
             + tokens["cached_input_tokens"] * MODEL_PRICES_PER_MILLION["cached_input"]
+            + tokens["cache_write_tokens"] * MODEL_PRICES_PER_MILLION["input"] * 1.25
             + tokens["output_tokens"] * MODEL_PRICES_PER_MILLION["output"]
         )
         / 1_000_000,
