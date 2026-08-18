@@ -1,0 +1,35 @@
+{
+  "source": "Phase 11A retained Phase 10 Top-5 candidate membership",
+  "historical_result": "/data/odyssey/runtime/phase11a-benchmark/results/cosine.json",
+  "historical_runtime": {
+    "fastembed": "0.7.3",
+    "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "candidate_limit": 5
+  },
+  "evaluation": {
+    "en-wife-school": ["clara-martin", "beatriz-alonso", "clara-ruiz", "marc-dubois", "beatriz-costa"],
+    "en-climbing-xavi": ["xavi-pujol", "beatriz-costa", "beatriz-martin", "xavier-pons", "marc-vidal"],
+    "en-not-discount-balma": ["lidl-balma", "carrefour-balma", "carrefour-market-capitole", "marche-victor-hugo", "carrefour-labege"],
+    "en-xavi-client-or-friend": ["xavier-pons", "xavi-pujol", "clara-martin", "marc-vidal", "beatriz-costa"],
+    "es-esposa-hijos": ["beatriz-alonso", "clara-martin", "beatriz-costa", "clara-ruiz", "marc-vidal"],
+    "es-vecino-bicis": ["marc-dubois", "marc-vidal", "clara-martin", "beatriz-costa", "xavi-pujol"],
+    "es-xavi-sin-contexto": ["xavier-pons", "xavi-pujol", "marc-vidal", "beatriz-alonso", "clara-martin"],
+    "es-mercurio-astronomia": ["mercury", "atlas", "odyssey", "delta"],
+    "fr-compagne-xavi": ["beatriz-costa", "xavi-pujol", "xavier-pons", "clara-martin", "beatriz-martin"],
+    "fr-clara-comptes": ["clara-martin", "clara-ruiz", "beatriz-alonso", "beatriz-costa", "marc-vidal"],
+    "fr-marc": ["marc-vidal", "marc-dubois", "beatriz-martin", "clara-martin", "lucia-ferrer"],
+    "fr-veterinaire": ["xavier-pons", "lucia-garcia", "marc-vidal", "beatriz-alonso", "clara-martin"]
+  },
+  "calibration": {
+    "cal-en-wife": ["clara-ruiz", "beatriz-alonso", "beatriz-costa", "clara-martin", "beatriz-martin"],
+    "cal-es-xavi-wife": ["xavi-pujol", "beatriz-costa", "marc-vidal", "beatriz-martin", "xavier-pons"],
+    "cal-fr-usual-store": ["lidl-balma", "carrefour-balma", "carrefour-market-capitole", "marche-victor-hugo", "carrefour-labege"],
+    "cal-en-atlas-colleague": ["marc-vidal", "clara-martin", "marc-dubois", "lucia-ferrer", "lucia-garcia"],
+    "cal-es-beatriz": ["beatriz-martin", "beatriz-alonso", "xavi-pujol", "beatriz-costa", "lucia-ferrer"],
+    "cal-fr-xavi": ["xavi-pujol", "xavier-pons", "beatriz-costa", "clara-martin", "marc-vidal"],
+    "cal-en-unknown-doctor": ["lucia-garcia", "beatriz-martin", "xavier-pons", "lucia-ferrer", "marc-vidal"],
+    "cal-fr-unknown-project": ["odyssey", "atlas", "delta", "mercury"],
+    "cal-es-odyssey": ["odyssey", "atlas", "mercury", "delta"],
+    "cal-en-carrefour": ["carrefour-market-capitole", "carrefour-labege", "carrefour-balma", "marche-victor-hugo", "lidl-balma"]
+  }
+}
