@@ -148,14 +148,13 @@ Phase 11B.1c investigated only three bounded opportunities against the selected 
   resolutions, the semantic fast path is rejected/deferred. The resolver remains exact → Phase 10
   Top-N → Sol → deterministic Core validation.
 - The frozen Sol few-shot prefix is now structured for GPT-5.6 explicit-only Responses API caching:
-  the stable instructions and ten calibration turns end at one supported `input_text` breakpoint,
-  followed by the changing evaluation request, with a stable `prompt_cache_key` and `store: false`.
-  The authorized smoke reached the API twice but both requests returned HTTP 400 before usage was
-  available: the first exposed that an assistant message cannot carry an `input_text` block, and the
-  second was the permitted one-time error inspection. The implementation now uses an empty developer
-  `input_text` marker after all examples. No cache reuse was observed, no token counters were
-  returned, and measured smoke cost was $0.00; no further request was permitted by the three-call
-  cap. This is not a quality benchmark and does not change the baseline prompt or contract.
+  the final calibration user turn carries the supported `input_text` breakpoint, followed by
+  assistant example 10 and the changing evaluation request, with a stable `prompt_cache_key` and
+  `store: false`. The two-request synthetic smoke used existing cases `en-xavi-partner` and `A01`.
+  Request 1 reported 2,777 input / 2,518 cache-write / 0 cached / 25 output tokens; request 2
+  reported 2,782 input / 0 cache-write / 2,518 cached / 26 output tokens. The combined estimated
+  spend was $0.021142. Cache reuse therefore succeeded. This was transport validation only, not a
+  quality benchmark, and the baseline prompt and contract remain unchanged.
 
 Future resolver-cost architecture remains deliberately deferred to later phases. The eventual
 `interpret_request` + entity-reference extraction + `decompose_knowledge` flow should be one

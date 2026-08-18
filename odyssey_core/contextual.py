@@ -117,15 +117,24 @@ def build_openai_payload(
     """
     _validate_request(request)
     input_turns: list[dict[str, Any]] = [{"role": "system", "content": _SYSTEM_INSTRUCTIONS}]
-    for example in examples:
+    for index, example in enumerate(examples):
         _validate_request(example.request)
         validate_contextual_decision(
             {"outcome": example.decision.outcome, "id": example.decision.id},
             frozenset(candidate.id for candidate in example.request.candidates),
         )
+        user_content: str | list[dict[str, Any]] = _render_user_evidence(example.request)
+        if index == len(examples) - 1 and prompt_cache_key is not None:
+            user_content = [
+                {
+                    "type": "input_text",
+                    "text": user_content,
+                    "prompt_cache_breakpoint": {"mode": "explicit"},
+                }
+            ]
         input_turns.extend(
             (
-                {"role": "user", "content": _render_user_evidence(example.request)},
+                {"role": "user", "content": user_content},
                 {
                     "role": "assistant",
                     "content": json.dumps(
@@ -135,22 +144,6 @@ def build_openai_payload(
                     ),
                 },
             )
-        )
-    if examples and prompt_cache_key is not None:
-        # Assistant input messages accept output_text, while explicit breakpoints accept
-        # input_text. An empty developer block marks the complete preceding few-shot prefix
-        # without changing the calibration turns or evaluation semantics.
-        input_turns.append(
-            {
-                "role": "developer",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": "",
-                        "prompt_cache_breakpoint": {"mode": "explicit"},
-                    }
-                ],
-            }
         )
     input_turns.append({"role": "user", "content": _render_user_evidence(request)})
     payload = {

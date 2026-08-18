@@ -72,18 +72,20 @@ def test_frozen_examples_are_compact_turns_and_evaluation_stays_blind() -> None:
     payload = build_openai_payload(evaluation, "gpt-5.6-luna", examples=(example,))
     turns = payload["input"]
 
-    assert [turn["role"] for turn in turns] == ["system", "user", "assistant", "developer", "user"]
+    assert [turn["role"] for turn in turns] == ["system", "user", "assistant", "user"]
     assert json.loads(turns[2]["content"]) == {
         "outcome": "RESOLVED",
         "id": "beatriz-costa",
     }
+    assert turns[1]["content"][0]["type"] == "input_text"
+    assert "prompt_cache_breakpoint" in turns[1]["content"][0]
     assert "EVALUATION-REFERENCE" in turns[-1]["content"]
     assert "EVALUATION-CONTEXT" in turns[-1]["content"]
     assert "case_id" not in json.dumps(payload).casefold()
 
 
-def test_frozen_prefix_uses_one_explicit_breakpoint_before_evaluation() -> None:
-    """Cache all frozen turns while leaving the changing request outside the breakpoint."""
+def test_frozen_prefix_breakpoint_marks_final_calibration_user_turn() -> None:
+    """Mark only the final calibration user block and preserve the full few-shot sequence."""
     examples = tuple(
         ContextualResolutionExample(
             request=request(),
@@ -93,6 +95,9 @@ def test_frozen_prefix_uses_one_explicit_breakpoint_before_evaluation() -> None:
     )
 
     payload = build_openai_payload(request(), "gpt-5.6-sol", examples=examples)
+    uncached = build_openai_payload(
+        request(), "gpt-5.6-sol", examples=examples, prompt_cache_key=None
+    )
     turns = payload["input"]
     breakpoints = [
         (index, block)
@@ -104,10 +109,15 @@ def test_frozen_prefix_uses_one_explicit_breakpoint_before_evaluation() -> None:
     assert payload["prompt_cache_key"] == SOL_FEW_SHOT_PROMPT_CACHE_KEY
     assert payload["prompt_cache_options"] == {"mode": "explicit"}
     assert len(breakpoints) == 1
-    assert breakpoints[0][0] == len(turns) - 2
-    assert turns[breakpoints[0][0]]["role"] == "developer"
+    assert breakpoints[0][0] == len(turns) - 3
+    assert turns[breakpoints[0][0]]["role"] == "user"
+    assert turns[breakpoints[0][0] + 1]["role"] == "assistant"
+    assert turns[breakpoints[0][0] + 1] == uncached["input"][breakpoints[0][0] + 1]
     assert turns[-1]["role"] == "user"
     assert isinstance(turns[-1]["content"], str)
+    assert "prompt_cache_breakpoint" not in json.dumps(turns[-1])
+    assert all(turn["role"] != "developer" for turn in turns)
+    assert len(turns) == 22
 
 
 def test_cache_configuration_does_not_change_semantic_prompt_or_contract() -> None:
@@ -128,15 +138,6 @@ def test_cache_configuration_does_not_change_semantic_prompt_or_contract() -> No
         normalized = json.loads(json.dumps(payload))
         normalized.pop("prompt_cache_key", None)
         normalized.pop("prompt_cache_options", None)
-        normalized["input"] = [
-            turn
-            for turn in normalized["input"]
-            if not (
-                turn["role"] == "developer"
-                and isinstance(turn["content"], list)
-                and turn["content"][0].get("prompt_cache_breakpoint")
-            )
-        ]
         for turn in normalized["input"]:
             if isinstance(turn["content"], list):
                 turn["content"] = turn["content"][0]["text"]
