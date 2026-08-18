@@ -134,10 +134,38 @@ provider invoice. No cached-input tokens or retries were reported.
 
 ### Follow-up: input-cost optimization
 
-The selected baseline currently repeats a large static ten-example prefix. Later work may separately
-evaluate explicit prompt caching, fewer or shorter examples, and lower reasoning effort. No
-optimization is accepted until controlled evaluation proves that it matches the selected Sol
-baseline's safety and quality.
+Phase 11B.1c investigated only three bounded opportunities against the selected baseline.
+
+- Exact identity matching now uses NFC Unicode normalization and repeated-whitespace collapse in
+  addition to its existing trimming and case folding. It deliberately preserves accents, articles,
+  prepositions, punctuation, hyphens, apostrophes, and stopwords. Known primary names and aliases
+  should eventually be detectable locally inside an incoming message through a derived lookup/index;
+  that message interpreter remains future work.
+- A single policy selected from the ten existing calibration rows (`top_score >= 0.3895420472` and
+  `top_score - second_score >= 0.1163190872`) was evaluated once against the existing 90 blocking
+  cases. It auto-resolved 34/90 cases, including only 21 correct resolutions and 13 clear false
+  `RESOLVED` decisions; disputed E13 was not auto-resolved. Because safety requires zero clear false
+  resolutions, the semantic fast path is rejected/deferred. The resolver remains exact → Phase 10
+  Top-N → Sol → deterministic Core validation.
+- The frozen Sol few-shot prefix is now structured for GPT-5.6 explicit-only Responses API caching:
+  the stable instructions and ten calibration turns end at one supported `input_text` breakpoint,
+  followed by the changing evaluation request, with a stable `prompt_cache_key` and `store: false`.
+  The authorized smoke reached the API twice but both requests returned HTTP 400 before usage was
+  available: the first exposed that an assistant message cannot carry an `input_text` block, and the
+  second was the permitted one-time error inspection. The implementation now uses an empty developer
+  `input_text` marker after all examples. No cache reuse was observed, no token counters were
+  returned, and measured smoke cost was $0.00; no further request was permitted by the three-call
+  cap. This is not a quality benchmark and does not change the baseline prompt or contract.
+
+Future resolver-cost architecture remains deliberately deferred to later phases. The eventual
+`interpret_request` + entity-reference extraction + `decompose_knowledge` flow should be one
+intelligent model operation, benchmarked cheapest-first independently of Sol. Known names and
+aliases should be detected locally; multiple unresolved references from one message should be
+considered for one contextual request; evidence minimization must wait for Phase 11B.2 privacy
+validation. Sophisticated fuzzy/near-exact matching, stopword or preposition removal, fewer
+calibration examples, Top-5 → Top-3, medium → low reasoning, compressed identity evidence,
+broader batching, provider/model experiments, distillation, and asynchronous Batch API processing
+are all deferred until Odyssey is materially usable.
 
 ## Decision and consequences
 
