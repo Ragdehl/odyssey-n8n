@@ -270,7 +270,8 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
     note = valid_note(
         "ada",
         "person",
-        "Partner of [[people/Xavi|Xavi]].",
+        "Links: [[people/Xavi]], [[people/Xavi|mi amigo]], [[people/Xavi#Section]], "
+        "[[people/Xavi#Section|mi amigo]], and [[Xavi]].",
         aliases=["A. Lovelace"],
         relationship_to_user="colleague",
     )
@@ -287,6 +288,9 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
     assert "Aliases: A. Lovelace" in first
     assert "Relationship To User: colleague" in first
     assert "Xavi" in first and "[[" not in first
+    assert "people/" not in first
+    assert "Section" not in first
+    assert "mi amigo" in first
 
 
 def test_invalid_candidate_note_is_rejected_before_provider_evidence(

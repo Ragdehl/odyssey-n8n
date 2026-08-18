@@ -120,11 +120,21 @@ def build_provider_evidence(note: Note, path: str) -> str:
         rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
         lines.append(f"{key.replace('_', ' ').title()}: {rendered}")
     body = _WIKILINK_PATTERN.sub(
-        lambda match: (match.group(2) or match.group(1)).strip(), note.content
+        _humanize_wikilink,
+        note.content,
     )
     if body.strip():
         lines.append("Body: " + body.strip())
     return "\n".join(lines)
+
+
+def _humanize_wikilink(match: re.Match[str]) -> str:
+    """Render a wikilink as a display name without exposing vault path components."""
+    alias = match.group(2)
+    if alias is not None:
+        return alias.strip()
+    target = match.group(1).split("#", 1)[0].rstrip("/")
+    return PurePosixPath(target).name.strip()
 
 
 def resolve_existing_entity(
