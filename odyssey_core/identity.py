@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePosixPath
@@ -89,7 +90,9 @@ def _normalize_reference(value: str) -> str:
     """
     if not isinstance(value, str):
         raise ValueError("Entity reference must be text")
-    return value.strip().casefold()
+    # NFC joins canonically equivalent Unicode sequences without erasing accents,
+    # punctuation, or other identity-bearing text.
+    return " ".join(unicodedata.normalize("NFC", value).casefold().split())
 
 
 def _canonical_types(schema: dict[str, Any]) -> set[str]:

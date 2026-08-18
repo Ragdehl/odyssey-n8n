@@ -83,6 +83,35 @@ def test_find_exact_entity_candidates_finds_primary_name_with_unicode_casefold_a
     assert candidates[0].matched_value == "Straße"
 
 
+def test_exact_matching_normalizes_canonical_unicode_and_repeated_whitespace(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
+    """Treat only canonical Unicode and whitespace-layout variants as equivalent."""
+    _write_note(
+        repository,
+        "stores/Café du Port.md",
+        note_id="store-cafe",
+        note_type="store",
+        aliases=["L’Épicerie   Centrale"],
+    )
+
+    primary = find_exact_entity_candidates(repository, schema, "Cafe\u0301\tdu\nPort", type="store")
+    alias = find_exact_entity_candidates(repository, schema, "l’épicerie centrale", type="store")
+
+    assert [candidate.id for candidate in primary] == ["store-cafe"]
+    assert [candidate.id for candidate in alias] == ["store-cafe"]
+
+
+@pytest.mark.parametrize("query", ["Cafe du Port", "Café de Port", "Café-du-Port", "Café du Port!"])
+def test_exact_matching_preserves_accents_words_hyphens_and_punctuation(
+    repository: VaultRepository, schema: dict[str, object], query: str
+) -> None:
+    """Keep identity-bearing lexical and punctuation differences out of exact matching."""
+    _write_note(repository, "stores/Café du Port.md", note_id="store-cafe", note_type="store")
+
+    assert find_exact_entity_candidates(repository, schema, query, type="store") == ()
+
+
 def test_find_exact_entity_candidates_finds_alias_and_primary_name_takes_precedence(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:

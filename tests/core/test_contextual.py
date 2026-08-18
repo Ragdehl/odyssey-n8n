@@ -7,6 +7,7 @@ import json
 import pytest
 
 from odyssey_core.contextual import (
+    SOL_FEW_SHOT_PROMPT_CACHE_KEY,
     ContextualCandidate,
     ContextualResolutionDecision,
     ContextualResolutionError,
@@ -39,6 +40,9 @@ def test_openai_payload_is_blind_and_uses_required_api_controls() -> None:
     assert payload["reasoning"] == {"effort": "medium"}
     assert payload["text"]["format"]["type"] == "json_schema"
     assert payload["text"]["format"]["strict"] is True
+    assert "prompt_cache_key" not in payload
+    assert "prompt_cache_options" not in payload
+    assert "prompt_cache_breakpoint" not in json.dumps(payload)
     assert "expected" not in serialized.casefold()
     assert "case_id" not in serialized.casefold()
     assert "correct" not in serialized.casefold()
@@ -76,9 +80,88 @@ def test_frozen_examples_are_compact_turns_and_evaluation_stays_blind() -> None:
         "outcome": "RESOLVED",
         "id": "beatriz-costa",
     }
-    assert sum("EVALUATION-REFERENCE" in turn["content"] for turn in turns) == 1
-    assert sum("EVALUATION-CONTEXT" in turn["content"] for turn in turns) == 1
+    assert isinstance(turns[1]["content"], str)
+    assert "prompt_cache_key" not in payload
+    assert "prompt_cache_options" not in payload
+    assert "prompt_cache_breakpoint" not in json.dumps(payload)
+    assert "EVALUATION-REFERENCE" in turns[-1]["content"]
+    assert "EVALUATION-CONTEXT" in turns[-1]["content"]
     assert "case_id" not in json.dumps(payload).casefold()
+
+
+def test_frozen_prefix_breakpoint_marks_final_calibration_user_turn() -> None:
+    """Mark only the final calibration user block and preserve the full few-shot sequence."""
+    examples = tuple(
+        ContextualResolutionExample(
+            request=request(),
+            decision=ContextualResolutionDecision("RESOLVED", "beatriz-costa"),
+        )
+        for _ in range(10)
+    )
+
+    payload = build_openai_payload(
+        request(),
+        "gpt-5.6-sol",
+        examples=examples,
+        prompt_cache_key=SOL_FEW_SHOT_PROMPT_CACHE_KEY,
+    )
+    uncached = build_openai_payload(request(), "gpt-5.6-sol", examples=examples)
+    assert "prompt_cache_key" not in uncached
+    assert "prompt_cache_options" not in uncached
+    assert "prompt_cache_breakpoint" not in json.dumps(uncached)
+    turns = payload["input"]
+    breakpoints = [
+        (index, block)
+        for index, turn in enumerate(turns)
+        for block in (turn["content"] if isinstance(turn["content"], list) else [])
+        if "prompt_cache_breakpoint" in block
+    ]
+
+    assert payload["prompt_cache_key"] == SOL_FEW_SHOT_PROMPT_CACHE_KEY
+    assert payload["prompt_cache_options"] == {"mode": "explicit"}
+    assert len(breakpoints) == 1
+    assert breakpoints[0][0] == len(turns) - 3
+    assert turns[breakpoints[0][0]]["role"] == "user"
+    assert turns[breakpoints[0][0] + 1]["role"] == "assistant"
+    assert turns[breakpoints[0][0] + 1] == uncached["input"][breakpoints[0][0] + 1]
+    assert turns[-1]["role"] == "user"
+    assert isinstance(turns[-1]["content"], str)
+    assert "prompt_cache_breakpoint" not in json.dumps(turns[-1])
+    assert all(turn["role"] != "developer" for turn in turns)
+    assert len(turns) == 22
+
+
+def test_cache_configuration_does_not_change_semantic_prompt_or_contract() -> None:
+    """Keep prompt meaning and output validation identical across cache configurations."""
+    example = ContextualResolutionExample(
+        request=request(), decision=ContextualResolutionDecision("RESOLVED", "beatriz-costa")
+    )
+    cached = build_openai_payload(
+        request(),
+        "gpt-5.6-sol",
+        examples=(example,),
+        prompt_cache_key=SOL_FEW_SHOT_PROMPT_CACHE_KEY,
+    )
+    changed_key = build_openai_payload(
+        request(), "gpt-5.6-sol", examples=(example,), prompt_cache_key="another-stable-key"
+    )
+    uncached = build_openai_payload(request(), "gpt-5.6-sol", examples=(example,))
+
+    def semantic_payload(payload):
+        """Remove only cache transport metadata from one test payload."""
+        normalized = json.loads(json.dumps(payload))
+        normalized.pop("prompt_cache_key", None)
+        normalized.pop("prompt_cache_options", None)
+        for turn in normalized["input"]:
+            if isinstance(turn["content"], list):
+                turn["content"] = turn["content"][0]["text"]
+        return normalized
+
+    assert semantic_payload(cached) == semantic_payload(changed_key) == semantic_payload(uncached)
+    for payload in (cached, changed_key, uncached):
+        assert payload["store"] is False
+        assert payload["reasoning"] == {"effort": "medium"}
+        assert payload["text"] == uncached["text"]
 
 
 @pytest.mark.parametrize(

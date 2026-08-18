@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "frozen_before_measurement": true,
+  "queries": [
+    {"id":"es-wife-mujer","language":"es","category":"synonym_mismatch","mismatch":true,"reference":"mi mujer","context":"Recuérdame el cumpleaños de mi mujer.","type":"person","expected_id":"person-es-esposa"},
+    {"id":"es-wife-esposa","language":"es","category":"synonym_mismatch","mismatch":true,"reference":"mi esposa","context":"Añade que mi esposa prefiere té.","type":"person","expected_id":"person-es-mujer"},
+    {"id":"fr-wife-femme","language":"fr","category":"synonym_mismatch","mismatch":true,"reference":"ma femme","context":"Note le rendez-vous de ma femme.","type":"person","expected_id":"person-fr-epouse"},
+    {"id":"fr-wife-epouse","language":"fr","category":"synonym_mismatch","mismatch":true,"reference":"mon épouse","context":"Mon épouse arrivera demain.","type":"person","expected_id":"person-fr-femme"},
+    {"id":"en-wife-wife","language":"en","category":"synonym_mismatch","mismatch":true,"reference":"my wife","context":"Remember my wife's train time.","type":"person","expected_id":"person-en-spouse"},
+    {"id":"en-wife-spouse","language":"en","category":"synonym_mismatch","mismatch":true,"reference":"my spouse","context":"My spouse needs the booking code.","type":"person","expected_id":"person-en-wife"},
+    {"id":"es-person-alias","language":"es","category":"alias","mismatch":false,"reference":"Beti Alonso","context":"Llama a Beti Alonso.","type":"person","expected_id":"person-es-esposa"},
+    {"id":"fr-person-alias","language":"fr","category":"alias","mismatch":false,"reference":"Clo Martin","context":"Envoyer le document à Clo Martin.","type":"person","expected_id":"person-fr-epouse"},
+    {"id":"en-person-literal","language":"en","category":"literal","mismatch":false,"reference":"Alice Morgan","context":"Alice Morgan sent a message.","type":"person","expected_id":"person-en-spouse"},
+    {"id":"es-colleague","language":"es","category":"semantic_paraphrase","mismatch":true,"reference":"la compañera del equipo Atlas","context":"La compañera del equipo Atlas revisó el mapa.","type":"person","expected_id":"person-atlas-colleague"},
+    {"id":"fr-mother","language":"fr","category":"semantic_paraphrase","mismatch":true,"reference":"la mère de Luc","context":"Le cadeau est pour la mère de Luc.","type":"person","expected_id":"person-luc-mother"},
+    {"id":"en-friend","language":"en","category":"semantic_paraphrase","mismatch":true,"reference":"Sam's climbing friend","context":"Ask Sam's climbing friend about Saturday.","type":"person","expected_id":"person-sam-friend"},
+
+    {"id":"es-store-literal","language":"es","category":"literal","mismatch":false,"reference":"Carrefour Balma","context":"Compré leche en Carrefour Balma.","type":"store","expected_id":"store-carrefour-balma"},
+    {"id":"fr-store-alias","language":"fr","category":"alias","mismatch":false,"reference":"Carrefour de Balma","context":"Les courses viennent du Carrefour de Balma.","type":"store","expected_id":"store-carrefour-balma"},
+    {"id":"en-store-semantic","language":"en","category":"semantic_paraphrase","mismatch":true,"reference":"the supermarket near Balma town hall","context":"I bought groceries at the supermarket near Balma town hall.","type":"store","expected_id":"store-carrefour-balma"},
+    {"id":"es-store-capitole","language":"es","category":"literal","mismatch":false,"reference":"Carrefour Market Capitole","context":"Ticket de Carrefour Market Capitole.","type":"store","expected_id":"store-carrefour-capitole"},
+    {"id":"fr-store-labege","language":"fr","category":"semantic_paraphrase","mismatch":true,"reference":"le Carrefour près du cinéma de Labège","context":"Retrouve le magasin près du cinéma de Labège.","type":"store","expected_id":"store-carrefour-labege"},
+    {"id":"en-store-lidl","language":"en","category":"literal","mismatch":false,"reference":"Lidl Balma","context":"The receipt is from Lidl Balma.","type":"store","expected_id":"store-lidl-balma"},
+    {"id":"es-store-shop","language":"es","category":"synonym_mismatch","mismatch":true,"reference":"el comercio ecológico de Balma","context":"Busca el comercio ecológico de Balma.","type":"store","expected_id":"store-bio-balma"},
+    {"id":"en-store-polysemy","language":"en","category":"polysemy","mismatch":true,"reference":"the hardware store","context":"Buy screws from the hardware store in Toulouse, not computer storage.","type":"store","expected_id":"store-hardware-toulouse"},
+
+    {"id":"en-project-literal","language":"en","category":"literal","mismatch":false,"reference":"Odyssey","context":"Update the Odyssey retrieval benchmark.","type":"project","expected_id":"project-odyssey"},
+    {"id":"es-project-alias","language":"es","category":"alias","mismatch":false,"reference":"Proyecto Odisea","context":"Continúa el Proyecto Odisea.","type":"project","expected_id":"project-odyssey"},
+    {"id":"fr-project-semantic","language":"fr","category":"semantic_paraphrase","mismatch":true,"reference":"le système de notes atomiques","context":"Améliore le système de notes atomiques en Markdown.","type":"project","expected_id":"project-odyssey"},
+    {"id":"en-project-atlas","language":"en","category":"literal","mismatch":false,"reference":"Atlas","context":"Atlas needs a new map layer.","type":"project","expected_id":"project-atlas"},
+    {"id":"es-project-map","language":"es","category":"semantic_paraphrase","mismatch":true,"reference":"el proyecto de mapas de rutas","context":"Actualiza el proyecto de mapas de rutas ciclistas.","type":"project","expected_id":"project-atlas"},
+    {"id":"fr-project-ai","language":"fr","category":"semantic_paraphrase","mismatch":true,"reference":"le projet local de classement IA","context":"Le projet local de classement IA reste hors ligne.","type":"project","expected_id":"project-lumen"},
+    {"id":"en-project-plan","language":"en","category":"polysemy","mismatch":true,"reference":"the project plan","context":"Open the project plan for the kitchen renovation, not the document.","type":"project","expected_id":"project-kitchen"},
+    {"id":"es-project-partner","language":"es","category":"polysemy","mismatch":true,"reference":"el proyecto con mi socio","context":"El proyecto con mi socio es Huerto Solar.","type":"project","expected_id":"project-solar-garden"},
+
+    {"id":"en-concept-atomic","language":"en","category":"literal","mismatch":false,"reference":"Atomic notes","context":"Explain Atomic notes.","type":"concept","expected_id":"concept-atomic-notes"},
+    {"id":"es-concept-atomic","language":"es","category":"semantic_paraphrase","mismatch":true,"reference":"una idea por nota","context":"La regla de una idea por nota evita mezclar entidades.","type":"concept","expected_id":"concept-atomic-notes"},
+    {"id":"fr-concept-resolution","language":"fr","category":"alias","mismatch":false,"reference":"résolution d'identité","context":"Documente la résolution d'identité.","type":"concept","expected_id":"concept-entity-resolution"},
+    {"id":"en-concept-resolution","language":"en","category":"semantic_paraphrase","mismatch":true,"reference":"matching a mention to the right existing entity","context":"Matching a mention to the right existing entity must preserve uncertainty.","type":"concept","expected_id":"concept-entity-resolution"},
+    {"id":"es-concept-bank","language":"es","category":"polysemy","mismatch":true,"reference":"banco de memoria","context":"El banco de memoria no es una entidad financiera.","type":"concept","expected_id":"concept-memory-bank"},
+    {"id":"fr-concept-partner","language":"fr","category":"polysemy","mismatch":true,"reference":"partenaire de programmation","context":"Le partenaire de programmation en binôme n'est pas un conjoint.","type":"concept","expected_id":"concept-pair-programming"},
+
+    {"id":"en-product-literal","language":"en","category":"literal","mismatch":false,"reference":"Arduino Uno","context":"Find the Arduino Uno note.","type":"product","expected_id":"product-arduino-uno"},
+    {"id":"es-product-alias","language":"es","category":"alias","mismatch":false,"reference":"Leche Lactel","context":"Precio de Leche Lactel.","type":"product","expected_id":"product-lactel-milk"},
+    {"id":"fr-task-semantic","language":"fr","category":"semantic_paraphrase","mismatch":true,"reference":"renouveler mon passeport","context":"Quelle tâche concerne le renouvellement de mon passeport ?","type":"task","expected_id":"task-renew-passport"},
+    {"id":"en-document-literal","language":"en","category":"literal","mismatch":false,"reference":"Apartment lease","context":"Open the Apartment lease.","type":"document","expected_id":"document-apartment-lease"},
+    {"id":"es-place-represented","language":"es","category":"semantic_paraphrase","mismatch":true,"reference":"la plaza central de Toulouse","context":"La plaza central de Toulouse con el ayuntamiento.","type":"concept","expected_id":"concept-place-capitole"},
+    {"id":"fr-recipe-semantic","language":"fr","category":"semantic_paraphrase","mismatch":true,"reference":"la soupe aux tomates rôties","context":"Prépare la soupe aux tomates rôties.","type":"recipe","expected_id":"recipe-tomato-soup"}
+  ]
+}

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 OUTCOMES = frozenset({"RESOLVED", "AMBIGUOUS", "UNRESOLVED"})
+SOL_FEW_SHOT_PROMPT_CACHE_KEY = "odyssey:contextual-resolution:sol-few-shot-v1"
 
 
 class ContextualResolutionError(RuntimeError):
@@ -97,6 +98,7 @@ def build_openai_payload(
     *,
     reasoning_effort: str = "medium",
     examples: tuple[ContextualResolutionExample, ...] = (),
+    prompt_cache_key: str | None = None,
 ) -> dict[str, Any]:
     """Build one blind Responses API request with strict Structured Outputs.
 
@@ -105,6 +107,7 @@ def build_openai_payload(
         model: Exact OpenAI model identifier to benchmark.
         reasoning_effort: Responses API reasoning effort.
         examples: Pre-existing labelled calibration turns shared by every evaluated model.
+        prompt_cache_key: Stable routing key for explicit caching, or ``None`` to disable caching.
 
     Returns:
         JSON-compatible payload containing no benchmark labels, scoring metadata, or case identity.
@@ -113,16 +116,25 @@ def build_openai_payload(
         ValueError: If candidate identities are empty or duplicated.
     """
     _validate_request(request)
-    input_turns: list[dict[str, str]] = [{"role": "system", "content": _SYSTEM_INSTRUCTIONS}]
-    for example in examples:
+    input_turns: list[dict[str, Any]] = [{"role": "system", "content": _SYSTEM_INSTRUCTIONS}]
+    for index, example in enumerate(examples):
         _validate_request(example.request)
         validate_contextual_decision(
             {"outcome": example.decision.outcome, "id": example.decision.id},
             frozenset(candidate.id for candidate in example.request.candidates),
         )
+        user_content: str | list[dict[str, Any]] = _render_user_evidence(example.request)
+        if index == len(examples) - 1 and prompt_cache_key is not None:
+            user_content = [
+                {
+                    "type": "input_text",
+                    "text": user_content,
+                    "prompt_cache_breakpoint": {"mode": "explicit"},
+                }
+            ]
         input_turns.extend(
             (
-                {"role": "user", "content": _render_user_evidence(example.request)},
+                {"role": "user", "content": user_content},
                 {
                     "role": "assistant",
                     "content": json.dumps(
@@ -134,7 +146,7 @@ def build_openai_payload(
             )
         )
     input_turns.append({"role": "user", "content": _render_user_evidence(request)})
-    return {
+    payload = {
         "model": model,
         "store": False,
         "reasoning": {"effort": reasoning_effort},
@@ -156,6 +168,10 @@ def build_openai_payload(
             }
         },
     }
+    if examples and prompt_cache_key is not None:
+        payload["prompt_cache_key"] = prompt_cache_key
+        payload["prompt_cache_options"] = {"mode": "explicit"}
+    return payload
 
 
 def _validate_request(request: ContextualResolutionRequest) -> None:

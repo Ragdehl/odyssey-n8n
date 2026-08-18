@@ -1,6 +1,6 @@
 # ADR 0003: Phase 11B.1 OpenAI contextual-reasoner validation
 
-- Status: Accepted — Sol selected as the Phase 11 contextual-resolution quality baseline
+- Status: Accepted — Sol selected as the Phase 11 contextual-resolution quality baseline; Phase 11B.1c complete
 - Date: 2026-08-18
 
 ## Context
@@ -134,10 +134,77 @@ provider invoice. No cached-input tokens or retries were reported.
 
 ### Follow-up: input-cost optimization
 
-The selected baseline currently repeats a large static ten-example prefix. Later work may separately
-evaluate explicit prompt caching, fewer or shorter examples, and lower reasoning effort. No
-optimization is accepted until controlled evaluation proves that it matches the selected Sol
-baseline's safety and quality.
+Phase 11B.1c investigated only three bounded opportunities against the selected baseline.
+
+- Exact identity matching now uses NFC Unicode normalization and repeated-whitespace collapse in
+  addition to its existing trimming and case folding. It deliberately preserves accents, articles,
+  prepositions, punctuation, hyphens, apostrophes, and stopwords. Known primary names and aliases
+  should eventually be detectable locally inside an incoming message through a derived lookup/index;
+  that message interpreter remains future work.
+- A single policy selected from the ten existing calibration rows (`top_score >= 0.3895420472` and
+  `top_score - second_score >= 0.1163190872`) was evaluated once against the existing 90 blocking
+  cases. It auto-resolved 34/90 cases, including only 21 correct resolutions and 13 clear false
+  `RESOLVED` decisions; disputed E13 was not auto-resolved. Because safety requires zero clear false
+  resolutions, the semantic fast path is rejected/deferred. The resolver remains exact → Phase 10
+  Top-N → Sol → deterministic Core validation.
+- The frozen Sol few-shot prefix is now structured for GPT-5.6 explicit-only Responses API caching:
+  the final calibration user turn carries the supported `input_text` breakpoint, followed by
+  assistant example 10 and the changing evaluation request, with a stable `prompt_cache_key` and
+  `store: false`. The two-request synthetic smoke used existing cases `en-xavi-partner` and `A01`.
+  Request 1 reported 2,777 input / 2,518 cache-write / 0 cached / 25 output tokens; request 2
+  reported 2,782 input / 0 cache-write / 2,518 cached / 26 output tokens. The combined estimated
+  spend was $0.021142. Cache reuse therefore succeeded. This was transport validation only, not a
+  quality benchmark, and the baseline prompt and contract remain unchanged.
+
+The provider's explicit GPT-5.6 cache TTL is approximately 30 minutes and refreshes when the cached
+prefix is reused. Caching is therefore useful mainly for bursts or sessions containing several
+requests. For isolated Odyssey captures separated by hours, the entry may expire before reuse and
+cache writing can cost more than uncached input. Prompt caching is supported but opt-in by default
+until production activation policy is decided in Phase 11B.2 or later; it is an opportunistic
+optimization, not the foundation of Odyssey's cost model. No scheduler or session manager is
+introduced here.
+
+### Phase 11B.1c closure evidence
+
+The bounded retrieval follow-up is complete. Safer exact matching is accepted: NFC normalization,
+case folding, repeated-whitespace collapse, and preservation of identity-bearing lexical differences.
+The strong contextual-reasoner boundary and the Sol few-shot baseline remain accepted. Explicit Sol
+prompt caching is technically validated and is retained as an opportunistic optimization for bursts,
+with an approximately 30-minute reuse window; it is not a foundation for the cost model.
+
+The frozen 1,000-note, 40-query adversarial fixture produced the following contextual-only MiniLM
+recall: 72% at Top-5, 80% at Top-20, 88% at Top-50, and 100% at Top-100. This is evidence that the
+current fixture's main risk is candidate reduction/ranking rather than total broad discovery failure,
+not proof of arbitrary future real-vault recall. The tested cosine identity fast path remains
+rejected after 13 clear false `RESOLVED` decisions. The WordNet/OMW hybrid and tested mMARCO
+Cross-Encoder reranker are rejected/deferred: the latter did not improve contextual Top-5 beyond
+72% and added substantial ARM64 resource cost.
+
+The resulting boundary remains:
+
+```text
+exact unique
+    -> resolved locally
+otherwise:
+broad local candidate retrieval
+    -> future safe candidate reduction, if needed
+    -> strong contextual reasoner
+    -> deterministic Core validation
+```
+
+No production retrieval dependency or pipeline change was adopted. Future candidate reduction and
+compact per-note retrieval summaries are tracked in GitHub issue #20; they are not Phase 11B.1c
+implementation.
+
+Future resolver-cost architecture remains deliberately deferred to later phases. The eventual
+`interpret_request` + entity-reference extraction + `decompose_knowledge` flow should be one
+intelligent model operation, benchmarked cheapest-first independently of Sol. Known names and
+aliases should be detected locally; multiple unresolved references from one message should be
+considered for one contextual request; evidence minimization must wait for Phase 11B.2 privacy
+validation. Sophisticated fuzzy/near-exact matching, stopword or preposition removal, fewer
+calibration examples, Top-5 → Top-3, medium → low reasoning, compressed identity evidence,
+broader batching, provider/model experiments, distillation, and asynchronous Batch API processing
+are all deferred until Odyssey is materially usable.
 
 ## Decision and consequences
 

@@ -382,6 +382,18 @@ Phase 11 quality baseline; any cost optimization must preserve its measured safe
 Integration, privacy, retention, evidence minimization, and fallback choices remain pending. See
 [`ADR 0003`](../decisions/0003-phase-11b1-openai-model-validation.md).
 
+Phase 11B.1c is complete. The accepted resolution direction is exact unique matching resolved
+locally, followed otherwise by broad local candidate retrieval, a future safe candidate-reduction
+strategy if needed, the strong contextual reasoner, and deterministic Core validation. Cosine is
+retrieval evidence only: the tested semantic identity fast path produced 13 clear false resolutions
+and is rejected. On the frozen 1,000-note fixture, contextual-only MiniLM reached 72% Recall@5,
+80% @20, 88% @50, and 100% @100. This indicates a candidate reduction/ranking problem in this
+fixture, not proof of arbitrary real-vault recall. The tested WordNet/OMW hybrid and mMARCO
+Cross-Encoder reranker are rejected/deferred; no production retrieval dependency or pipeline change
+was adopted. Future candidate reduction and compact retrieval summaries are tracked in GitHub issue
+#20. Phase 11B.2 remains the next planned phase: production integration plus privacy/evidence
+minimization.
+
 ### Resolution before canonical link creation
 
 The planning/LLM layer may identify semantic references, but Odyssey Core must resolve them before
