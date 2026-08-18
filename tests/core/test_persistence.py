@@ -128,6 +128,56 @@ def test_update_removes_property_and_replaces_body_exactly(repository: VaultRepo
     assert raw.endswith("A caller-decided replacement.\n")
 
 
+def test_update_rejects_scalar_remove_metadata_before_write(repository: VaultRepository) -> None:
+    """A scalar removal name cannot be interpreted as a character sequence."""
+    create_person(repository, metadata={"type": "person", "aliases": ["Bea"]})
+    before = repository.read_text("people/bea.md")
+    with pytest.raises(TypeError, match="sequence of strings"):
+        update_entity(
+            repository,
+            SCHEMA,
+            path="people/bea.md",
+            expected_id="person-bea",
+            set_metadata={},
+            remove_metadata="aliases",
+            actor="updater",
+            now=NOW,
+        )
+    assert repository.read_text("people/bea.md") == before
+
+
+def test_update_rejects_non_string_remove_metadata_element(repository: VaultRepository) -> None:
+    """Removal fields must all be explicit property names."""
+    create_person(repository)
+    with pytest.raises(TypeError, match="only strings"):
+        update_entity(
+            repository,
+            SCHEMA,
+            path="people/bea.md",
+            expected_id="person-bea",
+            set_metadata={},
+            remove_metadata=("aliases", 7),
+            actor="updater",
+            now=NOW,
+        )
+
+
+def test_update_accepts_valid_remove_metadata_sequence(repository: VaultRepository) -> None:
+    """A sequence of string property names removes the requested property."""
+    create_person(repository, metadata={"type": "person", "aliases": ["Bea"]})
+    update_entity(
+        repository,
+        SCHEMA,
+        path="people/bea.md",
+        expected_id="person-bea",
+        set_metadata={},
+        remove_metadata=("aliases",),
+        actor="updater",
+        now=NOW,
+    )
+    assert "aliases:" not in repository.read_text("people/bea.md")
+
+
 def test_update_content_none_preserves_body(repository: VaultRepository) -> None:
     """A metadata-only update keeps the exact existing body."""
     create_person(repository, content="Body with *Markdown*.\r\n")

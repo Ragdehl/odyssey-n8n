@@ -103,8 +103,9 @@ def _find_duplicate_id(
 ) -> str | None:
     """Find a validated canonical note carrying a stable ID, if one exists.
 
-    Malformed or schema-invalid Markdown is not a canonical note and is ignored for this
-    invariant; storage errors still propagate rather than weakening the check.
+    Every encountered Markdown note is parsed and validated. Malformed or schema-invalid
+    Markdown aborts duplicate inspection; storage errors also propagate rather than weakening
+    the check.
     """
     for path in repository.list_markdown_paths():
         note = _parse_and_validate(repository.read_text(path), schema)
@@ -208,6 +209,10 @@ def update_entity(
     """
     if not isinstance(set_metadata, Mapping):
         raise TypeError("set_metadata must be a mapping")
+    if isinstance(remove_metadata, (str, bytes, bytearray, memoryview)):
+        raise TypeError("remove_metadata must be a sequence of strings")
+    if any(not isinstance(field_id, str) for field_id in remove_metadata):
+        raise TypeError("remove_metadata must contain only strings")
     remove_fields = tuple(remove_metadata)
     _check_protected_fields(set_metadata.keys(), "update_entity")
     _check_protected_fields(remove_fields, "update_entity")

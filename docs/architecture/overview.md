@@ -62,7 +62,7 @@ get_context                    decompose_knowledge
                                      |
                                      v
                        planned domain/write decisions
-             create_entity / update_entity / save_knowledge [PHASE 12]
+             create_entity / update_entity [PHASE 12]
                                      |
                                      v
                           validated Note persistence
@@ -133,7 +133,7 @@ planned domain / knowledge outcome
     -> validate_note
     -> serialize_note
     -> raw Markdown
-    -> VaultRepository.create_text / future update boundary
+    -> VaultRepository.create_text / VaultRepository.replace_text
 ```
 
 `parse_note` never writes, `serialize_note` never reads, and `validate_note` can participate in
@@ -374,7 +374,8 @@ examples; Sol then passed with zero clear false resolutions and 98.89% frozen-la
 both cheaper models retained clear false resolutions. A repeat reproduced all 90 outcome/ID
 decisions. The human selected Sol with medium reasoning and the frozen ten-example prompt as the
 Phase 11 quality baseline; any cost optimization must preserve its measured safety and quality.
-Integration, privacy, retention, evidence minimization, and fallback choices remain pending. See
+Integration, privacy, retention, evidence minimization, and fallback choices were addressed in
+Phase 11B.2. See
 [`ADR 0003`](../decisions/0003-phase-11b1-openai-model-validation.md).
 
 Phase 11B.1c is complete. The accepted resolution direction is exact unique matching resolved
@@ -386,8 +387,8 @@ and is rejected. On the frozen 1,000-note fixture, contextual-only MiniLM reache
 fixture, not proof of arbitrary real-vault recall. The tested WordNet/OMW hybrid and mMARCO
 Cross-Encoder reranker are rejected/deferred; no production retrieval dependency or pipeline change
 was adopted. Future candidate reduction and compact retrieval summaries are tracked in GitHub issue
-#20. Phase 11B.2 remains the next planned phase: production integration plus privacy/evidence
-minimization.
+#20. Phase 11B.2 production contextual resolution is complete; its accepted integration and
+privacy/evidence-minimization contract is documented in [`ADR 0004`](../decisions/0004-phase-11b2-production-resolution.md).
 
 ### Resolution before canonical link creation
 
