@@ -62,7 +62,7 @@ get_context                    decompose_knowledge
                                      |
                                      v
                        planned domain/write decisions
-                  upsert_entity / save_knowledge [PLANNED]
+             create_entity / update_entity / save_knowledge [PHASE 12]
                                      |
                                      v
                           validated Note persistence
@@ -268,20 +268,15 @@ serialize or coalesce dependency-sensitive and same-entity mutations. This prope
 require or authorize a DAG engine, scheduler, LangGraph, workflow engine, or parallel execution
 framework in Phases 9 or 10.
 
-### `upsert_entity` — decide reuse, creation, or update
+### `create_entity` / `update_entity` — persist explicit entity decisions
 
-- **Purpose:** eventually reuse, enrich, or create an entity after safe identity resolution.
-- **Input:** a structured entity unit plus resolution evidence.
-- **Output:** a future validated entity-write outcome.
-- **Can see:** grouped entity facts, resolution outcomes, and note-domain contracts.
-- **Must not know or do:** reinterpret the full user request, treat `NO_EXACT_MATCH` as proof of
-  absence or unconditional creation permission, bypass validation, or silently change the
-  canonical schema.
-- **Status:** **PLANNED**; Phase 10 performs no create or update behavior.
-- **Concrete conceptual example:** a future fully resolved Carrefour identity may be reused;
-  `NO_EXACT_MATCH` must continue through later resolution rather than authorize creation, and
-  unresolved ambiguity may require clarification. The permanent write-result shape is not defined
-  here.
+- **Purpose:** persist an explicit caller decision as a validated canonical entity note.
+- **Input:** an explicit create request or path-plus-ID-guarded metadata/body mutation.
+- **Output:** a deterministic created, updated, or no-change result.
+- **Can see:** caller-decided domain metadata/content, lifecycle inputs, and the canonical schema.
+- **Must not know or do:** infer meaning, resolve identity, treat `UNRESOLVED` as creation
+  permission, or perform an automatic update-or-insert.
+- **Status:** **IMPLEMENTED** in Phase 12; future orchestration composes these operations.
 
 ### `save_knowledge` — persist approved knowledge changes
 

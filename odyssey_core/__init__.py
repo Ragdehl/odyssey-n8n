@@ -9,6 +9,15 @@ from .identity import (
     find_exact_entity_candidates,
     resolve_exact_entity,
 )
+from .persistence import (
+    EntityAlreadyExistsError,
+    EntityIdentityMismatchError,
+    EntityPersistenceResult,
+    PersistenceOperation,
+    ProtectedMetadataError,
+    create_entity,
+    update_entity,
+)
 from .resolution import (
     ExistingEntityOutcome,
     ExistingEntityResolution,
@@ -50,4 +59,11 @@ __all__ = [
     "ResolutionSource",
     "build_provider_evidence",
     "resolve_existing_entity",
+    "EntityAlreadyExistsError",
+    "EntityIdentityMismatchError",
+    "EntityPersistenceResult",
+    "PersistenceOperation",
+    "ProtectedMetadataError",
+    "create_entity",
+    "update_entity",
 ]
