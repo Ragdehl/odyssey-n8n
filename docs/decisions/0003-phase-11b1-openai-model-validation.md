@@ -72,16 +72,14 @@ clear unsafe link. The frozen gate is applied as approved rather than changed af
 | Sol | 34,977 | 0 | 3,810 | 1,613 | $0.289185 |
 | **Total** | **104,931** | **0** | **12,934** | **6,267** | **$0.420056** |
 
-Costs use actual API-reported tokens and the official standard list prices checked on the 2026-08-17
-benchmark date: Luna $0.20/$0.02/$1.20, Terra $2.00/$0.20/$12.00, and Sol
-$5.00/$0.50/$30.00 per million input/cached-input/output tokens. Current official model
-documentation was rechecked on 2026-08-18 and lists the same
-[Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna) and
-[Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra) prices; Sol remains
-$5.00/$0.50/$30.00. Both price bases charge cache writes at 1.25x uncached input. These figures are
-calculated estimates from the recorded counters, not an independent provider invoice. No call
-reported cached input or cache writes. There were 270 evaluated requests, no retries, and no extra
-smoke test.
+Benchmark cost estimates use the
+[OpenAI API prices announced effective 2026-07-30](https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/):
+Luna $0.20/$0.02/$1.20, Terra $2.00/$0.20/$12.00, and Sol $5.00/$0.50/$30.00 per
+million input/cached-input/output tokens, with cache writes at 1.25x uncached input. Individual
+model-detail pages displayed inconsistent earlier Luna and Terra prices at final review time, so they
+are not the pricing source for these estimates. The figures use actual API-reported token counters
+and are calculated estimates, not an independent provider invoice. No call reported cached input or
+cache writes. There were 270 evaluated requests, no retries, and no extra smoke test.
 
 Complete compact results are version controlled in
 [`phase11b1_openai_results.md`](../../benchmarks/phase11b1_openai_results.md) and the three linked
@@ -130,10 +128,9 @@ false resolution. No other model or paid evaluation was run for consistency.
 | Sol repeat | — | 90/90 versus Sol run 1 | 248,727 / 248,457 / 2,889 | $1.640876 |
 
 Phase 11B.1b calculated spend was $4.008063; calculated spend across 11B.1a and 11B.1b was
-$4.428119. These estimates use the unchanged benchmark-date price basis documented above and actual
-API token counters, including the reported cache-write tokens at 1.25x input price. Recalculating from
-the recorded counters with the current 2026-08-18 Luna and Terra prices produces the same figures.
-They are not an independent provider invoice. No cached-input tokens or retries were reported.
+$4.428119. These estimates use the 2026-07-30 price basis documented above and actual API token
+counters, including the reported cache-write tokens at 1.25x input price. They are not an independent
+provider invoice. No cached-input tokens or retries were reported.
 
 ### Follow-up: input-cost optimization
 

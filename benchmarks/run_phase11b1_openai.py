@@ -27,7 +27,8 @@ STRONG_EVIDENCE = REPOSITORY_ROOT / "benchmarks/phase11a_strong_reasoner_cases.j
 DEFAULT_CACHE = Path("/data/odyssey/runtime/phase11a-benchmark/embedding-cache")
 E13_CASE_ID = "en-toulouse-supermarket"
 MODEL_PRICES_PER_MILLION = {
-    # Official OpenAI model pages checked 2026-08-17. Cache writes cost 1.25x input.
+    # Historical benchmark inputs: OpenAI API prices effective 2026-07-30.
+    # Cache writes cost 1.25x uncached input; do not treat these as live pricing.
     "gpt-5.6-luna": {"input": 0.20, "cached_input": 0.02, "output": 1.20},
     "gpt-5.6-terra": {"input": 2.00, "cached_input": 0.20, "output": 12.00},
     "gpt-5.6-sol": {"input": 5.00, "cached_input": 0.50, "output": 30.00},
