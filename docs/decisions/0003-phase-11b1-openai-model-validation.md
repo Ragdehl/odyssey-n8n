@@ -1,6 +1,6 @@
 # ADR 0003: Phase 11B.1 OpenAI contextual-reasoner validation
 
-- Status: Accepted — Sol selected as the Phase 11 contextual-resolution quality baseline
+- Status: Accepted — Sol selected as the Phase 11 contextual-resolution quality baseline; Phase 11B.1c complete
 - Date: 2026-08-18
 
 ## Context
@@ -162,6 +162,38 @@ requests. For isolated Odyssey captures separated by hours, the entry may expire
 cache writing can cost more than uncached input. Prompt caching is an opportunistic optimization,
 not the foundation of Odyssey's cost model. Final production activation policy remains deferred to
 Phase 11B.2 or later integration; no scheduler or session manager is introduced here.
+
+### Phase 11B.1c closure evidence
+
+The bounded retrieval follow-up is complete. Safer exact matching is accepted: NFC normalization,
+case folding, repeated-whitespace collapse, and preservation of identity-bearing lexical differences.
+The strong contextual-reasoner boundary and the Sol few-shot baseline remain accepted. Explicit Sol
+prompt caching is technically validated and is retained as an opportunistic optimization for bursts,
+with an approximately 30-minute reuse window; it is not a foundation for the cost model.
+
+The frozen 1,000-note, 40-query adversarial fixture produced the following contextual-only MiniLM
+recall: 72% at Top-5, 80% at Top-20, 88% at Top-50, and 100% at Top-100. This is evidence that the
+current fixture's main risk is candidate reduction/ranking rather than total broad discovery failure,
+not proof of arbitrary future real-vault recall. The tested cosine identity fast path remains
+rejected after 13 clear false `RESOLVED` decisions. The WordNet/OMW hybrid and tested mMARCO
+Cross-Encoder reranker are rejected/deferred: the latter did not improve contextual Top-5 beyond
+72% and added substantial ARM64 resource cost.
+
+The resulting boundary remains:
+
+```text
+exact unique
+    -> resolved locally
+otherwise:
+broad local candidate retrieval
+    -> future safe candidate reduction, if needed
+    -> strong contextual reasoner
+    -> deterministic Core validation
+```
+
+No production retrieval dependency or pipeline change was adopted. Future candidate reduction and
+compact per-note retrieval summaries are tracked in GitHub issue #20; they are not Phase 11B.1c
+implementation.
 
 Future resolver-cost architecture remains deliberately deferred to later phases. The eventual
 `interpret_request` + entity-reference extraction + `decompose_knowledge` flow should be one

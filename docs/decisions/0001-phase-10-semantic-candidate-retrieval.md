@@ -51,13 +51,18 @@ The complete implemented contract remains in
 ## Phase 11B.1c scale stress follow-up
 
 A deterministic 1,000-note, 40-query adversarial stress test found 77.5% Recall@5 and Recall@10 for
-the unchanged dense retriever, substantially below the original 16/16 small benchmark. One local
-hybrid experiment using name/alias overlap, NLTK WordNet/OMW 1.4 synonym evidence, and reciprocal-rank
-fusion reached 80.0% Recall@5 and Recall@10 but caused five new Top-5 misses, had important
-multilingual gaps, and added disproportionate resource and deployment complexity. It is
-rejected/deferred; Phase 10 production behavior is unchanged. Full evidence is recorded in
-[`phase11b1c_retrieval_stress_results.md`](../../benchmarks/phase11b1c_retrieval_stress_results.md).
+the unchanged dense retriever, substantially below the original 16/16 small benchmark. On the
+contextual-only slice, broad MiniLM recall was 72% at Top-5, 80% at Top-20, 88% at Top-50, and 100%
+at Top-100. This fixture therefore points primarily to candidate reduction/ranking risk, while not
+proving arbitrary future real-vault recall. One local hybrid experiment using name/alias overlap,
+NLTK WordNet/OMW 1.4 synonym evidence, and reciprocal-rank fusion reached 80.0% Recall@5 and
+Recall@10 but caused five new Top-5 misses, had important multilingual gaps, and added
+disproportionate resource and deployment complexity. The tested mMARCO Cross-Encoder reranker did
+not improve contextual Top-5 beyond 72% and added substantial ARM64 resource cost. Both approaches
+are rejected/deferred; Phase 10 production behavior and dependencies are unchanged. Full evidence
+is recorded in [`phase11b1c_retrieval_stress_results.md`](../../benchmarks/phase11b1c_retrieval_stress_results.md).
 
 Retrieval must be re-evaluated against real Odyssey data as the vault grows. This synthetic
 1,000-note stress test demonstrates a scale risk; it is not evidence that retrieval will remain
-adequate at 10,000 or 100,000 real notes.
+adequate at 10,000 or 100,000 real notes. Future safe candidate reduction and per-note retrieval
+summaries are tracked in GitHub issue #20; they are intentionally deferred.
