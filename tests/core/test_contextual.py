@@ -40,6 +40,9 @@ def test_openai_payload_is_blind_and_uses_required_api_controls() -> None:
     assert payload["reasoning"] == {"effort": "medium"}
     assert payload["text"]["format"]["type"] == "json_schema"
     assert payload["text"]["format"]["strict"] is True
+    assert "prompt_cache_key" not in payload
+    assert "prompt_cache_options" not in payload
+    assert "prompt_cache_breakpoint" not in json.dumps(payload)
     assert "expected" not in serialized.casefold()
     assert "case_id" not in serialized.casefold()
     assert "correct" not in serialized.casefold()
@@ -77,8 +80,10 @@ def test_frozen_examples_are_compact_turns_and_evaluation_stays_blind() -> None:
         "outcome": "RESOLVED",
         "id": "beatriz-costa",
     }
-    assert turns[1]["content"][0]["type"] == "input_text"
-    assert "prompt_cache_breakpoint" in turns[1]["content"][0]
+    assert isinstance(turns[1]["content"], str)
+    assert "prompt_cache_key" not in payload
+    assert "prompt_cache_options" not in payload
+    assert "prompt_cache_breakpoint" not in json.dumps(payload)
     assert "EVALUATION-REFERENCE" in turns[-1]["content"]
     assert "EVALUATION-CONTEXT" in turns[-1]["content"]
     assert "case_id" not in json.dumps(payload).casefold()
@@ -94,10 +99,16 @@ def test_frozen_prefix_breakpoint_marks_final_calibration_user_turn() -> None:
         for _ in range(10)
     )
 
-    payload = build_openai_payload(request(), "gpt-5.6-sol", examples=examples)
-    uncached = build_openai_payload(
-        request(), "gpt-5.6-sol", examples=examples, prompt_cache_key=None
+    payload = build_openai_payload(
+        request(),
+        "gpt-5.6-sol",
+        examples=examples,
+        prompt_cache_key=SOL_FEW_SHOT_PROMPT_CACHE_KEY,
     )
+    uncached = build_openai_payload(request(), "gpt-5.6-sol", examples=examples)
+    assert "prompt_cache_key" not in uncached
+    assert "prompt_cache_options" not in uncached
+    assert "prompt_cache_breakpoint" not in json.dumps(uncached)
     turns = payload["input"]
     breakpoints = [
         (index, block)
@@ -125,13 +136,16 @@ def test_cache_configuration_does_not_change_semantic_prompt_or_contract() -> No
     example = ContextualResolutionExample(
         request=request(), decision=ContextualResolutionDecision("RESOLVED", "beatriz-costa")
     )
-    cached = build_openai_payload(request(), "gpt-5.6-sol", examples=(example,))
+    cached = build_openai_payload(
+        request(),
+        "gpt-5.6-sol",
+        examples=(example,),
+        prompt_cache_key=SOL_FEW_SHOT_PROMPT_CACHE_KEY,
+    )
     changed_key = build_openai_payload(
         request(), "gpt-5.6-sol", examples=(example,), prompt_cache_key="another-stable-key"
     )
-    uncached = build_openai_payload(
-        request(), "gpt-5.6-sol", examples=(example,), prompt_cache_key=None
-    )
+    uncached = build_openai_payload(request(), "gpt-5.6-sol", examples=(example,))
 
     def semantic_payload(payload):
         """Remove only cache transport metadata from one test payload."""

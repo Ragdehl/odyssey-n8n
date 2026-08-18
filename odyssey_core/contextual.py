@@ -98,7 +98,7 @@ def build_openai_payload(
     *,
     reasoning_effort: str = "medium",
     examples: tuple[ContextualResolutionExample, ...] = (),
-    prompt_cache_key: str | None = SOL_FEW_SHOT_PROMPT_CACHE_KEY,
+    prompt_cache_key: str | None = None,
 ) -> dict[str, Any]:
     """Build one blind Responses API request with strict Structured Outputs.
 

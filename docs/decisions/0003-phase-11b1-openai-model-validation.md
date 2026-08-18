@@ -159,9 +159,10 @@ Phase 11B.1c investigated only three bounded opportunities against the selected 
 The provider's explicit GPT-5.6 cache TTL is approximately 30 minutes and refreshes when the cached
 prefix is reused. Caching is therefore useful mainly for bursts or sessions containing several
 requests. For isolated Odyssey captures separated by hours, the entry may expire before reuse and
-cache writing can cost more than uncached input. Prompt caching is an opportunistic optimization,
-not the foundation of Odyssey's cost model. Final production activation policy remains deferred to
-Phase 11B.2 or later integration; no scheduler or session manager is introduced here.
+cache writing can cost more than uncached input. Prompt caching is supported but opt-in by default
+until production activation policy is decided in Phase 11B.2 or later; it is an opportunistic
+optimization, not the foundation of Odyssey's cost model. No scheduler or session manager is
+introduced here.
 
 ### Phase 11B.1c closure evidence
 
