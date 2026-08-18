@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
 import resource
 import statistics
@@ -18,10 +19,15 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from odyssey_core.notes import Note, serialize_note  # noqa: E402
+from odyssey_core.notes import (  # noqa: E402
+    Note,
+    parse_note,  # noqa: E402
+    serialize_note,
+)
 from odyssey_core.semantic import (  # noqa: E402
     FastEmbedTextEmbedder,
     SemanticEntityIndex,
+    build_semantic_retrieval_text,
 )
 from odyssey_core.storage import VaultRepository  # noqa: E402
 
@@ -486,13 +492,13 @@ def rrf(*rankings: list[str]) -> list[str]:
 
 
 def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Calculate Recall@1/3/5/10 overall and across frozen benchmark dimensions."""
+    """Calculate recall at the requested cutoffs across frozen benchmark dimensions."""
 
     def summarize(items: list[dict[str, Any]]) -> dict[str, float]:
         return {
             f"recall_at_{limit}": sum(row["expected_id"] in row["ranking"][:limit] for row in items)
             / len(items)
-            for limit in (1, 3, 5, 10)
+            for limit in (1, 3, 5, 10, 20, 50, 100)
         }
 
     groups: dict[str, Any] = {"overall": summarize(rows)}
@@ -505,8 +511,120 @@ def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return groups
 
 
-def run(queries_path: Path, schema_path: Path, cache_dir: Path | None) -> dict[str, Any]:
-    """Build the temporary vault and compare unchanged dense retrieval with one hybrid method."""
+def exact_unique_ids(specs: tuple[NoteSpec, ...], query: dict[str, Any]) -> set[str]:
+    """Return IDs that the current exact primary-name/alias lookup would match uniquely.
+
+    Args:
+        specs: Frozen synthetic note specifications.
+        query: Frozen query with reference and canonical type.
+
+    Returns:
+        Matching note IDs after the same NFC/case/whitespace normalization used by exact lookup.
+    """
+    normalized = " ".join(unicodedata.normalize("NFC", query["reference"]).casefold().split())
+    matches = []
+    for spec in specs:
+        values = (spec.name, *spec.aliases)
+        if spec.type == query["type"] and any(
+            " ".join(unicodedata.normalize("NFC", value).casefold().split()) == normalized
+            for value in values
+        ):
+            matches.append(spec.id)
+    return set(matches)
+
+
+def retrieve_projection_texts(
+    repository: VaultRepository, schema: dict[str, Any]
+) -> dict[str, str]:
+    """Rebuild the exact useful candidate projection used by the semantic index.
+
+    Args:
+        repository: Disposable benchmark vault containing validated Markdown notes.
+        schema: Canonical note schema used to validate source notes.
+
+    Returns:
+        Mapping from stable note ID to the current semantic retrieval projection.
+    """
+    projections = {}
+    for path in repository.list_markdown_paths():
+        note = parse_note(repository.read_text(path))
+        projections[str(note.metadata["id"])] = build_semantic_retrieval_text(note, path)
+    return projections
+
+
+def rerank_top_candidates(
+    rows: list[dict[str, Any]], projection_texts: dict[str, str], model_dir: Path, limit: int
+) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    """Rerank MiniLM candidates with the retained mMARCO Cross-Encoder.
+
+    The model only sorts retrieved evidence. It never emits an identity decision or confidence.
+
+    Args:
+        rows: Dense rows containing complete candidate rankings.
+        projection_texts: Current semantic evidence projection keyed by note ID.
+        model_dir: Directory containing the exact Phase 11A tokenizer and ``model.onnx``.
+        limit: MiniLM candidate breadth to rerank.
+
+    Returns:
+        Reranked rows and timing data for model load and all reranking calls.
+
+    Raises:
+        OSError: If the retained model files cannot be loaded.
+        RuntimeError: If the local ONNX runtime cannot execute the model.
+    """
+    import numpy as np
+    import onnxruntime as ort
+    from tokenizers import Tokenizer
+
+    load_started = time.perf_counter()
+    tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
+    session = ort.InferenceSession(
+        str(model_dir / "model.onnx"), providers=["CPUExecutionProvider"]
+    )
+    load_seconds = time.perf_counter() - load_started
+    rerank_latencies = []
+    reranked_rows = []
+    for row in rows:
+        candidates = row["ranking"][:limit]
+        query_text = f"Reference: {row['reference']}\nContext: {row['context']}"
+        pairs = [(query_text, projection_texts[note_id]) for note_id in candidates]
+        encodings = tokenizer.encode_batch(pairs)
+        width = min(512, max(len(encoding.ids) for encoding in encodings))
+        input_ids = np.zeros((len(encodings), width), dtype=np.int64)
+        attention_mask = np.zeros_like(input_ids)
+        for index, encoding in enumerate(encodings):
+            ids = encoding.ids[:width]
+            input_ids[index, : len(ids)] = ids
+            attention_mask[index, : len(ids)] = 1
+        started = time.perf_counter()
+        logits = session.run(None, {"input_ids": input_ids, "attention_mask": attention_mask})[0]
+        rerank_latencies.append(time.perf_counter() - started)
+        reranked = sorted(
+            zip(candidates, logits.reshape(-1), strict=True),
+            key=lambda item: (-float(item[1]), item[0]),
+        )
+        reranked_rows.append(
+            {
+                **row,
+                "ranking": [note_id for note_id, _ in reranked],
+                "rerank_scores": {note_id: float(score) for note_id, score in reranked},
+            }
+        )
+    return reranked_rows, {
+        "model_load_seconds": load_seconds,
+        "rerank_ms_median": statistics.median(rerank_latencies) * 1000,
+        "rerank_ms_mean": statistics.mean(rerank_latencies) * 1000,
+        "process_peak_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
+    }
+
+
+def run(
+    queries_path: Path,
+    schema_path: Path,
+    cache_dir: Path | None,
+    cross_encoder_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Build the frozen vault and measure unchanged dense retrieval at broad cutoffs."""
     queries = load_json(queries_path)["queries"]
     schema = load_json(schema_path)
     with tempfile.TemporaryDirectory(prefix="odyssey-phase11b1c-") as temporary_name:
@@ -519,10 +637,10 @@ def run(queries_path: Path, schema_path: Path, cache_dir: Path | None) -> dict[s
         count = index.rebuild(VaultRepository(vault), schema, embedder)
         indexing_seconds = time.perf_counter() - started
 
+        repository = VaultRepository(vault)
+        projection_texts = retrieve_projection_texts(repository, schema)
         dense_rows: list[dict[str, Any]] = []
-        hybrid_rows: list[dict[str, Any]] = []
         dense_latencies = []
-        hybrid_latencies = []
         for query in queries:
             started = time.perf_counter()
             dense_candidates = index.find_candidates(
@@ -536,14 +654,12 @@ def run(queries_path: Path, schema_path: Path, cache_dir: Path | None) -> dict[s
             dense_ranking = [candidate.id for candidate in dense_candidates]
             dense_rows.append({**query, "ranking": dense_ranking})
 
-            started = time.perf_counter()
-            name_ranking = lexical_rank(specs, query, synonyms=False)
-            synonym_ranking = lexical_rank(specs, query, synonyms=True)
-            hybrid_ranking = rrf(dense_ranking, name_ranking, synonym_ranking)
-            hybrid_latencies.append(time.perf_counter() - started + dense_latencies[-1])
-            hybrid_rows.append({**query, "ranking": hybrid_ranking[:10]})
-
-        return {
+        contextual_rows = [
+            row
+            for row, query in zip(dense_rows, queries, strict=True)
+            if exact_unique_ids(specs, query) != {query["expected_id"]}
+        ]
+        result = {
             "corpus": {
                 "notes": count,
                 "queries": len(queries),
@@ -553,29 +669,63 @@ def run(queries_path: Path, schema_path: Path, cache_dir: Path | None) -> dict[s
             "method": {
                 "dense_model": embedder.model_name,
                 "hybrid": "dense + name/alias overlap + NLTK WordNet/OMW same-language lemmas; RRF k=60",
+                "cross_encoder": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (reranking only)",
             },
             "performance": {
                 "indexing_seconds": indexing_seconds,
                 "dense_query_ms_median": statistics.median(dense_latencies) * 1000,
-                "hybrid_query_ms_median": statistics.median(hybrid_latencies) * 1000,
+                "hybrid_query_ms_median": None,
                 "max_rss_mib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
                 "index_bytes": index.path.stat().st_size,
             },
             "dense": {
                 "metrics": metrics(dense_rows),
+                "contextual_only_count": len(contextual_rows),
+                "contextual_only_metrics": metrics(contextual_rows),
                 "top5_misses": [
-                    row["id"] for row in dense_rows if row["expected_id"] not in row["ranking"][:5]
+                    {
+                        "id": row["id"],
+                        "expected_rank": (
+                            row["ranking"].index(row["expected_id"]) + 1
+                            if row["expected_id"] in row["ranking"]
+                            else None
+                        ),
+                    }
+                    for row in contextual_rows
+                    if row["expected_id"] not in row["ranking"][:5]
                 ],
                 "rows": dense_rows,
             },
             "hybrid": {
-                "metrics": metrics(hybrid_rows),
-                "top5_misses": [
-                    row["id"] for row in hybrid_rows if row["expected_id"] not in row["ranking"][:5]
-                ],
-                "rows": hybrid_rows,
+                "status": "historical result preserved in phase11b1c_retrieval_stress_results.md; not rerun",
             },
         }
+        if cache_dir is not None:
+            result["performance"]["platform"] = platform.platform()
+        if cross_encoder_dir is not None:
+            reranked_results = {}
+            for breadth in (20, 50, 100):
+                reranked_rows, timing = rerank_top_candidates(
+                    dense_rows, projection_texts, cross_encoder_dir, breadth
+                )
+                breadth_rows = reranked_rows
+                reranked_contextual = [
+                    row
+                    for row, query in zip(breadth_rows, queries, strict=True)
+                    if exact_unique_ids(specs, query) != {query["expected_id"]}
+                ]
+                reranked_results[f"top_{breadth}"] = {
+                    "all_query_metrics": metrics(breadth_rows),
+                    "contextual_only_metrics": metrics(reranked_contextual),
+                    "top5_misses": [
+                        row["id"]
+                        for row in reranked_contextual
+                        if row["expected_id"] not in row["ranking"][:5]
+                    ],
+                    "timing": timing,
+                }
+            result["cross_encoder_reranking"] = reranked_results
+        return result
 
 
 def main() -> None:
@@ -590,9 +740,10 @@ def main() -> None:
         "--schema", type=Path, default=Path(__file__).parents[1] / "config" / "note-schema.json"
     )
     parser.add_argument("--cache-dir", type=Path)
+    parser.add_argument("--cross-encoder-dir", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = run(args.queries, args.schema, args.cache_dir)
+    result = run(args.queries, args.schema, args.cache_dir, args.cross_encoder_dir)
     rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")

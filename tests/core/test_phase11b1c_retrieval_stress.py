@@ -8,7 +8,9 @@ from pathlib import Path
 from benchmarks.run_phase11b1c_retrieval_stress import (
     NOTE_COUNT,
     create_vault,
+    exact_unique_ids,
     generated_specs,
+    metrics,
     rrf,
 )
 from odyssey_core.notes import parse_note, validate_note
@@ -60,3 +62,39 @@ def test_rrf_unions_sources_with_deterministic_ties() -> None:
         "dense",
         "lexical",
     ]
+
+
+def test_contextual_only_partition_excludes_unique_exact_names_and_aliases() -> None:
+    """Keep exact/alias short-circuits out of contextual retrieval measurements."""
+    fixture = json.loads(
+        (ROOT / "benchmarks" / "phase11b1c_retrieval_queries.json").read_text(encoding="utf-8")
+    )
+    contextual_only = [
+        query
+        for query in fixture["queries"]
+        if exact_unique_ids(generated_specs(), query) != {query["expected_id"]}
+    ]
+    assert len(contextual_only) == 25
+    assert {query["category"] for query in contextual_only} == {
+        "polysemy",
+        "semantic_paraphrase",
+        "synonym_mismatch",
+    }
+
+
+def test_metrics_include_broad_recall_cutoffs() -> None:
+    """Expose the broad retrieval cutoffs required by the viability experiment."""
+    result = metrics(
+        [
+            {
+                "expected_id": "target",
+                "ranking": ["target"],
+                "language": "en",
+                "category": "literal",
+                "mismatch": False,
+            }
+        ]
+    )["overall"]
+    assert result["recall_at_20"] == 1.0
+    assert result["recall_at_50"] == 1.0
+    assert result["recall_at_100"] == 1.0
