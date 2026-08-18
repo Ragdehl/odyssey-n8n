@@ -24,9 +24,8 @@ from odyssey_core.resolution import build_provider_evidence
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PHASE11A_CASES = REPOSITORY_ROOT / "benchmarks/phase11a_contextual_resolution_cases.json"
-STRONG_EVIDENCE = REPOSITORY_ROOT / "benchmarks/phase11a_strong_reasoner_cases.json"
 SCHEMA_PATH = REPOSITORY_ROOT / "config/note-schema.json"
-DEFAULT_CACHE = Path("/data/odyssey/runtime/phase11a-benchmark/embedding-cache")
+CANDIDATE_ARTIFACT = REPOSITORY_ROOT / "benchmarks/phase11b2_frozen_candidate_membership.json"
 MODEL = "gpt-5.6-sol"
 MAX_REQUESTS = 12
 MODEL_PRICES_PER_MILLION = {"input": 5.00, "cached_input": 0.50, "output": 30.00}
@@ -85,15 +84,28 @@ def _synthetic_note(note_definition: dict[str, Any], schema: dict[str, Any]) -> 
     return note
 
 
-def _load_ranked_cases(cache_dir: Path) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Load frozen candidates using the established Phase 11B.1 ranking path."""
-    from benchmarks.run_phase11b1_openai import load_blocking_cases
-
+def _load_frozen_cases() -> tuple[tuple[dict[str, Any], ...], dict[str, dict[str, Any]]]:
+    """Load cases using version-controlled historical candidate membership only."""
     base = json.loads(PHASE11A_CASES.read_text(encoding="utf-8"))
-    ranked = load_blocking_cases(cache_dir)
-    selected = select_cases(ranked)
+    artifact = json.loads(CANDIDATE_ARTIFACT.read_text(encoding="utf-8"))
     notes = {note["id"]: note for note in base["notes"]}
-    return list(selected), notes
+    cases = {case["id"]: case for case in base["cases"]}
+    selected = select_cases(
+        [
+            {
+                **cases[case_id],
+                "candidates": [
+                    {"id": candidate_id, "text": notes[candidate_id]["text"]}
+                    for candidate_id in artifact["evaluation"][case_id]
+                ],
+            }
+            for case_id in SELECTED_CASE_IDS
+        ]
+    )
+    calibration_ids = {case["id"] for case in base["cases"] if case["split"] == "calibration"}
+    if set(artifact["calibration"]) != calibration_ids:
+        raise ValueError("Frozen calibration candidate artifact does not cover all ten cases")
+    return selected, notes
 
 
 def select_cases(cases: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
@@ -130,16 +142,21 @@ def _production_request(
 
 
 def _calibration_examples(
-    cache_dir: Path, note_definitions: dict[str, dict[str, Any]], schema: dict[str, Any]
+    note_definitions: dict[str, dict[str, Any]], schema: dict[str, Any]
 ) -> tuple[ContextualResolutionExample, ...]:
-    """Build the accepted ten calibration turns through the production evidence boundary."""
-    from benchmarks.run_phase11a_contextual_resolution import build_phase10_candidates
-
+    """Build ten calibration turns from frozen candidate membership."""
     base = json.loads(PHASE11A_CASES.read_text(encoding="utf-8"))
+    artifact = json.loads(CANDIDATE_ARTIFACT.read_text(encoding="utf-8"))
     calibration = [case for case in base["cases"] if case["split"] == "calibration"]
-    ranked = build_phase10_candidates({"notes": base["notes"], "cases": calibration}, cache_dir)
     examples = []
-    for case in ranked:
+    for case in calibration:
+        case = {
+            **case,
+            "candidates": [
+                {"id": candidate_id, "text": note_definitions[candidate_id]["text"]}
+                for candidate_id in artifact["calibration"][case["id"]]
+            ],
+        }
         request = _production_request(case, note_definitions, schema)
         decision = ContextualResolutionDecision(
             case["expected"], case.get("expected_id") if case["expected"] == "RESOLVED" else None
@@ -162,13 +179,13 @@ def estimated_cost_from_tokens(tokens: Counter[str]) -> float:
     )
 
 
-def run_benchmark(cache_dir: Path, output: Path) -> None:
+def run_benchmark(output: Path) -> None:
     """Run one no-retry twelve-request synthetic production-evidence checkpoint."""
     if output.exists():
         raise ValueError(f"Refusing to overwrite benchmark result: {output}")
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    selected, note_definitions = _load_ranked_cases(cache_dir)
-    examples = _calibration_examples(cache_dir, note_definitions, schema)
+    selected, note_definitions = _load_frozen_cases()
+    examples = _calibration_examples(note_definitions, schema)
     reasoner = OpenAIContextualReasoner(MODEL, reasoning_effort="medium", examples=examples)
     result: dict[str, Any] = {
         "phase": "11B.2",
@@ -191,13 +208,13 @@ def run_benchmark(cache_dir: Path, output: Path) -> None:
         result["requests_attempted"] += 1
         try:
             output_data, usage = reasoner.resolve(request)
+            candidate_ids = {candidate.id for candidate in request.candidates}
+            decision = validate_contextual_decision(output_data, candidate_ids)
         except (ContextualProviderError, RuntimeError) as error:
             result["failure"] = {"type": type(error).__name__}
             write_json_atomic(output, result)
             raise
         latency = time.perf_counter() - started
-        candidate_ids = {candidate.id for candidate in request.candidates}
-        decision = validate_contextual_decision(output_data, candidate_ids)
         expected_id = case.get("expected_id") if case["expected"] == "RESOLVED" else None
         correct = decision.outcome == case["expected"] and decision.id == expected_id
         row = {
@@ -240,9 +257,8 @@ def main() -> None:
     """Parse the one authorized synthetic parity-run command."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--embedding-cache-dir", type=Path, default=DEFAULT_CACHE)
     args = parser.parse_args()
-    run_benchmark(args.embedding_cache_dir, args.output)
+    run_benchmark(args.output)
 
 
 if __name__ == "__main__":

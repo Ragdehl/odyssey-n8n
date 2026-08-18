@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from odyssey_core.contextual import build_openai_payload
+from odyssey_core.contextual import ContextualResolutionError, build_openai_payload
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER_PATH = ROOT / "benchmarks/run_phase11b2_sol_parity.py"
@@ -39,6 +39,20 @@ def test_selected_case_ids_are_frozen_evaluation_cases(runner) -> None:
     )
     assert [case["id"] for case in selected] == list(runner.SELECTED_CASE_IDS)
     assert len(selected) == 12
+    artifact = json.loads(runner.CANDIDATE_ARTIFACT.read_text())
+    note_ids = {note["id"] for note in data["notes"]}
+    assert set(artifact["evaluation"]) == set(runner.SELECTED_CASE_IDS)
+    assert len(artifact["calibration"]) == 10
+    assert all(
+        candidate_id in note_ids
+        for candidate_ids in (*artifact["evaluation"].values(), *artifact["calibration"].values())
+        for candidate_id in candidate_ids
+    )
+    assert all(
+        case["expected_id"] in artifact["evaluation"][case["id"]]
+        for case in data["cases"]
+        if case["id"] in artifact["evaluation"] and case["expected"] == "RESOLVED"
+    )
     with pytest.raises(ValueError, match="exactly twelve"):
         runner.SELECTED_CASE_IDS = runner.SELECTED_CASE_IDS + ("extra",)
         runner.select_cases(cases)
@@ -110,3 +124,36 @@ def test_result_shape_excludes_request_content(runner, tmp_path: Path) -> None:
     assert '"evidence"' not in serialized
     assert '"context"' not in serialized
     assert "OPENAI_API_KEY" not in serialized
+
+
+def test_malformed_provider_output_persists_safe_failure_and_stops(
+    runner, monkeypatch, tmp_path: Path
+) -> None:
+    """Stop after one invalid response and persist only safe partial benchmark state."""
+
+    class InvalidReasoner:
+        """Return malformed output once without making a network request."""
+
+        calls = 0
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            """Accept the production reasoner constructor contract."""
+
+        def resolve(self, request: object) -> tuple[dict[str, object], dict[str, int]]:
+            """Return an invalid outcome that Core must reject."""
+            self.calls += 1
+            return {"outcome": "MAYBE", "id": None}, {}
+
+    fake = InvalidReasoner()
+    monkeypatch.setattr(runner, "OpenAIContextualReasoner", lambda *args, **kwargs: fake)
+    output = tmp_path / "failure.json"
+    with pytest.raises(ContextualResolutionError):
+        runner.run_benchmark(output)
+    persisted = json.loads(output.read_text())
+    assert fake.calls == 1
+    assert persisted["requests_attempted"] == 1
+    assert persisted["requests_completed"] == 0
+    assert persisted["failure"] == {"type": "ContextualResolutionError"}
+    serialized = output.read_text()
+    assert '"evidence"' not in serialized
+    assert '"context"' not in serialized
