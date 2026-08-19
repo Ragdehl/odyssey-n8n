@@ -33,6 +33,8 @@ _TECHNICAL_METADATA = {
     "revision",
     "schema_version",
 }
+# Classification facets are useful to notes but are not evidence of entity identity.
+_NON_IDENTITY_FACETS = frozenset({"tags"})
 _WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
 
@@ -192,7 +194,7 @@ def build_semantic_retrieval_text(note: Note, path: str) -> str:
         lines.append("Aliases: " + ", ".join(cast(list[str], aliases)))
     lines.append(f"Type: {note_type}")
     for key in sorted(note.metadata):
-        if key in _TECHNICAL_METADATA or key in {"aliases", "type"}:
+        if key in _TECHNICAL_METADATA or key in _NON_IDENTITY_FACETS or key in {"aliases", "type"}:
             continue
         value = note.metadata[key]
         rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)

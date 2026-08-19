@@ -67,6 +67,14 @@ I bought [[Lactel Milk]] and [[Tomatoes]].
 
 The links are readable and useful without a mandatory `store` field or typed relation.
 
+## Controlled tags
+
+Tags are optional, lightweight cross-cutting facets for classification and later knowledge retrieval. They are not note types, precise domain properties, task status, identity evidence, or replacements for wikilinks. A type says what a note is; a property records a structured fact; a wikilink expresses a relationship; a tag adds a transversal facet.
+
+The controlled-but-extensible initial vocabulary is: `idea` (possible proposal not yet a decision), `decision` (choice already made), `question` (open question worth retaining), `reflection` (observation, reasoning, interpretation, or conclusion), `reference` (knowledge kept for consultation), `hypothesis` (unestablished explanation or proposition), `explore` (marked for investigation), `someday` (possibility without current commitment or date), and `review` (knowledge worth revisiting). Their canonical descriptions in `config/note-schema.json` constrain use. Callers and LLMs must not invent tag IDs; adding one requires an intentional schema change. No mutual-exclusion rules apply yet.
+
+Tags are intentionally excluded from semantic identity retrieval text and contextual provider evidence. Future Phase 13 may use them for broader context retrieval, but this phase adds no tag filtering, ranking, search, or auto-tagging.
+
 ## Validation and future evolution
 
 Run the deterministic validator and its standard-library tests from the repository root:

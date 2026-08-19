@@ -97,6 +97,15 @@ def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
     assert "[[" not in projection
 
 
+def test_projection_excludes_controlled_tags_from_identity_text() -> None:
+    """Changing classification facets must not change semantic identity input."""
+    base = valid_note("person-beatriz", "person", "Partner of [[Xavi]].")
+    tagged = valid_note("person-beatriz", "person", "Partner of [[Xavi]].", tags=["idea"])
+    assert build_semantic_retrieval_text(
+        tagged, "people/Beatriz.md"
+    ) == build_semantic_retrieval_text(base, "people/Beatriz.md")
+
+
 def test_rebuild_replaces_and_delete_removes_only_derived_index(
     tmp_path: Path, schema: dict
 ) -> None:

@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "types"}
+TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "tags", "types"}
 REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "subtypes", "properties"}
 REQUIRED_FIELD_DEFINITION_FIELDS = {"id", "value_type", "required", "description"}
+REQUIRED_TAG_FIELDS = {"id", "description"}
 
 
 class SchemaValidationError(ValueError):
@@ -148,6 +149,34 @@ def _validate_types(types: Any) -> None:
         _validate_properties(note_type["properties"], type_id)
 
 
+def _validate_tags(tags: Any) -> None:
+    """Validate the canonical controlled tag registry.
+
+    Args:
+        tags: Candidate top-level tag registry.
+
+    Raises:
+        SchemaValidationError: If a tag entry is malformed or duplicated.
+    """
+    if not isinstance(tags, list):
+        raise SchemaValidationError("tags must be an array")
+    seen: set[str] = set()
+    for index, tag in enumerate(tags):
+        location = f"tag at index {index}"
+        if not isinstance(tag, dict):
+            raise SchemaValidationError(f"{location} must be an object")
+        missing = REQUIRED_TAG_FIELDS - tag.keys()
+        if missing:
+            raise SchemaValidationError(f"{location} missing required fields: {sorted(missing)}")
+        tag_id = tag["id"]
+        if not isinstance(tag_id, str) or not ID_PATTERN.fullmatch(tag_id):
+            raise SchemaValidationError(f"{location} has invalid id {tag_id!r}")
+        if tag_id in seen:
+            raise SchemaValidationError(f"duplicate tag id {tag_id!r}")
+        seen.add(tag_id)
+        _require_non_empty_string(tag["description"], f"tag {tag_id!r} description")
+
+
 def _validate_metadata_fields(metadata_fields: Any) -> None:
     """Validate Odyssey's canonical universal metadata definitions.
 
@@ -231,6 +260,20 @@ def _validate_architectural_metadata_invariants(
             "subtype must be controlled by its parent type and disallow unregistered values"
         )
 
+    tags = definitions.get("tags")
+    if tags is None:
+        raise SchemaValidationError("Odyssey metadata must define the optional tags field")
+    if tags["required"] is not False or tags["value_type"] != "array[string]":
+        raise SchemaValidationError("tags must be an optional array[string] field")
+    tag_constraints = tags.get("constraints")
+    if not isinstance(tag_constraints, dict) or not (
+        tag_constraints.get("registry") == "tags"
+        and tag_constraints.get("controlled") is True
+        and tag_constraints.get("allow_unregistered") is False
+        and tag_constraints.get("unique_items") is True
+    ):
+        raise SchemaValidationError("tags must use the controlled canonical tags registry")
+
 
 def validate_schema(schema: Any) -> None:
     """Validate that data follows the canonical Odyssey schema-definition contract.
@@ -260,6 +303,7 @@ def validate_schema(schema: Any) -> None:
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
         raise SchemaValidationError("schema_version must be a positive integer")
     _validate_metadata_fields(schema["metadata_fields"])
+    _validate_tags(schema["tags"])
     _validate_types(schema["types"])
 
 

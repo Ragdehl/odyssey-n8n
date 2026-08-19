@@ -281,6 +281,26 @@ class NoteValidationTests(unittest.TestCase):
             with self.subTest(aliases=aliases):
                 self.assert_invalid(metadata)
 
+    def test_controlled_tags_are_optional_unique_registered_strings(self) -> None:
+        """Accept canonical tags and reject unknown, duplicate, or malformed values."""
+        for tags in ([], ["idea"], ["idea", "explore"]):
+            metadata = self.valid_metadata()
+            metadata["tags"] = tags
+            validate_note(Note(metadata=metadata, content=""), self.schema)  # type: ignore[arg-type]
+
+        for tags in (["invented"], ["idea", "idea"], "idea", ["idea", 2]):
+            metadata = self.valid_metadata()
+            metadata["tags"] = tags
+            with self.subTest(tags=tags):
+                self.assert_invalid(metadata)
+
+    def test_tags_round_trip_through_markdown_codec(self) -> None:
+        """Preserve canonical tag arrays through serialization and parsing."""
+        metadata = self.valid_metadata()
+        metadata["tags"] = ["idea", "explore"]
+        note = Note(metadata=metadata, content="# Tagged")  # type: ignore[arg-type]
+        self.assertEqual(parse_note(serialize_note(note)), note)
+
     def test_date_and_date_time_formats(self) -> None:
         """Accept real ISO values and reject invalid dates, times, and missing offsets."""
         person = self.valid_metadata("person")

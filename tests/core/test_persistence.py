@@ -58,6 +58,19 @@ def test_create_serializes_domain_data_and_core_lifecycle(repository: VaultRepos
     assert "revision: 1" in raw
 
 
+def test_create_persists_valid_controlled_tags(repository: VaultRepository) -> None:
+    """Persist canonical tags through the existing generic metadata path."""
+    create_person(repository, metadata={"type": "person", "tags": ["idea", "explore"]})
+    assert 'tags: ["idea", "explore"]' in repository.read_text("people/bea.md")
+
+
+def test_create_unknown_tags_fail_before_write(repository: VaultRepository) -> None:
+    """Reject unregistered tags without creating a target note."""
+    with pytest.raises(NoteValidationError):
+        create_person(repository, metadata={"type": "person", "tags": ["invented"]})
+    assert "people/bea.md" not in repository.list_markdown_paths()
+
+
 def test_create_rejects_duplicate_path_without_overwrite(repository: VaultRepository) -> None:
     """Create-only storage preserves an existing note."""
     create_person(repository)
@@ -107,6 +120,65 @@ def test_update_sets_properties_and_preserves_creation_lifecycle(
     assert 'created_by: "phase12-test"' in raw
     assert 'updated_by: "updater"' in raw
     assert "revision: 2" in raw
+
+
+def test_update_replaces_and_removes_tags(repository: VaultRepository) -> None:
+    """Allow explicit tag replacement and removal with normal revisioning."""
+    create_person(repository, metadata={"type": "person", "tags": ["idea"]})
+    result = update_entity(
+        repository,
+        SCHEMA,
+        path="people/bea.md",
+        expected_id="person-bea",
+        set_metadata={"tags": ["decision", "review"]},
+        actor="updater",
+        now=NOW,
+    )
+    assert result.operation is PersistenceOperation.UPDATED
+    assert result.revision == 2
+    assert 'tags: ["decision", "review"]' in repository.read_text("people/bea.md")
+    removed = update_entity(
+        repository,
+        SCHEMA,
+        path="people/bea.md",
+        expected_id="person-bea",
+        set_metadata={},
+        remove_metadata=("tags",),
+        actor="updater",
+        now=NOW,
+    )
+    assert removed.operation is PersistenceOperation.UPDATED
+    assert "tags:" not in repository.read_text("people/bea.md")
+
+
+def test_update_invalid_tags_fails_closed_and_identical_tags_are_no_change(
+    repository: VaultRepository, monkeypatch
+) -> None:
+    """Reject invalid tag patches before writing and preserve no-op semantics."""
+    create_person(repository, metadata={"type": "person", "tags": ["idea"]})
+    before = repository.read_text("people/bea.md")
+    with pytest.raises(NoteValidationError):
+        update_entity(
+            repository,
+            SCHEMA,
+            path="people/bea.md",
+            expected_id="person-bea",
+            set_metadata={"tags": ["invented"]},
+            actor="updater",
+            now=NOW,
+        )
+    assert repository.read_text("people/bea.md") == before
+    monkeypatch.setattr(repository, "replace_text", lambda *args: pytest.fail("must not write"))
+    result = update_entity(
+        repository,
+        SCHEMA,
+        path="people/bea.md",
+        expected_id="person-bea",
+        set_metadata={"tags": ["idea"]},
+        actor="updater",
+        now=NOW,
+    )
+    assert result.operation is PersistenceOperation.NO_CHANGE
 
 
 def test_update_removes_property_and_replaces_body_exactly(repository: VaultRepository) -> None:

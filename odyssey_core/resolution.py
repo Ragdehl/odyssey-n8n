@@ -81,6 +81,8 @@ _TECHNICAL_METADATA = frozenset(
         "path",
     }
 )
+# Knowledge-classification facets are intentionally outside identity evidence.
+_NON_IDENTITY_FACETS = frozenset({"tags"})
 _WIKILINK_PATTERN = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]")
 
 
@@ -114,7 +116,11 @@ def build_provider_evidence(note: Note, path: str) -> str:
         lines.append("Aliases: " + ", ".join(str(value) for value in aliases))
     lines.append(f"Type: {note_type}")
     for key in sorted(note.metadata):
-        if key in _TECHNICAL_METADATA or key in {"id", "aliases", "type"}:
+        if (
+            key in _TECHNICAL_METADATA
+            or key in _NON_IDENTITY_FACETS
+            or key in {"id", "aliases", "type"}
+        ):
             continue
         value = note.metadata[key]
         rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
