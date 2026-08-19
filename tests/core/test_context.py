@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -78,6 +79,11 @@ def write_note(vault: Path, path: str, value: Note) -> None:
     target = vault / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(serialize_note(value), encoding="utf-8")
+
+
+def copy_schema(schema: dict) -> dict:
+    """Return an isolated in-memory schema variant for compatibility tests."""
+    return deepcopy(schema)
 
 
 def test_context_projection_includes_tags_and_excludes_lifecycle() -> None:
@@ -159,6 +165,58 @@ def test_context_contract_rejects_invalid_query_limit_and_filters(
     for kwargs in cases:
         with pytest.raises(ValueError):
             get_context(repository, schema, index, KeywordEmbedder(), **kwargs)
+
+
+def test_context_type_filter_excludes_other_canonical_types(tmp_path: Path, schema: dict) -> None:
+    """Apply the exact type filter before ranking and return only that type."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "ideas/GUI.md", note("gui", "concept", "Odyssey interface idea."))
+    write_note(vault, "reference/GUI.md", note("doc", "document", "Odyssey interface idea."))
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="Odyssey interface idea",
+        limit=2,
+        type="concept",
+    )
+    assert [item.id for item in package.items] == ["gui"]
+
+
+def test_context_index_rejects_changed_tag_registry(tmp_path: Path, schema: dict) -> None:
+    """Reject queries using a tag registry newer than the built index."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    changed_schema = copy_schema(schema)
+    changed_schema["tags"].append({"id": "urgent", "description": "Urgent context."})
+    with pytest.raises(ContextIndexError, match="incompatible or stale"):
+        get_context(repository, changed_schema, index, embedder, query="anything", limit=1)
+
+
+def test_context_index_rejects_changed_type_registry(tmp_path: Path, schema: dict) -> None:
+    """Reject queries against a type registry different from the built index."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    changed_schema = copy_schema(schema)
+    changed_schema["types"].append(
+        {"id": "new_type", "description": "New type.", "subtypes": [], "properties": []}
+    )
+    with pytest.raises(ContextIndexError, match="incompatible or stale"):
+        get_context(repository, changed_schema, index, embedder, query="anything", limit=1)
 
 
 def test_failed_rebuild_preserves_previous_index_and_index_is_outside_vault(

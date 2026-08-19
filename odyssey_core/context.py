@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
 import sqlite3
 import tempfile
+from array import array
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -14,19 +17,45 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
-from odyssey_core.semantic import (
-    TextEmbedder,
-    _blob_vector,
-    _humanize_wikilinks,
-    _normalized_vector,
-    _vector_blob,
-)
+from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
 
 _INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "1"}
 _TECHNICAL_METADATA = frozenset(
     {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
 )
+_WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+
+
+def _humanize_wikilinks(markdown: str) -> str:
+    """Replace wikilinks with their visible label or target text."""
+    return _WIKILINK_PATTERN.sub(lambda match: (match.group(2) or match.group(1)).strip(), markdown)
+
+
+def _normalized_vector(values: Sequence[float]) -> tuple[float, ...]:
+    """Return a finite unit vector suitable for exact cosine comparison."""
+    vector = tuple(float(value) for value in values)
+    if not vector or not all(math.isfinite(value) for value in vector):
+        raise ContextIndexError("Embedding runtime returned an invalid vector")
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm == 0:
+        raise ContextIndexError("Embedding runtime returned a zero vector")
+    return tuple(value / norm for value in vector)
+
+
+def _vector_blob(vector: Sequence[float]) -> bytes:
+    """Serialize a normalized vector as portable float32 SQLite data."""
+    values = array("f", vector)
+    if values.itemsize != 4:
+        raise ContextIndexError("Platform does not provide 32-bit float arrays")
+    return values.tobytes()
+
+
+def _blob_vector(blob: bytes) -> array[float]:
+    """Deserialize one SQLite float32 vector blob."""
+    values: array[float] = array("f")
+    values.frombytes(blob)
+    return values
 
 
 class ContextIndexError(RuntimeError):
@@ -286,6 +315,20 @@ class ContextIndex:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Context index markers are incompatible")
+                try:
+                    stored_types = tuple(sorted(json.loads(metadata["canonical_types"])))
+                    stored_tags = tuple(sorted(json.loads(metadata["canonical_tags"])))
+                except (KeyError, TypeError, json.JSONDecodeError) as error:
+                    raise ContextIndexError(
+                        "Context index is incompatible or stale; rebuild is required"
+                    ) from error
+                current_types = _canonical_values(schema, "types")
+                current_tags = _canonical_values(schema, "tags")
+                if stored_types != current_types or stored_tags != current_tags:
+                    raise ContextIndexError(
+                        "Context index is incompatible or stale with the canonical type/tag "
+                        "registries; rebuild is required"
+                    )
                 if (
                     metadata["model_name"] != embedder.model_name
                     or metadata["model_version"] != embedder.model_version

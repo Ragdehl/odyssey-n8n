@@ -145,4 +145,6 @@ the Markdown vault before becoming immutable `ContextItem` values; the vault rem
 of truth. A changed selected source hash, invalid note, or indexed identity mismatch fails
 explicitly. Rebuild is explicit and atomic, and a failed rebuild preserves the previous index.
 V1 has no LLM, answer generation, graph traversal, chunking, reranking, or automatic refresh
-orchestration. Future interpretation supplies the retrieval need.
+orchestration. The index is also compatible only with the canonical type and tag registries stored
+when it was built; registry drift fails explicitly and requires an explicit rebuild. Future
+interpretation supplies the retrieval need.
