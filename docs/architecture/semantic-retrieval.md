@@ -148,3 +148,19 @@ V1 has no LLM, answer generation, graph traversal, chunking, reranking, or autom
 orchestration. The index is also compatible only with the canonical type and tag registries stored
 when it was built; registry drift fails explicitly and requires an explicit rebuild. Future
 interpretation supplies the retrieval need.
+
+Phase 13 also accepts a small structured filter plan through `get_context(..., filters=...)`.
+Each filter has `field`, `op`, and `value`; fields are accepted only when the canonical schema
+marks them `filterable`. The supported operators are `eq` and `in` for strings, `eq`, `in`,
+`gt`, `gte`, `lt`, and `lte` for integers and dates, and `contains` for string arrays. The
+existing `type` and `required_tags` convenience arguments are converted into this same path;
+required tags remain all-of constraints. Type-specific properties such as `entry_date` or
+`relationship_to_user` are queryable only when declared by the current registry.
+
+The index stores normalized property rows and compiles validated filters into fixed, parameterized
+SQLite `EXISTS` predicates before embedding and ranking. Date range bounds are concrete ISO values;
+range filters use inclusive lower and exclusive upper bounds when expressed as `gte` plus `lt`.
+Date-only bounds are accepted for date-time range comparisons as day boundaries. Unknown fields,
+non-filterable fields, unsupported operators, and invalid values fail explicitly. A future request
+interpreter may produce this constrained plan from natural language, but Phase 13 does no such
+interpretation and never executes model-generated SQL.

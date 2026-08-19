@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from odyssey_core.context import (
+    ContextFilter,
     ContextIndex,
     ContextIndexError,
     ContextRetrievalError,
@@ -187,6 +188,169 @@ def test_context_type_filter_excludes_other_canonical_types(tmp_path: Path, sche
         type="concept",
     )
     assert [item.id for item in package.items] == ["gui"]
+
+
+def test_structured_property_equality_and_in_filters(tmp_path: Path, schema: dict) -> None:
+    """Filter schema-declared domain properties through one structured API."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/Ada.md",
+        note("ada", "person", "Engineer.", relationship_to_user="colleague", aliases=["Ada"]),
+    )
+    write_note(
+        vault,
+        "people/Bea.md",
+        note("bea", "person", "Friend.", relationship_to_user="friend", aliases=["Bea"]),
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="person",
+        limit=2,
+        filters=(ContextFilter("relationship_to_user", "eq", "colleague"),),
+    )
+    assert [item.id for item in package.items] == ["ada"]
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="person",
+        limit=2,
+        filters=({"field": "aliases", "op": "contains", "value": "Bea"},),
+    )
+    assert [item.id for item in package.items] == ["bea"]
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="person",
+        limit=2,
+        filters=({"field": "relationship_to_user", "op": "in", "value": ["friend", "colleague"]},),
+    )
+    assert [item.id for item in package.items] == ["ada", "bea"]
+
+
+def test_structured_created_at_range_is_half_open(tmp_path: Path, schema: dict) -> None:
+    """Use normalized bounds with inclusive lower and exclusive upper semantics."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "february.md",
+        note("february", "concept", "Odyssey idea.", created_at="2026-02-01T00:00:00+00:00"),
+    )
+    write_note(
+        vault,
+        "march.md",
+        note("march", "concept", "Odyssey idea.", created_at="2026-03-01T00:00:00+00:00"),
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="Odyssey idea",
+        limit=2,
+        filters=(
+            {"field": "created_at", "op": "gte", "value": "2026-02-01"},
+            {"field": "created_at", "op": "lt", "value": "2026-03-01"},
+        ),
+    )
+    assert [item.id for item in package.items] == ["february"]
+
+
+def test_structured_filters_reduce_candidates_before_ranking(tmp_path: Path, schema: dict) -> None:
+    """Exclude a stronger semantic match outside deterministic date constraints."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "outside.md",
+        note(
+            "outside", "concept", "Odyssey interface idea.", created_at="2026-01-31T23:59:59+00:00"
+        ),
+    )
+    write_note(
+        vault,
+        "inside.md",
+        note("inside", "concept", "Odyssey idea.", created_at="2026-02-01T00:00:00+00:00"),
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="Odyssey interface idea",
+        limit=2,
+        filters=({"field": "created_at", "op": "gte", "value": "2026-02-01"},),
+    )
+    assert [item.id for item in package.items] == ["inside"]
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        ({"field": "unknown", "op": "eq", "value": "x"},),
+        ({"field": "created_by", "op": "eq", "value": "pytest"},),
+        ({"field": "created_at", "op": "contains", "value": "2026"},),
+        ({"field": "created_at", "op": "gte", "value": 2026},),
+    ],
+)
+def test_invalid_structured_filters_fail_explicitly(
+    tmp_path: Path, schema: dict, filters: tuple[dict[str, object], ...]
+) -> None:
+    """Reject unknown, non-filterable, incompatible, and malformed constraints."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    with pytest.raises(ValueError):
+        get_context(repository, schema, index, embedder, query="x", limit=1, filters=filters)
+
+
+def test_injection_like_filter_value_is_plain_data(tmp_path: Path, schema: dict) -> None:
+    """Treat SQL-looking values as bound data and leave the index usable."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "person.md", note("person", "person", "A person."))
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    malicious = "'; DROP TABLE notes; --"
+    assert (
+        get_context(
+            repository,
+            schema,
+            index,
+            embedder,
+            query="person",
+            limit=1,
+            filters=(ContextFilter("relationship_to_user", "eq", malicious),),
+        ).items
+        == ()
+    )
+    assert get_context(repository, schema, index, embedder, query="person", limit=1).items
 
 
 def test_context_index_rejects_changed_tag_registry(tmp_path: Path, schema: dict) -> None:

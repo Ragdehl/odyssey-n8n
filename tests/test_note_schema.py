@@ -109,6 +109,14 @@ class NoteSchemaValidationTests(unittest.TestCase):
         schema["types"][0]["properties"] = [property_definition]
         self.assert_invalid(schema, "required must be boolean")
 
+    def test_invalid_property_filterable_value_fails(self) -> None:
+        """Require the optional retrieval filterability marker to be boolean."""
+        schema = copy.deepcopy(self.schema)
+        property_definition = copy.deepcopy(self.type_definition("person")["properties"][0])
+        property_definition["filterable"] = "true"
+        schema["types"][0]["properties"] = [property_definition]
+        self.assert_invalid(schema, "filterable must be boolean")
+
     def test_journal_entry_date_exists_and_is_required(self) -> None:
         """Record a journal entry's subject date as required structured information."""
         journal_entry = self.type_definition("journal_entry")

@@ -817,7 +817,8 @@ allow internal storage mechanics to evolve without exposing low-level call seque
 Phase 13 general knowledge context retrieval is implemented separately from identity retrieval.
 `get_context` ranks whole atomic notes in a disposable local `ContextIndex` for an already-decided
 retrieval query, applies optional exact type and all-of controlled-tag filters, and then loads
-authoritative validated Markdown content with provenance. Similarity is ranking evidence only;
+schema-declared deterministic filters before semantic ranking, then loads authoritative validated
+Markdown content with provenance. Similarity is ranking evidence only;
 there is no LLM, identity resolution, graph traversal, answer generation, or implicit limit.
 Selected stale or invalid notes fail closed. See [`semantic-retrieval.md`](semantic-retrieval.md)
 and [`ADR 0006`](../decisions/0006-phase-13-context-retrieval.md).

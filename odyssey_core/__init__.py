@@ -1,6 +1,7 @@
 """Odyssey's Python application and domain core."""
 
 from .context import (
+    ContextFilter,
     ContextIndex,
     ContextIndexError,
     ContextItem,
@@ -63,6 +64,7 @@ __all__ = [
     "build_semantic_retrieval_text",
     "find_semantic_entity_candidates",
     "ContextIndex",
+    "ContextFilter",
     "ContextIndexError",
     "ContextItem",
     "ContextPackage",
