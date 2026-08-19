@@ -14,3 +14,4 @@ When an ADR adds real value, it should state the context, decision, alternatives
 - [0003: Phase 11B.1 OpenAI contextual-reasoner validation](0003-phase-11b1-openai-model-validation.md)
 - [0004: Phase 11B.2 production contextual resolution and evidence minimization](0004-phase-11b2-production-resolution.md)
 - [0005: Phase 12 entity persistence](0005-phase-12-entity-persistence.md)
+- [0006: Phase 13 separate general knowledge context retrieval](0006-phase-13-context-retrieval.md)

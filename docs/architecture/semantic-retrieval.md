@@ -118,3 +118,31 @@ A later context capability may add an API conceptually equivalent to
 `get_linked_notes(note_id, depth=1)`. It can derive a small note neighborhood from ordinary
 wikilinks when a concrete `get_context` requirement exists. Phase 10 adds no graph traversal,
 backlink index, graph database, or linked-note API.
+
+## Phase 13 general knowledge context retrieval
+
+Phase 13 implements `get_context` for a different responsibility: retrieving notes that contain
+knowledge relevant to an already-interpreted query. It does not resolve identity, interpret
+natural-language requests, or generate answers:
+
+```text
+interpreted query -> get_context -> ContextIndex -> ranked atomic notes
+                                      |
+                                      +--> authoritative Markdown content
+```
+
+`ContextIndex` is a separate disposable SQLite derived index. It stores one normalized local
+embedding per whole atomic note, its source hash, canonical type, and controlled tags. The
+projection includes filename name, aliases, type, subtype/domain metadata, tags, Markdown body,
+and human-readable wikilinks; lifecycle and internal technical metadata are excluded. Tags are
+context evidence and exact filters here, while remaining excluded from Phase 10 identity
+projection and Phase 11 provider evidence.
+
+The V1 API requires a non-empty query and explicit positive `limit`, with optional exact canonical
+`type` and all-of `required_tags` filters applied before deterministic cosine top-N ranking.
+Similarity is ranking evidence only. Selected candidates are reread and schema-validated from
+the Markdown vault before becoming immutable `ContextItem` values; the vault remains the source
+of truth. A changed selected source hash, invalid note, or indexed identity mismatch fails
+explicitly. Rebuild is explicit and atomic, and a failed rebuild preserves the previous index.
+V1 has no LLM, answer generation, graph traversal, chunking, reranking, or automatic refresh
+orchestration. Future interpretation supplies the retrieval need.

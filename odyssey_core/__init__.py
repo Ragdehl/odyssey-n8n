@@ -1,5 +1,14 @@
 """Odyssey's Python application and domain core."""
 
+from .context import (
+    ContextIndex,
+    ContextIndexError,
+    ContextItem,
+    ContextPackage,
+    ContextRetrievalError,
+    build_context_retrieval_text,
+    get_context,
+)
 from .identity import (
     ExactEntityCandidate,
     ExactEntityLookupError,
@@ -53,6 +62,13 @@ __all__ = [
     "TextEmbedder",
     "build_semantic_retrieval_text",
     "find_semantic_entity_candidates",
+    "ContextIndex",
+    "ContextIndexError",
+    "ContextItem",
+    "ContextPackage",
+    "ContextRetrievalError",
+    "build_context_retrieval_text",
+    "get_context",
     "ExistingEntityOutcome",
     "ExistingEntityResolution",
     "ExistingEntityResolutionError",

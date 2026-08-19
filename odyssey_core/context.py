@@ -1,0 +1,419 @@
+"""Deterministic local retrieval of grounded knowledge from atomic Odyssey notes."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import sqlite3
+import tempfile
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from types import MappingProxyType
+from typing import Any, cast
+
+from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+from odyssey_core.semantic import (
+    TextEmbedder,
+    _blob_vector,
+    _humanize_wikilinks,
+    _normalized_vector,
+    _vector_blob,
+)
+from odyssey_core.storage import VaultRepository
+
+_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "1"}
+_TECHNICAL_METADATA = frozenset(
+    {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
+)
+
+
+class ContextIndexError(RuntimeError):
+    """Indicate that the derived context index cannot be built or used safely."""
+
+
+class ContextRetrievalError(RuntimeError):
+    """Indicate that ranked context could not be grounded in the authoritative vault."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContextItem:
+    """Expose one authoritative note selected as knowledge context."""
+
+    id: str
+    path: str
+    primary_name: str
+    type: str
+    tags: tuple[str, ...]
+    metadata: Mapping[str, Any]
+    content: str
+    similarity: float
+
+
+@dataclass(frozen=True, slots=True)
+class ContextPackage:
+    """Contain an interpreted retrieval query and its ranked grounded notes."""
+
+    query: str
+    items: tuple[ContextItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _ContextCandidate:
+    id: str
+    path: str
+    type: str
+    primary_name: str
+    source_hash: str
+    similarity: float
+
+
+def build_context_retrieval_text(note: Any, path: str) -> str:
+    """Build human-readable general-knowledge embedding text for one validated note.
+
+    Args:
+        note: Canonically validated Odyssey note.
+        path: Vault-relative Markdown path used for the filename-derived name.
+
+    Returns:
+        Projection containing useful metadata, controlled tags, body text, and readable links.
+
+    Raises:
+        ValueError: If the path or required note metadata is unusable.
+    """
+    if not isinstance(path, str) or not path.endswith(".md"):
+        raise ValueError("Context projection requires a Markdown note path")
+    primary_name = PurePosixPath(path).stem
+    note_type = note.metadata.get("type")
+    if not primary_name or not isinstance(note_type, str):
+        raise ValueError("Context projection requires a validated note type")
+    lines = [f"Name: {primary_name}"]
+    aliases = note.metadata.get("aliases")
+    if isinstance(aliases, list) and aliases:
+        lines.append("Aliases: " + ", ".join(cast(list[str], aliases)))
+    lines.append(f"Type: {note_type}")
+    tags = note.metadata.get("tags")
+    if isinstance(tags, list) and tags:
+        lines.append("Tags: " + ", ".join(cast(list[str], tags)))
+    for key in sorted(note.metadata):
+        if key in _TECHNICAL_METADATA or key in {"aliases", "tags", "type"}:
+            continue
+        value = note.metadata[key]
+        rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
+        lines.append(f"{key.replace('_', ' ').title()}: {rendered}")
+    body = _humanize_wikilinks(note.content).strip()
+    if body:
+        lines.append(body)
+    return "\n".join(lines)
+
+
+def _canonical_values(schema: dict[str, Any], key: str) -> tuple[str, ...]:
+    try:
+        values = tuple(sorted(definition["id"] for definition in schema[key]))
+    except (KeyError, TypeError):
+        raise ValueError("Supplied schema is not a usable canonical schema") from None
+    if not values or not all(isinstance(value, str) for value in values):
+        raise ValueError("Supplied schema is not a usable canonical schema")
+    return values
+
+
+def _validate_filters(
+    schema: dict[str, Any], note_type: str | None, required_tags: Sequence[str]
+) -> tuple[str, ...]:
+    types = _canonical_values(schema, "types")
+    tags = _canonical_values(schema, "tags")
+    if note_type is not None and (not isinstance(note_type, str) or note_type not in types):
+        raise ValueError(f"Unknown canonical note type: {note_type!r}")
+    if isinstance(required_tags, (str, bytes)) or not isinstance(required_tags, Sequence):
+        raise ValueError("Required tags must be a sequence of canonical tag IDs")
+    requested = tuple(required_tags)
+    if not all(isinstance(tag, str) for tag in requested):
+        raise ValueError("Required tags must be a sequence of canonical tag IDs")
+    if len(set(requested)) != len(requested):
+        raise ValueError("Required tags must not contain duplicates")
+    unknown = sorted(set(requested) - set(tags))
+    if unknown:
+        raise ValueError(f"Unknown canonical tag IDs: {unknown}")
+    return requested
+
+
+class ContextIndex:
+    """Own one disposable SQLite file containing atomic-note context embeddings."""
+
+    def __init__(self, path: Path):
+        if not isinstance(path, Path):
+            raise TypeError("Context index path must be a pathlib.Path")
+        self.path = path
+
+    def rebuild(
+        self, repository: VaultRepository, schema: dict[str, Any], embedder: TextEmbedder
+    ) -> int:
+        """Atomically rebuild context embeddings from every valid authoritative note.
+
+        Args:
+            repository: Authoritative Markdown vault access.
+            schema: Canonical schema used to validate every note.
+            embedder: Local embedding implementation.
+
+        Returns:
+            Number of indexed notes.
+
+        Raises:
+            ContextIndexError: If source notes, IDs, vectors, or derived storage are unsafe.
+        """
+        canonical_types = _canonical_values(schema, "types")
+        canonical_tags = _canonical_values(schema, "tags")
+        if repository.contains_filesystem_path(self.path):
+            raise ContextIndexError("Context index must be stored outside the Markdown vault")
+        projected: list[tuple[str, str, str, str, str, tuple[str, ...], str]] = []
+        seen_ids: set[str] = set()
+        for path in repository.list_markdown_paths():
+            raw = repository.read_text(path)
+            try:
+                note = parse_note(raw)
+                validate_note(note, schema)
+            except (NoteFormatError, NoteValidationError) as error:
+                raise ContextIndexError(f"Cannot safely index invalid note: {path}") from error
+            note_id = cast(str, note.metadata["id"])
+            if note_id in seen_ids:
+                raise ContextIndexError(f"Cannot safely index duplicate note ID: {note_id}")
+            seen_ids.add(note_id)
+            note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
+            if any(tag not in canonical_tags for tag in note_tags):
+                raise ContextIndexError(f"Cannot safely index unknown tag in note: {path}")
+            projected.append(
+                (
+                    note_id,
+                    path,
+                    cast(str, note.metadata["type"]),
+                    PurePosixPath(path).stem,
+                    hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                    note_tags,
+                    build_context_retrieval_text(note, path),
+                )
+            )
+        vectors = list(embedder.embed_documents([item[6] for item in projected]))
+        if len(vectors) != len(projected):
+            raise ContextIndexError("Embedding runtime returned the wrong number of vectors")
+        normalized = [_normalized_vector(vector) for vector in vectors]
+        dimensions = {len(vector) for vector in normalized}
+        if len(dimensions) > 1:
+            raise ContextIndexError("Embedding runtime returned inconsistent dimensions")
+        dimension = dimensions.pop() if dimensions else 0
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", suffix=".tmp", dir=self.path.parent
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            with sqlite3.connect(temporary) as connection:
+                connection.executescript("""
+                    CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE notes (
+                        id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, type TEXT NOT NULL,
+                        primary_name TEXT NOT NULL, source_hash TEXT NOT NULL, tags TEXT NOT NULL,
+                        embedding BLOB NOT NULL
+                    );
+                """)
+                connection.executemany(
+                    "INSERT INTO metadata(key, value) VALUES (?, ?)",
+                    (
+                        *_INDEX_MARKERS.items(),
+                        ("model_name", embedder.model_name),
+                        ("model_version", embedder.model_version),
+                        ("dimension", str(dimension)),
+                        ("canonical_types", json.dumps(canonical_types)),
+                        ("canonical_tags", json.dumps(canonical_tags)),
+                    ),
+                )
+                connection.executemany(
+                    "INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        (
+                            item[0],
+                            item[1],
+                            item[2],
+                            item[3],
+                            item[4],
+                            json.dumps(item[5]),
+                            _vector_blob(vector),
+                        )
+                        for item, vector in zip(projected, normalized, strict=True)
+                    ],
+                )
+            os.replace(temporary, self.path)
+        except (OSError, sqlite3.Error) as error:
+            raise ContextIndexError("Unable to rebuild context index") from error
+        finally:
+            temporary.unlink(missing_ok=True)
+        return len(projected)
+
+    def delete(self) -> None:
+        """Delete this file only after verifying its context-index markers."""
+        if not self.path.exists():
+            return
+        try:
+            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+            if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                raise ContextIndexError("Refusing to delete an unverified context index")
+            self.path.unlink(missing_ok=True)
+        except ContextIndexError:
+            raise
+        except (OSError, sqlite3.Error) as error:
+            raise ContextIndexError("Refusing to delete an unverified context index") from error
+
+    def find_candidates(
+        self,
+        schema: dict[str, Any],
+        embedder: TextEmbedder,
+        query: str,
+        *,
+        limit: int,
+        type: str | None = None,
+        required_tags: Sequence[str] = (),
+    ) -> tuple[_ContextCandidate, ...]:
+        """Return deterministic ranking candidates after exact type/tag filtering."""
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("Context query must not be empty")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise ValueError("Context limit must be a positive integer")
+        requested_tags = _validate_filters(schema, type, required_tags)
+        try:
+            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise ContextIndexError("Context index markers are incompatible")
+                if (
+                    metadata["model_name"] != embedder.model_name
+                    or metadata["model_version"] != embedder.model_version
+                ):
+                    raise ContextIndexError(
+                        "Context index embedding model does not match query model"
+                    )
+                dimension = int(metadata["dimension"])
+                if dimension == 0:
+                    return ()
+                vector_values = list(embedder.embed_queries([f"Query: {query.strip()}"]))
+                if len(vector_values) != 1:
+                    raise ContextIndexError(
+                        "Embedding runtime returned the wrong number of vectors"
+                    )
+                query_vector = _normalized_vector(vector_values[0])
+                if len(query_vector) != dimension:
+                    raise ContextIndexError(
+                        "Query embedding dimension does not match context index"
+                    )
+                rows = connection.execute(
+                    "SELECT id, path, type, primary_name, source_hash, tags, embedding FROM notes"
+                )
+                candidates = []
+                for note_id, path, note_type, primary_name, source_hash, encoded_tags, blob in rows:
+                    note_tags = tuple(json.loads(encoded_tags))
+                    if (
+                        type is not None
+                        and note_type != type
+                        or not set(requested_tags).issubset(note_tags)
+                    ):
+                        continue
+                    vector = _blob_vector(blob)
+                    if len(vector) != dimension:
+                        raise ContextIndexError("Stored embedding dimension is inconsistent")
+                    candidates.append(
+                        _ContextCandidate(
+                            note_id,
+                            path,
+                            note_type,
+                            primary_name,
+                            source_hash,
+                            sum(
+                                left * right
+                                for left, right in zip(vector, query_vector, strict=True)
+                            ),
+                        )
+                    )
+        except ValueError:
+            raise
+        except (OSError, sqlite3.Error, KeyError, TypeError, json.JSONDecodeError) as error:
+            raise ContextIndexError("Unable to read a compatible context index") from error
+        candidates.sort(
+            key=lambda item: (-item.similarity, item.primary_name.casefold(), item.path, item.id)
+        )
+        return tuple(candidates[:limit])
+
+
+def get_context(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    context_index: ContextIndex,
+    embedder: TextEmbedder,
+    *,
+    query: str,
+    limit: int,
+    type: str | None = None,
+    required_tags: Sequence[str] = (),
+) -> ContextPackage:
+    """Retrieve ranked, authoritative atomic notes for an interpreted knowledge query.
+
+    Args:
+        repository: Authoritative Markdown vault.
+        schema: Canonical note schema.
+        context_index: Rebuildable derived context index.
+        embedder: Local embedding implementation matching the index.
+        query: Already-interpreted non-empty retrieval need.
+        limit: Explicit positive context budget.
+        type: Optional exact canonical note type filter.
+        required_tags: Optional controlled tags; every tag must be present.
+
+    Returns:
+        Immutable package containing current validated note content and provenance.
+
+    Raises:
+        ContextRetrievalError: If a selected candidate is stale, invalid, or mismatched.
+        ValueError: If query or filters are invalid.
+    """
+    candidates = context_index.find_candidates(
+        schema, embedder, query, limit=limit, type=type, required_tags=required_tags
+    )
+    items: list[ContextItem] = []
+    for candidate in candidates:
+        try:
+            raw = repository.read_text(candidate.path)
+        except OSError as error:
+            raise ContextRetrievalError(f"Unable to load indexed note: {candidate.path}") from error
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest() != candidate.source_hash:
+            raise ContextRetrievalError(
+                f"Context index is stale for selected note: {candidate.path}"
+            )
+        try:
+            note = parse_note(raw)
+            validate_note(note, schema)
+        except (NoteFormatError, NoteValidationError) as error:
+            raise ContextRetrievalError(
+                f"Selected note is no longer valid: {candidate.path}"
+            ) from error
+        if (note.metadata.get("id"), note.metadata.get("type")) != (candidate.id, candidate.type):
+            raise ContextRetrievalError(
+                f"Indexed note identity disagrees with source: {candidate.path}"
+            )
+        metadata = {
+            key: value
+            for key, value in note.metadata.items()
+            if key not in _TECHNICAL_METADATA | {"type", "tags"}
+        }
+        tags = tuple(cast(list[str], note.metadata.get("tags", [])))
+        items.append(
+            ContextItem(
+                candidate.id,
+                candidate.path,
+                candidate.primary_name,
+                candidate.type,
+                tags,
+                MappingProxyType(metadata),
+                note.content,
+                candidate.similarity,
+            )
+        )
+    return ContextPackage(query=query.strip(), items=tuple(items))

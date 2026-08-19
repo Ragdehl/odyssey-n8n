@@ -813,3 +813,11 @@ perform its independent exact linear scan and does not access the derived store.
 Odyssey Core should eventually be the sole normal writer of knowledge notes. High-level domain
 tools provide agents with stable intent-level contracts, centralize validation and idempotency, and
 allow internal storage mechanics to evolve without exposing low-level call sequences.
+
+Phase 13 general knowledge context retrieval is implemented separately from identity retrieval.
+`get_context` ranks whole atomic notes in a disposable local `ContextIndex` for an already-decided
+retrieval query, applies optional exact type and all-of controlled-tag filters, and then loads
+authoritative validated Markdown content with provenance. Similarity is ranking evidence only;
+there is no LLM, identity resolution, graph traversal, answer generation, or implicit limit.
+Selected stale or invalid notes fail closed. See [`semantic-retrieval.md`](semantic-retrieval.md)
+and [`ADR 0006`](../decisions/0006-phase-13-context-retrieval.md).
