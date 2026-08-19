@@ -145,6 +145,16 @@ def test_context_filters_tags_before_limit_and_returns_authoritative_content(
     assert [item.id for item in package.items] == ["gui"]
     assert package.items[0].content == "Original GUI idea."
     assert package.items[0].tags == ("idea", "explore")
+    all_tags = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="mobile",
+        limit=3,
+        required_tags=("idea", "explore"),
+    )
+    assert {item.id for item in all_tags.items} == {"gui", "reference"}
 
 
 def test_context_contract_rejects_invalid_query_limit_and_filters(
@@ -271,6 +281,164 @@ def test_structured_created_at_range_is_half_open(tmp_path: Path, schema: dict) 
         ),
     )
     assert [item.id for item in package.items] == ["february"]
+
+
+def test_date_time_offsets_compare_by_utc_chronology(tmp_path: Path, schema: dict) -> None:
+    """Normalize offset-bearing timestamps before applying chronological range filters."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "before-boundary.md",
+        note(
+            "before",
+            "concept",
+            "Odyssey idea before UTC February.",
+            created_at="2026-02-01T01:00:00+02:00",
+        ),
+    )
+    write_note(
+        vault,
+        "at-boundary.md",
+        note(
+            "boundary",
+            "concept",
+            "Odyssey idea at UTC February.",
+            created_at="2026-02-01T00:00:00+00:00",
+        ),
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    from_february = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="Odyssey idea",
+        limit=2,
+        filters=({"field": "created_at", "op": "gte", "value": "2026-02-01"},),
+    )
+    before_february = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="Odyssey idea",
+        limit=2,
+        filters=({"field": "created_at", "op": "lt", "value": "2026-02-01"},),
+    )
+    assert [item.id for item in from_february.items] == ["boundary"]
+    assert [item.id for item in before_february.items] == ["before"]
+
+
+def test_integer_filters_use_numeric_comparison(tmp_path: Path, schema: dict) -> None:
+    """Compare validated integer properties numerically rather than lexicographically."""
+    integer_schema = copy_schema(schema)
+    concept = next(item for item in integer_schema["types"] if item["id"] == "concept")
+    concept["properties"].append(
+        {
+            "id": "score",
+            "value_type": "integer",
+            "required": False,
+            "description": "Controlled test score.",
+            "filterable": True,
+        }
+    )
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    for value in (2, 10, 100):
+        write_note(
+            vault, f"score-{value}.md", note(f"score-{value}", "concept", "Score.", score=value)
+        )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, integer_schema, embedder)
+    middle = get_context(
+        repository,
+        integer_schema,
+        index,
+        embedder,
+        query="score",
+        limit=3,
+        filters=(
+            {"field": "score", "op": "gt", "value": 2},
+            {"field": "score", "op": "lt", "value": 100},
+        ),
+    )
+    at_least_ten = get_context(
+        repository,
+        integer_schema,
+        index,
+        embedder,
+        query="score",
+        limit=3,
+        filters=({"field": "score", "op": "gte", "value": 10},),
+    )
+    assert [item.id for item in middle.items] == ["score-10"]
+    assert {item.id for item in at_least_ten.items} == {"score-10", "score-100"}
+
+
+def test_controlled_subtype_filter_validates_canonical_registry(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Accept registered subtype IDs and reject invented controlled values."""
+    subtype_schema = copy_schema(schema)
+    concept = next(item for item in subtype_schema["types"] if item["id"] == "concept")
+    concept["subtypes"] = [{"id": "system", "name": "System", "description": "A system concept."}]
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "system.md", note("system", "concept", "Odyssey system.", subtype="system"))
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, subtype_schema, embedder)
+    valid = get_context(
+        repository,
+        subtype_schema,
+        index,
+        embedder,
+        query="Odyssey system",
+        limit=1,
+        filters=({"field": "subtype", "op": "eq", "value": "system"},),
+    )
+    assert [item.id for item in valid.items] == ["system"]
+    with pytest.raises(ValueError, match="Unknown canonical subtype"):
+        get_context(
+            repository,
+            subtype_schema,
+            index,
+            embedder,
+            query="Odyssey system",
+            limit=1,
+            filters=({"field": "subtype", "op": "eq", "value": "invented_subtype"},),
+        )
+
+
+def test_tags_filterability_comes_from_schema(tmp_path: Path, schema: dict) -> None:
+    """Do not expose required-tags filtering when the canonical field is non-filterable."""
+    non_filterable_schema = copy_schema(schema)
+    tags = next(item for item in non_filterable_schema["metadata_fields"] if item["id"] == "tags")
+    tags["filterable"] = False
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "idea.md", note("idea", "concept", "Idea.", tags=["idea"]))
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, non_filterable_schema, embedder)
+    with pytest.raises(ValueError, match="Unknown or unsupported context filter field: 'tags'"):
+        get_context(
+            repository,
+            non_filterable_schema,
+            index,
+            embedder,
+            query="idea",
+            limit=1,
+            required_tags=("idea",),
+        )
 
 
 def test_structured_filters_reduce_candidates_before_ranking(tmp_path: Path, schema: dict) -> None:

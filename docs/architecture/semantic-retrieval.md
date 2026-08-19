@@ -160,7 +160,15 @@ required tags remain all-of constraints. Type-specific properties such as `entry
 The index stores normalized property rows and compiles validated filters into fixed, parameterized
 SQLite `EXISTS` predicates before embedding and ranking. Date range bounds are concrete ISO values;
 range filters use inclusive lower and exclusive upper bounds when expressed as `gte` plus `lt`.
-Date-only bounds are accepted for date-time range comparisons as day boundaries. Unknown fields,
-non-filterable fields, unsupported operators, and invalid values fail explicitly. A future request
-interpreter may produce this constrained plan from natural language, but Phase 13 does no such
-interpretation and never executes model-generated SQL.
+Offset-bearing date-times are normalized to fixed-width UTC text in the derived index and query
+parameters before comparison. Date-only bounds on date-time fields mean midnight UTC, so
+`gte 2026-02-01` starts at `2026-02-01T00:00:00Z`. Integer properties use validated integer
+parameters and explicit SQLite integer casts for numeric rather than lexical range semantics.
+
+Controlled values are validated against their authoritative registries. This includes type IDs,
+tag IDs, and the union of subtype IDs declared under canonical note types; callers can combine a
+subtype filter with a type filter when parent scoping matters. Filterability, including whether
+tags may be filtered, comes only from each canonical schema field's `filterable` marker. Unknown
+fields, non-filterable fields, unsupported operators, invalid values, and invented controlled
+values fail explicitly. A future request interpreter may produce this constrained plan from
+natural language, but Phase 13 does no such interpretation and never executes model-generated SQL.

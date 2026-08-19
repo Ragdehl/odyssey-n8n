@@ -12,7 +12,7 @@ import tempfile
 from array import array
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, cast
@@ -21,7 +21,7 @@ from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note,
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
 
-_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "2"}
+_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "3"}
 _TECHNICAL_METADATA = frozenset(
     {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
 )
@@ -179,11 +179,6 @@ def _filter_definitions(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 ):
                     raise ValueError(f"Schema declares conflicting filter field: {field_id!r}")
                 definitions[field_id] = definition
-    definitions["tags"] = {
-        "id": "tags",
-        "value_type": "array[string]",
-        "constraints": {"registry": "tags", "controlled": True},
-    }
     if not definitions:
         raise ValueError("Schema declares no filterable fields")
     return definitions
@@ -221,7 +216,52 @@ def _is_date_time(value: Any) -> bool:
         return False
 
 
-def _validate_filter_value(definition: dict[str, Any], op: str, value: Any) -> tuple[str, ...]:
+def _canonical_subtypes(schema: dict[str, Any]) -> set[str]:
+    """Return all subtype IDs from their authoritative per-type registries."""
+    try:
+        return {subtype["id"] for note_type in schema["types"] for subtype in note_type["subtypes"]}
+    except (KeyError, TypeError):
+        raise ValueError("Supplied schema is not a usable canonical schema") from None
+
+
+def _normalize_property_value(
+    definition: dict[str, Any], value: Any, *, allow_date_boundary: bool = False
+) -> str | int:
+    """Validate and normalize one indexed or queried property value.
+
+    Date-times become fixed-width UTC text so SQLite lexical ordering is chronological. Integers
+    remain integers for bound query parameters and are stored canonically by SQLite's TEXT column.
+    """
+    value_type = definition["value_type"]
+    constraints = definition.get("constraints", {})
+    if value_type == "integer":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("Filter value must be an integer")
+        return value
+    if value_type == "date":
+        if not _is_date(value):
+            raise ValueError("Filter date value must be YYYY-MM-DD")
+        return value
+    if value_type in {"string", "array[string]"}:
+        if not isinstance(value, str):
+            raise ValueError("Filter value must be text")
+        if constraints.get("format") != "date-time":
+            return value
+        if _is_date(value):
+            if not allow_date_boundary:
+                raise ValueError("Date-only values are valid only for date-time range bounds")
+            parsed = datetime.combine(date.fromisoformat(value), time.min, tzinfo=UTC)
+        elif _is_date_time(value):
+            parsed = datetime.fromisoformat(value).astimezone(UTC)
+        else:
+            raise ValueError("Filter date-time value must be timezone-aware ISO text")
+        return parsed.isoformat(timespec="microseconds").replace("+00:00", "Z")
+    raise ValueError(f"Unsupported filter field value type: {value_type!r}")
+
+
+def _validate_filter_value(
+    definition: dict[str, Any], op: str, value: Any
+) -> tuple[str | int, ...]:
     """Validate one filter value and return its canonical SQLite text values."""
     value_type = definition["value_type"]
     values = value if op == "in" else (value,)
@@ -233,29 +273,13 @@ def _validate_filter_value(definition: dict[str, Any], op: str, value: Any) -> t
         raise ValueError("Filter 'contains' requires an array[string] field")
     if op != "contains" and value_type == "array[string]":
         raise ValueError("Array fields support only the 'contains' operator")
-    result: list[str] = []
+    result: list[str | int] = []
     for item in values:
-        if value_type in {"string", "date"}:
-            if not isinstance(item, str):
-                raise ValueError("Filter value must be text")
-            if value_type == "date" and not _is_date(item):
-                raise ValueError("Filter date value must be YYYY-MM-DD")
-            if definition.get("constraints", {}).get("format") == "date-time":
-                if not _is_date_time(item) and not (
-                    op in {"gte", "gt", "lt", "lte"} and _is_date(item)
-                ):
-                    raise ValueError("Filter date-time value must be timezone-aware ISO text")
-            result.append(item)
-        elif value_type == "integer":
-            if not isinstance(item, int) or isinstance(item, bool):
-                raise ValueError("Filter value must be an integer")
-            result.append(str(item))
-        elif value_type == "array[string]":
-            if not isinstance(item, str):
-                raise ValueError("Filter array member must be text")
-            result.append(item)
-        else:
-            raise ValueError(f"Unsupported filter field value type: {value_type!r}")
+        result.append(
+            _normalize_property_value(
+                definition, item, allow_date_boundary=op in {"gt", "gte", "lt", "lte"}
+            )
+        )
     return tuple(result)
 
 
@@ -264,7 +288,7 @@ def _normalize_filters(
     filters: Sequence[ContextFilter | Mapping[str, Any]],
     note_type: str | None,
     required_tags: Sequence[str],
-) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
+) -> tuple[tuple[str, str, tuple[str | int, ...]], ...]:
     """Validate convenience and structured filters into safe SQL inputs."""
     definitions = _filter_definitions(schema)
     if isinstance(filters, (str, bytes)) or not isinstance(filters, Sequence):
@@ -282,7 +306,8 @@ def _normalize_filters(
     raw_filters.extend(ContextFilter("tags", "contains", tag) for tag in required_tag_values)
     canonical_types = set(_canonical_values(schema, "types"))
     canonical_tags = set(_canonical_values(schema, "tags"))
-    normalized: list[tuple[str, str, tuple[str, ...]]] = []
+    canonical_subtypes = _canonical_subtypes(schema)
+    normalized: list[tuple[str, str, tuple[str | int, ...]]] = []
     allowed = {
         "string": {"eq", "in"},
         "integer": {"eq", "in", "gt", "gte", "lt", "lte"},
@@ -310,6 +335,10 @@ def _normalize_filters(
             raise ValueError(f"Unknown canonical note type in filter: {values}")
         if registry == "tags" and any(item not in canonical_tags for item in values):
             raise ValueError(f"Unknown canonical tag in filter: {values}")
+        if registry == "types[].subtypes" and any(
+            item not in canonical_subtypes for item in values
+        ):
+            raise ValueError(f"Unknown canonical subtype in filter: {values}")
         normalized.append((field, op, values))
     return tuple(normalized)
 
@@ -340,11 +369,12 @@ class ContextIndex:
         """
         canonical_types = _canonical_values(schema, "types")
         canonical_tags = _canonical_values(schema, "tags")
+        canonical_subtypes = tuple(sorted(_canonical_subtypes(schema)))
         filter_definitions = _filter_definitions(schema)
         if repository.contains_filesystem_path(self.path):
             raise ContextIndexError("Context index must be stored outside the Markdown vault")
         projected: list[tuple[str, str, str, str, str, tuple[str, ...], str]] = []
-        properties: list[tuple[str, str, str, str]] = []
+        properties: list[tuple[str, str, str | int, str]] = []
         seen_ids: set[str] = set()
         for path in repository.list_markdown_paths():
             raw = repository.read_text(path)
@@ -379,7 +409,13 @@ class ContextIndex:
                     continue
                 values = value if isinstance(value, list) else [value]
                 properties.extend(
-                    (note_id, field, str(item), definition["value_type"]) for item in values
+                    (
+                        note_id,
+                        field,
+                        _normalize_property_value(definition, item),
+                        definition["value_type"],
+                    )
+                    for item in values
                 )
         vectors = list(embedder.embed_documents([item[6] for item in projected]))
         if len(vectors) != len(projected):
@@ -421,6 +457,7 @@ class ContextIndex:
                         ("dimension", str(dimension)),
                         ("canonical_types", json.dumps(canonical_types)),
                         ("canonical_tags", json.dumps(canonical_tags)),
+                        ("canonical_subtypes", json.dumps(canonical_subtypes)),
                         (
                             "filter_definitions",
                             json.dumps(_filter_registry(filter_definitions), sort_keys=True),
@@ -484,6 +521,7 @@ class ContextIndex:
             raise ValueError("Context query must not be empty")
         if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             raise ValueError("Context limit must be a positive integer")
+        filter_definitions = _filter_definitions(schema)
         normalized_filters = _normalize_filters(schema, filters, type, required_tags)
         try:
             with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
@@ -493,16 +531,22 @@ class ContextIndex:
                 try:
                     stored_types = tuple(sorted(json.loads(metadata["canonical_types"])))
                     stored_tags = tuple(sorted(json.loads(metadata["canonical_tags"])))
+                    stored_subtypes = tuple(sorted(json.loads(metadata["canonical_subtypes"])))
                 except (KeyError, TypeError, json.JSONDecodeError) as error:
                     raise ContextIndexError(
                         "Context index is incompatible or stale; rebuild is required"
                     ) from error
                 current_types = _canonical_values(schema, "types")
                 current_tags = _canonical_values(schema, "tags")
-                if stored_types != current_types or stored_tags != current_tags:
+                current_subtypes = tuple(sorted(_canonical_subtypes(schema)))
+                if (
+                    stored_types != current_types
+                    or stored_tags != current_tags
+                    or stored_subtypes != current_subtypes
+                ):
                     raise ContextIndexError(
-                        "Context index is incompatible or stale with the canonical type/tag "
-                        "registries; rebuild is required"
+                        "Context index is incompatible or stale with the canonical type/tag/"
+                        "subtype registries; rebuild is required"
                     )
                 stored_filter_definitions = json.loads(metadata["filter_definitions"])
                 current_filter_definitions = _filter_registry(_filter_definitions(schema))
@@ -532,29 +576,34 @@ class ContextIndex:
                         "Query embedding dimension does not match context index"
                     )
                 clauses: list[str] = []
-                parameters: list[str] = []
+                parameters: list[Any] = []
                 for field, op, values in normalized_filters:
+                    definition = filter_definitions[field]
+                    value_expression = (
+                        "CAST(p.value AS INTEGER)"
+                        if definition["value_type"] == "integer"
+                        else "p.value"
+                    )
                     if op == "in":
                         placeholders = ", ".join("?" for _ in values)
-                        value_clause = f"p.value IN ({placeholders})"
+                        value_clause = f"{value_expression} IN ({placeholders})"
                     else:
                         sql_operator = {
                             "eq": "=",
+                            "contains": "=",
                             "gt": ">",
                             "gte": ">=",
                             "lt": "<",
                             "lte": "<=",
-                        }.get(op, "=")
-                        value_clause = f"p.value {sql_operator} ?"
+                        }[op]
+                        value_clause = f"{value_expression} {sql_operator} ?"
                     clauses.append(
                         "EXISTS (SELECT 1 FROM properties p "
                         "WHERE p.note_id = n.id AND p.field = ? AND p.value_type = ? AND "
                         + value_clause
                         + ")"
                     )
-                    parameters.extend(
-                        [field, _filter_definitions(schema)[field]["value_type"], *values]
-                    )
+                    parameters.extend([field, definition["value_type"], *values])
                 where = " WHERE " + " AND ".join(clauses) if clauses else ""
                 rows = connection.execute(
                     "SELECT n.id, n.path, n.type, n.primary_name, n.source_hash, n.tags, n.embedding "
