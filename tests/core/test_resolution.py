@@ -293,6 +293,15 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
     assert "mi amigo" in first
 
 
+def test_provider_evidence_excludes_controlled_tags(schema: dict[str, Any]) -> None:
+    """Keep classification facets outside contextual identity evidence."""
+    note = valid_note("ada", "person", "Known colleague.", tags=["review", "reference"])
+    evidence = build_provider_evidence(note, "people/Ada Lovelace.md")
+    assert "Tags" not in evidence
+    assert "review" not in evidence
+    assert "reference" not in evidence
+
+
 def test_invalid_candidate_note_is_rejected_before_provider_evidence(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:

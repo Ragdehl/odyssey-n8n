@@ -119,6 +119,7 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     try:
         universal = {definition["id"]: definition for definition in schema["metadata_fields"]}
         types = {definition["id"]: definition for definition in schema["types"]}
+        registered_tags = {definition["id"] for definition in schema["tags"]}
         canonical_version = schema["schema_version"]
     except (KeyError, TypeError):
         raise NoteValidationError("Supplied schema is not a usable canonical schema") from None
@@ -156,6 +157,11 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
 
     for field_id, value in note.metadata.items():
         _validate_value(field_id, value, allowed[field_id])
+
+    tags = note.metadata.get("tags")
+    if tags is not None and any(tag not in registered_tags for tag in tags):
+        unknown_tags = sorted(set(tags) - registered_tags)
+        raise NoteValidationError(f"Unregistered tags: {unknown_tags}")
 
     subtype = note.metadata.get("subtype")
     if subtype is not None:

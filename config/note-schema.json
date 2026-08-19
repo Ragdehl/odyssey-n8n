@@ -70,7 +70,30 @@
       "required": false,
       "description": "Alternative names useful for entity resolution; aliases do not create separate entities.",
       "constraints": {"unique_items": true}
+    },
+    {
+      "id": "tags",
+      "value_type": "array[string]",
+      "required": false,
+      "description": "Controlled cross-cutting facets for lightweight classification and later knowledge retrieval.",
+      "constraints": {
+        "unique_items": true,
+        "registry": "tags",
+        "controlled": true,
+        "allow_unregistered": false
+      }
     }
+  ],
+  "tags": [
+    {"id": "idea", "description": "A possible proposal or direction that has not yet become a decision; not an actionable task."},
+    {"id": "decision", "description": "A choice already made that is worth retaining as future context; not a tentative possibility."},
+    {"id": "question", "description": "An open question worth retaining as knowledge or work context, rather than every transient user question."},
+    {"id": "reflection", "description": "A personal observation, reasoning, interpretation, or conclusion worth retaining without implying action or decision."},
+    {"id": "reference", "description": "Knowledge retained primarily for later consultation; it does not replace the document note type."},
+    {"id": "hypothesis", "description": "An explanation or proposition believed possible but not established as fact and open to revision."},
+    {"id": "explore", "description": "A topic, possibility, or question deliberately marked for further investigation; not task status."},
+    {"id": "someday", "description": "A possibility worth retaining without a current commitment or date; not task scheduling or status."},
+    {"id": "review", "description": "Knowledge explicitly worth revisiting later; not generic update metadata or task status."}
   ],
   "types": [
     {

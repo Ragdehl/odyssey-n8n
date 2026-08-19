@@ -153,6 +153,32 @@ class NoteSchemaValidationTests(unittest.TestCase):
         schema["metadata_fields"].append(copy.deepcopy(schema["metadata_fields"][0]))
         self.assert_invalid(schema, "duplicate metadata field id")
 
+    def test_duplicate_tag_id_fails(self) -> None:
+        """Reject duplicate IDs in the canonical controlled tag registry."""
+        schema = copy.deepcopy(self.schema)
+        schema["tags"].append(copy.deepcopy(schema["tags"][0]))
+        self.assert_invalid(schema, "duplicate tag id")
+
+    def test_malformed_tag_registry_fails(self) -> None:
+        """Require every canonical tag to have a valid ID and description."""
+        for mutation, message in (
+            (lambda schema: schema.update(tags="invalid"), "tags must be an array"),
+            (lambda schema: schema["tags"].__setitem__(0, "invalid"), "must be an object"),
+            (lambda schema: schema["tags"][0].__setitem__("id", "Invalid-ID"), "invalid id"),
+            (lambda schema: schema["tags"][0].__setitem__("description", " "), "non-empty"),
+        ):
+            schema = copy.deepcopy(self.schema)
+            mutation(schema)
+            self.assert_invalid(schema, message)
+
+    def test_tags_metadata_constraints_are_canonical(self) -> None:
+        """Require optional controlled unique tags to use the top-level registry."""
+        for key, value in (("required", True), ("value_type", "string")):
+            schema = copy.deepcopy(self.schema)
+            field = next(item for item in schema["metadata_fields"] if item["id"] == "tags")
+            field[key] = value
+            self.assert_invalid(schema, "tags")
+
     def test_metadata_field_missing_definition_field_fails(self) -> None:
         """Reject universal metadata that omits part of the field contract."""
         schema = copy.deepcopy(self.schema)
