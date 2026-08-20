@@ -3,7 +3,7 @@
 Run: `20260820T_PHASE14_INITIAL`
 Original experiment Git SHA: `e51f92bec959a017ad8c4e904c4dc321ba0a68d7`
 Evaluator version: `2.1.0`
-Evaluator source Git SHA: `90faa5106d0cb0e17722b7bc75aafb41deff857b`
+Evaluator source Git SHA: `0ca38fc969bee71f3ca221d1fc2662d9bfa546c7`
 Raw API results: unchanged from the historical v1 run; zero additional API requests.
 Fixed context: `{"current_date": "2026-08-20", "current_time": "10:30", "timezone": "Europe/Madrid"}`
 
