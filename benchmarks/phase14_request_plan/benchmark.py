@@ -26,6 +26,7 @@ PRICING_PATH = BENCHMARK_DIR / "pricing.json"
 SCHEMA_CONTRACT_PATH = BENCHMARK_DIR / "schema_contract.json"
 LIMITATION_CODES = ("not_supported", "unsupported_domain_date", "direct_link_not_filterable")
 _SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 
 
 def sha256_file(path: Path) -> str:
@@ -43,12 +44,69 @@ def assert_schema_alignment() -> dict[str, Any]:
         BenchmarkContractError: If a canonical retrieval value changed after the experiment froze.
     """
     frozen = load_json(SCHEMA_CONTRACT_PATH)
-    actual = extract_schema_contract(load_json(CANONICAL_SCHEMA_PATH))
+    canonical = load_json(CANONICAL_SCHEMA_PATH)
+    actual = extract_schema_contract(canonical)
     if frozen.get("retrieval_contract") != actual:
         raise BenchmarkContractError("Canonical retrieval schema differs from frozen v2 contract")
     if tuple(frozen.get("limitation_codes", ())) != LIMITATION_CODES:
         raise BenchmarkContractError("Frozen limitation-code vocabulary is invalid")
+    if frozen.get("filter_capabilities") != extract_filter_capabilities(canonical):
+        raise BenchmarkContractError("Canonical filter capabilities differ from frozen v2 contract")
     return frozen
+
+
+def extract_filter_capabilities(schema: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Project schema-owned filter scope and description into a compact prompt contract.
+
+    Args:
+        schema: Parsed canonical Odyssey note schema.
+
+    Returns:
+        Filter capabilities keyed by field, including the types each field may constrain.
+
+    Raises:
+        BenchmarkContractError: If filter declarations cannot be safely interpreted.
+    """
+    try:
+        type_ids = [item["id"] for item in schema["types"]]
+        universal = [item for item in schema["metadata_fields"] if item.get("filterable")]
+        scoped = [
+            (note_type["id"], field)
+            for note_type in schema["types"]
+            for field in note_type["properties"]
+            if field.get("filterable")
+        ]
+    except (KeyError, TypeError) as error:
+        raise BenchmarkContractError(
+            "Canonical schema has unusable filter capability data"
+        ) from error
+    capabilities = {
+        field["id"]: {"types": type_ids, "description": field["description"]} for field in universal
+    }
+    for type_id, field in scoped:
+        capabilities[field["id"]] = {"types": [type_id], "description": field["description"]}
+    return capabilities
+
+
+def render_prompt() -> str:
+    """Render the frozen prompt with schema-derived retrieval capabilities.
+
+    Returns:
+        Prompt text ready for a future independent benchmark request.
+
+    Raises:
+        BenchmarkContractError: If the frozen prompt omits or duplicates its capability placeholder.
+    """
+    contract = assert_schema_alignment()
+    template = PROMPT_PATH.read_text(encoding="utf-8")
+    if template.count(_CAPABILITY_PLACEHOLDER) != 1:
+        raise BenchmarkContractError("Prompt must contain exactly one capability placeholder")
+    capabilities = contract["filter_capabilities"]
+    lines = []
+    for field, definition in capabilities.items():
+        scope = ", ".join(definition["types"])
+        lines.append(f"- `{field}`: {definition['description']} Applies to: {scope}.")
+    return template.replace(_CAPABILITY_PLACEHOLDER, "\n".join(lines))
 
 
 def load_cases() -> list[dict[str, str]]:
@@ -80,25 +138,7 @@ def load_oracle() -> dict[str, dict[str, Any]]:
 def structured_output_schema(contract: Mapping[str, Any]) -> dict[str, Any]:
     """Build the strict Structured Outputs schema for one RequestPlan."""
     retrieval = contract["retrieval_contract"]
-    fields = list(retrieval["filterable_fields"])
-    operators = sorted(
-        {op for item in retrieval["filterable_fields"].values() for op in item["operators"]}
-    )
-    filter_schema = {
-        "type": "object",
-        "properties": {
-            "field": {"type": "string", "enum": fields},
-            "op": {"type": "string", "enum": operators},
-            "value": {
-                "anyOf": [
-                    {"type": "string"},
-                    {"type": "array", "items": {"type": "string"}, "minItems": 1},
-                ]
-            },
-        },
-        "required": ["field", "op", "value"],
-        "additionalProperties": False,
-    }
+    filter_schema = {"oneOf": _field_specific_filter_schemas(retrieval["filterable_fields"])}
     retrieval_plan = {
         "type": "object",
         "properties": {
@@ -113,6 +153,7 @@ def structured_output_schema(contract: Mapping[str, Any]) -> dict[str, Any]:
         "required": ["query", "type", "required_tags", "filters"],
         "additionalProperties": False,
     }
+
     return {
         "type": "object",
         "properties": {
@@ -150,6 +191,37 @@ def structured_output_schema(contract: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _field_specific_filter_schemas(fields: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Build closed field/operator filter alternatives from the frozen schema contract."""
+    alternatives = []
+    for field, definition in fields.items():
+        controlled_values = definition["controlled_values"]
+        if field == "subtype" and not controlled_values:
+            continue
+        scalar = (
+            {"type": "string", "enum": controlled_values}
+            if controlled_values
+            else {"type": "string"}
+        )
+        for operator in definition["operators"]:
+            value = (
+                {"type": "array", "items": scalar, "minItems": 1} if operator == "in" else scalar
+            )
+            alternatives.append(
+                {
+                    "type": "object",
+                    "properties": {
+                        "field": {"const": field},
+                        "op": {"const": operator},
+                        "value": value,
+                    },
+                    "required": ["field", "op", "value"],
+                    "additionalProperties": False,
+                }
+            )
+    return alternatives
+
+
 def _validate_filter(item: Any, contract: Mapping[str, Any]) -> None:
     """Validate one Phase 13-compatible deterministic filter."""
     if not isinstance(item, dict) or set(item) != {"field", "op", "value"}:
@@ -170,7 +242,7 @@ def _validate_filter(item: Any, contract: Mapping[str, Any]) -> None:
         raise BenchmarkContractError("Only the in operator accepts a string list")
     controlled = definition["controlled_values"]
     values = value if isinstance(value, list) else [value]
-    if controlled and not set(values) <= set(controlled):
+    if (controlled or item["field"] == "subtype") and not set(values) <= set(controlled):
         raise BenchmarkContractError("Filter uses an unregistered controlled value")
     kind = definition["value_type"]
     if kind == "date" and any(_valid_date(v) is False for v in values):
@@ -191,6 +263,31 @@ def _valid_datetime(value: str) -> bool:
         return datetime.fromisoformat(value).tzinfo is not None
     except ValueError:
         return False
+
+
+def _plan_type_candidates(plan: Mapping[str, Any], contract: Mapping[str, Any]) -> set[str]:
+    """Return the intersection of all type restrictions in one RetrievalPlan."""
+    candidates = set(contract["retrieval_contract"]["canonical_types"])
+    if plan["type"] is not None:
+        candidates &= {plan["type"]}
+    for item in plan["filters"]:
+        if item["field"] == "type":
+            values = item["value"] if isinstance(item["value"], list) else [item["value"]]
+            candidates &= set(values)
+    return candidates
+
+
+def _validate_filter_scopes(plan: Mapping[str, Any], contract: Mapping[str, Any]) -> None:
+    """Reject type-specific filters that would silently constrain unrelated note types."""
+    candidates = _plan_type_candidates(plan, contract)
+    if not candidates:
+        raise BenchmarkContractError("RetrievalPlan type restrictions are contradictory")
+    for item in plan["filters"]:
+        allowed = set(contract["filter_capabilities"][item["field"]]["types"])
+        if not candidates <= allowed:
+            raise BenchmarkContractError(
+                f"Filter {item['field']!r} requires candidates within {sorted(allowed)!r}"
+            )
 
 
 def validate_output(payload: Any) -> dict[str, Any]:
@@ -234,6 +331,7 @@ def validate_output(payload: Any) -> dict[str, Any]:
             raise BenchmarkContractError("RetrievalPlan filters are invalid")
         for item in plan["filters"]:
             _validate_filter(item, contract)
+        _validate_filter_scopes(plan, contract)
     if (
         not isinstance(payload["limitations"], list)
         or len(payload["limitations"]) != len(set(payload["limitations"]))

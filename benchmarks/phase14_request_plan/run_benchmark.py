@@ -29,6 +29,7 @@ from benchmarks.phase14_request_plan.benchmark import (  # noqa: E402
     finite_latency,
     load_cases,
     load_json,
+    render_prompt,
     sanitize_error,
     sha256_file,
     validate_output,
@@ -110,7 +111,7 @@ def run(run_id: str, configurations: list[tuple[str, str]]) -> None:
     )
     client, prompt, oracle, pricing = (
         OpenAI(),
-        PROMPT_PATH.read_text(encoding="utf-8"),
+        render_prompt(),
         load_json(ORACLE_PATH),
         load_json(PRICING_PATH),
     )

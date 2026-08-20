@@ -1,6 +1,6 @@
-# Phase 14 RequestPlan benchmark v2 (offline draft)
+# Phase 14 RequestPlan benchmark v2.1 (offline, frozen before calls)
 
-This is a new, frozen-before-calls experiment. It does not alter Phase 14 retrieval-plan v1, its 366 raw responses, or evaluator v2.1 historical evidence.
+This is a new, frozen-before-calls experiment. It does not alter Phase 14 retrieval-plan v1, its 366 raw responses, or evaluator v2.1 historical evidence. The v2.1 oracle and contract are locked; paid execution still requires separate human approval.
 
 ## Contract under test
 
@@ -20,7 +20,18 @@ The only remaining limitation codes are `not_supported`, `unsupported_domain_dat
 
 ## Evaluation
 
-The oracle compares deterministic candidate branches as an unordered set. A false hard filter, collapsed globally ANDed branch, missing whole candidate branch, invalid action shape, or extra independently constrained retrieval branch is CRITICAL. Omitted safe narrowing is MAJOR. Query wording and create-content fidelity are HUMAN REVIEW, never automated CRITICAL.
+The oracle matches retrieval branches as an unordered set and compares their candidate restrictions
+recall-first. An extra/wrong type, all-of tag, or hard filter that can exclude a requested candidate
+is CRITICAL; an omitted restriction that only broadens candidates is MAJOR. A collapsed globally
+ANDed branch is therefore CRITICAL. An extra retrieval action is MAJOR (noise/cost); an extra create
+action is CRITICAL because it would authorize an unrequested future side effect. Query and
+create-content concept aids produce HUMAN REVIEW only, never automated CRITICAL.
+
+Logical mixed action order is evaluated where the oracle declares it, but it remains MAJOR-only and
+does not prescribe physical execution. The Structured Outputs schema derives closed field/operator
+alternatives and controlled values from the frozen schema contract; local validation additionally
+rejects a person/journal-only filter when its type candidates include unrelated note types. The prompt
+renders concise filter capabilities from that same frozen, schema-aligned contract.
 
 ## Future staged run (requires human approval)
 
