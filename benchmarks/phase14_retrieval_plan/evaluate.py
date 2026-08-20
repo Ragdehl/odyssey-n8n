@@ -290,6 +290,10 @@ def summarize_configuration(rows: list[dict[str, Any]], total_cases: int) -> dic
         any(row.get("semantic_human_review", False) for row in case_rows)
         for case_rows in by_case.values()
     )
+    repeated_cases = [case_rows for case_rows in by_case.values() if len(case_rows) > 1]
+    stable_repeated_cases = sum(
+        len({row["status"] for row in case_rows}) == 1 for case_rows in repeated_cases
+    )
     successful = [row for row in rows if row["status"] != "API_ERROR"]
     usage_fields = (
         "input_tokens",
@@ -314,6 +318,9 @@ def summarize_configuration(rows: list[dict[str, Any]], total_cases: int) -> dic
         "critical": case_statuses["CRITICAL"],
         "human_review": case_statuses["HUMAN REVIEW"],
         "semantic_human_review": semantic_review_cases,
+        "repeated_cases": len(repeated_cases),
+        "stable_repeated_cases": stable_repeated_cases,
+        "unstable_repeated_cases": len(repeated_cases) - stable_repeated_cases,
         "complete": len(by_case) == total_cases
         and not any(row["status"] == "API_ERROR" for row in rows),
         "mean_latency_seconds": round(statistics.fmean(latencies), 6) if latencies else None,
@@ -362,6 +369,7 @@ def render_summary(
         f"Run: `{metadata['run_id']}`",
         f"Original experiment Git SHA: `{metadata['git_sha']}`",
         f"Evaluator version: `{EVALUATOR_VERSION}`",
+        f"Evaluator source Git SHA: `{metadata['evaluator_git_sha']}`",
         "Raw API results: unchanged from the historical v1 run; zero additional API requests.",
         f"Fixed context: `{json.dumps(metadata['fixed_context'], ensure_ascii=False)}`",
         "",
@@ -379,15 +387,15 @@ def render_summary(
         [
             "## Configuration overview",
             "",
-            "| Model | Effort | Tests | Critical | Major | Minor | Semantic review | Avg latency | Tokens | Cost already spent |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Model | Effort | Tests | Critical | Major | Minor | Semantic review | Repeat stability | Avg latency | Tokens | Cost already spent |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for model, effort in configurations:
         key = f"{model}:{effort}"
         summary = summaries.get(key)
         if summary is None:
-            lines.append(f"| `{model}` | {effort} | 0/45 | — | — | — | — | — | — | not run |")
+            lines.append(f"| `{model}` | {effort} | 0/45 | — | — | — | — | — | — | — | not run |")
             continue
         token_total = summary["tokens"]["input_tokens"] + summary["tokens"]["output_tokens"]
         if summary["requests"] == 0:
@@ -401,11 +409,16 @@ def render_summary(
             if summary["mean_latency_seconds"] is not None
             else "—"
         )
+        stability = (
+            f"{summary['stable_repeated_cases']}/{summary['repeated_cases']} stable"
+            if summary["repeated_cases"]
+            else "not repeated"
+        )
         lines.append(
             f"| `{model}` | {effort} | {summary['tests_observed']}/45 | "
             f"{summary['critical']} | {summary['major']} | {summary['minor']} | "
             f"{summary['semantic_human_review']} | "
-            f"{latency} | {token_total} | {cost} |"
+            f"{stability} | {latency} | {token_total} | {cost} |"
         )
 
     lines.extend(
@@ -539,6 +552,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Regenerate the versioned v2 derived artifacts",
     )
+    value.add_argument(
+        "--evaluator-git-sha",
+        required=True,
+        help="Exact source revision of this evaluator for the derived audit artifact",
+    )
     return value
 
 
@@ -546,7 +564,10 @@ def main() -> int:
     """Evaluate one run and write machine-readable and human-readable conclusions."""
     args = parser().parse_args()
     assert_schema_alignment()
-    metadata = load_json(args.run_dir / "metadata.json")
+    metadata = {
+        **load_json(args.run_dir / "metadata.json"),
+        "evaluator_git_sha": args.evaluator_git_sha,
+    }
     oracle = load_oracle()
     pricing = load_json(PRICING_PATH)
     rows = load_raw_rows(args.run_dir / "raw_results.jsonl")
@@ -561,6 +582,7 @@ def main() -> int:
     payload = {
         "run_id": metadata["run_id"],
         "evaluator_version": EVALUATOR_VERSION,
+        "evaluator_git_sha": args.evaluator_git_sha,
         "original_experiment_git_sha": metadata["git_sha"],
         "raw_results_identical_to_v1": True,
         "additional_api_requests": 0,
