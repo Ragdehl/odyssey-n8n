@@ -19,7 +19,11 @@ from benchmarks.phase14_retrieval_plan.benchmark import (
     structured_output_schema,
     validate_output,
 )
-from benchmarks.phase14_retrieval_plan.evaluate import evaluate_plan, select_recommendation
+from benchmarks.phase14_retrieval_plan.evaluate import (
+    evaluate_plan,
+    select_cheapest_zero_deterministic_critical,
+    select_quality_recommendation,
+)
 
 
 def output(
@@ -289,7 +293,7 @@ def test_error_sanitization_removes_key_shaped_values() -> None:
     assert "[REDACTED_API_KEY]" in rendered
 
 
-def test_recommendation_obeys_safety_quality_cost_order() -> None:
+def test_recommendations_separate_cost_and_quality() -> None:
     template = {
         "complete": True,
         "critical": 0,
@@ -305,4 +309,56 @@ def test_recommendation_obeys_safety_quality_cost_order() -> None:
         "safe_cheap": {**template, "estimated_cost_usd": 0.2},
         "safe_expensive": {**template, "estimated_cost_usd": 2.0},
     }
-    assert select_recommendation(deepcopy(summaries)) == "safe_cheap"
+    assert select_cheapest_zero_deterministic_critical(deepcopy(summaries)) == "more_major"
+    assert select_quality_recommendation(deepcopy(summaries)) == "safe_cheap"
+
+
+def test_current_v2_evidence_selects_terra_for_cost_and_sol_for_quality() -> None:
+    """Keep the two recommendations distinct for the immutable benchmark evidence."""
+    summaries = {
+        "gpt-5.6-terra:low": {
+            "complete": True,
+            "critical": 0,
+            "major": 4,
+            "minor": 1,
+            "semantic_human_review": 7,
+            "estimated_cost_usd": 0.0689794,
+            "mean_latency_seconds": 1.676252,
+        },
+        "gpt-5.6-sol:low": {
+            "complete": True,
+            "critical": 0,
+            "major": 1,
+            "minor": 0,
+            "semantic_human_review": 4,
+            "estimated_cost_usd": 0.838557,
+            "mean_latency_seconds": 2.817086,
+        },
+    }
+    assert select_cheapest_zero_deterministic_critical(summaries) == "gpt-5.6-terra:low"
+    assert select_quality_recommendation(summaries) == "gpt-5.6-sol:low"
+
+
+def test_cheapest_recommendation_excludes_critical_failures() -> None:
+    """A cheaper unsafe run cannot qualify for the cost recommendation."""
+    summaries = {
+        "unsafe-cheap": {
+            "complete": True,
+            "critical": 1,
+            "major": 0,
+            "minor": 0,
+            "semantic_human_review": 0,
+            "estimated_cost_usd": 0.001,
+            "mean_latency_seconds": 1.0,
+        },
+        "safe": {
+            "complete": True,
+            "critical": 0,
+            "major": 4,
+            "minor": 1,
+            "semantic_human_review": 7,
+            "estimated_cost_usd": 0.1,
+            "mean_latency_seconds": 2.0,
+        },
+    }
+    assert select_cheapest_zero_deterministic_critical(summaries) == "safe"

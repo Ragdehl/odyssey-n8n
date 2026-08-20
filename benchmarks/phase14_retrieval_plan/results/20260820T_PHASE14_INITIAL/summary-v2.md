@@ -2,8 +2,8 @@
 
 Run: `20260820T_PHASE14_INITIAL`
 Original experiment Git SHA: `e51f92bec959a017ad8c4e904c4dc321ba0a68d7`
-Evaluator version: `2.0.0`
-Evaluator source Git SHA: `b3d976e31f1cc39c07652ea24190f9faa964031a`
+Evaluator version: `2.1.0`
+Evaluator source Git SHA: `90faa5106d0cb0e17722b7bc75aafb41deff857b`
 Raw API results: unchanged from the historical v1 run; zero additional API requests.
 Fixed context: `{"current_date": "2026-08-20", "current_time": "10:30", "timezone": "Europe/Madrid"}`
 
@@ -976,9 +976,10 @@ Why a result is unsafe or inferior:
 
 Unsupported-constraint wording needs human review; lexical oracle group [' or ', ' o ', 'disyunt'] was not found in generated output ['OR entre aliases contains "Ody" y aliases contains "Proyecto Odyssey" no puede representarse en un único RetrievalPlan']
 
-## Final recommendation
+## Recommendations
 
-Cheapest configuration with zero deterministic recall-threatening failures under the approved ordering: `gpt-5.6-sol:low`. Semantic-review diagnostics remain separate from deterministic safety failures.
-Quality reference: `gpt-5.6-sol:low`.
+Cheapest observed configuration with zero deterministic critical failures: `gpt-5.6-terra:low`. This is a cost recommendation, not a claim of statistically proven perfect reliability; semantic-review diagnostics remain separate.
+Best observed quality among complete zero-critical configurations: `gpt-5.6-sol:low`.
+Repeatability evidence is configuration-specific: Terra/low was observed once per case, while Sol/low was repeated across its cases.
 
 The v1 evaluator was too pessimistic: substring checks on natural-language query and diagnostic prose cannot establish lost meaning. V2 retains strict structural candidate-set checks, and preserves lexical mismatches as an auditable human-review queue instead.

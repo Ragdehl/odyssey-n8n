@@ -50,10 +50,14 @@ Apunta que quiero usar Sol para Phase 14 y dime qué había pensado antes sobre 
 ```
 
 The action list is preferred over separate `retrieval_plans` and `create_notes` collections because it
-preserves the request's order for mixed operations without introducing an execution graph. The latter
-shape is slightly smaller today but loses ordering or needs a second ordering field as soon as requests
-mix actions. This is not a LangGraph use case: Phase 14 plans explicit actions and does not need
-stateful iteration.
+preserves the logical/conversational structure of mixed requests without introducing an execution graph.
+Action order represents request intent, not necessarily side-effect execution order. For example, the
+plan above may list `CreateNoteAction` before `RetrieveAction` because that is the user's wording, while
+the downstream orchestration layer may safely retrieve prior knowledge before persisting the new note to
+avoid contaminating that retrieval. This is not a blanket rule that retrievals always precede creates;
+execution order must follow the request semantics when post-write state is intentionally relevant.
+Phase 14 remains only the interpretation/planning boundary and does not choose that physical execution
+order.
 
 ## Controlled diagnostic protocol for a future benchmark and interpreter
 

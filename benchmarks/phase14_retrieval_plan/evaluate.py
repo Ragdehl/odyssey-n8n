@@ -30,7 +30,7 @@ from benchmarks.phase14_retrieval_plan.benchmark import (  # noqa: E402
     validate_output,
 )
 
-EVALUATOR_VERSION = "2.0.0"
+EVALUATOR_VERSION = "2.1.0"
 SEVERITIES = ("PASS", "MINOR", "MAJOR", "CRITICAL")
 SEVERITY_RANK = {value: index for index, value in enumerate(SEVERITIES)}
 SEMANTIC_REVIEW_CODES = {
@@ -332,13 +332,36 @@ def summarize_configuration(rows: list[dict[str, Any]], total_cases: int) -> dic
     }
 
 
-def select_recommendation(summaries: dict[str, dict[str, Any]]) -> str | None:
-    """Select the cheapest complete zero-critical configuration by the approved tie-breakers."""
-    eligible = [
+def eligible_zero_critical(
+    summaries: dict[str, dict[str, Any]],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return complete configurations without deterministic critical findings."""
+    return [
         (key, value)
         for key, value in summaries.items()
         if value["complete"] and value["critical"] == 0
     ]
+
+
+def select_cheapest_zero_deterministic_critical(
+    summaries: dict[str, dict[str, Any]],
+) -> str | None:
+    """Select the cheapest complete configuration with zero deterministic critical findings."""
+    eligible = eligible_zero_critical(summaries)
+    if not eligible:
+        return None
+    return min(
+        eligible,
+        key=lambda item: (
+            item[1]["estimated_cost_usd"],
+            item[1]["mean_latency_seconds"],
+        ),
+    )[0]
+
+
+def select_quality_recommendation(summaries: dict[str, dict[str, Any]]) -> str | None:
+    """Select the best observed quality among complete zero-critical configurations."""
+    eligible = eligible_zero_critical(summaries)
     if not eligible:
         return None
     return min(
@@ -351,6 +374,11 @@ def select_recommendation(summaries: dict[str, dict[str, Any]]) -> str | None:
             item[1]["mean_latency_seconds"],
         ),
     )[0]
+
+
+def select_recommendation(summaries: dict[str, dict[str, Any]]) -> str | None:
+    """Select the legacy cheapest zero-critical recommendation alias."""
+    return select_cheapest_zero_deterministic_critical(summaries)
 
 
 def render_summary(
@@ -500,27 +528,28 @@ def render_summary(
             ]
         )
 
-    recommended = select_recommendation(summaries)
-    lines.extend(["## Final recommendation", ""])
-    if recommended is None:
+    cheapest = select_cheapest_zero_deterministic_critical(summaries)
+    quality = select_quality_recommendation(summaries)
+    lines.extend(["## Recommendations", ""])
+    if cheapest is None:
         lines.append(
-            "No configuration can yet be recommended: no complete evaluated configuration has "
+            "No cheapest eligible configuration: no complete evaluated configuration has "
             "demonstrated zero deterministic critical errors."
         )
     else:
         lines.append(
-            "Cheapest configuration with zero deterministic recall-threatening failures under "
-            f"the approved ordering: `{recommended}`. Semantic-review diagnostics remain "
-            "separate from deterministic safety failures."
+            "Cheapest observed configuration with zero deterministic critical failures: "
+            f"`{cheapest}`. This is a cost recommendation, not a claim of statistically proven "
+            "perfect reliability; semantic-review diagnostics remain separate."
         )
-    quality_key = next(
-        (key for key in summaries if key.startswith("gpt-5.6-sol:") and summaries[key]["complete"]),
-        None,
+    lines.append(
+        f"Best observed quality among complete zero-critical configurations: `{quality}`."
+        if quality
+        else "Quality recommendation remains unavailable until an eligible configuration exists."
     )
     lines.append(
-        f"Quality reference: `{quality_key}`."
-        if quality_key
-        else "Quality reference remains unavailable until a complete Sol run exists."
+        "Repeatability evidence is configuration-specific: Terra/low was observed once per case, "
+        "while Sol/low was repeated across its cases."
     )
     lines.extend(
         [
@@ -589,7 +618,10 @@ def main() -> int:
         "oracle_version": metadata["oracle_version"],
         "evaluated_requests": evaluated,
         "configurations": summaries,
-        "recommendation": select_recommendation(summaries),
+        "cheapest_zero_deterministic_critical": select_cheapest_zero_deterministic_critical(
+            summaries
+        ),
+        "quality_recommendation": select_quality_recommendation(summaries),
     }
     write_derived(
         args.run_dir / "evaluation-v2.json",
