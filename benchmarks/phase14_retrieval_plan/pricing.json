@@ -1,0 +1,22 @@
+{
+  "retrieved_at": "2026-08-20",
+  "currency": "USD",
+  "unit": "per_1m_tokens",
+  "service_tier": "standard",
+  "sources": {
+    "models": "https://developers.openai.com/api/docs/models",
+    "luna": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+    "terra": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+    "sol": "https://developers.openai.com/api/docs/models/gpt-5.6-sol"
+  },
+  "notes": [
+    "Reasoning tokens are included in output tokens and are not charged a second time.",
+    "Cache writes are calculated at 1.25 times the uncached input rate when exposed by usage.",
+    "Rates apply to short-context standard processing; this benchmark prompt is below 272K tokens."
+  ],
+  "models": {
+    "gpt-5.6-luna": {"input": 0.2, "cached_input": 0.02, "output": 1.2},
+    "gpt-5.6-terra": {"input": 2.0, "cached_input": 0.2, "output": 12.0},
+    "gpt-5.6-sol": {"input": 5.0, "cached_input": 0.5, "output": 30.0}
+  }
+}

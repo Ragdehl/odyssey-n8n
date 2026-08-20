@@ -1,0 +1,104 @@
+{
+  "run_id": "20260820T103836Z-missing-api-key",
+  "oracle_version": "1.0.0",
+  "evaluated_requests": [],
+  "configurations": {
+    "gpt-5.6-luna:none": {
+      "tests_expected": 45,
+      "tests_observed": 0,
+      "requests": 0,
+      "api_errors": 0,
+      "pass": 0,
+      "minor": 0,
+      "major": 0,
+      "critical": 0,
+      "human_review": 0,
+      "complete": false,
+      "mean_latency_seconds": null,
+      "median_latency_seconds": null,
+      "tokens": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "estimated_cost_usd": null,
+      "mean_cost_per_request_usd": null,
+      "median_cost_per_request_usd": null
+    },
+    "gpt-5.6-luna:low": {
+      "tests_expected": 45,
+      "tests_observed": 0,
+      "requests": 0,
+      "api_errors": 0,
+      "pass": 0,
+      "minor": 0,
+      "major": 0,
+      "critical": 0,
+      "human_review": 0,
+      "complete": false,
+      "mean_latency_seconds": null,
+      "median_latency_seconds": null,
+      "tokens": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "estimated_cost_usd": null,
+      "mean_cost_per_request_usd": null,
+      "median_cost_per_request_usd": null
+    },
+    "gpt-5.6-terra:low": {
+      "tests_expected": 45,
+      "tests_observed": 0,
+      "requests": 0,
+      "api_errors": 0,
+      "pass": 0,
+      "minor": 0,
+      "major": 0,
+      "critical": 0,
+      "human_review": 0,
+      "complete": false,
+      "mean_latency_seconds": null,
+      "median_latency_seconds": null,
+      "tokens": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "estimated_cost_usd": null,
+      "mean_cost_per_request_usd": null,
+      "median_cost_per_request_usd": null
+    },
+    "gpt-5.6-sol:low": {
+      "tests_expected": 45,
+      "tests_observed": 0,
+      "requests": 0,
+      "api_errors": 0,
+      "pass": 0,
+      "minor": 0,
+      "major": 0,
+      "critical": 0,
+      "human_review": 0,
+      "complete": false,
+      "mean_latency_seconds": null,
+      "median_latency_seconds": null,
+      "tokens": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "estimated_cost_usd": null,
+      "mean_cost_per_request_usd": null,
+      "median_cost_per_request_usd": null
+    }
+  },
+  "recommendation": null
+}
