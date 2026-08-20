@@ -20,7 +20,7 @@ Phase 2 does not copy the schema to `/data/odyssey/config`, add a Docker mount, 
 
 Universal metadata supplies the technical fields shared by every note, such as stable identity, controlled type, revision information, and provenance. Type-specific properties hold deterministic domain information that belongs only to one note type. The exact field IDs, requirements, descriptions, and constraints for both are defined only in [`config/note-schema.json`](../../config/note-schema.json).
 
-Every type definition has `id`, `name`, `description`, `examples`, `subtypes`, and `properties`. `properties` is always an array, including when empty. Each property is a lightweight definition with a stable `id`, non-empty `value_type`, boolean `required` marker, and non-empty `description`. This is intentionally not a general property language or JSON Schema system.
+Every type definition has `id`, `name`, `description`, `examples`, `subtypes`, and `properties`. `properties` is always an array, including when empty. Each property is a lightweight definition with a stable `id`, non-empty `value_type`, boolean `required` marker, non-empty `description`, and optional `filterable` flag. The same flag on universal metadata fields tells deterministic context retrieval which fields may be constrained. This is intentionally not a general property language or JSON Schema system.
 
 A possible property is not automatically a property Odyssey should add. Structured properties are introduced only for a demonstrated deterministic query or processing requirement. Otherwise, Markdown and wikilinks remain the clearer human-first representation.
 
@@ -73,7 +73,7 @@ Tags are optional, lightweight cross-cutting facets for classification and later
 
 The controlled-but-extensible initial vocabulary is: `idea` (possible proposal not yet a decision), `decision` (choice already made), `question` (open question worth retaining), `reflection` (observation, reasoning, interpretation, or conclusion), `reference` (knowledge kept for consultation), `hypothesis` (unestablished explanation or proposition), `explore` (marked for investigation), `someday` (possibility without current commitment or date), and `review` (knowledge worth revisiting). Their canonical descriptions in `config/note-schema.json` constrain use. Callers and LLMs must not invent tag IDs; adding one requires an intentional schema change. No mutual-exclusion rules apply yet.
 
-Tags are intentionally excluded from semantic identity retrieval text and contextual provider evidence. Future Phase 13 may use them for broader context retrieval, but this phase adds no tag filtering, ranking, search, or auto-tagging.
+Tags are intentionally excluded from semantic identity retrieval text and contextual provider evidence. Phase 13 uses them in broader context retrieval, including the existing all-of required-tag filter, but adds no tag inference, synonyms, weighting, or auto-tagging.
 
 ## Validation and future evolution
 

@@ -17,6 +17,12 @@ REQUIRED_FIELD_DEFINITION_FIELDS = {"id", "value_type", "required", "description
 REQUIRED_TAG_FIELDS = {"id", "description"}
 
 
+def _validate_optional_filterable(definition: dict[str, Any], location: str) -> None:
+    """Validate the optional schema flag that exposes a field to deterministic retrieval."""
+    if "filterable" in definition and not isinstance(definition["filterable"], bool):
+        raise SchemaValidationError(f"{location} filterable must be boolean")
+
+
 class SchemaValidationError(ValueError):
     """Raised when the canonical note schema violates its contract."""
 
@@ -110,6 +116,7 @@ def _validate_properties(properties: Any, type_id: str) -> None:
         _require_non_empty_string(
             property_definition["description"], f"property {property_id!r} description"
         )
+        _validate_optional_filterable(property_definition, location)
 
 
 def _validate_types(types: Any) -> None:
@@ -208,6 +215,7 @@ def _validate_metadata_fields(metadata_fields: Any) -> None:
         if not isinstance(field["required"], bool):
             raise SchemaValidationError(f"metadata field {field_id!r} required must be boolean")
         _require_non_empty_string(field["description"], f"metadata field {field_id!r} description")
+        _validate_optional_filterable(field, location)
         definitions[field_id] = field
 
     _validate_architectural_metadata_invariants(definitions)
