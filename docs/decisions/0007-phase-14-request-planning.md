@@ -1,6 +1,6 @@
 # ADR 0007: Phase 14 request planning boundary
 
-- Status: Proposed for human review
+- Status: Proposed for human review (offline v2 contract prepared)
 - Date: 2026-08-20
 
 ## Context
@@ -59,23 +59,53 @@ execution order must follow the request semantics when post-write state is inten
 Phase 14 remains only the interpretation/planning boundary and does not choose that physical execution
 order.
 
-## Controlled diagnostic protocol for a future benchmark and interpreter
+## Final proposed output contract
+
+The contract deliberately stays smaller than a draft-note schema:
+
+```json
+{
+  "actions": [
+    {"kind": "retrieve", "plan": {"query": "Odyssey", "type": null, "required_tags": [], "filters": []}},
+    {"kind": "create_note", "content": "Knowledge the user explicitly asked Odyssey to remember."}
+  ],
+  "limitations": []
+}
+```
+
+`RetrieveAction.plan` is exactly one ordinary Phase 13-compatible retrieval plan. It changes no
+Phase 13 semantics. A type list continues to use its existing `type` `in` filter, so common
+constraints across several requested types remain one action. Conversely, different deterministic
+candidate sets become several actions; the downstream retrieval layer may union and deduplicate
+their results later, outside Phase 14.
+
+`CreateNoteAction` has exactly `kind` and free-text `content`. Type, tags, properties, IDs, paths,
+Markdown, persistence mode, duplicate decisions, links, and atomic decomposition are excluded.
+Those fields would either invent schema-backed details or duplicate the later note-preparation and
+Phase 12 persistence boundaries. One create action can preserve compound knowledge; several are
+reserved for clearly independent user actions, not inferred atomic-note decomposition.
+
+Action array order preserves logical/conversational structure. Array position is sufficient initial
+branch identity: it lets a future answer layer associate results with an action without premature
+action IDs or grouping. Retrieval branch evaluation treats order as irrelevant. The plan records no
+physical execution dependency: a later orchestrator may retrieve prior knowledge before persisting a
+preceding create intent when needed to avoid contaminating the answer.
+
+## Controlled diagnostic protocol
 
 Free-text `unrepresented_constraints` should be replaced by a minimal controlled code collection.
 Optional human detail may accompany a code, but evaluators must rely on the code rather than prose.
 
 | Code | Meaning |
 | --- | --- |
-| `predicate_or` | Deterministic predicate alternatives need separate branches. |
-| `tag_or` | Tag alternatives cannot be represented by ANDed required tags. |
 | `not_supported` | Requested exclusion cannot be represented. |
-| `scoped_filter` | A condition applies only to one branch or type. |
-| `multiple_retrieval_branches` | The request needs independent retrieval plans. |
 | `unsupported_domain_date` | Requested domain event date has no filterable field. |
 | `direct_link_not_filterable` | An exact direct wikilink relation cannot be filtered. |
 
 This is a protocol, not a new ontology: it describes planning limitations, never note relationships
-or knowledge types.
+or knowledge types. Predicate OR, tag OR, scoped filters, and multiple retrieval branches are no
+longer limitations: separate `RetrieveAction` candidates express them safely. Ordinary semantic OR
+normally remains in one semantic query; multiple named concepts alone do not justify a split.
 
 ## Consequences and future benchmark v2
 
@@ -86,3 +116,8 @@ create-intent, and mixed retrieval/create cases. Its deterministic score should 
 candidate-set safety; semantic wording mismatches belong in a human-review queue. Core deterministic
 evaluation must not use an LLM judge. The v1 prompt, cases, oracle, raw responses, and v1 evaluation
 remain immutable historical evidence.
+
+The prepared v2 experiment freezes 24 compact adversarial cases: four simple retrieval, five
+multi-branch, three do-not-split, three remaining unsupported constraints, three create-only, two
+mixed, one compound-create boundary, and three adversarial safety cases. Its staged future run is
+Terra/low first (24 requests), then Sol/low only after human review of Terra evidence (another 24).
