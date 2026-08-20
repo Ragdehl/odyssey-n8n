@@ -185,6 +185,73 @@ def test_scoped_filter_applied_globally_is_critical() -> None:
     assert "unexpected_hard_filter" in {item["code"] for item in findings}
 
 
+def test_spanish_lexical_variant_is_human_review_not_critical() -> None:
+    """Keep a stem mismatch in free text out of the deterministic safety score."""
+    oracle = load_oracle()["T24"]
+    candidate = output(
+        query="cosas sobre Odyssey que creé ayer o modifiqué hoy",
+        unrepresented=[
+            "La alternativa entre created_at ayer y updated_at hoy necesita ramas separadas."
+        ],
+    )
+    status, findings = evaluate_plan(candidate, oracle)
+    assert status == "HUMAN REVIEW"
+    assert "lost_semantic_concept" not in {item["code"] for item in findings}
+    assert all(item["severity"] != "CRITICAL" for item in findings)
+
+
+def test_differently_worded_structural_or_is_not_major_or_critical() -> None:
+    """Treat prose diagnostics as review evidence instead of a brittle protocol."""
+    oracle = load_oracle()["T44"]
+    candidate = output(
+        query="Ody o proyecto Odyssey",
+        unrepresented=["Las dos alternativas de alias requieren búsquedas independientes."],
+    )
+    status, findings = evaluate_plan(candidate, oracle)
+    assert status in {"PASS", "HUMAN REVIEW"}
+    assert not {item["severity"] for item in findings} & {"MAJOR", "CRITICAL"}
+
+
+def test_false_created_at_for_unsupported_decision_date_remains_critical() -> None:
+    """Reject a deterministic date restriction that substitutes a decision date."""
+    oracle = load_oracle()["T03"]
+    candidate = output(
+        query="decisiones Odyssey n8n julio",
+        tags=["decision"],
+        filters=[{"field": "created_at", "op": "gte", "value": "2026-07-01T00:00:00+02:00"}],
+    )
+    status, findings = evaluate_plan(candidate, oracle)
+    assert status == "CRITICAL"
+    assert "unexpected_hard_filter" in {item["code"] for item in findings}
+
+
+def test_false_type_restriction_remains_critical() -> None:
+    """Reject an invented type restriction even when the semantic query is present."""
+    status, findings = evaluate_plan(
+        output(query="Odyssey Raspberry", note_type="project"), load_oracle()["T01"]
+    )
+    assert status == "CRITICAL"
+    assert "false_type_filter" in {item["code"] for item in findings}
+
+
+def test_false_required_tag_remains_critical() -> None:
+    """Reject a tag AND that has no request-level justification."""
+    status, findings = evaluate_plan(
+        output(query="Odyssey Raspberry", tags=["review"]), load_oracle()["T01"]
+    )
+    assert status == "CRITICAL"
+    assert "false_required_tag" in {item["code"] for item in findings}
+
+
+def test_missing_safe_filter_is_major_and_not_a_false_filter() -> None:
+    """Keep omitted safe narrowing distinct from a recall-threatening restriction."""
+    status, findings = evaluate_plan(output(query="Odyssey Raspberry"), load_oracle()["T05"])
+    assert status == "MAJOR"
+    codes = {item["code"] for item in findings}
+    assert "missing_safe_filter" in codes
+    assert "unexpected_hard_filter" not in codes
+
+
 def test_entity_name_cannot_become_alias_filter() -> None:
     oracle = load_oracle()["T30"]
     candidate = output(

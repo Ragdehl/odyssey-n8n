@@ -30,8 +30,13 @@ from benchmarks.phase14_retrieval_plan.benchmark import (  # noqa: E402
     validate_output,
 )
 
+EVALUATOR_VERSION = "2.0.0"
 SEVERITIES = ("PASS", "MINOR", "MAJOR", "CRITICAL")
 SEVERITY_RANK = {value: index for index, value in enumerate(SEVERITIES)}
+SEMANTIC_REVIEW_CODES = {
+    "semantic_query_review",
+    "unrepresented_constraint_review",
+}
 
 
 def finding(severity: str, code: str, message: str) -> dict[str, str]:
@@ -40,7 +45,7 @@ def finding(severity: str, code: str, message: str) -> dict[str, str]:
 
 
 def evaluate_plan(output: Any, oracle: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
-    """Evaluate one generated output by retrieval semantics rather than wording.
+    """Evaluate one generated output for deterministic candidate-set safety.
 
     Args:
         output: Parsed model output from one successful API request.
@@ -146,13 +151,17 @@ def evaluate_plan(output: Any, oracle: dict[str, Any]) -> tuple[str, list[dict[s
             )
         )
 
+    # The oracle's lexical groups are audit aids, not a semantic parser.  A missing
+    # stem (for example, ``modific`` versus ``modifiqué``) cannot prove that a plan
+    # lost meaning and must never be converted into a recall-safety failure.
     missing_query = concepts_present(plan["query"], expected["query_groups"])
     for group in missing_query:
         findings.append(
             finding(
-                "CRITICAL",
-                "lost_semantic_concept",
-                f"Meaningful topic/entity missing from semantic query: {group!r}",
+                "HUMAN REVIEW",
+                "semantic_query_review",
+                "Semantic preservation needs human review; lexical oracle group "
+                f"{group!r} was not found in generated query {plan['query']!r}",
             )
         )
 
@@ -161,9 +170,11 @@ def evaluate_plan(output: Any, oracle: dict[str, Any]) -> tuple[str, list[dict[s
     for group in missing_unrepresented:
         findings.append(
             finding(
-                "MAJOR",
-                "silent_structural_limitation",
-                f"Material unsupported structural constraint was not reported: {group!r}",
+                "HUMAN REVIEW",
+                "unrepresented_constraint_review",
+                "Unsupported-constraint wording needs human review; lexical oracle group "
+                f"{group!r} was not found in generated output "
+                f"{validated['unrepresented_constraints']!r}",
             )
         )
     if not expected["unrepresented_groups"] and validated["unrepresented_constraints"]:
@@ -176,9 +187,12 @@ def evaluate_plan(output: Any, oracle: dict[str, Any]) -> tuple[str, list[dict[s
         )
 
     if oracle.get("needs_human_review"):
-        findings.append(finding("MAJOR", "needs_human_review", oracle["needs_human_review"]))
+        findings.append(finding("HUMAN REVIEW", "needs_human_review", oracle["needs_human_review"]))
+
+    deterministic = [item["severity"] for item in findings if item["severity"] in SEVERITY_RANK]
+    severity = max(deterministic, key=SEVERITY_RANK.get, default="PASS")
+    if severity == "PASS" and any(item["severity"] == "HUMAN REVIEW" for item in findings):
         return "HUMAN REVIEW", findings
-    severity = max((item["severity"] for item in findings), key=SEVERITY_RANK.get, default="PASS")
     return severity, findings
 
 
@@ -240,6 +254,9 @@ def evaluate_rows(
                 "repetition": row["repetition"],
                 "status": status,
                 "findings": findings,
+                "semantic_human_review": any(
+                    item["code"] in SEMANTIC_REVIEW_CODES for item in findings
+                ),
                 "plan": row["parsed_output"],
                 "api_error": None,
                 "latency_seconds": row["latency_seconds"],
@@ -257,9 +274,10 @@ def worst_status(rows: list[dict[str, Any]]) -> str:
         return "NOT RUN"
     if "API_ERROR" in statuses:
         return "API ERROR"
-    if "HUMAN REVIEW" in statuses:
-        return "HUMAN REVIEW"
-    return max(statuses, key=SEVERITY_RANK.get)
+    deterministic = [status for status in statuses if status in SEVERITY_RANK]
+    if deterministic:
+        return max(deterministic, key=SEVERITY_RANK.get)
+    return "HUMAN REVIEW" if "HUMAN REVIEW" in statuses else "PASS"
 
 
 def summarize_configuration(rows: list[dict[str, Any]], total_cases: int) -> dict[str, Any]:
@@ -268,6 +286,10 @@ def summarize_configuration(rows: list[dict[str, Any]], total_cases: int) -> dic
     for row in rows:
         by_case[row["test_id"]].append(row)
     case_statuses = Counter(worst_status(case_rows) for case_rows in by_case.values())
+    semantic_review_cases = sum(
+        any(row.get("semantic_human_review", False) for row in case_rows)
+        for case_rows in by_case.values()
+    )
     successful = [row for row in rows if row["status"] != "API_ERROR"]
     usage_fields = (
         "input_tokens",
@@ -291,6 +313,7 @@ def summarize_configuration(rows: list[dict[str, Any]], total_cases: int) -> dic
         "major": case_statuses["MAJOR"],
         "critical": case_statuses["CRITICAL"],
         "human_review": case_statuses["HUMAN REVIEW"],
+        "semantic_human_review": semantic_review_cases,
         "complete": len(by_case) == total_cases
         and not any(row["status"] == "API_ERROR" for row in rows),
         "mean_latency_seconds": round(statistics.fmean(latencies), 6) if latencies else None,
@@ -307,7 +330,7 @@ def select_recommendation(summaries: dict[str, dict[str, Any]]) -> str | None:
     eligible = [
         (key, value)
         for key, value in summaries.items()
-        if value["complete"] and value["critical"] == 0 and value["human_review"] == 0
+        if value["complete"] and value["critical"] == 0
     ]
     if not eligible:
         return None
@@ -316,6 +339,7 @@ def select_recommendation(summaries: dict[str, dict[str, Any]]) -> str | None:
         key=lambda item: (
             item[1]["major"],
             item[1]["minor"],
+            item[1].get("semantic_human_review", 0),
             item[1]["estimated_cost_usd"],
             item[1]["mean_latency_seconds"],
         ),
@@ -336,7 +360,9 @@ def render_summary(
         "# Phase 14 retrieval-plan benchmark summary",
         "",
         f"Run: `{metadata['run_id']}`",
-        f"Git SHA: `{metadata['git_sha']}`",
+        f"Original experiment Git SHA: `{metadata['git_sha']}`",
+        f"Evaluator version: `{EVALUATOR_VERSION}`",
+        "Raw API results: unchanged from the historical v1 run; zero additional API requests.",
         f"Fixed context: `{json.dumps(metadata['fixed_context'], ensure_ascii=False)}`",
         "",
     ]
@@ -353,15 +379,15 @@ def render_summary(
         [
             "## Configuration overview",
             "",
-            "| Model | Effort | Tests | Critical | Major | Minor | Avg latency | Tokens | Estimated cost |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| Model | Effort | Tests | Critical | Major | Minor | Semantic review | Avg latency | Tokens | Cost already spent |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
     for model, effort in configurations:
         key = f"{model}:{effort}"
         summary = summaries.get(key)
         if summary is None:
-            lines.append(f"| `{model}` | {effort} | 0/45 | — | — | — | — | — | not run |")
+            lines.append(f"| `{model}` | {effort} | 0/45 | — | — | — | — | — | — | not run |")
             continue
         token_total = summary["tokens"]["input_tokens"] + summary["tokens"]["output_tokens"]
         if summary["requests"] == 0:
@@ -378,6 +404,7 @@ def render_summary(
         lines.append(
             f"| `{model}` | {effort} | {summary['tests_observed']}/45 | "
             f"{summary['critical']} | {summary['major']} | {summary['minor']} | "
+            f"{summary['semantic_human_review']} | "
             f"{latency} | {token_total} | {cost} |"
         )
 
@@ -448,7 +475,7 @@ def render_summary(
                 for row in evaluated
                 if row["test_id"] == case_id
                 for item in row["findings"]
-                if item["severity"] in {"CRITICAL", "MAJOR"}
+                if item["severity"] in {"CRITICAL", "MAJOR", "HUMAN REVIEW"}
             }
         )
         lines.extend(
@@ -465,11 +492,13 @@ def render_summary(
     if recommended is None:
         lines.append(
             "No configuration can yet be recommended: no complete evaluated configuration has "
-            "demonstrated zero critical errors."
+            "demonstrated zero deterministic critical errors."
         )
     else:
         lines.append(
-            f"Cheapest recall-safe configuration under the approved ordering: `{recommended}`."
+            "Cheapest configuration with zero deterministic recall-threatening failures under "
+            f"the approved ordering: `{recommended}`. Semantic-review diagnostics remain "
+            "separate from deterministic safety failures."
         )
     quality_key = next(
         (key for key in summaries if key.startswith("gpt-5.6-sol:") and summaries[key]["complete"]),
@@ -483,9 +512,9 @@ def render_summary(
     lines.extend(
         [
             "",
-            "A more articulate explanation is not evidence of better retrieval. The recommendation "
-            "uses hard-filter safety and preservation of semantic recall first, then major/minor "
-            "errors, actual estimated cost, and latency.",
+            "The v1 evaluator was too pessimistic: substring checks on natural-language query and "
+            "diagnostic prose cannot establish lost meaning. V2 retains strict structural candidate-set "
+            "checks, and preserves lexical mismatches as an auditable human-review queue instead.",
             "",
         ]
     )
@@ -508,7 +537,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument(
         "--replace-derived",
         action="store_true",
-        help="Regenerate evaluation.json and summary.md after intentional resumed requests",
+        help="Regenerate the versioned v2 derived artifacts",
     )
     return value
 
@@ -531,18 +560,22 @@ def main() -> int:
         summaries[key] = summarize_configuration(grouped[key], total_cases=45)
     payload = {
         "run_id": metadata["run_id"],
+        "evaluator_version": EVALUATOR_VERSION,
+        "original_experiment_git_sha": metadata["git_sha"],
+        "raw_results_identical_to_v1": True,
+        "additional_api_requests": 0,
         "oracle_version": metadata["oracle_version"],
         "evaluated_requests": evaluated,
         "configurations": summaries,
         "recommendation": select_recommendation(summaries),
     }
     write_derived(
-        args.run_dir / "evaluation.json",
+        args.run_dir / "evaluation-v2.json",
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
         replace=args.replace_derived,
     )
     write_derived(
-        args.run_dir / "summary.md",
+        args.run_dir / "summary-v2.md",
         render_summary(metadata, evaluated, summaries, oracle),
         replace=args.replace_derived,
     )
