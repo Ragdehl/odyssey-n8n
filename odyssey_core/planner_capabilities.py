@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from odyssey_core.filtering import supported_filter_operators
+
 LIMITATIONS = {
     "not_supported": "An exact exclusion / NOT condition cannot currently be represented deterministically.",
     "unsupported_domain_date": "The requested non-lifecycle/domain-event date has no canonical deterministic field.",
@@ -83,9 +85,7 @@ def _filter_capability(field: Mapping[str, Any], applies_to: list[str]) -> dict[
     value_type = field.get("constraints", {}).get("format", field["value_type"])
     return {
         "value_type": value_type,
-        "operators": ["contains"]
-        if field["value_type"] == "array[string]"
-        else ["eq", "in", "gt", "gte", "lt", "lte"],
+        "operators": list(supported_filter_operators(field)),
         "controlled_values": [],
         "applies_to": applies_to,
         "description": field["description"],

@@ -153,8 +153,9 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Can see:** original user language and caller-supplied conversational context.
 - **Must not know or do:** open Markdown files, resolve identity, decide that a referenced entity
   exists, or decide to create a new entity.
-- **Status:** **PLANNED**. `RETRIEVE`, `WRITE`, and `MIXED` describe expected outcomes without
-  freezing an enum or permanent API.
+- **Status:** **IMPLEMENTED** as the Phase 14 `RequestPlan` boundary. The Sol/low planner returns
+  ordered validated retrieval and content-only create-intent actions; it does not retrieve or write.
+  Capabilities are derived dynamically from the canonical schema and caller-supplied current context.
 - **Concrete conceptual example:**
 
   Input:

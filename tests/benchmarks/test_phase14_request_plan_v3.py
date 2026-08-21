@@ -85,13 +85,22 @@ def test_frozen_contract_uses_only_schema_derived_v3_capabilities() -> None:
     assert "tags" not in json.loads(rendered.split("\n\n")[-1])["filters"]
 
 
-def test_frozen_capabilities_match_the_reusable_builder_at_freeze_time() -> None:
-    """Prove the immutable v3 snapshot was generated from the production projection."""
-    expected = build_planner_capabilities(
+def test_frozen_capabilities_remain_historical_after_production_operator_fix() -> None:
+    """Keep the frozen snapshot independent when Core's safe operator projection improves."""
+    production = build_planner_capabilities(
         load_json(Path("config/note-schema.json")),
         current_context={"date": "2026-08-20", "time": "10:30", "timezone": "Europe/Madrid"},
     )
-    assert load_planner_capabilities() == expected
+    frozen = load_planner_capabilities()
+    assert frozen["filters"]["relationship_to_user"]["operators"] == [
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+    ]
+    assert production["filters"]["relationship_to_user"]["operators"] == ["eq", "in"]
     rendered = render_prompt()
     assert (
         '"current_context":{"date":"2026-08-20","time":"10:30","timezone":"Europe/Madrid"}'

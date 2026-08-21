@@ -1,6 +1,6 @@
 # ADR 0007: Phase 14 request planning boundary
 
-- Status: Proposed for human review (offline v2 contract prepared)
+- Status: Accepted and implemented as the production planning boundary
 - Date: 2026-08-20
 
 ## Context
@@ -113,7 +113,30 @@ or knowledge types. Predicate OR, tag OR, scoped filters, and multiple retrieval
 longer limitations: separate `RetrieveAction` candidates express them safely. Ordinary semantic OR
 normally remains in one semantic query; multiple named concepts alone do not justify a split.
 
-## Consequences and future benchmark v2
+## Production decision and consequences
+
+Phase 14 uses the OpenAI Responses API with **gpt-5.6-sol** at low reasoning
+effort. The completed frozen v3 experiment rejected Terra as the default:
+Terra silently omitted one required B05 candidate region in 4/4 repetitions.
+Sol's one observed S04 error was an invalid empty query, which deterministic
+Core validation rejected before retrieval and which did not recur in the next
+three repetitions. Sol cost about 2.3x Terra in the benchmark; that premium is
+accepted for the safer planner baseline. No model router is introduced. It can
+be reconsidered only after production request distribution and monthly cost are
+observed.
+
+Production renders capabilities from the current canonical schema at call time,
+including caller-supplied date, time, and timezone. The frozen benchmark
+capability snapshot remains historical evidence only. The production planner
+locally validates every model response before returning it; invalid output
+fails closed and is never exposed for execution.
+
+The implementation still stops at the RequestPlan boundary. It does not invoke
+`get_context`, create or update notes, or choose execution order. Phase 15 or a
+later explicit orchestration phase may compose validated actions with Phase 13
+retrieval and Phase 12 persistence.
+
+## Historical benchmark context
 
 Phase 14 remains deliberately narrow: it does not retrieve notes, execute `get_context`, persist
 notes, resolve entities, issue SQL, retain user memory, or synthesize an answer. The next benchmark
