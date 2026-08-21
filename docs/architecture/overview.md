@@ -22,7 +22,7 @@ not necessarily an entity: only entity references that require identity lookup p
 USER / AGENT
      |
      v
-interpret_request                 [PLANNED]
+interpret_request                 [PHASE 14 — IMPLEMENTED]
      |
      +-------------------------------+
      |                               |
@@ -31,7 +31,7 @@ RETRIEVAL INTENT                WRITE INTENT
      |                               |
      v                               v
 get_context                    decompose_knowledge
-  [PLANNED]                       [PLANNED]
+  [PHASE 13 — IMPLEMENTED]         [PLANNED]
                                      |
                                      v
                                KnowledgePlan
@@ -185,8 +185,10 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Output:** a future context package grounded in Odyssey notes.
 - **Can see:** the interpreted question and results from future retrieval capabilities.
 - **Must not know or do:** equate semantic relevance with entity identity or mutate notes.
-- **Status:** **PLANNED**. Phase 10's entity-candidate index does not define general knowledge
-  retrieval, linked-note traversal, or the future context-package contract.
+- **Status:** **PHASE 13 — IMPLEMENTED**. `get_context` retrieves and ranks relevant atomic notes
+  for a validated retrieval plan, including supported type, tag, and field filters. Future
+  orchestration may compose it with request interpretation; linked-note traversal and broader
+  context-package behavior remain separate future work.
 - **Concrete conceptual example:** input `previous Lactel purchase price`; output might identify the
   source purchase note and a recorded price, with enough provenance to answer the user. The exact
   package shape remains undecided.

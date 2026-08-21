@@ -66,7 +66,7 @@ The contract deliberately stays smaller than a draft-note schema:
 ```json
 {
   "actions": [
-    {"kind": "retrieve", "plan": {"query": "Odyssey", "type": null, "required_tags": [], "filters": []}},
+    {"kind": "retrieve", "plan": {"query": "Odyssey", "type": null, "filters": []}},
     {"kind": "create_note", "content": "Knowledge the user explicitly asked Odyssey to remember."}
   ],
   "limitations": []

@@ -1,6 +1,6 @@
 # ADR 0008: Phase 14 v3 removes tags from planner interpretation
 
-- Status: Proposed for human review (offline v3 benchmark prepared)
+- Status: Accepted and implemented in production Phase 14 (v3 benchmarked)
 - Date: 2026-08-21
 
 ## Decision
