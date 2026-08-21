@@ -249,7 +249,7 @@ def _semantic_findings(plan: dict[str, Any], branch: dict[str, Any]) -> list[dic
             "HUMAN REVIEW", "semantic_query_review", "Query wording may omit requested meaning."
         )
         for group in branch.get("query_groups", [])
-        if not any(term in query for term in group)
+        if not any(_normalize(term) in query for term in group)
     ]
 
 
@@ -305,7 +305,8 @@ def evaluate_plan(candidate: Any, oracle: dict[str, Any]) -> tuple[str, list[dic
                     "Several actions partition one intended retrieval branch.",
                 )
             )
-            findings.extend(_semantic_findings(plans[base_safe[0][0]], branch))
+            for index, _ in base_safe:
+                findings.extend(_semantic_findings(plans[index], branch))
             continue
         if direct:
             findings.extend(

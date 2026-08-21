@@ -59,4 +59,13 @@ writes/output per 1M tokens. `input_tokens` is normalized as total input minus c
 writes; all three input categories are then billed exactly once. Raw evidence records actual cached and
 write counters, prompt/schema hashes, and the stable cache strategy without assuming a hit or write.
 
+One user request still produces one planner LLM call, even when its `RequestPlan` contains several
+`RetrieveAction` entries; those actions execute locally/downstream and do not create additional planner
+calls. Explicit prompt caching is useful across successive planning requests because the large
+system/schema prefix is stable. With GPT-5.6 pricing, an explicit cache write costs more than ordinary
+input, while later cache reads are much cheaper, so reuse can become worthwhile across repeated calls.
+This benchmark enables explicit caching and records provider counters; no TTL field is added because the
+repository/SDK payload shape does not support one, so provider TTL policy applies. Production caching
+policy and TTL will be finalized during Phase 14 implementation, not in this benchmark architecture.
+
 Do not run this harness until paid execution is explicitly approved.

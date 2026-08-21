@@ -424,9 +424,40 @@ def test_limitations_are_closed_and_evaluated() -> None:
 def test_api_payload_is_v2_and_only_allows_staged_models() -> None:
     payload = build_api_payload("gpt-5.6-terra", "low", "common", "request")
     assert payload["store"] is False
+    assert payload["prompt_cache_key"] == "odyssey-phase14-request-plan-v2"
+    assert payload["prompt_cache_options"] == {"mode": "explicit"}
     assert payload["text"]["format"]["name"] == "odyssey_request_plan_v2"
     with pytest.raises(BenchmarkContractError):
         build_api_payload("gpt-5.6-luna", "low", "common", "request")
+
+
+def test_partitioned_retrieval_reviews_every_branch_semantically() -> None:
+    oracle = {
+        "expected": {
+            "retrieve": [{"types": ["person", "project"], "query_groups": [["Toulouse"]]}],
+            "create_count": 0,
+            "limitations": [],
+        }
+    }
+    matching = output(
+        retrieve("Toulouse", note_type="person"),
+        retrieve("Toulouse", note_type="project"),
+    )
+    status, findings = evaluate_plan(matching, oracle)
+    assert status == "MAJOR"
+    assert [item["code"] for item in findings] == ["partitioned_retrieval"]
+
+    mismatched = output(
+        retrieve("Toulouse", note_type="person"),
+        retrieve("Paris", note_type="project"),
+    )
+    status, findings = evaluate_plan(mismatched, oracle)
+    assert status == "MAJOR"
+    assert any(
+        item["code"] == "semantic_query_review" and item["severity"] == "HUMAN REVIEW"
+        for item in findings
+    )
+    assert all(item["severity"] != "CRITICAL" for item in findings)
 
 
 def test_coverage_can_reuse_one_broad_branch_for_two_expected_branches() -> None:

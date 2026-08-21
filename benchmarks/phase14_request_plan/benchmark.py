@@ -357,6 +357,8 @@ def build_api_payload(model: str, effort: str, prompt: str, request: str) -> dic
     return {
         "model": model,
         "store": False,
+        "prompt_cache_key": "odyssey-phase14-request-plan-v2",
+        "prompt_cache_options": {"mode": "explicit"},
         "reasoning": {"effort": effort},
         "input": [
             {
