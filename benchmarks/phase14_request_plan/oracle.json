@@ -1,5 +1,5 @@
 {
-  "oracle_version":"2.1.0", "locked_before_model_calls":true, "primary_metric":"retrieval_candidate_set_safety",
+  "oracle_version":"2.2.0", "locked_before_model_calls":true, "primary_metric":"retrieval_candidate_set_safety",
   "notes":["Branch order is irrelevant for retrieval scoring.","Query/content fidelity is human review, never deterministic CRITICAL."],
   "cases":[
     {"id":"S01","expected":{"retrieve":[{"query_groups":[["odyssey"]]}],"create_count":0,"limitations":[]}},

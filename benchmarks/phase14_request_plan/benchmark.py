@@ -136,14 +136,24 @@ def load_oracle() -> dict[str, dict[str, Any]]:
 
 
 def structured_output_schema(contract: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the strict Structured Outputs schema for one RequestPlan."""
+    """Build a conservative strict Structured Outputs schema for one RequestPlan.
+
+    The schema intentionally uses only closed objects, enums, ``anyOf``, required
+    properties, and array items. Local validation remains the defense-in-depth
+    authority for non-empty strings, filter scope, and semantic constraints.
+    """
     retrieval = contract["retrieval_contract"]
-    filter_schema = {"oneOf": _field_specific_filter_schemas(retrieval["filterable_fields"])}
+    filter_schema = {"anyOf": _field_specific_filter_schemas(retrieval["filterable_fields"])}
     retrieval_plan = {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "minLength": 1},
-            "type": {"type": ["string", "null"], "enum": [None, *retrieval["canonical_types"]]},
+            "query": {"type": "string"},
+            "type": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "string", "enum": retrieval["canonical_types"]},
+                ]
+            },
             "required_tags": {
                 "type": "array",
                 "items": {"type": "string", "enum": retrieval["canonical_tags"]},
@@ -159,20 +169,22 @@ def structured_output_schema(contract: Mapping[str, Any]) -> dict[str, Any]:
         "properties": {
             "actions": {
                 "type": "array",
-                "minItems": 1,
                 "items": {
-                    "oneOf": [
+                    "anyOf": [
                         {
                             "type": "object",
-                            "properties": {"kind": {"const": "retrieve"}, "plan": retrieval_plan},
+                            "properties": {
+                                "kind": {"type": "string", "enum": ["retrieve"]},
+                                "plan": retrieval_plan,
+                            },
                             "required": ["kind", "plan"],
                             "additionalProperties": False,
                         },
                         {
                             "type": "object",
                             "properties": {
-                                "kind": {"const": "create_note"},
-                                "content": {"type": "string", "minLength": 1},
+                                "kind": {"type": "string", "enum": ["create_note"]},
+                                "content": {"type": "string"},
                             },
                             "required": ["kind", "content"],
                             "additionalProperties": False,
@@ -183,7 +195,6 @@ def structured_output_schema(contract: Mapping[str, Any]) -> dict[str, Any]:
             "limitations": {
                 "type": "array",
                 "items": {"type": "string", "enum": list(LIMITATION_CODES)},
-                "uniqueItems": True,
             },
         },
         "required": ["actions", "limitations"],
@@ -204,15 +215,13 @@ def _field_specific_filter_schemas(fields: Mapping[str, Any]) -> list[dict[str, 
             else {"type": "string"}
         )
         for operator in definition["operators"]:
-            value = (
-                {"type": "array", "items": scalar, "minItems": 1} if operator == "in" else scalar
-            )
+            value = {"type": "array", "items": scalar} if operator == "in" else scalar
             alternatives.append(
                 {
                     "type": "object",
                     "properties": {
-                        "field": {"const": field},
-                        "op": {"const": operator},
+                        "field": {"type": "string", "enum": [field]},
+                        "op": {"type": "string", "enum": [operator]},
                         "value": value,
                     },
                     "required": ["field", "op", "value"],
@@ -374,11 +383,22 @@ def build_api_payload(model: str, effort: str, prompt: str, request: str) -> dic
 
 
 def estimated_cost(model: str, usage: Mapping[str, int], pricing: Mapping[str, Any]) -> float:
-    """Estimate request cost from actual returned token counters and locked pricing."""
+    """Estimate cost from actual provider counters and a locked pricing snapshot.
+
+    ``input_tokens`` is normalized as the total input counter: cached reads and
+    cache writes are separately billed subsets, so ordinary input is their remainder.
+    A malformed overlapping total fails rather than silently double charging.
+    """
     rates = pricing["models"][model]
+    ordinary_input = (
+        usage["input_tokens"] - usage["cached_input_tokens"] - usage["cache_write_tokens"]
+    )
+    if ordinary_input < 0:
+        raise BenchmarkContractError("Provider usage counters overlap beyond input_tokens")
     return (
-        (usage["input_tokens"] - usage["cached_input_tokens"]) * rates["input"]
+        ordinary_input * rates["input"]
         + usage["cached_input_tokens"] * rates["cached_input"]
+        + usage["cache_write_tokens"] * rates["cache_write"]
         + usage["output_tokens"] * rates["output"]
     ) / 1_000_000
 

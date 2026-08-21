@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from benchmarks.phase14_request_plan.benchmark import (
     BenchmarkContractError,
     assert_schema_alignment,
     build_api_payload,
+    estimated_cost,
     load_cases,
+    load_json,
     load_oracle,
     render_prompt,
     structured_output_schema,
     validate_output,
 )
 from benchmarks.phase14_request_plan.evaluate import _effective_types, evaluate_plan
+from benchmarks.phase14_request_plan.run_benchmark import (
+    PLANNED_CONFIGURATIONS,
+    _metadata,
+    effective_attempts,
+    pending_requests,
+    summarize_attempts,
+)
 
 
 def retrieve(
@@ -52,12 +63,12 @@ def test_frozen_v2_schema_cases_oracle_and_strict_schema_align() -> None:
     assert len(load_oracle()) == 24
     schema = structured_output_schema(contract)
     assert schema["additionalProperties"] is False
-    assert schema["properties"]["actions"]["items"]["oneOf"][0]["additionalProperties"] is False
-    alternatives = schema["properties"]["actions"]["items"]["oneOf"][0]["properties"]["plan"][
+    assert schema["properties"]["actions"]["items"]["anyOf"][0]["additionalProperties"] is False
+    alternatives = schema["properties"]["actions"]["items"]["anyOf"][0]["properties"]["plan"][
         "properties"
-    ]["filters"]["items"]["oneOf"]
-    aliases = [item for item in alternatives if item["properties"]["field"]["const"] == "aliases"]
-    assert [item["properties"]["op"]["const"] for item in aliases] == ["contains"]
+    ]["filters"]["items"]["anyOf"]
+    aliases = [item for item in alternatives if item["properties"]["field"]["enum"] == ["aliases"]]
+    assert [item["properties"]["op"]["enum"] for item in aliases] == [["contains"]]
     assert load_oracle()["S01"]["expected"]
 
 
@@ -201,7 +212,9 @@ def test_a02_keeps_shared_types_filters_and_topic_in_one_action() -> None:
         retrieve("Toulouse", note_type="person", filters=today[1:]),
         retrieve("Toulouse", note_type="project", filters=today[1:]),
     )
-    assert evaluate_plan(split, oracle)[0] == "CRITICAL"
+    assert evaluate_plan(split, oracle)[0] == "MAJOR"
+    missing_project = output(retrieve("Toulouse", note_type="person", filters=today[1:]))
+    assert evaluate_plan(missing_project, oracle)[0] == "CRITICAL"
 
 
 def test_create_only_and_mixed_request_are_valid() -> None:
@@ -242,9 +255,7 @@ def test_false_hard_filter_is_critical() -> None:
         load_oracle()["S01"],
     )
     assert status == "CRITICAL"
-    assert {item["code"] for item in findings} == {
-        "unexpected_hard_filter",
-    }
+    assert "unexpected_hard_filter" in {item["code"] for item in findings}
 
 
 def test_omitted_safe_filter_is_major_not_critical() -> None:
@@ -309,7 +320,7 @@ def test_wrong_hard_filter_value_is_critical() -> None:
             "niños",
             note_type="journal_entry",
             filters=[
-                {"field": "created_at", "op": "gte", "value": "2026-08-18T00:00:00+02:00"},
+                {"field": "created_at", "op": "gte", "value": "2026-08-19T12:00:00+02:00"},
                 {"field": "created_at", "op": "lt", "value": "2026-08-20T00:00:00+02:00"},
             ],
         )
@@ -375,10 +386,10 @@ def test_type_specific_filters_require_compatible_type_candidates() -> None:
 
 def test_unregistered_subtypes_remain_invalid_in_schema_and_local_validation() -> None:
     schema = structured_output_schema(assert_schema_alignment())
-    alternatives = schema["properties"]["actions"]["items"]["oneOf"][0]["properties"]["plan"][
+    alternatives = schema["properties"]["actions"]["items"]["anyOf"][0]["properties"]["plan"][
         "properties"
-    ]["filters"]["items"]["oneOf"]
-    assert "subtype" not in {item["properties"]["field"]["const"] for item in alternatives}
+    ]["filters"]["items"]["anyOf"]
+    assert "subtype" not in {item["properties"]["field"]["enum"][0] for item in alternatives}
     with pytest.raises(BenchmarkContractError, match="unregistered"):
         validate_output(
             output(retrieve(filters=[{"field": "subtype", "op": "eq", "value": "system"}]))
@@ -416,3 +427,132 @@ def test_api_payload_is_v2_and_only_allows_staged_models() -> None:
     assert payload["text"]["format"]["name"] == "odyssey_request_plan_v2"
     with pytest.raises(BenchmarkContractError):
         build_api_payload("gpt-5.6-luna", "low", "common", "request")
+
+
+def test_coverage_can_reuse_one_broad_branch_for_two_expected_branches() -> None:
+    oracle = {
+        "expected": {
+            "retrieve": [
+                {"filters": [["created_at", "eq", "2026-08-20T00:00:00+02:00"]]},
+                {"filters": [["updated_at", "eq", "2026-08-20T00:00:00+02:00"]]},
+            ],
+            "create_count": 0,
+            "limitations": [],
+        }
+    }
+    assert evaluate_plan(output(retrieve("Odyssey")), oracle)[0] == "MAJOR"
+    assert (
+        evaluate_plan(
+            output(
+                retrieve(
+                    "Odyssey",
+                    filters=[
+                        {"field": field, "op": operator, "value": value}
+                        for field, operator, value in oracle["expected"]["retrieve"][0]["filters"]
+                    ],
+                )
+            ),
+            oracle,
+        )[0]
+        == "CRITICAL"
+    )
+
+
+def test_date_intervals_are_semantic_and_wrong_date_field_is_critical() -> None:
+    expected = {
+        "expected": {
+            "retrieve": [
+                {
+                    "filters": [
+                        ["created_at", "gte", "2026-08-19T00:00:00+02:00"],
+                        ["created_at", "lt", "2026-08-20T00:00:00+02:00"],
+                    ]
+                }
+            ],
+            "create_count": 0,
+            "limitations": [],
+        }
+    }
+    exact = [
+        {"field": "created_at", "op": "gte", "value": "2026-08-19T00:00:00+02:00"},
+        {"field": "created_at", "op": "lt", "value": "2026-08-20T00:00:00+02:00"},
+    ]
+    broader = [
+        {"field": "created_at", "op": "gte", "value": "2026-08-18T00:00:00+02:00"},
+        exact[1],
+    ]
+    narrower = [
+        {"field": "created_at", "op": "gte", "value": "2026-08-19T12:00:00+02:00"},
+        exact[1],
+    ]
+    assert evaluate_plan(output(retrieve(filters=exact)), expected)[0] == "PASS"
+    assert evaluate_plan(output(retrieve(filters=broader)), expected)[0] == "MAJOR"
+    assert evaluate_plan(output(retrieve(filters=narrower)), expected)[0] == "CRITICAL"
+    wrong_field = [
+        {"field": "updated_at", "op": "gte", "value": "2026-08-19T00:00:00+02:00"},
+        {"field": "updated_at", "op": "lt", "value": "2026-08-20T00:00:00+02:00"},
+    ]
+    assert evaluate_plan(output(retrieve(filters=wrong_field)), expected)[0] == "CRITICAL"
+
+
+def _attempt(success: bool, *, repetition: int = 1, attempt: int = 1) -> dict:
+    """Build minimal append-only evidence for runner selection tests."""
+    return {
+        "record_type": "request",
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low",
+        "test_id": "S01",
+        "repetition": repetition,
+        "attempt": attempt,
+        "success": success,
+    }
+
+
+def test_attempt_resume_retry_and_repetition_selection_are_logical() -> None:
+    cases = [{"id": "S01", "request": "x"}]
+    config = [PLANNED_CONFIGURATIONS["terra"]]
+    failure = _attempt(False)
+    assert pending_requests([failure], config, cases, 1, False) == []
+    assert pending_requests([failure], config, cases, 1, True)[0][-1] == 2
+    success = _attempt(True)
+    assert pending_requests([success], config, cases, 1, True) == []
+    repetitions = pending_requests([success], config, cases, 2, False)
+    assert [(row[3], row[4]) for row in repetitions] == [(2, 1)]
+    effective = effective_attempts([failure, _attempt(True, attempt=2)])
+    assert effective[("gpt-5.6-terra", "low", "S01", 1)]["attempt"] == 2
+    summary = summarize_attempts([failure, _attempt(True, attempt=2), _attempt(True, repetition=2)])
+    assert summary["api_attempt_count"] == 3
+    assert summary["logical_request_count"] == 2
+    assert summary["successful_repetitions"] == [
+        ("gpt-5.6-terra", "low", "S01", 1),
+        ("gpt-5.6-terra", "low", "S01", 2),
+    ]
+
+
+def test_staged_metadata_is_immutable_and_cost_includes_cache_writes() -> None:
+    metadata = _metadata("test")
+    assert [row["name"] for row in metadata["planned_configurations"]] == ["terra", "sol"]
+    pricing = load_json(Path("benchmarks/phase14_request_plan/pricing.json"))
+    usage = {
+        "input_tokens": 1000,
+        "cached_input_tokens": 200,
+        "cache_write_tokens": 100,
+        "output_tokens": 50,
+    }
+    assert estimated_cost("gpt-5.6-terra", usage, pricing) == pytest.approx(0.0028625)
+
+
+def test_structured_output_schema_uses_conservative_supported_subset() -> None:
+    schema = structured_output_schema(assert_schema_alignment())
+    forbidden = {"oneOf", "const", "minLength", "minItems", "uniqueItems"}
+
+    def keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | set().union(
+                *(keys(item) for key, item in value.items() if key != "enum")
+            )
+        if isinstance(value, list):
+            return set().union(*(keys(item) for item in value)) if value else set()
+        return set()
+
+    assert not keys(schema) & forbidden
