@@ -1,0 +1,11 @@
+{
+  "benchmark_version": "1.0.0",
+  "fixed_context": {"current_date": "2026-08-20", "current_time": "10:30", "timezone": "Europe/Madrid"},
+  "cases": [
+    {"id": "T01", "request": "Apunta que quiero usar Sol para Phase 15 y qué había pensado antes sobre esto?"},
+    {"id": "T02", "request": "Actualiza la tienda de la esquina: ahora cierra a las 20:30, si existe."},
+    {"id": "T03", "request": "¿Qué entradas de diario escribí ayer sobre los niños?"},
+    {"id": "T04", "request": "¿Qué personas nacieron en 1990 o en 2000?"},
+    {"id": "T05", "request": "¿Qué compré la última vez en Carrefour Balma? Apunta que ahora cierra a las 20:30."}
+  ]
+}
