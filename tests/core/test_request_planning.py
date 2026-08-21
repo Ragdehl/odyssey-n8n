@@ -19,6 +19,7 @@ from odyssey_core.request_planning import (
     RetrieveAction,
     WriteAction,
     render_request_planner_prompt,
+    request_plan_json_schema,
     validate_request_plan,
 )
 
@@ -277,8 +278,28 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     write_schema = calls[0]["text"]["format"]["schema"]["properties"]["actions"]["items"][  # type: ignore[index]
         "anyOf"
     ][1]
-    assert write_schema["properties"]["kind"] == {"const": "write"}
+    assert write_schema["properties"]["kind"] == {"type": "string", "enum": ["write"]}
     assert write_schema["properties"]["units"]["items"]["properties"]["facts"]["minItems"] == 0
+
+
+def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) -> None:
+    """Keep Structured Outputs action discriminators in the Phase 14-compatible subset."""
+    request_schema = request_plan_json_schema(schema)
+
+    def contains_key(value: object, key: str) -> bool:
+        """Find one unsupported schema keyword recursively without a schema library."""
+        if isinstance(value, dict):
+            return key in value or any(contains_key(item, key) for item in value.values())
+        if isinstance(value, list):
+            return any(contains_key(item, key) for item in value)
+        return False
+
+    action_variants = request_schema["properties"]["actions"]["items"]["anyOf"]
+    assert [variant["properties"]["kind"] for variant in action_variants] == [
+        {"type": "string", "enum": ["retrieve"]},
+        {"type": "string", "enum": ["write"]},
+    ]
+    assert not contains_key(request_schema, "const")
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:

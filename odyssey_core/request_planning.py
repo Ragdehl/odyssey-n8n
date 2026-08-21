@@ -192,14 +192,17 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                     "anyOf": [
                         {
                             "type": "object",
-                            "properties": {"kind": {"const": "retrieve"}, "plan": retrieve},
+                            "properties": {
+                                "kind": {"type": "string", "enum": ["retrieve"]},
+                                "plan": retrieve,
+                            },
                             "required": ["kind", "plan"],
                             "additionalProperties": False,
                         },
                         {
                             "type": "object",
                             "properties": {
-                                "kind": {"const": "write"},
+                                "kind": {"type": "string", "enum": ["write"]},
                                 "units": {
                                     "type": "array",
                                     "items": {
