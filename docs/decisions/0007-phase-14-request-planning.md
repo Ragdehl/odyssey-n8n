@@ -1,6 +1,7 @@
 # ADR 0007: Phase 14 request planning boundary
 
-- Status: Accepted and implemented as the production planning boundary
+- Status: Accepted and implemented as the production planning boundary; its content-only write shape
+  is superseded by [ADR 0009](0009-phase-15-semantic-write-planning.md) for Phase 15 preparation
 - Date: 2026-08-20
 
 ## Context

@@ -16,13 +16,13 @@ writing.
 This is a conceptual capability map, not a mandatory pipeline. Retrieval does not traverse the
 write branch, and a mixed request may use both branches. A `KnowledgeUnit` is a knowledge object,
 not necessarily an entity: only entity references that require identity lookup pass through
-`resolve_entity`.
+`resolve_existing_entity`.
 
 ```text
 USER / AGENT
      |
      v
-interpret_request                 [PHASE 14 — IMPLEMENTED]
+interpret_request                 [PHASE 15 — IMPLEMENTED / VALIDATED]
      |
      +-------------------------------+
      |                               |
@@ -30,11 +30,11 @@ interpret_request                 [PHASE 14 — IMPLEMENTED]
 RETRIEVAL INTENT                WRITE INTENT
      |                               |
      v                               v
-get_context                    decompose_knowledge
-  [PHASE 13 — IMPLEMENTED]         [PLANNED]
+get_context                    WriteAction / KnowledgeUnit(s)
+  [PHASE 13 — IMPLEMENTED]         [PHASE 15 — IMPLEMENTED / VALIDATED]
                                      |
                                      v
-                               KnowledgePlan
+                         entity references requiring lookup
                                      |
                           +----------+-----------+
                           |                      |
@@ -43,8 +43,8 @@ get_context                    decompose_knowledge
                   and their facts       require identity lookup
                           |                      |
                           |                      v
-                          |               resolve_entity
-                          |                  [PLANNED]
+                          |          resolve_existing_entity
+                          |              [PHASE 11B.2 — IMPLEMENTED]
                           |                      |
                           |                      v
                           |          resolve_exact_entity
@@ -75,9 +75,9 @@ purchase facts remain attached to the purchase:
 ```text
 Purchase unit
     |
-    +--> store reference ----> resolve_entity("Carrefour Balma", type="store")
+    +--> store reference ----> resolve_existing_entity("Carrefour Balma", type="store")
     |
-    +--> product reference --> resolve_entity("Lactel", type="product")
+    +--> product reference --> resolve_existing_entity("Lactel", type="product")
     |
     +--> purchase facts ------> remain purchase knowledge
 ```
@@ -153,9 +153,10 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Can see:** original user language and caller-supplied conversational context.
 - **Must not know or do:** open Markdown files, resolve identity, decide that a referenced entity
   exists, or decide to create a new entity.
-- **Status:** **IMPLEMENTED** as the Phase 14 `RequestPlan` boundary. The Sol/low planner returns
-  ordered validated retrieval and content-only create-intent actions; it does not retrieve or write.
-  Capabilities are derived dynamically from the canonical schema and caller-supplied current context.
+- **Status:** **Phase 15 implemented and validated.** The one-call Sol/low planner contract has
+  ordered validated retrieval and semantic write-planning actions; it does not retrieve, resolve
+  identity, or write. Capabilities are derived dynamically from the canonical schema and
+  caller-supplied current context. Write-target existence is delegated to later entity resolution.
 - **Concrete conceptual example:**
 
   Input:
@@ -193,16 +194,19 @@ Every conceptual output below is illustrative unless the capability is marked im
   source purchase note and a recorded price, with enough provenance to answer the user. The exact
   package shape remains undecided.
 
-### `decompose_knowledge` — build related knowledge work
+### `WriteAction` / `KnowledgeUnit` — prepare related knowledge work
 
-- **Purpose:** transform the write-oriented part of a request into related conceptual knowledge
-  units while retaining relationships and required context.
-- **Input:** interpreted write intent and applicable request context.
-- **Output:** a conceptual `KnowledgePlan` containing related `KnowledgeUnit` values.
+- **Purpose:** represent the write-oriented part of a request as related semantic knowledge units
+  while retaining relationships and required context.
+- **Input:** the original user message and applicable request context through `interpret_request`.
+- **Output:** validated `WriteAction` values containing ordered `KnowledgeUnit` values.
 - **Can see:** write intent, subjects, facts, relationships, and context supplied by interpretation.
 - **Must not know or do:** split text into unrelated fragments, resolve identities, choose storage
-  paths, write notes, or freeze a permanent plan schema.
-- **Status:** **PLANNED**. `KnowledgePlan` and `KnowledgeUnit` are architecture vocabulary only.
+  paths, write notes, or choose physical CREATE versus UPDATE.
+- **Status:** **PHASE 15 — IMPLEMENTED / VALIDATED.** `WriteAction` contains validated semantic
+  `KnowledgeUnit` values and remains a non-executing planning contract. It does not authorize
+  creation for unresolved reference-only `record` units; Phase 16 must make creation authorization
+  explicit.
 - **Concrete conceptual example:**
 
   Input:
@@ -216,7 +220,7 @@ Every conceptual output below is illustrative unless the capability is marked im
   Output:
 
   ```text
-  KnowledgePlan
+  WriteAction
     Unit A:
       subject: Carrefour Balma
       type: store
@@ -246,13 +250,13 @@ all context into every future note.
 Future orchestration may parallelize independent, read-only work:
 
 ```text
-KnowledgePlan
+WriteAction
     |
-    +---- Carrefour reference ---- resolve_entity ----+
+    +---- Carrefour reference ---- resolve_existing_entity ----+
     |                                                 |
-    +---- Lactel reference ------- resolve_entity ----+  PARALLEL OK
+    +---- Lactel reference ------- resolve_existing_entity ----+  PARALLEL OK
     |                                                 |
-    +---- another entity reference -> resolve_entity -+
+    +---- another entity reference -> resolve_existing_entity -+
 ```
 
 Dependencies still determine ordering:
@@ -265,7 +269,7 @@ create Purchase referring to Carrefour identity
 ```
 
 Only references requiring identity decisions are resolved; a knowledge unit is not passed wholesale
-to `resolve_entity`. Several facts targeting the same logical entity must be coalesced before
+to `resolve_existing_entity`. Several facts targeting the same logical entity must be coalesced before
 mutation rather than race as independent writes. The rule is: parallelize independent work;
 serialize or coalesce dependency-sensitive and same-entity mutations. This property does not
 require or authorize a DAG engine, scheduler, LangGraph, workflow engine, or parallel execution
@@ -289,14 +293,14 @@ framework in Phases 9 or 10.
 - **Can see:** approved domain outcomes and note-domain contracts.
 - **Must not know or do:** manipulate raw files directly, ignore dependencies, or invent ontology
   schema.
-- **Status:** **PLANNED**; Phase 10 does not implement its write behavior.
+- **Status:** **PLANNED** for Phase 16; Phase 15 prepares inputs but does not persist them.
 - **Concrete conceptual example:** after store and product identities are settled, save a purchase
   note linking those entities and report the affected notes. Exact contracts remain a future
   architecture decision.
 
-### `resolve_entity` — layered hybrid identity resolution
+### `resolve_existing_entity` — layered hybrid identity resolution
 
-- **Purpose:** eventually resolve an entity reference by composing exact lookup, cheap structured
+- **Purpose:** resolve an entity reference by composing exact lookup, cheap structured
   narrowing, semantic retrieval, and contextual reasoning while preserving uncertainty.
 - **Input:** an extracted reference, original surrounding request context, repository/schema access,
   and any available deterministic constraints.
@@ -304,8 +308,7 @@ framework in Phases 9 or 10.
 - **Can see:** the original reference and context plus evidence returned by its lower layers.
 - **Must not know or do:** equate semantic similarity with identity, invent certainty, authorize
   automatic creation after no exact match, or make an LLM scan the entire vault.
-- **Status:** **PLANNED** for contextual resolution after Phase 10. No Python function with this
-  name exists yet.
+- **Status:** **PHASE 11B.2 — IMPLEMENTED** in `odyssey_core.resolution.resolve_existing_entity`.
 - **Concrete conceptual example:** `"the other Beatriz"` may have no exact match. Structured and
   semantic retrieval may narrow candidates to the user's spouse and Xavi's partner; contextual
   evidence may resolve the latter or retain ambiguity when evidence is insufficient.
@@ -321,8 +324,8 @@ reference + original request context
 unique exact match       no/ambiguous exact match
        |                         |
        v                         v
-    resolved          structured candidate narrowing
-                               [PLANNED]
+    resolved          local candidate gathering and contextual review
+                               [PHASE 11B.2 — IMPLEMENTED]
                                   |
                                   v
                          semantic/vector retrieval
@@ -650,9 +653,9 @@ schema proposal and human approval.
 
 ## End-to-end multi-unit example
 
-The following shows representations at each boundary. All request and knowledge planning is
-conceptual and **PLANNED**; Phases 9 and 10 implement exact lookup and semantic candidate retrieval
-only.
+The following shows representations at each boundary. Request planning is the validated Phase 15
+RequestPlan contract; Phases 9–11 implement identity resolution, and Phase 12 provides deterministic
+note persistence. Phase 16 will compose these boundaries for approved writes.
 
 1. **Arbitrary user input**
 
@@ -663,7 +666,7 @@ only.
    Lactel is my usual milk.
    ```
 
-2. **`interpret_request` output — conceptual**
+2. **`interpret_request` output — implemented Phase 15 contract**
 
    ```text
    RequestPlan
@@ -675,10 +678,10 @@ only.
        - fact about Lactel
    ```
 
-3. **`decompose_knowledge` output — conceptual**
+3. **`WriteAction` output — implemented Phase 15 contract**
 
    ```text
-   KnowledgePlan
+   WriteAction
      Store unit:
        reference: {name: "Carrefour Balma", type: "store"}
        facts:
@@ -710,16 +713,17 @@ only.
    not treated as an entity query, and its facts remain purchase knowledge. These read-only scans
    are independent and may be orchestrated in parallel in the future. Each calls
    `find_exact_entity_candidates`, which follows the read direction: list paths, read raw Markdown,
-   parse `Note` values, then validate before returning exact evidence. A future `resolve_entity`
-   will compose this exact step with later layers when exact evidence is insufficient.
+   parse `Note` values, then validate before returning exact evidence. `resolve_existing_entity`
+   composes exact evidence, semantic candidates, and the contextual reasoner when exact evidence is
+   insufficient.
 
-5. **Dependency-sensitive writing — conceptual**
+5. **Dependency-sensitive writing — Phase 16 planned composition**
 
    The store facts are coalesced into one store mutation. The product facts are likewise grouped.
    A purchase write waits until its store and product references have settled. `NO_EXACT_MATCH`
-   continues to later planned resolution and never authorizes creation by itself;
+   continues through the Phase 11B.2 resolution boundary and never authorizes creation by itself;
    `AMBIGUOUS_EXACT_MATCH` also requires later evidence or clarification. No such write logic exists
-   in Phase 10.
+   in Phase 15; Phase 16 will compose the approved persistence path.
 
 6. **Note transformation — implemented infrastructure, future application composition**
 
@@ -756,7 +760,7 @@ These capabilities answer different questions:
 resolve_exact_entity("Carrefour", type="store")
     -> Which notes have this exact primary name or alias?
 
-resolve_entity("the other Beatriz", context=...)  [PLANNED]
+resolve_existing_entity("the other Beatriz", context=...)  [PHASE 11B.2 — IMPLEMENTED]
     -> Which entity does this contextual reference identify, if evidence is sufficient?
 
 find_semantic_entity_candidates("the other Beatriz", context=...)
@@ -766,10 +770,10 @@ search("What stores do I normally use and what do I buy there?")  [FUTURE]
     -> Which knowledge is relevant to this natural-language question?
 ```
 
-The generic names `resolve_entity` and `search` remain reserved for future hybrid identity
-resolution and general knowledge retrieval. Phase 9 owns deterministic exact evidence. Phase 10
-owns semantic candidate ranking only; it adds no LLM, graph traversal, note mutation, watcher, or
-additional service.
+The generic name `search` remains reserved for future general knowledge retrieval. Phase 9 owns
+deterministic exact evidence, Phase 10 owns semantic candidate ranking, and Phase 11B.2 owns the
+validated contextual resolution boundary. None adds graph traversal, note mutation, watchers, or
+additional services.
 
 ## n8n and the legacy/admin storage path
 

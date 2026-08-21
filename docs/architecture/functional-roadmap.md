@@ -22,18 +22,20 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 14 — request interpretation / validated `RequestPlan`:** Sol/low turns a message into
   ordered retrieval and content-only create-intent actions without retrieval or persistence.
 
-## Next functional phase
+## Current and next functional phase
 
-➡️ **Phase 15 — write planning / knowledge preparation**
+✅ **Phase 15 — write planning / knowledge preparation (COMPLETE / VALIDATED)**
 
 Transform write intent into structured knowledge work without persisting it. This includes
 knowledge decomposition, related knowledge units, facts, and references in a form suitable for
-later deterministic validation and existing-entity resolution.
+later deterministic validation and existing-entity resolution. The one-call Sol/low planner,
+deterministic contract, full benchmark, and targeted follow-up are accepted; see the
+[Phase 15 contract and validation record](phase-15-write-planning.md).
 
 The opening architecture question is whether the **same Sol/low interpretation call** used by Phase
 14 can produce retrieval planning and structured write/knowledge preparation in one `RequestPlan`
-response. Phase 15 must test this preferred simplification; it must not assume a second LLM call is
-needed and must not change the Phase 14 production contract as part of that investigation.
+response. Phase 15 validated this preferred simplification without a second LLM call. Its
+deterministic preparation evolves content-only `CreateNoteAction` into semantic `WriteAction`.
 
 ```text
 user message
@@ -60,7 +62,7 @@ can reduce latency and cost.
 
 ## Remaining intended sequence
 
-⬜ **Phase 16 — resolved knowledge persistence**
+➡️ **Phase 16 — resolved knowledge persistence**
 
 Use the existing Phase 11 resolver for references in prepared knowledge, then implement
 `save_knowledge` to coordinate validated creates, updates, and canonical wikilinks. It must retain

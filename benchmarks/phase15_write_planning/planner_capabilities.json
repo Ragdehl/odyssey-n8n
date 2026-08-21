@@ -1,0 +1,322 @@
+{
+  "current_context": {
+    "date": "2026-08-20",
+    "time": "10:30",
+    "timezone": "Europe/Madrid"
+  },
+  "filters": {
+    "aliases": {
+      "applies_to": [
+        "concept",
+        "project",
+        "task",
+        "store",
+        "product",
+        "purchase",
+        "recipe",
+        "document",
+        "person",
+        "journal_entry"
+      ],
+      "controlled_values": [],
+      "description": "Alternative names useful for entity resolution; aliases do not create separate entities.",
+      "operators": [
+        "contains"
+      ],
+      "retrieval_examples": [
+        "alias exacto Ody -> aliases contains Ody"
+      ],
+      "retrieval_guidance": "Use deterministic exact matching only when the user explicitly asks for an exact alias. Ordinary name or entity search remains semantic.",
+      "value_type": "array[string]"
+    },
+    "birth_date": {
+      "applies_to": [
+        "person"
+      ],
+      "controlled_values": [],
+      "description": "Known date of birth of the person.",
+      "operators": [
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte"
+      ],
+      "retrieval_examples": [
+        "personas nacidas después de 1990 -> birth_date gt 1990-12-31",
+        "personas nacidas en 1990 -> gte 1990-01-01, lt 1991-01-01"
+      ],
+      "retrieval_guidance": "Person domain date. Serialize as YYYY-MM-DD (for example 1990-12-31). Use half-open ranges for years or months.",
+      "value_type": "date"
+    },
+    "created_at": {
+      "applies_to": [
+        "concept",
+        "project",
+        "task",
+        "store",
+        "product",
+        "purchase",
+        "recipe",
+        "document",
+        "person",
+        "journal_entry"
+      ],
+      "controlled_values": [],
+      "description": "Timestamp when Odyssey created the note.",
+      "operators": [
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte"
+      ],
+      "retrieval_examples": [
+        "¿Qué escribí ayer sobre n8n? -> created_at day range in the supplied timezone"
+      ],
+      "retrieval_guidance": "Odyssey note-lifecycle creation timestamp: when Odyssey created, wrote, or stored the note. Use for creé, escribí, guardé, or apunté. It is not the domain date described by the note. Serialize as timezone-aware ISO 8601 (for example 2026-08-20T00:00:00+02:00); never emit timezone-less lifecycle datetimes. Prefer half-open ranges: gte start, lt next boundary.",
+      "value_type": "date-time"
+    },
+    "entry_date": {
+      "applies_to": [
+        "journal_entry"
+      ],
+      "controlled_values": [],
+      "description": "Date the journal entry refers to.",
+      "operators": [
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte"
+      ],
+      "retrieval_examples": [
+        "entradas de diario de agosto -> entry_date August range",
+        "entradas de diario que escribí ayer -> created_at yesterday range"
+      ],
+      "retrieval_guidance": "Domain date only for journal_entry: the date the diary entry refers to, not when Odyssey stored it. Serialize as YYYY-MM-DD. Use half-open ranges for years or months. ‘entradas de diario de agosto’ uses entry_date; ‘entradas de diario que escribí ayer’ uses created_at.",
+      "value_type": "date"
+    },
+    "relationship_to_user": {
+      "applies_to": [
+        "person"
+      ],
+      "controlled_values": [],
+      "description": "How the person is related to the user.",
+      "operators": [
+        "eq",
+        "in"
+      ],
+      "retrieval_examples": [],
+      "retrieval_guidance": "Use deterministic filtering only when the request maps safely to an exact stored relationship value. Never invent relationship values; otherwise keep the wording semantic.",
+      "value_type": "string"
+    },
+    "type": {
+      "applies_to": [
+        "concept",
+        "project",
+        "task",
+        "store",
+        "product",
+        "purchase",
+        "recipe",
+        "document",
+        "person",
+        "journal_entry"
+      ],
+      "controlled_values": [
+        "concept",
+        "project",
+        "task",
+        "store",
+        "product",
+        "purchase",
+        "recipe",
+        "document",
+        "person",
+        "journal_entry"
+      ],
+      "description": "Canonical note type selected from the type registry.",
+      "operators": [
+        "eq",
+        "in"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query.",
+      "value_type": "string"
+    },
+    "updated_at": {
+      "applies_to": [
+        "concept",
+        "project",
+        "task",
+        "store",
+        "product",
+        "purchase",
+        "recipe",
+        "document",
+        "person",
+        "journal_entry"
+      ],
+      "controlled_values": [],
+      "description": "Timestamp of the latest Odyssey modification to the note.",
+      "operators": [
+        "eq",
+        "in",
+        "gt",
+        "gte",
+        "lt",
+        "lte"
+      ],
+      "retrieval_examples": [
+        "¿Qué modifiqué hoy? -> today updated_at range"
+      ],
+      "retrieval_guidance": "Odyssey note-lifecycle modification timestamp. Use for modifiqué, actualicé, or cambié. Serialize as timezone-aware ISO 8601 (for example 2026-08-20T00:00:00+02:00); never emit timezone-less lifecycle datetimes. Prefer half-open ranges: gte start, lt next boundary.",
+      "value_type": "date-time"
+    }
+  },
+  "limitations": {
+    "direct_link_not_filterable": "An exact direct wikilink relation cannot currently be filtered deterministically.",
+    "not_supported": "An exact exclusion / NOT condition cannot currently be represented deterministically.",
+    "unsupported_domain_date": "The requested non-lifecycle/domain-event date has no canonical deterministic field."
+  },
+  "types": {
+    "concept": {
+      "description": "Reusable idea, subject, fact cluster, or knowledge item that does not fit a more specific canonical type.",
+      "examples": [
+        "Entity resolution",
+        "Photosynthesis"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "document": {
+      "description": "Document or document-like artifact worth representing as an independent knowledge object.",
+      "examples": [
+        "Apartment lease",
+        "Project requirements brief"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "journal_entry": {
+      "description": "Diary or journal entry describing a day, experience, reflection, or personal occurrence.",
+      "examples": [
+        "13 August 2026",
+        "First day in Madrid"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "person": {
+      "description": "Person with a reusable identity that can be referenced from personal knowledge and domain notes.",
+      "examples": [
+        "Carlos García",
+        "Ada Lovelace"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "product": {
+      "description": "Identifiable product that can recur across purchases or other knowledge contexts.",
+      "examples": [
+        "Leche Lactel",
+        "Arduino Uno"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "project": {
+      "description": "Goal-oriented initiative or area of work that can accumulate knowledge and tasks.",
+      "examples": [
+        "Odyssey",
+        "Kitchen renovation"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "purchase": {
+      "description": "Human-readable record of a purchase occurrence that can link naturally to stores and products.",
+      "examples": [
+        "Compra Carrefour 2026-08-13",
+        "Online hardware order"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "recipe": {
+      "description": "Reusable cooking recipe that can link naturally to product or ingredient notes.",
+      "examples": [
+        "Tortilla española",
+        "Tomato soup"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "store": {
+      "description": "Physical or virtual establishment where purchases can occur.",
+      "examples": [
+        "Carrefour Balma",
+        "Lidl"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    },
+    "task": {
+      "description": "Action that can be managed by a task workflow without defining task-specific lifecycle fields in the canonical note schema.",
+      "examples": [
+        "Renew passport",
+        "Review Odyssey schema"
+      ],
+      "retrieval_examples": [
+        "personas y proyectos -> person/project restriction",
+        "ideas sobre Odyssey -> no type restriction",
+        "decisiones sobre Odyssey -> no type restriction"
+      ],
+      "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query."
+    }
+  }
+}
