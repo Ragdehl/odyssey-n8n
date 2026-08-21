@@ -15,3 +15,4 @@ When an ADR adds real value, it should state the context, decision, alternatives
 - [0004: Phase 11B.2 production contextual resolution and evidence minimization](0004-phase-11b2-production-resolution.md)
 - [0005: Phase 12 entity persistence](0005-phase-12-entity-persistence.md)
 - [0006: Phase 13 separate general knowledge context retrieval](0006-phase-13-context-retrieval.md)
+- [0008: Phase 14 v3 planner tag interpretation](0008-phase-14-v3-planner-tags.md)

@@ -1,0 +1,17 @@
+{
+  "contract_version": "3.0.0",
+  "limitation_codes": ["not_supported", "unsupported_domain_date", "direct_link_not_filterable"],
+  "retrieval_contract": {
+    "schema_version": 1,
+    "canonical_types": ["concept", "project", "task", "store", "product", "purchase", "recipe", "document", "person", "journal_entry"],
+    "filterable_fields": {
+      "type": {"value_type": "string", "operators": ["eq", "in"], "controlled_values": ["concept", "project", "task", "store", "product", "purchase", "recipe", "document", "person", "journal_entry"]},
+      "created_at": {"value_type": "date-time", "operators": ["eq", "in", "gt", "gte", "lt", "lte"], "controlled_values": []},
+      "updated_at": {"value_type": "date-time", "operators": ["eq", "in", "gt", "gte", "lt", "lte"], "controlled_values": []},
+      "aliases": {"value_type": "array[string]", "operators": ["contains"], "controlled_values": []},
+      "birth_date": {"value_type": "date", "operators": ["eq", "in", "gt", "gte", "lt", "lte"], "controlled_values": []},
+      "relationship_to_user": {"value_type": "string", "operators": ["eq", "in"], "controlled_values": []},
+      "entry_date": {"value_type": "date", "operators": ["eq", "in", "gt", "gte", "lt", "lte"], "controlled_values": []}
+    }
+  }
+}
