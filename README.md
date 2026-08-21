@@ -50,6 +50,7 @@ This Git repository contains code, application configuration and schema, tests, 
 
 - [AGENTS.md](AGENTS.md) — project rules for agents and contributors.
 - [Architecture Overview](docs/architecture/overview.md) — high-level system architecture.
+- [Functional Roadmap](docs/architecture/functional-roadmap.md) — canonical intended functional phase sequence.
 - [Product Vision](docs/product-vision.md) — durable product outcomes and responsibility boundaries.
 - [Architecture decision history](docs/decisions/README.md) — measured significant decisions and proposals.
 - [Ontology Principles](docs/architecture/ontology.md) — knowledge-model principles.
