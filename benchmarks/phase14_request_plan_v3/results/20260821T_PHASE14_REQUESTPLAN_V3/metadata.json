@@ -1,0 +1,33 @@
+{
+  "created_at": "2026-08-21T12:32:43.736495+00:00",
+  "benchmark_version": "3.0.0",
+  "oracle_version": "3.0.0",
+  "planned_configurations": [
+    {
+      "name": "terra",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "low"
+    },
+    {
+      "name": "sol",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "low"
+    }
+  ],
+  "openai_sdk_version": "3.3.1",
+  "api": "OpenAI Responses API",
+  "store": false,
+  "structured_outputs": true,
+  "independent_request_per_case": true,
+  "caching_strategy": "Independent requests retain a stable shared system prompt/schema prefix; provider counters are recorded without assuming a cache hit or write.",
+  "prompt_cache_key": "odyssey-phase14-request-plan-v3",
+  "artifact_sha256": {
+    "prompt.md": "75dd178e5dd52c1d1730667930a8ecd67220b12f535e2dd7e5d0a1a2856cce72",
+    "cases.json": "9033eb0cf7b05cff2e0df8b925fe8518d32bd6dd4d51e6f524f4ce0450403a81",
+    "oracle.json": "80d1c46ece41bba26ea80e64cd6224f12b9ed481b1e29cd0760bfcd7664af4bb",
+    "schema_contract.json": "09d0a0e6f6167a3b0c1d9b05c61dddb1a5a923e637df694799da2d9651e628bc",
+    "pricing.json": "951c8cd00d91ee3376bbe4e17b008b60680fdd057deaf510d45f050e4c15bbdd",
+    "planner_capabilities.json": "7b515d8f71df6d1057d6429abb540fb2e788be20f256e95d8346da36cce60e33"
+  },
+  "generating_note_schema_sha256": "ec68591d4a26afa877f711b97ec6fdd65d676ff2669dbdc010449f90726016ed"
+}
