@@ -19,7 +19,7 @@ minimal controlled intent vocabulary is `record`, `amend`, `remove`, and `delete
 
 `record` expresses remembered knowledge but no physical create decision. It normally carries facts,
 but may be factless only when another unit in the same action references it. `amend` and `remove`
-require concrete facts; `delete` permits empty facts and must not create filler deletion text. `amend`,
+require concrete facts; `delete` requires empty facts and must not create filler deletion text. `amend`,
 `remove`, and `delete` explicitly require an existing target later and can never imply fallback
 creation. Units may use canonical types where directly appropriate and can refer to another unit
 through an in-plan index and semantic role. Grouping applies only to facts with the same subject and

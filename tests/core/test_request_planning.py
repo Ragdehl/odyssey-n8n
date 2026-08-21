@@ -202,6 +202,7 @@ def test_write_contract_rejects_physical_decisions_and_invalid_semantic_fields(
         output(write(unit("Carrefour", intent="amend", facts=[]))),
         output(write(unit("Carrefour", intent="remove", facts=[]))),
         output(write(unit("Carrefour", intent="record", facts=[]))),
+        output(write(unit("Carrefour", intent="delete", facts=["Delete this object."]))),
         output(write(unit("Carrefour", references=[{"target_index": 0, "role": "self"}]))),
         output(write(unit("Carrefour", references=[{"target_index": 1, "role": "store"}]))),
         output(write(unit("Carrefour") | {"operation": "UPDATE"})),

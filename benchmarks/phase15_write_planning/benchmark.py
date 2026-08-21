@@ -109,7 +109,7 @@ def render_prompt() -> str:
     Raises:
         BenchmarkContractError: If the prompt placeholder is not exact.
     """
-    template = PROMPT_PATH.read_text(encoding="utf-8")
+    template = PROMPT_PATH.read_text(encoding="utf-8").rstrip()
     if template.count(_PLACEHOLDER) != 1:
         raise BenchmarkContractError("Phase 15 prompt placeholder is invalid")
     return template.replace(
@@ -174,6 +174,8 @@ def _validate_write(action: Mapping[str, Any], contract: Mapping[str, list[str]]
             raise BenchmarkContractError("KnowledgeUnit canonical type is invalid")
         if unit["intent"] not in contract["write_intents"]:
             raise BenchmarkContractError("KnowledgeUnit intent is invalid")
+        if unit["intent"] == "delete" and unit["facts"]:
+            raise BenchmarkContractError("KnowledgeUnit delete intent requires facts to be empty")
         if (
             not isinstance(unit["facts"], list)
             or len(unit["facts"]) != len(set(unit["facts"]))

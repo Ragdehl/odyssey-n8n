@@ -74,7 +74,7 @@ single-call prompt is sufficiently reliable before production activation.
 A reference is `{ "target_index": <unit index>, "role": <non-empty semantic role> }`. It is an
 in-plan structural pointer, not a persistent identifier or relationship ontology. It must target a
 different existing unit. `amend` and `remove` require at least one concrete fact. `delete` permits
-`facts: []` and should not invent deletion prose. `record` normally requires facts, but permits
+requires `facts: []` and rejects any deletion prose. `record` normally requires facts, but permits
 `facts: []` only when another unit in the same `WriteAction` references it as a semantic target.
 `record` means remember knowledge and may later be resolved to an existing entity or a deliberately
 approved new one. `amend`, `remove`, and `delete` require an existing target later; unresolved

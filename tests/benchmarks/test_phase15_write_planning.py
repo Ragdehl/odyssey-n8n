@@ -16,6 +16,7 @@ from benchmarks.phase15_write_planning.benchmark import (
 from benchmarks.phase15_write_planning.evaluate import evaluate_plan
 from benchmarks.phase15_write_planning.run_benchmark import CONFIGURATIONS
 from odyssey_core.planner_capabilities import build_planner_capabilities
+from odyssey_core.request_planning import render_request_planner_prompt
 
 
 def retrieve(query: str) -> dict:
@@ -40,7 +41,7 @@ def test_incremental_case_set_is_frozen_and_sol_only() -> None:
     assert [case["id"] for case in cases[:7]] == [f"R{index:02}" for index in range(1, 8)]
     assert [case["id"] for case in cases[7:]] == [f"W{index:02}" for index in range(1, 12)]
     assert len(load_oracle()) == 18 and CONFIGURATIONS == {"sol": ("gpt-5.6-sol", "low")}
-    assert "decompose semantically" in render_prompt()
+    assert "Decompose write knowledge semantically" in render_prompt()
     assert load_oracle()["W05"]["actions"][0]["units"][0]["type"] == "project"
     assert load_oracle()["W05"]["actions"][0]["units"][0]["fact_count"] == 0
     assert load_oracle()["W10"]["actions"][0]["units"][0]["fact_groups"] == [["20:30"]]
@@ -130,6 +131,33 @@ def test_phase15_capability_snapshot_matches_current_production_projection() -> 
     assert expected["filters"]["relationship_to_user"]["operators"] == ["eq", "in"]
 
 
+def test_frozen_prompt_has_production_contract_parity() -> None:
+    """Prevent frozen prompt drift from critical production write-planning semantics."""
+    root = Path(__file__).resolve().parents[2]
+    schema = json.loads((root / "config/note-schema.json").read_text(encoding="utf-8"))
+    context = {"date": "2026-08-20", "time": "10:30", "timezone": "Europe/Madrid"}
+    production, frozen = (
+        render_request_planner_prompt(schema, context).lower(),
+        render_prompt().lower(),
+    )
+    requirements = (
+        "compatible",
+        "different intents for the same subject produce separate knowledgeunits",
+        "record, amend, remove, and delete",
+        "amend requires concrete facts",
+        "remove requires concrete facts",
+        "delete uses facts: []",
+        "record normally contains facts",
+        "resolve identity",
+        "create versus update",
+        "generate ids, paths, markdown",
+        "execute retrieval, persistence, or entity resolution",
+    )
+    for requirement in requirements:
+        assert requirement in production
+        assert requirement in frozen
+
+
 def test_oracle_rejects_extra_facts_and_allows_factless_reference_targets() -> None:
     """Guard deterministic fact counts while permitting only valid empty-fact units."""
     extra_fact = {
@@ -161,6 +189,18 @@ def test_oracle_rejects_extra_facts_and_allows_factless_reference_targets() -> N
         "limitations": [],
     }
     assert validate_output(reference_only)
+    assert (
+        evaluate_plan(
+            {
+                "actions": [
+                    {"kind": "write", "units": [unit("Old", intent="delete", facts=["filler"])]}
+                ],
+                "limitations": [],
+            },
+            {"actions": [{"kind": "write", "units": [{"intent": "delete", "fact_count": 0}]}]},
+        )[0]
+        == "CRITICAL"
+    )
     assert (
         evaluate_plan(
             {"actions": [retrieve("Odyssey")], "limitations": []},

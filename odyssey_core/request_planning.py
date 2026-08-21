@@ -20,7 +20,7 @@ _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestP
 
 Hard filters can permanently remove valid notes: apply a deterministic restriction only when the request maps explicitly and safely to this capability contract. Otherwise preserve the meaning in `query`. Multiple RetrieveActions are only for genuinely independent candidate-set branches; ordinary semantic OR stays one query.
 
-Use a canonical type restriction only when the request explicitly and safely identifies that canonical class; never infer a canonical type from semantic facets. Decompose write knowledge semantically: group facts for the same subject only when their mutation intent is compatible; separate different intents even for the same subject. Split independent subjects and preserve references between units. Distinguish record, amend, remove, and delete. Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval or persistence. Use limitation codes only with their defined meanings. Return strict structured JSON.
+Use a canonical type restriction only when the request explicitly and safely identifies that canonical class; never infer a canonical type from semantic facets. Decompose write knowledge semantically: group facts for the same logical subject only when their semantic mutation intent is compatible; different intents for the same subject produce separate KnowledgeUnits. Split independent subjects and preserve references between units. Use only record, amend, remove, and delete. Amend requires concrete facts describing the corrected state. Remove requires concrete facts identifying the knowledge to remove. Delete uses facts: [] and must not invent filler or deletion prose. Record normally contains facts; facts: [] is allowed only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval, persistence, or entity resolution. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
 Planner retrieval capabilities (derived dynamically from the canonical schema):
 
@@ -492,6 +492,8 @@ def _validate_knowledge_unit(unit: Any, capabilities: Mapping[str, Any]) -> Know
         raise RequestPlanningError("KnowledgeUnit type is invalid")
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
+    if intent == "delete" and raw_facts:
+        raise RequestPlanningError("KnowledgeUnit delete intent requires facts to be empty")
     if (
         not isinstance(raw_facts, list)
         or len(raw_facts) != len(set(raw_facts))
