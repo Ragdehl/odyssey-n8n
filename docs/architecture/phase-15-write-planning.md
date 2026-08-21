@@ -23,10 +23,10 @@ unchanged Phase 13     later Phase 16 resolution/persistence
 
 - Existing `RetrieveAction` planning remains Phase 13-compatible; `get_context` is unchanged.
 - A request can contain retrieval and write actions together.
-- `WriteAction` groups facts for one logical subject, decomposes independent subjects, and preserves
-  references between units.
-- Each unit has a subject, optional canonical type, controlled semantic intent, non-empty facts, and
-  validated references.
+- `WriteAction` groups facts for one logical subject only when their semantic intent is compatible,
+  separates independent subjects or different intents, and preserves references between units.
+- Each unit has a subject, optional canonical type, controlled semantic intent, intent-appropriate
+  facts, and validated references.
 - The only write intents are `record`, `amend`, `remove`, and `delete`.
 - The planner does not resolve identity, infer repository existence, choose physical CREATE versus
   UPDATE, generate persistent IDs/paths/Markdown/SQLite rows, or execute persistence.
@@ -73,10 +73,17 @@ single-call prompt is sufficiently reliable before production activation.
 
 A reference is `{ "target_index": <unit index>, "role": <non-empty semantic role> }`. It is an
 in-plan structural pointer, not a persistent identifier or relationship ontology. It must target a
-different existing unit. `record` means remember knowledge and may later be resolved to an existing
-entity or a deliberately approved new one. `amend`, `remove`, and `delete` require an existing target
-later; unresolved identity never authorizes creation. This preserves the Phase 12 invariant
+different existing unit. `amend` and `remove` require at least one concrete fact. `delete` permits
+`facts: []` and should not invent deletion prose. `record` normally requires facts, but permits
+`facts: []` only when another unit in the same `WriteAction` references it as a semantic target.
+`record` means remember knowledge and may later be resolved to an existing entity or a deliberately
+approved new one. `amend`, `remove`, and `delete` require an existing target later; unresolved
+identity never authorizes creation. This preserves the Phase 12 invariant
 [`UNRESOLVED != CREATE`](../decisions/0005-phase-12-entity-persistence.md).
+
+Facts for one logical subject are grouped only when their intent is compatible. For example, a
+correction and a removal about Carrefour Balma are separate `KnowledgeUnit` values even though they
+have the same subject. Later persistence may safely coalesce same-entity mutations; Phase 15 does not.
 
 The schema type, when supplied, must be one of the current canonical types. The action has no
 persistence operation, entity ID, path, serialized Markdown, or storage instruction.

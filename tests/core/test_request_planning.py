@@ -143,7 +143,7 @@ def test_mixed_retrieval_and_write_actions_preserve_request_order(schema: dict) 
 
 
 def test_write_intents_grouped_facts_multiple_subjects_and_references(schema: dict) -> None:
-    """Accept all controlled semantic intents and valid inter-unit references."""
+    """Accept all controlled intents, factless deletes, and reference-only targets."""
     plan = validate_request_plan(
         output(
             write(
@@ -156,7 +156,21 @@ def test_write_intents_grouped_facts_multiple_subjects_and_references(schema: di
                 unit(
                     "Leche Pascual semidesnatada",
                     note_type="product",
-                    facts=["This is the user's habitual milk."],
+                    facts=[],
+                ),
+                unit(
+                    "Weekly shopping",
+                    note_type="purchase",
+                    facts=["Bought today."],
+                    references=[
+                        {"target_index": 0, "role": "store"},
+                        {"target_index": 1, "role": "product"},
+                    ],
+                ),
+                unit(
+                    "Old shopping list",
+                    intent="delete",
+                    facts=[],
                 ),
                 unit(
                     "Weekly shopping",
@@ -164,11 +178,6 @@ def test_write_intents_grouped_facts_multiple_subjects_and_references(schema: di
                     intent="remove",
                     facts=["Remove the obsolete delivery fee."],
                     references=[{"target_index": 0, "role": "store"}],
-                ),
-                unit(
-                    "Old shopping list",
-                    intent="delete",
-                    facts=["Delete this obsolete knowledge object."],
                 ),
             )
         ),
@@ -179,6 +188,7 @@ def test_write_intents_grouped_facts_multiple_subjects_and_references(schema: di
     assert set(item.intent for item in action.units) == set(WRITE_INTENTS)
     assert isinstance(action.units[0], KnowledgeUnit)
     assert action.units[0].facts == ("Closes at 20:30.", "Has underground parking.")
+    assert action.units[1].facts == () and action.units[3].facts == ()
     assert action.units[2].references[0].target_index == 0
 
 
@@ -189,7 +199,9 @@ def test_write_contract_rejects_physical_decisions_and_invalid_semantic_fields(
     invalid = [
         output(write(unit("Carrefour", note_type="unknown"))),
         output(write(unit("Carrefour", intent="create"))),
-        output(write(unit("Carrefour", facts=[]))),
+        output(write(unit("Carrefour", intent="amend", facts=[]))),
+        output(write(unit("Carrefour", intent="remove", facts=[]))),
+        output(write(unit("Carrefour", intent="record", facts=[]))),
         output(write(unit("Carrefour", references=[{"target_index": 0, "role": "self"}]))),
         output(write(unit("Carrefour", references=[{"target_index": 1, "role": "store"}]))),
         output(write(unit("Carrefour") | {"operation": "UPDATE"})),
@@ -265,6 +277,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
         "anyOf"
     ][1]
     assert write_schema["properties"]["kind"] == {"const": "write"}
+    assert write_schema["properties"]["units"]["items"]["properties"]["facts"]["minItems"] == 0
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:

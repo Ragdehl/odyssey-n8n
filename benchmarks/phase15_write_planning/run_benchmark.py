@@ -13,9 +13,11 @@ from benchmarks.phase15_write_planning.benchmark import (
     load_cases,
     load_contract,
     load_oracle,
+    load_planner_capabilities,
     render_prompt,
 )
 from benchmarks.phase15_write_planning.evaluate import evaluate_plan
+from odyssey_core.planner_capabilities import build_planner_capabilities
 from odyssey_core.request_planning import (
     PLANNER_MODEL,
     PLANNER_REASONING_EFFORT,
@@ -39,6 +41,11 @@ def _load_schema() -> dict[str, Any]:
     schema = json.loads((root / "config" / "note-schema.json").read_text(encoding="utf-8"))
     if [item["id"] for item in schema["types"]] != load_contract()["canonical_types"]:
         raise ValueError("Canonical types differ from the frozen Phase 15 benchmark contract")
+    if load_planner_capabilities() != build_planner_capabilities(
+        schema,
+        current_context={"date": "2026-08-20", "time": "10:30", "timezone": "Europe/Madrid"},
+    ):
+        raise ValueError("Planner capabilities differ from the frozen Phase 15 production snapshot")
     return schema
 
 
@@ -102,6 +109,13 @@ def run(run_id: str, configuration: str) -> None:
                 status, findings, payload = "CRITICAL", [{"code": "invalid_json"}], None
             else:
                 status, findings = evaluate_plan(payload, oracle[case["id"]])
+            requires_human_semantic_review = bool(
+                isinstance(payload, dict)
+                and any(
+                    isinstance(action, dict) and action.get("kind") == "write"
+                    for action in payload.get("actions", [])
+                )
+            )
             stream.write(
                 json.dumps(
                     {
@@ -111,6 +125,7 @@ def run(run_id: str, configuration: str) -> None:
                         "parsed_output": payload,
                         "status": status,
                         "findings": findings,
+                        "requires_human_semantic_review": requires_human_semantic_review,
                     },
                     ensure_ascii=False,
                 )

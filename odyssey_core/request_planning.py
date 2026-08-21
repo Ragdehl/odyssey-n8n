@@ -20,7 +20,7 @@ _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestP
 
 Hard filters can permanently remove valid notes: apply a deterministic restriction only when the request maps explicitly and safely to this capability contract. Otherwise preserve the meaning in `query`. Multiple RetrieveActions are only for genuinely independent candidate-set branches; ordinary semantic OR stays one query.
 
-Use a canonical type restriction only when the request explicitly and safely identifies that canonical class; never infer a canonical type from semantic facets. Decompose write knowledge semantically: group facts for the same subject, split independent subjects, preserve references between units, and distinguish record, amend, remove, and delete. Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval or persistence. Use limitation codes only with their defined meanings. Return strict structured JSON.
+Use a canonical type restriction only when the request explicitly and safely identifies that canonical class; never infer a canonical type from semantic facets. Decompose write knowledge semantically: group facts for the same subject only when their mutation intent is compatible; separate different intents even for the same subject. Split independent subjects and preserve references between units. Distinguish record, amend, remove, and delete. Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval or persistence. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
 Planner retrieval capabilities (derived dynamically from the canonical schema):
 
@@ -75,7 +75,8 @@ class KnowledgeUnit:
         subject: Non-empty user-level subject reference.
         type: Optional canonical type directly expressed by the request.
         intent: Controlled semantic mutation intent for later resolution.
-        facts: Non-empty facts grouped for this subject.
+        facts: Concrete facts grouped for this subject, possibly empty for a delete or a
+            reference-only record target.
         references: Semantic pointers to other units in the same write action.
     """
 
@@ -221,6 +222,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                             "facts": {
                                                 "type": "array",
                                                 "items": {"type": "string"},
+                                                "minItems": 0,
                                             },
                                             "references": {
                                                 "type": "array",
@@ -441,11 +443,11 @@ def _validate_write_action(
         capabilities: Canonical type capabilities derived from the active schema.
 
     Returns:
-        Immutable semantic write preparation with valid in-plan references.
+        Immutable semantic write preparation with valid references and intent-specific fact rules.
 
     Raises:
-        RequestPlanningError: If a unit is malformed, lacks semantic content, or references an
-            unknown or self target.
+        RequestPlanningError: If a unit is malformed, violates its intent-specific fact rule, or
+            references an unknown or self target.
     """
     raw_units = action.get("units")
     if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
@@ -455,6 +457,14 @@ def _validate_write_action(
         for reference in unit.references:
             if reference.target_index >= len(units) or reference.target_index == index:
                 raise RequestPlanningError("KnowledgeUnit reference target is invalid")
+    referenced_targets = {reference.target_index for unit in units for reference in unit.references}
+    for index, unit in enumerate(units):
+        if unit.intent in {"amend", "remove"} and not unit.facts:
+            raise RequestPlanningError("KnowledgeUnit amend and remove intents require facts")
+        if unit.intent == "record" and not unit.facts and index not in referenced_targets:
+            raise RequestPlanningError(
+                "KnowledgeUnit record intent requires facts unless referenced"
+            )
     return WriteAction(units=units)
 
 
@@ -469,7 +479,7 @@ def _validate_knowledge_unit(unit: Any, capabilities: Mapping[str, Any]) -> Know
         One immutable semantic unit with no physical persistence fields.
 
     Raises:
-        RequestPlanningError: If fields are incomplete, unknown, or non-semantic.
+        RequestPlanningError: If fields are incomplete, unknown, or contain malformed fact text.
     """
     required = {"subject", "type", "intent", "facts", "references"}
     if not isinstance(unit, dict) or set(unit) != required:
@@ -484,7 +494,6 @@ def _validate_knowledge_unit(unit: Any, capabilities: Mapping[str, Any]) -> Know
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
     if (
         not isinstance(raw_facts, list)
-        or not raw_facts
         or len(raw_facts) != len(set(raw_facts))
         or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
     ):

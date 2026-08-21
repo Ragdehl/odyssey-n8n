@@ -20,9 +20,7 @@ CASES_PATH = BENCHMARK_DIR / "cases.json"
 ORACLE_PATH = BENCHMARK_DIR / "oracle.json"
 PROMPT_PATH = BENCHMARK_DIR / "prompt.md"
 SCHEMA_CONTRACT_PATH = BENCHMARK_DIR / "schema_contract.json"
-PHASE14_CAPABILITIES_PATH = (
-    BENCHMARK_DIR.parent / "phase14_request_plan_v3" / "planner_capabilities.json"
-)
+CAPABILITIES_PATH = BENCHMARK_DIR / "planner_capabilities.json"
 _PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 
 
@@ -44,7 +42,7 @@ def load_contract() -> dict[str, Any]:
 
 
 def load_cases() -> list[dict[str, str]]:
-    """Load the fixed 17-case incremental experiment input.
+    """Load the fixed 18-case incremental experiment input.
 
     Returns:
         Unique non-empty case IDs and requests.
@@ -53,8 +51,8 @@ def load_cases() -> list[dict[str, str]]:
         BenchmarkContractError: If the frozen input is malformed.
     """
     cases = load_json(CASES_PATH).get("cases")
-    if not isinstance(cases, list) or len(cases) != 17:
-        raise BenchmarkContractError("Phase 15 benchmark must contain exactly 17 cases")
+    if not isinstance(cases, list) or len(cases) != 18:
+        raise BenchmarkContractError("Phase 15 benchmark must contain exactly 18 cases")
     if any(set(case) != {"id", "request"} for case in cases):
         raise BenchmarkContractError("Phase 15 cases are malformed")
     if len({case["id"] for case in cases}) != len(cases) or any(
@@ -82,8 +80,28 @@ def load_oracle() -> dict[str, dict[str, Any]]:
     return indexed
 
 
+def load_planner_capabilities() -> dict[str, Any]:
+    """Load the Phase 15 production-parity capability snapshot.
+
+    Returns:
+        The immutable capability projection generated at the benchmark's fixed context.
+
+    Raises:
+        BenchmarkContractError: If the snapshot lacks its corrected relationship operators.
+    """
+    capabilities = load_json(CAPABILITIES_PATH)
+    if capabilities.get("filters", {}).get("relationship_to_user", {}).get("operators") != [
+        "eq",
+        "in",
+    ]:
+        raise BenchmarkContractError(
+            "Phase 15 relationship capability snapshot is not production-parity"
+        )
+    return capabilities
+
+
 def render_prompt() -> str:
-    """Render the frozen Phase 15 prompt with Phase 14's frozen capabilities.
+    """Render the frozen Phase 15 prompt with its own production-parity capabilities.
 
     Returns:
         A model-ready frozen system prompt.
@@ -96,7 +114,7 @@ def render_prompt() -> str:
         raise BenchmarkContractError("Phase 15 prompt placeholder is invalid")
     return template.replace(
         _PLACEHOLDER,
-        json.dumps(load_json(PHASE14_CAPABILITIES_PATH), ensure_ascii=False, separators=(",", ":")),
+        json.dumps(load_planner_capabilities(), ensure_ascii=False, separators=(",", ":")),
     )
 
 
@@ -136,10 +154,11 @@ def validate_output(payload: Any) -> dict[str, Any]:
 
 
 def _validate_write(action: Mapping[str, Any], contract: Mapping[str, list[str]]) -> None:
-    """Validate one write action's semantic units without accepting persistence details."""
+    """Validate semantic units and their intent-specific fact rules without persistence details."""
     units = action.get("units")
     if set(action) != {"kind", "units"} or not isinstance(units, list) or not units:
         raise BenchmarkContractError("WriteAction must contain non-empty units")
+    referenced_targets = set()
     for index, unit in enumerate(units):
         if not isinstance(unit, dict) or set(unit) != {
             "subject",
@@ -157,7 +176,7 @@ def _validate_write(action: Mapping[str, Any], contract: Mapping[str, list[str]]
             raise BenchmarkContractError("KnowledgeUnit intent is invalid")
         if (
             not isinstance(unit["facts"], list)
-            or not unit["facts"]
+            or len(unit["facts"]) != len(set(unit["facts"]))
             or not all(isinstance(fact, str) and fact.strip() for fact in unit["facts"])
         ):
             raise BenchmarkContractError("KnowledgeUnit facts are invalid")
@@ -176,3 +195,11 @@ def _validate_write(action: Mapping[str, Any], contract: Mapping[str, list[str]]
                 or not reference["role"].strip()
             ):
                 raise BenchmarkContractError("KnowledgeUnit reference is invalid")
+            referenced_targets.add(reference["target_index"])
+    for index, unit in enumerate(units):
+        if unit["intent"] in {"amend", "remove"} and not unit["facts"]:
+            raise BenchmarkContractError("KnowledgeUnit amend and remove intents require facts")
+        if unit["intent"] == "record" and not unit["facts"] and index not in referenced_targets:
+            raise BenchmarkContractError(
+                "KnowledgeUnit record intent requires facts unless referenced"
+            )

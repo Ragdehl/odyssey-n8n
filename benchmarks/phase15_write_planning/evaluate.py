@@ -54,6 +54,8 @@ def evaluate_plan(candidate: Any, oracle: dict[str, Any]) -> tuple[str, list[dic
             findings.extend(_retrieve_findings(candidate_action["plan"], expected_action))
         else:
             findings.extend(_write_findings(candidate_action, expected_action))
+    if any(action["kind"] == "write" for action in actual):
+        findings.append(_finding("HUMAN REVIEW", "write_semantic_review_required"))
     status = "CRITICAL" if any(item["severity"] == "CRITICAL" for item in findings) else "PASS"
     if status == "PASS" and findings:
         status = "HUMAN REVIEW"
@@ -90,6 +92,8 @@ def _write_findings(action: dict[str, Any], expected: dict[str, Any]) -> list[di
             findings.append(_finding("CRITICAL", "incorrect_mutation_intent"))
         if "type" in expectation and unit["type"] != expectation["type"]:
             findings.append(_finding("CRITICAL", "invalid_or_invented_canonical_type"))
+        if "fact_count" in expectation and len(unit["facts"]) != expectation["fact_count"]:
+            findings.append(_finding("CRITICAL", "unexpected_or_missing_fact"))
         for group in expectation.get("subject_groups", []):
             if not _contains_group(unit["subject"], group):
                 findings.append(_finding("HUMAN REVIEW", "subject_wording"))

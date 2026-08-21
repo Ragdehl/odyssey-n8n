@@ -18,6 +18,7 @@
     {"id": "W07", "request": "Apunta que Carrefour Balma cierra a las 20:30 y que Leche Pascual semidesnatada es la leche que compro habitualmente."},
     {"id": "W08", "request": "Apunta que compré Leche Pascual semidesnatada en Carrefour Balma hoy."},
     {"id": "W09", "request": "¿Qué compré la última vez en Carrefour Balma? Apunta que ahora cierra a las 20:30."},
-    {"id": "W10", "request": "Actualiza la tienda de la esquina con el nuevo horario, si existe."}
+    {"id": "W10", "request": "Actualiza la tienda de la esquina: ahora cierra a las 20:30, si existe."},
+    {"id": "W11", "request": "Corrige Carrefour Balma: ahora cierra a las 20:30 y quita que abre los domingos."}
   ]
 }
