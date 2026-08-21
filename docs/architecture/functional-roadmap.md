@@ -64,7 +64,9 @@ can reduce latency and cost.
 
 Use the existing Phase 11 resolver for references in prepared knowledge, then implement
 `save_knowledge` to coordinate validated creates, updates, and canonical wikilinks. It must retain
-ambiguous and unresolved outcomes rather than inventing identity or silently changing the ontology.
+ambiguous and unresolved outcomes rather than inventing identity or silently changing the ontology:
+`UNRESOLVED != CREATE`. Failure to resolve an existing entity, or ambiguous resolution, authorizes
+neither creation nor mutation; create/update must be explicit and validated before persistence.
 
 ⬜ **Phase 17 — executable application flow and stable application boundary**
 
