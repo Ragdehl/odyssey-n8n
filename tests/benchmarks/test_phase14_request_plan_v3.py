@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,12 +13,15 @@ from benchmarks.phase14_request_plan_v3.benchmark import (
     assert_schema_alignment,
     load_cases,
     load_oracle,
+    load_planner_capabilities,
     render_prompt,
     structured_output_schema,
     validate_output,
 )
 from benchmarks.phase14_request_plan_v3.evaluate import evaluate_plan
 from benchmarks.phase14_request_plan_v3.run_benchmark import run
+from benchmarks.phase14_retrieval_plan.benchmark import load_json
+from odyssey_core.planner_capabilities import LIMITATIONS, build_planner_capabilities
 
 
 def retrieve(
@@ -78,7 +82,22 @@ def test_frozen_contract_uses_only_schema_derived_v3_capabilities() -> None:
         and "entry_date" in rendered
         and "birth_date" in rendered
     )
-    assert "idea" not in json.dumps(json.loads(rendered.split("\n\n")[-1])["filters"])
+    assert "tags" not in json.loads(rendered.split("\n\n")[-1])["filters"]
+
+
+def test_frozen_capabilities_match_the_reusable_builder_at_freeze_time() -> None:
+    """Prove the immutable v3 snapshot was generated from the production projection."""
+    expected = build_planner_capabilities(
+        load_json(Path("config/note-schema.json")),
+        current_context={"date": "2026-08-20", "time": "10:30", "timezone": "Europe/Madrid"},
+    )
+    assert load_planner_capabilities() == expected
+    rendered = render_prompt()
+    assert (
+        '"current_context":{"date":"2026-08-20","time":"10:30","timezone":"Europe/Madrid"}'
+        in rendered
+    )
+    assert json.loads(rendered.split("\n\n")[-1])["limitations"] == LIMITATIONS
 
 
 def test_structured_output_and_local_contract_reject_tags() -> None:

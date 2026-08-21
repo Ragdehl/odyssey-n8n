@@ -14,9 +14,9 @@
             "value_type": "string",
             "required": true,
             "description": "Canonical note type selected from the type registry.",
-            "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request clearly names canonical note classes; semantic facets such as idea or decision stay in the semantic query.",
+            "retrieval_guidance": "Type is a hard candidate restriction. Use it only when the request explicitly and safely identifies canonical note classes; semantic facets are not types and stay in the semantic query.",
             "retrieval_examples": [
-                "personas y proyectos creados hoy -> person/project restriction",
+                "personas y proyectos -> person/project restriction",
                 "ideas sobre Odyssey -> no type restriction",
                 "decisiones sobre Odyssey -> no type restriction"
             ],
@@ -41,9 +41,9 @@
             "value_type": "string",
             "required": true,
             "description": "Timestamp when Odyssey created the note.",
-            "retrieval_guidance": "Odyssey note-lifecycle creation timestamp. Use for wording such as creé, escribí, guardé, or apunté when it refers to creating the Odyssey note. Serialize as timezone-aware ISO 8601; day ranges use gte start-of-day and lt next start-of-day in the supplied timezone.",
+            "retrieval_guidance": "Odyssey note-lifecycle creation timestamp: when Odyssey created, wrote, or stored the note. Use for creé, escribí, guardé, or apunté. It is not the domain date described by the note. Serialize as timezone-aware ISO 8601 (for example 2026-08-20T00:00:00+02:00); never emit timezone-less lifecycle datetimes. Prefer half-open ranges: gte start, lt next boundary.",
             "retrieval_examples": [
-                "¿Qué escribí ayer sobre n8n? -> gte 2026-08-19T00:00:00+02:00, lt 2026-08-20T00:00:00+02:00"
+                "¿Qué escribí ayer sobre n8n? -> created_at day range in the supplied timezone"
             ],
             "constraints": {"format": "date-time"},
             "filterable": true
@@ -53,7 +53,7 @@
             "value_type": "string",
             "required": true,
             "description": "Timestamp of the latest Odyssey modification to the note.",
-            "retrieval_guidance": "Odyssey note-lifecycle modification timestamp. Use for wording such as modifiqué, actualicé, or cambié. Serialize as timezone-aware ISO 8601; day ranges use gte start-of-day and lt next start-of-day in the supplied timezone.",
+            "retrieval_guidance": "Odyssey note-lifecycle modification timestamp. Use for modifiqué, actualicé, or cambié. Serialize as timezone-aware ISO 8601 (for example 2026-08-20T00:00:00+02:00); never emit timezone-less lifecycle datetimes. Prefer half-open ranges: gte start, lt next boundary.",
             "retrieval_examples": ["¿Qué modifiqué hoy? -> today updated_at range"],
             "constraints": {"format": "date-time"},
             "filterable": true
@@ -95,7 +95,7 @@
             "value_type": "array[string]",
             "required": false,
             "description": "Alternative names useful for entity resolution; aliases do not create separate entities.",
-            "retrieval_guidance": "Use deterministic alias filtering only for an explicit exact alias request. Ordinary name or entity search remains semantic.",
+            "retrieval_guidance": "Use deterministic exact matching only when the user explicitly asks for an exact alias. Ordinary name or entity search remains semantic.",
             "retrieval_examples": ["alias exacto Ody -> aliases contains Ody"],
             "constraints": {"unique_items": true},
             "filterable": true
@@ -229,7 +229,7 @@
                     "value_type": "date",
                     "required": false,
                     "description": "Known date of birth of the person.",
-                    "retrieval_guidance": "Domain date for person. Serialize as YYYY-MM-DD. Use half-open ranges for years or months.",
+                    "retrieval_guidance": "Person domain date. Serialize as YYYY-MM-DD (for example 1990-12-31). Use half-open ranges for years or months.",
                     "retrieval_examples": [
                         "personas nacidas después de 1990 -> birth_date gt 1990-12-31",
                         "personas nacidas en 1990 -> gte 1990-01-01, lt 1991-01-01"
@@ -258,7 +258,7 @@
                     "value_type": "date",
                     "required": true,
                     "description": "Date the journal entry refers to.",
-                    "retrieval_guidance": "Domain date only for journal_entry: the date the diary entry refers to, not when Odyssey stored it. Serialize as YYYY-MM-DD. Use half-open ranges for years or months; ‘entradas de diario que escribí ayer’ uses created_at instead.",
+                    "retrieval_guidance": "Domain date only for journal_entry: the date the diary entry refers to, not when Odyssey stored it. Serialize as YYYY-MM-DD. Use half-open ranges for years or months. ‘entradas de diario de agosto’ uses entry_date; ‘entradas de diario que escribí ayer’ uses created_at.",
                     "retrieval_examples": [
                         "entradas de diario de agosto -> entry_date August range",
                         "entradas de diario que escribí ayer -> created_at yesterday range"

@@ -18,6 +18,8 @@ if __package__ in {None, ""}:
 
 from benchmarks.phase14_request_plan_v3.benchmark import (  # noqa: E402
     BENCHMARK_DIR,
+    CANONICAL_SCHEMA_PATH,
+    CAPABILITIES_PATH,
     CASES_PATH,
     ORACLE_PATH,
     PRICING_PATH,
@@ -78,8 +80,10 @@ def _metadata(sdk_version: str) -> dict[str, Any]:
                 "oracle.json": ORACLE_PATH,
                 "schema_contract.json": SCHEMA_CONTRACT_PATH,
                 "pricing.json": PRICING_PATH,
+                "planner_capabilities.json": CAPABILITIES_PATH,
             }.items()
         },
+        "generating_note_schema_sha256": sha256_file(CANONICAL_SCHEMA_PATH),
     }
 
 

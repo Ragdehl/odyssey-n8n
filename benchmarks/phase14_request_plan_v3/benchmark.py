@@ -11,16 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.phase14_retrieval_plan.benchmark import BenchmarkContractError, load_json
+from odyssey_core.planner_capabilities import LIMITATIONS, build_planner_capabilities
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = BENCHMARK_DIR.parents[1]
 CANONICAL_SCHEMA_PATH = REPOSITORY_ROOT / "config/note-schema.json"
+CAPABILITIES_PATH = BENCHMARK_DIR / "planner_capabilities.json"
 CASES_PATH = BENCHMARK_DIR / "cases.json"
 ORACLE_PATH = BENCHMARK_DIR / "oracle.json"
 PROMPT_PATH = BENCHMARK_DIR / "prompt.md"
 PRICING_PATH = BENCHMARK_DIR / "pricing.json"
 SCHEMA_CONTRACT_PATH = BENCHMARK_DIR / "schema_contract.json"
-LIMITATION_CODES = ("not_supported", "unsupported_domain_date", "direct_link_not_filterable")
+LIMITATION_CODES = tuple(LIMITATIONS)
 _SECRET_PATTERN = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
 _CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 
@@ -31,19 +33,15 @@ def sha256_file(path: Path) -> str:
 
 
 def assert_schema_alignment() -> dict[str, Any]:
-    """Validate that the frozen retrieval values still match the canonical note schema.
+    """Validate the self-contained frozen v3 retrieval contract.
 
     Returns:
         The frozen RequestPlan contract.
 
     Raises:
-        BenchmarkContractError: If a canonical retrieval value changed after the experiment froze.
+        BenchmarkContractError: If the frozen contract is internally invalid.
     """
     frozen = load_json(SCHEMA_CONTRACT_PATH)
-    canonical = load_json(CANONICAL_SCHEMA_PATH)
-    actual = extract_retrieval_contract(canonical)
-    if frozen.get("retrieval_contract") != actual:
-        raise BenchmarkContractError("Canonical retrieval schema differs from frozen v3 contract")
     if tuple(frozen.get("limitation_codes", ())) != LIMITATION_CODES:
         raise BenchmarkContractError("Frozen limitation-code vocabulary is invalid")
     return frozen
@@ -55,87 +53,34 @@ def extract_retrieval_contract(schema: Mapping[str, Any]) -> dict[str, Any]:
     Tags and unregistered subtypes remain storage capabilities, but are deliberately
     excluded from planner interpretation until a concrete product need exists.
     """
-    type_ids = [item["id"] for item in schema["types"]]
+    capabilities = build_planner_capabilities(schema)
     fields = {
-        "type": {"value_type": "string", "operators": ["eq", "in"], "controlled_values": type_ids}
+        field: {key: definition[key] for key in ("value_type", "operators", "controlled_values")}
+        for field, definition in capabilities["filters"].items()
     }
-    operators = ["eq", "in", "gt", "gte", "lt", "lte"]
-    for field in schema["metadata_fields"]:
-        if field.get("filterable") and field["id"] not in {"type", "subtype", "tags"}:
-            value_type = field.get("constraints", {}).get("format", field["value_type"])
-            fields[field["id"]] = {
-                "value_type": value_type,
-                "operators": ["contains"] if value_type == "array[string]" else operators,
-                "controlled_values": [],
-            }
-    for note_type in schema["types"]:
-        for field in note_type["properties"]:
-            if field.get("filterable"):
-                fields[field["id"]] = {
-                    "value_type": field["value_type"],
-                    "operators": ["eq", "in"] if field["value_type"] == "string" else operators,
-                    "controlled_values": [],
-                }
     return {
         "schema_version": schema["schema_version"],
-        "canonical_types": type_ids,
+        "canonical_types": list(capabilities["types"]),
         "filterable_fields": fields,
     }
 
 
-def extract_filter_capabilities(schema: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """Project schema-owned filter scope and description into a compact prompt contract.
-
-    Args:
-        schema: Parsed canonical Odyssey note schema.
+def load_planner_capabilities() -> dict[str, Any]:
+    """Load the immutable planner capabilities frozen for the v3 experiment.
 
     Returns:
-        Filter capabilities keyed by field, including the types each field may constrain.
+        The complete model-visible planner capability JSON.
 
     Raises:
-        BenchmarkContractError: If filter declarations cannot be safely interpreted.
+        BenchmarkContractError: If the frozen snapshot violates the v3 boundary.
     """
-    try:
-        type_ids = [item["id"] for item in schema["types"]]
-        universal = [
-            item
-            for item in schema["metadata_fields"]
-            if item.get("filterable") and item["id"] not in {"type", "subtype", "tags"}
-        ]
-        scoped = [
-            (note_type["id"], field)
-            for note_type in schema["types"]
-            for field in note_type["properties"]
-            if field.get("filterable")
-        ]
-    except (KeyError, TypeError) as error:
-        raise BenchmarkContractError(
-            "Canonical schema has unusable filter capability data"
-        ) from error
-    capabilities = {
-        field["id"]: {
-            "value_type": field.get("constraints", {}).get("format", field["value_type"]),
-            "operators": ["contains"]
-            if field["value_type"] == "array[string]"
-            else ["eq", "in", "gt", "gte", "lt", "lte"],
-            "applies_to": type_ids,
-            "description": field["description"],
-            "retrieval_guidance": field.get("retrieval_guidance", ""),
-            "retrieval_examples": field.get("retrieval_examples", []),
-        }
-        for field in universal
-    }
-    for type_id, field in scoped:
-        capabilities[field["id"]] = {
-            "value_type": field["value_type"],
-            "operators": ["eq", "in"]
-            if field["value_type"] == "string"
-            else ["eq", "in", "gt", "gte", "lt", "lte"],
-            "applies_to": [type_id],
-            "description": field["description"],
-            "retrieval_guidance": field.get("retrieval_guidance", ""),
-            "retrieval_examples": field.get("retrieval_examples", []),
-        }
+    capabilities = load_json(CAPABILITIES_PATH)
+    if (
+        not isinstance(capabilities, dict)
+        or {"tags", "subtype"} & set(capabilities.get("filters", {}))
+        or set(capabilities.get("limitations", {})) != set(LIMITATION_CODES)
+    ):
+        raise BenchmarkContractError("Frozen planner capabilities violate the v3 contract")
     return capabilities
 
 
@@ -148,27 +93,14 @@ def render_prompt() -> str:
     Raises:
         BenchmarkContractError: If the frozen prompt omits or duplicates its capability placeholder.
     """
-    assert_schema_alignment()
     template = PROMPT_PATH.read_text(encoding="utf-8")
     if template.count(_CAPABILITY_PLACEHOLDER) != 1:
         raise BenchmarkContractError("Prompt must contain exactly one capability placeholder")
-    canonical = load_json(CANONICAL_SCHEMA_PATH)
-    type_field = next(field for field in canonical["metadata_fields"] if field["id"] == "type")
-    capability_json = {
-        "types": {
-            item["id"]: {
-                "description": item["description"],
-                "examples": item["examples"],
-                "retrieval_guidance": type_field["retrieval_guidance"],
-                "retrieval_examples": type_field["retrieval_examples"],
-            }
-            for item in canonical["types"]
-        },
-        "filters": extract_filter_capabilities(canonical),
-    }
     return template.replace(
         _CAPABILITY_PLACEHOLDER,
-        __import__("json").dumps(capability_json, ensure_ascii=False, separators=(",", ":")),
+        __import__("json").dumps(
+            load_planner_capabilities(), ensure_ascii=False, separators=(",", ":")
+        ),
     )
 
 
@@ -353,11 +285,7 @@ def _validate_filter_scopes(plan: Mapping[str, Any], contract: Mapping[str, Any]
     for item in plan["filters"]:
         if item["field"] == "type":
             continue
-        allowed = set(
-            extract_filter_capabilities(load_json(CANONICAL_SCHEMA_PATH))[item["field"]][
-                "applies_to"
-            ]
-        )
+        allowed = set(load_planner_capabilities()["filters"][item["field"]]["applies_to"])
         if not candidates <= allowed:
             raise BenchmarkContractError(
                 f"Filter {item['field']!r} requires candidates within {sorted(allowed)!r}"

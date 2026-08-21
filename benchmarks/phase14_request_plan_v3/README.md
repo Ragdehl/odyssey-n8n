@@ -6,7 +6,7 @@ This separate, frozen-before-calls v3 experiment preserves v2.2 evidence unchang
 
 `RequestPlan` has ordered `RetrieveAction` and `CreateNoteAction` values plus limitation codes. A v3 retrieval plan is exactly `{query, type, filters}`. Tags, canonical tag values, and subtype capability are intentionally absent from the planner contract. `type` and filters are recall-sensitive hard restrictions, so semantic facets remain in `query` unless the schema makes an explicit, safe mapping possible.
 
-The stable cacheable prompt prefix contains the concise planner rules and a compact JSON capability projection derived from `config/note-schema.json`. The runner uses `odyssey-phase14-request-plan-v3`, records provider cache counters, and preserves append-only evidence. A received but malformed or invalid model output is a `success: true`, `status: CRITICAL` model-quality record; only provider/transport failures are retryable with `--retry-failures`.
+The stable cacheable prompt prefix contains the concise planner rules and `planner_capabilities.json`, an immutable v3 snapshot generated from `odyssey_core.planner_capabilities.build_planner_capabilities(...)` using `config/note-schema.json`. The runner never regenerates this artifact from the live schema. Future production calls should invoke that same builder dynamically with runtime context. The runner uses `odyssey-phase14-request-plan-v3`, records provider cache counters, and preserves append-only evidence. A received but malformed or invalid model output is a `success: true`, `status: CRITICAL` model-quality record; only provider/transport failures are retryable with `--retry-failures`.
 
 ## Tag decision
 
