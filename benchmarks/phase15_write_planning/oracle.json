@@ -1,0 +1,24 @@
+{
+  "oracle_version": "1.0.0",
+  "locked_before_model_calls": true,
+  "notes": ["Facts use required token groups only; wording equivalence remains human review.", "No case authorizes a physical create or update decision."],
+  "cases": [
+    {"id":"R01","actions":[{"kind":"retrieve","query_groups":[["odyssey"]]}]},
+    {"id":"R02","actions":[{"kind":"retrieve","type":"journal_entry","filters":[["created_at","gte","2026-08-19T00:00:00+02:00"],["created_at","lt","2026-08-20T00:00:00+02:00"]],"query_groups":[["niños","ninos"]]}]},
+    {"id":"R03","actions":[{"kind":"retrieve","filters":[["aliases","contains","Ody"]]}]},
+    {"id":"R04","actions":[{"kind":"retrieve","filters":[["type","in",["project","task","concept"]],["created_at","gte","2026-08-20T00:00:00+02:00"],["created_at","lt","2026-08-21T00:00:00+02:00"]],"query_groups":[["odyssey"]]}]},
+    {"id":"R05","actions":[{"kind":"retrieve","type":"person","filters":[["birth_date","gte","1990-01-01"],["birth_date","lt","1991-01-01"]]},{"kind":"retrieve","type":"person","filters":[["birth_date","gte","2000-01-01"],["birth_date","lt","2001-01-01"]]}]},
+    {"id":"R06","actions":[{"kind":"write","units":[{"intent":"record","subject_groups":[["phase","15"],["sol"]],"fact_groups":[["sol"]]}]},{"kind":"retrieve","query_groups":[["había","habia"],["pensado"]]}]},
+    {"id":"R07","limitations":["not_supported"],"actions":[{"kind":"retrieve","query_groups":[["odyssey"],["idea"],["revis","review"]]}]},
+    {"id":"W01","actions":[{"kind":"write","units":[{"intent":"record","subject_groups":[["taller","marta"]],"fact_groups":[["abre","sabado","sábado"]]}]}]},
+    {"id":"W02","actions":[{"kind":"write","units":[{"intent":"record","subject_groups":[["carrefour","balma"]],"fact_groups":[["aparcamiento"]]}]}]},
+    {"id":"W03","actions":[{"kind":"write","units":[{"intent":"amend","subject_groups":[["carrefour","balma"]],"fact_groups":[["20:30"]]}]}]},
+    {"id":"W04","actions":[{"kind":"write","units":[{"intent":"remove","subject_groups":[["carrefour","balma"]],"fact_groups":[["domingo"]]}]}]},
+    {"id":"W05","actions":[{"kind":"write","units":[{"intent":"delete","subject_groups":[["jardín","jardin"],["2024"]]}]}]},
+    {"id":"W06","actions":[{"kind":"write","units":[{"intent":"record","subject_groups":[["carrefour","balma"]],"fact_groups":[["20:30"],["aparcamiento"]]}]}]},
+    {"id":"W07","actions":[{"kind":"write","units":[{"intent":"record","subject_groups":[["carrefour","balma"]],"fact_groups":[["20:30"]]},{"intent":"record","subject_groups":[["leche","pascual","semidesnatada"]],"fact_groups":[["habitual"]]}]}]},
+    {"id":"W08","actions":[{"kind":"write","units":[{"intent":"record","subject_groups":[["leche","pascual","semidesnatada"]]},{"intent":"record","subject_groups":[["carrefour","balma"]]},{"intent":"record","type":"purchase","fact_groups":[["hoy"]],"references":[[2,0,["producto","product"]],[2,1,["tienda","store"]]]}]}]},
+    {"id":"W09","actions":[{"kind":"retrieve","query_groups":[["compr","última","ultima"],["carrefour","balma"]]},{"kind":"write","units":[{"intent":"amend","subject_groups":[["carrefour","balma"]],"fact_groups":[["20:30"]]}]}]},
+    {"id":"W10","actions":[{"kind":"write","units":[{"intent":"amend","subject_groups":[["tienda","esquina"]],"fact_groups":[["horario"]]}]}]}
+  ]
+}

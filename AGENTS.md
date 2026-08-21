@@ -65,6 +65,12 @@ Routine implementation risk means proceed autonomously; material data, security,
 
 ## GitHub review workflow
 
+## Significant functional-phase checklist
+
+For a significant functional phase, read the canonical [Functional Roadmap](docs/architecture/functional-roadmap.md) rather than reconstructing phase state from chat or agent memory. Read the relevant architecture documents and ADRs before changing a contract, define the phase contract under the [Development Pipeline](docs/architecture/development-pipeline.md), and run the architecture challenge before implementation.
+
+Prefer the simplest architecture and challenge unnecessary complexity. Keep one canonical source for each project fact or contract; link to it elsewhere instead of duplicating it. Implement code and tests together, review both code and documentation for correctness and stale information, and update roadmap or ADR status only when actual project state changes. Readiness requires deterministic verification and CI, followed by PR, semantic/human review, and human merge.
+
 Before beginning each significant new functional Odyssey phase, use the repository's `odyssey-architecture-challenge` skill as a reasoning checkpoint before implementation. It is not required for tiny bug fixes, straightforward review feedback, formatting, documentation typo fixes, routine test corrections, or post-merge cleanup.
 
 Before continuing implementation on a branch that has an open Pull Request, use the repository's `odyssey-pr-feedback` skill to inspect and process review feedback.

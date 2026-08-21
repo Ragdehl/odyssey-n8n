@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 
 ## Next functional phase
 
-➡️ **Phase 15 — write planning / knowledge preparation**
+➡️ **Phase 15 — write planning / knowledge preparation (in progress)**
 
 Transform write intent into structured knowledge work without persisting it. This includes
 knowledge decomposition, related knowledge units, facts, and references in a form suitable for
@@ -32,8 +32,9 @@ later deterministic validation and existing-entity resolution.
 
 The opening architecture question is whether the **same Sol/low interpretation call** used by Phase
 14 can produce retrieval planning and structured write/knowledge preparation in one `RequestPlan`
-response. Phase 15 must test this preferred simplification; it must not assume a second LLM call is
-needed and must not change the Phase 14 production contract as part of that investigation.
+response. Phase 15 must test this preferred simplification and must not assume a second LLM call is
+needed. Its deterministic preparation evolves content-only `CreateNoteAction` into semantic
+`WriteAction`; production activation remains pending the frozen Sol/low experiment.
 
 ```text
 user message

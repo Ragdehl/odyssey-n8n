@@ -153,9 +153,11 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Can see:** original user language and caller-supplied conversational context.
 - **Must not know or do:** open Markdown files, resolve identity, decide that a referenced entity
   exists, or decide to create a new entity.
-- **Status:** **IMPLEMENTED** as the Phase 14 `RequestPlan` boundary. The Sol/low planner returns
-  ordered validated retrieval and content-only create-intent actions; it does not retrieve or write.
-  Capabilities are derived dynamically from the canonical schema and caller-supplied current context.
+- **Status:** **Phase 14 implemented; Phase 15 deterministic preparation in progress.** The Sol/low
+  planner contract has ordered validated retrieval and semantic write-planning actions; it does not
+  retrieve, resolve identity, or write. Production activation of the Phase 15 extension awaits its
+  frozen benchmark. Capabilities are derived dynamically from the canonical schema and caller-supplied
+  current context.
 - **Concrete conceptual example:**
 
   Input:
@@ -202,7 +204,8 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Can see:** write intent, subjects, facts, relationships, and context supplied by interpretation.
 - **Must not know or do:** split text into unrelated fragments, resolve identities, choose storage
   paths, write notes, or freeze a permanent plan schema.
-- **Status:** **PLANNED**. `KnowledgePlan` and `KnowledgeUnit` are architecture vocabulary only.
+- **Status:** **Phase 15 deterministic preparation in progress.** `WriteAction` contains validated
+  semantic `KnowledgeUnit` values; it remains a non-executing planning contract until benchmarked.
 - **Concrete conceptual example:**
 
   Input:

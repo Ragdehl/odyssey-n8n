@@ -1,0 +1,23 @@
+{
+  "benchmark_version": "1.0.0",
+  "fixed_context": {"current_date": "2026-08-20", "current_time": "10:30", "timezone": "Europe/Madrid"},
+  "cases": [
+    {"id": "R01", "request": "¿Qué tengo apuntado sobre Odyssey?"},
+    {"id": "R02", "request": "¿Qué entradas de diario escribí ayer sobre los niños?"},
+    {"id": "R03", "request": "¿Qué notas tienen exactamente el alias \"Ody\"?"},
+    {"id": "R04", "request": "¿Qué proyectos, tareas y conceptos sobre Odyssey creé hoy?"},
+    {"id": "R05", "request": "¿Qué personas nacieron en 1990 o en 2000?"},
+    {"id": "R06", "request": "Apunta que quiero usar Sol para Phase 15 y qué había pensado antes sobre esto?"},
+    {"id": "R07", "request": "¿Qué ideas sobre Odyssey no estén marcadas para revisar?"},
+    {"id": "W01", "request": "Apunta que el taller de Marta abre los sábados."},
+    {"id": "W02", "request": "Apunta que Carrefour Balma tiene aparcamiento subterráneo."},
+    {"id": "W03", "request": "Corrige Carrefour Balma: ahora cierra a las 20:30."},
+    {"id": "W04", "request": "Quita de Carrefour Balma que abre los domingos."},
+    {"id": "W05", "request": "Elimina el proyecto Jardín 2024."},
+    {"id": "W06", "request": "Apunta que Carrefour Balma cierra a las 20:30 y tiene aparcamiento subterráneo."},
+    {"id": "W07", "request": "Apunta que Carrefour Balma cierra a las 20:30 y que Leche Pascual semidesnatada es la leche que compro habitualmente."},
+    {"id": "W08", "request": "Apunta que compré Leche Pascual semidesnatada en Carrefour Balma hoy."},
+    {"id": "W09", "request": "¿Qué compré la última vez en Carrefour Balma? Apunta que ahora cierra a las 20:30."},
+    {"id": "W10", "request": "Actualiza la tienda de la esquina con el nuevo horario, si existe."}
+  ]
+}

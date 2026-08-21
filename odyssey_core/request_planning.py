@@ -13,13 +13,14 @@ from odyssey_core.planner_capabilities import LIMITATIONS, build_planner_capabil
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
+WRITE_INTENTS = ("record", "amend", "remove", "delete")
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestPlan. Use the supplied current date, time, and timezone.
 
 Hard filters can permanently remove valid notes: apply a deterministic restriction only when the request maps explicitly and safely to this capability contract. Otherwise preserve the meaning in `query`. Multiple RetrieveActions are only for genuinely independent candidate-set branches; ordinary semantic OR stays one query.
 
-Use a canonical type restriction only when the request explicitly and safely identifies that canonical class; never infer a canonical type from semantic facets. CreateNoteAction is content-only user memory intent. Do not perform SQL, retrieval, persistence, ID generation, relationship inference, or note decomposition. Use limitation codes only with their defined meanings. Return strict structured JSON.
+Use a canonical type restriction only when the request explicitly and safely identifies that canonical class; never infer a canonical type from semantic facets. Decompose write knowledge semantically: group facts for the same subject, split independent subjects, preserve references between units, and distinguish record, amend, remove, and delete. Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval or persistence. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
 Planner retrieval capabilities (derived dynamically from the canonical schema):
 
@@ -54,14 +55,50 @@ class RetrieveAction:
 
 
 @dataclass(frozen=True, slots=True)
-class CreateNoteAction:
-    """Represent content-only memory intent without persistence details."""
+class KnowledgeReference:
+    """Represent one semantic in-plan reference to another knowledge unit.
 
-    content: str
-    kind: str = "create_note"
+    Args:
+        target_index: Zero-based index of another unit in the same write action.
+        role: Human-readable semantic role of the referenced unit.
+    """
+
+    target_index: int
+    role: str
 
 
-RequestAction = RetrieveAction | CreateNoteAction
+@dataclass(frozen=True, slots=True)
+class KnowledgeUnit:
+    """Represent grouped facts about one subject without resolving or persisting it.
+
+    Args:
+        subject: Non-empty user-level subject reference.
+        type: Optional canonical type directly expressed by the request.
+        intent: Controlled semantic mutation intent for later resolution.
+        facts: Non-empty facts grouped for this subject.
+        references: Semantic pointers to other units in the same write action.
+    """
+
+    subject: str
+    type: str | None
+    intent: str
+    facts: tuple[str, ...]
+    references: tuple[KnowledgeReference, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class WriteAction:
+    """Represent semantic write preparation without physical persistence decisions.
+
+    Args:
+        units: Non-empty related knowledge units in request order.
+    """
+
+    units: tuple[KnowledgeUnit, ...]
+    kind: str = "write"
+
+
+RequestAction = RetrieveAction | WriteAction
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,10 +198,58 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                         {
                             "type": "object",
                             "properties": {
-                                "kind": {"const": "create_note"},
-                                "content": {"type": "string"},
+                                "kind": {"const": "write"},
+                                "units": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "subject": {"type": "string"},
+                                            "type": {
+                                                "anyOf": [
+                                                    {"type": "null"},
+                                                    {
+                                                        "type": "string",
+                                                        "enum": list(capabilities["types"]),
+                                                    },
+                                                ]
+                                            },
+                                            "intent": {
+                                                "type": "string",
+                                                "enum": list(WRITE_INTENTS),
+                                            },
+                                            "facts": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                            },
+                                            "references": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "target_index": {
+                                                            "type": "integer",
+                                                            "minimum": 0,
+                                                        },
+                                                        "role": {"type": "string"},
+                                                    },
+                                                    "required": ["target_index", "role"],
+                                                    "additionalProperties": False,
+                                                },
+                                            },
+                                        },
+                                        "required": [
+                                            "subject",
+                                            "type",
+                                            "intent",
+                                            "facts",
+                                            "references",
+                                        ],
+                                        "additionalProperties": False,
+                                    },
+                                },
                             },
-                            "required": ["kind", "content"],
+                            "required": ["kind", "units"],
                             "additionalProperties": False,
                         },
                     ]
@@ -316,15 +401,8 @@ def _validate_action(
     """Validate one discriminated action without executing retrieval or persistence."""
     if not isinstance(action, dict):
         raise RequestPlanningError("RequestPlan action must be an object")
-    if action.get("kind") == "create_note":
-        content = action.get("content")
-        if (
-            set(action) != {"kind", "content"}
-            or not isinstance(content, str)
-            or not content.strip()
-        ):
-            raise RequestPlanningError("CreateNoteAction must contain only non-empty content")
-        return CreateNoteAction(content=content.strip())
+    if action.get("kind") == "write":
+        return _validate_write_action(action, capabilities)
     if action.get("kind") != "retrieve" or set(action) != {"kind", "plan"}:
         raise RequestPlanningError("RequestPlan action kind is invalid")
     raw_plan = action["plan"]
@@ -350,6 +428,92 @@ def _validate_action(
                 ContextFilter(item["field"], item["op"], item["value"]) for item in raw_filters
             ),
         )
+    )
+
+
+def _validate_write_action(
+    action: Mapping[str, Any], capabilities: Mapping[str, Any]
+) -> WriteAction:
+    """Validate semantic knowledge units without resolving identity or choosing persistence.
+
+    Args:
+        action: Untrusted write-action object returned by the planner.
+        capabilities: Canonical type capabilities derived from the active schema.
+
+    Returns:
+        Immutable semantic write preparation with valid in-plan references.
+
+    Raises:
+        RequestPlanningError: If a unit is malformed, lacks semantic content, or references an
+            unknown or self target.
+    """
+    raw_units = action.get("units")
+    if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
+        raise RequestPlanningError("WriteAction must contain non-empty units")
+    units = tuple(_validate_knowledge_unit(raw, capabilities) for raw in raw_units)
+    for index, unit in enumerate(units):
+        for reference in unit.references:
+            if reference.target_index >= len(units) or reference.target_index == index:
+                raise RequestPlanningError("KnowledgeUnit reference target is invalid")
+    return WriteAction(units=units)
+
+
+def _validate_knowledge_unit(unit: Any, capabilities: Mapping[str, Any]) -> KnowledgeUnit:
+    """Validate one grouped knowledge unit and its local reference syntax.
+
+    Args:
+        unit: Untrusted model object for one semantic subject.
+        capabilities: Canonical type capabilities derived from the active schema.
+
+    Returns:
+        One immutable semantic unit with no physical persistence fields.
+
+    Raises:
+        RequestPlanningError: If fields are incomplete, unknown, or non-semantic.
+    """
+    required = {"subject", "type", "intent", "facts", "references"}
+    if not isinstance(unit, dict) or set(unit) != required:
+        raise RequestPlanningError("KnowledgeUnit fields are invalid")
+    subject, note_type, intent = unit["subject"], unit["type"], unit["intent"]
+    raw_facts, raw_references = unit["facts"], unit["references"]
+    if not isinstance(subject, str) or not subject.strip():
+        raise RequestPlanningError("KnowledgeUnit subject must be non-empty")
+    if note_type is not None and note_type not in capabilities["types"]:
+        raise RequestPlanningError("KnowledgeUnit type is invalid")
+    if intent not in WRITE_INTENTS:
+        raise RequestPlanningError("KnowledgeUnit intent is invalid")
+    if (
+        not isinstance(raw_facts, list)
+        or not raw_facts
+        or len(raw_facts) != len(set(raw_facts))
+        or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
+    ):
+        raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
+    if not isinstance(raw_references, list):
+        raise RequestPlanningError("KnowledgeUnit references must be a list")
+    references = []
+    for reference in raw_references:
+        if (
+            not isinstance(reference, dict)
+            or set(reference) != {"target_index", "role"}
+            or not isinstance(reference["target_index"], int)
+            or isinstance(reference["target_index"], bool)
+            or reference["target_index"] < 0
+            or not isinstance(reference["role"], str)
+            or not reference["role"].strip()
+        ):
+            raise RequestPlanningError("KnowledgeUnit reference is invalid")
+        references.append(
+            KnowledgeReference(
+                target_index=reference["target_index"], role=reference["role"].strip()
+            )
+        )
+    return KnowledgeUnit(
+        subject=subject.strip(),
+        type=note_type,
+        intent=intent,
+        facts=tuple(fact.strip() for fact in raw_facts),
+        references=tuple(references),
     )
 
 

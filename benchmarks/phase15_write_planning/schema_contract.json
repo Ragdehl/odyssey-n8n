@@ -1,0 +1,5 @@
+{
+  "canonical_types": ["concept", "project", "task", "store", "product", "purchase", "recipe", "document", "person", "journal_entry"],
+  "write_intents": ["record", "amend", "remove", "delete"],
+  "forbidden_write_fields": ["id", "path", "markdown", "sql", "operation", "persistence", "create", "update"]
+}
