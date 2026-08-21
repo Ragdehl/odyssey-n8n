@@ -1,6 +1,6 @@
 # Phase 15 contract: write planning / knowledge preparation
 
-Status: **in progress — deterministic preparation only**
+Status: **COMPLETE / VALIDATED — deterministic preparation accepted; persistence remains out of scope**
 
 ## Objective
 
@@ -41,8 +41,8 @@ infrastructure; and LangGraph, DAG, or workflow-engine infrastructure.
 
 ## Open decisions
 
-None for deterministic preparation. The frozen Sol/low experiment will determine whether the
-single-call prompt is sufficiently reliable before production activation.
+None. The single-call Sol/low design is accepted for this phase; persistence and explicit creation
+authorization remain Phase 16 decisions.
 
 ## Canonical contract
 
@@ -73,8 +73,8 @@ single-call prompt is sufficiently reliable before production activation.
 
 A reference is `{ "target_index": <unit index>, "role": <non-empty semantic role> }`. It is an
 in-plan structural pointer, not a persistent identifier or relationship ontology. It must target a
-different existing unit. `amend` and `remove` require at least one concrete fact. `delete` permits
-requires `facts: []` and rejects any deletion prose. `record` normally requires facts, but permits
+different existing unit. `amend` and `remove` require at least one concrete fact. `delete` requires
+`facts: []` and rejects any deletion prose. `record` normally requires facts, but permits
 `facts: []` only when another unit in the same `WriteAction` references it as a semantic target.
 `record` means remember knowledge and may later be resolved to an existing entity or a deliberately
 approved new one. `amend`, `remove`, and `delete` require an existing target later; unresolved
@@ -85,8 +85,32 @@ Facts for one logical subject are grouped only when their intent is compatible. 
 correction and a removal about Carrefour Balma are separate `KnowledgeUnit` values even though they
 have the same subject. Later persistence may safely coalesce same-entity mutations; Phase 15 does not.
 
+Semantic chronology such as “qué había pensado antes” remains in the retrieval query and does not
+automatically become a `created_at` or `updated_at` filter. Explicit timing of when a note, entry, or
+item was created, written, added, updated, modified, or recorded may still produce those filters.
+Independent deterministic candidate sets remain independent `RetrieveAction` branches. A
+write-target existence check is not a retrieval request: identity and existence are delegated to
+the later Phase 9–11 resolution path, and `UNRESOLVED != CREATE` remains invariant.
+
+Reference-only `record` units do not authorize creation merely because their identity is unresolved.
+Phase 16 must decide creation authorization explicitly and safely.
+
 The schema type, when supplied, must be one of the current canonical types. The action has no
-persistence operation, entity ID, path, serialized Markdown, or storage instruction.
+persistence operation, entity ID, path, serialized Markdown, SQL, or storage instruction.
 
 The experiment details and deterministic oracle are canonical in
 [`benchmarks/phase15_write_planning/README.md`](../../benchmarks/phase15_write_planning/README.md).
+
+## Validation record
+
+The initial Structured Outputs compatibility attempt returned zero model outputs and is preserved
+as failed harness evidence. The corrected full experiment completed 18 Sol/low calls. Human review
+identified and corrected two planner-boundary issues: semantic “before” had become lifecycle
+metadata, and a write-target existence check had become an unnecessary `RetrieveAction`.
+
+The targeted follow-up completed five Sol/low calls: T01, T02, T03, and T05 were acceptable; T04
+once collapsed the 1990/2000 OR into an unsatisfiable AND filter. One frozen-prompt T04 repeat
+completed one additional Sol/low call and produced two independent candidate-set branches. Human
+review accepts that isolated variance; no further paid calls are required. Raw evidence and exact
+statuses remain unchanged under `benchmarks/phase15_write_planning/results/` and its `targeted/results/`
+directories.

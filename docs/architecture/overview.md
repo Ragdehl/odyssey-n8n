@@ -153,11 +153,10 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Can see:** original user language and caller-supplied conversational context.
 - **Must not know or do:** open Markdown files, resolve identity, decide that a referenced entity
   exists, or decide to create a new entity.
-- **Status:** **Phase 14 implemented; Phase 15 deterministic preparation in progress.** The Sol/low
-  planner contract has ordered validated retrieval and semantic write-planning actions; it does not
-  retrieve, resolve identity, or write. Production activation of the Phase 15 extension awaits its
-  frozen benchmark. Capabilities are derived dynamically from the canonical schema and caller-supplied
-  current context.
+- **Status:** **Phase 15 implemented and validated.** The one-call Sol/low planner contract has
+  ordered validated retrieval and semantic write-planning actions; it does not retrieve, resolve
+  identity, or write. Capabilities are derived dynamically from the canonical schema and
+  caller-supplied current context. Write-target existence is delegated to later entity resolution.
 - **Concrete conceptual example:**
 
   Input:
@@ -204,8 +203,10 @@ Every conceptual output below is illustrative unless the capability is marked im
 - **Can see:** write intent, subjects, facts, relationships, and context supplied by interpretation.
 - **Must not know or do:** split text into unrelated fragments, resolve identities, choose storage
   paths, write notes, or freeze a permanent plan schema.
-- **Status:** **Phase 15 deterministic preparation in progress.** `WriteAction` contains validated
-  semantic `KnowledgeUnit` values; it remains a non-executing planning contract until benchmarked.
+- **Status:** **PHASE 15 — IMPLEMENTED / VALIDATED.** `WriteAction` contains validated semantic
+  `KnowledgeUnit` values and remains a non-executing planning contract. It does not authorize
+  creation for unresolved reference-only `record` units; Phase 16 must make creation authorization
+  explicit.
 - **Concrete conceptual example:**
 
   Input:

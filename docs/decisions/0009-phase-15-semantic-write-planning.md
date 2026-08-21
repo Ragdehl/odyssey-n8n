@@ -1,6 +1,6 @@
 # ADR 0009: Phase 15 semantic write-planning boundary
 
-- Status: Accepted for deterministic preparation; Sol/low experiment pending
+- Status: Accepted and validated
 - Date: 2026-08-21
 
 ## Context
@@ -38,6 +38,6 @@ Markdown, SQLite, repository-existence, or persistence authority.
 ## Consequences
 
 Phase 14 retrieval actions and Phase 13 `get_context` remain unchanged. Phase 15 validates but does
-not execute plans. The planned benchmark must establish Sol/low quality before the evolved production
-prompt is used for paid traffic. Identity resolution and explicit persistence remain Phase 16 work,
-including the enduring `UNRESOLVED != CREATE` rule.
+not execute plans. The full and targeted Sol/low evidence validated the single-call boundary, with
+two prompt clarifications for semantic chronology and write-target existence. Identity resolution
+and explicit persistence remain Phase 16 work, including the enduring `UNRESOLVED != CREATE` rule.
