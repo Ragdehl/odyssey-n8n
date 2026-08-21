@@ -1,0 +1,46 @@
+{
+  "run_id": "20260820T103836Z-missing-api-key",
+  "created_at": "2026-08-20T10:38:36+00:00",
+  "git_sha": "8c6a8a3b7637a341aecae4cbe4db3ceb508045ed",
+  "source_state": "benchmark harness present as uncommitted feature-branch changes",
+  "benchmark_version": "1.0.0",
+  "oracle_version": "1.0.0",
+  "fixed_context": {
+    "current_date": "2026-08-20",
+    "current_time": "10:30",
+    "timezone": "Europe/Madrid"
+  },
+  "configurations": [
+    {"model": "gpt-5.6-luna", "reasoning_effort": "none"},
+    {"model": "gpt-5.6-luna", "reasoning_effort": "low"},
+    {"model": "gpt-5.6-terra", "reasoning_effort": "low"},
+    {"model": "gpt-5.6-sol", "reasoning_effort": "low"}
+  ],
+  "openai_sdk_version": "3.3.1",
+  "api": "OpenAI Responses API",
+  "structured_outputs": true,
+  "store": false,
+  "independent_request_per_case": true,
+  "prompt_cache_key": "odyssey-phase14-retrieval-plan-v1",
+  "execution_status": "blocked_before_api_calls",
+  "blocker": "OPENAI_API_KEY is unavailable",
+  "paid_requests": 0,
+  "artifact_sha256": {
+    "prompt.md": "a07b9b25a5d9fafc3daba12b0b55fd836e4cc423ef5aab5b91c4f7992d822218",
+    "cases.json": "1608f3b1d5b1fb46e1df26f5bdedc43bc06506262e20569c9512387de62fff6b",
+    "oracle.json": "485f14c3268b4c0acc4f74417599e19ac0dacc322b5a0876fc7fdc8dff8a2bd8",
+    "schema_contract.json": "ddcfd32eb57710b8242a5b08d489ae972da20f4759f2a1d64cf237f9937ecf3e",
+    "pricing.json": "cb25b4c7cbfd37f4223cf41bb9d0dab874229c7b75fca8271414b459fa722399"
+  },
+  "pricing": {
+    "retrieved_at": "2026-08-20",
+    "currency": "USD",
+    "unit": "per_1m_tokens",
+    "service_tier": "standard",
+    "models": {
+      "gpt-5.6-luna": {"input": 0.2, "cached_input": 0.02, "output": 1.2},
+      "gpt-5.6-terra": {"input": 2.0, "cached_input": 0.2, "output": 12.0},
+      "gpt-5.6-sol": {"input": 5.0, "cached_input": 0.5, "output": 30.0}
+    }
+  }
+}

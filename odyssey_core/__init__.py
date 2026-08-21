@@ -9,6 +9,7 @@ from .context import (
     ContextRetrievalError,
     build_context_retrieval_text,
     get_context,
+    validate_context_filters,
 )
 from .identity import (
     ExactEntityCandidate,
@@ -27,6 +28,19 @@ from .persistence import (
     ProtectedMetadataError,
     create_entity,
     update_entity,
+)
+from .request_planning import (
+    PLANNER_MODEL,
+    PLANNER_REASONING_EFFORT,
+    CreateNoteAction,
+    OpenAIRequestPlanner,
+    RequestPlan,
+    RequestPlanningError,
+    RetrievalPlan,
+    RetrieveAction,
+    render_request_planner_prompt,
+    request_plan_json_schema,
+    validate_request_plan,
 )
 from .resolution import (
     ExistingEntityOutcome,
@@ -71,6 +85,7 @@ __all__ = [
     "ContextRetrievalError",
     "build_context_retrieval_text",
     "get_context",
+    "validate_context_filters",
     "ExistingEntityOutcome",
     "ExistingEntityResolution",
     "ExistingEntityResolutionError",
@@ -84,4 +99,15 @@ __all__ = [
     "ProtectedMetadataError",
     "create_entity",
     "update_entity",
+    "PLANNER_MODEL",
+    "PLANNER_REASONING_EFFORT",
+    "CreateNoteAction",
+    "OpenAIRequestPlanner",
+    "RequestPlan",
+    "RequestPlanningError",
+    "RetrievalPlan",
+    "RetrieveAction",
+    "request_plan_json_schema",
+    "render_request_planner_prompt",
+    "validate_request_plan",
 ]

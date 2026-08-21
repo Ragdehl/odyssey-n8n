@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, cast
 
+from odyssey_core.filtering import supported_filter_operators
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
@@ -308,12 +309,6 @@ def _normalize_filters(
     canonical_tags = set(_canonical_values(schema, "tags"))
     canonical_subtypes = _canonical_subtypes(schema)
     normalized: list[tuple[str, str, tuple[str | int, ...]]] = []
-    allowed = {
-        "string": {"eq", "in"},
-        "integer": {"eq", "in", "gt", "gte", "lt", "lte"},
-        "date": {"eq", "in", "gt", "gte", "lt", "lte"},
-        "array[string]": {"contains"},
-    }
     for raw in raw_filters:
         if isinstance(raw, ContextFilter):
             field, op, value = raw.field, raw.op, raw.value
@@ -324,9 +319,7 @@ def _normalize_filters(
         if not isinstance(field, str) or field not in definitions:
             raise ValueError(f"Unknown or unsupported context filter field: {field!r}")
         definition = definitions[field]
-        valid_operators = allowed[definition["value_type"]]
-        if definition.get("constraints", {}).get("format") == "date-time":
-            valid_operators = valid_operators | {"gt", "gte", "lt", "lte"}
+        valid_operators = set(supported_filter_operators(definition))
         if not isinstance(op, str) or op not in valid_operators:
             raise ValueError(f"Unsupported operator {op!r} for context field {field!r}")
         values = _validate_filter_value(definition, op, value)
@@ -341,6 +334,28 @@ def _normalize_filters(
             raise ValueError(f"Unknown canonical subtype in filter: {values}")
         normalized.append((field, op, values))
     return tuple(normalized)
+
+
+def validate_context_filters(
+    schema: dict[str, Any],
+    filters: Sequence[ContextFilter | Mapping[str, Any]],
+    *,
+    note_type: str | None = None,
+) -> tuple[tuple[str, str, tuple[str | int, ...]], ...]:
+    """Validate RequestPlan-compatible filters with Phase 13's retrieval rules.
+
+    Args:
+        schema: Canonical schema defining supported deterministic fields.
+        filters: Structured filter objects emitted by a caller.
+        note_type: Optional canonical type restriction from the retrieval plan.
+
+    Returns:
+        Canonical filter tuples accepted by the Phase 13 retrieval boundary.
+
+    Raises:
+        ValueError: If a field, operator, value, or type restriction is unsupported.
+    """
+    return _normalize_filters(schema, filters, note_type, ())
 
 
 class ContextIndex:

@@ -1,0 +1,30 @@
+{
+  "oracle_version":"2.2.0", "locked_before_model_calls":true, "primary_metric":"retrieval_candidate_set_safety",
+  "notes":["Branch order is irrelevant for retrieval scoring.","Query/content fidelity is human review, never deterministic CRITICAL."],
+  "cases":[
+    {"id":"S01","expected":{"retrieve":[{"query_groups":[["odyssey"]]}],"create_count":0,"limitations":[]}},
+    {"id":"S02","expected":{"retrieve":[{"type":["journal_entry"],"filters":[["created_at","gte","2026-08-19T00:00:00+02:00"],["created_at","lt","2026-08-20T00:00:00+02:00"]],"query_groups":[["niños","ninos"]]}],"create_count":0,"limitations":[]}},
+    {"id":"S03","expected":{"retrieve":[{"tags":["idea","review"],"query_groups":[["odyssey"]]}],"create_count":0,"limitations":[]}},
+    {"id":"S04","expected":{"retrieve":[{"filters":[["aliases","contains","Ody"]]}],"create_count":0,"limitations":[]}},
+    {"id":"B01","expected":{"retrieve":[{"filters":[["updated_at","gte","2026-08-20T00:00:00+02:00"],["updated_at","lt","2026-08-21T00:00:00+02:00"]],"query_groups":[["odyssey"]]},{"filters":[["created_at","gte","2026-08-19T00:00:00+02:00"],["created_at","lt","2026-08-20T00:00:00+02:00"]],"query_groups":[["n8n"]]}],"create_count":0,"limitations":[]}},
+    {"id":"B02","expected":{"retrieve":[{"type":["person"],"filters":[["birth_date","gt","1990-12-31"]]},{"type":["journal_entry"],"filters":[["entry_date","gte","2026-08-01"],["entry_date","lt","2026-09-01"]]}],"create_count":0,"limitations":[]}},
+    {"id":"B03","expected":{"retrieve":[{"filters":[["created_at","gte","2026-08-19T00:00:00+02:00"],["created_at","lt","2026-08-20T00:00:00+02:00"]],"query_groups":[["odyssey"]]},{"filters":[["updated_at","gte","2026-08-20T00:00:00+02:00"],["updated_at","lt","2026-08-21T00:00:00+02:00"]],"query_groups":[["odyssey"]]}],"create_count":0,"limitations":[]}},
+    {"id":"B04","expected":{"retrieve":[{"tags":["idea"],"query_groups":[["odyssey"]]},{"tags":["decision"],"query_groups":[["odyssey"]]}],"create_count":0,"limitations":[]}},
+    {"id":"B05","expected":{"retrieve":[{"type":["person"],"filters":[["birth_date","gte","1990-01-01"],["birth_date","lt","1991-01-01"]]},{"type":["person"],"filters":[["birth_date","gte","2000-01-01"],["birth_date","lt","2001-01-01"]]}],"create_count":0,"limitations":[]}},
+    {"id":"N01","expected":{"retrieve":[{"query_groups":[["n8n"],["langgraph"]]}],"create_count":0,"limitations":[]}},
+    {"id":"N02","expected":{"retrieve":[{"query_groups":[["odyssey"],["raspberry"],["n8n"]]}],"create_count":0,"limitations":[]}},
+    {"id":"N03","expected":{"retrieve":[{"types":["project","task","concept"],"filters":[["created_at","gte","2026-08-20T00:00:00+02:00"],["created_at","lt","2026-08-21T00:00:00+02:00"]],"query_groups":[["odyssey"]]}],"create_count":0,"limitations":[]}},
+    {"id":"U01","expected":{"retrieve":[{"tags":["idea"],"query_groups":[["odyssey"],["revis","review"]]}],"create_count":0,"limitations":["not_supported"]}},
+    {"id":"U02","expected":{"retrieve":[{"type":["purchase"],"query_groups":[["carrefour"],["julio","july","2026-07"]]}],"create_count":0,"limitations":["unsupported_domain_date"]}},
+    {"id":"U03","expected":{"retrieve":[{"query_groups":[["n8n"],["wikilink","enlace","direct"]]}],"create_count":0,"limitations":["direct_link_not_filterable"]}},
+    {"id":"C01","expected":{"retrieve":[],"create_count":1,"create_content_groups":[["terra"],["prefier","prefer"],["prueba","test"]],"limitations":[]}},
+    {"id":"C02","expected":{"retrieve":[],"create_count":1,"create_content_groups":[["separ"],["retrieval"],["creacion","creación"]],"limitations":[]}},
+    {"id":"C03","expected":{"retrieve":[],"create_count":1,"create_content_groups":[["idea"],["separ"],["retrieval"],["creacion","creación"]],"limitations":[]}},
+    {"id":"M01","expected":{"retrieve":[{"query_groups":[["model"]]}],"create_count":1,"create_content_groups":[["terra"],["probar","prueba","test"],["phase 14"]],"action_kinds":["create_note","retrieve"],"limitations":[]}},
+    {"id":"M02","expected":{"retrieve":[{"query_groups":[["n8n"]]}],"create_count":1,"create_content_groups":[["revis"],["ticket"]],"action_kinds":["retrieve","create_note"],"limitations":[]}},
+    {"id":"MC01","expected":{"retrieve":[],"create_count":1,"create_content_groups":[["terra"],["probar","prueba","test"],["revis"],["ticket"]],"limitations":[]}},
+    {"id":"A01","expected":{"retrieve":[{"tags":["decision"],"query_groups":[["odyssey"],["julio","july","2026-07"]]}],"create_count":0,"limitations":["unsupported_domain_date"]}},
+    {"id":"A02","expected":{"retrieve":[{"types":["person","project"],"filters":[["created_at","gte","2026-08-20T00:00:00+02:00"],["created_at","lt","2026-08-21T00:00:00+02:00"]],"query_groups":[["toulouse"]]}],"create_count":0,"limitations":[]}},
+    {"id":"A03","expected":{"retrieve":[{"types":["project","task"],"filters":[["updated_at","gte","2026-08-20T00:00:00+02:00"],["updated_at","lt","2026-08-21T00:00:00+02:00"]],"query_groups":[["casa"]]}],"create_count":0,"limitations":[]}}
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "benchmark_version": "2.2.0",
+  "fixed_context": {"current_date": "2026-08-20", "current_time": "10:30", "timezone": "Europe/Madrid"},
+  "cases": [
+    {"id":"S01","request":"¿Qué tengo apuntado sobre Odyssey?"},
+    {"id":"S02","request":"¿Qué entradas de diario escribí ayer sobre los niños?"},
+    {"id":"S03","request":"¿Qué ideas sobre Odyssey tengo marcadas para revisar?"},
+    {"id":"S04","request":"¿Qué notas tienen exactamente el alias \"Ody\"?"},
+    {"id":"B01","request":"¿Qué modifiqué hoy sobre Odyssey y qué escribí ayer sobre n8n?"},
+    {"id":"B02","request":"¿Qué personas nacidas después de 1990 y qué entradas de diario de agosto tengo?"},
+    {"id":"B03","request":"¿Qué cosas sobre Odyssey creé ayer o modifiqué hoy?"},
+    {"id":"B04","request":"¿Qué ideas o decisiones tengo sobre Odyssey?"},
+    {"id":"B05","request":"¿Qué personas nacieron en 1990 o en 2000?"},
+    {"id":"N01","request":"¿Qué tengo apuntado sobre n8n o LangGraph?"},
+    {"id":"N02","request":"¿Qué tengo apuntado sobre Odyssey, la Raspberry y n8n?"},
+    {"id":"N03","request":"¿Qué proyectos, tareas y conceptos sobre Odyssey creé hoy?"},
+    {"id":"U01","request":"¿Qué ideas sobre Odyssey no estén marcadas para revisar?"},
+    {"id":"U02","request":"¿Qué compras hice en julio en Carrefour?"},
+    {"id":"U03","request":"¿Qué notas contienen un wikilink directo a n8n?"},
+    {"id":"C01","request":"Apunta que prefiero Terra para esta prueba."},
+    {"id":"C02","request":"Guarda esta idea: separar retrieval y creación."},
+    {"id":"C03","request":"Apunta una idea con etiqueta idea: separar retrieval y creación."},
+    {"id":"M01","request":"Apunta que vamos a probar Terra para Phase 14 y dime qué había pensado antes sobre los modelos."},
+    {"id":"M02","request":"¿Qué tengo sobre n8n? Guarda también que debemos revisar los tickets."},
+    {"id":"MC01","request":"Apunta que quiero probar Terra y que deberíamos revisar los tickets."},
+    {"id":"A01","request":"¿Qué decisiones tomé sobre Odyssey en julio de 2026?"},
+    {"id":"A02","request":"¿Qué personas y proyectos creé hoy relacionados con Toulouse?"},
+    {"id":"A03","request":"¿Qué proyectos y tareas actualicé hoy sobre la casa?"}
+  ]
+}
