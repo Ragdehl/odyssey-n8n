@@ -87,7 +87,7 @@ def run(run_id: str, client: Any | None = None, case_ids: set[str] | None = None
             from openai import __version__ as sdk_version
         except ImportError as error:
             raise BenchmarkContractError("Install the OpenAI SDK before execution") from error
-        client = OpenAI()
+        client = OpenAI(max_retries=0)
     else:
         sdk_version = "test-client"
     all_cases = load_cases()

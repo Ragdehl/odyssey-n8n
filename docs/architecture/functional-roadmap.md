@@ -27,7 +27,14 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 
 ## Current functional phase
 
-➡️ **Phase 15.1 — schema-aware write planning**
+➡️ **Phase 16 — resolved knowledge persistence**
+
+Phase 15.1 is accepted. Its focused benchmark verified schema-aware property extraction, target
+selection versus mutation, positive `concept` semantics, current-reflection journal entries, and
+schema-only extensibility. Historical benchmark evidence remains append-only; the final P05 oracle
+correction and effective follow-up are documented in the Phase 15.1 benchmark record.
+
+### Phase 15.1 — schema-aware write planning (accepted)
 
 Phase 15 remains accepted for the contract it validated, but a pre-persistence gap was found after
 merge: `KnowledgeUnit` currently carries free-text facts but not the canonical writable properties

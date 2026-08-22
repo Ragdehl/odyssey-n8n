@@ -5,7 +5,7 @@
     {"id":"P02","action_kinds":["write"],"intent":"record","type":"person","filters":[],"properties":[["relationship_to_user","set","hermana"]]},
     {"id":"P03","action_kinds":["write"],"intent":"amend","type":"person","filters":[["birth_date","eq","1990-05-03"]],"properties":[["relationship_to_user","set","hermana"]]},
     {"id":"P04","action_kinds":["write"],"intent":"amend","type":"person","filters":[["birth_date","eq","1990-05-03"]],"properties":[["birth_date","set","1990-05-04"]]},
-    {"id":"P05","action_kinds":["write"],"intent":"amend","type":"person","query_terms":["amiga","marta"],"properties":[],"fact_terms":["lyon"],"forbidden_property_fields":["relationship_to_user"],"allowed_filters":[[],[["birth_date","gte","1990-01-01"],["birth_date","lt","1991-01-01"]]]},
+    {"id":"P05","action_kinds":["write"],"intent":"amend","type":"person","query_terms":["amiga","marta"],"filters":[["birth_date","gte","1990-01-01"],["birth_date","lt","1991-01-01"]],"properties":[],"fact_terms":["lyon"],"forbidden_property_fields":["relationship_to_user"]},
     {"id":"P06","action_kinds":["write"],"intent":"remove","type":"person","filters":[],"properties":[["birth_date","remove",null]]},
     {"id":"P07","action_kinds":["write"],"intent":"record","type":"journal_entry","filters":[],"properties":[["entry_date","set","2026-08-20"]],"forbidden_filter_fields":["created_at","updated_at"]},
     {"id":"P08","action_kinds":["write"],"intent":"record","type":"concept","filters":[],"properties":[],"query_terms":["entity resolution"],"fact_terms":["entidad existente"]},

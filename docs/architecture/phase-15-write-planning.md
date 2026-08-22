@@ -484,10 +484,9 @@ target query/filter evidence and mutation facts. The production prompt no longer
 rule that suppressed `journal_entry` for current reflections. R01–R03 sentinels now assert essential
 semantic content as well as action shape.
 
-The v1.1 follow-up is limited to P05, P07, P08, P09, and P12 after offline reevaluation. It uses the
-final production prompt, `gpt-5.6-sol`, low reasoning, `store=false`, and no retries. Its five raw
-rows are a new append-only evidence set; exact outcome and usage are recorded in the benchmark
-README and result metadata. The five attempts all ended in provider `Connection error` before a model
-response, with zero reported tokens and no retries. This is harness/network evidence rather than a
-semantic model failure; because corrected P05 therefore lacks a successful follow-up, Phase 15.1 is
-not marked ready on this branch. No Phase 16 work is authorized by this benchmark.
+The v1.1 five-case transport attempt remains append-only evidence. After the strict P05 oracle
+correction, one effective `gpt-5.6-sol` / low call was made with the final production prompt/schema,
+`store=false`, and `max_retries=0`; it passed the exact target-filter-versus-mutation contract. The
+result and usage are recorded in the benchmark README and result metadata. A preceding local runner
+construction error is retained separately and made zero provider calls. Phase 15.1 is accepted and
+PR #29 is ready for human review. No Phase 16 work is authorized by this benchmark.

@@ -44,13 +44,14 @@ evidence rather than model-quality evidence. The 17 network-reachable calls repo
 82,347 cached input, 18,404 cache-write, 2,379 output, and 1,044 reasoning tokens; using the frozen
 pricing snapshot, their estimated total is **$0.227823 USD**.
 
-After deterministic checks, v1.1 adds one new five-call follow-up for P05, P07, P08, P09, and P12.
-Its raw rows are append-only under a new `results/` directory and use the final production prompt.
-All five attempts ended in provider `Connection error` before a model response, with zero reported
-tokens and estimated cost `$0.000000 USD`; no automatic retry was made. This is harness/network
-evidence, not a semantic model result. The historical accepted outputs still support P07, P08, P09
-(after the corrected adjudication), and P12, but the corrected P05 has no successful follow-up row,
-so Phase 15.1 is not marked ready on this branch.
+The earlier v1.1 five-case attempt remains append-only transport evidence. After the oracle correction,
+one effective Sol/low call was made for P05 using the final production prompt/schema, `store=false`,
+and `max_retries=0`. It passed: `target.type=person`, query retained “amiga” and “Marta”, the
+exact 1990 birth-date range was emitted in `target.filters`, `properties=[]`, and facts retained
+“Lyon”; no `relationship_to_user` was invented. Usage was 5,903 input tokens (5,900 cache-write),
+155 output tokens, 54 reasoning tokens; estimated cost was `$0.041540 USD`. A preceding local runner
+construction error is retained separately with zero provider calls and does not count as an OpenAI
+call. Phase 15.1 is accepted and PR #29 is ready for human review.
 
 Run once only after deterministic tests pass:
 

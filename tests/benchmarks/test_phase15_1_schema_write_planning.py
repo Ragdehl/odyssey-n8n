@@ -157,6 +157,18 @@ def test_oracle_requires_semantic_content_for_reviewed_cases() -> None:
         )
     )
     assert evaluate("P05", p05, schema) == ("PASS", [])
+    missing_filter = _output(
+        _write(
+            _unit(
+                "amiga de Marta nacida en 1990",
+                note_type="person",
+                intent="amend",
+                properties=[],
+                facts=["Ahora vive en Lyon."],
+            )
+        )
+    )
+    assert evaluate("P05", missing_filter, schema) == ("FAIL", ["incorrect_target_filters"])
     missing_mutation = _output(
         _write(_unit("amiga de Marta", note_type="person", intent="amend", properties=[], facts=[]))
     )
