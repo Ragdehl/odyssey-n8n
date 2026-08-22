@@ -180,12 +180,28 @@ def _write_property_capability(field: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(
             f"Writable property {field_id!r} declares unsupported constraints: {sorted(unsupported)}"
         )
-    value_format = constraints.get("format")
-    if value_format is not None and value_format not in _SUPPORTED_WRITE_FORMATS:
-        raise ValueError(f"Writable property {field_id!r} declares unsupported format {value_format!r}")
+    _validate_write_constraint_compatibility(field_id, value_type, constraints)
     return {
         "value_type": value_type,
         "required": required,
         "description": description,
         "constraints": dict(constraints),
     }
+
+
+def _validate_write_constraint_compatibility(
+    field_id: str, value_type: str, constraints: Mapping[str, Any]
+) -> None:
+    """Fail closed when a known constraint is attached to an unsupported value-type shape."""
+    value_format = constraints.get("format")
+    if value_format is not None:
+        if value_format not in _SUPPORTED_WRITE_FORMATS or value_type != "string":
+            raise ValueError(
+                f"Writable property {field_id!r} declares unsupported format {value_format!r}"
+            )
+    if "minimum" in constraints and value_type != "integer":
+        raise ValueError(f"Writable property {field_id!r} uses minimum on non-integer data")
+    if constraints.get("unique_items") is True and value_type != "array[string]":
+        raise ValueError(f"Writable property {field_id!r} uses unique_items on non-array data")
+    if constraints.get("non_empty") is True and value_type != "string":
+        raise ValueError(f"Writable property {field_id!r} uses non_empty on non-string data")
