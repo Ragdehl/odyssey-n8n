@@ -156,7 +156,7 @@
         {
             "id": "concept",
             "name": "Concept",
-            "description": "Reusable idea, subject, fact cluster, or knowledge item that does not fit a more specific canonical type.",
+            "description": "Reusable identifiable abstract subject, domain concept, or topic with semantic identity of its own that can accumulate knowledge across contexts; not a generic fallback for events, tasks, opinions, reflections, questions, arbitrary statements, or underclassified entities.",
             "examples": ["Entity resolution", "Photosynthesis"],
             "subtypes": [],
             "properties": []
