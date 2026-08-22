@@ -127,17 +127,15 @@ reinterpret the original language before it could populate `birth_date`, and a r
 as `entry_date` can make valid creation impossible if it is never extracted.
 
 Phase 15.1 therefore extends, rather than replaces, this contract so the same Sol/low interpretation
-call can infer canonical writable properties directly from the schema. During contract review two
-further simplifications were identified: write-target identification should reuse the same
-`query`/`type`/`filters` selection vocabulary already used by `RetrieveAction.plan`, and an explicit
-canonical type reassignment must be represented separately from the current target type used for
-selection.
+call can infer canonical writable properties directly from the schema. During contract review a
+second simplification was identified: write-target identification should reuse the same
+`query`/`type`/`filters` selection vocabulary already used by `RetrieveAction.plan` instead of
+inventing a write-only `subject` plus target-filter dialect.
 
 The intended separation is:
 
 ```text
 query/type/filters                         -> which note(s) fit the reference
-new_type                                  -> requested resulting canonical type, if changing it
 canonical property expressed as a change -> structured property operation
 other useful knowledge                    -> free-text facts
 references                                -> links to other units in the same WriteAction
@@ -152,19 +150,20 @@ The existing Phase 15 raw evidence remains historical evidence for the contract 
 rewritten retrospectively. See the canonical Functional Roadmap for the detailed Phase 15.1 decisions,
 Phase 16 persistence decisions, and open questions discovered before implementation.
 
-## Phase 15.1 contract: schema-aware write targets, type changes, and property changes
+## Phase 15.1 contract: schema-aware write targets and property changes
 
 Architecture challenge result: **PROCEED**. The real problem is to preserve structured domain data
 already declared by the canonical schema without making Phase 16 reinterpret user language, while
 also preserving deterministic target-identification evidence instead of hiding it in free text. The
-simplest boundary is to keep the single Sol/low interpretation call, reuse one selection contract,
-represent explicit type reassignment directly, and keep property changes generic and schema-derived.
+simplest boundary is to keep the single Sol/low interpretation call, reuse one selection contract, and
+add a small generic property-change representation whose allowed fields and values are derived from
+`config/note-schema.json`.
 
 ### KnowledgeUnit shape
 
 Phase 15.1 intentionally replaces the Phase 15 write-unit `subject` plus top-level `type` fields with a
-single `target` object and adds a nullable `new_type` mutation field. This is a forward contract
-refinement only; the historical Phase 15 benchmark and evidence above remain unchanged.
+single `target` object. This is a forward contract refinement only; the historical Phase 15 benchmark
+and evidence above remain unchanged.
 
 ```json
 {
@@ -174,7 +173,6 @@ refinement only; the historical Phase 15 benchmark and evidence above remain unc
     "filters": []
   },
   "intent": "record",
-  "new_type": null,
   "properties": [
     {
       "field": "birth_date",
@@ -202,7 +200,6 @@ A property removal is explicit and carries `null` only as the operation payload 
     "filters": []
   },
   "intent": "remove",
-  "new_type": null,
   "properties": [
     {
       "field": "birth_date",
@@ -215,28 +212,11 @@ A property removal is explicit and carries `null` only as the operation payload 
 }
 ```
 
-An explicit canonical type reassignment is represented independently from target selection:
-
-```json
-{
-  "target": {
-    "query": "Odyssey",
-    "type": "concept",
-    "filters": []
-  },
-  "intent": "amend",
-  "new_type": "project",
-  "properties": [],
-  "facts": [],
-  "references": []
-}
-```
-
 The model-facing and production representation should correspond to small immutable generic values,
-conceptually `SelectionCriteria(query, type, filters)` and `PropertyChange(field, op, value)`, plus the
-nullable canonical `new_type`. This does not require introducing public abstractions solely for naming
-symmetry: implementation should reuse existing retrieval-plan builders/validators where practical and
-extract only the smallest shared helper/value needed to avoid duplicate logic.
+conceptually `SelectionCriteria(query, type, filters)` and `PropertyChange(field, op, value)`. This
+does not require introducing public abstractions solely for naming symmetry: implementation should
+reuse the existing retrieval-plan builders/validators where practical and extract only the smallest
+shared helper/value needed to avoid duplicate logic.
 
 ### One selection vocabulary: query, type, filters
 
@@ -244,7 +224,7 @@ extract only the smallest shared helper/value needed to avoid duplicate logic.
 
 ```text
 query   non-empty semantic wording that should match candidate knowledge/identity
-type    optional canonical CURRENT-type restriction
+type    optional canonical type restriction
 filters deterministic restrictions derived from the active retrieval/filter capabilities
 ```
 
@@ -284,9 +264,9 @@ other target-identification meaning remains in `query`.
 
 ### Identification evidence is not mutation payload
 
-`target.filters` answers **which note is being referred to**. `new_type`, `properties`, and `facts`
-answer **what knowledge should change**. A property mentioned only to identify the target must not be
-emitted as a property mutation.
+`target.filters` answers **which note is being referred to**. `properties` and `facts` answer **what
+knowledge should change**. A property mentioned only to identify the target must not be emitted as a
+property mutation.
 
 For example:
 
@@ -304,7 +284,6 @@ becomes conceptually:
     ]
   },
   "intent": "amend",
-  "new_type": null,
   "properties": [
     {"field": "relationship_to_user", "op": "set", "value": "hermana"}
   ],
@@ -323,68 +302,32 @@ When part of target identity is not filterable, `query` carries it. For “corri
 nacida en 1990”, the relationship wording can remain in `query` while `birth_date` contributes safe
 date filters. No second target-selection language is needed.
 
-### Type reassignment is a mutation, not a selector
-
-`target.type` and `new_type` have deliberately different meanings:
-
-```text
-target.type  -> optional restriction on the type the target has NOW
-new_type     -> optional type the note should have AFTER the write
-```
-
-A planner must not use the desired new type as a hard target restriction unless the request also
-independently establishes that the existing note already has that type. Otherwise a note stored under
-its old type could be filtered out and a later `record` path could create a duplicate.
-
-Examples:
-
-- `Odyssey no es un concepto, es un proyecto` may use `target.type=concept` and
-  `new_type=project`.
-- `Odyssey es un proyecto` may use `target.type=null` and `new_type=project` when the message asserts
-  classification but does not establish the current stored type.
-- `Corrige el proyecto Odyssey: ...` may use `target.type=project` and `new_type=null` because
-  `project` identifies the current target rather than changing its type.
-
-`new_type` may be non-null only for `record` or `amend`; `remove` and `delete` require it to be null.
-For `record`, an unresolved target still does not authorize creation by itself, but an authorized
-creation may use `new_type` as its resulting type. For `amend`, the target must resolve to an existing
-note as usual.
-
-When `new_type` is non-null, every explicit `properties` mutation is scoped and validated against the
-destination `new_type`, not the current `target.type`. When `new_type` is null, properties are scoped
-to `target.type`; therefore non-empty properties require a canonical effective write type.
-
-A type change itself counts as semantic mutation payload. `Odyssey no es un concepto, es un proyecto`
-is therefore a valid `amend` even with `properties: []` and `facts: []`.
-
 ### Intent and payload rules
 
-- `record` permits `set` property changes and an optional `new_type`. It represents desired knowledge,
-  not physical CREATE.
-- `amend` permits `set` property changes and an optional `new_type`. The value is the corrected desired
-  value; the planner does not need to reproduce the previous stored value except when an old value is
-  useful as target selection evidence.
-- `remove` permits `remove` property changes, requires `new_type=null`, and requires each property
-  `value` to be `null`; Phase 16 later decides whether the resolved note can legally lose that field.
-- `delete` requires `new_type=null`, `properties: []`, and `facts: []`; whole-note deletion never
-  travels through property changes.
+- `record` permits `set` property changes. It represents desired knowledge, not physical CREATE.
+- `amend` permits `set` property changes. The value is the corrected desired value; the planner does
+  not need to reproduce the previous stored value except when an old value is useful as target
+  selection evidence.
+- `remove` permits `remove` property changes. `value` must be `null`; Phase 16 later decides whether
+  the resolved note can legally lose that field.
+- `delete` requires both `properties: []` and `facts: []`; whole-note deletion never travels through
+  property changes.
 - A mutation field may occur at most once in `properties` for one `KnowledgeUnit`. A correction is one
   `set`, not remove+set.
-- `amend` requires at least one semantic mutation payload across `new_type`, `properties`, and `facts`.
-- `remove` requires at least one semantic mutation payload across `properties` and `facts`.
-- `record` requires at least one semantic payload across `new_type`, `properties`, and `facts`, except
-  for the already-approved reference-only record case where another unit references it.
+- `amend` and `remove` require at least one semantic mutation payload across `properties` and `facts`.
+- `record` requires at least one semantic payload across `properties` and `facts`, except for the
+  already-approved reference-only record case where another unit references it.
 - A fact fully represented by a canonical property should not be duplicated in `facts`. Any remaining
   information that the property does not capture stays as free text. For example, if only
   `birth_date` exists, `Marta nació el 3 de mayo de 1990 en Toulouse` becomes a `birth_date` property
   plus a free-text fact for the Toulouse information rather than duplicating the date in prose.
 
 Required schema properties are **not** required on every Phase 15.1 unit. The planner does not know
-whether the later physical result is CREATE, ordinary UPDATE, or a type reassignment against stored
-state. The planner must extract a required destination property whenever the request supplies it
-safely. Phase 16 must refuse or defer a CREATE or type change whose final metadata cannot satisfy the
-canonical destination schema. Likewise, removal of a required property can be represented
-semantically here but cannot be persisted if it would leave an invalid note.
+whether the later physical result is CREATE or UPDATE, so requiring all create-time fields here would
+reintroduce repository-state inference. The planner must extract a required property whenever the
+request supplies it safely. Phase 16 must refuse or defer a CREATE whose final metadata cannot satisfy
+the canonical schema. Likewise, removal of a required property can be represented semantically here
+but cannot be persisted if it would leave an invalid note.
 
 ### References remain in-plan logical links
 
@@ -410,81 +353,67 @@ registries: a property may be writable even when it is not filterable, while a f
 appear in both retrieval filters and `KnowledgeUnit.target.filters`.
 
 There must be no production branch such as `if type == "person"`, no list of known property IDs in a
-prompt, and no separate per-application property registry. Adding a new canonical type or property
-whose `value_type` **and constraint/format semantics are already supported by Core** must make it
-available to the write planner and local validator by changing the schema only. If the property is
-also `filterable`, it must become available to the shared selection/filter contract automatically as
-well. A genuinely new value type or validation/constraint primitive requires explicit generic Core
-support and tests before the schema may rely on it.
+prompt, and no separate per-application property registry. Adding a new canonical type or adding a
+new property that uses an already-supported `value_type` must make it available to the write planner
+and local validator by changing the schema only. If the property is also `filterable`, it must become
+available to the shared selection/filter contract automatically as well.
 
-If the same filterable property ID is declared under multiple note types, planner capability
-construction must not silently let one declaration overwrite another. Compatible declarations
-(same value type and relevant constraints/operator semantics) must merge their `applies_to` type sets;
-incompatible declarations must fail closed as a schema/capability conflict.
-
-The Phase 15.1 implementation must include synthetic-schema tests proving these paths. For example, a
+The Phase 15.1 implementation must include synthetic-schema tests proving both paths. For example, a
 test may add a temporary `car` type with a `registration_number` string property and verify that write
 capabilities, Structured Outputs, and deterministic validation accept it without any production-code
 change naming either `car` or `registration_number`; marking that property filterable should also
-expose it through the common filter contract without a write-specific branch. Another synthetic test
-should declare the same compatible filterable field under two types and verify merged `applies_to`,
-then verify that incompatible definitions fail closed.
+expose it through the common filter contract without a write-specific branch.
 
 ### Supported value types and extension rule
 
 Property values must be validated using the same canonical value semantics as persisted note
 metadata; Phase 15.1 must not create a second, divergent validator. The currently supported schema
 value types are `string`, `integer`, `array[string]`, and `date`. Dates remain strict `YYYY-MM-DD`
-strings, integers exclude booleans, arrays contain strings, and declared supported constraints continue
-to apply.
+strings, integers exclude booleans, arrays contain strings, and declared constraints continue to
+apply.
 
-A **new property ID** or **new note type** using an already-supported value type and already-supported
-constraint/format semantics requires no planner business-logic change. A genuinely **new `value_type`
-or validation/constraint primitive** is different: Odyssey must first add explicit support for that
-semantic in shared schema/value validation and Structured Outputs mapping, with tests. Until then
-capability/schema construction must fail closed rather than silently approximating it.
+A **new property ID** or **new note type** using one of those supported value types requires no planner
+code change. A genuinely **new `value_type`** is different: Odyssey must first add explicit support
+for that type in the shared schema/value validation and Structured Outputs mapping, with tests. Until
+then capability/schema construction must fail closed rather than silently treating an unknown type as
+`string` or accepting an unvalidated value.
 
 ### Type scoping and writable surface
 
-Phase 15.1 exposes type-specific `types[].properties` as semantic property mutations and exposes
-canonical type reassignment only through `new_type`. System/lifecycle metadata such as `id`,
-`created_at`, `updated_at`, `created_by`, `updated_by`, `revision`, and `schema_version` remains owned by
-persistence. `tags` remain deferred by product decision. `subtype` and `aliases` are not added to this
-Phase 15.1 mutation contract.
+Phase 15.1 exposes only type-specific `types[].properties` as semantic properties. System/lifecycle
+metadata such as `id`, `created_at`, `updated_at`, `created_by`, `updated_by`, `revision`, and
+`schema_version` remains owned by persistence. `tags` remain deferred by product decision. `subtype`
+and `aliases` are not added to this Phase 15.1 property-mutation contract.
 
-The effective write type for property validation is `new_type` when non-null, otherwise `target.type`.
-A non-empty `properties` list requires that effective type to be canonical, and every mutation field
-must belong to it in the active schema. `target.type=null` is still valid when current classification
-is unsafe; such a unit may still carry properties only when a canonical `new_type` supplies the
-destination property scope. Target filters continue to obey their own existing
-capability/type-compatibility rules.
+A non-empty `properties` list requires a non-null canonical `target.type`, and every mutation field
+must belong to that type in the active schema. `target.type=null` is still valid when classification
+is unsafe, but such a unit cannot invent or infer type-specific property mutations. Target filters
+continue to obey their own existing capability/type-compatibility rules.
 
 ### Deterministic validation boundary
 
 The model output remains untrusted. Before returning a `RequestPlan`, local validation must verify at
 least:
 
-- `target` has exactly non-empty `query`, optional canonical current `type`, and a `filters` list;
+- `target` has exactly non-empty `query`, optional canonical `type`, and a `filters` list;
 - target filters pass the same dynamic field/operator/value/type-compatibility validation as retrieval
   filters;
-- `target.type` and `new_type` are canonical when non-null;
-- `new_type` is allowed only with `record`/`amend`, and is null for `remove`/`delete`;
-- every property mutation field exists under the effective write type (`new_type` when present,
-  otherwise `target.type`);
+- the target type is canonical when non-null;
+- every property mutation field exists under that exact target type in the active schema;
 - mutation field names are unique within the unit;
-- `set` carries a non-null value valid for the field's canonical schema definition;
+- `set` carries a non-null value valid for the field's schema definition;
 - `remove` carries `null`;
 - property operations are compatible with the unit intent;
-- non-empty properties imply a non-null effective write type;
-- the combined `new_type` + `facts` + `properties` mutation payload obeys the intent rules above;
+- `target.type=null` implies `properties: []`;
+- the combined `facts` + `properties` mutation payload obeys the intent rules above;
 - reference indexes and roles retain the existing Phase 15 validation rules.
 
 Structured Outputs should also be generated dynamically from the same schema to constrain the model,
-but deterministic local validation remains authoritative. Unknown fields, unsupported value or
-constraint semantics, wrong value shapes, cross-type properties, malformed operations, invalid type
-changes, and invalid target filters fail closed.
+but deterministic local validation remains authoritative. Unknown fields, unsupported value types,
+wrong value shapes, cross-type properties, malformed operations, and invalid target filters fail
+closed.
 
-### Phase 16 boundary created by target filters and type changes
+### Phase 16 boundary created by target filters
 
 The current Phase 11 production resolver accepts semantic reference/context plus an optional type, but
 not arbitrary structured filters. Phase 15.1 does **not** change that resolver or execute target
@@ -501,26 +430,6 @@ Important invariants remain:
 - `amend`, `remove`, and `delete` never create because selection failed;
 - `record` creation remains governed by the separate Phase 16 creation policy.
 
-Type reassignment has an additional boundary. Phase 15.1 sees the user request and destination schema
-but does **not** yet have the resolved stored note, so it cannot safely recreate the complete
-property set from existing state. It only expresses `new_type` and any destination properties that
-are explicitly supported by the request.
-
-After resolution, if the stored type actually changes, Phase 16 should use a **bounded schema
-rematerialization LLM step** for that rare operation. Its input is the resolved note's relevant
-current metadata/body, the validated user change intent, and only the destination type definition. Its
-output is a complete proposed set of destination type-specific properties or an explicit abstention.
-Core then validates that proposal against the canonical destination schema, removes old
- type-specific properties, sets `type=new_type`, applies the validated destination property set, and
-refuses/defer the mutation if required destination properties cannot be justified. The LLM never gets
-permission to mutate lifecycle metadata or bypass canonical validation. Body mutation remains a
-separate bounded semantic-patch concern.
-
-This rematerialization is deliberately not implemented as hard-coded old-type/new-type conversion
-rules. It is the narrow place where semantic reconstruction is actually needed because the existing
-note is finally available. If the note already has `new_type`, ordinary property mutation rules apply
-and no rematerialization is needed.
-
 Do not build a generic query engine or force `get_context` to become the identity resolver merely to
 reuse syntax. Reuse the contract and deterministic validation; reuse execution code only where the
 semantics genuinely match.
@@ -536,29 +445,22 @@ been approved as part of the Phase 15.1 design checkpoint.
 ### Phase 15.1 acceptance criteria added by this contract
 
 - Existing historical Phase 15 evidence remains unchanged; Phase 15.1 intentionally refines the
-  write-unit shape to `target + intent + new_type + properties + facts + references`.
+  write-unit shape to `target + intent + properties + facts + references`.
 - `RetrieveAction.plan` and `KnowledgeUnit.target` share one dynamic `query`/`type`/`filters` contract
   and one deterministic filter-validation path, without conflating their execution semantics.
 - A filterable property mentioned only to identify a write target is emitted in `target.filters`, not
   as a mutation; non-filterable identity wording remains in `target.query`.
 - The same property may safely appear as old target evidence and a new mutation value when the user is
   explicitly correcting that property.
-- Explicit canonical type reassignment is represented as `new_type`, independently from the current
-  `target.type`, and destination properties are validated against that new type.
 - Sol/low receives dynamic write capabilities derived from the active schema in the same single
   interpretation call.
 - Current properties such as `birth_date`, `relationship_to_user`, and `entry_date` can be emitted as
   validated structured property changes without hard-coded field logic.
-- Synthetic new types/properties using existing supported value and constraint semantics work by
-  schema change alone; filterable additions also flow automatically into both retrieval and
-  write-target filters.
-- Compatible same-ID filterable properties across multiple types merge `applies_to`; incompatible
-  definitions fail closed rather than being silently overwritten.
-- Unsupported new value types or validation/constraint primitives fail closed until shared explicit
-  support is added.
+- Synthetic new types/properties using existing supported value types work by schema change alone;
+  filterable additions also flow automatically into both retrieval and write-target filters.
+- Unsupported new value types fail closed until shared explicit support is added.
 - `concept` is validated as a positive semantic type, not a fallback.
 - A focused Sol/low benchmark covers property set/remove/amend behavior, required-property extraction,
-  target-filter-versus-mutation separation, query-plus-filter target selection, explicit type-change
-  extraction and destination-property scoping, property-vs-fact separation, dynamic schema behavior,
-  concept non-fallback behavior, and compact Phase 15 regression sentinels before Phase 16
-  implementation begins.
+  target-filter-versus-mutation separation, query-plus-filter target selection, property-vs-fact
+  separation, dynamic schema behavior, concept non-fallback behavior, and compact Phase 15 regression
+  sentinels before Phase 16 implementation begins.
