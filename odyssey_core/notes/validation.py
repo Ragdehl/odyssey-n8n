@@ -12,12 +12,15 @@ class NoteValidationError(ValueError):
     """Indicate that one note violates the supplied canonical schema contract."""
 
 
-def _validate_value(field_id: str, value: Any, definition: dict[str, Any]) -> None:
-    """Validate one metadata value against its supplied field definition.
+def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) -> None:
+    """Validate one schema-declared value against its canonical field definition.
+
+    This is shared by persisted-note validation and pre-persistence planner validation so Odyssey
+    keeps one value-semantics implementation for supported metadata/property types.
 
     Args:
-        field_id: Stable metadata field identifier used in errors.
-        value: Note metadata value to check.
+        field_id: Stable metadata/property field identifier used in errors.
+        value: Candidate value to check.
         definition: Canonical field or type-property definition.
 
     Raises:
@@ -156,7 +159,7 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
         raise NoteValidationError(f"Missing required type properties: {missing_properties}")
 
     for field_id, value in note.metadata.items():
-        _validate_value(field_id, value, allowed[field_id])
+        validate_field_value(field_id, value, allowed[field_id])
 
     tags = note.metadata.get("tags")
     if tags is not None and any(tag not in registered_tags for tag in tags):

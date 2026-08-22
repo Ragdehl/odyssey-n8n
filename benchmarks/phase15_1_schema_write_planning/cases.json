@@ -1,0 +1,20 @@
+{
+  "benchmark_version": "1.1.0",
+  "cases": [
+    {"id": "P01", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Marta nació el 3 de mayo de 1990"},
+    {"id": "P02", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Marta es mi hermana"},
+    {"id": "P03", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Corrige la relación de la persona que nació el 3 de mayo de 1990: es mi hermana"},
+    {"id": "P04", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Corrige la persona nacida el 3 de mayo de 1990: nació el 4 de mayo de 1990"},
+    {"id": "P05", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Corrige a la amiga de Marta nacida en 1990: ahora vive en Lyon"},
+    {"id": "P06", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Quita la fecha de nacimiento de Marta"},
+    {"id": "P07", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Escribí una entrada de diario sobre el viaje del día 20"},
+    {"id": "P08", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Entity resolution es el proceso de decidir qué entidad existente corresponde a una referencia"},
+    {"id": "P09", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Hoy estoy pensando si cambiar el sofá"},
+    {"id": "P10", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Carrefour Balma cierra a las 20:30"},
+    {"id": "P11", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Marta nació el 3 de mayo de 1990 en Toulouse"},
+    {"id": "P12", "schema": "synthetic_car", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Corrige el coche con matrícula 1234 ABC: su matrícula es 5678 DEF"},
+    {"id": "R01", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Corrige la tienda de la esquina: cierra a las 20:30"},
+    {"id": "R02", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Apunta que antes pensaba usar LangGraph para Odyssey"},
+    {"id": "R03", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "¿Qué tengo apuntado sobre n8n? Apunta también que debemos revisar los tickets."}
+  ]
+}

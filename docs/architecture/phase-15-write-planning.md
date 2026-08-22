@@ -464,3 +464,29 @@ been approved as part of the Phase 15.1 design checkpoint.
   target-filter-versus-mutation separation, query-plus-filter target selection, property-vs-fact
   separation, dynamic schema behavior, concept non-fallback behavior, and compact Phase 15 regression
   sentinels before Phase 16 implementation begins.
+
+### Phase 15.1 benchmark evidence — 2026-08-22
+
+The independent focused evidence lives in
+[`benchmarks/phase15_1_schema_write_planning/`](../../benchmarks/phase15_1_schema_write_planning/).
+It uses the production `render_request_planner_prompt` and `request_plan_json_schema` functions,
+`gpt-5.6-sol` with low reasoning effort, `store=false`, fixed per-case current context, the canonical
+schema digest, and a synthetic `car.registration_number` schema extension. Every call preserves its
+complete input, effective schema/capabilities, raw model output, local validation, oracle result, and
+available usage immediately after the call; it does not alter Phase 15 historical evidence.
+
+The v1 benchmark remains append-only. Human review adjudicated P09's original `journal_entry` output
+as semantically acceptable and identified the old oracle expectation (`type=null`) as incorrect. P05's
+original output remains invalid evidence for the desired capability because “Corrige a la amiga de
+Marta nacida en 1990” identifies a target but supplies no mutation; the non-empty `amend` validation
+must remain. The corrected P05 input adds “ahora vive en Lyon”, preserving the separation between
+target query/filter evidence and mutation facts. The production prompt no longer contains the special
+rule that suppressed `journal_entry` for current reflections. R01–R03 sentinels now assert essential
+semantic content as well as action shape.
+
+The v1.1 five-case transport attempt remains append-only evidence. After the strict P05 oracle
+correction, one effective `gpt-5.6-sol` / low call was made with the final production prompt/schema,
+`store=false`, and `max_retries=0`; it passed the exact target-filter-versus-mutation contract. The
+result and usage are recorded in the benchmark README and result metadata. A preceding local runner
+construction error is retained separately and made zero provider calls. Phase 15.1 is accepted and
+PR #29 is ready for human review. No Phase 16 work is authorized by this benchmark.
