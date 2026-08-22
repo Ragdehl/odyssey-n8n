@@ -35,10 +35,10 @@ that are defined by note type in `config/note-schema.json`. Persistence cannot s
 those properties later without reinterpreting the request. Phase 15.1 therefore extends the same
 single Sol/low interpretation boundary rather than introducing a second interpretation pass.
 
-Contract review also identified a simplification for write-target identity: do not create a second
-write-only selection language. Reuse the same `query` / `type` / `filters` shape already used by
-`RetrieveAction.plan`, while keeping user retrieval and write-target identity resolution as different
-execution responsibilities.
+Contract review also identified two simplifications for write-target identity and classification: do
+not create a second write-only selection language, and do not overload the target's current type with
+a requested resulting type. Reuse the same `query` / `type` / `filters` shape already used by
+`RetrieveAction.plan`, while representing an explicit type reassignment separately as `new_type`.
 
 The intended direction is:
 
@@ -55,6 +55,7 @@ single Sol/low interpretation call
              |
              +--> target(query, type, filters)
              +--> intent
+             +--> new_type when canonical type should change
              +--> canonical writable property changes inferred from the schema
              +--> remaining free-text facts
              `--> references
@@ -63,15 +64,16 @@ single Sol/low interpretation call
 ### Phase 15.1 decisions already made
 
 - `RetrieveAction.plan` and `KnowledgeUnit.target` share one closed selection shape:
-  `query`, optional canonical `type`, and deterministic `filters`. They should reuse the same dynamic
-  filter vocabulary, Structured Outputs construction, operator/value rules, type-compatibility checks,
-  and deterministic filter validation.
+  `query`, optional canonical current `type`, and deterministic `filters`. They should reuse the same
+  dynamic filter vocabulary, Structured Outputs construction, operator/value rules,
+  type-compatibility checks, and deterministic filter validation.
 - Sharing the selection contract does **not** make write-target selection a `RetrieveAction` and does
   not imply a common executor. Retrieval may return zero-to-many notes for the user; a write target
   must later resolve safely to one existing identity or abstain, with `record` creation handled by a
   separate policy.
 - Phase 15.1 intentionally refines the Phase 15 write-unit shape from top-level `subject`/`type` to a
-  nested `target(query, type, filters)`. Historical Phase 15 benchmark evidence remains unchanged.
+  nested `target(query, type, filters)` plus nullable `new_type`. Historical Phase 15 benchmark
+  evidence remains unchanged.
 - `target.query` remains non-empty and carries identity meaning that is not safely expressible as
   deterministic filters. When the request supplies a stable name, preserve it in the query even if
   filters also exist.
@@ -81,6 +83,14 @@ single Sol/low interpretation call
 - The same property may appear on both sides when the user identifies an old value and explicitly
   supplies a corrected new value: the old value can constrain `target.filters`, while the new value is
   a `properties` mutation.
+- `target.type` means the current type used only as selection evidence. `new_type` means the desired
+  resulting canonical type when the user is asserting or correcting classification. The desired new
+  type must not be used as a hard current-type filter unless the request independently establishes
+  that current type.
+- `new_type` may be used with `record` or `amend`; `remove` and `delete` require it to be null. A type
+  change counts as mutation payload even when `properties` and `facts` are empty.
+- When `new_type` is non-null, explicit property mutations are validated against the destination
+  `new_type`; otherwise they are validated against `target.type`.
 - Canonical properties belong in the mutation output when the user text expresses them as knowledge
   to record/change/remove. Examples include `person.birth_date`, `person.relationship_to_user`, and
   `journal_entry.entry_date`; future applications may add more properties to the schema without
@@ -92,13 +102,16 @@ single Sol/low interpretation call
   `{field, op, value}`. Phase 15.1 supports only `set` and whole-property `remove`: `set` carries a
   schema-valid value, while `remove` carries `null`. `record`/`amend` use `set`; `remove` uses
   `remove`; `delete` carries no property changes. The detailed contract is canonical in
-  [Phase 15 write planning](phase-15-write-planning.md#phase-151-contract-schema-aware-write-targets-and-property-changes).
-- Property support is entirely schema-driven. Adding a new canonical type or property that uses an
-  already-supported schema `value_type` must require only a schema change, not a planner/prompt/code
-  branch naming that type or property. If that property is `filterable`, it must also flow into both
-  retrieval filters and write-target filters automatically. A genuinely new `value_type` requires
-  explicit shared validation/Structured-Outputs support and tests; unknown value types fail closed
-  until then.
+  [Phase 15 write planning](phase-15-write-planning.md#phase-151-contract-schema-aware-write-targets-type-changes-and-property-changes).
+- Property support is entirely schema-driven. Adding a new canonical type or property whose
+  `value_type` and constraint/format semantics are already supported by Core must require only a
+  schema change, not a planner/prompt/code branch naming that type or property. If that property is
+  `filterable`, it must also flow into both retrieval filters and write-target filters automatically.
+  A genuinely new value type or validation/constraint primitive requires explicit shared support and
+  tests; unsupported semantics fail closed until then.
+- Compatible declarations of the same filterable property ID under multiple note types must merge
+  their `applies_to` type sets. Incompatible definitions must fail closed instead of silently letting
+  one type overwrite another in planner capabilities.
 - Information that maps safely to a canonical property mutation should be represented structurally;
   knowledge that does not map to a property remains in `facts` rather than being forced into metadata.
 - `references` remain in-plan logical links between `KnowledgeUnit` values. Phase 16 later resolves or
@@ -113,14 +126,14 @@ single Sol/low interpretation call
 - The existing Phase 15 safety boundaries remain: the planner does not resolve repository identity,
   choose physical CREATE versus UPDATE, allocate IDs or paths, rewrite Markdown, or persist data.
 - A new Sol/low benchmark is required for the extended contract. It should focus on property
-  extraction, target selection versus mutation, dynamic schema behavior, and `concept` non-fallback
-  behavior while retaining a compact set of Phase 15 regression sentinels; there is no reason to
-  repeat model-selection experiments.
+  extraction, target selection versus mutation, explicit type reassignment and destination-property
+  scoping, dynamic schema behavior, and `concept` non-fallback behavior while retaining a compact set
+  of Phase 15 regression sentinels; there is no reason to repeat model-selection experiments.
 
 ### Phase 15.1 examples to validate
 
 - `Marta nació el 3 de mayo de 1990` → write target `query=Marta`, `type=person`, no target filter
-  required, and mutation `birth_date=1990-05-03`.
+  required, `new_type=null`, and mutation `birth_date=1990-05-03`.
 - `Marta es mi hermana` → mutation `relationship_to_user=hermana` when the canonical property can
   represent the supplied value safely.
 - `Corrige la relación de la persona que nació el 3 de mayo de 1990: es mi hermana` → target
@@ -130,6 +143,12 @@ single Sol/low interpretation call
   evidence while the new birth date is the property mutation; do not collapse the two roles.
 - `Corrige a la amiga de Marta nacida en 1990` → semantic relationship wording remains in
   `target.query`, while the year may use deterministic `birth_date` filters.
+- `Odyssey no es un concepto, es un proyecto` → target may use current `type=concept`, while
+  `new_type=project`; do not search only for a project and miss the existing concept note.
+- `Odyssey es un proyecto` → when the request asserts the desired classification but not the current
+  stored type, prefer `target.type=null` plus `new_type=project`.
+- A synthetic type-change case with destination properties must verify that `properties` are scoped to
+  the new type, including required destination properties when the request supplies them.
 - `Quita la fecha de nacimiento de Marta` → removal of the structured property.
 - `Escribí una entrada de diario sobre el viaje del día 20` → `journal_entry.entry_date` when the
   request identifies that domain date.
@@ -172,6 +191,20 @@ coordination boundary, but its exact API is intentionally not frozen yet.
   pseudo-identity.
 - `amend`, `remove`, and `delete` require an existing resolved target. Ambiguous or unresolved
   identity must not silently create a new note.
+- A validated `new_type` is a requested resulting classification, never identity evidence by itself.
+  If a `record` target remains unresolved and later creation is independently authorized, `new_type`
+  may supply the resulting creation type.
+- When a resolved note actually changes canonical type, Phase 16 must rebuild its type-specific
+  property set for the destination schema instead of leaving incompatible old properties behind.
+  Because Phase 15.1 does not have the stored note, this reconstruction happens after resolution via a
+  bounded schema-rematerialization LLM step: current relevant note metadata/body + validated change
+  intent + destination type definition in, complete destination property proposal or abstention out.
+  Core removes old type-specific properties, sets the new type, validates the complete proposed
+  destination properties, and refuses/defer the update if required properties cannot be justified.
+  This is a special bounded type-change path, not a generic old-type/new-type mapping table or a free
+  rewrite of lifecycle metadata/body.
+- If a resolved note already has `new_type`, there is no reclassification migration; ordinary
+  structured property mutation rules apply.
 - HITL remains later work, but Phase 16 results should preserve a machine-readable pending state such
   as `NEEDS_CLARIFICATION` so that a later interface can ask the user what was meant instead of
   discarding the original knowledge.
@@ -252,9 +285,6 @@ validated operation.
 - **Dependency handling:** define the persisted/pending result structure when some units succeed and
   others or their dependencies remain unresolved. Do not invent incomplete links just to force a
   nominal success.
-- **Type-change requests:** distinguish a type used only to help resolve the current target from a new
-  canonical type the user is explicitly asking to assign. Example: `Odyssey no es un concepto, es un
-  proyecto`. A type-change request must not prevent finding the existing note under its old type.
 - **No-general-solver guarantee:** accept that some arbitrary natural-language mutations will remain
   ambiguous. The success criterion is safe automation with explicit abstention/pending states, not
   forcing every request into an automatic mutation.
@@ -292,7 +322,8 @@ without evidence.
 
 Phase 15.1 deliberately repairs the write-planning representation before persistence rather than
 making Phase 16 reinterpret raw user language. Phase 16 then combines prepared-target resolution,
-bounded semantic body mutation, reference materialization, and deterministic persistence because
-those responsibilities meet at the point where resolved identities and canonical links become actual
-note changes. Phase 17 keeps Core composition and its stable boundary together; Phase 18 then proves
-that boundary through the distinct n8n integration responsibility.
+bounded type-property rematerialization when classification changes, bounded semantic body mutation,
+reference materialization, and deterministic persistence because those responsibilities meet at the
+point where resolved identities and canonical links become actual note changes. Phase 17 keeps Core
+composition and its stable boundary together; Phase 18 then proves that boundary through the distinct
+n8n integration responsibility.
