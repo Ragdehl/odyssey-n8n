@@ -289,12 +289,20 @@ def test_property_validation_is_type_scoped_schema_driven_and_fail_closed(schema
     """Reject cross-type fields, malformed values, duplicate fields, and intent/op mismatches."""
     invalid = [
         unit("Marta", properties=[prop("birth_date", "1990-05-03")], facts=[]),
-        unit("Odyssey", note_type="project", properties=[prop("birth_date", "1990-05-03")], facts=[]),
+        unit(
+            "Odyssey",
+            note_type="project",
+            properties=[prop("birth_date", "1990-05-03")],
+            facts=[],
+        ),
         unit("Marta", note_type="person", properties=[prop("birth_date", "03/05/1990")], facts=[]),
         unit(
             "Marta",
             note_type="person",
-            properties=[prop("birth_date", "1990-05-03"), prop("birth_date", "1991-01-01")],
+            properties=[
+                prop("birth_date", "1990-05-03"),
+                prop("birth_date", "1991-01-01"),
+            ],
             facts=[],
         ),
         unit(
