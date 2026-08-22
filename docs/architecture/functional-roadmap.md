@@ -64,6 +64,15 @@ single Sol/low interpretation call
 - The planner must receive a write-oriented projection of the canonical schema, including writable
   type properties whether or not they are retrieval-filterable. Retrieval capabilities and write
   capabilities are related but are not the same contract.
+- `KnowledgeUnit.properties` is an ordered list of generic property changes shaped as
+  `{field, op, value}`. Phase 15.1 supports only `set` and whole-property `remove`: `set` carries a
+  schema-valid value, while `remove` carries `null`. `record`/`amend` use `set`; `remove` uses
+  `remove`; `delete` carries no property changes. The detailed contract is canonical in
+  [Phase 15 write planning](phase-15-write-planning.md#phase-151-contract-schema-aware-property-changes).
+- Property support is entirely schema-driven. Adding a new canonical type or property that uses an
+  already-supported schema `value_type` must require only a schema change, not a planner/prompt/code
+  branch naming that type or property. A genuinely new `value_type` requires explicit shared
+  validation/Structured-Outputs support and tests; unknown value types fail closed until then.
 - Information that maps safely to a canonical property should be represented structurally; knowledge
   that does not map to a property remains in `facts` rather than being forced into metadata.
 - `concept` is not a fallback for unknown classification. Its intended meaning is a reusable,
@@ -184,9 +193,6 @@ validated operation.
 
 ### Phase 16 open questions before implementation
 
-- **Exact `KnowledgeUnit.properties` contract:** decide the representation of set/remove/amend
-  property operations and how property values are validated against the schema before the Phase 15.1
-  benchmark is frozen.
 - **Creation authorization:** define the exact rule that permits `record + unresolved` to become a
   CREATE without equating failure to resolve with proof of absence.
 - **Insufficient identity:** define the deterministic threshold/conditions for returning
