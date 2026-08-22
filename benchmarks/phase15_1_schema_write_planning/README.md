@@ -1,7 +1,9 @@
 # Phase 15.1 schema-aware write-planning benchmark
 
 This is separate evidence for the refined `target + properties` contract. It deliberately does not
-modify any historical Phase 15 artifact. The frozen input set has fifteen single-call Sol/low cases:
+modify any historical Phase 15 artifact. Version 1.0 is retained in the original raw results and
+the reviewed rows are indexed in `cases.v1.0.json` / `oracle.v1.0.json`. Version 1.1 is the
+corrected follow-up case set; it has fifteen single-call Sol/low cases:
 the twelve property/schema cases required by the contract and three Phase 15 regression sentinels.
 
 Every case fixes `current_context` to `2026-08-22 09:30 Europe/Paris`; P07 therefore has the
@@ -22,16 +24,18 @@ The oracle is narrow: it reports `INVALID` for local contract rejection, `FAIL` 
 required semantic invariant, and `PASS` otherwise. It does not use an evaluator LLM or treat
 alternate harmless wording as a failure.
 
+The v1 review changed adjudication, not historical rows: P09's original `journal_entry` output is
+semantically acceptable and the old oracle was wrong; P05's original output remains invalid evidence
+for the intended amend behavior because its input supplied no mutation. The production validation
+still rejects empty `amend`/`remove` payloads. The special prompt rule added after v1 was removed;
+type semantics remain schema-driven. R01–R03 now require their essential target and fact/query
+content, not only action shape.
+
 ## Execution record — 2026-08-22
 
-The complete run `phase15-1-sol-low-20260822-network` made 15 Sol/low calls: **13 PASS, 1 FAIL,
-1 INVALID**. P09 incorrectly inferred `journal_entry` from a transient reflection mentioning
-“hoy”; the production prompt was tightened, the change received a deterministic test, and the
-one-case follow-up passed. P05 initially emitted an empty action list and, after the Structured
-Outputs `actions.minItems=1` correction, emitted an `amend` with neither fact nor property. Both
-are correctly `INVALID` locally: the input identifies a target but supplies no requested mutation.
-Treat it as an incomplete request/contract boundary, not a safe no-op or permission to invent a
-relationship.
+The historical run `phase15-1-sol-low-20260822-network` made 15 Sol/low calls: **13 PASS, 1 FAIL,
+1 INVALID**. Its raw rows remain unchanged. Offline reevaluation under v1.1 changes only P09's
+adjudication from FAIL to PASS; the original P05 row remains INVALID because its input was incomplete.
 
 The explicit follow-up `phase15-1-sol-low-20260822-followup` made two further calls: P09 **PASS**;
 P05 **INVALID**. The sandbox-only attempt `phase15-1-sol-low-20260822` is preserved separately:
@@ -40,9 +44,13 @@ evidence rather than model-quality evidence. The 17 network-reachable calls repo
 82,347 cached input, 18,404 cache-write, 2,379 output, and 1,044 reasoning tokens; using the frozen
 pricing snapshot, their estimated total is **$0.227823 USD**.
 
-Consequently the Phase 15.1 benchmark is not accepted and this PR remains a Draft pending a human
-decision on the mutation-less P05 request shape or a revised complete semantic input. Raw, parsed,
-validated, usage, prompt/schema, and oracle evidence are append-only under `results/`.
+After deterministic checks, v1.1 adds one new five-call follow-up for P05, P07, P08, P09, and P12.
+Its raw rows are append-only under a new `results/` directory and use the final production prompt.
+All five attempts ended in provider `Connection error` before a model response, with zero reported
+tokens and estimated cost `$0.000000 USD`; no automatic retry was made. This is harness/network
+evidence, not a semantic model result. The historical accepted outputs still support P07, P08, P09
+(after the corrected adjudication), and P12, but the corrected P05 has no successful follow-up row,
+so Phase 15.1 is not marked ready on this branch.
 
 Run once only after deterministic tests pass:
 

@@ -67,6 +67,7 @@ def test_frozen_cases_cover_required_semantics_once_and_fix_context() -> None:
         "R02",
         "R03",
     ]
+    assert cases[4]["request"].endswith("ahora vive en Lyon")
     assert cases[6]["current_context"] == {
         "date": "2026-08-22",
         "time": "09:30",
@@ -135,6 +136,108 @@ def test_oracle_rejects_duplicate_structured_date_and_extra_write_lookup() -> No
         ),
     )
     assert evaluate("R01", extra_retrieval, schema)[0] == "FAIL"
+
+
+def test_oracle_requires_semantic_content_for_reviewed_cases() -> None:
+    """Ensure reviewed benchmark sentinels preserve the user's requested knowledge."""
+    schema = schema_for(next(case for case in load_cases() if case["id"] == "P05"))
+    p05 = _output(
+        _write(
+            _unit(
+                "amiga de Marta nacida en 1990",
+                note_type="person",
+                intent="amend",
+                properties=[],
+                facts=["Ahora vive en Lyon."],
+                filters=[
+                    {"field": "birth_date", "op": "gte", "value": "1990-01-01"},
+                    {"field": "birth_date", "op": "lt", "value": "1991-01-01"},
+                ],
+            )
+        )
+    )
+    assert evaluate("P05", p05, schema) == ("PASS", [])
+    missing_mutation = _output(
+        _write(_unit("amiga de Marta", note_type="person", intent="amend", properties=[], facts=[]))
+    )
+    assert evaluate("P05", missing_mutation, schema)[0] == "INVALID"
+
+
+def test_oracle_accepts_current_reflection_as_journal_entry() -> None:
+    """Treat a current personal reflection as a dated journal entry when represented fully."""
+    schema = schema_for(next(case for case in load_cases() if case["id"] == "P09"))
+    payload = _output(
+        _write(
+            _unit(
+                "entrada de diario de hoy",
+                note_type="journal_entry",
+                intent="record",
+                properties=[{"field": "entry_date", "op": "set", "value": "2026-08-22"}],
+                facts=["Estoy pensando si cambiar el sofá."],
+            )
+        )
+    )
+    assert evaluate("P09", payload, schema) == ("PASS", [])
+
+
+def test_regression_sentinels_require_user_content() -> None:
+    """Reject shape-only regressions that discard the request's essential content."""
+    schema = schema_for(next(case for case in load_cases() if case["id"] == "R02"))
+    r02 = _output(
+        _write(
+            _unit(
+                "Odyssey",
+                note_type=None,
+                intent="record",
+                properties=[],
+                facts=["Antes pensaba usar LangGraph para Odyssey."],
+            )
+        )
+    )
+    assert evaluate("R02", r02, schema) == ("PASS", [])
+    assert (
+        evaluate(
+            "R02",
+            _output(
+                _write(
+                    _unit(
+                        "Odyssey",
+                        note_type=None,
+                        intent="record",
+                        properties=[],
+                        facts=["Antes pensaba usar una herramienta."],
+                    )
+                )
+            ),
+            schema,
+        )[0]
+        == "FAIL"
+    )
+
+    r03 = _output(
+        {
+            "kind": "retrieve",
+            "plan": {"query": "n8n", "type": None, "filters": []},
+        },
+        _write(
+            _unit(
+                "n8n",
+                note_type=None,
+                intent="record",
+                properties=[],
+                facts=["Debemos revisar los tickets."],
+            )
+        ),
+    )
+    assert evaluate("R03", r03, schema) == ("PASS", [])
+    missing_content = _output(
+        {
+            "kind": "retrieve",
+            "plan": {"query": "tema", "type": None, "filters": []},
+        },
+        _write(_unit("tema", note_type=None, intent="record", properties=[], facts=["Anotado."])),
+    )
+    assert evaluate("R03", missing_content, schema)[0] == "FAIL"
 
 
 def test_runner_persists_each_complete_input_and_stops_without_retries(

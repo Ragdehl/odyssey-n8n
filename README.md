@@ -62,4 +62,4 @@ This Git repository contains code, application configuration and schema, tests, 
 - [`workflows/`](workflows/) — n8n integration and orchestration workflows.
 - [Codex project skills](.codex/skills/) — reusable development workflows.
 
-Project-development state is represented by Git branches and commits, Pull Requests, and test results. Architecture documentation records durable decisions rather than manual checkpoint status.
+Project-development state is represented by Git branches and commits, Pull Requests, and test results. Architecture documentation records durable decisions rather than manual checkpoint status. Phase 15.1 benchmark v1.1 review/follow-up evidence is documented in [the benchmark README](benchmarks/phase15_1_schema_write_planning/README.md); v1 raw outputs remain historical and append-only.

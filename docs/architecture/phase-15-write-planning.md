@@ -475,14 +475,19 @@ schema digest, and a synthetic `car.registration_number` schema extension. Every
 complete input, effective schema/capabilities, raw model output, local validation, oracle result, and
 available usage immediately after the call; it does not alter Phase 15 historical evidence.
 
-The full 15-call Sol/low pass produced 13 PASS, P09 FAIL, and P05 INVALID. P09's erroneous
-`journal_entry` inference from a transient “hoy” reflection was a real prompt defect; the prompt was
-clarified, a deterministic test was added, and its one-call follow-up passed. P05 remains INVALID:
-“Corrige a la amiga de Marta nacida en 1990” provides target-selection evidence but no fact or
-property to amend. A valid `amend` cannot be a no-op, and adding a fact/property would invent a
-mutation; this is an unresolved input/contract boundary rather than a reason to weaken validation.
+The v1 benchmark remains append-only. Human review adjudicated P09's original `journal_entry` output
+as semantically acceptable and identified the old oracle expectation (`type=null`) as incorrect. P05's
+original output remains invalid evidence for the desired capability because “Corrige a la amiga de
+Marta nacida en 1990” identifies a target but supplies no mutation; the non-empty `amend` validation
+must remain. The corrected P05 input adds “ahora vive en Lyon”, preserving the separation between
+target query/filter evidence and mutation facts. The production prompt no longer contains the special
+rule that suppressed `journal_entry` for current reflections. R01–R03 sentinels now assert essential
+semantic content as well as action shape.
 
-The benchmark is therefore **not accepted** and Phase 15.1 remains the current functional phase.
-The 17 network-reachable calls (15 full plus the two-case explicit follow-up) reported an estimated
-$0.227823 USD from the frozen pricing snapshot. A sandbox-only failed attempt is retained as separate
-zero-token connection-error harness evidence. No Phase 16 work is authorized by this result.
+The v1.1 follow-up is limited to P05, P07, P08, P09, and P12 after offline reevaluation. It uses the
+final production prompt, `gpt-5.6-sol`, low reasoning, `store=false`, and no retries. Its five raw
+rows are a new append-only evidence set; exact outcome and usage are recorded in the benchmark
+README and result metadata. The five attempts all ended in provider `Connection error` before a model
+response, with zero reported tokens and no retries. This is harness/network evidence rather than a
+semantic model failure; because corrected P05 therefore lacks a successful follow-up, Phase 15.1 is
+not marked ready on this branch. No Phase 16 work is authorized by this benchmark.

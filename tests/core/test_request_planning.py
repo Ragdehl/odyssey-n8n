@@ -529,10 +529,10 @@ def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) ->
     assert not contains_key(request_schema, "const")
 
 
-def test_prompt_prevents_today_from_inventing_a_journal_entry_type(schema: dict) -> None:
-    """Keep transient dated reflections untyped unless the request names a diary entry."""
+def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) -> None:
+    """Do not add a production exception that suppresses valid dated reflections."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
-    assert "Do not infer `journal_entry` merely because a reflection says today/hoy" in prompt
+    assert "Do not infer `journal_entry` merely because a reflection says today/hoy" not in prompt
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:

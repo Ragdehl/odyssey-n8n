@@ -1,0 +1,8 @@
+{
+  "oracle_version": "1.0.0",
+  "cases": [
+    {"id":"P05","action_kinds":["write"],"intent":"amend","type":"person","query_terms":["amiga","marta"],"properties":[],"allowed_filters":[[],[["birth_date","gte","1990-01-01"],["birth_date","lt","1991-01-01"]]]},
+    {"id":"P09","action_kinds":["write"],"intent":"record","type":null,"filters":[],"properties":[]}
+  ],
+  "note": "Audit index for the two reviewed v1 oracle rows; the original oracle remains represented by the historical raw classifications."
+}

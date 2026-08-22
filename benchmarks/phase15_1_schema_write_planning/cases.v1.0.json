@@ -1,0 +1,8 @@
+{
+  "benchmark_version": "1.0.0",
+  "cases": [
+    {"id": "P05", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Corrige a la amiga de Marta nacida en 1990"},
+    {"id": "P09", "schema": "canonical", "current_context": {"date": "2026-08-22", "time": "09:30", "timezone": "Europe/Paris"}, "request": "Hoy estoy pensando si cambiar el sofá"}
+  ],
+  "note": "Audit index for the two reviewed v1 rows; the complete original input set remains in the v1 raw evidence."
+}

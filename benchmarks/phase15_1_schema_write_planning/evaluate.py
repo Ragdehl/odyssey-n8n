@@ -35,10 +35,20 @@ def evaluate(case_id: str, payload: Any, schema: dict[str, Any]) -> tuple[str, l
     expected, actions = _expectation(case_id), payload["actions"]
     if [action["kind"] for action in actions] != expected["action_kinds"]:
         return "FAIL", ["unexpected_action_order_or_kind"]
-    action = actions[expected.get("write_action_index", 0)]
+    write_index = expected.get("write_action_index", 0)
+    if expected.get("retrieve_query_terms"):
+        retrieve_actions = [action for action in actions if action["kind"] == "retrieve"]
+        retrieve_query = " ".join(action["plan"]["query"] for action in retrieve_actions).lower()
+        if any(term not in retrieve_query for term in expected["retrieve_query_terms"]):
+            findings = ["retrieve_query_lost_semantic_identity"]
+        else:
+            findings = []
+    else:
+        findings = []
+    action = actions[write_index]
     if len(action["units"]) != 1:
         return "FAIL", ["unexpected_knowledge_unit_count"]
-    unit, findings = action["units"][0], []
+    unit = action["units"][0]
     if unit["intent"] != expected["intent"]:
         findings.append("incorrect_intent")
     if "type" in expected and unit["target"]["type"] != expected["type"]:
@@ -59,6 +69,11 @@ def evaluate(case_id: str, payload: Any, schema: dict[str, Any]) -> tuple[str, l
         findings.append("unrepresented_knowledge_lost_from_facts")
     if any(term in facts for term in expected.get("forbidden_fact_terms", [])):
         findings.append("structured_property_duplicated_in_facts")
+    if any(
+        item["field"] in expected.get("forbidden_property_fields", [])
+        for item in unit["properties"]
+    ):
+        findings.append("invented_or_unrequested_property_mutation")
     if any(
         item["field"] in expected.get("forbidden_filter_fields", [])
         for item in unit["target"]["filters"]
