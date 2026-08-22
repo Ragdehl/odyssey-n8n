@@ -521,11 +521,18 @@ def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) ->
         return False
 
     action_variants = request_schema["properties"]["actions"]["items"]["anyOf"]
+    assert request_schema["properties"]["actions"]["minItems"] == 1
     assert [variant["properties"]["kind"] for variant in action_variants] == [
         {"type": "string", "enum": ["retrieve"]},
         {"type": "string", "enum": ["write"]},
     ]
     assert not contains_key(request_schema, "const")
+
+
+def test_prompt_prevents_today_from_inventing_a_journal_entry_type(schema: dict) -> None:
+    """Keep transient dated reflections untyped unless the request names a diary entry."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    assert "Do not infer `journal_entry` merely because a reflection says today/hoy" in prompt
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:

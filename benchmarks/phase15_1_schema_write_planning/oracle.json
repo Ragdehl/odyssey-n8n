@@ -1,0 +1,20 @@
+{
+  "oracle_version": "1.0.0",
+  "cases": [
+    {"id":"P01","action_kinds":["write"],"intent":"record","type":"person","filters":[],"properties":[["birth_date","set","1990-05-03"]],"forbidden_fact_terms":["1990","mayo"]},
+    {"id":"P02","action_kinds":["write"],"intent":"record","type":"person","filters":[],"properties":[["relationship_to_user","set","hermana"]]},
+    {"id":"P03","action_kinds":["write"],"intent":"amend","type":"person","filters":[["birth_date","eq","1990-05-03"]],"properties":[["relationship_to_user","set","hermana"]]},
+    {"id":"P04","action_kinds":["write"],"intent":"amend","type":"person","filters":[["birth_date","eq","1990-05-03"]],"properties":[["birth_date","set","1990-05-04"]]},
+    {"id":"P05","action_kinds":["write"],"intent":"amend","type":"person","query_terms":["amiga","marta"],"properties":[],"allowed_filters":[[],[["birth_date","gte","1990-01-01"],["birth_date","lt","1991-01-01"]]]},
+    {"id":"P06","action_kinds":["write"],"intent":"remove","type":"person","filters":[],"properties":[["birth_date","remove",null]]},
+    {"id":"P07","action_kinds":["write"],"intent":"record","type":"journal_entry","filters":[],"properties":[["entry_date","set","2026-08-20"]],"forbidden_filter_fields":["created_at","updated_at"]},
+    {"id":"P08","action_kinds":["write"],"intent":"record","type":"concept","filters":[],"properties":[]},
+    {"id":"P09","action_kinds":["write"],"intent":"record","type":null,"filters":[],"properties":[]},
+    {"id":"P10","action_kinds":["write"],"intent":"record","type":"store","filters":[],"properties":[],"fact_terms":["20:30"]},
+    {"id":"P11","action_kinds":["write"],"intent":"record","type":"person","filters":[],"properties":[["birth_date","set","1990-05-03"]],"fact_terms":["toulouse"],"forbidden_fact_terms":["1990","mayo"]},
+    {"id":"P12","action_kinds":["write"],"intent":"amend","type":"car","filters":[["registration_number","eq","1234 ABC"]],"properties":[["registration_number","set","5678 DEF"]]},
+    {"id":"R01","action_kinds":["write"],"intent":"amend","filters":[],"properties":[]},
+    {"id":"R02","action_kinds":["write"],"intent":"record","filters":[],"properties":[],"forbidden_filter_fields":["created_at","updated_at"]},
+    {"id":"R03","action_kinds":["retrieve","write"],"write_action_index":1,"intent":"record","filters":[],"properties":[]}
+  ]
+}

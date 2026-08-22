@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-08-22T21:21:52.395739+00:00",
+  "benchmark_version": "1.0.0",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "structured_outputs": "production request_plan_json_schema",
+  "prompt": "production render_request_planner_prompt",
+  "planned_calls": 2,
+  "automatic_retries": false,
+  "openai_sdk_version": "3.3.1"
+}

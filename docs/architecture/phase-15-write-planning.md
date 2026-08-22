@@ -464,3 +464,25 @@ been approved as part of the Phase 15.1 design checkpoint.
   target-filter-versus-mutation separation, query-plus-filter target selection, property-vs-fact
   separation, dynamic schema behavior, concept non-fallback behavior, and compact Phase 15 regression
   sentinels before Phase 16 implementation begins.
+
+### Phase 15.1 benchmark evidence — 2026-08-22
+
+The independent focused evidence lives in
+[`benchmarks/phase15_1_schema_write_planning/`](../../benchmarks/phase15_1_schema_write_planning/).
+It uses the production `render_request_planner_prompt` and `request_plan_json_schema` functions,
+`gpt-5.6-sol` with low reasoning effort, `store=false`, fixed per-case current context, the canonical
+schema digest, and a synthetic `car.registration_number` schema extension. Every call preserves its
+complete input, effective schema/capabilities, raw model output, local validation, oracle result, and
+available usage immediately after the call; it does not alter Phase 15 historical evidence.
+
+The full 15-call Sol/low pass produced 13 PASS, P09 FAIL, and P05 INVALID. P09's erroneous
+`journal_entry` inference from a transient “hoy” reflection was a real prompt defect; the prompt was
+clarified, a deterministic test was added, and its one-call follow-up passed. P05 remains INVALID:
+“Corrige a la amiga de Marta nacida en 1990” provides target-selection evidence but no fact or
+property to amend. A valid `amend` cannot be a no-op, and adding a fact/property would invent a
+mutation; this is an unresolved input/contract boundary rather than a reason to weaken validation.
+
+The benchmark is therefore **not accepted** and Phase 15.1 remains the current functional phase.
+The 17 network-reachable calls (15 full plus the two-case explicit follow-up) reported an estimated
+$0.227823 USD from the frozen pricing snapshot. A sandbox-only failed attempt is retained as separate
+zero-token connection-error harness evidence. No Phase 16 work is authorized by this result.

@@ -31,6 +31,8 @@ RetrieveAction.plan and every KnowledgeUnit.target use the same selection shape:
 
 Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Do not attempt canonical type reassignment in Phase 15.1.
 
+Do not infer `journal_entry` merely because a reflection says today/hoy or names a date. Use that type and its `entry_date` only when the user explicitly identifies a diary or journal entry; otherwise a transient reflection with no safely supported type may use type=null.
+
 Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval, persistence, or entity resolution. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
 Planner retrieval/selection capabilities (derived dynamically from the canonical schema):
@@ -176,6 +178,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         "properties": {
             "actions": {
                 "type": "array",
+                "minItems": 1,
                 "items": {
                     "anyOf": [
                         {
