@@ -119,20 +119,29 @@ def test_frozen_contract_matches_current_canonical_types() -> None:
     )
 
 
-def test_phase15_capability_snapshot_matches_current_production_projection() -> None:
-    """Freeze Phase 15 capabilities from current production, not Phase 14 evidence."""
+def test_phase15_capability_snapshot_remains_historical_after_phase15_1() -> None:
+    """Keep accepted Phase 15 evidence frozen when later production semantics intentionally evolve."""
     root = Path(__file__).resolve().parents[2]
     schema = json.loads((root / "config/note-schema.json").read_text(encoding="utf-8"))
-    expected = build_planner_capabilities(
+    frozen = load_planner_capabilities()
+    current = build_planner_capabilities(
         schema,
         current_context={"date": "2026-08-20", "time": "10:30", "timezone": "Europe/Madrid"},
     )
-    assert load_planner_capabilities() == expected
-    assert expected["filters"]["relationship_to_user"]["operators"] == ["eq", "in"]
+
+    assert frozen["current_context"] == {
+        "date": "2026-08-20",
+        "time": "10:30",
+        "timezone": "Europe/Madrid",
+    }
+    assert frozen["filters"]["relationship_to_user"]["operators"] == ["eq", "in"]
+    assert frozen["types"]["concept"]["description"].startswith("Reusable idea")
+    assert "not a generic fallback" in current["types"]["concept"]["description"]
+    assert frozen != current
 
 
-def test_frozen_prompt_has_production_contract_parity() -> None:
-    """Prevent frozen prompt drift from critical production write-planning semantics."""
+def test_frozen_prompt_preserves_phase15_while_production_advances_to_phase15_1() -> None:
+    """Preserve historical prompt evidence while checking shared safety and new production semantics."""
     root = Path(__file__).resolve().parents[2]
     schema = json.loads((root / "config/note-schema.json").read_text(encoding="utf-8"))
     context = {"date": "2026-08-20", "time": "10:30", "timezone": "Europe/Madrid"}
@@ -140,27 +149,30 @@ def test_frozen_prompt_has_production_contract_parity() -> None:
         render_request_planner_prompt(schema, context).lower(),
         render_prompt().lower(),
     )
-    requirements = (
-        "compatible",
-        "different intents for the same subject produce separate knowledgeunits",
-        "record, amend, remove, and delete",
-        "amend requires concrete facts",
-        "remove requires concrete facts",
-        "delete uses facts: []",
-        "record normally contains facts",
+
+    shared_safety = (
         "describe knowledge semantics, not note lifecycle",
         "only that explicit lifecycle timing authorizes created_at or updated_at filters",
-        "do not create a retrieveaction merely to determine whether a write target exists",
-        "entity existence and identity resolution happen later",
-        "only when the user actually asks to retrieve or inspect knowledge",
         "resolve identity",
         "create versus update",
         "generate ids, paths, markdown",
         "execute retrieval, persistence, or entity resolution",
     )
-    for requirement in requirements:
+    for requirement in shared_safety:
         assert requirement in production
         assert requirement in frozen
+
+    assert "different intents for the same subject produce separate knowledgeunits" in frozen
+    assert "amend requires concrete facts" in frozen
+    assert "remove requires concrete facts" in frozen
+    assert "record normally contains facts" in frozen
+
+    assert "every knowledgeunit.target use the same selection shape" in production
+    assert "different intents for the same target produce separate knowledgeunits" in production
+    assert "amend/remove require at least one mutation across properties or facts" in production
+    assert "record normally contains properties and/or facts" in production
+    assert "must not create an extra retrieveaction" in production
+    assert "do not attempt canonical type reassignment in phase 15.1" in production
 
 
 def test_oracle_rejects_extra_facts_and_allows_factless_reference_targets() -> None:
