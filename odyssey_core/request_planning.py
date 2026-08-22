@@ -123,7 +123,20 @@ class RequestPlan:
 def render_request_planner_prompt(
     schema: Mapping[str, Any], current_context: Mapping[str, str]
 ) -> str:
-    """Render the production planner prompt from current schema and caller context."""
+    """Render the production planner prompt from active schema and runtime context.
+
+    Args:
+        schema: Parsed canonical Odyssey schema used to derive selection and write capabilities.
+        current_context: Current date, time, and timezone supplied by the caller.
+
+    Returns:
+        Planner instructions containing dynamic retrieval/selection and writable-property contracts.
+
+    Raises:
+        RequestPlanningError: If the runtime context is incomplete or malformed.
+        ValueError: If the canonical schema cannot be projected safely into planner capabilities.
+        RuntimeError: If an internal capability placeholder is missing or duplicated.
+    """
     _validate_current_context(current_context)
     if _PROMPT_TEMPLATE.count(_RETRIEVAL_CAPABILITY_PLACEHOLDER) != 1:
         raise RuntimeError("Request planner retrieval capability placeholder is invalid")
@@ -142,7 +155,18 @@ def render_request_planner_prompt(
 
 
 def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the strict Structured Outputs schema for the active canonical schema."""
+    """Build the strict Structured Outputs schema for the active canonical schema.
+
+    Args:
+        schema: Parsed canonical Odyssey schema that defines types, filters, and writable properties.
+
+    Returns:
+        Closed JSON Schema accepted by the Responses API for one Phase 15.1 RequestPlan.
+
+    Raises:
+        RequestPlanningError: If the active capabilities cannot form a usable structured contract.
+        ValueError: If the canonical schema declares malformed or unsupported planner semantics.
+    """
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
     selection_schema = _selection_json_schema(retrieval_capabilities)
@@ -227,7 +251,19 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPlan:
-    """Validate untrusted model output and return an immutable non-executing plan."""
+    """Validate untrusted model output and return an immutable non-executing plan.
+
+    Args:
+        payload: JSON-decoded planner output to validate locally.
+        schema: Parsed canonical Odyssey schema used for dynamic type, filter, and property checks.
+
+    Returns:
+        A validated RequestPlan that has not performed retrieval, resolution, or persistence.
+
+    Raises:
+        RequestPlanningError: If output is malformed, empty, unsafe, or violates the active contract.
+        ValueError: If the canonical schema cannot be projected into safe planner capabilities.
+    """
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
     if not isinstance(payload, dict) or set(payload) != {"actions", "limitations"}:
@@ -254,7 +290,16 @@ class OpenAIRequestPlanner:
     def __init__(
         self, client: ResponsesClient, schema: Mapping[str, Any], current_context: Mapping[str, str]
     ) -> None:
-        """Initialize a planner with an injected client and runtime schema/context."""
+        """Initialize a planner with an injected client and runtime schema/context.
+
+        Args:
+            client: OpenAI-compatible Responses client supplied by composition code.
+            schema: Current canonical Odyssey schema.
+            current_context: Current date, time, and timezone used during interpretation.
+
+        Raises:
+            RequestPlanningError: If current context is malformed.
+        """
         _validate_current_context(current_context)
         self._client = client
         self._schema = schema
@@ -264,7 +309,18 @@ class OpenAIRequestPlanner:
     def from_environment(
         cls, schema: Mapping[str, Any], current_context: Mapping[str, str]
     ) -> OpenAIRequestPlanner:
-        """Create a production planner using the environment-provided OpenAI API key."""
+        """Create a production planner using the environment-provided OpenAI API key.
+
+        Args:
+            schema: Current canonical Odyssey schema.
+            current_context: Current date, time, and timezone used during interpretation.
+
+        Returns:
+            A planner backed by the OpenAI Responses API.
+
+        Raises:
+            RequestPlanningError: If the API key, OpenAI SDK, or runtime context is unavailable.
+        """
         if not os.environ.get("OPENAI_API_KEY"):
             raise RequestPlanningError("OPENAI_API_KEY is required for request planning")
         try:
@@ -274,7 +330,18 @@ class OpenAIRequestPlanner:
         return cls(OpenAI(), schema, current_context)
 
     def plan(self, request: str) -> RequestPlan:
-        """Interpret one non-empty user request and fail closed on invalid model output."""
+        """Interpret one non-empty user request and fail closed on invalid model output.
+
+        Args:
+            request: User request to interpret as one ordered RequestPlan.
+
+        Returns:
+            A locally validated RequestPlan that has not been executed.
+
+        Raises:
+            RequestPlanningError: If the request, provider call, JSON response, or plan is invalid.
+            ValueError: If the active schema cannot be projected into safe planner capabilities.
+        """
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
         try:
@@ -310,7 +377,17 @@ class OpenAIRequestPlanner:
 
 
 def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the one shared query/type/filter Structured Outputs shape."""
+    """Build the shared query/type/filter Structured Outputs shape.
+
+    Args:
+        capabilities: Dynamic retrieval/selection capability projection from the canonical schema.
+
+    Returns:
+        Closed JSON Schema for either a RetrieveAction plan or KnowledgeUnit target.
+
+    Raises:
+        RequestPlanningError: If no deterministic planner filters are available.
+    """
     alternatives = _filter_json_schema_alternatives(capabilities)
     if not alternatives:
         raise RequestPlanningError("Canonical schema exposes no planner filters")
@@ -332,7 +409,14 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Build strict dynamic filter alternatives shared by retrieve and write target selection."""
+    """Build strict dynamic filter alternatives shared by retrieval and write selection.
+
+    Args:
+        capabilities: Dynamic selection capabilities keyed by canonical filter field.
+
+    Returns:
+        JSON Schema alternatives for every supported field/operator combination.
+    """
     alternatives: list[dict[str, Any]] = []
     for field, definition in capabilities["filters"].items():
         scalar: dict[str, Any] = {
@@ -357,7 +441,17 @@ def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[di
 
 
 def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build dynamic strict property-change alternatives from type-specific schema properties."""
+    """Build dynamic strict property-change alternatives from type-specific properties.
+
+    Args:
+        write_capabilities: Writable type/property projection from the canonical schema.
+
+    Returns:
+        Closed array schema supporting generic set/remove changes for known properties.
+
+    Raises:
+        RequestPlanningError: If a projected property uses an unsupported value type.
+    """
     alternatives: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for type_definition in write_capabilities["types"].values():
@@ -402,7 +496,17 @@ def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict
 
 
 def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]:
-    """Map one Core-supported property value definition to a basic strict JSON value shape."""
+    """Map one supported property definition to its basic strict JSON value shape.
+
+    Args:
+        definition: Schema-derived writable property capability.
+
+    Returns:
+        JSON Schema fragment for the property's value type.
+
+    Raises:
+        RequestPlanningError: If the property value type has no Structured Outputs mapping.
+    """
     value_type = definition["value_type"]
     if value_type == "integer":
         return {"type": "integer"}
@@ -449,7 +553,20 @@ def _validate_selection(
     *,
     label: str,
 ) -> SelectionCriteria:
-    """Validate the shared query/type/filters selection contract."""
+    """Validate the shared query/type/filters selection contract.
+
+    Args:
+        raw: Untrusted selection object emitted by the planner.
+        schema: Parsed canonical schema used by the shared deterministic filter validator.
+        capabilities: Dynamic selection capabilities derived from that schema.
+        label: Human-readable contract name used in validation errors.
+
+    Returns:
+        Immutable validated selection criteria reusable by retrieval or write targeting.
+
+    Raises:
+        RequestPlanningError: If query, type, filter shape, or filter semantics are invalid.
+    """
     if not isinstance(raw, dict) or set(raw) != {"query", "type", "filters"}:
         raise RequestPlanningError(f"{label} must contain exactly query, type, and filters")
     query, note_type, raw_filters = raw["query"], raw["type"], raw["filters"]
@@ -479,7 +596,21 @@ def _validate_write_action(
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
 ) -> WriteAction:
-    """Validate semantic knowledge units without resolving identity or choosing persistence."""
+    """Validate one semantic write action without resolving identity or persisting data.
+
+    Args:
+        action: Untrusted write-action object returned by the planner.
+        schema: Parsed canonical schema used by shared target-filter validation.
+        retrieval_capabilities: Dynamic query/type/filter contract for write targets.
+        write_capabilities: Dynamic canonical property contract for write mutations.
+
+    Returns:
+        Immutable semantic write preparation with safe targets, payloads, and references.
+
+    Raises:
+        RequestPlanningError: If units are malformed, violate intent payload rules, or reference an
+            unknown or self target.
+    """
     raw_units = action.get("units")
     if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
         raise RequestPlanningError("WriteAction must contain non-empty units")
@@ -511,7 +642,21 @@ def _validate_knowledge_unit(
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
 ) -> KnowledgeUnit:
-    """Validate one write target, its property/fact payload, and local reference syntax."""
+    """Validate one write target, mutation payload, and local reference set.
+
+    Args:
+        unit: Untrusted model object for one semantic write target.
+        schema: Parsed canonical schema used for deterministic target-filter validation.
+        retrieval_capabilities: Shared query/type/filter capability projection.
+        write_capabilities: Type-scoped writable property capability projection.
+
+    Returns:
+        One immutable KnowledgeUnit with no physical persistence authority.
+
+    Raises:
+        RequestPlanningError: If target, intent, properties, facts, or references violate the
+            Phase 15.1 contract.
+    """
     required = {"target", "intent", "properties", "facts", "references"}
     if not isinstance(unit, dict) or set(unit) != required:
         raise RequestPlanningError("KnowledgeUnit fields are invalid")
@@ -574,7 +719,21 @@ def _validate_property_changes(
     intent: str,
     write_capabilities: Mapping[str, Any],
 ) -> tuple[PropertyChange, ...]:
-    """Validate property changes against the selected type and shared Core value rules."""
+    """Validate property changes against the selected type and shared Core value rules.
+
+    Args:
+        raw_properties: Untrusted ordered property-change objects from one KnowledgeUnit.
+        note_type: Canonical target type used to scope allowed property IDs.
+        intent: Semantic write intent controlling the allowed property operation.
+        write_capabilities: Active schema-derived type/property capability projection.
+
+    Returns:
+        Immutable validated property changes in planner order.
+
+    Raises:
+        RequestPlanningError: If field scope, operation, uniqueness, nullability, or value semantics
+            violate the active write contract.
+    """
     if raw_properties and note_type is None:
         raise RequestPlanningError("KnowledgeUnit properties require a canonical target type")
     if intent == "delete" and raw_properties:
@@ -622,7 +781,7 @@ def _validate_property_changes(
 def _validate_planner_filters(
     filters: Sequence[Any], note_type: str | None, capabilities: Mapping[str, Any]
 ) -> None:
-    """Restrict selection filters to dynamic planner capabilities and compatible type scopes."""
+    """Restrict selection filters to dynamic capabilities and compatible type scopes."""
     known = capabilities["filters"]
     candidates = set(capabilities["types"])
     if note_type is not None:
