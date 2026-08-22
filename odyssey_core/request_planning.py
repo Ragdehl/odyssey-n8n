@@ -347,9 +347,7 @@ def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[di
                     "properties": {
                         "field": {"type": "string", "enum": [field]},
                         "op": {"type": "string", "enum": [operator]},
-                        "value": {"type": "array", "items": scalar}
-                        if operator == "in"
-                        else scalar,
+                        "value": {"type": "array", "items": scalar} if operator == "in" else scalar,
                     },
                     "required": ["field", "op", "value"],
                     "additionalProperties": False,
@@ -361,17 +359,14 @@ def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[di
 def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict[str, Any]:
     """Build dynamic strict property-change alternatives from type-specific schema properties."""
     alternatives: list[dict[str, Any]] = []
-    seen: dict[str, dict[str, Any]] = {}
+    seen: set[tuple[str, str]] = set()
     for type_definition in write_capabilities["types"].values():
         for field, definition in type_definition["properties"].items():
-            existing = seen.get(field)
-            if existing is not None and existing != definition:
-                raise RequestPlanningError(
-                    f"Writable property {field!r} has incompatible definitions across types"
-                )
-            if existing is not None:
+            definition_key = json.dumps(definition, sort_keys=True, separators=(",", ":"))
+            key = (field, definition_key)
+            if key in seen:
                 continue
-            seen[field] = definition
+            seen.add(key)
             scalar = _property_value_json_schema(definition)
             alternatives.extend(
                 [
@@ -407,24 +402,14 @@ def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict
 
 
 def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]:
-    """Map one Core-supported property value definition to strict Structured Outputs JSON Schema."""
+    """Map one Core-supported property value definition to a basic strict JSON value shape."""
     value_type = definition["value_type"]
-    constraints = definition.get("constraints", {})
     if value_type == "integer":
-        result: dict[str, Any] = {"type": "integer"}
-        if "minimum" in constraints:
-            result["minimum"] = constraints["minimum"]
-        return result
+        return {"type": "integer"}
     if value_type == "array[string]":
-        result = {"type": "array", "items": {"type": "string"}}
-        if constraints.get("unique_items") is True:
-            result["uniqueItems"] = True
-        return result
+        return {"type": "array", "items": {"type": "string"}}
     if value_type in {"string", "date"}:
-        result = {"type": "string"}
-        if constraints.get("non_empty") is True:
-            result["minLength"] = 1
-        return result
+        return {"type": "string"}
     raise RequestPlanningError(f"Unsupported writable property value type: {value_type!r}")
 
 
@@ -448,9 +433,7 @@ def _validate_action(
     if not isinstance(action, dict):
         raise RequestPlanningError("RequestPlan action must be an object")
     if action.get("kind") == "write":
-        return _validate_write_action(
-            action, schema, retrieval_capabilities, write_capabilities
-        )
+        return _validate_write_action(action, schema, retrieval_capabilities, write_capabilities)
     if action.get("kind") != "retrieve" or set(action) != {"kind", "plan"}:
         raise RequestPlanningError("RequestPlan action kind is invalid")
     plan = _validate_selection(
@@ -501,9 +484,7 @@ def _validate_write_action(
     if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
         raise RequestPlanningError("WriteAction must contain non-empty units")
     units = tuple(
-        _validate_knowledge_unit(
-            raw, schema, retrieval_capabilities, write_capabilities
-        )
+        _validate_knowledge_unit(raw, schema, retrieval_capabilities, write_capabilities)
         for raw in raw_units
     )
     for index, unit in enumerate(units):
@@ -544,9 +525,7 @@ def _validate_knowledge_unit(
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
         raise RequestPlanningError("KnowledgeUnit properties must be a list")
-    properties = _validate_property_changes(
-        raw_properties, target.type, intent, write_capabilities
-    )
+    properties = _validate_property_changes(raw_properties, target.type, intent, write_capabilities)
 
     raw_facts = unit["facts"]
     if (
@@ -556,7 +535,9 @@ def _validate_knowledge_unit(
     ):
         raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
     if intent == "delete" and (raw_properties or raw_facts):
-        raise RequestPlanningError("KnowledgeUnit delete intent requires empty properties and facts")
+        raise RequestPlanningError(
+            "KnowledgeUnit delete intent requires empty properties and facts"
+        )
 
     raw_references = unit["references"]
     if not isinstance(raw_references, list):
@@ -593,7 +574,7 @@ def _validate_property_changes(
     intent: str,
     write_capabilities: Mapping[str, Any],
 ) -> tuple[PropertyChange, ...]:
-    """Validate generic property changes against the selected canonical type and shared value rules."""
+    """Validate property changes against the selected type and shared Core value rules."""
     if raw_properties and note_type is None:
         raise RequestPlanningError("KnowledgeUnit properties require a canonical target type")
     if intent == "delete" and raw_properties:
@@ -614,12 +595,16 @@ def _validate_property_changes(
             raise RequestPlanningError("Each property change must contain field, op, and value")
         field, op, value = raw["field"], raw["op"], raw["value"]
         if not isinstance(field, str) or field not in type_properties:
-            raise RequestPlanningError("KnowledgeUnit property field is invalid for its target type")
+            raise RequestPlanningError(
+                "KnowledgeUnit property field is invalid for its target type"
+            )
         if field in seen:
             raise RequestPlanningError("KnowledgeUnit property fields must be unique")
         seen.add(field)
         if op not in _PROPERTY_OPS or op not in allowed_ops:
-            raise RequestPlanningError("KnowledgeUnit property operation is incompatible with intent")
+            raise RequestPlanningError(
+                "KnowledgeUnit property operation is incompatible with intent"
+            )
         if op == "remove":
             if value is not None:
                 raise RequestPlanningError("Property remove operation requires null value")
