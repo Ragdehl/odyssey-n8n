@@ -27,29 +27,81 @@ phase contract
 architecture challenge (agent judgment)
     |
     v
-Codex implementation + local iteration
-    |
-    v
+choose the smallest reliable execution path
+    |                         |
+    |                         |
+    v                         v
+GitHub-capable agent       Codex local implementation
+bounded change             + local iteration/debugging
+    |                         |
+    +------------+------------+
+                 |
+                 v
 GitHub PR + deterministic server-side CI
-    |
-    v
-human review and merge
+                 |
+                 v
+semantic/human review and human merge
 ```
 
 - GitHub owns branches, pull-request state, server-side checks, and any future merge protection or
   auto-merge policy.
-- Codex owns implementation, local test iteration, feature-branch work, and Draft PR creation and
-  updates.
+- The GitHub-capable agent may implement bounded, well-understood changes directly when the contract
+  is clear and reliable validation does not require an iterative local environment.
+- Codex owns implementation that materially benefits from repository-local execution: iterative
+  testing and debugging, broader multi-file changes, refactors, benchmark/harness work, environment
+  interaction, and other tasks where local feedback is part of reaching a correct result.
+- Choosing Codex is not automatic merely because code changes are required. Before delegation,
+  prefer the smallest execution path that can complete the work safely and reviewably.
+- Regardless of who writes the change, deterministic validation and semantic review remain separate
+  gates. The author does not gain authority to merge its own work.
 - Agents and LLMs provide judgment; they do not replace deterministic validation.
-- Pre-commit provides fast local feedback, while GitHub CI independently validates commits and pull
-  requests.
+- Pre-commit provides fast local feedback when Codex is working locally, while GitHub CI
+  independently validates commits and pull requests.
 - n8n remains responsible for integrations, notifications, external orchestration, and eventual
   human-in-the-loop flows when a concrete need justifies them. It is not part of development CI.
 
+### Implementation routing
+
+Use this table as the default routing rule, not as a rigid prohibition. Escalate to Codex whenever a
+nominally small change becomes difficult to validate safely through the GitHub path.
+
+| Work | Default executor | Why |
+| --- | --- | --- |
+| Architecture/roadmap/ADR/status documentation | GitHub-capable agent | Direct reviewable edits; no local execution normally required. |
+| Pull-request review, stale-doc review, architecture challenge | GitHub-capable agent | Requires cross-file judgment and independent review rather than repository-local iteration. |
+| Small focused code change with an already-clear contract | GitHub-capable agent | Efficient when the change is bounded and CI can provide sufficient deterministic validation. |
+| Simple data-model/schema-plumbing change with obvious tests | GitHub-capable agent when genuinely bounded | Keep it direct unless failures require iterative local debugging. |
+| Multi-layer or broad multi-file implementation | Codex | Local repository exploration and repeated test feedback materially improve reliability. |
+| Refactor or non-trivial debugging | Codex | Requires iterative execution, inspection, and correction. |
+| Benchmark/harness implementation or repeated local experiments | Codex | Needs controlled local execution and evidence collection. |
+| Raspberry Pi, filesystem, Docker, local n8n, or environment-sensitive work | Codex | Requires access to the actual local development/runtime environment. |
+| Final semantic review of either implementation path | GitHub-capable agent + human as needed | Preserve independent review before human merge. |
+
+The intended recurring workflow is therefore:
+
+```text
+need a change
+    |
+    v
+Can the GitHub-capable agent implement it as a small, safe, reviewable change
+without needing iterative local execution?
+    |
+    +-- yes --> implement on feature branch --> CI --> semantic review
+    |
+    `-- no  --> delegate to Codex --> local iteration --> PR/CI --> semantic review
+
+Either path --> human merge
+```
+
+This routing decision is itself part of project process and should survive chat/session memory. If a
+future agent is uncertain which route applies, prefer Codex when local feedback is necessary and the
+GitHub-capable path when the work is genuinely bounded; do not create a second process document for
+this distinction.
+
 ## Evolution points
 
-- **D0 — manual stable workflow:** phase specification, Codex implementation, local verification,
-  Draft PR, semantic review, and human merge.
+- **D0 — manual stable workflow:** phase specification, bounded agent/Codex implementation as
+  appropriate, verification, Draft PR, semantic review, and human merge.
 - **D1 — Architecture Challenge + GitHub CI:** add a pre-implementation reasoning checkpoint and
   independent deterministic Python validation.
 - **D1.1 — public readiness + verification efficiency:** remove unnecessary operational identifiers

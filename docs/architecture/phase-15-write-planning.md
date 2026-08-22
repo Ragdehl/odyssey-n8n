@@ -41,8 +41,9 @@ infrastructure; and LangGraph, DAG, or workflow-engine infrastructure.
 
 ## Open decisions
 
-None. The single-call Sol/low design is accepted for this phase; persistence and explicit creation
-authorization remain Phase 16 decisions.
+None for the Phase 15 contract that was benchmarked and accepted. A post-merge pre-persistence review
+subsequently identified a representation gap for canonical writable properties; that follow-up is
+tracked as Phase 15.1 in the Functional Roadmap and does not invalidate the benchmark evidence below.
 
 ## Canonical contract
 
@@ -114,3 +115,30 @@ completed one additional Sol/low call and produced two independent candidate-set
 review accepts that isolated variance; no further paid calls are required. Raw evidence and exact
 statuses remain unchanged under `benchmarks/phase15_write_planning/results/` and its `targeted/results/`
 directories.
+
+## Post-validation follow-up: why Phase 15.1 exists
+
+The accepted Phase 15 output is sufficient to express semantic subjects, write intents, free-text
+facts, and references, but it is not yet sufficient to materialize every canonical note correctly.
+The canonical schema contains writable type-specific properties such as `person.birth_date`,
+`person.relationship_to_user`, and required `journal_entry.entry_date`. If a request says
+`Marta nació el 3 de mayo de 1990`, retaining that only as free-text would force a later phase to
+reinterpret the original language before it could populate `birth_date`, and a required property such
+as `entry_date` can make valid creation impossible if it is never extracted.
+
+Phase 15.1 therefore extends, rather than replaces, this contract so the same Sol/low interpretation
+call can infer canonical writable properties directly from the schema. The intended separation is:
+
+```text
+canonical property expressed by the request -> structured property value/operation
+other useful knowledge                    -> free-text facts
+```
+
+This follow-up must not turn `concept` into a fallback classification. `concept` should mean a
+reusable identifiable abstract subject with semantic identity of its own; if no type is safely
+supported, `type=null` is preferable. Automatic tags remain deferred and are not part of Phase 15.1.
+
+Phase 15.1 requires a new focused Sol/low validation because it changes the write output contract.
+The existing Phase 15 raw evidence remains historical evidence for the contract above and must not be
+rewritten retrospectively. See the canonical Functional Roadmap for the detailed Phase 15.1 decisions,
+Phase 16 persistence decisions, and open questions discovered before implementation.

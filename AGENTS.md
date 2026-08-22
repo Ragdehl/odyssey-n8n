@@ -67,6 +67,8 @@ Routine implementation risk means proceed autonomously; material data, security,
 
 For a significant functional phase, read the canonical [Functional Roadmap](docs/architecture/functional-roadmap.md) rather than reconstructing phase state from chat or agent memory. Read the relevant architecture documents and ADRs before changing a contract, define the phase contract under the [Development Pipeline](docs/architecture/development-pipeline.md), and run the architecture challenge before implementation.
 
+Before automatically delegating implementation to Codex, apply the canonical implementation-routing rule in the [Development Pipeline](docs/architecture/development-pipeline.md): a GitHub-capable agent should implement genuinely bounded, well-understood changes when it can do so safely and rely on deterministic CI; use Codex when local repository execution, iterative debugging/testing, broader multi-file changes, benchmark work, or environment access materially improves reliability. Regardless of the author, preserve semantic review, deterministic CI, and human merge as separate gates.
+
 Prefer the simplest architecture and challenge unnecessary complexity. Keep one canonical source for each project fact or contract; link to it elsewhere instead of duplicating it. Implement code and tests together, review both code and documentation for correctness and stale information, and update roadmap or ADR status only when actual project state changes. Readiness requires deterministic verification and CI, followed by PR, semantic/human review, and human merge.
 
 ## GitHub review workflow
