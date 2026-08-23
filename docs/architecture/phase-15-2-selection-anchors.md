@@ -1,9 +1,14 @@
-# Phase 15.2 — explicit entity and link-scope planning
+# Phase 15.2 — explicit entity and generalized link-scope planning
 
 ## Status
 
 Design checkpoint before implementation. Phase 15.1 is accepted and merged. Phase 16 must not start
 until this contract gap has been validated and accepted.
+
+Related future extension requirements captured during this checkpoint — app routing, type-aware
+writer profiles, explicit-only tag semantics, and future multi-user sharing — are documented in
+[Future extension points](future-extension-points.md). They are intentionally not all implementation
+scope for Phase 15.2.
 
 ## Problem
 
@@ -14,18 +19,14 @@ Phase 16 would otherwise have to infer again whether a query is a name/alias can
 semantic description.
 
 The same planning boundary also cannot currently preserve an explicit request to navigate the
-wikilink graph around another note. That related note may itself be identified by name, semantic
-wording, canonical type, deterministic properties, or a combination of those signals. Restricting
-link traversal to a named entity would therefore throw away exactly the same structured selection
-information Phase 15.1 already learned to preserve.
+wikilink graph around a note selected by name, semantic wording, type, deterministic properties, or a
+combination. This matters for future queries such as "ideas relacionadas con Marta" or "entradas de
+diario de junio relacionadas con la persona nacida el 3 de mayo de 1990" without changing the default
+meaning of "¿Qué sé de Marta?".
 
-The goal is to retain both pieces of interpretation in the existing single Sol/low planning call:
-
-1. an optional nominal identity anchor for ordinary direct selection; and
-2. an optional graph relation whose anchor can be selected with the same non-recursive note-selection
-   vocabulary used elsewhere.
-
-Phase 15.2 does **not** implement graph traversal, a new database, aggregation, or persistence.
+The goal is to preserve these pieces of interpretation in the existing single Sol/low planning call.
+Phase 15.2 does **not** implement graph traversal, a new database, aggregation, app routing, tag
+migration, multi-user authorization, or persistence.
 
 ## Architecture challenge
 
@@ -39,36 +40,17 @@ Important constraints:
 - Do not make `entity` a resolved Odyssey ID. It is an unresolved nominal anchor extracted from the
   user request and may be a primary name or alias candidate.
 - Do not treat every entity mentioned in a sentence as the selected entity.
-- Do not restrict a graph anchor to a nominal entity. A related note may be identified safely by
-  `query`, `type`, and deterministic `filters` even when `entity=null`.
-- Do not make graph selectors recursive. A link anchor uses the base note-selection vocabulary but
-  does not itself contain another `link_scope`.
-- Do not reintroduce automatic tag inference or tag filters. ADR 0008 remains in force; words such as
-  `idea`, `reflection`, or `decision` remain semantic query language unless a future canonical schema
-  capability explicitly represents the requested restriction.
+- Do not reintroduce automatic tag inference or tag filters. ADR 0008 remains in force until the
+  explicit-tag ontology decision recorded in `future-extension-points.md` is made.
 - Do not add typed-edge ontology. Ordinary Markdown `[[wikilinks]]` remain the relationship source of
   truth.
 - `entity` is useful identity evidence, but it is not a universal creation requirement. Occurrence-like
   notes such as journal entries or purchases may have sufficient identity through type, domain
   properties, and context without a nominal name.
-- Phase 15.2 graph scope denotes one anchor note. If the anchor selection is ambiguous, later graph
-  execution must abstain or request clarification rather than silently traversing from every matching
-  note. Set-valued graph anchors can be added later if a concrete product need justifies them.
 
 ## Proposed shared selection contract
 
-The reusable non-recursive note selector is:
-
-```text
-NoteSelector
-├─ entity: str | null
-├─ query: str
-├─ type: str | null
-└─ filters: ContextFilter[]
-```
-
-`RetrieveAction.plan` and `KnowledgeUnit.target` continue to expose those same fields and add the
-optional graph relation:
+`RetrieveAction.plan` and `KnowledgeUnit.target` continue to share the same selection shape:
 
 ```text
 SelectionCriteria
@@ -78,19 +60,6 @@ SelectionCriteria
 ├─ filters: ContextFilter[]
 └─ link_scope: LinkScope | null
 ```
-
-A graph relation reuses `NoteSelector` for its anchor rather than inventing an entity-only mini
-language:
-
-```text
-LinkScope
-├─ anchor: NoteSelector
-├─ direction: incoming | outgoing | both
-└─ max_depth: integer >= 1
-```
-
-The implementation may share builders/validation between `SelectionCriteria` and `NoteSelector`, but
-must avoid recursive Structured Outputs or an anchor that contains another `link_scope`.
 
 ### `entity`
 
@@ -159,33 +128,42 @@ represented that meaning as the requested mutation.
 `link_scope` is present only when the request explicitly asks for notes connected through Odyssey's
 wikilink graph. Its absence means **do not traverse related notes**.
 
-The anchor is a full non-recursive `NoteSelector`, so the related note may be selected using any
-combination already supported by Phase 15.1:
+A graph anchor must not be entity-only. It reuses the same non-recursive note-selection vocabulary
+needed to identify any note by nominal identity, semantic wording, canonical type, deterministic
+properties, or a combination.
+
+Proposed shape:
 
 ```text
-anchor.entity
-anchor.query
-anchor.type
-anchor.filters
+NoteSelector
+├─ entity: str | null
+├─ query: str
+├─ type: str | null
+└─ filters: ContextFilter[]
+
+LinkScope
+├─ anchor: NoteSelector
+├─ direction: incoming | outgoing | both
+└─ max_depth: integer >= 1
 ```
 
-This is deliberately more general than an entity-only anchor. For example, the user may ask for notes
-linked to `Marta`, to `la persona nacida el 3 de mayo de 1990`, or to a specific journal entry selected
-by its `entry_date`.
+`NoteSelector` deliberately does **not** itself contain another `link_scope`; that avoids recursive
+selection contracts. The outer `SelectionCriteria` describes the result notes wanted by the user,
+while `link_scope.anchor` independently describes the note to which those results must be connected.
 
-`direction` is defined relative to the anchor:
+For now, the anchor is intended to resolve to one safe note identity. If its criteria remain ambiguous,
+graph traversal must fail closed or remain pending rather than unioning links from arbitrary
+candidates. A future demonstrated need for set-valued relational joins can extend this deliberately.
 
-- `incoming`: result notes link to the anchor (backlinks).
-- `outgoing`: the anchor note links to the result notes.
+`direction` means:
+
+- `incoming`: notes that link to the anchor (backlinks).
+- `outgoing`: notes linked from the anchor note.
 - `both`: either direction.
 
 `max_depth` preserves how far the user intended graph traversal to go. Execution may initially support
 only a smaller bounded depth and must fail explicitly for unsupported depth rather than silently
 broadening or narrowing the request.
-
-The outer `SelectionCriteria` always describes the **result notes**. The nested `link_scope.anchor`
-describes the **note they must be related to**. This distinction is what allows result and anchor
-constraints to coexist cleanly.
 
 ### Default direct-note semantics
 
@@ -206,8 +184,6 @@ Graph traversal occurs only when the request asks for related/linked knowledge.
 
 ### Graph examples
 
-A named anchor remains simple:
-
 ```text
 "¿Qué notas están directamente relacionadas con Marta?"
 
@@ -224,80 +200,6 @@ link_scope = {
   max_depth: 1
 }
 ```
-
-A result restriction belongs outside the link anchor:
-
-```text
-"¿Qué entradas de diario de junio están relacionadas con Marta?"
-
-entity  = null
-query   = "entradas de diario relacionadas con Marta"
-type    = journal_entry
-filters = [
-  entry_date gte 2026-06-01,
-  entry_date lt 2026-07-01
-]
-link_scope = {
-  anchor: {
-    entity: "Marta",
-    query: "Marta",
-    type: person,
-    filters: []
-  },
-  direction: incoming,
-  max_depth: 1
-}
-```
-
-The anchor itself may instead be identified through properties:
-
-```text
-"¿En qué notas aparece la persona nacida el 3 de mayo de 1990?"
-
-entity     = null
-query      = "notas que hacen referencia a la persona nacida el 3 de mayo de 1990"
-link_scope = {
-  anchor: {
-    entity: null,
-    query: "persona nacida el 3 de mayo de 1990",
-    type: person,
-    filters: [birth_date eq 1990-05-03]
-  },
-  direction: incoming,
-  max_depth: 1
-}
-```
-
-The same structure supports constraints on both sides:
-
-```text
-"¿Qué entradas de diario de junio están relacionadas con la persona nacida el 3 de mayo de 1990?"
-
-outer selection:
-  type = journal_entry
-  filters = entry_date in June 2026
-
-link anchor:
-  entity = null
-  query = "persona nacida el 3 de mayo de 1990"
-  type = person
-  filters = birth_date eq 1990-05-03
-```
-
-And the anchor can still be semantic when no canonical property exists:
-
-```text
-"¿Qué notas están relacionadas con la tienda que cierra a las 20:30?"
-
-link_scope.anchor = {
-  entity: null,
-  query: "tienda que cierra a las 20:30",
-  type: store,
-  filters: []
-}
-```
-
-Closing time remains semantic because the current schema has no corresponding canonical property.
 
 ```text
 "¿Qué ideas he tenido relacionadas con Marta?"
@@ -317,20 +219,46 @@ link_scope = {
 ```
 
 `idea` remains semantic query language under the current schema/ADR 0008. Do not turn it back into a
-hard tag filter merely to satisfy this example. If a future application adds an explicit canonical
-`idea` type or another deterministic schema field, the existing schema-driven type/filter mechanisms
-can then represent that restriction automatically.
+hard tag filter merely to satisfy this example. The future tag/type direction is explicitly left for
+the ontology decision documented in `future-extension-points.md`.
+
+A graph anchor may instead be selected without a name:
+
+```text
+"¿En qué notas aparece la persona nacida el 3 de mayo de 1990?"
+
+link_scope = {
+  anchor: {
+    entity: null,
+    query: "persona nacida el 3 de mayo de 1990",
+    type: person,
+    filters: [birth_date eq 1990-05-03]
+  },
+  direction: incoming,
+  max_depth: 1
+}
+```
+
+The result notes and graph anchor may have independent deterministic restrictions:
+
+```text
+"¿Qué entradas de diario de junio están relacionadas con la persona nacida el 3 de mayo de 1990?"
+
+outer selection:
+  type = journal_entry
+  filters = entry_date >= 2026-06-01 and entry_date < 2026-07-01
+
+link_scope.anchor:
+  type = person
+  filters = birth_date eq 1990-05-03
+```
+
+A phrase such as `esta nota` may remain semantic anchor wording, but execution must not guess what it
+means when the calling interface has not supplied a current-note identity/context.
 
 A deeper explicit request may preserve a larger `max_depth`, for example two hops, but Phase 15.2 only
 proves that the planner can represent the intent. Efficient traversal belongs to later graph-index
 execution.
-
-### Contextual references such as "esta nota"
-
-`NoteSelector.query` can preserve contextual wording such as `esta nota`, but Phase 15.2 does not
-invent conversation or UI state that is not supplied to the planner. A future application boundary may
-provide an active note or prior resolved selection as trusted execution context. Until such context is
-available, an unresolved phrase such as `esta nota` must remain unresolved rather than being guessed.
 
 ## Retrieve and write execution remain different
 
@@ -342,12 +270,7 @@ filters still apply. `entity=null` simply skips that optimization.
 
 For retrieval, a non-null `entity` with `link_scope=null` means direct entity-note retrieval. It does
 not imply a vault-wide search for every note mentioning that entity. A non-null `link_scope` requests
-an explicit graph neighborhood and will later be executed against derived link data after resolving
-its anchor safely.
-
-A graph anchor is a single-note selection boundary. If its `entity/query/type/filters` evidence cannot
-safely identify one anchor note, execution must preserve ambiguity instead of taking the union of all
-possible anchors.
+an explicit graph neighborhood and will later be executed against derived link data.
 
 ## Identity, names, aliases, and creation
 
@@ -469,21 +392,17 @@ repeat model-selection experiments. At minimum prove:
 5. `¿Qué sé de n8n?` -> retrieval `entity=n8n`, `link_scope=null`; do not force `type=concept` merely
    because n8n lacks a current canonical software type.
 6. `¿Qué sé de Marta?` -> direct entity-note semantics, `link_scope=null`.
-7. `¿Qué notas están directamente relacionadas con Marta?` -> explicit one-hop link scope with a named
-   anchor.
-8. `¿Qué entradas de diario de junio están relacionadas con Marta?` -> result-note type/date
-   restrictions stay outside the link scope while Marta is the graph anchor.
-9. `¿En qué notas aparece la persona nacida el 3 de mayo de 1990?` -> link anchor uses
-   `entity=null`, `type=person`, and deterministic `birth_date` selection evidence.
-10. A case with deterministic restrictions on both result notes and the graph anchor -> both sides are
-    preserved without collapsing their filters.
-11. A semantic-only graph anchor whose identifying fact has no canonical property -> the meaning stays
-    in `anchor.query` rather than inventing a filter.
-12. `¿Qué ideas he tenido relacionadas con Marta?` -> incoming one-hop link scope while `ideas`
-    remains semantic query language under the current tag policy.
-13. A suitable explicit two-hop query -> preserves `max_depth=2` without pretending traversal is
+7. `¿Qué notas están directamente relacionadas con Marta?` -> explicit one-hop link scope.
+8. `¿Qué ideas he tenido relacionadas con Marta?` -> incoming one-hop link scope while `ideas`
+   remains semantic query language under the current tag policy.
+9. `¿En qué notas aparece la persona nacida el 3 de mayo de 1990?` -> graph anchor selected by
+   `type=person` plus exact `birth_date` filter, without requiring a nominal entity.
+10. `¿Qué entradas de diario de junio están relacionadas con la persona nacida el 3 de mayo de 1990?`
+    -> independent outer journal/date selection and inner person/birth-date anchor selection.
+11. A suitable explicit two-hop query -> preserves `max_depth=2` without pretending traversal is
     already implemented.
-14. Existing Phase 15.1 property/target regression sentinels remain valid.
+12. Existing Phase 15.1 property/target regression sentinels remain valid.
 
 Phase 15.2 still does not resolve repository identity, execute graph queries, choose CREATE versus
-UPDATE, allocate IDs/paths, mutate Markdown, persist data, or run aggregations.
+UPDATE, allocate IDs/paths, mutate Markdown, persist data, run aggregations, route apps, migrate tags,
+or manage users.
