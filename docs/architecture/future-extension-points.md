@@ -32,70 +32,95 @@ Odyssey is expected to gain additional applications or capabilities built on the
 model. Examples include purchase/ticket processing, project/task workflows, translation-related
 workflows, structured analytics over notes, and other future applications.
 
-The Phase 15 interpretation boundary is the natural place to recognize that the user's request is
-asking for one of those capabilities because it already performs semantic decomposition of a user
-message into ordered actions.
+The Phase 15 interpretation boundary is the natural place to recognize, per subrequest, whether the
+user is asking for ordinary Odyssey knowledge work or for another capability. It already performs
+semantic decomposition into ordered actions.
 
-### Direction
+### Preferred scalable direction: generic delegation first, app selection second
 
-Do not add a separate mandatory router LLM before the existing planner. Extend the existing top-level
-planner, when the first real app requires it, so its ordered `RequestPlan` can contain an additional
-application action alongside ordinary retrieve/write actions.
-
-Conceptually:
+The top-level Sol planner should **not** receive an ever-growing catalog of every installed app. Its
+stable responsibility should remain small: split the message and decide whether each piece is:
 
 ```text
 RequestPlan.actions[]
     |
-    +--> RetrieveAction
-    +--> WriteAction
-    `--> AppAction
-             |
-             +--> app_id
-             `--> original/normalized subrequest
+    +--> RetrieveAction     # direct Odyssey knowledge retrieval
+    +--> WriteAction        # direct Odyssey knowledge mutation
+    `--> DelegateAction     # another capability is required
 ```
 
-An app selection belongs to an **action**, not to the whole request. A single user message may contain
-several actions, including normal note work before or after an app action.
+`DelegateAction` does not need to know the final app ID. It preserves the normalized subrequest and,
+when useful, the same generic note-selection information already understood by Odyssey (entity,
+query, type, filters, explicit tags, link scope). This lets the first planner retain useful structure
+without knowing app-specific operations.
 
 Example:
 
 ```text
 "¿Cuántas compras hice en Carrefour este año? Apunta el resultado en mi nota de presupuesto."
 
-1. AppAction(app=analytics, request="cuántas compras ...")
-2. WriteAction(...)
+1. DelegateAction(
+     request="cuántas compras hice en Carrefour este año",
+     selection=<generic Odyssey note selection when safely expressible>
+   )
+2. WriteAction(...presupuesto...)
 ```
 
-### App manifests and progressive disclosure
+The delegated action is then routed separately:
 
-Each installed Odyssey app should expose a compact manifest with a stable `app_id`, a short
-description, and activation guidance. A Markdown manifest is a reasonable human-readable format.
-The top-level planner should receive only the compact routing information needed to choose an app;
-it should not receive every app's full implementation instructions or large schema on every request.
+```text
+DelegateAction
+     |
+     v
+cheap app router
+     |
+     +--> analytics
+     +--> purchases
+     +--> translation
+     `--> NO_MATCH
+     |
+     v
+load only selected app contract
+     |
+     v
+app-specific planning/execution
+```
 
-Conceptually:
+This avoids making the expensive top-level semantic planner prompt grow linearly with the app catalog.
+It also allows Odyssey to report an unsupported delegated capability when no installed app matches,
+rather than forcing the top-level planner to know availability.
+
+### App manifests and cheap routing
+
+Each installed app should expose a compact routing manifest with a stable `app_id`, short description,
+and activation examples/guidance. Markdown is a reasonable human-readable source format:
 
 ```text
 apps/
-└── analytics/
-    ├── APP.md          # id + what/when to use
-    └── ...             # app-specific contract/resources
+├── analytics/APP.md
+├── purchases/APP.md
+└── translation/APP.md
 ```
 
-If an app needs additional semantic planning, its detailed contract can be loaded **after selection**
-and handled by the app boundary. This preserves one top-level semantic decomposition call for normal
-Odyssey use while avoiding an ever-growing planner prompt.
+The app router can be much cheaper than the main Sol planner. Prefer the simplest measured option:
 
-Do not add `AppAction` or an app registry merely to reserve syntax. Implement this extension when the
-first concrete app is ready to execute and benchmark its routing behavior then.
+1. use local embeddings / MiniLM over compact app routing summaries to retrieve a very small candidate
+   set;
+2. if needed, use a cheap model (for example Luna or a suitable local classifier) to choose among the
+   candidates or return `NO_MATCH`;
+3. only after routing, load the selected app's detailed instructions/schema.
 
-### Analytics as a likely first app/capability
+Do not introduce a second expensive general reasoning call merely for routing. With only a handful of
+apps, an even simpler deterministic or embedding-only router may be sufficient if benchmarks support
+it.
 
-Structured counts, sums, averages, grouping, and similar deterministic operations are a strong
-candidate for an analytics capability backed by the rebuildable derived SQLite index. The LLM should
-produce a validated structured analytics plan; deterministic code/SQL should perform arithmetic.
-Do not load the Markdown vault into an LLM to calculate deterministic aggregates.
+An app selection belongs to an **action**, not to the whole request, because one user message may mix
+normal Odyssey reads/writes with delegated capabilities.
+
+Do not implement app routing merely to reserve syntax. Add it when the first concrete app exists and
+benchmark the boundary then. Analytics remains a likely first app because deterministic counts, sums,
+averages, grouping, and similar operations can execute against rebuildable derived SQLite data rather
+than loading the Markdown vault into an LLM.
 
 ## 2. Type-aware note-writing profiles ("skills")
 
@@ -145,49 +170,100 @@ Do not confuse writer guidance with canonical metadata validation. `config/note-
 the machine-readable owner of note types/properties; writing guidance controls human-readable body
 rendering and must not silently invent schema fields.
 
-## 3. Tags should be explicit user-controlled transversal labels
+## 3. Tags — explicit user-controlled transversal labels
 
-### Product direction
+### What transversal means
 
-Tags are useful when they express a transversal label that the user deliberately wants to apply or
-query, for example `familia`. They should **not** be inferred merely because the LLM believes a note
-looks like an idea, reflection, decision, or similar semantic category.
+A tag is an axis independent from the note's canonical type. It does **not** have to make sense on
+every type; it should be useful across several unrelated types without redefining what those notes are.
 
-Desired safety rule:
+For example, a future `familia` tag can mean "this knowledge belongs to my family context" and may
+reasonably apply to a `person`, `journal_entry`, `project`, `task`, `purchase`, `document`, or recipe.
+It must not be confused with `person.relationship_to_user`: saying "Marta es mi hermana" records a
+structured relationship and does not silently add `familia`.
+
+Other plausible transversal domain labels, if later demonstrated and added to the registry, include
+`trabajo`, `casa`, `finanzas`, and `viajes`. By contrast, fields that drive deterministic behavior such
+as task priority/status or access permissions should normally become proper structured properties or
+security rules rather than tags.
+
+### Explicit-only safety rule
+
+The core product rule is:
 
 ```text
 semantic wording only
-    -> do not create a tag filter or tag mutation
+    -> NEVER create a tag filter or tag mutation
 
-user explicitly asks for tag/etiqueta X
+user explicitly asks for tag/etiqueta X (or another accepted explicit tag form)
     -> tag operation may be represented deterministically
 ```
 
-The same rule applies to reads and writes. A hard tag filter can permanently exclude relevant notes,
-so it must originate from explicit user intent rather than planner guesswork.
+Examples:
 
-### Current schema conflict to resolve later
+```text
+"Busca ideas sobre Odyssey"
+    -> NO tag filter
 
-The current canonical tag registry still contains semantic values such as `idea`, `decision`,
-`reflection`, and others. The current planner deliberately stopped inferring these tags (ADR 0008),
-but the registry itself remains for compatibility.
+"Busca notas con el tag idea"
+    -> explicit tag filter is allowed
 
-The newer product direction is different: `idea` is a candidate canonical **note type**, while tags
-should represent deliberate cross-cutting labels. This is a material ontology/schema decision and
-must not be changed silently inside Phase 15.2.
+"Apunta esta idea"
+    -> NO automatic tag mutation
 
-Before explicit tag planning is implemented, perform a focused schema decision covering at least:
+"Apunta esto y añade el tag review"
+    -> explicit tag add is allowed
+```
 
-- whether `idea` becomes a canonical note type;
-- which existing semantic tags remain useful, move to types/other semantics, or are retired;
-- whether tags remain a controlled registry or become user-extensible labels;
-- normalization/collision rules for user-defined tags;
-- how an explicit unknown tag is created or rejected;
-- exact read/write syntax or planner evidence required to prove that the user explicitly requested a
-  tag.
+This applies equally to retrieval, write-target selection, graph anchors, and note mutation. A hard tag
+restriction can exclude relevant notes, so it must never come from semantic guesswork.
 
-Until that decision is made, keep ADR 0008's conservative planner behavior: no semantic tag
-inference.
+### Phase 15.2 implementation direction
+
+This explicit-only behavior is small enough to include in the Phase 15.2 planner-contract work without
+redesigning the tag ontology.
+
+For **selection**, reuse the existing deterministic filter language rather than add another query
+system. `tags` is already canonical `array[string]` metadata and Core already supports `contains` for
+array filters. A planner tag filter is therefore valid only when the user explicitly requested a
+controlled tag:
+
+```text
+ContextFilter(field="tags", op="contains", value="review")
+```
+
+The current planner capability projection intentionally hides tags under ADR 0008. Phase 15.2 may
+refine that decision by exposing the controlled tag vocabulary with strict explicit-only guidance.
+The essential ADR 0008 safety conclusion remains: **never infer tags from semantic wording**.
+
+For **writes**, do not model `add tag X` as a whole-array `set`, because the planner does not know all
+existing tags and could overwrite them. Use a small item-level mutation contract, conceptually:
+
+```text
+TagChange
+├─ op: add | remove
+└─ value: controlled_tag_id
+```
+
+and attach ordered explicit `tag_changes` to `KnowledgeUnit`. Phase 16 can then apply those changes
+deterministically after resolving the note.
+
+Unknown tags remain unsupported/limited under the current controlled registry; Phase 15.2 must not
+silently create a new tag ID. User-extensible tag creation, normalization, aliases, and registry
+management are a separate future schema decision.
+
+### Vocabulary remains a separate ontology question
+
+The current canonical registry contains values such as `idea`, `decision`, `reflection`, `question`,
+`reference`, `hypothesis`, `explore`, `someday`, and `review`. Explicit-only planning does **not**
+require changing that list now.
+
+Some of those may later move or be retired. In particular, `idea` is a plausible future canonical note
+type rather than a tag. That migration should be decided separately because it changes classification
+semantics and existing data; it should not be bundled merely to enable safe explicit tag filtering.
+
+Therefore the near-term rule is simple: keep the current controlled registry, allow only explicit use,
+and evolve the vocabulary only when concrete notes/use cases justify it.
 
 ## 4. Future multi-user ownership and sharing
 
@@ -234,20 +310,22 @@ These extension points map to different moments rather than one new phase:
 ```text
 NOW / Phase 15.2
   - preserve entity + generalized link-selection intent
-  - do not expand implementation with apps/users/tag migration
+  - add explicit-only controlled tag filters and tag changes
+  - never infer tags from semantic wording
 
 Phase 16
   - decide minimal type-aware writer-profile representation
-  - use it for safe note creation/body mutation
+  - apply explicit tag changes after safe target resolution
+  - use writer profiles for safe note creation/body mutation
 
 When first concrete app exists
-  - extend top-level RequestPlan with app/capability routing
-  - feed compact app manifests to the same top-level planner
+  - let the top-level planner emit generic DelegateAction for non-Core capabilities
+  - route delegated actions separately using cheap/local routing over compact app manifests
   - load app-specific detail only after selection
 
-Before explicit tag support
-  - resolve tag ontology/registry direction
-  - then add explicit-only tag read/write behavior
+Later tag ontology evolution
+  - decide whether `idea` becomes a type and which semantic tags remain
+  - decide if/when user-extensible tag creation is needed
 
 Later multi-user phase
   - design authentication/authorization/storage boundary first
