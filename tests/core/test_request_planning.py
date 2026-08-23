@@ -542,6 +542,7 @@ def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) ->
     assert [variant["properties"]["kind"] for variant in action_variants] == [
         {"type": "string", "enum": ["retrieve"]},
         {"type": "string", "enum": ["write"]},
+        {"type": "string", "enum": ["delegate"]},
     ]
     assert not contains_key(request_schema, "const")
 

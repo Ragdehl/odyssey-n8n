@@ -22,13 +22,13 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 15.1 — schema-aware write planning:** adds shared target selection plus schema-derived
   property mutations and validates the refined contract with Sol/low.
 
-The canonical Phase 15 / 15.1 / 15.2 planner contract is centralized in
+The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). Historical benchmark evidence remains in its
 benchmark directories and is not restated here.
 
-## Current functional phase
+## Completed Phase 15 refinements
 
-➡️ **Phase 15.2 — explicit identity, link-scope, and explicit-tag planning**
+✅ **Phase 15.2 — explicit identity, link-scope, and explicit-tag planning**
 
 Phase 15.2 is a final pre-persistence refinement of the same single Sol/low interpretation boundary.
 It preserves information that later execution should not have to infer again:
@@ -49,12 +49,20 @@ repeat model-selection experiments. The benchmark should cover nominal versus co
 graph anchors by name and by properties, independent result/anchor filters, direct-note semantics,
 explicit depth, explicit-only tag reads/writes, and Phase 15.1 regression sentinels.
 
+✅ **Phase 15.3 — generic capability delegation**
+
+Phase 15.3 completes the planning boundary with a generic `DelegateAction` for work that ordinary
+Odyssey retrieval/write semantics cannot satisfy. The same Sol/low call distinguishes direct knowledge
+work from aggregation, external-artifact analysis, translation, or another specialized capability.
+It preserves an optional existing `SelectionCriteria`, but never selects an app, exposes an app
+catalog, routes, executes, or binds a delegated result to a later action.
+
 ## Next functional phase
 
-⬜ **Phase 16 — resolved knowledge persistence**
+➡️ **Phase 16 — resolved knowledge persistence**
 
-After Phase 15.2 is accepted, use the existing Phase 11 resolver and Phase 12 persistence primitives
-to execute prepared knowledge safely. `save_knowledge` remains the likely coordination boundary, but
+With the Phase 15 planner refinements accepted, use the existing Phase 11 resolver and Phase 12
+persistence primitives to execute prepared knowledge safely. `save_knowledge` remains the likely coordination boundary, but
 its exact API should be decided from the implementation evidence rather than frozen prematurely.
 
 Phase 16 must cover:
