@@ -22,21 +22,129 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 14 — request interpretation / validated `RequestPlan`:** Sol/low turns a message into
   ordered retrieval and content-only create-intent actions without retrieval or persistence.
 - ✅ **Phase 15 — write planning / knowledge preparation:** one Sol/low call produces validated
-  `RetrieveAction` and semantic `WriteAction` / `KnowledgeUnit` values with target selection,
-  intent, facts, and references.
-- ✅ **Phase 15.1 — schema-aware write planning:** the same Sol/low interpretation boundary now
-  separates target identity evidence from schema-derived property mutations and preserves remaining
-  knowledge as free-text facts.
+  `RetrieveAction` and semantic `WriteAction` / `KnowledgeUnit` values with subject, optional type,
+  intent, facts, and references. The Phase 15 benchmark and targeted follow-up are complete.
+- ✅ **Phase 15.1 — schema-aware write planning:** accepted and merged after focused Sol/low
+  validation of property extraction, target selection versus mutation, current-reflection journal
+  entries, positive `concept` semantics, and schema-only extensibility.
+
+## Accepted Phase 15.1 contract
+
+Phase 15 remains accepted for the contract it validated, but a pre-persistence gap was found after
+merge: `KnowledgeUnit` carried free-text facts but not the canonical writable properties defined by
+note type in `config/note-schema.json`. Persistence could not safely reconstruct those properties
+later without reinterpreting the request. Phase 15.1 therefore extended the same single Sol/low
+interpretation boundary rather than introducing a second interpretation pass.
+
+Contract review also identified a simplification for write-target identity: do not create a second
+write-only selection language. Reuse the same `query` / `type` / `filters` shape already used by
+`RetrieveAction.plan`, while keeping user retrieval and write-target identity resolution as different
+execution responsibilities.
+
+The accepted Phase 15.1 direction is:
+
+```text
+user message
+    |
+    v
+single Sol/low interpretation call
+    |
+    +--> RetrieveAction
+    |       `--> plan(query, type, filters)
+    |
+    `--> WriteAction / KnowledgeUnit(s)
+             |
+             +--> target(query, type, filters)
+             +--> intent
+             +--> canonical writable property changes inferred from the schema
+             +--> remaining free-text facts
+             `--> references
+```
+
+### Phase 15.1 decisions already made
+
+- `RetrieveAction.plan` and `KnowledgeUnit.target` share one closed selection shape:
+  `query`, optional canonical `type`, and deterministic `filters`. They reuse the same dynamic
+  filter vocabulary, Structured Outputs construction, operator/value rules, type-compatibility checks,
+  and deterministic filter validation.
+- Sharing the selection contract does **not** make write-target selection a `RetrieveAction` and does
+  not imply a common executor. Retrieval may return zero-to-many notes for the user; a write target
+  must later resolve safely to one existing identity or abstain, with `record` creation handled by a
+  separate policy.
+- Phase 15.1 intentionally refined the Phase 15 write-unit shape from top-level `subject`/`type` to a
+  nested `target(query, type, filters)`. Historical Phase 15 benchmark evidence remains unchanged.
+- `target.query` remains non-empty and carries identity meaning that is not safely expressible as
+  deterministic filters. When the request supplies a stable name, preserve it in the query even if
+  filters also exist.
+- A property mentioned only to identify the target belongs in `target.filters` when it maps safely to
+  the canonical filter contract; it is **not** a property mutation. Non-filterable identity wording
+  remains in `target.query`.
+- The same property may appear on both sides when the user identifies an old value and explicitly
+  supplies a corrected new value: the old value can constrain `target.filters`, while the new value is
+  the `properties` mutation.
+- Canonical properties belong in the mutation output when the user text expresses them as knowledge
+  to record/change/remove. Examples include `person.birth_date`, `person.relationship_to_user`, and
+  `journal_entry.entry_date`; future applications may add more properties to the schema without
+  requiring a hard-coded planner vocabulary.
+- The planner receives a write-oriented projection of the canonical schema, including writable type
+  properties whether or not they are retrieval-filterable. Retrieval/selection capabilities and write
+  capabilities are different views of the same canonical schema, not separate registries.
+- `KnowledgeUnit.properties` is an ordered list of generic property changes shaped as
+  `{field, op, value}`. Phase 15.1 supports only `set` and whole-property `remove`: `set` carries a
+  schema-valid value, while `remove` carries `null`. `record`/`amend` use `set`; `remove` uses
+  `remove`; `delete` carries no property changes. The detailed contract is canonical in
+  [Phase 15 write planning](phase-15-write-planning.md#phase-151-contract-schema-aware-write-targets-and-property-changes).
+- Property support is entirely schema-driven. Adding a new canonical type or property that uses an
+  already-supported schema `value_type` requires only a schema change, not a planner/prompt/code branch
+  naming that type or property. If that property is `filterable`, it flows into both retrieval filters
+  and write-target filters automatically. A genuinely new `value_type` requires explicit shared
+  validation/Structured-Outputs support and tests; unknown value types fail closed until then.
+- Information that maps safely to a canonical property mutation is represented structurally;
+  knowledge that does not map to a property remains in `facts` rather than being forced into metadata.
+- `references` remain in-plan logical links between `KnowledgeUnit` values. Phase 16 later resolves or
+  creates referenced units and materializes actual Markdown links from their stable identities/paths.
+- `concept` is not a fallback for unknown classification. Its intended meaning is a reusable,
+  identifiable abstract subject or topic with its own semantic identity. If no canonical type is
+  safely supported, `type=null` is preferable to inventing `concept`.
+- Tags remain deferred. They still exist in the schema, but Phase 15.1 does not add automatic tag
+  inference or make tags properties of `concept`. ADR 0008 remains authoritative for planner tag
+  behavior.
+- The existing Phase 15 safety boundaries remain: the planner does not resolve repository identity,
+  choose physical CREATE versus UPDATE, allocate IDs or paths, rewrite Markdown, or persist data.
+
+### Phase 15.1 examples validated
+
+- `Marta nació el 3 de mayo de 1990` → write target `query=Marta`, `type=person`, no target filter
+  required, and mutation `birth_date=1990-05-03`.
+- `Marta es mi hermana` → mutation `relationship_to_user=hermana` when the canonical property can
+  represent the supplied value safely.
+- `Corrige la relación de la persona que nació el 3 de mayo de 1990: es mi hermana` → target
+  `type=person`, `birth_date eq 1990-05-03` as selection evidence, and only
+  `relationship_to_user=hermana` as the mutation.
+- `Corrige la persona nacida el 3 de mayo: nació el 4 de mayo` → old birth date may be target-selection
+  evidence while the new birth date is the property mutation; do not collapse the two roles.
+- `Corrige a la amiga de Marta nacida en 1990: ahora vive en Lyon` → semantic relationship wording
+  remains in `target.query`, while the year uses deterministic `birth_date` filters and Lyon remains
+  the requested fact mutation.
+- `Quita la fecha de nacimiento de Marta` → removal of the structured property.
+- `Escribí una entrada de diario sobre el viaje del día 20` → `journal_entry.entry_date` when the
+  request identifies that domain date.
+- `Entity resolution es el proceso de decidir qué entidad existente corresponde a una referencia`
+  → may be `concept` because the subject is a reusable identifiable abstraction.
+- `Hoy estoy pensando si cambiar el sofá` → `journal_entry` with the current domain date; it must not
+  become `concept` merely because no more specific stable entity type fits.
+- `Carrefour Balma cierra a las 20:30` → remains a free-text fact unless the schema defines a
+  corresponding property; the planner must not invent one.
 
 ## Current functional phase
 
 ➡️ **Phase 15.2 — explicit entity anchors and link-scope planning**
 
-Phase 15.1 is accepted and merged. A final pre-persistence contract review identified two pieces of
-semantic information that the single planner call can understand but the current shared selection
-shape discards: an explicit nominal entity reference, and an explicit request to navigate wikilink
-relationships. Phase 15.2 preserves those signals before Phase 16 so later execution does not have to
-reinterpret raw user language.
+A final pre-persistence contract review identified two pieces of semantic information that the single
+planner call can already understand but the current shared selection shape discards: an explicit
+nominal entity reference, and an explicit request to navigate wikilink relationships. Phase 15.2
+preserves those signals before Phase 16 so later execution does not have to reinterpret raw user
+language.
 
 The detailed design checkpoint is canonical in
 [Phase 15.2 — explicit entity and link-scope planning](phase-15-2-selection-anchors.md).
