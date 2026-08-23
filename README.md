@@ -50,7 +50,9 @@ This Git repository contains code, application configuration and schema, tests, 
 
 - [AGENTS.md](AGENTS.md) — project rules for agents and contributors.
 - [Architecture Overview](docs/architecture/overview.md) — high-level system architecture.
-- [Functional Roadmap](docs/architecture/functional-roadmap.md) — canonical intended functional phase sequence.
+- [Functional Roadmap](docs/architecture/functional-roadmap.md) — canonical intended functional phase sequence and current phase.
+- [Phase 15 Planning Contract](docs/architecture/phase-15-write-planning.md) — canonical request-planning contract across Phase 15, 15.1 and 15.2.
+- [Future Extension Points](docs/architecture/future-extension-points.md) — cross-phase direction for apps, writer profiles, tags, users and other later capabilities.
 - [Product Vision](docs/product-vision.md) — durable product outcomes and responsibility boundaries.
 - [Architecture decision history](docs/decisions/README.md) — measured significant decisions and proposals.
 - [Ontology Principles](docs/architecture/ontology.md) — knowledge-model principles.
@@ -58,8 +60,8 @@ This Git repository contains code, application configuration and schema, tests, 
 - [Development Pipeline](docs/architecture/development-pipeline.md) — phase contracts and the evidence-led development-process roadmap.
 - [Machine-readable note schema](config/note-schema.json) — canonical schema definitions.
 - [Local Storage Boundary](docs/architecture/storage.md) — repository, personal-data, and runtime boundaries.
-- [`odyssey_core/`](odyssey_core/) — bootstrapped Python application/domain core.
+- [`odyssey_core/`](odyssey_core/) — Python application/domain core.
 - [`workflows/`](workflows/) — n8n integration and orchestration workflows.
 - [Codex project skills](.codex/skills/) — reusable development workflows.
 
-Project-development state is represented by Git branches and commits, Pull Requests, and test results. Architecture documentation records durable decisions rather than manual checkpoint status. Phase 15.1 benchmark v1.1 review/follow-up evidence is documented in [the benchmark README](benchmarks/phase15_1_schema_write_planning/README.md); v1 raw outputs remain historical and append-only.
+Project-development state is represented by Git branches and commits, Pull Requests, CI/test results, and the Functional Roadmap. Architecture documentation records durable contracts and decisions rather than transient checkpoint status. Historical benchmark evidence remains in its dedicated benchmark directories.
