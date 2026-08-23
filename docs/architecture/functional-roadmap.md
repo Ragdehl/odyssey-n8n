@@ -149,7 +149,17 @@ language.
 The detailed design checkpoint is canonical in
 [Phase 15.2 — explicit entity and link-scope planning](phase-15-2-selection-anchors.md).
 
-The intended shared selection shape becomes:
+The non-recursive note selector is:
+
+```text
+NoteSelector
+├─ entity: str | null
+├─ query: str
+├─ type: str | null
+└─ filters: ContextFilter[]
+```
+
+The shared top-level selection shape becomes:
 
 ```text
 SelectionCriteria
@@ -158,6 +168,16 @@ SelectionCriteria
 ├─ type: str | null
 ├─ filters: ContextFilter[]
 └─ link_scope: LinkScope | null
+```
+
+When graph traversal is explicitly requested, the relation reuses the same base selector for its
+anchor:
+
+```text
+LinkScope
+├─ anchor: NoteSelector
+├─ direction: incoming | outgoing | both
+└─ max_depth: integer >= 1
 ```
 
 ### Phase 15.2 decisions already made
@@ -176,9 +196,16 @@ SelectionCriteria
 - `link_scope=null` is the default and means **do not traverse related notes**. Therefore
   `¿Qué sé de Marta?` means retrieve the Marta entity note, not every note in the vault that mentions
   or links to Marta.
-- When the request explicitly asks for linked/related knowledge, `link_scope` preserves the nominal
-  anchor, optional anchor type, link direction (`incoming`, `outgoing`, or `both`), and requested
-  maximum traversal depth. Phase 15.2 represents that intent but does not execute graph traversal.
+- A `link_scope` anchor is not restricted to a name. It may use the same `entity/query/type/filters`
+  selection evidence as any other note selector. This allows relations to a named note, a note
+  identified semantically, or a note identified by deterministic properties.
+- The outer selection describes the result notes; `link_scope.anchor` describes the single note they
+  must be related to. Result filters and anchor filters therefore remain separate and may both be
+  present in one request.
+- `link_scope.anchor` is deliberately non-recursive: it does not contain another `link_scope`.
+- The graph anchor denotes one note. If its selector remains ambiguous, later execution must abstain or
+  request clarification rather than silently traversing from every candidate. Set-valued relational
+  joins are deferred until a concrete need justifies them.
 - Link traversal refers to Odyssey's ordinary Markdown `[[wikilinks]]`; it does not introduce typed
   edges or a relation ontology.
 - `RetrieveAction.plan` and `KnowledgeUnit.target` still share the same selection value but retain
@@ -193,6 +220,8 @@ SelectionCriteria
 - ADR 0008 remains in force: Phase 15.2 does not restore automatic tag inference or planner tag
   filters. In a query such as `ideas relacionadas con Marta`, `ideas` remains semantic query language
   under the current schema while the explicit relation to Marta can be represented by `link_scope`.
+- Contextual wording such as `esta nota` can be preserved in an anchor query, but the planner must not
+  invent active-note or conversation state that was not supplied by the application boundary.
 - Use the existing production Sol/low interpretation boundary and a small focused benchmark. Do not
   repeat model-selection experiments.
 
@@ -209,7 +238,15 @@ SelectionCriteria
 - `¿Qué sé de n8n?` → retrieval `entity=n8n`, `link_scope=null`, and do not force `type=concept`
   merely because the current ontology lacks a software type.
 - `¿Qué sé de Marta?` → direct Marta-note semantics with `link_scope=null`.
-- `¿Qué notas están directamente relacionadas con Marta?` → explicit one-hop graph scope.
+- `¿Qué notas están directamente relacionadas con Marta?` → explicit one-hop graph scope with a named
+  anchor.
+- `¿Qué entradas de diario de junio están relacionadas con Marta?` → journal-entry/date restrictions
+  belong to the outer result selection while Marta remains the graph anchor.
+- `¿En qué notas aparece la persona nacida el 3 de mayo de 1990?` → the anchor uses
+  `entity=null`, `type=person`, and deterministic `birth_date` evidence.
+- A query constraining both result notes and the anchor → preserve both filter sets independently.
+- A graph anchor identified by a fact without a canonical property → keep that identity evidence in
+  `anchor.query` rather than inventing a filter.
 - `¿Qué ideas he tenido relacionadas con Marta?` → incoming one-hop graph scope while `ideas`
   remains semantic query language under the current tag policy.
 - An explicit two-hop related-notes request → preserve `max_depth=2` without pretending graph
@@ -384,9 +421,9 @@ without evidence.
   rebuildable local SQLite index with the minimum required alias and wikilink/backlink tables instead
   of scanning the complete Markdown vault per request or introducing a new service. Markdown remains
   authoritative and the derived graph must remain rebuildable.
-- 💡 **Graph retrieval:** execute validated `link_scope` against that derived graph, with bounded
-  traversal and explicit handling of unresolved link targets. Ordinary wikilinks remain untyped by
-  default.
+- 💡 **Graph retrieval:** execute validated `link_scope` against that derived graph after resolving its
+  full `NoteSelector` anchor, with bounded traversal and explicit handling of unresolved or ambiguous
+  link targets. Ordinary wikilinks remain untyped by default.
 - 💡 **Structured analytics and aggregations:** support demonstrated queries such as counts, sums,
   averages, and grouping over derived structured/index data. Do not load the vault into an LLM for
   deterministic arithmetic, and do not force aggregation semantics into `RetrieveAction` before a
