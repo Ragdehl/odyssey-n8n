@@ -35,10 +35,21 @@ def schema() -> dict:
 
 
 def selection(
-    query: str, *, note_type: str | None = None, filters: list[dict] | None = None
+    query: str,
+    *,
+    entity: str | None = None,
+    note_type: str | None = None,
+    filters: list[dict] | None = None,
+    link_scope: dict | None = None,
 ) -> dict:
-    """Build one raw shared query/type/filter selection fixture."""
-    return {"query": query, "type": note_type, "filters": filters or []}
+    """Build one raw Phase 15.2 shared selection fixture."""
+    return {
+        "entity": entity,
+        "query": query,
+        "type": note_type,
+        "filters": filters or [],
+        "link_scope": link_scope,
+    }
 
 
 def retrieve(
@@ -63,11 +74,12 @@ def unit(
     facts: list[str] | None = None,
     references: list[dict] | None = None,
 ) -> dict:
-    """Build one raw Phase 15.1 semantic knowledge-unit fixture."""
+    """Build one raw Phase 15.2 semantic knowledge-unit fixture."""
     return {
         "target": selection(query, note_type=note_type, filters=filters),
         "intent": intent,
         "properties": [] if properties is None else properties,
+        "tag_changes": [],
         "facts": ["Remember this fact."] if facts is None else facts,
         "references": [] if references is None else references,
     }
@@ -361,7 +373,9 @@ def test_invalid_model_output_fails_closed(schema: dict) -> None:
     invalid = [
         output(retrieve("")),
         output(retrieve("Odyssey", note_type="invented")),
-        output(retrieve("Odyssey", filters=[{"field": "tags", "op": "contains", "value": "idea"}])),
+        output(
+            retrieve("Odyssey", filters=[{"field": "tags", "op": "contains", "value": "unknown"}])
+        ),
         output({"kind": "retrieve", "plan": {"query": "Odyssey"}}),
         output({"kind": "write", "units": []}),
         output(
@@ -407,8 +421,8 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
 
 
-def test_dynamic_capabilities_reflect_schema_changes_and_exclude_tags(schema: dict) -> None:
-    """Render the caller's schema rather than a benchmark snapshot or static field list."""
+def test_dynamic_capabilities_reflect_schema_changes_and_controlled_tags(schema: dict) -> None:
+    """Render caller schema fields and the controlled tag registry without static values."""
     changed = deepcopy(schema)
     changed["types"][0]["properties"].append(
         {
@@ -433,7 +447,9 @@ def test_dynamic_capabilities_reflect_schema_changes_and_exclude_tags(schema: di
         "lt",
         "lte",
     ]
-    assert "tags" not in capabilities["filters"]
+    assert capabilities["filters"]["tags"]["controlled_values"] == sorted(
+        tag["id"] for tag in schema["tags"]
+    )
 
 
 def test_synthetic_new_type_property_flows_through_schema_and_validation(schema: dict) -> None:
@@ -502,6 +518,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
         "target",
         "intent",
         "properties",
+        "tag_changes",
         "facts",
         "references",
     }

@@ -12,7 +12,7 @@ LIMITATIONS = {
     "unsupported_domain_date": "The requested non-lifecycle/domain-event date has no canonical deterministic field.",
     "direct_link_not_filterable": "An exact direct wikilink relation cannot currently be filtered deterministically.",
 }
-_EXCLUDED_FIELDS = {"subtype", "tags"}
+_EXCLUDED_FIELDS = {"subtype"}
 _SUPPORTED_WRITE_VALUE_TYPES = {"string", "integer", "array[string]", "date"}
 _SUPPORTED_WRITE_CONSTRAINTS = {"non_empty", "minimum", "unique_items", "format"}
 _SUPPORTED_WRITE_FORMATS = {"date-time"}
@@ -71,7 +71,10 @@ def build_planner_capabilities(
     filters = capabilities["filters"]
     for field in metadata_fields:
         if field.get("filterable") and field["id"] not in {"type", *_EXCLUDED_FIELDS}:
-            filters[field["id"]] = _filter_capability(field, type_ids)
+            capability = _filter_capability(field, type_ids)
+            if field["id"] == "tags":
+                capability["controlled_values"] = _controlled_tag_ids(schema)
+            filters[field["id"]] = capability
     for note_type in types:
         for field in note_type["properties"]:
             if field.get("filterable"):
@@ -81,6 +84,31 @@ def build_planner_capabilities(
             raise ValueError("Planner current context must contain date, time, and timezone")
         capabilities["current_context"] = dict(current_context)
     return capabilities
+
+
+def _controlled_tag_ids(schema: Mapping[str, Any]) -> list[str]:
+    """Return the canonical controlled tag registry for planner restrictions.
+
+    Args:
+        schema: Parsed canonical Odyssey note schema.
+
+    Returns:
+        Deterministically ordered controlled tag IDs.
+
+    Raises:
+        ValueError: If the controlled tag registry is absent, malformed, or duplicated.
+    """
+    try:
+        tag_ids = [tag["id"] for tag in schema["tags"]]
+    except (KeyError, TypeError) as error:
+        raise ValueError("Canonical schema has unusable controlled tags") from error
+    if (
+        not tag_ids
+        or len(tag_ids) != len(set(tag_ids))
+        or not all(isinstance(tag_id, str) and tag_id.strip() for tag_id in tag_ids)
+    ):
+        raise ValueError("Canonical schema has unusable controlled tags")
+    return sorted(tag_ids)
 
 
 def build_write_capabilities(schema: Mapping[str, Any]) -> dict[str, Any]:
