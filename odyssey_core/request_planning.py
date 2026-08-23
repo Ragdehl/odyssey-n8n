@@ -20,6 +20,8 @@ PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
 WRITE_INTENTS = ("record", "amend", "remove", "delete")
 _PROPERTY_OPS = ("set", "remove")
+_TAG_CHANGE_OPS = ("add", "remove")
+_LINK_DIRECTIONS = ("incoming", "outgoing", "both")
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
@@ -27,7 +29,11 @@ _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestP
 
 Hard filters can permanently remove valid notes: apply a deterministic restriction only when the request maps explicitly and safely to this capability contract. Otherwise preserve the meaning in `query`. Words such as before, earlier, previously, beforehand, antes, anteriormente, previamente, and ya había pensado describe knowledge semantics, not note lifecycle, unless the user explicitly refers to when a note, entry, or item was created, written, added, updated, modified, or recorded. Only that explicit lifecycle timing authorizes created_at or updated_at filters. Multiple RetrieveActions are only for genuinely independent candidate-set branches; ordinary semantic OR stays one query.
 
-RetrieveAction.plan and every KnowledgeUnit.target use the same selection shape: non-empty query, optional canonical type, and filters. A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
+RetrieveAction.plan and every KnowledgeUnit.target use the same selection shape: nullable explicit nominal entity, non-empty query, optional canonical type, filters, and optional link_scope. Entity is only a safely explicit primary-name/alias candidate from the user's wording; it is never an Odyssey ID and does not assert repository existence. Do not turn every noun phrase or mentioned name into entity: contextual descriptions such as "la tienda de la esquina" and "la amiga de Marta" keep entity=null. A null link_scope means the direct note only, never related notes. Use link_scope only when the user explicitly asks for linked/related/backlink knowledge; its non-recursive anchor independently selects the one safe note identity. Do not execute traversal.
+
+Tags are explicit-only. Semantic words such as idea, reflection, decision, review, or question never create a tags filter or tag mutation. Emit tags contains a controlled canonical ID only when the user explicitly says tag/etiqueta, and emit add/remove TagChange only when explicitly requested. Never replace the complete tags array and never invent an unknown tag ID.
+
+A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
 
 Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Do not attempt canonical type reassignment in Phase 15.1.
 
@@ -56,9 +62,30 @@ class ResponsesClient(Protocol):
 class SelectionCriteria:
     """Represent shared query/type/filter criteria without prescribing execution semantics."""
 
+    entity: str | None
     query: str
     type: str | None
     filters: tuple[ContextFilter, ...]
+    link_scope: LinkScope | None
+
+
+@dataclass(frozen=True, slots=True)
+class NoteSelector:
+    """Represent a non-recursive graph-anchor note selector."""
+
+    entity: str | None
+    query: str
+    type: str | None
+    filters: tuple[ContextFilter, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LinkScope:
+    """Represent requested wikilink traversal intent without executing it."""
+
+    anchor: NoteSelector
+    direction: str
+    max_depth: int
 
 
 # Keep the established public name while sharing the same selection value with write targets.
@@ -91,12 +118,21 @@ class PropertyChange:
 
 
 @dataclass(frozen=True, slots=True)
+class TagChange:
+    """Represent one explicit controlled-tag item mutation requested by the user."""
+
+    op: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
 class KnowledgeUnit:
     """Represent one semantic write target and the requested knowledge mutation."""
 
     target: SelectionCriteria
     intent: str
     properties: tuple[PropertyChange, ...]
+    tag_changes: tuple[TagChange, ...]
     facts: tuple[str, ...]
     references: tuple[KnowledgeReference, ...]
 
@@ -203,6 +239,9 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                                 "enum": list(WRITE_INTENTS),
                                             },
                                             "properties": property_changes_schema,
+                                            "tag_changes": _tag_changes_json_schema(
+                                                retrieval_capabilities
+                                            ),
                                             "facts": {
                                                 "type": "array",
                                                 "items": {"type": "string"},
@@ -228,6 +267,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                             "target",
                                             "intent",
                                             "properties",
+                                            "tag_changes",
                                             "facts",
                                             "references",
                                         ],
@@ -392,9 +432,47 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
     alternatives = _filter_json_schema_alternatives(capabilities)
     if not alternatives:
         raise RequestPlanningError("Canonical schema exposes no planner filters")
+    selector_schema = _note_selector_json_schema(capabilities)
     return {
         "type": "object",
         "properties": {
+            "entity": {"type": ["string", "null"]},
+            "query": {"type": "string"},
+            "type": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "string", "enum": list(capabilities["types"])},
+                ]
+            },
+            "filters": {"type": "array", "items": {"anyOf": alternatives}},
+            "link_scope": {
+                "anyOf": [
+                    {"type": "null"},
+                    {
+                        "type": "object",
+                        "properties": {
+                            "anchor": selector_schema,
+                            "direction": {"type": "string", "enum": list(_LINK_DIRECTIONS)},
+                            "max_depth": {"type": "integer", "minimum": 1},
+                        },
+                        "required": ["anchor", "direction", "max_depth"],
+                        "additionalProperties": False,
+                    },
+                ]
+            },
+        },
+        "required": ["entity", "query", "type", "filters", "link_scope"],
+        "additionalProperties": False,
+    }
+
+
+def _note_selector_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the non-recursive graph-anchor selector Structured Outputs shape."""
+    alternatives = _filter_json_schema_alternatives(capabilities)
+    return {
+        "type": "object",
+        "properties": {
+            "entity": {"type": ["string", "null"]},
             "query": {"type": "string"},
             "type": {
                 "anyOf": [
@@ -404,8 +482,27 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
             },
             "filters": {"type": "array", "items": {"anyOf": alternatives}},
         },
-        "required": ["query", "type", "filters"],
+        "required": ["entity", "query", "type", "filters"],
         "additionalProperties": False,
+    }
+
+
+def _tag_changes_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the controlled item-level tag mutation Structured Outputs shape."""
+    tag_values = capabilities["filters"].get("tags", {}).get("controlled_values", [])
+    if not tag_values:
+        raise RequestPlanningError("Canonical schema exposes no controlled tags")
+    return {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "enum": list(_TAG_CHANGE_OPS)},
+                "value": {"type": "string", "enum": tag_values},
+            },
+            "required": ["op", "value"],
+            "additionalProperties": False,
+        },
     }
 
 
@@ -568,9 +665,18 @@ def _validate_selection(
     Raises:
         RequestPlanningError: If query, type, filter shape, or filter semantics are invalid.
     """
-    if not isinstance(raw, dict) or set(raw) != {"query", "type", "filters"}:
-        raise RequestPlanningError(f"{label} must contain exactly query, type, and filters")
-    query, note_type, raw_filters = raw["query"], raw["type"], raw["filters"]
+    required = {"entity", "query", "type", "filters", "link_scope"}
+    legacy_required = {"query", "type", "filters"}
+    if not isinstance(raw, dict) or (set(raw) != required and set(raw) != legacy_required):
+        raise RequestPlanningError(f"{label} fields are invalid")
+    entity, query, note_type, raw_filters = (
+        raw.get("entity"),
+        raw["query"],
+        raw["type"],
+        raw["filters"],
+    )
+    if entity is not None and (not isinstance(entity, str) or not entity.strip()):
+        raise RequestPlanningError(f"{label} entity must be null or non-empty")
     if not isinstance(query, str) or not query.strip():
         raise RequestPlanningError(f"{label} query must be non-empty")
     if note_type is not None and note_type not in capabilities["types"]:
@@ -582,12 +688,73 @@ def _validate_selection(
         validate_context_filters(dict(schema), raw_filters, note_type=note_type)
     except ValueError as error:
         raise RequestPlanningError(f"{label} filters are invalid") from error
+    link_scope = _validate_link_scope(raw.get("link_scope"), schema, capabilities, label=label)
     return SelectionCriteria(
+        entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
         type=note_type,
         filters=tuple(
             ContextFilter(item["field"], item["op"], item["value"]) for item in raw_filters
         ),
+        link_scope=link_scope,
+    )
+
+
+def _validate_note_selector(
+    raw: Any, schema: Mapping[str, Any], capabilities: Mapping[str, Any], *, label: str
+) -> NoteSelector:
+    """Validate a graph anchor without permitting recursive link scopes."""
+    required = {"entity", "query", "type", "filters"}
+    if not isinstance(raw, dict) or set(raw) != required:
+        raise RequestPlanningError(f"{label} fields are invalid")
+    entity, query, note_type, raw_filters = (
+        raw["entity"],
+        raw["query"],
+        raw["type"],
+        raw["filters"],
+    )
+    if entity is not None and (not isinstance(entity, str) or not entity.strip()):
+        raise RequestPlanningError(f"{label} entity must be null or non-empty")
+    if not isinstance(query, str) or not query.strip():
+        raise RequestPlanningError(f"{label} query must be non-empty")
+    if note_type is not None and note_type not in capabilities["types"]:
+        raise RequestPlanningError(f"{label} type is invalid")
+    if not isinstance(raw_filters, list):
+        raise RequestPlanningError(f"{label} filters must be a list")
+    _validate_planner_filters(raw_filters, note_type, capabilities)
+    try:
+        validate_context_filters(dict(schema), raw_filters, note_type=note_type)
+    except ValueError as error:
+        raise RequestPlanningError(f"{label} filters are invalid") from error
+    return NoteSelector(
+        entity=entity.strip() if isinstance(entity, str) else None,
+        query=query.strip(),
+        type=note_type,
+        filters=tuple(
+            ContextFilter(item["field"], item["op"], item["value"]) for item in raw_filters
+        ),
+    )
+
+
+def _validate_link_scope(
+    raw: Any, schema: Mapping[str, Any], capabilities: Mapping[str, Any], *, label: str
+) -> LinkScope | None:
+    """Validate optional non-executing wikilink traversal intent."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {"anchor", "direction", "max_depth"}:
+        raise RequestPlanningError(f"{label} link_scope is invalid")
+    direction, max_depth = raw["direction"], raw["max_depth"]
+    if direction not in _LINK_DIRECTIONS:
+        raise RequestPlanningError(f"{label} link_scope direction is invalid")
+    if not isinstance(max_depth, int) or isinstance(max_depth, bool) or max_depth < 1:
+        raise RequestPlanningError(f"{label} link_scope max_depth is invalid")
+    return LinkScope(
+        anchor=_validate_note_selector(
+            raw["anchor"], schema, capabilities, label=f"{label} anchor"
+        ),
+        direction=direction,
+        max_depth=max_depth,
     )
 
 
@@ -625,14 +792,14 @@ def _validate_write_action(
                 raise RequestPlanningError("KnowledgeUnit reference target is invalid")
     referenced_targets = {reference.target_index for unit in units for reference in unit.references}
     for index, unit in enumerate(units):
-        has_payload = bool(unit.properties or unit.facts)
+        has_payload = bool(unit.properties or unit.tag_changes or unit.facts)
         if unit.intent in {"amend", "remove"} and not has_payload:
             raise RequestPlanningError(
-                "KnowledgeUnit amend and remove intents require properties or facts"
+                "KnowledgeUnit amend and remove intents require mutation payload"
             )
         if unit.intent == "record" and not has_payload and index not in referenced_targets:
             raise RequestPlanningError(
-                "KnowledgeUnit record intent requires properties or facts unless referenced"
+                "KnowledgeUnit record intent requires mutation payload unless referenced"
             )
     return WriteAction(units=units)
 
@@ -658,8 +825,9 @@ def _validate_knowledge_unit(
         RequestPlanningError: If target, intent, properties, facts, or references violate the
             Phase 15.1 contract.
     """
-    required = {"target", "intent", "properties", "facts", "references"}
-    if not isinstance(unit, dict) or set(unit) != required:
+    required = {"target", "intent", "properties", "tag_changes", "facts", "references"}
+    legacy_required = {"target", "intent", "properties", "facts", "references"}
+    if not isinstance(unit, dict) or (set(unit) != required and set(unit) != legacy_required):
         raise RequestPlanningError("KnowledgeUnit fields are invalid")
     target = _validate_selection(
         unit["target"], schema, retrieval_capabilities, label="KnowledgeUnit target"
@@ -673,6 +841,9 @@ def _validate_knowledge_unit(
         raise RequestPlanningError("KnowledgeUnit properties must be a list")
     properties = _validate_property_changes(raw_properties, target.type, intent, write_capabilities)
 
+    raw_tag_changes = unit.get("tag_changes", [])
+    tag_changes = _validate_tag_changes(raw_tag_changes, intent, retrieval_capabilities)
+
     raw_facts = unit["facts"]
     if (
         not isinstance(raw_facts, list)
@@ -680,9 +851,9 @@ def _validate_knowledge_unit(
         or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
     ):
         raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
-    if intent == "delete" and (raw_properties or raw_facts):
+    if intent == "delete" and (raw_properties or raw_tag_changes or raw_facts):
         raise RequestPlanningError(
-            "KnowledgeUnit delete intent requires empty properties and facts"
+            "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts"
         )
 
     raw_references = unit["references"]
@@ -709,6 +880,7 @@ def _validate_knowledge_unit(
         target=target,
         intent=intent,
         properties=properties,
+        tag_changes=tag_changes,
         facts=tuple(fact.strip() for fact in raw_facts),
         references=tuple(references),
     )
@@ -776,6 +948,50 @@ def _validate_property_changes(
             except NoteValidationError as error:
                 raise RequestPlanningError("KnowledgeUnit property value is invalid") from error
         changes.append(PropertyChange(field=field, op=op, value=value))
+    return tuple(changes)
+
+
+def _validate_tag_changes(
+    raw_tag_changes: Any, intent: str, capabilities: Mapping[str, Any]
+) -> tuple[TagChange, ...]:
+    """Validate explicit controlled-tag item mutations for one knowledge unit.
+
+    Args:
+        raw_tag_changes: Untrusted ordered tag operations from the planner.
+        intent: Write intent that restricts allowed tag operations.
+        capabilities: Selection capabilities containing the schema-derived tag registry.
+
+    Returns:
+        Immutable item-level tag changes in planner order.
+
+    Raises:
+        RequestPlanningError: If operations are malformed, unknown, conflicting, or incompatible.
+    """
+    if not isinstance(raw_tag_changes, list):
+        raise RequestPlanningError("KnowledgeUnit tag_changes must be a list")
+    allowed_ops = {
+        "record": {"add", "remove"},
+        "amend": {"add", "remove"},
+        "remove": {"remove"},
+        "delete": set(),
+    }[intent]
+    controlled_values = set(capabilities["filters"].get("tags", {}).get("controlled_values", []))
+    if not controlled_values:
+        raise RequestPlanningError("Canonical schema exposes no controlled tags")
+    changes: list[TagChange] = []
+    seen: set[str] = set()
+    for raw in raw_tag_changes:
+        if not isinstance(raw, dict) or set(raw) != {"op", "value"}:
+            raise RequestPlanningError("Each tag change must contain op and value")
+        op, value = raw["op"], raw["value"]
+        if op not in _TAG_CHANGE_OPS or op not in allowed_ops:
+            raise RequestPlanningError("KnowledgeUnit tag operation is incompatible with intent")
+        if not isinstance(value, str) or value not in controlled_values:
+            raise RequestPlanningError("KnowledgeUnit tag value is not a controlled tag")
+        if value in seen:
+            raise RequestPlanningError("KnowledgeUnit tag changes must not duplicate or conflict")
+        seen.add(value)
+        changes.append(TagChange(op=op, value=value))
     return tuple(changes)
 
 

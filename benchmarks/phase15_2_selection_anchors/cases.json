@@ -1,0 +1,20 @@
+{
+  "benchmark_version": "1.0.0",
+  "cases": [
+    {"id":"E01","request":"Marta es mi hermana","expect":"marta_entity"},
+    {"id":"E02","request":"Carrefour Balma cierra a las 20:30","expect":"carrefour_entity"},
+    {"id":"E03","request":"Corrige a la amiga de Marta nacida en 1990: ahora vive en Lyon","expect":"contextual_person"},
+    {"id":"E04","request":"Corrige la tienda de la esquina: cierra a las 20:30","expect":"contextual_store"},
+    {"id":"E05","request":"¿Qué sé de n8n?","expect":"n8n_direct"},
+    {"id":"E06","request":"¿Qué sé de Marta?","expect":"marta_direct"},
+    {"id":"G01","request":"¿Qué notas están directamente relacionadas con Marta?","expect":"marta_graph"},
+    {"id":"G02","request":"¿En qué notas aparece la persona nacida el 3 de mayo de 1990?","expect":"property_anchor"},
+    {"id":"G03","request":"¿Qué entradas de diario de junio están relacionadas con la persona nacida el 3 de mayo de 1990?","expect":"independent_filters"},
+    {"id":"G04","request":"¿Qué notas están relacionadas a dos saltos con Marta?","expect":"two_hops"},
+    {"id":"T01","request":"Busca ideas sobre Odyssey. Apunta esta reflexión.","expect":"semantic_no_tags"},
+    {"id":"T02","request":"Busca notas con el tag idea","expect":"tag_retrieval"},
+    {"id":"T03","request":"Apunta que Marta es mi hermana y añade el tag review; después quita el tag review.","expect":"tag_mutations"},
+    {"id":"R01","request":"Marta nació el 3 de mayo de 1990","expect":"property_regression"},
+    {"id":"R02","request":"¿Qué tengo apuntado sobre n8n? Apunta también que debemos revisar los tickets.","expect":"mixed_regression"}
+  ]
+}
