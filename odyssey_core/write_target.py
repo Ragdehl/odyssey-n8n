@@ -84,7 +84,11 @@ def decide_write_target(
     reference = target.entity or target.query
     if not isinstance(reference, str) or not reference.strip() or not isinstance(target.query, str):
         return _clarification("invalid_target")
-    allowed_ids = find_filtered_note_ids(repository, schema, target.filters, note_type=target.type)
+    allowed_ids = None
+    if target.filters:
+        allowed_ids = find_filtered_note_ids(
+            repository, schema, target.filters, note_type=target.type
+        )
     resolution = resolve_existing_entity(
         reference,
         target.query,

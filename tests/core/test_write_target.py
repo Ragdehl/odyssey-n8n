@@ -218,6 +218,22 @@ def test_e12_existing_delete_selects_only(tmp_path: Path, schema: dict) -> None:
     assert (tmp_path / path).read_text(encoding="utf-8") == before
 
 
+def test_unfiltered_target_skips_filter_id_scan(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Leave unfiltered candidate selection entirely to the existing resolver."""
+
+    def fail_if_called(*args: object, **kwargs: object) -> frozenset[str]:
+        raise AssertionError("unfiltered target invoked the filter-ID scan")
+
+    monkeypatch.setattr("odyssey_core.write_target.find_filtered_note_ids", fail_if_called)
+
+    result = decide(tmp_path, schema, unit("Marta"))
+
+    assert result.outcome is WriteTargetOutcome.CREATE
+    assert result.target_type == "person"
+
+
 def test_filters_narrow_exact_candidates_without_similarity_approximation(
     tmp_path: Path, schema: dict
 ) -> None:
