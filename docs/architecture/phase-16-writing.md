@@ -238,7 +238,7 @@ Raw bundled request evidence was contradiction-like where its planner-style atom
 neutral (minimum neutral 0.992), reinforcing atomization; no planner was invoked.
 
 The exact model/tokenizer were downloaded once outside the vault to `/home/ragdehl/.cache/odyssey-nli`
-(about 430 MiB model snapshot; no binaries are committed). A rerun with `HF_HUB_OFFLINE=1` and
+(about 470 MiB model snapshot; no binaries are committed). A rerun with `HF_HUB_OFFLINE=1` and
 `TRANSFORMERS_OFFLINE=1` used local files only. On this Raspberry Pi CPU, load took 7.62 s and
 one/three/five-pair batches took 72/88/94 ms; peak benchmark RSS was about 1.25 GiB.
 
