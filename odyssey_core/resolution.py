@@ -17,6 +17,7 @@ from odyssey_core.contextual import (
 )
 from odyssey_core.identity import (
     ExactEntityCandidate,
+    ExactEntityResolution,
     ExactResolutionOutcome,
     resolve_exact_entity,
 )
@@ -59,6 +60,8 @@ class ExistingEntityResolution:
         id: The selected canonical note ID, or ``None`` when abstaining.
         source: Local exact, local no-candidate, or contextual decision source.
         candidate_ids: IDs supplied to the contextual reasoner, or empty for local results.
+        has_ambiguous_exact_evidence: Whether the local exact lookup found more than one eligible
+            primary-name/alias candidate before contextual reasoning.
         usage: Provider counters only; never prompt, response, or credential content.
     """
 
@@ -67,6 +70,7 @@ class ExistingEntityResolution:
     source: ResolutionSource
     candidate_ids: tuple[str, ...] = ()
     usage: Mapping[str, Any] | None = None
+    has_ambiguous_exact_evidence: bool = False
 
 
 _TECHNICAL_METADATA = frozenset(
@@ -154,6 +158,7 @@ def resolve_existing_entity(
     embedder: TextEmbedder,
     contextual_reasoner: ContextualReasoner,
     semantic_limit: int,
+    allowed_candidate_ids: frozenset[str] | None = None,
 ) -> ExistingEntityResolution:
     """Resolve one extracted entity reference against existing validated notes.
 
@@ -175,6 +180,8 @@ def resolve_existing_entity(
         semantic_limit: Explicit maximum semantic candidates before exact-collision union. No
             production default is chosen because Phase 11B.1c showed that Top-5 recall is not a
             safe large-vault assumption; callers must make this retrieval decision explicitly.
+        allowed_candidate_ids: Optional authoritative deterministic restriction of eligible note
+            IDs. It narrows exact and semantic evidence before any candidate is selected.
 
     Returns:
         A typed local or contextual production result.
@@ -184,7 +191,13 @@ def resolve_existing_entity(
         ContextualResolutionError: If contextual output is malformed or provider access fails.
         ValueError: If local resolution inputs violate existing contracts.
     """
-    exact = resolve_exact_entity(repository, schema, reference, type=type)
+    if allowed_candidate_ids is not None and (
+        not all(isinstance(note_id, str) and note_id for note_id in allowed_candidate_ids)
+    ):
+        raise ValueError("Allowed candidate IDs must be non-empty strings")
+    exact = _restrict_exact_resolution(
+        resolve_exact_entity(repository, schema, reference, type=type), allowed_candidate_ids
+    )
     if exact.outcome is ExactResolutionOutcome.EXACT_MATCH:
         candidate = exact.candidate
         assert candidate is not None
@@ -203,6 +216,10 @@ def resolve_existing_entity(
         type=type,
         limit=semantic_limit,
     )
+    if allowed_candidate_ids is not None:
+        semantic_candidates = tuple(
+            candidate for candidate in semantic_candidates if candidate.id in allowed_candidate_ids
+        )
     candidates = _merge_candidates(semantic_candidates, exact.candidates)
     if not candidates:
         return ExistingEntityResolution(
@@ -233,8 +250,29 @@ def resolve_existing_entity(
         id=decision.id,
         source=ResolutionSource.CONTEXTUAL,
         candidate_ids=tuple(candidate.id for candidate in candidates),
+        has_ambiguous_exact_evidence=(
+            exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
+        ),
         usage=_safe_usage(usage),
     )
+
+
+def _restrict_exact_resolution(
+    exact: ExactEntityResolution, allowed_candidate_ids: frozenset[str] | None
+) -> ExactEntityResolution:
+    """Apply an authoritative candidate-ID restriction to exact identity evidence."""
+    if allowed_candidate_ids is None:
+        return exact
+    candidates = tuple(
+        candidate for candidate in exact.candidates if candidate.id in allowed_candidate_ids
+    )
+    if not candidates:
+        outcome = ExactResolutionOutcome.NO_EXACT_MATCH
+    elif len(candidates) == 1:
+        outcome = ExactResolutionOutcome.EXACT_MATCH
+    else:
+        outcome = ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
+    return ExactEntityResolution(outcome, exact.query, exact.type, candidates)
 
 
 def _merge_candidates(

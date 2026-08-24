@@ -358,6 +358,86 @@ def validate_context_filters(
     return _normalize_filters(schema, filters, note_type, ())
 
 
+def find_filtered_note_ids(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    filters: Sequence[ContextFilter | Mapping[str, Any]],
+    *,
+    note_type: str | None = None,
+) -> frozenset[str]:
+    """Return current validated note IDs satisfying deterministic selection filters.
+
+    This is the authoritative-vault counterpart to the context index's filter contract.  It is
+    intended for identity-sensitive callers that must restrict candidates without treating ranked
+    context retrieval as identity evidence.
+
+    Args:
+        repository: Authoritative Markdown vault to inspect.
+        schema: Canonical schema defining valid notes and filter semantics.
+        filters: Schema-validated deterministic constraints from a selection contract.
+        note_type: Optional canonical type restriction applied alongside ``filters``.
+
+    Returns:
+        Stable IDs of every current valid note that satisfies all restrictions.
+
+    Raises:
+        ValueError: If filters or the type restriction are not canonical.
+        ContextRetrievalError: If a note cannot safely participate in the selection.
+    """
+    normalized_filters = _normalize_filters(schema, filters, note_type, ())
+    matching_ids: set[str] = set()
+    for path in repository.list_markdown_paths():
+        try:
+            note = parse_note(repository.read_text(path))
+            validate_note(note, schema)
+        except (NoteFormatError, NoteValidationError, OSError) as error:
+            raise ContextRetrievalError(
+                "Cannot safely inspect a note for deterministic target filtering"
+            ) from error
+        if _metadata_matches_filters(
+            note.metadata, normalized_filters, _filter_definitions(schema)
+        ):
+            note_id = note.metadata["id"]
+            assert isinstance(note_id, str)
+            matching_ids.add(note_id)
+    return frozenset(matching_ids)
+
+
+def _metadata_matches_filters(
+    metadata: Mapping[str, Any],
+    filters: tuple[tuple[str, str, tuple[str | int, ...]], ...],
+    definitions: Mapping[str, dict[str, Any]],
+) -> bool:
+    """Return whether validated metadata satisfies normalized deterministic filters."""
+    for field, op, expected in filters:
+        actual = metadata.get(field)
+        if actual is None:
+            return False
+        definition = definitions[field]
+        if op == "contains":
+            if not isinstance(actual, list) or expected[0] not in actual:
+                return False
+            continue
+        try:
+            actual = _normalize_property_value(definition, actual)
+        except ValueError:
+            return False
+        if op == "in":
+            if actual not in expected:
+                return False
+        elif op == "eq" and actual != expected[0]:
+            return False
+        elif op == "gt" and not actual > expected[0]:
+            return False
+        elif op == "gte" and not actual >= expected[0]:
+            return False
+        elif op == "lt" and not actual < expected[0]:
+            return False
+        elif op == "lte" and not actual <= expected[0]:
+            return False
+    return True
+
+
 class ContextIndex:
     """Own one disposable SQLite file containing atomic-note context embeddings."""
 

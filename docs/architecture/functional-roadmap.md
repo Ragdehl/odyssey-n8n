@@ -21,6 +21,8 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   knowledge units beside retrieval actions.
 - ✅ **Phase 15.1 — schema-aware write planning:** adds shared target selection plus schema-derived
   property mutations and validates the refined contract with Sol/low.
+- ✅ **Phase 16.1 — safe write-target resolution / create-update decision:** composes one validated
+  `KnowledgeUnit` with the existing resolver into non-persisting UPDATE, CREATE, or clarification.
 
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). Historical benchmark evidence remains in its
@@ -59,7 +61,15 @@ catalog, routes, executes, or binds a delegated result to a later action.
 
 ## Next functional phase
 
-➡️ **Phase 16 — resolved knowledge persistence**
+➡️ **Phase 16 — resolved knowledge persistence (next: materialization)**
+
+✅ **Phase 16.1 — safe target decision** is the completed first block. It composes a validated
+single `KnowledgeUnit` with Phase 9–11 resolution and returns only `UPDATE`, `CREATE`, or
+`NEEDS_CLARIFICATION`; it allocates no ID/path and persists nothing. Creation is generic only for
+an unresolved `record` with a validated canonical type, including an unnamed contextual entity.
+No type, ambiguity, or unresolved amend/remove/delete requires clarification. Deterministic target
+filters narrow authoritative candidate IDs; they never become similarity evidence. Explicit bulk
+write cardinality and soft-delete persistence remain later Phase 16 work.
 
 With the Phase 15 planner refinements accepted, use the existing Phase 11 resolver and Phase 12
 persistence primitives to execute prepared knowledge safely. `save_knowledge` remains the likely coordination boundary, but

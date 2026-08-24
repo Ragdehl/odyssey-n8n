@@ -8,6 +8,7 @@ from .context import (
     ContextPackage,
     ContextRetrievalError,
     build_context_retrieval_text,
+    find_filtered_note_ids,
     get_context,
     validate_context_filters,
 )
@@ -67,6 +68,7 @@ from .semantic import (
     build_semantic_retrieval_text,
     find_semantic_entity_candidates,
 )
+from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
 __all__ = [
     "ExactEntityCandidate",
@@ -91,6 +93,7 @@ __all__ = [
     "ContextPackage",
     "ContextRetrievalError",
     "build_context_retrieval_text",
+    "find_filtered_note_ids",
     "get_context",
     "validate_context_filters",
     "ExistingEntityOutcome",
@@ -124,4 +127,7 @@ __all__ = [
     "request_plan_json_schema",
     "render_request_planner_prompt",
     "validate_request_plan",
+    "WriteTargetDecision",
+    "WriteTargetOutcome",
+    "decide_write_target",
 ]
