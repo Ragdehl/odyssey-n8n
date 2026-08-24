@@ -1,0 +1,8 @@
+{
+  "cases": [
+    {"id": "T01", "request": "¿Qué sé de Marta?", "expect": "direct_marta"},
+    {"id": "T02", "request": "¿Qué notas tengo relacionadas con Marta?", "expect": "related_retrieve"},
+    {"id": "T03", "request": "¿Cuántas notas tengo relacionadas con Marta?", "expect": "related_delegate"},
+    {"id": "T04", "request": "¿Cuántas compras hice en Carrefour?", "expect": "ordinary_delegate"}
+  ]
+}

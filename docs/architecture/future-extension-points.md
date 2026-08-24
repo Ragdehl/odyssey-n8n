@@ -10,16 +10,17 @@ implemented yet**. Current planner behavior belongs in the
 The goal is to preserve future requirements without forcing speculative infrastructure or duplicating
 active contracts.
 
-## 1. App / capability delegation
+## 1. Concrete capability routing and execution
 
 Odyssey is expected to support additional applications or capabilities built on the same knowledge
 foundation: structured analytics, purchase/ticket processing, project workflows, translation-related
 workflows, and others.
 
-The preferred scalable direction is **generic delegation first, concrete app selection second**.
+Phase 15.3 implements generic delegation detection in the top-level planner. The remaining scalable
+direction is concrete app selection and execution after that generic boundary.
 The top-level Sol planner should not receive an ever-growing catalog of every installed app.
 
-Conceptually, a future `RequestPlan` may contain:
+The current `RequestPlan` may contain:
 
 ```text
 RequestPlan.actions[]
@@ -161,17 +162,16 @@ boundaries and rebuildable indexes do not block a later multi-user design.
 ## Placement
 
 ```text
-NOW / Phase 15.2
+NOW / Phase 16
   - current planner contract lives in phase-15-write-planning.md
-  - no speculative app router or user model
+  - generic delegation detection is implemented; no concrete app router or user model
 
 Phase 16
   - choose minimal type-aware writing-profile representation
   - execute already-planned explicit tag changes after safe target resolution
 
 When first concrete app exists
-  - add generic DelegateAction
-  - route with cheap/local app selection
+  - route the existing generic DelegateAction with cheap/local app selection
   - load only selected app detail
 
 Later ontology work

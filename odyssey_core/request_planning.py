@@ -27,11 +27,15 @@ _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestPlan. Use the supplied current date, time, and timezone.
 
+Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, and link_scope. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+
 Hard filters can permanently remove valid notes: apply a deterministic restriction only when the request maps explicitly and safely to this capability contract. Otherwise preserve the meaning in `query`. Words such as before, earlier, previously, beforehand, antes, anteriormente, previamente, and ya había pensado describe knowledge semantics, not note lifecycle, unless the user explicitly refers to when a note, entry, or item was created, written, added, updated, modified, or recorded. Only that explicit lifecycle timing authorizes created_at or updated_at filters. Multiple RetrieveActions are only for genuinely independent candidate-set branches; ordinary semantic OR stays one query.
 
-RetrieveAction.plan and every KnowledgeUnit.target use the same selection shape: nullable explicit nominal entity, non-empty query, optional canonical type, filters, and optional link_scope. Entity is only a safely explicit primary-name/alias candidate from the user's wording; it is never an Odyssey ID and does not assert repository existence. Do not turn every noun phrase or mentioned name into entity: contextual descriptions such as "la tienda de la esquina" and "la amiga de Marta" keep entity=null. A null link_scope means the direct note only, never related notes. Use link_scope only when the user explicitly asks for linked/related/backlink knowledge; its non-recursive anchor independently selects the one safe note identity. Do not execute traversal.
+RetrieveAction.plan and every KnowledgeUnit.target use the same selection shape. A non-null DelegateAction.selection obeys those same SelectionCriteria rules. Entity is only a safely explicit primary-name/alias candidate from the user's wording; it is never an Odyssey ID and does not assert repository existence. Do not turn every noun phrase or mentioned name into entity: contextual descriptions such as "la tienda de la esquina" and "la amiga de Marta" keep entity=null. A null link_scope means the direct note only, never a graph neighborhood. Ordinary knowledge about one entity uses that direct selection. When the user explicitly selects notes through linked, related, backlink/reference, direction, or bounded-hop graph meaning that the existing LinkScope can represent, link_scope is required; retaining that graph meaning only in query is insufficient. Its non-recursive anchor independently selects the one safe note identity. Do not execute traversal.
 
 Tags are explicit-only. Semantic words such as idea, reflection, decision, review, or question never create a tags filter or tag mutation. Emit tags contains a controlled canonical ID only when the user explicitly says tag/etiqueta, and emit add/remove TagChange only when explicitly requested. Never replace the complete tags array and never invent an unknown tag ID.
+
+Use DelegateAction only when the requested operation needs a specialized capability that RetrieveAction or WriteAction cannot express, such as aggregate computation (count, sum, average, grouping or comparison), analysis of an external artifact, or translation. DelegateAction.request preserves that specialized operation and its material constraints. DelegateAction.selection preserves the already interpreted Odyssey candidate set, including any representable link_scope, filters, type, or entity; it may be null only when the request has no safely representable Odyssey knowledge candidate set, as may occur for an external artifact. Do not keyword-route: recording an intention to compare is WriteAction, while asking for the comparison now is DelegateAction. DelegateAction never chooses an application, app_id, router, SQL, execution instruction, or result. Preserve independent action order. Do not create cross-action result bindings or placeholders.
 
 A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
 
@@ -145,7 +149,16 @@ class WriteAction:
     kind: str = "write"
 
 
-RequestAction = RetrieveAction | WriteAction
+@dataclass(frozen=True, slots=True)
+class DelegateAction:
+    """Represent non-executing work that requires a later specialized capability."""
+
+    request: str
+    selection: SelectionCriteria | None
+    kind: str = "delegate"
+
+
+RequestAction = RetrieveAction | WriteAction | DelegateAction
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +289,16 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                 },
                             },
                             "required": ["kind", "units"],
+                            "additionalProperties": False,
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "kind": {"type": "string", "enum": ["delegate"]},
+                                "request": {"type": "string"},
+                                "selection": {"anyOf": [{"type": "null"}, selection_schema]},
+                            },
+                            "required": ["kind", "request", "selection"],
                             "additionalProperties": False,
                         },
                     ]
@@ -636,12 +659,46 @@ def _validate_action(
         raise RequestPlanningError("RequestPlan action must be an object")
     if action.get("kind") == "write":
         return _validate_write_action(action, schema, retrieval_capabilities, write_capabilities)
+    if action.get("kind") == "delegate":
+        return _validate_delegate_action(action, schema, retrieval_capabilities)
     if action.get("kind") != "retrieve" or set(action) != {"kind", "plan"}:
         raise RequestPlanningError("RequestPlan action kind is invalid")
     plan = _validate_selection(
         action["plan"], schema, retrieval_capabilities, label="RetrievalPlan"
     )
     return RetrieveAction(plan=plan)
+
+
+def _validate_delegate_action(
+    action: Mapping[str, Any], schema: Mapping[str, Any], capabilities: Mapping[str, Any]
+) -> DelegateAction:
+    """Validate generic delegated work without selecting or executing an application.
+
+    Args:
+        action: Untrusted delegated-action object returned by the planner.
+        schema: Parsed canonical schema used by optional shared selection validation.
+        capabilities: Dynamic shared selection capabilities derived from that schema.
+
+    Returns:
+        Immutable delegated work containing only a subrequest and optional generic selection.
+
+    Raises:
+        RequestPlanningError: If the action is not closed, has an empty request, or has invalid
+            shared selection criteria.
+    """
+    if set(action) != {"kind", "request", "selection"}:
+        raise RequestPlanningError("DelegateAction fields are invalid")
+    request, raw_selection = action["request"], action["selection"]
+    if not isinstance(request, str) or not request.strip():
+        raise RequestPlanningError("DelegateAction request must be non-empty")
+    selection = (
+        None
+        if raw_selection is None
+        else _validate_selection(
+            raw_selection, schema, capabilities, label="DelegateAction selection"
+        )
+    )
+    return DelegateAction(request=request.strip(), selection=selection)
 
 
 def _validate_selection(

@@ -1,8 +1,8 @@
 # Phase 15 planning contract
 
-Status: **Phase 15 and 15.1 accepted; Phase 15.2 is the current pre-persistence contract refinement**
+Status: **Phase 15 through 15.3 accepted; Phase 16 is next**
 
-This file is the canonical architecture contract for Phase 15, Phase 15.1, and Phase 15.2. Historical
+This file is the canonical architecture contract for Phase 15 and its 15.1–15.3 refinements. Historical
 benchmark inputs and raw model outputs remain append-only in their benchmark directories; the
 Functional Roadmap records phase order and status without duplicating this contract.
 
@@ -18,7 +18,8 @@ user message
 single Sol/low planner
     |
     +--> RetrieveAction(s)
-    `--> WriteAction(s) -> KnowledgeUnit(s)
+    +--> WriteAction(s) -> KnowledgeUnit(s)
+    `--> DelegateAction(s)
 
 execution, identity resolution, Markdown mutation and persistence happen later
 ```
@@ -429,14 +430,63 @@ experiments. A focused benchmark should prove at least:
 13. explicit add/remove tag write emits item-level `TagChange` without replacing all tags.
 14. Phase 15.1 property/target regression sentinels remain valid.
 
+## Phase 15.3 — generic capability delegation
+
+Phase 15.3 extends the same one-call planner boundary with a third ordered action:
+
+```text
+RequestPlan.actions[] = RetrieveAction | WriteAction | DelegateAction
+DelegateAction = {kind: "delegate", request: non-empty string, selection: SelectionCriteria | null}
+```
+
+The single interpretation call first preserves the richest safe Odyssey candidate set and then chooses
+the operation on that set:
+
+```text
+request
+  |
+  +--> candidate set: entity / query / type / filters / link_scope
+  `--> operation: retrieve / write / delegate
+```
+
+The planner uses retrieval/write for ordinary Odyssey knowledge work. It uses `DelegateAction` only
+when fulfilling the request requires a specialized capability such as aggregation/comparison,
+external-artifact analysis, or translation. This is semantic operation detection, not keyword routing:
+recording an intention to compare is a write, while requesting a comparison is delegated.
+
+`DelegateAction.request` retains the specialized operation and its material constraints. Its optional
+`selection` reuses `SelectionCriteria` and must retain safely representable entity, type, filters, and
+link scope just as direct retrieval would. Delegation changes what happens to the candidate set; it does
+not discard candidate-set structure. `selection=null` remains valid only when the request has no useful,
+safely representable Odyssey knowledge set, such as some external-artifact transformations.
+
+No app ID, catalog choice, SQL, execution instruction, fabricated result, or cross-action result binding
+is present. Concrete routing, manifests, execution, analytics, ticket parsing, and translation remain
+deferred. Mixed independent actions retain their order.
+
+### Accepted optional-type quality limitation
+
+Phase 15.3 acceptance evidence scored 16/18 under the deliberately stricter oracle because A07/A08
+omitted the otherwise safe `person` type on a graph anchor while preserving the correct action,
+`link_scope`, Marta entity anchor, direction, and depth. This is accepted as a precision limitation,
+not a semantic graph failure: `NoteSelector.type` is nullable by contract.
+
+A known type is still useful narrowing evidence. `entity="Marta", type="person"` restricts exact
+candidate discovery immediately; `type=null` may inspect exact candidates across canonical types and
+therefore expose more ambiguity. Resolution remains fail-closed and never selects an arbitrary
+candidate. A type hint also cannot distinguish two different `person` notes with the same exact name,
+so it is desirable when safely inferable but not sufficient or required for identity correctness.
+
 ## Evidence and related documents
 
 Historical benchmark evidence remains append-only:
 
 - [`benchmarks/phase15_write_planning/`](../../benchmarks/phase15_write_planning/)
 - [`benchmarks/phase15_1_schema_write_planning/`](../../benchmarks/phase15_1_schema_write_planning/)
+- [`benchmarks/phase15_2_selection_anchors/`](../../benchmarks/phase15_2_selection_anchors/)
+- [`benchmarks/phase15_3_capability_delegation/`](../../benchmarks/phase15_3_capability_delegation/)
 
 Schema/ontology and persistence invariants remain canonical in their existing documents/ADRs. The
 current phase sequence and state are in [Functional Roadmap](functional-roadmap.md). Cross-phase future
-capabilities such as app delegation/routing, writer profiles, derived graph/analytics, observability,
-and multi-user security are in [Future extension points](future-extension-points.md).
+capabilities such as concrete app routing/execution, writer profiles, derived graph/analytics,
+observability, and multi-user security are in [Future extension points](future-extension-points.md).

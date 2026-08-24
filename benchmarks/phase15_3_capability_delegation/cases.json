@@ -1,0 +1,20 @@
+{"benchmark_version":"1.0.0","cases":[
+{"id":"A01","request":"¿Qué sé de Marta?","expect":"marta_retrieve"},
+{"id":"A02","request":"Apunta que Marta vive en Lyon.","expect":"marta_write"},
+{"id":"A03","request":"¿Qué compras tengo de Carrefour?","expect":"purchase_retrieve"},
+{"id":"A04","request":"¿Cuántas compras hice en Carrefour?","expect":"purchase_count"},
+{"id":"A05","request":"¿Qué precios de leche tengo apuntados?","expect":"price_retrieve"},
+{"id":"A06","request":"¿Cuál es el precio medio que he pagado por leche?","expect":"price_average"},
+{"id":"A07","request":"¿Qué notas tengo relacionadas con Marta?","expect":"related_retrieve"},
+{"id":"A08","request":"¿Cuántas notas tengo relacionadas con Marta?","expect":"related_count"},
+{"id":"A09","request":"Analiza este ticket de Carrefour.","expect":"ticket_analysis"},
+{"id":"A10","request":"Traduce este documento al francés.","expect":"translation"},
+{"id":"A11","request":"¿Qué tengo apuntado sobre n8n? Apunta también que debemos revisar los tickets.","expect":"mixed_direct"},
+{"id":"A12","request":"¿Cuántas compras hice este año? Apunta también que quiero revisar mi presupuesto.","expect":"mixed_delegate_write"},
+{"id":"A13","request":"Busca mis compras en Carrefour y dime qué recuerdas de ellas.","expect":"purchase_memory_retrieve"},
+{"id":"A14","request":"Dime el total gastado en Carrefour este año.","expect":"purchase_total"},
+{"id":"A15","request":"Enséñame las compras de Carrefour de este año.","expect":"purchase_year_retrieve"},
+{"id":"A16","request":"¿Qué sé sobre mis gastos en Carrefour?","expect":"spending_retrieve"},
+{"id":"A17","request":"Compara lo que gasté en Carrefour y Lidl este año.","expect":"spending_comparison"},
+{"id":"A18","request":"Apunta que quiero comparar lo que gasto en Carrefour y Lidl.","expect":"comparison_intention_write"}
+]}
