@@ -175,3 +175,41 @@ accents, negation, and word choice.
 only a 0.021 gap below the lowest overlap case and must undergo larger, adversarial validation before
 any automatic APPEND is enabled. No production write gate, APPEND, or semantic writer is implemented
 by this checkpoint.
+
+### Phase 16.2A.2 adversarial Markdown-body benchmark (2026-08-24)
+
+The separate 46-scenario synthetic adversarial dataset and measured output are
+[`phase16_adversarial_novelty_cases.json`](../../benchmarks/phase16_adversarial_novelty_cases.json)
+and
+[`phase16_adversarial_novelty_results.json`](../../benchmarks/phase16_adversarial_novelty_results.json).
+It reuses exactly the same offline MiniLM/FastEmbed 0.7.3 runtime as 16.2A. It compares planner-style
+atomic facts with (A) the complete Markdown body, (B) the maximum score over simple body units
+(unordered-list item, paragraph, or plain line), and (C) the maximum score over adjacent two-unit
+blocks. It also includes raw-request probes; no planner was built or invoked.
+
+| Strategy | `OVERLAP` min / median / max | `INDEPENDENT` min / median / max | Assessment |
+| --- | ---: | ---: | --- |
+| Whole note | 0.197 / 0.481 / 0.768 | 0.263 / 0.451 / 0.853 | UNSAFE |
+| Unit-MAX | 0.178 / 0.562 / 1.000 | 0.151 / 0.603 / 0.853 | PROMISING, but unsafe for production |
+| Block-MAX | 0.179 / 0.572 / 0.891 | 0.184 / 0.468 / 0.853 | UNSAFE |
+
+Units demonstrate the buried-fact benefit: the buried exact Airbus fact was 0.341 whole-note versus
+0.919 Unit-MAX, and its exact normalized unit match was found without MiniLM. They do not make a
+safe gate: the buried Airbus → Thales update reached only 0.236 Unit-MAX, while the same-topic but
+independent Toulouse-work case reached 0.853. At the first threshold that allows any known
+independent local candidate, Unit-MAX `T=0.18` already has one dangerous false negative (the
+gym-cessation update); whole-note `T=0.20` has one (two-to-three-children update); Block-MAX
+`T=0.18` has one (French-language negation). `T=0.15` has zero false negatives for all three, but
+also zero local candidates. Higher required thresholds only add false negatives.
+
+Raw requests are noisier evidence than their expected atomic facts. For the multi-fact request,
+raw-to-note was 0.539 while the atomic Lyon update was 0.602 whole-note / 0.768 Unit-MAX and the
+independent piano fact was 0.404 / 0.366. The short-note raw independent violin request was 0.678,
+versus 0.263 for its atomic fact. This supports planner atomization as the benchmark input.
+
+Cross-language evidence is also conservative rather than decisive: the French buried Airbus →
+Thales update was 0.385 whole-note / 0.373 Unit-MAX, while an independent Spanish guitar fact was
+0.309 / 0.271. The benchmark therefore recommends **NONE_SAFE** for production integration now:
+Unit-MAX is the most informative projection for a future, larger benchmark, but all strategies must
+continue to fail closed. No production threshold is frozen, and no production APPEND or Phase 16.3
+writer is implemented by this evidence checkpoint.
