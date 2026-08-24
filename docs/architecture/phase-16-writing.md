@@ -132,3 +132,46 @@ Still outside this checkpoint:
 ## Evidence gate
 
 Before implementing automatic MiniLM-backed APPEND, benchmark duplicate/paraphrase/correction/independent pairs. If no robust low-risk separation exists, fail closed and send more cases to Phase 16.3 rather than lowering safety to save model calls.
+
+### Phase 16.2A local MiniLM benchmark (2026-08-24)
+
+The initial reproducible evidence is in
+[`benchmarks/phase16_novelty_cases.json`](../../benchmarks/phase16_novelty_cases.json) and
+[`benchmarks/phase16_novelty_results.json`](../../benchmarks/phase16_novelty_results.json). It is a
+60-pair synthetic fact-unit benchmark (38 `OVERLAP`, 22 `INDEPENDENT`) executed with the existing
+`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` through
+`FastEmbedTextEmbedder` / FastEmbed 0.7.3.
+
+The existing local artifact is a complete Hugging Face Hub snapshot for FastEmbed's approved
+`qdrant/paraphrase-multilingual-MiniLM-L12-v2-onnx-Q` source. FastEmbed 0.7.3 otherwise attempts
+an online metadata lookup even when that snapshot is complete. The embedder now exposes
+`local_files_only=True` (the default), so normal use fails clearly rather than depending on a
+network download. Run the evidence locally with a known model cache:
+
+```bash
+HF_HUB_OFFLINE=1 .venv/bin/python benchmarks/run_phase16_novelty.py \
+  --cache-dir /path/to/fastembed-cache
+```
+
+Similarity distributions were:
+
+| Expected class | Min | Median | Max |
+| --- | ---: | ---: | ---: |
+| `OVERLAP` | 0.321 | 0.900 | 1.000 |
+| `INDEPENDENT` | -0.038 | 0.299 | 0.853 |
+
+At `T = 0.30` (`similarity < T` is the only local-append candidate), all 38 overlap pairs
+escalated and 11/60 pairs (18.3%) could remain local. At `T = 0.40`, two overlap cases would append
+unsafely: an employer temporal update and a related running fact. The Markdown probe measured 0.970
+for a plain fact versus the same unordered-list item; paragraph/list equivalence ranged from 0.791 to
+0.916. A later trivial line/list-item/paragraph projection is sufficient to investigate; a Markdown
+AST is not justified by this evidence.
+
+Exact duplicate normalization is intentionally narrower: trim surrounding whitespace, collapse
+whitespace, and remove one conventional unordered-list marker. It preserves case, punctuation,
+accents, negation, and word choice.
+
+**Assessment: PROMISING, not a production threshold.** The zero-false-negative synthetic zone has
+only a 0.021 gap below the lowest overlap case and must undergo larger, adversarial validation before
+any automatic APPEND is enabled. No production write gate, APPEND, or semantic writer is implemented
+by this checkpoint.

@@ -66,12 +66,19 @@ class FastEmbedTextEmbedder:
     Args:
         model_name: FastEmbed model identifier. The Phase 10 benchmark-selected model is default.
         cache_dir: Optional derived-model cache location.
+        local_files_only: Require a complete local model artifact instead of allowing a download.
 
     Raises:
         SemanticIndexError: If FastEmbed is unavailable or the model cannot load locally.
     """
 
-    def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL, cache_dir: Path | None = None):
+    def __init__(
+        self,
+        model_name: str = DEFAULT_EMBEDDING_MODEL,
+        cache_dir: Path | None = None,
+        *,
+        local_files_only: bool = True,
+    ):
         try:
             from fastembed import TextEmbedding
             from fastembed import __version__ as fastembed_version
@@ -83,6 +90,7 @@ class FastEmbedTextEmbedder:
             self._model = TextEmbedding(
                 model_name=model_name,
                 cache_dir=str(cache_dir) if cache_dir is not None else None,
+                local_files_only=local_files_only,
             )
         except Exception as error:
             raise SemanticIndexError(f"Unable to load embedding model: {model_name}") from error
