@@ -213,3 +213,36 @@ Thales update was 0.385 whole-note / 0.373 Unit-MAX, while an independent Spanis
 Unit-MAX is the most informative projection for a future, larger benchmark, but all strategies must
 continue to fail closed. No production threshold is frozen, and no production APPEND or Phase 16.3
 writer is implemented by this evidence checkpoint.
+
+### Phase 16.2A.3 local multilingual NLI benchmark (2026-08-25)
+
+[`phase16_nli_results.json`](../../benchmarks/phase16_nli_results.json) reuses all 46 adversarial
+scenarios (25 `OVERLAP`, 21 `INDEPENDENT`) while keeping oracle-unit NLI separate from embedding
+retrieval plus NLI. The experimental sequence classifier is
+`MoritzLaurer/multilingual-MiniLMv2-L12-mnli-xnli` at revision
+`0d55db361c5f291640208c51ff8c181146aa8eff` (Transformers 4.57.3, Torch 2.9.1+cpu, Safetensors
+0.7.0). It is not a replacement for the existing retrieval embedding MiniLM.
+
+Every pair preserves entailment/neutral/contradiction probabilities in both directions. A small
+predeclared conservative grid (high neutral and low entailment/contradiction for every direction and
+candidate) found no dangerous false-independent examples here, but escalated 11/21 independent facts
+(52.4%) on oracle units, 14/21 at top-1 (66.7%), and 19/21 at top-3/top-5 (90.5%). This is not a
+useful autonomous append zone. Retrieval recall for labelled overlap oracle units was 92% at top-1
+(the English and French buried Airbus → Thales updates missed), then 100% at top-3/top-5.
+
+Bidirectionality materially helped: Airbus → Thales had maximum contradiction 0.997 despite one
+direction being 0.966 neutral; Toulouse → Lyon reached 0.997, gym cessation 0.991, and French
+Airbus → Thales 0.947. Related independence can still be over-escalated: dog ownership → food
+donation got reverse entailment 0.994, while Airbus → museum was clean (minimum neutral 0.949).
+Raw bundled request evidence was contradiction-like where its planner-style atomic piano fact was
+neutral (minimum neutral 0.992), reinforcing atomization; no planner was invoked.
+
+The exact model/tokenizer were downloaded once outside the vault to `/home/ragdehl/.cache/odyssey-nli`
+(about 430 MiB model snapshot; no binaries are committed). A rerun with `HF_HUB_OFFLINE=1` and
+`TRANSFORMERS_OFFLINE=1` used local files only. On this Raspberry Pi CPU, load took 7.62 s and
+one/three/five-pair batches took 72/88/94 ms; peak benchmark RSS was about 1.25 GiB.
+
+**Assessment: NLI_PROMISING.** It materially improves semantic judgement over cosine similarity, but
+the escalation rate and small synthetic corpus prevent productionization. Run larger held-out NLI
+validation next; do not evaluate LLaMA or Qwen automatically. No production write gate, APPEND,
+writer, or Phase 16.3 implementation exists.

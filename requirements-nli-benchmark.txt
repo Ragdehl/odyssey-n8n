@@ -1,0 +1,5 @@
+# Optional local-only runtime for Phase 16.2A.3 benchmark evidence.
+# This file is intentionally separate from production and ordinary CI requirements.
+transformers==4.57.3
+torch==2.9.1
+safetensors==0.7.0
