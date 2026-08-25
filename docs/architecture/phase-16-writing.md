@@ -274,10 +274,10 @@ The exact model/tokenizer were downloaded once outside the vault to `/home/ragde
 `TRANSFORMERS_OFFLINE=1` used local files only. On this Raspberry Pi CPU, load took 7.62 s and
 one/three/five-pair batches took 72/88/94 ms; peak benchmark RSS was about 1.25 GiB.
 
-**Assessment: NLI_PROMISING.** It materially improves semantic judgement over cosine similarity, but
-the escalation rate and small synthetic corpus prevent productionization. Run larger held-out NLI
-validation next; do not evaluate LLaMA or Qwen automatically. No production write gate, APPEND,
-writer, or Phase 16.3 implementation exists.
+**Historical assessment: NLI_PROMISING, not selected.** It materially improved semantic judgement
+over cosine similarity, but the escalation rate and operational complexity did not justify a local
+NLI layer once the later direct Luna-medium writer evidence was available. No further held-out NLI
+validation is required for the selected initial write path. No NLI write gate is productionized.
 
 ### Phase 16.3 Luna writer evidence (2026-08-25)
 
