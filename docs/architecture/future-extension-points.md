@@ -197,11 +197,31 @@ strong contextual resolver
 
 The selector is **not** an identity authority. Its job is only to remove clearly implausible
 candidates while retaining the correct one. The critical benchmark failure is dropping the correct
-candidate, not retaining too many false candidates. Reuse the existing 1,000-note adversarial corpus
-before building production code and measure at least:
+candidate, not retaining too many false candidates.
+
+Do not assume the previous 1,000-note corpus already has sufficient note-length coverage. Before the
+next selector benchmark, inspect it and extend/freeze a new benchmark version if necessary so the
+vault deliberately contains a realistic mix of:
+
+- short notes with roughly 1-5 factual units;
+- medium notes with roughly 10-20 factual units;
+- long notes with roughly 40-60 meaningful factual units;
+- a smaller set of very long notes around 1,500-3,000 words.
+
+Long notes must contain meaningful heterogeneous knowledge rather than repeated filler. For identity
+and contextual-reference cases, place the distinguishing evidence deliberately near the beginning,
+middle, and end of different notes. Include long distractor notes that share names, organizations,
+places, or vocabulary with the query while remaining the wrong entity. Measure MiniLM broad-retrieval
+recall and Luna reduction recall separately by note-length bucket as well as in aggregate, so good
+short-note performance cannot hide dilution or selection failures on long notes.
+
+Reuse the existing 1,000-note adversarial corpus where it already provides valid coverage, rather
+than replacing it merely to obtain nicer results, and measure at least:
 
 - Recall@20, Recall@10, and Recall@5 after Luna selection;
 - the exact IDs of any correct candidates dropped;
+- recall broken down by short/medium/long/very-long source-note length;
+- beginning/middle/end placement of the identity-bearing evidence in long notes;
 - Spanish/French and contextual-reference behavior;
 - input/output/reasoning tokens and real cost per query;
 - latency;
@@ -274,8 +294,9 @@ Phase 16
   - execute already-planned explicit tag changes after safe target resolution
 
 Before large-vault contextual retrieval is considered production-ready
-  - reuse the existing 1,000-note corpus
+  - reuse/extend the existing 1,000-note corpus with explicit long-note coverage when needed
   - benchmark MiniLM Top-100 -> Luna high-recall Top-20/10/5 reduction
+  - measure recall separately for short/medium/long/very-long notes
   - only if that is safe, test Luna resolution with fail-closed escalation to the strong resolver
   - evaluate compact revision-bound retrieval evidence before sending full note bodies
 
