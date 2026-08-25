@@ -212,6 +212,10 @@ def materialize_update(
         WriterProviderError: If the injected writer fails.
         WriterOutputError: If bounded operations cannot safely apply.
     """
+    if unit.references:
+        raise MaterializationError(
+            "UPDATE reference binding is not implemented; unresolved references are unsafe"
+        )
     if unit.intent == "delete":
         raise MaterializationError("Whole-note delete materialization is not implemented")
     path, existing = _load_existing_target(repository, schema, decision)

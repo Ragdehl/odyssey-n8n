@@ -30,8 +30,9 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
   one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
-- ➡️ **Phase 16.5 — pre-writer reference binding:** refine reference occurrence placement, resolve or
-  preallocate referenced identities, materialize only safe `[[wikilinks]]` before Luna, and preserve
+- ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A now freezes deterministic planner
+  occurrence markers and human-readable mentions; the remaining work resolves or preallocates
+  referenced identities, materializes only safe `[[wikilinks]]` before Luna, and preserves
   ambiguous/unresolved references as explicit pending work rather than guessing.
 - ⬜ **Phase 16.6 — CREATE materialization:** deterministically allocate CREATE identity/path/display
   identity, generate a complete body through the selected Luna/medium policy using already-bound
@@ -116,10 +117,10 @@ UPDATE target, stages deterministic properties/tags, calls the selected full-not
 only for non-duplicate free text, validates exact bounded operations, and calls Phase 12
 `update_entity()` once with an expected revision. No orchestration boundary is introduced.
 
-➡️ **Phase 16.5 — reference binding before body writing** is now the next step. The current
-`KnowledgeReference(target_index, role)` preserves logical relationships but does not preserve enough
-placement information to safely insert a wikilink after a semantic writer has changed the sentence.
-Reference placement must therefore be made deterministic before Luna sees the facts. See
+➡️ **Phase 16.5 — reference binding before body writing** remains in progress. Phase 16.5A freezes
+`KnowledgeReference(target_index, role, mention)` plus `{{ref:N}}` markers local to each unit's
+`references` array, so placement is preserved before Luna sees the facts. Target resolution and
+wikilink rendering remain later 16.5B/C work. See
 [Phase 16 reference binding](phase-16-reference-binding.md).
 
 The immediate execution order is:

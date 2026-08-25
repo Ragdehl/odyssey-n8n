@@ -271,10 +271,14 @@ def test_write_intents_multiple_targets_and_references(schema: dict) -> None:
                 unit(
                     "Weekly shopping",
                     note_type="purchase",
-                    facts=["Bought today."],
+                    facts=["Bought {{ref:0}} in {{ref:1}} today."],
                     references=[
-                        {"target_index": 0, "role": "store"},
-                        {"target_index": 1, "role": "product"},
+                        {"target_index": 0, "role": "store", "mention": "Carrefour Balma"},
+                        {
+                            "target_index": 1,
+                            "role": "product",
+                            "mention": "Leche Pascual semidesnatada",
+                        },
                     ],
                 ),
                 unit("Old shopping list", intent="delete", facts=[]),
@@ -282,8 +286,8 @@ def test_write_intents_multiple_targets_and_references(schema: dict) -> None:
                     "Weekly shopping",
                     note_type="purchase",
                     intent="remove",
-                    facts=["Remove the obsolete delivery fee."],
-                    references=[{"target_index": 0, "role": "store"}],
+                    facts=["Remove the obsolete delivery fee at {{ref:0}}."],
+                    references=[{"target_index": 0, "role": "store", "mention": "Carrefour Balma"}],
                 ),
             )
         ),
@@ -419,6 +423,18 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     capabilities = json.loads(write_json)
     assert capabilities["types"]["person"]["properties"]["birth_date"]["value_type"] == "date"
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
+
+
+def test_prompt_and_schema_freeze_reference_occurrence_contract(schema: dict) -> None:
+    """Teach Sol about local markers and require mention in each closed reference object."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    assert "{{ref:N}}" in prompt
+    assert "own `references` array" in prompt
+    assert "Do not emit Markdown `[[wikilinks]]`" in prompt
+    reference_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"]["anyOf"][
+        1
+    ]["properties"]["units"]["items"]["properties"]["references"]["items"]
+    assert reference_schema["required"] == ["target_index", "role", "mention"]
 
 
 def test_dynamic_capabilities_reflect_schema_changes_and_controlled_tags(schema: dict) -> None:

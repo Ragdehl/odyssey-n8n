@@ -1,0 +1,194 @@
+"""Run the focused Phase 16.5A Sol/low reference-occurrence contract benchmark once."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from dataclasses import asdict
+from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+from odyssey_core.request_planning import OpenAIRequestPlanner, RequestPlanningError
+
+BENCHMARK_DIR = Path(__file__).resolve().parent
+CASES_PATH = BENCHMARK_DIR / "cases.json"
+RESULTS_DIR = BENCHMARK_DIR / "results"
+
+
+def load_cases() -> list[dict[str, Any]]:
+    """Load the fixed ten-case synthetic occurrence benchmark."""
+    data = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    cases = data.get("cases")
+    if not isinstance(cases, list) or len(cases) != 10:
+        raise ValueError("Phase 16.5A benchmark requires exactly ten cases")
+    return cases
+
+
+def _schema() -> dict[str, Any]:
+    """Load the canonical schema used by the production planner."""
+    root = BENCHMARK_DIR.parents[1]
+    return json.loads((root / "config" / "note-schema.json").read_text(encoding="utf-8"))
+
+
+def _usage(response: Any) -> dict[str, int]:
+    """Extract compact provider usage counters without storing provider content."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+    input_details = getattr(usage, "input_tokens_details", None)
+    output_details = getattr(usage, "output_tokens_details", None)
+    return {
+        "input_tokens": int(getattr(usage, "input_tokens", 0) or 0),
+        "cached_input_tokens": int(getattr(input_details, "cached_tokens", 0) or 0),
+        "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
+        "reasoning_tokens": int(getattr(output_details, "reasoning_tokens", 0) or 0),
+    }
+
+
+def _cost(usage: dict[str, int]) -> float | None:
+    """Estimate standard Sol/low USD cost when the API supplies token counters."""
+    if not usage:
+        return None
+    uncached = usage["input_tokens"] - usage["cached_input_tokens"]
+    return round(
+        (uncached * 4.0 + usage["cached_input_tokens"] * 0.4 + usage["output_tokens"] * 20.0)
+        / 1_000_000,
+        8,
+    )
+
+
+class _RecordingResponses:
+    """Capture only the last response usage object while delegating the live API call."""
+
+    def __init__(self, responses: Any) -> None:
+        """Wrap the OpenAI Responses resource without changing its request arguments."""
+        self._responses = responses
+        self.last_response: Any | None = None
+
+    def create(self, **kwargs: Any) -> Any:
+        """Make one delegated provider call and retain its compact usage source."""
+        self.last_response = self._responses.create(**kwargs)
+        return self.last_response
+
+
+def _contract_findings(plan: Any, expected: dict[str, Any]) -> list[str]:
+    """Compare validated plan references with the case's conservative contract oracle."""
+    units = [unit for action in plan.actions if hasattr(action, "units") for unit in action.units]
+    references = [reference for unit in units for reference in unit.references]
+    findings: list[str] = []
+    expected_count = expected.get("reference_count")
+    if expected_count is not None and len(references) != expected_count:
+        findings.append("reference_count")
+    expected_mentions = expected.get("mentions", [])
+    actual_mentions = [reference.mention for reference in references]
+    if expected_mentions and not all(mention in actual_mentions for mention in expected_mentions):
+        findings.append("mention")
+    if expected.get("repeated") and not any(
+        fact.count("{{ref:") > 1 for unit in units for fact in unit.facts
+    ):
+        findings.append("repeated_marker")
+    if expected.get("no_false_positive") and any(
+        mention in expected["no_false_positive"] for mention in actual_mentions
+    ):
+        findings.append("false_positive_reference")
+    if expected.get("intent") and not any(unit.intent == expected["intent"] for unit in units):
+        findings.append("intent")
+    return findings
+
+
+def run(run_id: str) -> Path:
+    """Run each synthetic request once through the production Sol/low planner.
+
+    Args:
+        run_id: New result-directory name; existing directories are never overwritten.
+
+    Returns:
+        Created result directory.
+
+    Raises:
+        RuntimeError: If provider access or the OpenAI SDK is unavailable.
+        ValueError: If the run ID is unsafe or already exists.
+    """
+    if not run_id or Path(run_id).name != run_id:
+        raise ValueError("Invalid benchmark run ID")
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY is required for the focused live benchmark")
+    directory = RESULTS_DIR / run_id
+    if directory.exists():
+        raise ValueError("Refusing to overwrite an existing benchmark run")
+    try:
+        from openai import OpenAI
+
+        recorder = _RecordingResponses(OpenAI().responses)
+        planner = OpenAIRequestPlanner(
+            SimpleNamespace(responses=recorder),
+            _schema(),
+            {"date": "2026-08-26", "time": "10:30", "timezone": "Europe/Paris"},
+        )
+    except (ImportError, RequestPlanningError) as error:
+        raise RuntimeError(str(error)) from error
+    directory.mkdir(parents=True)
+    metadata = {
+        "created_at": datetime.now(UTC).isoformat(),
+        "benchmark_version": "16.5A.1",
+        "model": "gpt-5.6-sol",
+        "reasoning_effort": "low",
+        "store": False,
+        "planned_calls": len(load_cases()),
+    }
+    (directory / "metadata.json").write_text(
+        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+    )
+    with (directory / "raw_results.jsonl").open("x", encoding="utf-8") as stream:
+        for case in load_cases():
+            try:
+                plan = planner.plan(case["request"])
+            except RequestPlanningError as error:
+                record = {
+                    "id": case["id"],
+                    "request": case["request"],
+                    "status": "INVALID",
+                    "error": str(error),
+                    "usage": _usage(recorder.last_response),
+                    "estimated_cost_usd": _cost(_usage(recorder.last_response)),
+                    "raw_output": getattr(recorder.last_response, "output_text", None),
+                }
+            else:
+                findings = _contract_findings(plan, case["expected"])
+                usage = _usage(recorder.last_response)
+                record = {
+                    "id": case["id"],
+                    "request": case["request"],
+                    "status": "PASS" if not findings else "CONTRACT_FAIL",
+                    "findings": findings,
+                    "units": len(
+                        [
+                            unit
+                            for action in plan.actions
+                            if hasattr(action, "units")
+                            for unit in action.units
+                        ]
+                    ),
+                    "usage": usage,
+                    "estimated_cost_usd": _cost(usage),
+                    "raw_output": getattr(recorder.last_response, "output_text", None),
+                    "parsed_plan": asdict(plan),
+                }
+            stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+            stream.flush()
+    return directory
+
+
+def main() -> None:
+    """Parse the explicit one-run benchmark command."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run-id", required=True)
+    arguments = parser.parse_args()
+    print(run(arguments.run_id))
+
+
+if __name__ == "__main__":
+    main()
