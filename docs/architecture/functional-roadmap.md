@@ -27,6 +27,9 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   semantic gates were rejected for the write path; measured evidence selects one full-note
   `gpt-5.6-luna` / medium bounded writer policy for free-text CREATE/UPDATE, with deterministic
   structure and exact normalized duplicate shortcuts remaining in Core.
+- ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
+  deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
+  one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
 
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
@@ -97,9 +100,14 @@ MiniLM/NLI writer filtering, Luna-low/easy-case routing, and Terra/Sol writer fa
 the selected initial implementation. MiniLM remains available for separate broad-retrieval use cases
 where recall evidence supports it.
 
-The next work is to turn that selected policy into safe materialization using the existing Phase 12
-persistence primitives. `save_knowledge` remains the likely coordination boundary, but its exact API
-should be decided from implementation evidence rather than frozen prematurely.
+✅ **Phase 16.4 — existing-note UPDATE materialization** is complete. It accepts only a resolved
+UPDATE target, stages deterministic properties/tags, calls the selected full-note Luna-medium writer
+only for non-duplicate free text, validates exact bounded operations, and calls Phase 12
+`update_entity()` once with an expected revision. No orchestration boundary is introduced.
+
+The next Phase 16 work starts with CREATE materialization; `save_knowledge` remains a likely later
+coordination boundary, but its exact API should be decided from implementation evidence rather than
+frozen prematurely.
 
 Phase 16 materialization must still cover:
 
