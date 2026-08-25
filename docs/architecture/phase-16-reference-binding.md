@@ -67,6 +67,8 @@ After safe identity binding:
 
 The placeholder syntax above is illustrative, not yet a frozen public schema. The invariant is that **reference placement is decided before the writer and can be materialized by Core without semantic inference**.
 
+The actual Obsidian link target must be derived deterministically from the authoritative existing path or the preallocated CREATE path, with an optional display label when needed. A primary name or alias alone is never sufficient evidence for the physical link target when it could be ambiguous.
+
 ## Existing referenced notes
 
 When a reference points to knowledge that already exists, reuse the existing Phase 9-11 identity stack. The planner does not choose the repository note; Core binds the reference only after one safe stable identity has been resolved.
