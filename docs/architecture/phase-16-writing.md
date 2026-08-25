@@ -58,9 +58,11 @@ It should:
 - hand remaining free-text reconciliation to the bounded writer;
 - reuse Phase 12 persistence for schema validation, revisions and lifecycle metadata.
 
-Exact normalized duplicates remain deterministic. Free-text non-duplicates do not receive an
-autonomous local APPEND authorization from MiniLM or NLI. The Phase 16.2 evidence below showed that
-those extra semantic gates add complexity without a sufficiently safe autonomous decision zone.
+Exact normalized duplicates in positive `record`/`amend` updates remain deterministic. A `remove`
+fact is never discarded as a duplicate: its presence is evidence that the bounded writer must
+reconcile the requested removal. Free-text non-duplicates do not receive an autonomous local APPEND
+authorization from MiniLM or NLI. The Phase 16.2 evidence below showed that those extra semantic
+gates add complexity without a sufficiently safe autonomous decision zone.
 
 Representative cases:
 
@@ -162,8 +164,9 @@ Still outside this checkpoint:
 Phase 16.1 `WriteTargetDecision(UPDATE, existing_note_id=...)`. It finds and schema-validates the
 single authoritative note by that already-resolved stable ID; it does not resolve identity again.
 It stages canonical property and explicit controlled-tag mutations in memory. Exact-normalized
-facts (trim, collapse whitespace, remove one unordered-list marker) skip the writer; all other
-facts are supplied once with the **full authoritative body** to `OpenAILunaWriter`.
+facts in positive `record`/`amend` updates (trim, collapse whitespace, remove one unordered-list
+marker) skip the writer; `remove` facts always reach the bounded writer. All other facts are supplied
+once with the **full authoritative body** to `OpenAILunaWriter`.
 
 The production writer policy is fixed for this slice: `gpt-5.6-luna`, `medium` reasoning,
 `store: false`, and a strict UPDATE-only output schema with `NO_CHANGE`, `APPEND`, `REPLACE`, and

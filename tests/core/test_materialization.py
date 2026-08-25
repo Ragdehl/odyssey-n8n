@@ -169,6 +169,21 @@ def test_append_uses_full_note_context_and_one_persistence_call(
     assert "Bea works at Airbus." in body and "Bea plays piano." in body
 
 
+def test_remove_exact_existing_fact_reaches_writer_and_persists_once(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A remove fact is not swallowed by the positive-update duplicate shortcut."""
+    writer = FakeWriter({"operations": [{"op": "REMOVE", "old": "- Bea works at Airbus.\n"}]})
+    calls = count_persistence(monkeypatch, repository)
+
+    result = materialize(repository, unit(intent="remove", facts=("Bea works at Airbus.",)), writer)
+
+    assert result.operation is PersistenceOperation.UPDATED
+    assert len(writer.requests) == 1
+    assert calls == [1]
+    assert "Bea works at Airbus." not in repository.read_text("people/bea.md")
+
+
 @pytest.mark.parametrize(
     ("fact", "response", "present", "absent"),
     [
@@ -377,3 +392,17 @@ def test_non_update_decision_is_rejected(repository: VaultRepository) -> None:
             actor="test",
             now=NOW,
         )
+
+
+def test_delete_intent_is_rejected_without_persistence(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whole-note delete remains explicitly unsupported rather than becoming NO_CHANGE."""
+    calls = count_persistence(monkeypatch, repository)
+    before = repository.read_text("people/bea.md")
+
+    with pytest.raises(MaterializationError, match="delete materialization is not implemented"):
+        materialize(repository, unit(intent="delete"))
+
+    assert calls == [0]
+    assert repository.read_text("people/bea.md") == before

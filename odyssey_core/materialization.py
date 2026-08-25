@@ -212,12 +212,18 @@ def materialize_update(
         WriterProviderError: If the injected writer fails.
         WriterOutputError: If bounded operations cannot safely apply.
     """
+    if unit.intent == "delete":
+        raise MaterializationError("Whole-note delete materialization is not implemented")
     path, existing = _load_existing_target(repository, schema, decision)
     set_metadata, remove_metadata = _stage_structured_mutations(
         existing, unit.properties, unit.tag_changes
     )
-    remaining_facts = tuple(
-        fact for fact in unit.facts if not is_exact_normalized_duplicate(existing.content, fact)
+    remaining_facts = (
+        unit.facts
+        if unit.intent == "remove"
+        else tuple(
+            fact for fact in unit.facts if not is_exact_normalized_duplicate(existing.content, fact)
+        )
     )
     content = existing.content
     if remaining_facts:
