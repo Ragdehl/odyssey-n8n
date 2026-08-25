@@ -1,0 +1,8 @@
+{
+  "suite": "minilm-retrieval",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "low",
+  "store": false,
+  "planned_top_3_calls": 12,
+  "planned_top_5_calls": "conditional"
+}

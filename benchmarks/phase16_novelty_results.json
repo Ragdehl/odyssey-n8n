@@ -1,0 +1,823 @@
+{
+  "format_version": 1,
+  "model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "model_version": "fastembed-0.7.3",
+  "cases": [
+    {
+      "id": "O01",
+      "category": "exact_duplicate",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta trabaja en Airbus.",
+      "expected": "OVERLAP",
+      "similarity": 1.0,
+      "exact_normalized_match": true
+    },
+    {
+      "id": "O02",
+      "category": "exact_duplicate",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta vive en Toulouse.",
+      "expected": "OVERLAP",
+      "similarity": 0.9999999999999999,
+      "exact_normalized_match": true
+    },
+    {
+      "id": "O03",
+      "category": "exact_duplicate",
+      "existing": "Nació el 3 de junio de 1990.",
+      "proposed": "Nació el 3 de junio de 1990.",
+      "expected": "OVERLAP",
+      "similarity": 0.9999999999999999,
+      "exact_normalized_match": true
+    },
+    {
+      "id": "O04",
+      "category": "exact_duplicate",
+      "existing": "Habla francés y español.",
+      "proposed": "Habla francés y español.",
+      "expected": "OVERLAP",
+      "similarity": 1.0,
+      "exact_normalized_match": true
+    },
+    {
+      "id": "O05",
+      "category": "exact_duplicate",
+      "existing": "Marta travaille chez Airbus.",
+      "proposed": "Marta travaille chez Airbus.",
+      "expected": "OVERLAP",
+      "similarity": 1.0000000000000002,
+      "exact_normalized_match": true
+    },
+    {
+      "id": "O06",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta es empleada de Airbus.",
+      "expected": "OVERLAP",
+      "similarity": 0.9778237207249268,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O07",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "La residencia de Marta está en Toulouse.",
+      "expected": "OVERLAP",
+      "similarity": 0.9204929393788798,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O08",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta ha empezado clases de piano.",
+      "proposed": "Marta toma clases de piano desde hace poco.",
+      "expected": "OVERLAP",
+      "similarity": 0.9499743861119148,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O09",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta habla francés.",
+      "proposed": "El francés es uno de los idiomas que habla Marta.",
+      "expected": "OVERLAP",
+      "similarity": 0.894606170955755,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O10",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta tiene un perro llamado Sol.",
+      "proposed": "El perro de Marta se llama Sol.",
+      "expected": "OVERLAP",
+      "similarity": 0.9696971806314053,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O11",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta estudió ingeniería aeronáutica.",
+      "proposed": "La formación de Marta es en ingeniería aeronáutica.",
+      "expected": "OVERLAP",
+      "similarity": 0.9063018721495347,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O12",
+      "category": "paraphrase_duplicate",
+      "existing": "Marta prefiere trabajar por la mañana.",
+      "proposed": "La mañana es el horario de trabajo preferido de Marta.",
+      "expected": "OVERLAP",
+      "similarity": 0.9107021748641694,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O13",
+      "category": "correction_contradiction",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta vive en Lyon.",
+      "expected": "OVERLAP",
+      "similarity": 0.7836244281808921,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O14",
+      "category": "correction_contradiction",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta trabaja en Thales.",
+      "expected": "OVERLAP",
+      "similarity": 0.40131611454839505,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O15",
+      "category": "correction_contradiction",
+      "existing": "Marta habla francés.",
+      "proposed": "Marta habla italiano.",
+      "expected": "OVERLAP",
+      "similarity": 0.5754580598451818,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O16",
+      "category": "correction_contradiction",
+      "existing": "Marta tiene dos hermanos.",
+      "proposed": "Marta tiene tres hermanos.",
+      "expected": "OVERLAP",
+      "similarity": 0.9372346050522185,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O17",
+      "category": "correction_contradiction",
+      "existing": "Marta estudió en la Universidad de Toulouse.",
+      "proposed": "Marta estudió en la Universidad de Lyon.",
+      "expected": "OVERLAP",
+      "similarity": 0.7711521876719414,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O18",
+      "category": "date_number_change",
+      "existing": "Nació el 3 de junio de 1990.",
+      "proposed": "Nació el 4 de junio de 1990.",
+      "expected": "OVERLAP",
+      "similarity": 0.9058247781596102,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O19",
+      "category": "date_number_change",
+      "existing": "La reunión es el 12 de septiembre.",
+      "proposed": "La reunión es el 13 de septiembre.",
+      "expected": "OVERLAP",
+      "similarity": 0.9721286957378817,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O20",
+      "category": "date_number_change",
+      "existing": "Marta mide 168 centímetros.",
+      "proposed": "Marta mide 170 centímetros.",
+      "expected": "OVERLAP",
+      "similarity": 0.956613520964919,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O21",
+      "category": "date_number_change",
+      "existing": "Marta vive en el número 8 de la rue des Fleurs.",
+      "proposed": "Marta vive en el número 18 de la rue des Fleurs.",
+      "expected": "OVERLAP",
+      "similarity": 0.7823666278450703,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O22",
+      "category": "temporal_update",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta ahora vive en Lyon.",
+      "expected": "OVERLAP",
+      "similarity": 0.7677436831762456,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O23",
+      "category": "temporal_update",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta trabaja en Thales desde enero.",
+      "expected": "OVERLAP",
+      "similarity": 0.32108237052600064,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O24",
+      "category": "temporal_update",
+      "existing": "Marta toma clases de piano.",
+      "proposed": "Marta dejó las clases de piano el mes pasado.",
+      "expected": "OVERLAP",
+      "similarity": 0.6188798044332648,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O25",
+      "category": "temporal_update",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta vivía en Toulouse hasta 2024.",
+      "expected": "OVERLAP",
+      "similarity": 0.7094043279321413,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O26",
+      "category": "negation",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta ya no trabaja en Airbus.",
+      "expected": "OVERLAP",
+      "similarity": 0.7053888144807392,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O27",
+      "category": "negation",
+      "existing": "Marta tiene coche.",
+      "proposed": "Marta no tiene coche.",
+      "expected": "OVERLAP",
+      "similarity": 0.42798793898218507,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O28",
+      "category": "negation",
+      "existing": "Marta habla francés.",
+      "proposed": "Marta no habla francés.",
+      "expected": "OVERLAP",
+      "similarity": 0.5442894015228555,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O29",
+      "category": "negation",
+      "existing": "Marta vive sola.",
+      "proposed": "Marta ya no vive sola.",
+      "expected": "OVERLAP",
+      "similarity": 0.6343219834883901,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O30",
+      "category": "cross_language_overlap",
+      "existing": "Marta travaille chez Airbus.",
+      "proposed": "Marta trabaja en Airbus.",
+      "expected": "OVERLAP",
+      "similarity": 0.9655527769216738,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O31",
+      "category": "cross_language_overlap",
+      "existing": "Marta habite à Toulouse.",
+      "proposed": "Marta vive en Toulouse.",
+      "expected": "OVERLAP",
+      "similarity": 0.9588523159037137,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O32",
+      "category": "cross_language_overlap",
+      "existing": "Marta parle français.",
+      "proposed": "Marta habla francés.",
+      "expected": "OVERLAP",
+      "similarity": 0.9794698402102417,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O33",
+      "category": "cross_language_overlap",
+      "existing": "Marta a un chien appelé Sol.",
+      "proposed": "Marta tiene un perro llamado Sol.",
+      "expected": "OVERLAP",
+      "similarity": 0.9282562814659261,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O34",
+      "category": "related_distinct_conservative",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta estudió ingeniería aeronáutica.",
+      "expected": "OVERLAP",
+      "similarity": 0.6761290388596842,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O35",
+      "category": "related_distinct_conservative",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta conoce bien el metro de Toulouse.",
+      "expected": "OVERLAP",
+      "similarity": 0.8093786366710866,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O36",
+      "category": "related_distinct_conservative",
+      "existing": "Marta corre los domingos.",
+      "proposed": "Marta compró zapatillas para correr.",
+      "expected": "OVERLAP",
+      "similarity": 0.3273113110463602,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O37",
+      "category": "related_distinct_conservative",
+      "existing": "Marta estudia francés.",
+      "proposed": "Marta quiere visitar París.",
+      "expected": "OVERLAP",
+      "similarity": 0.7232684219569565,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O38",
+      "category": "short_fact",
+      "existing": "Vive en Lyon.",
+      "proposed": "Vive en Toulouse.",
+      "expected": "OVERLAP",
+      "similarity": 0.7132903077883469,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I01",
+      "category": "independent_fact",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta ha empezado clases de piano.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.31792360953307547,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I02",
+      "category": "independent_fact",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta tiene un perro llamado Sol.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.38074188520107477,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I03",
+      "category": "independent_fact",
+      "existing": "Marta habla francés.",
+      "proposed": "Marta cultiva tomates en el balcón.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.06724095709439733,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I04",
+      "category": "independent_fact",
+      "existing": "Marta nació en 1990.",
+      "proposed": "Marta prefiere el té verde.",
+      "expected": "INDEPENDENT",
+      "similarity": -0.038106632954807505,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I05",
+      "category": "independent_fact",
+      "existing": "Marta vive en Lyon.",
+      "proposed": "Marta toca el violín.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.3522563728970903,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I06",
+      "category": "independent_fact",
+      "existing": "Marta trabaja los martes.",
+      "proposed": "Marta lee novelas históricas.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.29543905889880323,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I07",
+      "category": "independent_fact",
+      "existing": "Marta tiene una hermana.",
+      "proposed": "Marta prepara pan los fines de semana.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.2219922013385846,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I08",
+      "category": "independent_fact",
+      "existing": "Marta estudió arquitectura.",
+      "proposed": "Marta nada en una piscina municipal.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.15256093968019852,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I09",
+      "category": "independent_fact",
+      "existing": "Marta posee una bicicleta roja.",
+      "proposed": "Marta escucha jazz por la noche.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.28870653627676535,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I10",
+      "category": "independent_fact",
+      "existing": "Marta travaille chez Airbus.",
+      "proposed": "Marta cocina paella los domingos.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.2711123141525116,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I11",
+      "category": "same_topic_independent",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta trabaja cerca de la estación de Toulouse.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.8533157514865338,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I12",
+      "category": "same_topic_independent",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta visita el museo de Airbus con su sobrino.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.7038089216338708,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I13",
+      "category": "same_topic_independent",
+      "existing": "Marta estudia francés.",
+      "proposed": "Marta ve películas francesas los viernes.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.602649388593449,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I14",
+      "category": "same_topic_independent",
+      "existing": "Marta tiene un perro.",
+      "proposed": "Marta dona comida a un refugio de perros.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.7412256119849746,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I15",
+      "category": "same_topic_independent",
+      "existing": "Marta corre los domingos.",
+      "proposed": "Marta sigue carreras de atletismo en televisión.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.3021420966903497,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I16",
+      "category": "same_topic_independent",
+      "existing": "Marta vive en Lyon.",
+      "proposed": "Marta recomienda un restaurante en Lyon.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.8241048049026269,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I17",
+      "category": "cross_language_independent",
+      "existing": "Marta habite à Toulouse.",
+      "proposed": "Marta ha comprado una guitarra nueva.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.1256534047226896,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I18",
+      "category": "cross_language_independent",
+      "existing": "Marta travaille chez Airbus.",
+      "proposed": "Marta aprende a cocinar ramen.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.25167732533420334,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I19",
+      "category": "short_fact",
+      "existing": "Vive en Lyon.",
+      "proposed": "Trabaja en Airbus.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.1875338941321851,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I20",
+      "category": "short_fact",
+      "existing": "Habla francés.",
+      "proposed": "Toca el piano.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.09532801638197062,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I21",
+      "category": "independent_fact",
+      "existing": "Marta viaja a menudo por trabajo.",
+      "proposed": "Marta colecciona postales antiguas.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.37626214311320877,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I22",
+      "category": "independent_fact",
+      "existing": "Marta usa una agenda de papel.",
+      "proposed": "Marta participa en un club de lectura.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.549021648140918,
+      "exact_normalized_match": false
+    }
+  ],
+  "category_counts": {
+    "correction_contradiction": 5,
+    "cross_language_independent": 2,
+    "cross_language_overlap": 4,
+    "date_number_change": 4,
+    "exact_duplicate": 5,
+    "independent_fact": 12,
+    "negation": 4,
+    "paraphrase_duplicate": 7,
+    "related_distinct_conservative": 4,
+    "same_topic_independent": 6,
+    "short_fact": 3,
+    "temporal_update": 4
+  },
+  "class_counts": {
+    "INDEPENDENT": 22,
+    "OVERLAP": 38
+  },
+  "distributions": {
+    "INDEPENDENT": {
+      "minimum": -0.038106632954807505,
+      "maximum": 0.8533157514865338,
+      "median": 0.29879057779457646,
+      "p10": 0.09836055521604252,
+      "p25": 0.19614847093378499,
+      "p75": 0.5069517074059572,
+      "p90": 0.7374839429498642
+    },
+    "OVERLAP": {
+      "minimum": 0.32108237052600064,
+      "maximum": 1.0000000000000002,
+      "median": 0.9002154745576826,
+      "p10": 0.5093989627606544,
+      "p25": 0.7063926928435897,
+      "p75": 0.9638776616671838,
+      "p90": 0.9999999999999999
+    }
+  },
+  "lowest_similarity_overlap": [
+    {
+      "id": "O23",
+      "category": "temporal_update",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta trabaja en Thales desde enero.",
+      "expected": "OVERLAP",
+      "similarity": 0.32108237052600064,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O36",
+      "category": "related_distinct_conservative",
+      "existing": "Marta corre los domingos.",
+      "proposed": "Marta compró zapatillas para correr.",
+      "expected": "OVERLAP",
+      "similarity": 0.3273113110463602,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O14",
+      "category": "correction_contradiction",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta trabaja en Thales.",
+      "expected": "OVERLAP",
+      "similarity": 0.40131611454839505,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O27",
+      "category": "negation",
+      "existing": "Marta tiene coche.",
+      "proposed": "Marta no tiene coche.",
+      "expected": "OVERLAP",
+      "similarity": 0.42798793898218507,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "O28",
+      "category": "negation",
+      "existing": "Marta habla francés.",
+      "proposed": "Marta no habla francés.",
+      "expected": "OVERLAP",
+      "similarity": 0.5442894015228555,
+      "exact_normalized_match": false
+    }
+  ],
+  "highest_similarity_independent": [
+    {
+      "id": "I11",
+      "category": "same_topic_independent",
+      "existing": "Marta vive en Toulouse.",
+      "proposed": "Marta trabaja cerca de la estación de Toulouse.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.8533157514865338,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I16",
+      "category": "same_topic_independent",
+      "existing": "Marta vive en Lyon.",
+      "proposed": "Marta recomienda un restaurante en Lyon.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.8241048049026269,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I14",
+      "category": "same_topic_independent",
+      "existing": "Marta tiene un perro.",
+      "proposed": "Marta dona comida a un refugio de perros.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.7412256119849746,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I12",
+      "category": "same_topic_independent",
+      "existing": "Marta trabaja en Airbus.",
+      "proposed": "Marta visita el museo de Airbus con su sobrino.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.7038089216338708,
+      "exact_normalized_match": false
+    },
+    {
+      "id": "I13",
+      "category": "same_topic_independent",
+      "existing": "Marta estudia francés.",
+      "proposed": "Marta ve películas francesas los viernes.",
+      "expected": "INDEPENDENT",
+      "similarity": 0.602649388593449,
+      "exact_normalized_match": false
+    }
+  ],
+  "markdown_probes": [
+    {
+      "id": "M01",
+      "left": "Marta vive en Toulouse.",
+      "right": "- Marta vive en Toulouse.",
+      "similarity": 0.9696402718258681
+    },
+    {
+      "id": "M02",
+      "left": "Marta vive en Toulouse.",
+      "right": "Marta vive en Toulouse.\n\nLe gusta caminar junto al Garona.",
+      "similarity": 0.7909531830603395
+    },
+    {
+      "id": "M03",
+      "left": "Marta vive en Toulouse.\n\nLe gusta caminar junto al Garona.",
+      "right": "- Marta vive en Toulouse.\n- Le gusta caminar junto al Garona.",
+      "similarity": 0.9164041222684528
+    }
+  ],
+  "threshold_analysis": [
+    {
+      "threshold": 0.3,
+      "overlap_recall": 1.0,
+      "dangerous_false_negative_count": 0,
+      "dangerous_false_negative_ids": [],
+      "independent_unnecessarily_escalated_count": 11,
+      "independent_unnecessarily_escalated_ids": [
+        "I01",
+        "I02",
+        "I05",
+        "I11",
+        "I12",
+        "I13",
+        "I14",
+        "I15",
+        "I16",
+        "I21",
+        "I22"
+      ],
+      "candidate_local_append_count": 11,
+      "candidate_local_append_share": 0.18333333333333332,
+      "known_independent_local_append_count": 11,
+      "known_independent_local_append_share": 0.18333333333333332
+    },
+    {
+      "threshold": 0.4,
+      "overlap_recall": 0.9473684210526315,
+      "dangerous_false_negative_count": 2,
+      "dangerous_false_negative_ids": [
+        "O23",
+        "O36"
+      ],
+      "independent_unnecessarily_escalated_count": 6,
+      "independent_unnecessarily_escalated_ids": [
+        "I11",
+        "I12",
+        "I13",
+        "I14",
+        "I16",
+        "I22"
+      ],
+      "candidate_local_append_count": 18,
+      "candidate_local_append_share": 0.3,
+      "known_independent_local_append_count": 16,
+      "known_independent_local_append_share": 0.26666666666666666
+    },
+    {
+      "threshold": 0.5,
+      "overlap_recall": 0.8947368421052632,
+      "dangerous_false_negative_count": 4,
+      "dangerous_false_negative_ids": [
+        "O14",
+        "O23",
+        "O27",
+        "O36"
+      ],
+      "independent_unnecessarily_escalated_count": 6,
+      "independent_unnecessarily_escalated_ids": [
+        "I11",
+        "I12",
+        "I13",
+        "I14",
+        "I16",
+        "I22"
+      ],
+      "candidate_local_append_count": 20,
+      "candidate_local_append_share": 0.3333333333333333,
+      "known_independent_local_append_count": 16,
+      "known_independent_local_append_share": 0.26666666666666666
+    },
+    {
+      "threshold": 0.6,
+      "overlap_recall": 0.8421052631578947,
+      "dangerous_false_negative_count": 6,
+      "dangerous_false_negative_ids": [
+        "O14",
+        "O15",
+        "O23",
+        "O27",
+        "O28",
+        "O36"
+      ],
+      "independent_unnecessarily_escalated_count": 5,
+      "independent_unnecessarily_escalated_ids": [
+        "I11",
+        "I12",
+        "I13",
+        "I14",
+        "I16"
+      ],
+      "candidate_local_append_count": 23,
+      "candidate_local_append_share": 0.38333333333333336,
+      "known_independent_local_append_count": 17,
+      "known_independent_local_append_share": 0.2833333333333333
+    },
+    {
+      "threshold": 0.7,
+      "overlap_recall": 0.7631578947368421,
+      "dangerous_false_negative_count": 9,
+      "dangerous_false_negative_ids": [
+        "O14",
+        "O15",
+        "O23",
+        "O24",
+        "O27",
+        "O28",
+        "O29",
+        "O34",
+        "O36"
+      ],
+      "independent_unnecessarily_escalated_count": 4,
+      "independent_unnecessarily_escalated_ids": [
+        "I11",
+        "I12",
+        "I14",
+        "I16"
+      ],
+      "candidate_local_append_count": 27,
+      "candidate_local_append_share": 0.45,
+      "known_independent_local_append_count": 18,
+      "known_independent_local_append_share": 0.3
+    }
+  ]
+}

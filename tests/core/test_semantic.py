@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
+import types
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,6 +13,7 @@ import pytest
 
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.semantic import (
+    FastEmbedTextEmbedder,
     SemanticEntityIndex,
     SemanticIndexError,
     build_semantic_retrieval_text,
@@ -45,6 +48,28 @@ class KeywordEmbedder:
             float(any(word in lowered for word in ("project", "odyssey"))),
             0.25,
         ]
+
+
+def test_fastembed_defaults_to_local_files_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pass the offline-only default through to FastEmbed without loading a real model."""
+    captured: dict[str, object] = {}
+
+    class FakeTextEmbedding:
+        """Capture constructor arguments for the optional FastEmbed boundary test."""
+
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    fake_fastembed = types.ModuleType("fastembed")
+    fake_fastembed.TextEmbedding = FakeTextEmbedding  # type: ignore[attr-defined]
+    fake_fastembed.__version__ = "test"
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fastembed)
+
+    embedder = FastEmbedTextEmbedder(cache_dir=Path("/tmp/phase16-test-cache"))
+
+    assert captured["local_files_only"] is True
+    assert captured["cache_dir"] == "/tmp/phase16-test-cache"
+    assert embedder.model_version == "fastembed-test"
 
 
 @pytest.fixture

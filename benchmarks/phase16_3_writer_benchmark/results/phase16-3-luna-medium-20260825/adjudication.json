@@ -1,0 +1,45 @@
+{
+  "review_type": "human_semantic_adjudication_summary",
+  "source": "raw_results.jsonl",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "medium",
+  "context_strategy": "FULL_NOTE",
+  "case_count": 15,
+  "counts": {
+    "PASS": 15,
+    "MINOR": 0,
+    "MATERIAL_FAIL": 0
+  },
+  "dangerous_semantic_failures": [],
+  "operation_contract_failures": [],
+  "cases": [
+    {"case_id": "L03_buried_update_end", "status": "PASS", "rationale": "Correctly replaces the buried current Airbus employer with Thales instead of appending contradictory current employment."},
+    {"case_id": "L01_buried_update_beginning", "status": "PASS", "rationale": "Correct bounded employer replacement with the relevant fact near the beginning of a 50-unit note."},
+    {"case_id": "L02_buried_update_middle", "status": "PASS", "rationale": "Correct bounded employer replacement with the relevant fact in the middle of a 50-unit note."},
+    {"case_id": "L08_multi_update_and_append", "status": "PASS", "rationale": "Preserves both supplied facts by replacing the conflicting employer and appending the independent ceramics fact."},
+    {"case_id": "L09_mixed_markdown_distractors", "status": "PASS", "rationale": "Updates the mixed-language employer fact while preserving the supplied planning-role information and unrelated Markdown content."},
+    {"case_id": "L07_buried_explicit_remove", "status": "PASS", "rationale": "Uses REMOVE with the exact authoritative subscription span."},
+    {"case_id": "VL01_very_long_buried_update", "status": "PASS", "rationale": "Finds and replaces the current employer in the approximately 2,783-word full authoritative note without unrelated changes."},
+    {"case_id": "VL02_very_long_related_independent", "status": "PASS", "rationale": "Appends the new dog-related fact as independent knowledge in the approximately 2,808-word full authoritative note."},
+    {"case_id": "U04_employer_update", "status": "PASS", "rationale": "Correct employer replacement."},
+    {"case_id": "U07_negation", "status": "PASS", "rationale": "Correctly reconciles explicit negation by replacing the prior positive fact."},
+    {"case_id": "U08_stopped_habit", "status": "PASS", "rationale": "Correctly replaces the active habit with the stopped-habit fact."},
+    {"case_id": "U15_dog_shelter_independent", "status": "PASS", "rationale": "Keeps dog ownership and dog-shelter donation as distinct facts."},
+    {"case_id": "U17_airbus_museum_independent", "status": "PASS", "rationale": "Keeps employment at Airbus and visiting the Airbus museum as distinct facts."},
+    {"case_id": "U23_multi_update_new", "status": "PASS", "rationale": "Correctly combines one replacement and one independent append without dropping either supplied fact."},
+    {"case_id": "U28_french_spanish_update", "status": "PASS", "rationale": "Correctly performs the cross-language employer update with an exact authoritative old span."}
+  ],
+  "assessment": "LUNA_MEDIUM_STRONG",
+  "selected_writer_policy": {
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "medium",
+    "context": "FULL_AUTHORITATIVE_NOTE",
+    "bounded_operations": true,
+    "minilm_within_note_filter": false,
+    "nli_write_gate": false,
+    "terra_writer_fallback": false,
+    "sol_writer_fallback": false
+  },
+  "human_decision": "USE_LUNA_MEDIUM_FULL_NOTE",
+  "notes": "Selection is for the Phase 16 writer policy. Structured canonical properties/tags and exact normalized duplicate shortcuts remain deterministic. Core must validate bounded operations, exact spans, schema and revision before persistence."
+}
