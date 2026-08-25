@@ -53,6 +53,10 @@ class EntityIdentityMismatchError(ValueError):
     """Indicate that an update path does not contain its expected stable ID."""
 
 
+class EntityRevisionMismatchError(ValueError):
+    """Indicate that an entity changed after a caller read its authoritative revision."""
+
+
 def _check_protected_fields(fields: Sequence[str], operation: str) -> None:
     """Reject caller mutations of lifecycle fields.
 
@@ -176,6 +180,7 @@ def update_entity(
     *,
     path: str,
     expected_id: str,
+    expected_revision: int | None = None,
     set_metadata: Mapping[str, Any],
     remove_metadata: Sequence[str] = (),
     content: str | None = None,
@@ -192,6 +197,8 @@ def update_entity(
         schema: Parsed canonical note schema.
         path: Physical vault-relative Markdown path to update.
         expected_id: Stable ID required in the existing note at ``path``.
+        expected_revision: Optional authoritative revision observed by the caller before planning.
+            A different current revision fails closed before any replacement is attempted.
         set_metadata: Explicit domain properties to add or replace.
         remove_metadata: Explicit domain properties to remove.
         content: Optional exact replacement body.
@@ -203,12 +210,19 @@ def update_entity(
 
     Raises:
         EntityIdentityMismatchError: If the loaded note ID differs from ``expected_id``.
+        EntityRevisionMismatchError: If ``expected_revision`` differs from the current note revision.
         ProtectedMetadataError: If the mutation attempts to alter lifecycle fields.
         NoteFormatError or NoteValidationError: If existing or resulting Markdown is invalid.
         VaultRepository errors: If the target cannot be safely read or replaced.
     """
     if not isinstance(set_metadata, Mapping):
         raise TypeError("set_metadata must be a mapping")
+    if expected_revision is not None and (
+        not isinstance(expected_revision, int)
+        or isinstance(expected_revision, bool)
+        or expected_revision < 1
+    ):
+        raise TypeError("expected_revision must be a positive integer or None")
     if isinstance(remove_metadata, (str, bytes, bytearray, memoryview)):
         raise TypeError("remove_metadata must be a sequence of strings")
     if any(not isinstance(field_id, str) for field_id in remove_metadata):
@@ -222,6 +236,8 @@ def update_entity(
     existing = _validated_existing_note(repository, schema, path)
     if existing.metadata.get("id") != expected_id:
         raise EntityIdentityMismatchError(f"Expected entity ID at path {path!r}")
+    if expected_revision is not None and existing.metadata.get("revision") != expected_revision:
+        raise EntityRevisionMismatchError(f"Expected entity revision at path {path!r}")
 
     metadata = dict(existing.metadata)
     metadata.update(set_metadata)
