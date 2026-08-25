@@ -4,5 +4,14 @@
   "reasoning_effort": "medium",
   "store": false,
   "semantic_retries": false,
-  "planned_total_calls": 15
+  "planned_total_calls": 15,
+  "actual_provider_calls": 15,
+  "adjudicated_cases": 15,
+  "semantic_counts": {
+    "PASS": 15,
+    "MINOR": 0,
+    "MATERIAL_FAIL": 0
+  },
+  "assessment": "LUNA_MEDIUM_STRONG",
+  "human_decision": "USE_LUNA_MEDIUM_FULL_NOTE"
 }
