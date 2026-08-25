@@ -144,6 +144,11 @@ future HITL path can ask which identity was intended. No second LLM should redis
 after writer output. Same-request CREATE references can be linked once deterministic identity/path has
 been allocated; the referenced Markdown file does not need to have been persisted first.
 
+A reference also does **not** authorize an automatic inverse mutation in the referenced note. Store the
+user-supplied relationship once and rely first on ordinary semantic context retrieval for reverse
+natural-language questions; the context projection already renders wikilinks as readable entity text.
+Explicit graph/backlink traversal remains separate and evidence-driven.
+
 ⬜ **Phase 16.6 — CREATE materialization** follows that preflight. `save_knowledge` remains a likely
 later coordination boundary, but its exact API should be decided from implementation evidence rather
 than frozen prematurely.
@@ -162,6 +167,7 @@ Phase 16 materialization must still cover:
 - deterministic reference occurrence binding before writer calls;
 - safe pre-writer `[[wikilink]]` materialization for resolved/preallocated identities;
 - explicit pending-reference results for ambiguous/unresolved references, with no guessed link;
+- no automatic inverse/mirrored note mutation merely because a relationship wikilink was created;
 - minimal type-aware note-writing guidance where demonstrated before body rendering is finalized;
 - selected Luna/medium bounded free-text writing with full authoritative existing-note context;
 - Core validation of exact spans, schema, current revision, and required bound links before applying
@@ -206,8 +212,10 @@ The detailed cross-phase direction is centralized in
   must preserve explicit pending-reference work so a later stable application flow can resume it.
 - 💡 **Derived identity/link graph index:** extend the rebuildable SQLite index with aliases and
   wikilinks/backlinks when graph execution is needed; Markdown remains authoritative.
-- 💡 **Graph retrieval:** execute validated `link_scope` with bounded traversal and explicit unresolved
-  link handling.
+- 💡 **Graph retrieval:** keep ordinary semantic relationship questions semantic-first because
+  `ContextIndex` humanizes wikilinks before embedding. Use bounded graph/backlink traversal for
+  explicit structural/neighborhood questions, or later as a recall supplement only if benchmarks show
+  semantic retrieval misses inverse relationships.
 - 💡 **Structured analytics / aggregations:** deterministic counts, sums, averages and grouping over
   rebuildable structured/index data rather than loading the vault into an LLM.
 - 💡 **App/capability delegation:** let the top-level planner distinguish direct Core knowledge work
