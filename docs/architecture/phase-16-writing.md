@@ -6,7 +6,8 @@ Status: design checkpoint for Phase 16.2 / 16.3. Implementation is tracked in Gi
 
 Odyssey should not pay for a generative writer merely because knowledge is being created or updated.
 
-The default write path is local and deterministic. Generative writing is a fallback for semantic reconciliation or an explicit type writing skill.
+The default structured write path is local and deterministic. Generative writing is a bounded fallback
+for existing-note semantic reconciliation or an explicit type writing skill.
 
 ```text
 KnowledgeUnit + WriteTargetDecision
@@ -20,16 +21,11 @@ KnowledgeUnit + WriteTargetDecision
                 |
         exact normalized check
           /              \
-     duplicate            new/unknown
+     duplicate       not exact duplicate
        |                     |
    NO_CHANGE                 v
-                        MiniLM local gate
-                         /            \
-                  clearly new      overlap/unclear
-                      |                 |
-                    APPEND              v
-                                  semantic writer
-                                    Phase 16.3
+                         bounded writer
+                           Phase 16.3
 ```
 
 MiniLM here is the existing local embedding model, not a generative LLM. Reuse `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` through the existing `TextEmbedder` boundary.
@@ -43,13 +39,13 @@ It should:
 - apply canonical property mutations deterministically;
 - merge explicit controlled tag additions/removals deterministically;
 - detect exact/normalized free-text duplicates locally;
-- compare new facts with small existing body units using the existing MiniLM embedding runtime;
-- allow deterministic APPEND only when benchmark evidence shows the fact is clearly independent;
-- return a typed semantic-writer escalation when overlap is plausible or confidence is insufficient;
+- return a typed bounded-writer escalation for remaining free-text reconciliation;
 - reuse Phase 12 persistence for schema validation, revisions and lifecycle metadata;
 - never let MiniLM authorize REPLACE or REMOVE.
 
-The MiniLM threshold must be benchmarked rather than guessed. Optimize for high recall of semantic overlap: a false positive merely spends a later writer call, while a false negative can pollute the knowledge base.
+Exact normalized duplicates remain deterministic. Free-text non-duplicates do not receive an
+autonomous local APPEND authorization from MiniLM or NLI evidence; the bounded writer benchmark
+decides whether direct writer calls are cheap and reliable enough to avoid more local routing layers.
 
 Representative cases:
 
@@ -81,7 +77,7 @@ Without an explicit writing skill, a new note may be materialized deterministica
 
 Never persist a partial note that silently drops free-text facts. Contextual unnamed entities such as `la amiga de Marta` remain valid logical entities; a proper name is not required for creation authorization.
 
-## Phase 16.3 — semantic/specialized writer
+## Phase 16.3 — semantic/specialized writer benchmark
 
 Phase 16.3 is the expensive fallback, not the normal path.
 
@@ -100,7 +96,9 @@ INSERT_AFTER exact anchor
 APPEND
 ```
 
-Core must validate exact anchors/current revision before persistence.
+Core must validate exact anchors/current revision before persistence. Issue #38 freezes a synthetic,
+cost-first benchmark: Luna runs all cases first, Terra receives only Luna material failures, and Sol
+receives only remaining Terra material failures. It does not implement or productionize a writer.
 
 A writing skill controls presentation/organization, not whether a type may be created. There are no per-type creation permission rules.
 
