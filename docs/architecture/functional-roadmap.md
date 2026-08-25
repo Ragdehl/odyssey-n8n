@@ -30,10 +30,21 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
   one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
+- ➡️ **Phase 16.5 — pre-writer reference binding:** refine reference occurrence placement, resolve or
+  preallocate referenced identities, materialize only safe `[[wikilinks]]` before Luna, and preserve
+  ambiguous/unresolved references as explicit pending work rather than guessing.
+- ⬜ **Phase 16.6 — CREATE materialization:** deterministically allocate CREATE identity/path/display
+  identity, generate a complete body through the selected Luna/medium policy using already-bound
+  references, validate it, and persist once.
+- ⬜ **Phase 16.7 — remaining Phase 16 mutation semantics:** guarded soft delete/inbound-link policy,
+  explicit bulk cardinality, dependency/partial-success results, and type-change handling before
+  general RequestPlan orchestration.
 
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
-benchmark evidence are centralized in [Phase 16 writing checkpoint](phase-16-writing.md).
+benchmark evidence are centralized in [Phase 16 writing checkpoint](phase-16-writing.md). The
+pre-writer reference-binding order and pending-reference rules are centralized in
+[Phase 16 reference binding](phase-16-reference-binding.md).
 
 ## Completed Phase 15 refinements
 
@@ -105,9 +116,37 @@ UPDATE target, stages deterministic properties/tags, calls the selected full-not
 only for non-duplicate free text, validates exact bounded operations, and calls Phase 12
 `update_entity()` once with an expected revision. No orchestration boundary is introduced.
 
-The next Phase 16 work starts with CREATE materialization; `save_knowledge` remains a likely later
-coordination boundary, but its exact API should be decided from implementation evidence rather than
-frozen prematurely.
+➡️ **Phase 16.5 — reference binding before body writing** is now the next step. The current
+`KnowledgeReference(target_index, role)` preserves logical relationships but does not preserve enough
+placement information to safely insert a wikilink after a semantic writer has changed the sentence.
+Reference placement must therefore be made deterministic before Luna sees the facts. See
+[Phase 16 reference binding](phase-16-reference-binding.md).
+
+The immediate execution order is:
+
+```text
+1. refine reference occurrence contract
+        |
+2. resolve existing reference targets / authorize same-request CREATE targets
+        |
+3. allocate stable identity + path for authorized CREATEs (no persistence yet)
+        |
+4. Core materializes only safe [[wikilinks]] before the writer
+        |
+5. Luna receives already-linked facts for CREATE/UPDATE
+        |
+6. validate complete staged notes and persist through bounded Phase 16 semantics
+```
+
+If a reference target remains ambiguous among several notes, Odyssey must **not** create a wikilink.
+The human-readable text remains unlinked and the unresolved reference is returned as pending work so a
+future HITL path can ask which identity was intended. No second LLM should rediscover link placement
+after writer output. Same-request CREATE references can be linked once deterministic identity/path has
+been allocated; the referenced Markdown file does not need to have been persisted first.
+
+⬜ **Phase 16.6 — CREATE materialization** follows that preflight. `save_knowledge` remains a likely
+later coordination boundary, but its exact API should be decided from implementation evidence rather
+than frozen prematurely.
 
 Phase 16 materialization must still cover:
 
@@ -120,12 +159,15 @@ Phase 16 materialization must still cover:
 - primary-name/alias ambiguity without inventing duplicate `-2` entities;
 - stable ID/path allocation only after identity/creation authorization;
 - deterministic schema property and explicit tag changes after target resolution;
+- deterministic reference occurrence binding before writer calls;
+- safe pre-writer `[[wikilink]]` materialization for resolved/preallocated identities;
+- explicit pending-reference results for ambiguous/unresolved references, with no guessed link;
 - minimal type-aware note-writing guidance where demonstrated before body rendering is finalized;
 - selected Luna/medium bounded free-text writing with full authoritative existing-note context;
-- Core validation of exact spans, schema and current revision before applying writer output;
-- one atomic persistence operation after the complete write plan validates;
+- Core validation of exact spans, schema, current revision, and required bound links before applying
+  writer output;
+- one atomic persistence operation per completely staged note after its complete write plan validates;
 - guarded whole-note delete behavior and inbound-link policy;
-- reference materialization as ordinary Markdown `[[wikilinks]]`;
 - explicit bulk cardinality, partial-success/dependency results and type-change requests.
 
 Existing notes must be changed through bounded operations (`NO_CHANGE`, `REPLACE`, `REMOVE`,
@@ -160,7 +202,8 @@ The detailed cross-phase direction is centralized in
 [Future extension points](future-extension-points.md). In short:
 
 - 💡 **Human-in-the-loop:** minimal clarification/approval path when ambiguity or user control requires
-  it; Phase 16 should preserve pending work so this can be added later.
+  it. Ambiguous reference binding is a concrete first use case: Phase 16 leaves the text unlinked and
+  must preserve explicit pending-reference work so a later stable application flow can resume it.
 - 💡 **Derived identity/link graph index:** extend the rebuildable SQLite index with aliases and
   wikilinks/backlinks when graph execution is needed; Markdown remains authoritative.
 - 💡 **Graph retrieval:** execute validated `link_scope` with bounded traversal and explicit unresolved
@@ -169,10 +212,16 @@ The detailed cross-phase direction is centralized in
   rebuildable structured/index data rather than loading the vault into an LLM.
 - 💡 **App/capability delegation:** let the top-level planner distinguish direct Core knowledge work
   from generic delegated capabilities; route delegated actions later with a cheap/local router over
-  compact app manifests and load only the selected app contract.
+  compact app manifests and load only the selected app contract. Purchase/ticket processing, project
+  workflows, and translation-related workflows are expected future application families on this
+  shared knowledge foundation rather than reasons to expand the top-level planner indefinitely.
 - 💡 **Tag vocabulary evolution:** keep Phase 15.2 explicit-only with the current controlled registry;
   decide later whether values such as `idea` become types and whether user-extensible transversal tags
   are needed.
+- 💡 **Large-vault retrieval reduction:** keep MiniLM as broad high-recall retrieval and benchmark a
+  recall-first Luna selector over Top-100 candidates before reducing the strong resolver context; do
+  not treat the Phase 16 writer evidence as proof that this retrieval path is safe. Detailed acceptance
+  evidence and long-note coverage live in [Future extension points](future-extension-points.md).
 - 💡 **Execution observability:** preserve reconstructable planner/retrieval/resolution/persistence/n8n/
   LLM traces including safe model/usage/cost/error metadata, with redaction and retention controls.
 - 💡 **Multi-user ownership/sharing:** design authentication, authorization and storage boundaries
