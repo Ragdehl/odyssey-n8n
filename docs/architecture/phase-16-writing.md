@@ -1,13 +1,15 @@
 # Phase 16 writing checkpoint
 
-Status: design checkpoint for Phase 16.2 / 16.3. Implementation is tracked in GitHub issue #36.
+Status: Phase 16.3 benchmark complete; the writer policy is selected for the upcoming Phase 16
+materialization work. Implementation remains tracked in GitHub issue #36.
 
 ## Principle
 
-Odyssey should not pay for a generative writer merely because knowledge is being created or updated.
+Keep the write path simple and fail closed.
 
-The default structured write path is local and deterministic. Generative writing is a bounded fallback
-for existing-note semantic reconciliation or an explicit type writing skill.
+Canonical structure remains deterministic. For free-text knowledge that is not an exact normalized
+duplicate, Odyssey uses one bounded semantic writer policy rather than a ladder of local semantic
+gates or model-routing conditions.
 
 ```text
 KnowledgeUnit + WriteTargetDecision
@@ -24,28 +26,40 @@ KnowledgeUnit + WriteTargetDecision
      duplicate       not exact duplicate
        |                     |
    NO_CHANGE                 v
-                         bounded writer
-                           Phase 16.3
+                  full authoritative note
+                            |
+                            v
+                     Luna / medium
+                            |
+                            v
+                    bounded operation
+                            |
+                            v
+        Core exact-span / revision / schema validation
+                            |
+                            v
+                      persistence
 ```
 
-MiniLM here is the existing local embedding model, not a generative LLM. Reuse `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` through the existing `TextEmbedder` boundary.
+MiniLM and the experimental NLI model are **not** selected for within-note writer filtering or
+semantic APPEND authorization. MiniLM remains useful elsewhere for broad retrieval where separate
+recall evidence supports it.
 
-## Phase 16.2 — deterministic writing and novelty gate
+## Phase 16.2 — deterministic structure and exact-duplicate shortcut
 
-Phase 16.2 owns the cheapest safe path.
+Phase 16.2 owns only work that is safely deterministic.
 
 It should:
 
 - apply canonical property mutations deterministically;
 - merge explicit controlled tag additions/removals deterministically;
 - detect exact/normalized free-text duplicates locally;
-- return a typed bounded-writer escalation for remaining free-text reconciliation;
-- reuse Phase 12 persistence for schema validation, revisions and lifecycle metadata;
-- never let MiniLM authorize REPLACE or REMOVE.
+- hand remaining free-text reconciliation to the bounded writer;
+- reuse Phase 12 persistence for schema validation, revisions and lifecycle metadata.
 
 Exact normalized duplicates remain deterministic. Free-text non-duplicates do not receive an
-autonomous local APPEND authorization from MiniLM or NLI evidence; the bounded writer benchmark
-decides whether direct writer calls are cheap and reliable enough to avoid more local routing layers.
+autonomous local APPEND authorization from MiniLM or NLI. The Phase 16.2 evidence below showed that
+those extra semantic gates add complexity without a sufficiently safe autonomous decision zone.
 
 Representative cases:
 
@@ -56,37 +70,46 @@ New:      Marta trabaja en Airbus.
 
 Existing: Marta trabaja en Airbus.
 New:      Marta es empleada de Airbus.
-=> semantic overlap -> semantic writer
+=> Luna / medium with full authoritative note
 
 Existing: Marta vive en Toulouse.
 New:      Marta ahora vive en Lyon.
-=> possible correction/current-value change -> semantic writer
+=> Luna / medium with full authoritative note
 
 Existing: Marta vive en Toulouse.
 New:      Marta ha empezado clases de piano.
-=> deterministic APPEND only if benchmark evidence supports a safe threshold
+=> Luna / medium decides bounded APPEND
 ```
-
-Do not compare only against one whole-note embedding if that can hide individual facts. Start with the smallest useful deterministic body units (for example list items or paragraphs) and avoid a complex Markdown AST unless evidence requires it.
 
 ### CREATE
 
-A CREATE decision does not imply a generative writer.
+A CREATE decision still does not give the model authority over identity, IDs, paths, lifecycle or
+schema. Those remain deterministic Core responsibilities.
 
-Without an explicit writing skill, a new note may be materialized deterministically when Odyssey can construct the complete note safely from validated planner output plus deterministic ID/name/path policy.
+When free-text body composition is required, use the **same Luna / medium writer policy** rather than
+creating a separate low/medium routing rule for CREATE versus UPDATE. `CREATE_BODY` remains a bounded
+writer output; Core validates the result before persistence.
 
-Never persist a partial note that silently drops free-text facts. Contextual unnamed entities such as `la amiga de Marta` remain valid logical entities; a proper name is not required for creation authorization.
+Never persist a partial note that silently drops free-text facts. Contextual unnamed entities such as
+`la amiga de Marta` remain valid logical entities; a proper name is not required for creation
+authorization.
 
-## Phase 16.3 — semantic/specialized writer benchmark
+## Phase 16.3 — selected bounded writer
 
-Phase 16.3 is the expensive fallback, not the normal path.
+Phase 16.3 selected the semantic writer policy from measured evidence:
 
-Use it when:
+```text
+model              gpt-5.6-luna
+reasoning effort   medium
+context            full authoritative note
+```
 
-1. existing free text must be semantically reconciled, amended or removed; or
-2. the canonical note type has an explicit writing skill/profile that requires specialized organization or formatting.
+Use it for free-text CREATE/UPDATE reconciliation after deterministic structured work and the exact
+normalized duplicate shortcut. Do not add conditions such as note-length routing, Luna-low for easy
+cases, MiniLM/NLI writer filtering, or Terra/Sol writer fallbacks without new production evidence
+showing a concrete need.
 
-The semantic writer should produce bounded operations rather than rewriting the entire note blindly. Candidate operations remain conceptually:
+The writer produces bounded operations rather than rewriting an existing note blindly:
 
 ```text
 NO_CHANGE
@@ -94,42 +117,53 @@ REPLACE exact old text -> new text
 REMOVE exact old text
 INSERT_AFTER exact anchor
 APPEND
+CREATE_BODY
 ```
 
-Core must validate exact anchors/current revision before persistence. Issue #38 freezes a synthetic,
-cost-first benchmark: Luna runs all cases first, Terra receives only Luna material failures, and Sol
-receives only remaining Terra material failures. It does not implement or productionize a writer.
+Core must validate exact anchors/current revision/schema before persistence. Existing-note operations
+that reference an `old` or `anchor` span must be grounded in the current authoritative body. A model
+output never bypasses Core validation.
 
-A writing skill controls presentation/organization, not whether a type may be created. There are no per-type creation permission rules.
+A writing skill controls presentation/organization, not whether a type may be created. There are no
+per-type creation permission rules.
 
 ## Cost model
 
-The intended common path is:
+The selected common path is intentionally boring:
 
 ```text
-planner                    existing call
+planner                    existing interpretation call
 identity resolution        local when exact; existing contextual fallback only if needed
-write novelty gate         existing local MiniLM
-simple writer              deterministic
-                           ----------------
-additional generative writer calls: 0
+structured mutations       deterministic
+exact text duplicate       deterministic NO_CHANGE
+remaining free text        one Luna / medium call with the full authoritative note
+bounded application        deterministic Core validation + persistence
 ```
 
-Only ambiguous semantic edits or explicit writing skills add a writer-model call.
+The matched difficult-case benchmark observed an average Luna-medium writer cost of about
+`$0.00039712` per write, or approximately `$0.039712` per 100 writes and `$0.397120` per 1,000
+writes at those observed input sizes. These are benchmark-derived figures, not workload forecasts.
 
 ## Deferred Phase 16 work
 
 Still outside this checkpoint:
 
+- production implementation of the selected bounded writer and operation application;
 - explicit bulk write cardinality;
 - wikilink/reference dependency materialization;
 - soft-delete persistence (`status: deleted` direction already chosen);
 - RequestPlan action orchestration (Phase 17);
 - n8n integration.
 
-## Evidence gate
+## Evidence conclusion
 
-Before implementing automatic MiniLM-backed APPEND, benchmark duplicate/paraphrase/correction/independent pairs. If no robust low-risk separation exists, fail closed and send more cases to Phase 16.3 rather than lowering safety to save model calls.
+The local semantic-gate experiments are complete for the current write architecture. MiniLM cosine
+similarity had no useful safe autonomous APPEND threshold, NLI escalated too many independent facts,
+and real MiniLM Top-3/Top-5 within-note retrieval dropped required long-note update evidence. Do not
+continue tuning those layers merely to avoid the inexpensive Luna-medium writer call.
+
+The historical evidence below is intentionally retained because it explains why the simpler final
+architecture was selected.
 
 ### Phase 16.2A local MiniLM benchmark (2026-08-24)
 
@@ -282,12 +316,9 @@ very-long full-note calls averaged $0.00093550. Across all actual Luna records, 
 historical duplicate: 93 calls, 52,395 input, 0 cached, 6,712 output, 1,532 reasoning tokens, and
 $0.01853340 estimated spend.
 
-**Assessment: LUNA_UNSAFE.** The long-note append/update confusion gives
-**TERRA_BENCHMARK_JUSTIFIED**, but Terra and Sol were not run. For human review only, retain
-**KEEP_MINILM_FOR_WRITER_CONTEXT**: reduced context is materially cheaper and passed its frozen
-probes, while full-note Luna failed a long positional update. The candidate architecture remains
-planner → target resolution → context policy → bounded writer → Core exact-span/revision validation
-→ persistence; no production selection is claimed.
+**Interim low-reasoning assessment: LUNA_UNSAFE.** The long-note append/update confusion would have
+justified testing a stronger policy. This assessment is retained as historical evidence and is
+superseded by the later Luna-medium full-note comparison below.
 
 ### MiniLM-selected context follow-up (2026-08-25)
 
@@ -308,9 +339,8 @@ same-vocabulary cases passed; L07 REMOVE, ES/FR duplicate, and both very-long ca
 their needed evidence was present.
 
 MINILM_REDUCED cost for 13 actual Luna calls was $0.00263940. The experiment is therefore
-**MINILM_RETRIEVAL_WEAK**, not evidence for Terra: a more expensive writer cannot repair missing
-context. **NO_TERRA_JUSTIFICATION_YET** for this retrieval finding; no provider selection or
-production routing is changed.
+**MINILM_RETRIEVAL_WEAK**. This rejects MiniLM as a Top-3/Top-5 within-note writer-context filter;
+it does not change MiniLM's separate broad-retrieval role elsewhere in Odyssey.
 
 ### Luna/medium full-authoritative-note comparison (2026-08-25)
 
@@ -320,11 +350,15 @@ was Luna reasoning effort from low to medium. MiniLM/NLI filtering was not used.
 passed deterministic and semantic review: L03 returned the required exact REPLACE rather than
 APPEND; L01/L02 long updates, L08 multi-fact, L07 REMOVE, L09 mixed Markdown, VL01/VL02,
 negation, stopped habit, same-vocabulary independence, and ES/FR update remained faithful. There
-were zero dangerous semantic and zero operation-contract failures.
+were zero dangerous semantic and zero operation-contract failures. The explicit adjudication summary
+is stored beside the raw run as `adjudication.json`.
 
 For these matched cases, Luna/low averaged $0.00032992 and Luna/medium averaged $0.00039712
 (1.20×). Medium cost is about $0.039712 per 100 writes and $0.397120 per 1,000 writes at observed
-usage. **LUNA_MEDIUM_STRONG** and **USE_LUNA_MEDIUM_FULL_NOTE** are the human-review
-recommendation: exact duplicate shortcut → full authoritative note → Luna/medium → bounded
-operation → Core exact-span/revision/schema validation → one persistence operation. This is not
-production integration or an automatic model-selection decision.
+usage.
+
+**Final selection: LUNA_MEDIUM_STRONG / USE_LUNA_MEDIUM_FULL_NOTE.** Human review accepts one
+writer policy for Phase 16: full authoritative note → `gpt-5.6-luna` / medium → bounded operations →
+Core validation → one persistence operation. Do not add MiniLM/NLI writer filtering, low/medium
+routing, or Terra/Sol writer escalation in the initial implementation. Revisit model/routing
+complexity only from real production evidence.
