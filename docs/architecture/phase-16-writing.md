@@ -288,3 +288,26 @@ $0.01853340 estimated spend.
 probes, while full-note Luna failed a long positional update. The candidate architecture remains
 planner → target resolution → context policy → bounded writer → Core exact-span/revision validation
 → persistence; no production selection is claimed.
+
+### MiniLM-selected context follow-up (2026-08-25)
+
+The previous 8/8 oracle-reduced calls remain an upper bound only: their fragments were frozen by a
+reviewer, not retrieved. A new Luna-only within-one-resolved-note experiment used the existing local
+FastEmbed multilingual MiniLM artifact. It embeds each planned fact independently against simple
+Markdown body units; ranking projections prefix `Entity` and `Type`, while Luna receives only exact
+authoritative source-order units. No expected operation, span, position, or review label enters the
+retriever. TOP_3 was called for all twelve supplemental cases; TOP_5 was called only for L01, whose
+required unit first ranked fourth.
+
+MiniLM was weak at retaining several required update units: L01 rank 4, L02 rank 20, L03 rank 28,
+L08 rank 15, and L09 rank 13. Thus L03's relevant Airbus fragment was absent from TOP_3 and TOP_5;
+its TOP_3 APPEND is a **RETRIEVAL_FAIL**, not proof of a remaining Luna writer failure. TOP_5 L01
+included the target and Luna correctly REPLACEd it. Required-target recall on the supplemental
+update/remove/duplicate set was 4/9 at @1, 4/9 at @3, and 5/9 at @5. Independent and
+same-vocabulary cases passed; L07 REMOVE, ES/FR duplicate, and both very-long cases passed when
+their needed evidence was present.
+
+MINILM_REDUCED cost for 13 actual Luna calls was $0.00263940. The experiment is therefore
+**MINILM_RETRIEVAL_WEAK**, not evidence for Terra: a more expensive writer cannot repair missing
+context. **NO_TERRA_JUSTIFICATION_YET** for this retrieval finding; no provider selection or
+production routing is changed.

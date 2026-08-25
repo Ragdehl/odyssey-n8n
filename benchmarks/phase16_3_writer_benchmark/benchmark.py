@@ -98,6 +98,8 @@ def render_request(case: dict[str, Any], *, context: str | None = None) -> str:
         "write_intent": case["intent"],
         "facts": case["facts"],
     }
+    if isinstance(case.get("identity"), str):
+        evidence["canonical_note_identity"] = case["identity"]
     if case["mode"] == "UPDATE":
         evidence["current_authoritative_markdown_body"] = (
             context if context is not None else case["current_body"]

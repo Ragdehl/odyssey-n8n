@@ -7,6 +7,12 @@ import json
 from benchmarks.phase16_3_writer_benchmark.adjudication import canonical_records
 from benchmarks.phase16_3_writer_benchmark.benchmark import load_cases, writer_json_schema
 from benchmarks.phase16_3_writer_benchmark.evaluate import evaluate_output
+from benchmarks.phase16_3_writer_benchmark.minilm_cases import load_pipeline_cases
+from benchmarks.phase16_3_writer_benchmark.minilm_retrieval import (
+    classify_pipeline,
+    exact_body_units,
+    render_retrieved_context,
+)
 from benchmarks.phase16_3_writer_benchmark.run_benchmark import _planned_call_metadata
 from benchmarks.phase16_3_writer_benchmark.supplemental import load_supplemental_cases
 
@@ -107,3 +113,38 @@ def test_future_luna_metadata_counts_full_and_reduced_calls() -> None:
     assert plan["planned_reduced_context_calls"] == 12
     assert plan["planned_total_calls"] == 72
     assert plan["context_strategies"] == ["FULL_NOTE", "REDUCED_CONTEXT"]
+
+
+def test_minilm_fragments_preserve_exact_authoritative_anchor_and_hide_oracle() -> None:
+    """Keep exact mutation spans separate from label-free retrieval input fields."""
+    primary, _ = load_pipeline_cases()
+    case = next(item for item in primary if item["id"] == "L03_buried_update_end")
+    assert case["target_fragment"] in exact_body_units(case["current_body"])
+    assert "target_fragment" not in {"current_body", "facts", "identity", "note_type"}
+    context = render_retrieved_context(
+        case,
+        {"fragments": [{"exact_text": "- Diego trabaja en Airbus en planificación industrial."}]},
+    )
+    assert context == case["target_fragment"]
+
+
+def test_pipeline_stage_separates_missing_evidence_from_writer_contract() -> None:
+    """Do not attribute a missing required fragment to Luna's semantic writer."""
+    assert (
+        classify_pipeline(
+            {"target_fragment": "x"},
+            rank=6,
+            semantic_status="MATERIAL_FAIL",
+            taxonomy="C. SEMANTIC_RELATION",
+        )
+        == "RETRIEVAL_FAIL"
+    )
+    assert (
+        classify_pipeline(
+            {"target_fragment": "x"},
+            rank=1,
+            semantic_status="MATERIAL_FAIL",
+            taxonomy="A. OPERATION_CONTRACT",
+        )
+        == "CONTRACT_FAIL"
+    )
