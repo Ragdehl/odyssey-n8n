@@ -1,0 +1,5 @@
+{
+  "version": "1.0.0",
+  "operations": ["NO_CHANGE", "APPEND", "REPLACE", "REMOVE", "INSERT_AFTER", "CREATE_BODY"],
+  "forbidden_output_terms": ["id:", "path:", "schema_version", "created_at", "updated_at", "[[", "http://", "https://"]
+}

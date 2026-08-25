@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-08-24T22:40:44.162621+00:00",
+  "benchmark_version": "1.0.0",
+  "stage": "luna",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "low",
+  "store": false,
+  "semantic_retries": false,
+  "planned_calls": 60,
+  "context_strategies": [
+    "FULL_NOTE"
+  ]
+}

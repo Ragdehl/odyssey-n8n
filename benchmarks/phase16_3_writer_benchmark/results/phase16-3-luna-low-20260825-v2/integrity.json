@@ -1,0 +1,41 @@
+{
+  "raw_record_lines": 74,
+  "malformed_raw_lines": [
+    46
+  ],
+  "duplicate_effective_calls": [
+    {
+      "line": 47,
+      "case_id": "U45_long_note_independent",
+      "context_strategy": "FULL_NOTE"
+    }
+  ],
+  "canonical_selection": "first_parseable_record_by_case_id_and_context_strategy",
+  "canonical_evaluation_record_count": 72,
+  "actual_provider_record_count": 73,
+  "all_provider_calls_count_toward_actual_cost": true,
+  "actual_cost": {
+    "input_tokens": 30155.0,
+    "cached_input_tokens": 0.0,
+    "output_tokens": 4639.0,
+    "reasoning_tokens": 630.0,
+    "estimated_cost_usd": 0.0115978
+  },
+  "historical_metadata_discrepancy": {
+    "planned_calls_recorded": 60,
+    "actual_intended_full_note_calls": 60,
+    "actual_intended_reduced_context_calls": 12,
+    "actual_intended_total_calls": 72,
+    "recorded_context_strategies": [
+      "FULL_NOTE"
+    ]
+  },
+  "recovery_only_calls": [],
+  "duplicate_recovery_calls": [
+    {
+      "case_id": "U45_long_note_independent",
+      "context_strategy": "FULL_NOTE",
+      "canonical_record": "first"
+    }
+  ]
+}

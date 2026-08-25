@@ -23,10 +23,17 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   property mutations and validates the refined contract with Sol/low.
 - ✅ **Phase 16.1 — safe write-target resolution / create-update decision:** composes one validated
   `KnowledgeUnit` with the existing resolver into non-persisting UPDATE, CREATE, or clarification.
+- ✅ **Phase 16.2 / 16.3 — write-path evidence and bounded-writer selection:** local MiniLM/NLI
+  semantic gates were rejected for the write path; measured evidence selects one full-note
+  `gpt-5.6-luna` / medium bounded writer policy for free-text CREATE/UPDATE, with deterministic
+  structure and exact normalized duplicate shortcuts remaining in Core.
+- ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
+  deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
+  one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
 
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
-[Phase 15 planning contract](phase-15-write-planning.md). Historical benchmark evidence remains in its
-benchmark directories and is not restated here.
+[Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
+benchmark evidence are centralized in [Phase 16 writing checkpoint](phase-16-writing.md).
 
 ## Completed Phase 15 refinements
 
@@ -61,38 +68,67 @@ catalog, routes, executes, or binds a delegated result to a later action.
 
 ## Next functional phase
 
-➡️ **Phase 16 — resolved knowledge persistence (next: materialization)**
+➡️ **Phase 16 — resolved knowledge materialization**
 
-✅ **Phase 16.1 — safe target decision** is the completed first block. It composes a validated
-single `KnowledgeUnit` with Phase 9–11 resolution and returns only `UPDATE`, `CREATE`, or
+✅ **Phase 16.1 — safe target decision** is complete. It composes a validated single
+`KnowledgeUnit` with Phase 9–11 resolution and returns only `UPDATE`, `CREATE`, or
 `NEEDS_CLARIFICATION`; it allocates no ID/path and persists nothing. Creation is generic only for
 an unresolved `record` with a validated canonical type, including an unnamed contextual entity.
 No type, ambiguity, or unresolved amend/remove/delete requires clarification. Deterministic target
-filters narrow authoritative candidate IDs; they never become similarity evidence. Explicit bulk
-write cardinality and soft-delete persistence remain later Phase 16 work.
+filters narrow authoritative candidate IDs; they never become similarity evidence.
 
-With the Phase 15 planner refinements accepted, use the existing Phase 11 resolver and Phase 12
-persistence primitives to execute prepared knowledge safely. `save_knowledge` remains the likely coordination boundary, but
-its exact API should be decided from the implementation evidence rather than frozen prematurely.
+✅ **Phase 16.2 / 16.3 — write-policy evidence** is also complete. The initial materialization
+implementation should not add a semantic routing ladder. Its selected free-text path is:
 
-Phase 16 must cover:
+```text
+resolved KnowledgeUnit
+        |
+        +--> deterministic properties / explicit tags
+        |
+        +--> exact normalized duplicate -> NO_CHANGE
+        |
+        `--> full authoritative note -> Luna / medium -> bounded operations
+                                            |
+                                            v
+                            Core exact-span / revision / schema validation
+                                            |
+                                            v
+                                     persist once
+```
+
+MiniLM/NLI writer filtering, Luna-low/easy-case routing, and Terra/Sol writer fallback are not part of
+the selected initial implementation. MiniLM remains available for separate broad-retrieval use cases
+where recall evidence supports it.
+
+✅ **Phase 16.4 — existing-note UPDATE materialization** is complete. It accepts only a resolved
+UPDATE target, stages deterministic properties/tags, calls the selected full-note Luna-medium writer
+only for non-duplicate free text, validates exact bounded operations, and calls Phase 12
+`update_entity()` once with an expected revision. No orchestration boundary is introduced.
+
+The next Phase 16 work starts with CREATE materialization; `save_knowledge` remains a likely later
+coordination boundary, but its exact API should be decided from implementation evidence rather than
+frozen prematurely.
+
+Phase 16 materialization must still cover:
 
 - privileged exact name/alias resolution when `target.entity` is present, with semantic/contextual
   fallback when appropriate;
 - deterministic target-filter candidate restriction without turning `get_context` into the identity
   resolver;
-- `UNRESOLVED != CREATE` and a separate explicit `record` creation-authorization policy;
+- `UNRESOLVED != CREATE` and the existing explicit `record` creation-authorization policy;
 - safe handling of insufficient identity and machine-readable `NEEDS_CLARIFICATION`;
 - primary-name/alias ambiguity without inventing duplicate `-2` entities;
 - stable ID/path allocation only after identity/creation authorization;
 - deterministic schema property and explicit tag changes after target resolution;
-- minimal type-aware note-writing guidance before body creation/patching is frozen;
-- bounded semantic free-text patching with exact anchors and note revision guards;
+- minimal type-aware note-writing guidance where demonstrated before body rendering is finalized;
+- selected Luna/medium bounded free-text writing with full authoritative existing-note context;
+- Core validation of exact spans, schema and current revision before applying writer output;
+- one atomic persistence operation after the complete write plan validates;
 - guarded whole-note delete behavior and inbound-link policy;
 - reference materialization as ordinary Markdown `[[wikilinks]]`;
-- partial-success/dependency results and type-change requests.
+- explicit bulk cardinality, partial-success/dependency results and type-change requests.
 
-The preferred body mutation direction remains a bounded patch (`NO_CHANGE`, `REPLACE`, `REMOVE`,
+Existing notes must be changed through bounded operations (`NO_CHANGE`, `REPLACE`, `REMOVE`,
 `INSERT_AFTER`, `APPEND`) validated and applied by Core, not routine whole-note LLM rewriting.
 
 ## Remaining intended sequence
