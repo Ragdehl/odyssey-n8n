@@ -159,16 +159,125 @@ A multi-user phase must first decide:
 The current single-user architecture should remain simple. Stable note IDs, explicit application
 boundaries and rebuildable indexes do not block a later multi-user design.
 
+## 5. Large-vault retrieval reduction with a cheap reasoner
+
+Phase 11B.1c stress evidence over a frozen synthetic 1,000-note vault showed a useful asymmetry:
+multilingual MiniLM retained the expected contextual entity at **Recall@100 = 100%**, while
+Recall@5 was only **72%**. The broad-retrieval problem is therefore currently solved better than the
+safe-reduction problem. GitHub issue #20 preserves the detailed benchmark context and the original
+recall-first selector hypothesis.
+
+Preliminary Phase 16.3 writer evidence suggests that Luna may be capable of useful bounded semantic
+reasoning at much lower cost than the strongest model. That writer evidence does **not** prove that
+Luna is safe for identity retrieval, where dropping or selecting the wrong entity is more dangerous.
+It is only a reason to benchmark Luna as a future retrieval component.
+
+The simplest next hypothesis to test is:
+
+```text
+1,000+ notes
+    |
+    v
+MiniLM local broad retrieval
+    |
+    v
+Top 100 candidates
+    |
+    v
+Luna high-recall selector
+    |
+    +--> keep ~20
+    +--> keep ~10
+    `--> keep ~5        # evidence only; do not assume this is safe
+    |
+    v
+strong contextual resolver
+(currently Sol unless later evidence changes that)
+```
+
+The selector is **not** an identity authority. Its job is only to remove clearly implausible
+candidates while retaining the correct one. The critical benchmark failure is dropping the correct
+candidate, not retaining too many false candidates. Reuse the existing 1,000-note adversarial corpus
+before building production code and measure at least:
+
+- Recall@20, Recall@10, and Recall@5 after Luna selection;
+- the exact IDs of any correct candidates dropped;
+- Spanish/French and contextual-reference behavior;
+- input/output/reasoning tokens and real cost per query;
+- latency;
+- whether compact candidate evidence is sufficient without full note bodies.
+
+Prefer a recall-first acceptance bar. A result such as MiniLM Recall@100 = 100% followed by Luna
+Recall@10 = 100% would justify sending only those ten candidates to the strong resolver. Ordinary
+accuracy or a nicer ranking is not enough if the correct note can disappear.
+
+Only after that selector benchmark is strong should Odyssey test the more aggressive possibility that
+Luna itself can perform contextual resolution and escalate uncertainty:
+
+```text
+MiniLM Top 100
+      |
+      v
+     Luna
+    /    \
+confident  uncertain / ambiguous
+   |             |
+   v             v
+Core validates   strong resolver (Sol)
+chosen ID        decides fail-closed
+```
+
+That second experiment must retain the existing identity guardrails: the model never mutates a note
+by path/name alone, Core validates stable IDs/current candidates, ambiguity fails closed, and the
+strong resolver remains available when Luna is not sufficiently certain. Do not replace Sol in this
+role merely because Luna performs well as a writer.
+
+### Compact retrieval evidence
+
+The existing issue #20 also proposes a compact retrieval/disambiguation summary for each note. If
+future writer evidence supports it, a writer call that creates or materially updates a note could
+also produce or refresh compact identity-bearing retrieval evidence in the same intelligent
+operation, avoiding an extra model call. Candidate evidence might look conceptually like:
+
+```text
+id | canonical name | type | aliases | compact identity facts
+```
+
+rather than 100 full Markdown bodies. This could materially reduce Luna/Sol input tokens. Do not make
+such a summary a universal canonical Markdown property yet: stale identity summaries are dangerous.
+Prefer a revision-bound derived-index representation first unless a later contract demonstrates that
+a canonical property is necessary.
+
+### Do not build a model ladder prematurely
+
+A deeper ladder remains a possible optimization, for example:
+
+```text
+MiniLM -> local selector -> Luna -> Sol
+```
+
+but do **not** introduce another local LLM/classifier merely because it might reduce Luna tokens.
+Benchmark the simpler `MiniLM -> Luna -> Sol` path first. Add a local intermediate selector only if
+measured Luna cost, latency, or candidate volume creates a concrete problem and the new stage can
+preserve the required high recall.
+
 ## Placement
 
 ```text
 NOW / Phase 16
   - current planner contract lives in phase-15-write-planning.md
   - generic delegation detection is implemented; no concrete app router or user model
+  - Luna writer evidence may motivate future cheap-reasoner benchmarks, but does not change retrieval
 
 Phase 16
   - choose minimal type-aware writing-profile representation
   - execute already-planned explicit tag changes after safe target resolution
+
+Before large-vault contextual retrieval is considered production-ready
+  - reuse the existing 1,000-note corpus
+  - benchmark MiniLM Top-100 -> Luna high-recall Top-20/10/5 reduction
+  - only if that is safe, test Luna resolution with fail-closed escalation to the strong resolver
+  - evaluate compact revision-bound retrieval evidence before sending full note bodies
 
 When first concrete app exists
   - route the existing generic DelegateAction with cheap/local app selection
@@ -184,4 +293,4 @@ Later multi-user phase
 
 The general rule is progressive disclosure and one canonical owner per contract: the main planner
 preserves meaning it already understands, while app instructions, writing profiles, analytics,
-graph execution, and authorization are loaded or executed only when needed.
+graph execution, retrieval reduction, and authorization are loaded or executed only when needed.
