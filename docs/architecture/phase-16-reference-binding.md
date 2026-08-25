@@ -85,6 +85,8 @@ unresolved target     -> keep human-readable text unlinked unless CREATE is inde
 
 An ambiguous or unresolved reference must remain represented as **pending reference work** in the materialization/application result so a later HITL flow can ask the user which target was intended. Do not invent a canonical Markdown metadata field or new persistence service merely to store pending references in this phase; the durable pending-work boundary is a later HITL/application-flow decision. Until that boundary exists, Core must at least return the unresolved reference explicitly rather than silently treating it as resolved.
 
+When ambiguity is specifically between several known existing notes, preserve the **candidate stable identities** as part of that pending work whenever the resolver has them. This lets future HITL present the real choices without re-running semantic discovery and avoids losing information such as "the reference could be Marta García or Marta López".
+
 The note mutation itself may still proceed when the unresolved reference does not otherwise make the requested knowledge unsafe; the text remains readable but unlinked.
 
 ## References to notes created by the same request
@@ -132,7 +134,7 @@ reference -> multiple plausible notes
 no wikilink now
         |
         v
-pending reference result
+pending reference + candidate stable identities
         |
         v
 future HITL asks user to choose
@@ -141,7 +143,9 @@ future HITL asks user to choose
 bind chosen stable identity and update note safely
 ```
 
-HITL should be introduced only once Odyssey has a stable application boundary capable of preserving and resuming pending work. The current Phase 16 rule is simply: **fail closed on identity, do not link ambiguously, and do not lose the fact that a reference remains pending.**
+A future durable pending-work representation may keep that ambiguity as a small internal artifact that itself points to the candidate notes. A Markdown artifact/note is one possible implementation because it would preserve the candidate links visibly and remain inspectable, but **do not introduce a new canonical Odyssey note type yet**. An unresolved reference is system workflow state, not automatically a user knowledge entity. Decide the representation only when the stable HITL/application boundary is designed; if evidence later shows that a dedicated internal Markdown type is the simplest durable representation, propose that ontology/schema addition explicitly then.
+
+HITL should be introduced only once Odyssey has a stable application boundary capable of preserving and resuming pending work. The current Phase 16 rule is simply: **fail closed on identity, do not link ambiguously, preserve the candidate set when known, and do not lose the fact that a reference remains pending.**
 
 ## Immediate Phase 16 execution plan
 
