@@ -1,0 +1,8 @@
+{
+  "suite": "luna-medium-full-note",
+  "model": "gpt-5.6-luna",
+  "reasoning_effort": "medium",
+  "store": false,
+  "semantic_retries": false,
+  "planned_total_calls": 15
+}

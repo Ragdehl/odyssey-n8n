@@ -311,3 +311,20 @@ MINILM_REDUCED cost for 13 actual Luna calls was $0.00263940. The experiment is 
 **MINILM_RETRIEVAL_WEAK**, not evidence for Terra: a more expensive writer cannot repair missing
 context. **NO_TERRA_JUSTIFICATION_YET** for this retrieval finding; no provider selection or
 production routing is changed.
+
+### Luna/medium full-authoritative-note comparison (2026-08-25)
+
+A separate frozen 15-case suite reran only difficult existing cases with the identical writer
+prompt, schema, facts, evaluator, and full authoritative body; the sole provider-variable change
+was Luna reasoning effort from low to medium. MiniLM/NLI filtering was not used. All 15 results
+passed deterministic and semantic review: L03 returned the required exact REPLACE rather than
+APPEND; L01/L02 long updates, L08 multi-fact, L07 REMOVE, L09 mixed Markdown, VL01/VL02,
+negation, stopped habit, same-vocabulary independence, and ES/FR update remained faithful. There
+were zero dangerous semantic and zero operation-contract failures.
+
+For these matched cases, Luna/low averaged $0.00032992 and Luna/medium averaged $0.00039712
+(1.20×). Medium cost is about $0.039712 per 100 writes and $0.397120 per 1,000 writes at observed
+usage. **LUNA_MEDIUM_STRONG** and **USE_LUNA_MEDIUM_FULL_NOTE** are the human-review
+recommendation: exact duplicate shortcut → full authoritative note → Luna/medium → bounded
+operation → Core exact-span/revision/schema validation → one persistence operation. This is not
+production integration or an automatic model-selection decision.
