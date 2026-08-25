@@ -244,3 +244,47 @@ one/three/five-pair batches took 72/88/94 ms; peak benchmark RSS was about 1.25 
 the escalation rate and small synthetic corpus prevent productionization. Run larger held-out NLI
 validation next; do not evaluate LLaMA or Qwen automatically. No production write gate, APPEND,
 writer, or Phase 16.3 implementation exists.
+
+### Phase 16.3 Luna writer evidence (2026-08-25)
+
+This remains benchmark evidence only: no production writer, persistence, MiniLM gate, or write-path
+integration changed. The original frozen 60-case full-note corpus has 59 PASS, 0 MINOR, and 1
+MATERIAL_FAIL. U13 selected the exact subscription span, preserved the unrelated cooking fact, and
+understood deletion, but encoded it as `REPLACE old -> ""` instead of `REMOVE old`. It is **A.
+OPERATION_CONTRACT**, not a wrong target, information loss, or hallucination; empty `REPLACE`
+remains invalid.
+
+Historical raw evidence remains unchanged. It contains one malformed JSONL fragment and two
+effective U45/FULL_NOTE records. Integrity metadata selects the first parseable result for semantic
+evaluation, labels the later call a duplicate/recovery record, and charges both to actual spend.
+Historical metadata said 60 planned FULL_NOTE calls although it intended 60 full + 12 reduced
+calls. Future metadata records the per-strategy counts and total explicitly.
+
+A separate frozen supplemental suite has twelve synthetic mutation cases. L01–L10 contain 50
+factual units each and cover beginning, 25%, 50%, 75%, and near-end targets; update, duplicate,
+independent/same-vocabulary independence, remove, multi-fact, mixed Markdown, and ES/FR are
+included. VL01 is 2,783 words (buried final-third update); VL02 is 2,808 words
+(related-but-independent append). Eight pre-frozen reduced contexts include both very-long notes.
+
+Supplemental FULL_NOTE Luna results: 10 PASS, 0 MINOR, 2 MATERIAL_FAIL. The beginning and middle
+updates, semantic duplicate, independent facts, same-vocabulary independence, multi-fact mutation,
+mixed Markdown, ES/FR duplicate, and both very-long cases were faithful. L07 is another **A.
+OPERATION_CONTRACT** error: it selected REMOVE and the right text but put its anchor in `text`
+rather than `old`, leaving Core unable to validate/apply it. L03 is a dangerous **C.
+SEMANTIC_RELATION** failure: with the employer fact near the end, Luna chose APPEND for a
+conflicting Thales update, retaining contradictory current employment knowledge. All eight reduced
+probes passed, but L03 has no reduced probe and the small sample does not establish a safe retrieval
+layer.
+
+Supplemental FULL_NOTE cost was $0.00497360 (18,256 input / 1,102 output tokens); reduced context
+was $0.00196200 (3,984 input / 971 output), a 2.54× cost and 4.58× input-token reduction. The two
+very-long full-note calls averaged $0.00093550. Across all actual Luna records, including the
+historical duplicate: 93 calls, 52,395 input, 0 cached, 6,712 output, 1,532 reasoning tokens, and
+$0.01853340 estimated spend.
+
+**Assessment: LUNA_UNSAFE.** The long-note append/update confusion gives
+**TERRA_BENCHMARK_JUSTIFIED**, but Terra and Sol were not run. For human review only, retain
+**KEEP_MINILM_FOR_WRITER_CONTEXT**: reduced context is materially cheaper and passed its frozen
+probes, while full-note Luna failed a long positional update. The candidate architecture remains
+planner → target resolution → context policy → bounded writer → Core exact-span/revision validation
+→ persistence; no production selection is claimed.

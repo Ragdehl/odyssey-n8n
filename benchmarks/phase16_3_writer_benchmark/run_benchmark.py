@@ -17,12 +17,20 @@ from benchmarks.phase16_3_writer_benchmark.benchmark import (
     writer_json_schema,
 )
 from benchmarks.phase16_3_writer_benchmark.evaluate import evaluate_output
+from benchmarks.phase16_3_writer_benchmark.supplemental import load_supplemental_cases
 
 RESULTS_DIR = BENCHMARK_DIR / "results"
 MODELS = {"luna": "gpt-5.6-luna", "terra": "gpt-5.6-terra", "sol": "gpt-5.6-sol"}
 
 
-def run(run_id: str, stage: str, *, resume: bool = False, client: Any | None = None) -> Path:
+def run(
+    run_id: str,
+    stage: str,
+    *,
+    resume: bool = False,
+    client: Any | None = None,
+    supplemental: bool = False,
+) -> Path:
     """Run one frozen staged provider pass and append one raw record per effective call.
 
     Args:
@@ -43,7 +51,9 @@ def run(run_id: str, stage: str, *, resume: bool = False, client: Any | None = N
     directory = RESULTS_DIR / run_id
     if directory.exists() and not resume:
         raise ValueError("Refusing to alter existing benchmark evidence")
-    cases = _stage_cases(stage)
+    if supplemental and stage != "luna":
+        raise ValueError("Supplemental evidence is Luna-only")
+    cases = load_supplemental_cases() if supplemental else _stage_cases(stage)
     if client is None:
         if not os.environ.get("OPENAI_API_KEY"):
             raise RuntimeError("OPENAI_API_KEY is required for a live writer benchmark")
@@ -76,16 +86,19 @@ def run(run_id: str, stage: str, *, resume: bool = False, client: Any | None = N
                 completed.add((row["case_id"], row["context_strategy"]))
     else:
         directory.mkdir(parents=True)
+    call_plan = _planned_call_metadata(cases, stage)
     metadata = {
         "created_at": datetime.now(UTC).isoformat(),
         "benchmark_version": "1.0.0",
+        "suite": "supplemental-long-note" if supplemental else "original-60",
         "stage": stage,
         "model": MODELS[stage],
         "reasoning_effort": "low",
         "store": False,
         "semantic_retries": False,
-        "planned_calls": len(cases),
-        "context_strategies": ["FULL_NOTE"],
+        # Keep the legacy ``planned_calls`` field for consumers of pre-1.1 evidence.  New
+        # evidence exposes both strategies so planned and actual call accounting agree.
+        **call_plan,
     }
     if not resume:
         (directory / "metadata.json").write_text(
@@ -184,6 +197,21 @@ def _calls(cases: list[dict[str, Any]], stage: str):
             yield case, "REDUCED_CONTEXT", case["reduced_context"]
 
 
+def _planned_call_metadata(cases: list[dict[str, Any]], stage: str) -> dict[str, Any]:
+    """Describe every intended context variant before a future provider run begins."""
+    reduced_calls = (
+        len([case for case in cases if case.get("reduced_context")]) if stage == "luna" else 0
+    )
+    full_calls = len(cases)
+    return {
+        "planned_calls": full_calls + reduced_calls,
+        "planned_full_note_calls": full_calls,
+        "planned_reduced_context_calls": reduced_calls,
+        "planned_total_calls": full_calls + reduced_calls,
+        "context_strategies": ["FULL_NOTE", "REDUCED_CONTEXT"] if reduced_calls else ["FULL_NOTE"],
+    }
+
+
 def _usage(response: Any) -> dict[str, int]:
     """Normalize Responses token counters without retaining provider response internals."""
     usage = getattr(response, "usage", None)
@@ -226,8 +254,9 @@ def main() -> None:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--stage", required=True, choices=sorted(MODELS))
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--supplemental", action="store_true")
     args = parser.parse_args()
-    run(args.run_id, args.stage, resume=args.resume)
+    run(args.run_id, args.stage, resume=args.resume, supplemental=args.supplemental)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,25 @@
+{
+  "raw_record_lines": 20,
+  "malformed_raw_lines": [],
+  "duplicate_effective_calls": [],
+  "canonical_selection": "first_parseable_record_by_case_id_and_context_strategy",
+  "canonical_evaluation_record_count": 20,
+  "actual_provider_record_count": 20,
+  "all_provider_calls_count_toward_actual_cost": true,
+  "actual_cost": {
+    "input_tokens": 22240.0,
+    "cached_input_tokens": 0.0,
+    "output_tokens": 2073.0,
+    "reasoning_tokens": 902.0,
+    "estimated_cost_usd": 0.0069356
+  },
+  "infrastructure_retry_attempts": [
+    {
+      "reason": "sandbox DNS failure before provider response",
+      "billed_usage_available": false,
+      "counts_toward_actual_cost": false
+    }
+  ],
+  "frozen_reduced_context_probe_count": 8,
+  "recovery_only_calls": []
+}
