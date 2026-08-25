@@ -110,6 +110,20 @@ Identity/path allocation is not persistence. This allows unit A to contain a val
 
 The exact multi-unit persistence/partial-success contract remains separate Phase 16 work. Do not introduce a generic workflow engine or Phase 17 RequestPlan orchestration merely to support this preflight.
 
+## No automatic inverse writes
+
+A semantic reference or wikilink authorizes only the fact the user actually supplied. Odyssey must not automatically create a mirrored or inverse fact in the referenced note merely to make reverse questions easier to answer.
+
+For example, if the user records:
+
+```text
+Laura is responsible for [[Marta]].
+```
+
+Odyssey may CREATE/UPDATE Laura and bind the reference to Marta, but it must not also update Marta with a generated inverse fact such as `Responsible: [[Laura]]` unless the user request independently requires that mutation or a future explicit domain rule justifies it.
+
+This avoids duplicated knowledge, extra writes, synchronization problems, and invented relation semantics. Reverse natural-language questions should first rely on ordinary semantic context retrieval, whose embedding projection already renders wikilinks as readable entity text. Explicit backlink/graph traversal remains a separate retrieval capability for structural graph questions or a future evidence-backed recall supplement. See [Semantic Candidate Retrieval](semantic-retrieval.md#relationship-retrieval-direction).
+
 ## Writer boundary
 
 Luna must receive the already-bound facts. It may organize or reconcile them according to the bounded writer contract, but it is not responsible for:
