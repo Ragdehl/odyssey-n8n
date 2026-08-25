@@ -1,32 +1,53 @@
 # Phase 16.3 bounded writer benchmark
 
-This is frozen synthetic evidence for issue #38. It is not production writer integration and it
-does not read or write the personal vault. The sixty cases comprise 45 existing-note mutations and
-15 `CREATE_BODY` cases. Luna makes one full-note call per case, followed by a Luna-only reduced
-context comparison on the twelve cases carrying `reduced_context`. Terra receives only Luna
-`MATERIAL_FAIL` cases; Sol receives only remaining Terra `MATERIAL_FAIL` cases.
+This directory contains frozen synthetic evidence for issue #38. It is not production writer
+integration and it does not read or write the personal vault.
+
+The benchmark evolved deliberately from a cost-first Luna/low trial into the final selected policy:
 
 ```text
-Luna full benchmark ── human semantic review ── MATERIAL_FAIL only ──> Terra
-       │                                                                  │
-       └── 12 full/reduced context probes                                 └──> Sol only if needed
+Luna / low full-note baseline
+        |
+        +--> long-note supplement exposes one dangerous semantic miss (L03)
+        |
+        +--> real MiniLM Top-3/Top-5 context filtering drops required evidence
+        |
+        `--> Luna / medium + full authoritative note
+                      |
+                      `--> 15/15 difficult cases PASS
 ```
 
-Run the first stage only after reviewing this frozen dataset, prompt, schema, pricing, and
-evaluator:
+The selected Phase 16 writer policy is therefore:
 
-```bash
-python -m benchmarks.phase16_3_writer_benchmark.run_benchmark \
-  --run-id phase16-3-luna-low-YYYYMMDD --stage luna
+```text
+full authoritative note
+        |
+        v
+gpt-5.6-luna / medium
+        |
+        v
+bounded operation
+        |
+        v
+Core exact-span / revision / schema validation
 ```
 
-Raw model evidence is append-only in `raw_results.jsonl`. Before escalation, create an append-only
-`review.jsonl` beside it with the original records plus `semantic_status` (`PASS`, `MINOR`, or
-`MATERIAL_FAIL`) and human findings. The runner refuses Terra/Sol when the prior stage has no
-material failures. Deterministic failures are recorded separately and are always material until a
-harness defect is demonstrated.
+Do not add MiniLM/NLI within-note writer filtering, low/medium routing, or Terra/Sol writer fallback
+in the initial implementation. Exact normalized duplicate shortcuts plus canonical structured
+properties/tags remain deterministic.
+
+Historical raw provider evidence remains append-only under `results/`. The Luna-medium final
+comparison is in `results/phase16-3-luna-medium-20260825/`; its raw provider records remain in
+`raw_results.jsonl` and the explicit human semantic adjudication is in `adjudication.json`.
+
+The original frozen corpus contains 60 cases (45 existing-note mutations and 15 `CREATE_BODY`
+cases), with separate long-note, oracle-reduced, real-MiniLM-retrieval, and Luna-medium follow-up
+evidence retained to show how the final architecture was selected.
 
 The evaluator validates the strict output shape, exact current-body spans, operation families,
-single-operation `NO_CHANGE`, metadata/link leakage, and oversized anchors. It deliberately does
-not pretend that string checks can decide natural-language faithfulness: a reviewer determines the
-semantic status without changing frozen inputs or expectations.
+single-operation `NO_CHANGE`, metadata/link leakage, and oversized anchors. Semantic faithfulness
+still requires explicit adjudication; deterministic checks are not treated as a substitute for
+natural-language review.
+
+No Terra or Sol writer calls were required for the final selection. Human review accepted
+`USE_LUNA_MEDIUM_FULL_NOTE`; production materialization is the next Phase 16 step.
