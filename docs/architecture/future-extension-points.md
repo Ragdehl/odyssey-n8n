@@ -161,6 +161,8 @@ boundaries and rebuildable indexes do not block a later multi-user design.
 
 ## 5. Large-vault retrieval reduction with a cheap reasoner
 
+**Status: future benchmark hypothesis only; this is not current production retrieval behavior.**
+
 Phase 11B.1c stress evidence over a frozen synthetic 1,000-note vault showed a useful asymmetry:
 multilingual MiniLM retained the expected contextual entity at **Recall@100 = 100%**, while
 Recall@5 was only **72%**. The broad-retrieval problem is therefore currently solved better than the
