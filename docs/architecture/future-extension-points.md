@@ -68,32 +68,52 @@ sums, averages and grouping over rebuildable index data.
 
 ## 2. Type-aware note-writing profiles ("skills")
 
-Once Phase 15 has selected a canonical note type, Odyssey should know how that type is normally
-written: body structure, useful sections, style, and type-specific content conventions that are not
-canonical metadata properties.
+**Status: conditional later extension; not part of the initial Phase 16.6 implementation.**
 
-This is not another classification problem. The type is already known, so Phase 16 should
-deterministically select its writing guidance before note-body creation or semantic patching.
+Phase 16.6 establishes the default rule:
+
+```text
+canonical type + prepared facts
+        |
+        +--> no explicit writing skill -> deterministic body
+        |
+        `--> explicit writing skill -> semantic rendering may opt in
+```
+
+A canonical property never needs an LLM merely to be stored. Likewise, CREATE facts do not need a
+model merely because they are free text: the planner has already interpreted them and there is no
+existing body to reconcile. Without a writing skill, Core preserves prepared facts deterministically.
+
+A future writing skill may be useful for note types whose **presentation** benefits materially from
+semantic organization: body structure, sections, style, ordering, or other type-specific human-readable
+conventions that are not canonical metadata properties.
+
+This is not another classification problem. The type is already known, so later skill selection must
+be deterministic:
 
 ```text
 canonical note type
       |
       v
-load type-aware writing guidance
+lookup optional writing skill
       |
-      v
-body creation / bounded semantic patch
+      +--> none -> deterministic renderer
+      |
+      `--> found -> skill-defined renderer
 ```
 
-Start with the smallest representation. Short guidance may live as an optional field under the
-canonical type definition. If it grows large or example-heavy, move it to a dedicated Markdown profile
-keyed by type and keep only the stable reference in the type registry.
+Start with the smallest representation only when a demonstrated need exists. Short guidance may live
+as an optional schema-linked field or compact registry entry. If it grows large or example-heavy, move
+it to a dedicated Markdown profile keyed by type and keep only a stable reference in the type registry.
 
-Writing guidance controls human-readable rendering; `config/note-schema.json` remains the
-machine-readable owner of note types/properties and validation. Guidance must not silently invent
-metadata fields.
+Writing guidance controls human-readable rendering only; `config/note-schema.json` remains the
+machine-readable owner of note types/properties and validation. Guidance must never silently invent
+metadata fields, change creation authorization, or become a second ontology.
 
-This must be decided during Phase 16 before note-body rendering behavior is frozen.
+If a skill uses an LLM, the already-evidenced `gpt-5.6-luna` / medium writer is the current safe
+baseline unless later evidence justifies another model/configuration. The skill must bring focused live
+evidence for its own semantic rendering behavior. Historical CREATE_BODY benchmark success does not
+justify a generic paid CREATE call when no skill needs it.
 
 ## 3. Tag vocabulary evolution
 
@@ -286,14 +306,12 @@ preserve the required high recall.
 ## Placement
 
 ```text
-NOW / Phase 16
+NOW / Phase 16.6
   - current planner contract lives in phase-15-write-planning.md
   - generic delegation detection is implemented; no concrete app router or user model
-  - Luna writer evidence may motivate future cheap-reasoner benchmarks, but does not change retrieval
-
-Phase 16
-  - choose minimal type-aware writing-profile representation
-  - execute already-planned explicit tag changes after safe target resolution
+  - CREATE properties/tags are deterministic
+  - CREATE facts are rendered deterministically while no writing skill exists
+  - no generic CREATE model call
 
 Before large-vault contextual retrieval is considered production-ready
   - reuse/extend the existing 1,000-note corpus with explicit long-note coverage when needed
@@ -306,6 +324,10 @@ When first concrete app exists
   - route the existing generic DelegateAction with cheap/local app selection
   - load only selected app detail
 
+Later writing-quality work, only if evidence requires it
+  - add the smallest schema-linked writing skill
+  - let only explicit skills opt into semantic rendering
+
 Later ontology work
   - evolve tag vocabulary/types only from demonstrated needs
 
@@ -315,5 +337,5 @@ Later multi-user phase
 ```
 
 The general rule is progressive disclosure and one canonical owner per contract: the main planner
-preserves meaning it already understands, while app instructions, writing profiles, analytics,
+preserves meaning it already understands, while app instructions, writing skills, analytics,
 graph execution, retrieval reduction, and authorization are loaded or executed only when needed.

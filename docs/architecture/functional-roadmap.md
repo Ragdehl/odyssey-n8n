@@ -24,21 +24,22 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 16.1 — safe write-target resolution / create-update decision:** composes one validated
   `KnowledgeUnit` with the existing resolver into non-persisting UPDATE, CREATE, or clarification.
 - ✅ **Phase 16.2 / 16.3 — write-path evidence and bounded-writer selection:** local MiniLM/NLI
-  semantic gates were rejected for the write path; measured evidence selects one full-note
-  `gpt-5.6-luna` / medium bounded writer policy for free-text CREATE/UPDATE, with deterministic
-  structure and exact normalized duplicate shortcuts remaining in Core.
+  semantic gates were rejected for the write path; measured evidence selects
+  `gpt-5.6-luna` / medium as the semantic writer when semantic body reconciliation/rendering is
+  actually required. UPDATE uses that policy; CREATE may remain deterministic when no writing skill
+  requires semantic rendering.
 - ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
-  one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
-- ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A freezes deterministic planner
-  occurrence markers and human-readable mentions; 16.5B preflights each target once and resolves or
-  preallocates referenced identities; 16.5C deterministically renders only safely bound
-  `[[path|mention]]` links before Luna. Ambiguous/unresolved references remain readable plain mentions
-  plus explicit pending-reference results in 16.5C; a later durable HITL boundary may represent that
-  pending ambiguity as an internal Markdown artifact linking the candidate notes.
-- ⬜ **Phase 16.6 — CREATE materialization:** generate a complete body through the selected
-  Luna/medium policy using the identity/path already preallocated by Phase 16.5B, validate it, and
-  persist once.
+  one revision-guarded Phase 12 update.
+- ✅ **Phase 16.5 — pre-writer reference binding:** 16.5A preserves deterministic planner occurrence
+  markers and human-readable mentions; 16.5B preflights each target once and resolves or preallocates
+  referenced identities; 16.5C deterministically renders only safely bound `[[path|mention]]` links
+  before any semantic writer. Ambiguous/unresolved references remain readable plain mentions plus
+  explicit pending-reference results. Focused linked-writer evidence is reproducible at 6/6 PASS.
+- ➡️ **Phase 16.6 — CREATE materialization:** consume the already-preallocated CREATE identity/path,
+  stage canonical metadata deterministically, render prepared facts deterministically by default,
+  validate bound links/schema, and persist once. A future explicit writing skill may opt into semantic
+  rendering; no generic CREATE LLM call is part of the initial implementation.
 - ⬜ **Phase 16.7 — remaining Phase 16 mutation semantics:** guarded soft delete/inbound-link policy,
   explicit bulk cardinality, dependency/partial-success results, and type-change handling before
   general RequestPlan orchestration.
@@ -47,14 +48,16 @@ The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
 benchmark evidence are centralized in [Phase 16 writing checkpoint](phase-16-writing.md). The
 pre-writer reference-binding order, mention/alias boundary, and pending-reference direction are
-centralized in [Phase 16 reference binding](phase-16-reference-binding.md).
+centralized in [Phase 16 reference binding](phase-16-reference-binding.md). The active CREATE
+materialization contract is centralized in
+[Phase 16.6 CREATE materialization](phase-16-create-materialization.md).
 
 ## Completed Phase 15 refinements
 
 ✅ **Phase 15.2 — explicit identity, link-scope, and explicit-tag planning**
 
 Phase 15.2 is a final pre-persistence refinement of the same single Sol/low interpretation boundary.
-It preserves information that later execution should not have to infer again:
+It preserves information that later execution should not have to reinterpret:
 
 - an explicit unresolved nominal `entity` anchor when safely present;
 - explicit wikilink-neighborhood intent through a generalized, non-recursive graph anchor selector;
@@ -91,11 +94,10 @@ an unresolved `record` with a validated canonical type, including an unnamed con
 No type, ambiguity, or unresolved amend/remove/delete requires clarification. Deterministic target
 filters narrow authoritative candidate IDs; they never become similarity evidence.
 
-✅ **Phase 16.2 / 16.3 — write-policy evidence** is also complete. The initial materialization
-implementation should not add a semantic routing ladder. Its selected free-text path is:
+✅ **Phase 16.2 / 16.3 — write-policy evidence** is also complete. Existing-note UPDATE free text uses:
 
 ```text
-resolved KnowledgeUnit
+resolved UPDATE KnowledgeUnit
         |
         +--> deterministic properties / explicit tags
         |
@@ -111,92 +113,101 @@ resolved KnowledgeUnit
 ```
 
 MiniLM/NLI writer filtering, Luna-low/easy-case routing, and Terra/Sol writer fallback are not part of
-the selected initial implementation. MiniLM remains available for separate broad-retrieval use cases
-where recall evidence supports it.
+the selected initial implementation. Phase 16.3 also proved Luna-medium capable of CREATE_BODY across
+several semantics, but that capability is not itself a reason to call a model for deterministic CREATE.
 
 ✅ **Phase 16.4 — existing-note UPDATE materialization** is complete. It accepts only a resolved
 UPDATE target, stages deterministic properties/tags, calls the selected full-note Luna-medium writer
 only for non-duplicate free text, validates exact bounded operations, and calls Phase 12
 `update_entity()` once with an expected revision. No orchestration boundary is introduced.
 
-➡️ **Phase 16.5 — reference binding before body writing** remains in progress. Phase 16.5A freezes
+✅ **Phase 16.5 — reference binding before body writing** is complete. Phase 16.5A freezes
 `KnowledgeReference(target_index, role, mention)` plus `{{ref:N}}` markers local to each unit's
-`references` array, so placement is preserved before Luna sees the facts. Phase 16.5B owns target
-resolution and identity/path preallocation. Phase 16.5C is deliberately smaller: it consumes those
-results and replaces only safely bound marker occurrences with `[[vault/path-without-.md|mention]]`.
-It does not resolve identity, persist pending artifacts, run HITL, or decide which mentions should
-become aliases. See [Phase 16 reference binding](phase-16-reference-binding.md).
+`references` array, so placement is preserved before any later body rendering. Phase 16.5B owns target
+resolution and identity/path preallocation. Phase 16.5C consumes those results and replaces only
+safely bound marker occurrences with `[[vault/path-without-.md|mention]]`. It does not resolve
+identity, persist pending artifacts, run HITL, or decide whether mentions should become aliases. See
+[Phase 16 reference binding](phase-16-reference-binding.md).
 
-The immediate execution order is:
+The established pre-render order is:
 
 ```text
-1. refine reference occurrence contract
+1. preserve reference occurrence in planner facts
         |
 2. resolve existing reference targets / authorize same-request CREATE targets
         |
-3. allocate stable identity + path for authorized CREATEs (Phase 16.5B; no persistence yet)
+3. allocate stable identity + path for authorized CREATEs (no persistence yet)
         |
-4. Core materializes only safe [[path|mention]] links before the writer (Phase 16.5C)
+4. Core materializes only safe [[path|mention]] links
         |
-5. Luna receives already-linked facts for CREATE/UPDATE
+5. UPDATE may use Luna; CREATE defaults to deterministic rendering
         |
 6. validate complete staged notes and persist through bounded Phase 16 semantics
 ```
 
-If a reference target remains ambiguous among several notes, Phase 16.5C must **not** guess one of
+If a reference target remains ambiguous among several notes, Phase 16.5C does **not** guess one of
 them. The occurrence stays as its human-readable `mention`, and the unresolved reference is returned
-as pending work together with candidate stable IDs when known. No second LLM should rediscover link
-placement after writer output.
+as pending work together with candidate stable IDs when known. No later renderer may rediscover or
+guess link identity.
 
 The preferred later HITL direction is more navigable than silently leaving that ambiguity forever:
 once Odyssey has a durable pending-work boundary, it may create a small internal Markdown artifact
 that links the real candidates and let the source occurrence temporarily point to that artifact, for
 example `[[pending/Marta-ambiguity-<uuid>|Una Marta]]`. Once the identity is resolved, the source link
 should normally be replaced with the real target and the temporary artifact archived or removed.
-This is workflow state, not automatically a new canonical note type, and is intentionally outside
-simple Phase 16.5C rendering.
+This is workflow state, not automatically a new canonical note type, and is outside Phase 16.5C.
 
 A reference also does **not** authorize an automatic inverse mutation in the referenced note. Store the
 user-supplied relationship once and rely first on ordinary semantic context retrieval for reverse
 natural-language questions; the context projection already renders wikilinks as readable entity text.
 Explicit graph/backlink traversal remains separate and evidence-driven.
 
-⬜ **Phase 16.6 — CREATE materialization** follows that preflight. `save_knowledge` remains a likely
-later coordination boundary, but its exact API should be decided from implementation evidence rather
-than frozen prematurely.
+➡️ **Phase 16.6 — CREATE materialization** now follows that completed preflight/binding boundary. The
+canonical contract is [Phase 16.6 CREATE materialization](phase-16-create-materialization.md).
+`save_knowledge` remains a likely later coordination boundary, but its exact API should be decided from
+implementation evidence rather than frozen prematurely.
 
-Phase 16 materialization must still cover:
+The Phase 16.6 slice is deliberately per-note:
 
-- privileged exact name/alias resolution when `target.entity` is present, with semantic/contextual
-  fallback when appropriate;
-- deterministic target-filter candidate restriction without turning `get_context` into the identity
-  resolver;
-- `UNRESOLVED != CREATE` and the existing explicit `record` creation-authorization policy;
-- safe handling of insufficient identity and machine-readable `NEEDS_CLARIFICATION`;
-- primary-name/alias ambiguity without inventing duplicate `-2` entities;
-- stable ID/path allocation only after identity/creation authorization;
-- deterministic schema property and explicit tag changes after target resolution;
-- deterministic reference occurrence binding before writer calls;
-- safe pre-writer `[[path|mention]]` materialization for resolved/preallocated identities;
-- explicit pending-reference results for ambiguous/unresolved references, with no guessed canonical
-  target;
-- no automatic inverse/mirrored note mutation merely because a relationship wikilink was created;
-- minimal type-aware note-writing guidance where demonstrated before body rendering is finalized;
-- selected Luna/medium bounded free-text writing with full authoritative existing-note context;
-- Core validation of exact spans, schema, current revision, and required bound links before applying
-  writer output;
-- one atomic persistence operation per completely staged note after its complete write plan validates;
+```text
+CREATE-authorized KnowledgeUnit + matching preflight
+        |
+        +--> deterministic canonical metadata
+        |       `--> invalid/incomplete -> fail
+        |
+        +--> no free-text facts -> empty body
+        |
+        `--> rendered free-text facts
+                |
+                +--> no writing skill -> preserve facts deterministically
+                |
+                `--> future explicit writing skill -> semantic rendering may opt in
+        |
+        v
+Core body/link/schema validation
+        |
+        v
+create_entity() once
+```
+
+The initial implementation has no writing-skill registry and therefore no CREATE model calls. The
+prepared facts are preserved exactly, in planner order, with deterministic newline separation. This
+keeps cost and behavior simple while leaving an explicit extension point for note types that later
+prove they need semantic presentation guidance.
+
+Phase 16 materialization must still cover after 16.6:
+
 - guarded whole-note delete behavior and inbound-link policy;
-- explicit bulk cardinality, partial-success/dependency results and type-change requests.
+- explicit bulk cardinality;
+- dependency/partial-success results across several units;
+- type-change requests.
 
-Existing notes must be changed through bounded operations (`NO_CHANGE`, `REPLACE`, `REMOVE`,
+Existing notes remain changed through bounded operations (`NO_CHANGE`, `REPLACE`, `REMOVE`,
 `INSERT_AFTER`, `APPEND`) validated and applied by Core, not routine whole-note LLM rewriting.
 
-Because 16.5C changes the writer input from plain facts to facts containing canonical wikilinks,
-focused live regression evidence with the already-selected `gpt-5.6-luna` / medium writer is required.
-The initial 6/6 live checkpoint is valid evidence but did not capture every exact request input. A
-frozen six-case runner now exists under `benchmarks/phase16_5_writer_links/`; rerun that small focused
-set before treating 16.5C as fully reproducible evidence. This is not a new model-selection benchmark.
+No live LLM benchmark is required for the default Phase 16.6 implementation because that CREATE path
+makes no model call. Any later writing skill that activates semantic CREATE rendering must bring its
+own focused live evidence.
 
 ## Remaining intended sequence
 
@@ -249,6 +260,9 @@ The detailed cross-phase direction is centralized in
   compact app manifests and load only the selected app contract. Purchase/ticket processing, project
   workflows, and translation-related workflows are expected future application families on this
   shared knowledge foundation rather than reasons to expand the top-level planner indefinitely.
+- 💡 **Type-aware writing profiles:** absent by default. If a type later demonstrates a concrete need
+  for semantic body organization, add the smallest schema-linked writing skill and let only that skill
+  opt into a semantic renderer such as the already-evidenced Luna-medium baseline.
 - 💡 **Tag vocabulary evolution:** keep Phase 15.2 explicit-only with the current controlled registry;
   decide later whether values such as `idea` become types and whether user-extensible transversal tags
   are needed.
