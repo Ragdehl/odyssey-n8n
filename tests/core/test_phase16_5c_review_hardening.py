@@ -92,7 +92,9 @@ def test_rendered_fact_validation_accepts_bound_link_or_plain_pending_mention() 
     validate_rendered_facts(unit, ("Bea habló con Marta.",))
 
 
-def test_materializer_rejects_unrelated_rendered_fact_before_repository_access(tmp_path: Path) -> None:
+def test_materializer_rejects_unrelated_rendered_fact_before_repository_access(
+    tmp_path: Path,
+) -> None:
     """A wrong rendered-facts tuple cannot be attached to a different KnowledgeUnit."""
     with pytest.raises(MaterializationError, match="do not match"):
         materialize_update(
