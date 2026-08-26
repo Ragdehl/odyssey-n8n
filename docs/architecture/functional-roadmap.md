@@ -194,7 +194,9 @@ Existing notes must be changed through bounded operations (`NO_CHANGE`, `REPLACE
 
 Because 16.5C changes the writer input from plain facts to facts containing canonical wikilinks,
 focused live regression evidence with the already-selected `gpt-5.6-luna` / medium writer is required.
-This is not a new model-selection benchmark.
+The initial 6/6 live checkpoint is valid evidence but did not capture every exact request input. A
+frozen six-case runner now exists under `benchmarks/phase16_5_writer_links/`; rerun that small focused
+set before treating 16.5C as fully reproducible evidence. This is not a new model-selection benchmark.
 
 ## Remaining intended sequence
 
