@@ -68,43 +68,52 @@ sums, averages and grouping over rebuildable index data.
 
 ## 2. Type-aware note-writing profiles ("skills")
 
-**Status: conditional later extension; not part of the initial Phase 16.6 CREATE implementation.**
+**Status: conditional later extension; not part of the initial Phase 16.6 implementation.**
 
-Once Phase 15 has selected a canonical note type, Odyssey could eventually use type-specific writing
-guidance for body structure, useful sections, style, and other presentation conventions that are not
-canonical metadata properties.
+Phase 16.6 establishes the default rule:
 
-This is not another classification problem. The type is already known. If this capability is later
-needed, selection should therefore remain deterministic:
+```text
+canonical type + prepared facts
+        |
+        +--> no explicit writing skill -> deterministic body
+        |
+        `--> explicit writing skill -> semantic rendering may opt in
+```
+
+A canonical property never needs an LLM merely to be stored. Likewise, CREATE facts do not need a
+model merely because they are free text: the planner has already interpreted them and there is no
+existing body to reconcile. Without a writing skill, Core preserves prepared facts deterministically.
+
+A future writing skill may be useful for note types whose **presentation** benefits materially from
+semantic organization: body structure, sections, style, ordering, or other type-specific human-readable
+conventions that are not canonical metadata properties.
+
+This is not another classification problem. The type is already known, so later skill selection must
+be deterministic:
 
 ```text
 canonical note type
       |
       v
-load type-aware writing guidance
+lookup optional writing skill
       |
-      v
-body creation / bounded semantic patch
+      +--> none -> deterministic renderer
+      |
+      `--> found -> skill-defined renderer
 ```
 
-Phase 16.6 deliberately does **not** introduce this representation. The existing Phase 16.3 corpus
-already exercised fifteen `CREATE_BODY` cases across multiple note semantics using one generic bounded
-writer contract, without demonstrating a type-specific failure that requires another configuration
-layer. The simplest initial CREATE path therefore remains one shared Luna-medium writer policy.
+Start with the smallest representation only when a demonstrated need exists. Short guidance may live
+as an optional schema-linked field or compact registry entry. If it grows large or example-heavy, move
+it to a dedicated Markdown profile keyed by type and keep only a stable reference in the type registry.
 
-If focused CREATE evidence or later real usage demonstrates a concrete type whose body is materially
-poor without specialized organization, start with the smallest representation. Short guidance may
-live as an optional schema-linked field or compact registry entry. If it grows large or example-heavy,
-move it to a dedicated Markdown profile keyed by type and keep only a stable reference in the type
-registry.
-
-Writing guidance would control human-readable rendering only; `config/note-schema.json` remains the
+Writing guidance controls human-readable rendering only; `config/note-schema.json` remains the
 machine-readable owner of note types/properties and validation. Guidance must never silently invent
 metadata fields, change creation authorization, or become a second ontology.
 
-This direction remains available without freezing generic CREATE formatting forever, but it now has a
-clear evidence gate: **do not implement a profile system until measured body-quality failures justify
-it.**
+If a skill uses an LLM, the already-evidenced `gpt-5.6-luna` / medium writer is the current safe
+baseline unless later evidence justifies another model/configuration. The skill must bring focused live
+evidence for its own semantic rendering behavior. Historical CREATE_BODY benchmark success does not
+justify a generic paid CREATE call when no skill needs it.
 
 ## 3. Tag vocabulary evolution
 
@@ -300,8 +309,9 @@ preserve the required high recall.
 NOW / Phase 16.6
   - current planner contract lives in phase-15-write-planning.md
   - generic delegation detection is implemented; no concrete app router or user model
-  - CREATE uses the shared Luna-medium writer only when free-text facts require body generation
-  - no type-writing-profile system unless focused evidence demonstrates a concrete need
+  - CREATE properties/tags are deterministic
+  - CREATE facts are rendered deterministically while no writing skill exists
+  - no generic CREATE model call
 
 Before large-vault contextual retrieval is considered production-ready
   - reuse/extend the existing 1,000-note corpus with explicit long-note coverage when needed
@@ -315,7 +325,8 @@ When first concrete app exists
   - load only selected app detail
 
 Later writing-quality work, only if evidence requires it
-  - add the smallest schema-linked type-writing guidance representation
+  - add the smallest schema-linked writing skill
+  - let only explicit skills opt into semantic rendering
 
 Later ontology work
   - evolve tag vocabulary/types only from demonstrated needs
@@ -326,5 +337,5 @@ Later multi-user phase
 ```
 
 The general rule is progressive disclosure and one canonical owner per contract: the main planner
-preserves meaning it already understands, while app instructions, writing profiles, analytics,
+preserves meaning it already understands, while app instructions, writing skills, analytics,
 graph execution, retrieval reduction, and authorization are loaded or executed only when needed.
