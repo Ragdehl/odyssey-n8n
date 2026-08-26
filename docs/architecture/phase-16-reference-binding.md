@@ -50,6 +50,12 @@ The link target is always derived from the authoritative existing path or the pr
 path. The display text is the occurrence-local `mention`. The renderer never performs a second
 identity lookup and never guesses from a human name or alias.
 
+A resolved wikilink must preserve the exact `mention` only when that text is syntactically safe as an
+Obsidian display label. If the mention itself contains structural wikilink delimiters such as `|`,
+`[` or `]` (or unsafe control/newline characters), Core fails closed rather than altering the wording
+or emitting ambiguous Markdown. An unresolved reference may still remain as plain mention text because
+no wikilink syntax is being constructed in that case.
+
 Phase 16.5C itself remains non-persisting. Durable pending-reference artifacts are a later
 application/HITL concern described below.
 
@@ -132,6 +138,12 @@ pre-writer rendering; it does not reopen target resolution.
 
 The actual Obsidian link target must be derived deterministically from the authoritative existing path or the preallocated CREATE path. A primary name or alias alone is never sufficient evidence for the physical link target when it could be ambiguous.
 
+The UPDATE materialization hand-off is also structural: when `rendered_facts` are supplied, literal
+source text outside `{{ref:N}}` occurrences must remain byte-for-byte identical, and every marker must
+be replaced only by that reference's exact plain `mention` or one syntactically safe
+`[[target|mention]]`. This prevents accidentally attaching another unit's prepared facts to the wrong
+mutation while keeping identity authority in the earlier preflight/rendering step.
+
 ## Mention and alias separation
 
 `mention` and `aliases` are related but not equivalent.
@@ -213,19 +225,13 @@ A source note could then temporarily contain a human-readable link such as:
 This is preferable to inventing one candidate as the answer because the graph itself preserves the
 ambiguity and its candidate set. Once HITL or later evidence resolves the identity, the source link
 should normally be replaced with the real target and the pending artifact archived or removed.
-Keeping the ambiguity artifact permanently as a proxy is not the default direction because it would
-pollute the knowledge graph with a false long-lived entity.
+Keeping the ambiguity artifact permanently as a proxy would make it look like a real knowledge
+entity and unnecessarily contaminate the graph.
 
-Important boundaries:
-
-- the pending artifact is **workflow state**, not automatically a canonical user-knowledge note;
-- do not add a canonical Odyssey note type merely to implement it;
-- its storage location, lifecycle, cleanup, and backlink replacement need the stable application/HITL
-  boundary before implementation;
-- Phase 16.5C does not create or persist this artifact.
-
-This direction preserves the user's desired future UX without coupling simple reference rendering to
-persistence or HITL prematurely.
+This artifact is workflow state, **not automatically a new canonical Odyssey knowledge-note type**.
+Its exact schema, location, lifecycle, cleanup policy, and whether it shares the ordinary canonical
+note schema belong to the later durable application/HITL boundary. Phase 16.5C must not create or
+persist it.
 
 ## References to notes created by the same request
 
@@ -275,10 +281,26 @@ Luna must receive the already-bound facts. It may organize or reconcile them acc
 
 The writer should preserve supplied wikilinks as part of the authoritative intended fact. Core remains responsible for validating the final Markdown and for rejecting writer output that corrupts required bound references.
 
-Because Phase 16.5C materially changes writer input from plain fact text to already-linked Markdown,
-focused live evidence must be rerun with the selected production `gpt-5.6-luna` / medium writer before
-treating UPDATE-with-links behavior as validated. This is a focused regression check, not model
-selection.
+Core's output-side link detector is intentionally broader than the canonical bound-link renderer: it
+must notice an invented complete `[[...]]` even when Luna uses Obsidian anchor/block syntax such as
+`[[Other#Section]]` or `[[Other^block]]`. For record/amend, required Core-bound links must remain and
+no additional link multiplicity may appear beyond links already present in the authoritative body plus
+the supplied facts. For explicit remove, the requested linked fact may disappear, but the writer still
+has no authority to invent another link.
+
+## Focused writer evidence
+
+Because Phase 16.5C materially changes writer input from plain facts to facts containing canonical
+wikilinks, a small regression checkpoint uses the existing selected `gpt-5.6-luna` / medium /
+`FULL_NOTE` writer rather than repeating model selection.
+
+The initial 2026-08-26 live run returned 6/6 passing operations for one bound APPEND, an employer
+REPLACE, two distinct links, a repeated link, a preallocated same-request CREATE target, and a no-link
+sentinel. That first capture retained the returned operations but not every exact request input, so it
+is valid behavioral evidence but not a fully reproducible historical run. The repository now freezes
+six explicit production-shaped cases plus a runner under `benchmarks/phase16_5_writer_links/`; the
+next focused live rerun must use that runner to retain exact requests, provider outputs, rendered
+bodies, and deterministic validation together. No new model selection or Sol call is needed.
 
 ## Future HITL
 
@@ -288,32 +310,29 @@ Ambiguous references are a concrete future HITL use case.
 reference -> multiple plausible notes
         |
         v
-Phase 16.5C: plain mention + PendingReference
+plain mention + PendingReference now
         |
         v
-future durable pending artifact may link the candidate notes
+future durable pending artifact may link candidates
         |
         v
-HITL asks user to choose
+future HITL asks user to choose
         |
         v
-replace source occurrence with real target
-        |
-        v
-archive/remove pending artifact
+bind chosen stable identity and replace the temporary source link
 ```
 
-HITL should be introduced only once Odyssey has a stable application boundary capable of preserving and resuming pending work. The current Phase 16.5C rule is simply: **do not guess identity, preserve the mention and candidate set, and keep rendering deterministic.**
+HITL should be introduced only once Odyssey has a stable application boundary capable of preserving and resuming pending work. The current Phase 16 rule is simply: **fail closed on identity, do not guess a canonical target, preserve the candidate set when known, and do not lose the fact that a reference remains pending.**
 
 ## Immediate Phase 16 execution plan
 
 The remaining implementation order is:
 
-1. **Reference-binding contract** — refine the reference occurrence representation so Core knows exactly where a reference belongs before any writer call. ✅
-2. **Reference-target preflight** — resolve existing targets and authorize same-request CREATE targets without persistence. ✅
-3. **CREATE identity allocation** — deterministically allocate stable IDs/paths/display identity for authorized CREATE units before body generation. ✅ (owned by Phase 16.5B)
-4. **Pre-writer wikilink materialization — Phase 16.5C** — replace safely bound reference occurrences with ordinary `[[path|mention]]`; unresolved references remain plain mentions plus explicit pending results. No persistence or HITL.
+1. **Reference-binding contract** — refine the reference occurrence representation so Core knows exactly where a reference belongs before any writer call.
+2. **Reference-target preflight** — resolve existing targets and authorize same-request CREATE targets without persistence.
+3. **CREATE identity allocation** — deterministically allocate stable IDs/paths/display identity for authorized CREATE units before body generation.
+4. **Pre-writer wikilink materialization** — replace only safely bound reference occurrences with ordinary `[[wikilinks]]`; ambiguous references remain plain text and pending.
 5. **CREATE materialization + UPDATE integration** — feed already-linked facts to the selected Luna/medium writer, validate the bounded output, and persist once per staged note.
-6. **Remaining Phase 16 semantics** — guarded soft delete/inbound-link policy, explicit bulk cardinality, dependency/partial-success results, type-change handling, and later durable pending-reference/HITL lifecycle before or alongside the stable application boundary as evidence dictates.
+6. **Remaining Phase 16 semantics** — guarded soft delete/inbound-link policy, explicit bulk cardinality, dependency/partial-success results, and type-change handling before Phase 17 orchestration.
 
 This ordering supersedes the earlier informal idea of implementing CREATE first and adding wikilinks afterward. Reference placement must be made safe first because it changes the writer input contract for both CREATE and UPDATE.
