@@ -12,6 +12,23 @@ them.
 
 The goal is to keep reference placement deterministic and avoid a second LLM call or post-hoc text guessing.
 
+## Phase 16.5B target preflight
+
+Phase 16.5B adds a deterministic, non-persisting preflight table indexed by ordered unit index:
+
+```text
+validated WriteAction -> decide each KnowledgeUnit once
+        | UPDATE -> existing ID + authoritative path + metadata name
+        | CREATE -> full UUID + <name> - <full-id>.md
+        ` NEEDS_CLARIFICATION -> reason + known candidate IDs
+```
+
+Reference occurrences consume this table through `target_index`; they do not invoke resolution a
+second time. CREATE names use `target.entity` when present, otherwise the human-readable
+`target.query`. UUID allocation is injectable for deterministic tests. The preflight performs no
+Markdown writes, persistence, writer/model calls, or wikilink rendering. `name` is canonical
+metadata; the filename is a stable creation-time label and always contains the full stable ID.
+
 ## Core ordering decision
 
 Reference materialization happens before semantic body writing:
@@ -80,7 +97,7 @@ After safe identity binding:
 ```
 
 The invariant is that **reference placement is decided before the writer and can be materialized by
-Core without semantic inference**. Phase 16.5B/C will replace the temporary UPDATE fail-closed guard
+Core without semantic inference**. Phase 16.5C will replace the temporary UPDATE fail-closed guard
 with reference target binding and pre-writer rendering; Phase 16.5A does not resolve targets or emit
 wikilinks.
 

@@ -50,13 +50,14 @@ def _write_note(
     """Create one valid identity fixture through the raw repository boundary."""
     metadata: dict[str, object] = {
         "id": note_id,
+        "name": Path(path).stem,
         "type": note_type,
         "created_at": "2026-08-15T10:00:00+02:00",
         "updated_at": "2026-08-15T10:00:00+02:00",
         "created_by": "test",
         "updated_by": "test",
         "revision": 1,
-        "schema_version": 1,
+        "schema_version": 2,
     }
     if aliases is not None:
         metadata["aliases"] = aliases

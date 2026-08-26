@@ -75,13 +75,14 @@ def valid_note(note_id: str, note_type: str, content: str, **metadata: object) -
     """Create one valid note fixture with the schema's required lifecycle fields."""
     values = {
         "id": note_id,
+        "name": str(metadata.pop("name", note_id.replace("-", " ").title())),
         "type": note_type,
         "created_at": "2026-08-16T12:00:00Z",
         "updated_at": "2026-08-16T12:00:00Z",
         "created_by": "pytest",
         "updated_by": "pytest",
         "revision": 1,
-        "schema_version": 1,
+        "schema_version": 2,
         **metadata,
     }
     return Note(metadata=values, content=content)  # type: ignore[arg-type]
@@ -274,6 +275,7 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
         "[[people/Xavi#Section|mi amigo]], and [[Xavi]].",
         aliases=["A. Lovelace"],
         relationship_to_user="colleague",
+        name="Ada Lovelace",
     )
     first = build_provider_evidence(note, "people/Ada Lovelace.md")
     second = build_provider_evidence(note, "people/Ada Lovelace.md")

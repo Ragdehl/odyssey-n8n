@@ -1,6 +1,6 @@
 {
   "canonical_schema_path": "config/note-schema.json",
-  "canonical_schema_sha256": "57a5bb9e103850386232bf410cf162df051f8889528f666cca8c54e9ebd7756f",
+  "canonical_schema_sha256": "419871146d1496286ef91d55cbbd00a4f9b59465297fd707bb69b6b0381e133c",
   "synthetic_variants": {
     "synthetic_car": {
       "id": "car",

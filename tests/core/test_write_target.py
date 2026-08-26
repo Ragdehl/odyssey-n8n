@@ -66,13 +66,14 @@ def note(note_id: str, note_type: str, **metadata: object) -> Note:
     return Note(
         {
             "id": note_id,
+            "name": str(metadata.pop("name", note_id.replace("-", " ").title())),
             "type": note_type,
             "created_at": "2026-08-24T12:00:00Z",
             "updated_at": "2026-08-24T12:00:00Z",
             "created_by": "pytest",
             "updated_by": "pytest",
             "revision": 1,
-            "schema_version": 1,
+            "schema_version": 2,
             **metadata,
         },
         "Synthetic knowledge.",
@@ -180,6 +181,7 @@ def test_e05_e11_ambiguity_never_creates(tmp_path: Path, schema: dict) -> None:
     )
     assert result.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
     assert result.reason == "ambiguous_existing_target"
+    assert result.candidate_note_ids == ("garcia", "lopez")
 
 
 @pytest.mark.parametrize("intent", ["amend", "remove", "delete"])
@@ -201,8 +203,8 @@ def test_e09_null_type_never_creates(tmp_path: Path, schema: dict) -> None:
 
 def test_e10_type_narrows_same_name_across_canonical_types(tmp_path: Path, schema: dict) -> None:
     """E10 applies the planner's canonical type as exact identity narrowing."""
-    write_note(tmp_path, "people/Marta.md", note("person-marta", "person"))
-    write_note(tmp_path, "projects/Marta.md", note("project-marta", "project"))
+    write_note(tmp_path, "people/Marta.md", note("person-marta", "person", name="Marta"))
+    write_note(tmp_path, "projects/Marta.md", note("project-marta", "project", name="Marta"))
     result = decide(tmp_path, schema, unit("Marta", entity="Marta", note_type="project"))
     assert result.outcome is WriteTargetOutcome.UPDATE
     assert result.existing_note_id == "project-marta"

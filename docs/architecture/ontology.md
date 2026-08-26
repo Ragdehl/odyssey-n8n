@@ -40,12 +40,14 @@ RESOLVE
 CREATE only if necessary
 ```
 
-1. **Resolve:** search existing identifiers, names, aliases, metadata, and useful context.
+1. **Resolve:** search existing identifiers, canonical names, aliases, metadata, and useful context.
 2. **Reuse:** select an existing entity when the identity is sufficiently clear.
 3. **Enrich:** add new valid facts or links without discarding established knowledge.
 4. **Create:** create a new entity only when no existing entity is an adequate match.
 
 This sequence is the primary defense against duplicates. Resolution must also preserve uncertainty: when two candidates cannot be distinguished safely, the workflow should report ambiguity instead of guessing.
+
+The canonical human identity is metadata `name`; the filename is only the stable creation-time physical label `<creation-name> - <full-id>.md`. Full stable IDs are retained in filenames. `mention` values belong to individual reference occurrences and are not canonical names or automatic aliases.
 
 ## Relationships and structure
 
@@ -60,7 +62,7 @@ updated_at: 2026-08-13T10:00:00+02:00
 created_by: n8n
 updated_by: n8n
 revision: 1
-schema_version: 1
+schema_version: 2
 ---
 
 # Purchase at [[Carrefour Balma]]

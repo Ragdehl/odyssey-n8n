@@ -2,7 +2,7 @@
   "contract_version": "3.0.0",
   "limitation_codes": ["not_supported", "unsupported_domain_date", "direct_link_not_filterable"],
   "retrieval_contract": {
-    "schema_version": 1,
+    "schema_version": 2,
     "canonical_types": ["concept", "project", "task", "store", "product", "purchase", "recipe", "document", "person", "journal_entry"],
     "filterable_fields": {
       "type": {"value_type": "string", "operators": ["eq", "in"], "controlled_values": ["concept", "project", "task", "store", "product", "purchase", "recipe", "document", "person", "journal_entry"]},

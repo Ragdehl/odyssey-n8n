@@ -82,13 +82,14 @@ def valid_note(note_id: str, note_type: str, content: str, **metadata: object) -
     """Create one schema-valid note fixture with optional domain metadata."""
     values = {
         "id": note_id,
+        "name": str(metadata.pop("name", note_id.replace("person-", "").replace("-", " ").title())),
         "type": note_type,
         "created_at": "2026-08-16T12:00:00Z",
         "updated_at": "2026-08-16T12:00:00Z",
         "created_by": "pytest",
         "updated_by": "pytest",
         "revision": 1,
-        "schema_version": 1,
+        "schema_version": 2,
         **metadata,
     }
     return Note(metadata=values, content=content)  # type: ignore[arg-type]
@@ -109,6 +110,7 @@ def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
         "Partner of [[people/Xavi|Xavi]]. Related to [[Atomic notes]].",
         aliases=["Bea"],
         relationship_to_user="spouse",
+        name="Beatriz Alonso",
     )
 
     projection = build_semantic_retrieval_text(note, "people/Beatriz Alonso.md")
@@ -232,9 +234,9 @@ def test_equal_scores_use_stable_name_path_id_order(tmp_path: Path, schema: dict
     """Break cosine ties deterministically instead of depending on SQLite row order."""
     vault = tmp_path / "vault"
     vault.mkdir()
-    write_note(vault, "people/Zed.md", valid_note("1", "person", "Colleague."))
-    write_note(vault, "archive/amy.md", valid_note("3", "person", "Colleague."))
-    write_note(vault, "people/Amy.md", valid_note("2", "person", "Colleague."))
+    write_note(vault, "people/Zed.md", valid_note("1", "person", "Colleague.", name="Zed"))
+    write_note(vault, "archive/amy.md", valid_note("3", "person", "Colleague.", name="amy"))
+    write_note(vault, "people/Amy.md", valid_note("2", "person", "Colleague.", name="Amy"))
     index = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
     index.rebuild(VaultRepository(vault), schema, KeywordEmbedder())
 

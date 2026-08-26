@@ -49,6 +49,12 @@ from .persistence import (
     create_entity,
     update_entity,
 )
+from .reference_preflight import (
+    ReferencePreflightError,
+    UnitTargetPreflight,
+    allocate_stable_id,
+    preflight_write_action,
+)
 from .request_planning import (
     PLANNER_MODEL,
     PLANNER_REASONING_EFFORT,
@@ -63,6 +69,7 @@ from .request_planning import (
     RequestPlanningError,
     RetrievalPlan,
     RetrieveAction,
+    SelectionCriteria,
     TagChange,
     WriteAction,
     render_request_planner_prompt,
@@ -139,6 +146,7 @@ __all__ = [
     "NoteSelector",
     "OpenAIRequestPlanner",
     "RequestPlan",
+    "SelectionCriteria",
     "RequestPlanningError",
     "RetrievalPlan",
     "RetrieveAction",
@@ -150,6 +158,10 @@ __all__ = [
     "WriteTargetDecision",
     "WriteTargetOutcome",
     "decide_write_target",
+    "ReferencePreflightError",
+    "UnitTargetPreflight",
+    "allocate_stable_id",
+    "preflight_write_action",
     "WRITER_CONTEXT_MODE",
     "WRITER_MODEL",
     "WRITER_REASONING_EFFORT",

@@ -69,13 +69,14 @@ def _synthetic_note(note_definition: dict[str, Any], schema: dict[str, Any]) -> 
             body.append(line)
     metadata: dict[str, object] = {
         "id": note_definition["id"],
+        "name": note_definition.get("name", str(note_definition["id"]).replace("-", " ").title()),
         "type": note_type,
         "created_at": "2026-08-16T12:00:00Z",
         "updated_at": "2026-08-16T12:00:00Z",
         "created_by": "phase11b2-synthetic",
         "updated_by": "phase11b2-synthetic",
         "revision": 1,
-        "schema_version": 1,
+        "schema_version": 2,
     }
     if aliases:
         metadata["aliases"] = aliases

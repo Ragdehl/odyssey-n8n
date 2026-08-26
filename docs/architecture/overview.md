@@ -351,7 +351,8 @@ deterministic constraints. This does not freeze a filter API or query language.
 
 The future layered resolver may also accept a stable ID as decisive exact evidence when a caller
 already has one. The implemented Phase 9 API deliberately preserves its narrower contract: it
-matches only filename-derived primary names and aliases, with optional canonical type filtering.
+matches canonical metadata `name` and aliases, with optional canonical type filtering; the physical
+filename is not semantic identity.
 
 Semantic/vector candidate retrieval is implemented in Phase 10 for identity expressed through
 roles, relationships, contextual
@@ -464,7 +465,7 @@ arbitrary generated links. Automated persistence should not emit broken wikilink
   optional canonical type constraint.
 - **Output:** an immutable, deterministically ordered tuple of `ExactEntityCandidate` values.
 - **Can see:** vault-relative paths, raw Markdown supplied by the repository, parsed `Note` values,
-  and the supplied schema. The filename stem is available here as storage context.
+  and the supplied schema. The filename is technical storage context, not canonical identity.
 - **Must not know or do:** perform general knowledge search, interpret prose or wikilinks, return
   fuzzy or partial matches, rank semantically, modify notes, or move domain behavior into storage.
 - **Status:** **PHASE 9 — IMPLEMENTED** as a read-only linear scan.
@@ -501,19 +502,18 @@ could produce a false `NO_EXACT_MATCH` and enable a future duplicate.
 
 ### Primary lookup name and logical identity
 
-Phase 9 derives `primary_name` from the vault-relative filename stem:
+Phase 9 reads canonical `name` from note metadata:
 
 ```text
 path:          stores/Carrefour Balma.md
-primary_name:  Carrefour Balma
+name:          Carrefour Balma
 stable id:     metadata["id"]
 aliases:       metadata.get("aliases", [])
 ```
 
-This is a small V1 composition choice, not a schema change. `Note` remains path-independent, and
-the metadata ID remains stable when a file is renamed. Renaming a file changes its primary lookup
-name. If this causes demonstrated failures, a universal canonical name field requires a separate
-schema proposal and human approval.
+The filename is a creation-time physical label, not the current human identity. `Note` remains
+path-independent, and the metadata ID remains stable when a file is renamed. Updating `name` does
+not rename the existing file. There is no legacy filename-as-primary-name fallback.
 
 ### `VaultRepository.list_markdown_paths` — path discovery
 
@@ -546,7 +546,7 @@ schema proposal and human approval.
   created_by: "odyssey"
   id: "store-carrefour-balma"
   revision: 1
-  schema_version: 1
+  schema_version: 2
   type: "store"
   updated_at: "2026-08-16T08:00:00Z"
   updated_by: "odyssey"
@@ -592,7 +592,7 @@ schema proposal and human approval.
           "created_by": "odyssey",
           "updated_by": "odyssey",
           "revision": 1,
-          "schema_version": 1,
+          "schema_version": 2,
       },
       content="# Carrefour Balma\n\nCloses at 21:00.\n",
   )
@@ -740,7 +740,7 @@ note persistence. Phase 16 will compose these boundaries for approved writes.
            "created_by": "odyssey",
            "updated_by": "odyssey",
            "revision": 1,
-           "schema_version": 1,
+           "schema_version": 2,
        },
        content="# Carrefour Balma\n\nCloses at 21:00.\nUsually visited on Saturday.\n",
    )

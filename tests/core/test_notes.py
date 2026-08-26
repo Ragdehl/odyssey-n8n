@@ -201,6 +201,7 @@ class NoteValidationTests(unittest.TestCase):
         """
         return {
             "id": "01JTEST",
+            "name": "Test note",
             "type": note_type,
             "created_at": "2026-08-15T10:30:00+02:00",
             "updated_at": "2026-08-15T08:30:00Z",

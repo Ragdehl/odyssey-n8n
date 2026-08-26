@@ -31,7 +31,8 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
   one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
 - ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A now freezes deterministic planner
-  occurrence markers and human-readable mentions; the remaining work resolves or preallocates
+  occurrence markers and human-readable mentions; 16.5B preflights each target once and resolves or
+  preallocates
   referenced identities, materializes only safe `[[wikilinks]]` before Luna, and preserves
   ambiguous/unresolved references as explicit pending work rather than guessing.
 - ⬜ **Phase 16.6 — CREATE materialization:** deterministically allocate CREATE identity/path/display
