@@ -8,6 +8,8 @@
   "failed": 0,
   "selection_rerun": false,
   "sol_calls": 0,
+  "complete_request_capture": false,
+  "reproducible_runner_added_after_review": true,
   "cases": [
     "append_bound",
     "replace_employer_bound",
