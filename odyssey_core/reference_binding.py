@@ -7,7 +7,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .request_planning import KnowledgeReference, WriteAction
+from .request_planning import KnowledgeReference, KnowledgeUnit, WriteAction
 from .write_target import WriteTargetOutcome
 
 if TYPE_CHECKING:
@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
 
 _MARKER = re.compile(r"\{\{ref:(\d+)\}\}")
-_WIKILINK = re.compile(r"\[\[[^\[\]#|^:%]+(?:\|[^\[\]]+)?\]\]")
+_ANY_WIKILINK = re.compile(r"\[\[[^\[\]\r\n]+\]\]")
+_RENDERED_WIKILINK = re.compile(r"\[\[([^\[\]|\r\n]+)\|([^\[\]|\r\n]+)\]\]")
 
 
 class ReferenceBindingError(RuntimeError):
@@ -57,7 +58,8 @@ def render_reference_facts(
         Immutable rendered facts and at most one pending record per semantic reference.
 
     Raises:
-        ReferenceBindingError: If table ordering, target indexes, paths, or markers are unsafe.
+        ReferenceBindingError: If table ordering, target indexes, paths, mentions, or markers are
+            unsafe.
     """
     if not isinstance(action, WriteAction):
         raise ReferenceBindingError("Reference rendering requires a WriteAction")
@@ -83,6 +85,30 @@ def render_reference_facts(
             )
         rendered_units.append(tuple(rendered_facts))
     return ReferenceRenderingResult(tuple(rendered_units), tuple(pending))
+
+
+def validate_rendered_facts(unit: KnowledgeUnit, rendered_facts: tuple[str, ...]) -> None:
+    """Verify that prepared facts differ from source facts only at validated reference markers.
+
+    The materializer does not reopen identity resolution. It does, however, verify the structural
+    hand-off: literal source text must remain byte-for-byte identical and every marker replacement
+    must be either that reference's exact mention or one safe ``[[target|mention]]`` value.
+
+    Args:
+        unit: Original validated marker-bearing knowledge unit.
+        rendered_facts: Phase 16.5C facts supplied to materialization.
+
+    Raises:
+        ReferenceBindingError: If the rendered facts are not a faithful marker-only projection.
+    """
+    if (
+        not isinstance(rendered_facts, tuple)
+        or len(rendered_facts) != len(unit.facts)
+        or not all(isinstance(fact, str) for fact in rendered_facts)
+    ):
+        raise ReferenceBindingError("Rendered facts do not match the KnowledgeUnit shape")
+    for source, rendered in zip(unit.facts, rendered_facts, strict=True):
+        _validate_rendered_fact(source, rendered, unit.references)
 
 
 def _render_fact(
@@ -116,7 +142,8 @@ def _render_fact(
             if not target.path:
                 raise ReferenceBindingError("Resolved reference target has no path")
             target_without_suffix = _wikilink_target(target.path)
-            output.append(f"[[{target_without_suffix}|{reference.mention}]]")
+            mention = _wikilink_display(reference.mention)
+            output.append(f"[[{target_without_suffix}|{mention}]]")
         elif target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION:
             output.append(reference.mention)
             if not any(
@@ -138,9 +165,50 @@ def _render_fact(
         else:
             raise ReferenceBindingError("Reference target has an unsupported preflight outcome")
         cursor = match.end()
-    if "{{ref" in "".join(output) or "}}" in "".join(output):
+    rendered = "".join(output)
+    if "{{ref" in rendered or "}}" in rendered:
         raise ReferenceBindingError("Reference marker survived rendering")
-    return "".join(output)
+    return rendered
+
+
+def _validate_rendered_fact(
+    source: str, rendered: str, references: tuple[KnowledgeReference, ...]
+) -> None:
+    """Validate one marker-only rendering without knowing or re-resolving target identity."""
+    matches = list(_MARKER.finditer(source))
+    if not matches:
+        if rendered != source:
+            raise ReferenceBindingError("Reference-free fact changed during rendering")
+        return
+    cursor = 0
+    pattern: list[str] = ["^"]
+    reference_indexes: list[int] = []
+    for match in matches:
+        literal = source[cursor : match.start()]
+        pattern.append(re.escape(literal))
+        pattern.append("(.*?)")
+        reference_indexes.append(int(match.group(1)))
+        cursor = match.end()
+    pattern.append(re.escape(source[cursor:]))
+    pattern.append("$")
+    rendered_match = re.match("".join(pattern), rendered, flags=re.DOTALL)
+    if rendered_match is None:
+        raise ReferenceBindingError("Rendered fact changed text outside reference markers")
+    for reference_index, replacement in zip(
+        reference_indexes, rendered_match.groups(), strict=True
+    ):
+        if reference_index >= len(references):
+            raise ReferenceBindingError("Reference marker index is out of range")
+        mention = references[reference_index].mention
+        if replacement == mention:
+            continue
+        link_match = _RENDERED_WIKILINK.fullmatch(replacement)
+        if link_match is None or link_match.group(2) != mention:
+            raise ReferenceBindingError("Reference marker was not replaced by its exact mention")
+        _wikilink_target(f"{link_match.group(1)}.md")
+        _wikilink_display(link_match.group(2))
+    if "{{ref" in rendered or "}}" in rendered:
+        raise ReferenceBindingError("Reference marker survived rendering")
 
 
 def _wikilink_target(path: str) -> str:
@@ -158,6 +226,18 @@ def _wikilink_target(path: str) -> str:
     return path.removesuffix(".md")
 
 
+def _wikilink_display(mention: str) -> str:
+    """Return exact display text only when it cannot break Odyssey's wikilink syntax."""
+    if (
+        not isinstance(mention, str)
+        or not mention
+        or any(character in mention for character in "|[]\r\n")
+        or any(ord(character) < 32 or ord(character) == 127 for character in mention)
+    ):
+        raise ReferenceBindingError("Reference mention cannot safely form wikilink display text")
+    return mention
+
+
 def required_bound_wikilinks(facts: tuple[str, ...]) -> Counter[str]:
-    """Return exact bound wikilink multiplicities required by prepared writer facts."""
-    return Counter(link for fact in facts for link in _WIKILINK.findall(fact))
+    """Return exact wikilink multiplicities for prepared facts or authoritative Markdown."""
+    return Counter(link for fact in facts for link in _ANY_WIKILINK.findall(fact))
