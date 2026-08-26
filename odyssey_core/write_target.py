@@ -31,12 +31,14 @@ class WriteTargetDecision:
         existing_note_id: Selected stable note ID only for ``UPDATE``.
         target_type: Canonical type only for ``CREATE``.
         reason: Small stable explanation for a non-update decision.
+        candidate_note_ids: Existing stable IDs retained when clarification is required.
     """
 
     outcome: WriteTargetOutcome
     existing_note_id: str | None = None
     target_type: str | None = None
     reason: str | None = None
+    candidate_note_ids: tuple[str, ...] = ()
 
 
 def decide_write_target(
@@ -105,9 +107,9 @@ def decide_write_target(
         assert resolution.id is not None
         return WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=resolution.id)
     if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS:
-        return _clarification("ambiguous_existing_target")
+        return _clarification("ambiguous_existing_target", resolution.candidate_ids)
     if resolution.has_ambiguous_exact_evidence:
-        return _clarification("ambiguous_existing_target")
+        return _clarification("ambiguous_existing_target", resolution.candidate_ids)
     if unit.intent == "record" and target.type is not None:
         return WriteTargetDecision(WriteTargetOutcome.CREATE, target_type=target.type)
     return _clarification("unresolved_existing_target")
@@ -124,6 +126,10 @@ def _canonical_types(schema: dict[str, Any]) -> frozenset[str]:
     return types
 
 
-def _clarification(reason: str) -> WriteTargetDecision:
+def _clarification(reason: str, candidate_note_ids: tuple[str, ...] = ()) -> WriteTargetDecision:
     """Build a fail-closed clarification decision without asserting an identity."""
-    return WriteTargetDecision(WriteTargetOutcome.NEEDS_CLARIFICATION, reason=reason)
+    return WriteTargetDecision(
+        WriteTargetOutcome.NEEDS_CLARIFICATION,
+        reason=reason,
+        candidate_note_ids=candidate_note_ids,
+    )

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from benchmarks.phase15_1_schema_write_planning import benchmark as benchmark_module
 from benchmarks.phase15_1_schema_write_planning import run_benchmark
 from benchmarks.phase15_1_schema_write_planning.benchmark import (
     BenchmarkContractError,
@@ -84,6 +85,25 @@ def test_production_request_uses_exact_production_prompt_and_structured_output()
     assert request["text"]["format"]["name"] == "odyssey_request_plan"
     assert request["text"]["format"]["strict"] is True
     assert "Planner writable type/property capabilities" in request["input"][0]["content"]
+
+
+def test_schema_guard_rejects_unapproved_future_v2_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Keep the frozen harness fail-closed after the one explicitly approved v2 schema evolution."""
+    original_root = benchmark_module.ROOT
+    canonical_path = original_root / "config/note-schema.json"
+    canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
+    canonical["metadata_fields"][0]["description"] += " Future drift sentinel."
+    copied_path = tmp_path / "config/note-schema.json"
+    copied_path.parent.mkdir(parents=True)
+    copied_path.write_text(
+        json.dumps(canonical, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(benchmark_module, "ROOT", tmp_path)
+    case = next(case for case in load_cases() if case["id"] == "P01")
+    with pytest.raises(BenchmarkContractError, match="drifted"):
+        benchmark_module.schema_for(case)
 
 
 def test_synthetic_snapshot_supports_dynamic_car_filter_and_mutation() -> None:

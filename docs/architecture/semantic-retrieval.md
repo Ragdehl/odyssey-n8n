@@ -23,7 +23,7 @@ canonical note, and does not implement `resolve_entity`.
 ## Retrieval projection
 
 `build_semantic_retrieval_text(note, path)` deterministically produces one embedding input per
-validated atomic note. It includes the filename-derived primary name, aliases, canonical type,
+validated atomic note. It includes canonical metadata `name`, aliases, canonical type,
 non-technical domain metadata, and Markdown body. Ordinary wikilinks contribute their visible
 label, or their target when no label exists:
 

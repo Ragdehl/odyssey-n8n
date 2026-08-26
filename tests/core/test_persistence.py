@@ -35,12 +35,13 @@ def create_person(repository: VaultRepository, path: str = "people/bea.md", **kw
     arguments = {
         "path": path,
         "entity_id": "person-bea",
-        "metadata": {"type": "person", "relationship_to_user": "esposa"},
+        "metadata": {"name": "Bea", "type": "person", "relationship_to_user": "esposa"},
         "content": "# Bea\n\nOriginal body.",
         "actor": "phase12-test",
         "now": NOW,
     }
     arguments.update(kwargs)
+    arguments["metadata"] = {"name": "Bea", **arguments["metadata"]}
     return create_entity(repository, SCHEMA, **arguments)
 
 
@@ -337,7 +338,7 @@ def test_update_rejects_required_property_removal_and_bad_existing_note(
         SCHEMA,
         path="people/journal.md",
         entity_id="journal-1",
-        metadata={"type": "journal_entry", "entry_date": "2026-08-18"},
+        metadata={"name": "Journal", "type": "journal_entry", "entry_date": "2026-08-18"},
         content="entry",
         actor="test",
         now=NOW,

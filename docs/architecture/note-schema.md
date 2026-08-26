@@ -18,7 +18,9 @@ Phase 2 does not copy the schema to `/data/odyssey/config`, add a Docker mount, 
 
 ## Universal metadata and type-specific properties
 
-Universal metadata supplies the technical fields shared by every note, such as stable identity, controlled type, revision information, and provenance. Type-specific properties hold deterministic domain information that belongs only to one note type. The exact field IDs, requirements, descriptions, and constraints for both are defined only in [`config/note-schema.json`](../../config/note-schema.json).
+Universal metadata supplies the technical fields shared by every note, such as stable identity, canonical human-readable name, controlled type, revision information, and provenance. Type-specific properties hold deterministic domain information that belongs only to one note type. The exact field IDs, requirements, descriptions, and constraints for both are defined only in [`config/note-schema.json`](../../config/note-schema.json).
+
+`id` is the stable technical identity and `name` is the authoritative current human-readable identity. The filename is a stable creation-time physical label, formatted as `<creation-name> - <full-id>.md`; it is not used as the current canonical name and is not automatically renamed when `name` changes. `aliases` remain separate alternate identity names. A reference `mention` is occurrence-local and is never promoted to an alias automatically. New names are derived from the interpreted planner target (`target.entity`, otherwise `target.query`); no naming LLM is involved.
 
 Every type definition has `id`, `name`, `description`, `examples`, `subtypes`, and `properties`. `properties` is always an array, including when empty. Each property is a lightweight definition with a stable `id`, non-empty `value_type`, boolean `required` marker, non-empty `description`, and optional `filterable` flag. The same flag on universal metadata fields tells deterministic context retrieval which fields may be constrained. This is intentionally not a general property language or JSON Schema system.
 
@@ -51,13 +53,14 @@ For example:
 ```markdown
 ---
 id: <stable-id>
+name: Carrefour Balma
 type: purchase
 created_at: 2026-08-13T10:00:00+02:00
 updated_at: 2026-08-13T10:00:00+02:00
 created_by: n8n
 updated_by: n8n
 revision: 1
-schema_version: 1
+schema_version: 2
 ---
 
 # Purchase at [[Carrefour Balma]]
@@ -86,4 +89,4 @@ pytest
 
 The schema-definition validator checks the schema structure, controlled-field semantics, stable ID syntax, uniqueness, and descriptive registry entries without external dependencies. Separately, `odyssey_core.notes.validate_note` validates one generic note against an explicitly supplied parsed schema: required and allowed fields, controlled type and subtype, declared value constraints, type-specific properties, and compatible `schema_version`. It does not load a repository path or attempt historical lifecycle checks such as whether identity and revision stayed stable across earlier versions.
 
-The top-level `schema_version` starts at `1`. A future schema change must be explicit, reviewed for compatibility and migration impact, documented when significant, and reflected in this version as appropriate. Human approval is normally required for ontology changes. Phase 2 establishes the controlled schema but does not implement schema-evolution or approval workflows.
+The top-level `schema_version` is `2`, reflecting the required canonical `name` field. A future schema change must be explicit, reviewed for compatibility and migration impact, documented when significant, and reflected in this version as appropriate. Human approval is normally required for ontology changes. Phase 2 establishes the controlled schema but does not implement schema-evolution or approval workflows.

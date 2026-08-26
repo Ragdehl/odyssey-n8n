@@ -5,7 +5,6 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import PurePosixPath
 from typing import Any, cast
 
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
@@ -39,7 +38,8 @@ class ExactEntityCandidate:
         path: Vault-relative POSIX path of the note.
         id: Stable logical note identifier from canonical metadata.
         type: Canonical note type from validated metadata.
-        primary_name: Human-readable lookup name derived from the filename stem.
+        primary_name: Canonical human-readable name from note metadata. The historical field name is
+            retained in this evidence type for API compatibility.
         match_kind: Whether the query matched the primary name or an alias.
         matched_value: Exact stored primary name or alias that matched after normalization.
     """
@@ -80,7 +80,7 @@ def _normalize_reference(value: str) -> str:
     """Normalize one identity value for exact Unicode-aware comparison.
 
     Args:
-        value: Query, filename stem, or alias to normalize.
+        value: Query, canonical name, or alias to normalize.
 
     Returns:
         Surrounding-whitespace-trimmed and case-folded text.
@@ -167,7 +167,7 @@ def find_exact_entity_candidates(
         if type is not None and note_type != type:
             continue
 
-        primary_name = PurePosixPath(path).stem
+        primary_name = cast(str, note.metadata["name"])
         match_kind: MatchKind | None = None
         matched_value = primary_name
         if _normalize_reference(primary_name) == normalized_query:

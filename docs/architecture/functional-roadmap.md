@@ -31,12 +31,13 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
   one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
 - ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A now freezes deterministic planner
-  occurrence markers and human-readable mentions; the remaining work resolves or preallocates
-  referenced identities, materializes only safe `[[wikilinks]]` before Luna, and preserves
+  occurrence markers and human-readable mentions; 16.5B preflights each target once and resolves or
+  preallocates referenced identities, while 16.5C materializes only safe `[[wikilinks]]` before Luna
+  and preserves
   ambiguous/unresolved references as explicit pending work rather than guessing.
-- ⬜ **Phase 16.6 — CREATE materialization:** deterministically allocate CREATE identity/path/display
-  identity, generate a complete body through the selected Luna/medium policy using already-bound
-  references, validate it, and persist once.
+- ⬜ **Phase 16.6 — CREATE materialization:** generate a complete body through the selected
+  Luna/medium policy using the identity/path already preallocated by Phase 16.5B, validate it, and
+  persist once.
 - ⬜ **Phase 16.7 — remaining Phase 16 mutation semantics:** guarded soft delete/inbound-link policy,
   explicit bulk cardinality, dependency/partial-success results, and type-change handling before
   general RequestPlan orchestration.
@@ -119,8 +120,8 @@ only for non-duplicate free text, validates exact bounded operations, and calls 
 
 ➡️ **Phase 16.5 — reference binding before body writing** remains in progress. Phase 16.5A freezes
 `KnowledgeReference(target_index, role, mention)` plus `{{ref:N}}` markers local to each unit's
-`references` array, so placement is preserved before Luna sees the facts. Target resolution and
-wikilink rendering remain later 16.5B/C work. See
+`references` array, so placement is preserved before Luna sees the facts. Phase 16.5B now owns
+target resolution and identity/path preallocation; wikilink rendering remains Phase 16.5C. See
 [Phase 16 reference binding](phase-16-reference-binding.md).
 
 The immediate execution order is:
@@ -130,7 +131,7 @@ The immediate execution order is:
         |
 2. resolve existing reference targets / authorize same-request CREATE targets
         |
-3. allocate stable identity + path for authorized CREATEs (no persistence yet)
+3. allocate stable identity + path for authorized CREATEs (Phase 16.5B; no persistence yet)
         |
 4. Core materializes only safe [[wikilinks]] before the writer
         |

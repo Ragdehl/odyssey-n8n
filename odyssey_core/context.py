@@ -13,7 +13,7 @@ from array import array
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
 
@@ -114,7 +114,7 @@ def build_context_retrieval_text(note: Any, path: str) -> str:
 
     Args:
         note: Canonically validated Odyssey note.
-        path: Vault-relative Markdown path used for the filename-derived name.
+        path: Vault-relative Markdown path validated as technical source evidence.
 
     Returns:
         Projection containing useful metadata, controlled tags, body text, and readable links.
@@ -124,9 +124,13 @@ def build_context_retrieval_text(note: Any, path: str) -> str:
     """
     if not isinstance(path, str) or not path.endswith(".md"):
         raise ValueError("Context projection requires a Markdown note path")
-    primary_name = PurePosixPath(path).stem
+    primary_name = note.metadata.get("name")
     note_type = note.metadata.get("type")
-    if not primary_name or not isinstance(note_type, str):
+    if (
+        not isinstance(primary_name, str)
+        or not primary_name.strip()
+        or not isinstance(note_type, str)
+    ):
         raise ValueError("Context projection requires a validated note type")
     lines = [f"Name: {primary_name}"]
     aliases = note.metadata.get("aliases")
@@ -137,7 +141,7 @@ def build_context_retrieval_text(note: Any, path: str) -> str:
     if isinstance(tags, list) and tags:
         lines.append("Tags: " + ", ".join(cast(list[str], tags)))
     for key in sorted(note.metadata):
-        if key in _TECHNICAL_METADATA or key in {"aliases", "tags", "type"}:
+        if key in _TECHNICAL_METADATA or key in {"aliases", "name", "tags", "type"}:
             continue
         value = note.metadata[key]
         rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
@@ -490,7 +494,7 @@ class ContextIndex:
                     note_id,
                     path,
                     cast(str, note.metadata["type"]),
-                    PurePosixPath(path).stem,
+                    cast(str, note.metadata["name"]),
                     hashlib.sha256(raw.encode("utf-8")).hexdigest(),
                     note_tags,
                     build_context_retrieval_text(note, path),

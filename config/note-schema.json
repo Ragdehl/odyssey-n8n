@@ -1,5 +1,5 @@
 {
-    "schema_version": 1,
+    "schema_version": 2,
     "metadata_fields": [
         {
             "id": "id",
@@ -7,6 +7,14 @@
             "required": true,
             "description": "Stable identifier for the logical note or entity; independent of the filename and unchanged when the note is renamed.",
             "constraints": {"non_empty": true, "stable": true, "filename_independent": true},
+            "filterable": false
+        },
+        {
+            "id": "name",
+            "value_type": "string",
+            "required": true,
+            "description": "Canonical human-readable identity; independent of the creation-time filename label.",
+            "constraints": {"non_empty": true},
             "filterable": false
         },
         {

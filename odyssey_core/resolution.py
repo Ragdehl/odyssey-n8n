@@ -99,7 +99,8 @@ def build_provider_evidence(note: Note, path: str) -> str:
 
     Args:
         note: Parsed note already validated against the canonical schema.
-        path: Vault-relative Markdown path whose stem is the canonical display name.
+        path: Vault-relative Markdown path used only to load the validated note; canonical display
+            identity comes from ``note.metadata["name"]``.
 
     Returns:
         Stable textual identity evidence containing no semantic score or rank.
@@ -114,7 +115,10 @@ def build_provider_evidence(note: Note, path: str) -> str:
     if not isinstance(note_id, str) or not isinstance(note_type, str):
         raise ValueError("Provider evidence requires validated note identity")
 
-    lines = [f"Name: {PurePosixPath(path).stem}"]
+    name = note.metadata.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Provider evidence requires canonical note name")
+    lines = [f"Name: {name}"]
     aliases = note.metadata.get("aliases")
     if isinstance(aliases, list) and aliases:
         lines.append("Aliases: " + ", ".join(str(value) for value in aliases))
@@ -123,7 +127,7 @@ def build_provider_evidence(note: Note, path: str) -> str:
         if (
             key in _TECHNICAL_METADATA
             or key in _NON_IDENTITY_FACETS
-            or key in {"id", "aliases", "type"}
+            or key in {"id", "name", "aliases", "type"}
         ):
             continue
         value = note.metadata[key]

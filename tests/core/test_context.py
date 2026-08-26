@@ -62,13 +62,14 @@ def note(note_id: str, note_type: str, content: str, **metadata: object) -> Note
     return Note(
         metadata={
             "id": note_id,
+            "name": str(metadata.pop("name", note_id.replace("-", " ").title())),
             "type": note_type,
             "created_at": "2026-08-16T12:00:00Z",
             "updated_at": "2026-08-16T12:00:00Z",
             "created_by": "pytest",
             "updated_by": "pytest",
             "revision": 1,
-            "schema_version": 1,
+            "schema_version": 2,
             **metadata,
         },
         content=content,
@@ -96,6 +97,7 @@ def test_context_projection_includes_tags_and_excludes_lifecycle() -> None:
         tags=["idea", "explore"],
         aliases=["GUI"],
         subtype="system",
+        name="Odyssey GUI",
     )
     projection = build_context_retrieval_text(value, "ideas/Odyssey GUI.md")
     assert "Name: Odyssey GUI" in projection

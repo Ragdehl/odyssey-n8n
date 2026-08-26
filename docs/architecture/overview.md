@@ -351,7 +351,8 @@ deterministic constraints. This does not freeze a filter API or query language.
 
 The future layered resolver may also accept a stable ID as decisive exact evidence when a caller
 already has one. The implemented Phase 9 API deliberately preserves its narrower contract: it
-matches only filename-derived primary names and aliases, with optional canonical type filtering.
+matches canonical metadata `name` and aliases, with optional canonical type filtering; the physical
+filename is not semantic identity.
 
 Semantic/vector candidate retrieval is implemented in Phase 10 for identity expressed through
 roles, relationships, contextual
@@ -400,11 +401,12 @@ privacy/evidence-minimization contract is documented in [`ADR 0004`](../decision
 
 The planning/LLM layer may identify semantic references, but Odyssey Core must resolve them before
 final Markdown persistence. After identity is settled, rendering may produce canonical wikilinks
-that preserve the user's wording as link text:
+that preserve the user's wording as link text. With the Phase 16.5B creation-path rule, a new note's
+link target is its stable creation-time filename stem rather than its current human-readable name:
 
 ```markdown
-[[Beatriz Hidalgo|my wife]]
-[[Carrefour Balma|Carrefour]]
+[[Beatriz Hidalgo - <full-id>|my wife]]
+[[Carrefour Balma - <full-id>|Carrefour]]
 ```
 
 One occurrence of `"my wife"` or `"Carrefour"` in prose does not automatically add that phrase to
@@ -464,7 +466,7 @@ arbitrary generated links. Automated persistence should not emit broken wikilink
   optional canonical type constraint.
 - **Output:** an immutable, deterministically ordered tuple of `ExactEntityCandidate` values.
 - **Can see:** vault-relative paths, raw Markdown supplied by the repository, parsed `Note` values,
-  and the supplied schema. The filename stem is available here as storage context.
+  and the supplied schema. The filename is technical storage context, not canonical identity.
 - **Must not know or do:** perform general knowledge search, interpret prose or wikilinks, return
   fuzzy or partial matches, rank semantically, modify notes, or move domain behavior into storage.
 - **Status:** **PHASE 9 — IMPLEMENTED** as a read-only linear scan.
@@ -489,8 +491,8 @@ arbitrary generated links. Automated persistence should not emit broken wikilink
   )
   ```
 
-Matching removes surrounding whitespace and applies Unicode `casefold()` only. Primary filename
-stem matches sort before alias matches; remaining ordering uses primary name, path, and stable ID.
+Matching removes surrounding whitespace and applies Unicode `casefold()` only. Primary canonical-name
+matches sort before alias matches; remaining ordering uses primary name, path, and stable ID.
 No punctuation rewriting, stemming, edit distance, phonetics, transliteration, embeddings, or
 “only candidate” heuristic participates.
 
@@ -501,19 +503,18 @@ could produce a false `NO_EXACT_MATCH` and enable a future duplicate.
 
 ### Primary lookup name and logical identity
 
-Phase 9 derives `primary_name` from the vault-relative filename stem:
+Phase 9 reads canonical `name` from note metadata:
 
 ```text
 path:          stores/Carrefour Balma.md
-primary_name:  Carrefour Balma
+name:          Carrefour Balma
 stable id:     metadata["id"]
 aliases:       metadata.get("aliases", [])
 ```
 
-This is a small V1 composition choice, not a schema change. `Note` remains path-independent, and
-the metadata ID remains stable when a file is renamed. Renaming a file changes its primary lookup
-name. If this causes demonstrated failures, a universal canonical name field requires a separate
-schema proposal and human approval.
+The filename is a creation-time physical label, not the current human identity. `Note` remains
+path-independent, and the metadata ID remains stable when a file is renamed. Updating `name` does
+not rename the existing file. There is no legacy filename-as-primary-name fallback.
 
 ### `VaultRepository.list_markdown_paths` — path discovery
 
@@ -545,8 +546,9 @@ schema proposal and human approval.
   created_at: "2026-08-16T08:00:00Z"
   created_by: "odyssey"
   id: "store-carrefour-balma"
+  name: "Carrefour Balma"
   revision: 1
-  schema_version: 1
+  schema_version: 2
   type: "store"
   updated_at: "2026-08-16T08:00:00Z"
   updated_by: "odyssey"
@@ -567,7 +569,8 @@ schema proposal and human approval.
   identities.
 - **Status:** **IMPLEMENTED**.
 - **Concrete example:**
-  `repository.create_text("products/Lactel.md", markdown)` returns `None` after creating that file.
+  `repository.create_text("products/Lactel - <full-id>.md", markdown)` returns `None` after creating
+  that already-preallocated path.
 
 ### `parse_note` — Markdown decoding
 
@@ -585,6 +588,7 @@ schema proposal and human approval.
   Note(
       metadata={
           "id": "store-carrefour-balma",
+          "name": "Carrefour Balma",
           "type": "store",
           "aliases": ["Carrefour"],
           "created_at": "2026-08-16T08:00:00Z",
@@ -592,7 +596,7 @@ schema proposal and human approval.
           "created_by": "odyssey",
           "updated_by": "odyssey",
           "revision": 1,
-          "schema_version": 1,
+          "schema_version": 2,
       },
       content="# Carrefour Balma\n\nCloses at 21:00.\n",
   )
@@ -623,7 +627,7 @@ schema proposal and human approval.
 - **Status:** **IMPLEMENTED**.
 - **Concrete example:** `serialize_note(Note(metadata={...}, content="# Lactel\n"))` returns text
   beginning with `---`, deterministic frontmatter, a closing `---`, and `# Lactel`. It does not
-  choose `products/Lactel.md` or persist anything.
+  choose `products/Lactel - <full-id>.md` or persist anything.
 
 ### `Note` — path-independent representation
 
@@ -637,7 +641,10 @@ schema proposal and human approval.
 - **Concrete example:**
 
   ```python
-  Note(metadata={"id": "product-lactel", "type": "product", ...}, content="# Lactel\n")
+  Note(
+      metadata={"id": "product-lactel", "name": "Lactel", "type": "product", ...},
+      content="# Lactel\n",
+  )
   ```
 
 ### Filesystem and Markdown vault — authoritative persistence
@@ -648,8 +655,8 @@ schema proposal and human approval.
 - **Can see:** directories, filenames, frontmatter text, body text, and wikilinks.
 - **Must not know or do:** make domain decisions or depend on a derived index.
 - **Status:** **IMPLEMENTED** and the source of truth.
-- **Concrete example:** `stores/Carrefour Balma.md` contains canonical frontmatter and ordinary
-  Markdown; the filesystem does not know that its alias matched a request.
+- **Concrete example:** a preallocated `stores/Carrefour Balma - <full-id>.md` contains canonical
+  frontmatter and ordinary Markdown; the filesystem does not know that its alias matched a request.
 
 ## End-to-end multi-unit example
 
@@ -733,6 +740,7 @@ note persistence. Phase 16 will compose these boundaries for approved writes.
    Note(
        metadata={
            "id": "store-carrefour-balma",
+           "name": "Carrefour Balma",
            "type": "store",
            "aliases": ["Carrefour"],
            "created_at": "2026-08-16T08:00:00Z",
@@ -740,17 +748,18 @@ note persistence. Phase 16 will compose these boundaries for approved writes.
            "created_by": "odyssey",
            "updated_by": "odyssey",
            "revision": 1,
-           "schema_version": 1,
+           "schema_version": 2,
        },
        content="# Carrefour Balma\n\nCloses at 21:00.\nUsually visited on Saturday.\n",
    )
    ```
 
    In the write direction, `validate_note(note, schema)` returns `None`, `serialize_note(note)`
-   returns raw Markdown, and `repository.create_text("stores/Carrefour Balma.md", markdown)`
-   persists it. Planning decides relationships; `Note` carries metadata and content; serialization
-   produces text; the repository sees only the chosen path and that text. `parse_note` is not part
-   of this write path.
+   returns raw Markdown, and
+   `repository.create_text("stores/Carrefour Balma - <full-id>.md", markdown)` persists the
+   already-preallocated path. Planning decides relationships; `Note` carries metadata and content;
+   serialization produces text; the repository sees only the chosen path and that text. `parse_note`
+   is not part of this write path.
 
 ## Why exact and semantic candidate retrieval remain separate
 

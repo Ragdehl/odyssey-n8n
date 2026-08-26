@@ -65,7 +65,12 @@ def repository(tmp_path: Path) -> VaultRepository:
         SCHEMA,
         path="people/bea.md",
         entity_id="person-bea",
-        metadata={"type": "person", "relationship_to_user": "partner", "tags": ["idea"]},
+        metadata={
+            "name": "Bea",
+            "type": "person",
+            "relationship_to_user": "partner",
+            "tags": ["idea"],
+        },
         content="# Bea\n\n- Bea works at Airbus.\n- Bea lives in Toulouse.\n\nUnrelated *formatting*.",
         actor="test",
         now=NOW,

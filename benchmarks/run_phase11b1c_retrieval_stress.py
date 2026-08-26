@@ -403,13 +403,14 @@ def metadata(spec: NoteSpec, ordinal: int) -> dict[str, Any]:
     """Build schema-valid metadata for one synthetic specification."""
     values: dict[str, Any] = {
         "id": spec.id,
+        "name": spec.name,
         "type": spec.type,
         "created_at": TIMESTAMP,
         "updated_at": TIMESTAMP,
         "created_by": "phase11b1c-stress-generator",
         "updated_by": "phase11b1c-stress-generator",
         "revision": 1,
-        "schema_version": 1,
+        "schema_version": 2,
     }
     if spec.aliases:
         values["aliases"] = list(spec.aliases)

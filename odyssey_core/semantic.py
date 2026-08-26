@@ -12,7 +12,7 @@ import tempfile
 from array import array
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
@@ -141,7 +141,7 @@ class SemanticEntityCandidate:
         id: Stable logical note identifier.
         path: Vault-relative POSIX Markdown path.
         type: Canonical note type.
-        primary_name: Human-readable filename-derived name.
+        primary_name: Canonical human-readable metadata name.
         similarity: Cosine similarity used only to rank this candidate set.
     """
 
@@ -176,7 +176,7 @@ def build_semantic_retrieval_text(note: Note, path: str) -> str:
 
     Args:
         note: Canonically validated Odyssey note.
-        path: Vault-relative POSIX Markdown path supplying the primary name.
+        path: Vault-relative POSIX Markdown path validated as technical source evidence.
 
     Returns:
         One human-readable projection containing name, aliases, type, useful domain metadata,
@@ -190,10 +190,15 @@ def build_semantic_retrieval_text(note: Note, path: str) -> str:
     """
     if not isinstance(path, str) or not path.endswith(".md"):
         raise ValueError("Semantic projection requires a Markdown note path")
-    primary_name = PurePosixPath(path).stem
+    primary_name = note.metadata.get("name")
     note_type = note.metadata.get("type")
     note_id = note.metadata.get("id")
-    if not primary_name or not isinstance(note_type, str) or not isinstance(note_id, str):
+    if (
+        not isinstance(primary_name, str)
+        or not primary_name.strip()
+        or not isinstance(note_type, str)
+        or not isinstance(note_id, str)
+    ):
         raise ValueError("Semantic projection requires validated note identity and type")
 
     lines = [f"Name: {primary_name}"]
@@ -202,7 +207,11 @@ def build_semantic_retrieval_text(note: Note, path: str) -> str:
         lines.append("Aliases: " + ", ".join(cast(list[str], aliases)))
     lines.append(f"Type: {note_type}")
     for key in sorted(note.metadata):
-        if key in _TECHNICAL_METADATA or key in _NON_IDENTITY_FACETS or key in {"aliases", "type"}:
+        if (
+            key in _TECHNICAL_METADATA
+            or key in _NON_IDENTITY_FACETS
+            or key in {"aliases", "name", "type"}
+        ):
             continue
         value = note.metadata[key]
         rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
@@ -300,7 +309,7 @@ class SemanticEntityIndex:
                     path=path,
                     id=note_id,
                     type=cast(str, note.metadata["type"]),
-                    primary_name=PurePosixPath(path).stem,
+                    primary_name=cast(str, note.metadata["name"]),
                     source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
                     text=build_semantic_retrieval_text(note, path),
                 )
