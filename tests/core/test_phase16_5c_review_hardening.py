@@ -92,6 +92,25 @@ def test_rendered_fact_validation_accepts_bound_link_or_plain_pending_mention() 
     validate_rendered_facts(unit, ("Bea habló con Marta.",))
 
 
+def test_rendered_fact_validation_handles_adjacent_markers() -> None:
+    """Adjacent markers remain independently attributable to their exact references."""
+    unit = KnowledgeUnit(
+        SelectionCriteria("Bea", "Bea", "person", (), None),
+        "amend",
+        (),
+        (),
+        ("{{ref:0}}{{ref:1}}",),
+        (
+            KnowledgeReference(1, "person", "Marta"),
+            KnowledgeReference(2, "person", "Laura"),
+        ),
+    )
+    validate_rendered_facts(
+        unit,
+        ("[[people/Marta - id|Marta]][[people/Laura - id|Laura]]",),
+    )
+
+
 def test_materializer_rejects_unrelated_rendered_fact_before_repository_access(
     tmp_path: Path,
 ) -> None:
