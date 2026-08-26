@@ -401,11 +401,12 @@ privacy/evidence-minimization contract is documented in [`ADR 0004`](../decision
 
 The planning/LLM layer may identify semantic references, but Odyssey Core must resolve them before
 final Markdown persistence. After identity is settled, rendering may produce canonical wikilinks
-that preserve the user's wording as link text:
+that preserve the user's wording as link text. With the Phase 16.5B creation-path rule, a new note's
+link target is its stable creation-time filename stem rather than its current human-readable name:
 
 ```markdown
-[[Beatriz Hidalgo|my wife]]
-[[Carrefour Balma|Carrefour]]
+[[Beatriz Hidalgo - <full-id>|my wife]]
+[[Carrefour Balma - <full-id>|Carrefour]]
 ```
 
 One occurrence of `"my wife"` or `"Carrefour"` in prose does not automatically add that phrase to
@@ -490,8 +491,8 @@ arbitrary generated links. Automated persistence should not emit broken wikilink
   )
   ```
 
-Matching removes surrounding whitespace and applies Unicode `casefold()` only. Primary filename
-stem matches sort before alias matches; remaining ordering uses primary name, path, and stable ID.
+Matching removes surrounding whitespace and applies Unicode `casefold()` only. Primary canonical-name
+matches sort before alias matches; remaining ordering uses primary name, path, and stable ID.
 No punctuation rewriting, stemming, edit distance, phonetics, transliteration, embeddings, or
 “only candidate” heuristic participates.
 
@@ -545,6 +546,7 @@ not rename the existing file. There is no legacy filename-as-primary-name fallba
   created_at: "2026-08-16T08:00:00Z"
   created_by: "odyssey"
   id: "store-carrefour-balma"
+  name: "Carrefour Balma"
   revision: 1
   schema_version: 2
   type: "store"
@@ -567,7 +569,8 @@ not rename the existing file. There is no legacy filename-as-primary-name fallba
   identities.
 - **Status:** **IMPLEMENTED**.
 - **Concrete example:**
-  `repository.create_text("products/Lactel.md", markdown)` returns `None` after creating that file.
+  `repository.create_text("products/Lactel - <full-id>.md", markdown)` returns `None` after creating
+  that already-preallocated path.
 
 ### `parse_note` — Markdown decoding
 
@@ -585,6 +588,7 @@ not rename the existing file. There is no legacy filename-as-primary-name fallba
   Note(
       metadata={
           "id": "store-carrefour-balma",
+          "name": "Carrefour Balma",
           "type": "store",
           "aliases": ["Carrefour"],
           "created_at": "2026-08-16T08:00:00Z",
@@ -623,7 +627,7 @@ not rename the existing file. There is no legacy filename-as-primary-name fallba
 - **Status:** **IMPLEMENTED**.
 - **Concrete example:** `serialize_note(Note(metadata={...}, content="# Lactel\n"))` returns text
   beginning with `---`, deterministic frontmatter, a closing `---`, and `# Lactel`. It does not
-  choose `products/Lactel.md` or persist anything.
+  choose `products/Lactel - <full-id>.md` or persist anything.
 
 ### `Note` — path-independent representation
 
@@ -637,7 +641,10 @@ not rename the existing file. There is no legacy filename-as-primary-name fallba
 - **Concrete example:**
 
   ```python
-  Note(metadata={"id": "product-lactel", "type": "product", ...}, content="# Lactel\n")
+  Note(
+      metadata={"id": "product-lactel", "name": "Lactel", "type": "product", ...},
+      content="# Lactel\n",
+  )
   ```
 
 ### Filesystem and Markdown vault — authoritative persistence
@@ -648,8 +655,8 @@ not rename the existing file. There is no legacy filename-as-primary-name fallba
 - **Can see:** directories, filenames, frontmatter text, body text, and wikilinks.
 - **Must not know or do:** make domain decisions or depend on a derived index.
 - **Status:** **IMPLEMENTED** and the source of truth.
-- **Concrete example:** `stores/Carrefour Balma.md` contains canonical frontmatter and ordinary
-  Markdown; the filesystem does not know that its alias matched a request.
+- **Concrete example:** a preallocated `stores/Carrefour Balma - <full-id>.md` contains canonical
+  frontmatter and ordinary Markdown; the filesystem does not know that its alias matched a request.
 
 ## End-to-end multi-unit example
 
@@ -733,6 +740,7 @@ note persistence. Phase 16 will compose these boundaries for approved writes.
    Note(
        metadata={
            "id": "store-carrefour-balma",
+           "name": "Carrefour Balma",
            "type": "store",
            "aliases": ["Carrefour"],
            "created_at": "2026-08-16T08:00:00Z",
@@ -747,10 +755,11 @@ note persistence. Phase 16 will compose these boundaries for approved writes.
    ```
 
    In the write direction, `validate_note(note, schema)` returns `None`, `serialize_note(note)`
-   returns raw Markdown, and `repository.create_text("stores/Carrefour Balma.md", markdown)`
-   persists it. Planning decides relationships; `Note` carries metadata and content; serialization
-   produces text; the repository sees only the chosen path and that text. `parse_note` is not part
-   of this write path.
+   returns raw Markdown, and
+   `repository.create_text("stores/Carrefour Balma - <full-id>.md", markdown)` persists the
+   already-preallocated path. Planning decides relationships; `Note` carries metadata and content;
+   serialization produces text; the repository sees only the chosen path and that text. `parse_note`
+   is not part of this write path.
 
 ## Why exact and semantic candidate retrieval remain separate
 
