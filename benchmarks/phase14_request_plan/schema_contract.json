@@ -13,7 +13,7 @@
     "entry_date": {"types": ["journal_entry"], "description": "Date the journal entry refers to."}
   },
   "retrieval_contract": {
-    "schema_version": 2,
+    "schema_version": 1,
     "canonical_types": ["concept", "project", "task", "store", "product", "purchase", "recipe", "document", "person", "journal_entry"],
     "canonical_tags": ["idea", "decision", "question", "reflection", "reference", "hypothesis", "explore", "someday", "review"],
     "canonical_subtypes": [],

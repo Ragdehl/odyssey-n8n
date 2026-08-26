@@ -56,6 +56,7 @@ Relationships are represented by ordinary Obsidian wikilinks by default. A purch
 ```markdown
 ---
 id: purchase_2026_08_13_001
+name: Purchase at Carrefour Balma
 type: purchase
 created_at: 2026-08-13T10:00:00+02:00
 updated_at: 2026-08-13T10:00:00+02:00

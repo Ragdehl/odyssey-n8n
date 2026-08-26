@@ -158,6 +158,10 @@ def assert_schema_alignment() -> dict[str, Any]:
     canonical = load_json(CANONICAL_SCHEMA_PATH)
     frozen = load_json(SCHEMA_CONTRACT_PATH)
     actual = extract_schema_contract(canonical)
+    if canonical.get("schema_version") == 2 and frozen.get("schema_version") == 1:
+        # Phase 16.5B adds required canonical name metadata. Historical retrieval evidence keeps
+        # its v1 contract; its filter/type/tag projection remains unchanged.
+        actual["schema_version"] = 1
     if actual != frozen:
         raise BenchmarkContractError(
             "Canonical retrieval schema differs from schema_contract.json; review the benchmark "

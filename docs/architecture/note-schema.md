@@ -53,6 +53,7 @@ For example:
 ```markdown
 ---
 id: <stable-id>
+name: Carrefour Balma
 type: purchase
 created_at: 2026-08-13T10:00:00+02:00
 updated_at: 2026-08-13T10:00:00+02:00

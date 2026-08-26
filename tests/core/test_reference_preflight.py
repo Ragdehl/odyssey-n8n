@@ -11,6 +11,7 @@ import pytest
 from odyssey_core import (
     KnowledgeReference,
     KnowledgeUnit,
+    ReferencePreflightError,
     SelectionCriteria,
     WriteAction,
     WriteTargetOutcome,
@@ -46,14 +47,29 @@ class NoReasoner:
         raise AssertionError("preflight test unexpectedly called a reasoner")
 
 
-def unit(query: str, *, entity: str | None = None, note_type: str = "person", refs=()):
+class UnresolvedReasoner:
+    """Return an explicit unresolved contextual result for ambiguity tests."""
+
+    def resolve(self, request: object) -> tuple[dict[str, object], dict[str, int]]:
+        """Abstain while preserving the resolver candidate set."""
+        return {"outcome": "UNRESOLVED", "id": None}, {"output_tokens": 0}
+
+
+def unit(
+    query: str,
+    *,
+    entity: str | None = None,
+    note_type: str = "person",
+    facts=("fact",),
+    refs=(),
+):
     """Build the validated-shaped unit used by deterministic preflight cases."""
     return KnowledgeUnit(
         SelectionCriteria(entity, query, note_type, (), None),
         "record",
         (),
         (),
-        ("fact",),
+        tuple(facts),
         tuple(refs),
     )
 
@@ -63,7 +79,7 @@ def action(*units: KnowledgeUnit) -> WriteAction:
     return WriteAction(tuple(units))
 
 
-def run(vault: Path, schema: dict[str, Any], value: WriteAction, *, ids=None):
+def run(vault: Path, schema: dict[str, Any], value: WriteAction, *, ids=None, reasoner=None):
     """Run preflight with local no-op dependencies and an optional deterministic allocator."""
     kwargs = {}
     if ids is not None:
@@ -74,7 +90,7 @@ def run(vault: Path, schema: dict[str, Any], value: WriteAction, *, ids=None):
         schema=schema,
         semantic_index=EmptyIndex(),
         embedder=EmptyEmbedder(),
-        contextual_reasoner=NoReasoner(),
+        contextual_reasoner=reasoner or NoReasoner(),
         semantic_limit=5,
         **kwargs,
     )
@@ -158,10 +174,11 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:
     """Preflight reference-only targets and leave all markers/source files untouched."""
-    target = unit("Leche Pascual")
+    target = unit("Leche Pascual", facts=())
     purchase = unit(
         "purchase",
         note_type="purchase",
+        facts=("Bought {{ref:0}}.",),
         refs=(KnowledgeReference(0, "product", "Leche Pascual"),),
     )
     result = run(tmp_path, schema, action(target, purchase), ids=["product-id", "purchase-id"])
@@ -171,6 +188,90 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     ]
     assert result[1].stable_id == "purchase-id"
     assert list(tmp_path.rglob("*.md")) == []
+    assert target.facts == ()
+    assert purchase.facts == ("Bought {{ref:0}}.",)
+
+
+def test_mixed_update_and_create_preflight_is_ordered(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Return one complete ordered table for existing and newly authorized targets."""
+    write_existing(tmp_path, "people/Marta.md")
+    result = run(
+        tmp_path,
+        schema,
+        action(unit("Marta", entity="Marta"), unit("Leche Pascual", note_type="product")),
+        ids=["product-full-id"],
+    )
+    assert [item.outcome for item in result] == [
+        WriteTargetOutcome.UPDATE,
+        WriteTargetOutcome.CREATE,
+    ]
+    assert result[0].stable_id == "existing-marta"
+    assert result[0].path == "people/Marta.md"
+    assert result[1].path == "Leche Pascual - product-full-id.md"
+
+
+def test_ambiguous_target_preserves_candidates_without_path(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Return clarification and candidate IDs when exact identity remains ambiguous."""
+    write_existing(tmp_path, "people/Marta A.md", "Marta")
+    second = tmp_path / "people/Marta B.md"
+    second.write_text(
+        serialize_note(
+            Note(
+                {
+                    "id": "existing-marta-2",
+                    "name": "Marta",
+                    "type": "person",
+                    "created_at": "2026-08-25T10:00:00Z",
+                    "updated_at": "2026-08-25T10:00:00Z",
+                    "created_by": "test",
+                    "updated_by": "test",
+                    "revision": 1,
+                    "schema_version": 2,
+                },
+                "fact",
+            )
+        ),
+        encoding="utf-8",
+    )
+    result = run(
+        tmp_path, schema, action(unit("Marta", entity="Marta")), reasoner=UnresolvedReasoner()
+    )
+    assert result[0].outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result[0].candidate_note_ids == ("existing-marta", "existing-marta-2")
+    assert result[0].path is None
+
+
+def test_duplicate_existing_id_fails_closed(tmp_path: Path, schema: dict[str, Any]) -> None:
+    """Reject a resolved identity whose stable ID occurs in multiple validated notes."""
+    write_existing(tmp_path, "people/Marta A.md")
+    duplicate = tmp_path / "people/Marta B.md"
+    duplicate.write_text(
+        (tmp_path / "people/Marta A.md")
+        .read_text(encoding="utf-8")
+        .replace('name: "Marta"', 'name: "Other"'),
+        encoding="utf-8",
+    )
+    with pytest.raises(ReferencePreflightError, match="duplicated"):
+        run(tmp_path, schema, action(unit("Marta", entity="Marta")))
+
+
+@pytest.mark.parametrize("name", ["What?", "What:", "What|", "What*", "What. ", "CON"])
+def test_creation_filename_is_windows_portable(
+    tmp_path: Path, schema: dict[str, Any], name: str
+) -> None:
+    """Replace Windows-forbidden characters while retaining canonical metadata unchanged."""
+    result = run(tmp_path, schema, action(unit(name, entity=name)), ids=["full-id"])
+    assert result[0].canonical_name == name
+    assert result[0].path is not None
+    label = result[0].path.removesuffix(" - full-id.md")
+    assert not any(character in label for character in '<>:"/\\|?*')
+    assert not label.endswith((" ", "."))
+    if name == "CON":
+        assert label == "CON_"
 
 
 def test_exact_identity_uses_current_name_not_stale_creation_label(

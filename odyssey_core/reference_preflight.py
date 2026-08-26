@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -140,13 +141,14 @@ def _materialize_decision(
     if path in existing_paths or path in allocated_paths:
         raise ReferencePreflightError(f"CREATE path already exists: {path}")
     allocated_paths.add(path)
-    return UnitTargetPreflight(unit_index, decision.outcome, stable_id, name.strip(), path)
+    return UnitTargetPreflight(unit_index, decision.outcome, stable_id, name, path)
 
 
 def _find_existing_identity(
     repository: VaultRepository, schema: dict[str, Any], stable_id: str
 ) -> tuple[str, str]:
     """Find and validate the authoritative path and canonical name for an existing ID."""
+    matches: list[tuple[str, str]] = []
     for path in repository.list_markdown_paths():
         try:
             note = parse_note(repository.read_text(path))
@@ -157,15 +159,30 @@ def _find_existing_identity(
             name = note.metadata.get("name")
             if not isinstance(name, str) or not name.strip():
                 raise ReferencePreflightError(f"Existing note has no canonical name: {path}")
-            return path, name
-    raise ReferencePreflightError(f"Resolved note ID is no longer present: {stable_id}")
+            matches.append((path, name))
+    if not matches:
+        raise ReferencePreflightError(f"Resolved note ID is no longer present: {stable_id}")
+    if len(matches) > 1:
+        raise ReferencePreflightError(f"Stable note ID is duplicated: {stable_id}")
+    return matches[0]
 
 
 def _safe_creation_name(name: str) -> str:
     """Validate the human name used in a creation-time filename label."""
     value = name.strip()
-    if not value or any(character in value for character in ("/", "\\", "\x00")):
+    if not value:
         raise ReferencePreflightError("Canonical name cannot safely form a Markdown filename")
-    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+    value = re.sub(r'[<>:"/\\|?*]', "_", value)
+    value = value.rstrip(" .")
+    if not value or any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise ReferencePreflightError("Canonical name contains unsafe control characters")
+    if value.upper() in {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }:
+        value += "_"
     return value
