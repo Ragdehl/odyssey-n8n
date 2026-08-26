@@ -97,7 +97,9 @@ def test_schema_guard_rejects_unapproved_future_v2_drift(
     canonical["metadata_fields"][0]["description"] += " Future drift sentinel."
     copied_path = tmp_path / "config/note-schema.json"
     copied_path.parent.mkdir(parents=True)
-    copied_path.write_text(json.dumps(canonical, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
+    copied_path.write_text(
+        json.dumps(canonical, ensure_ascii=False, indent=4) + "\n", encoding="utf-8"
+    )
     monkeypatch.setattr(benchmark_module, "ROOT", tmp_path)
     case = next(case for case in load_cases() if case["id"] == "P01")
     with pytest.raises(BenchmarkContractError, match="drifted"):
