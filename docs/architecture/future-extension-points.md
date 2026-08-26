@@ -68,12 +68,14 @@ sums, averages and grouping over rebuildable index data.
 
 ## 2. Type-aware note-writing profiles ("skills")
 
-Once Phase 15 has selected a canonical note type, Odyssey should know how that type is normally
-written: body structure, useful sections, style, and type-specific content conventions that are not
+**Status: conditional later extension; not part of the initial Phase 16.6 CREATE implementation.**
+
+Once Phase 15 has selected a canonical note type, Odyssey could eventually use type-specific writing
+guidance for body structure, useful sections, style, and other presentation conventions that are not
 canonical metadata properties.
 
-This is not another classification problem. The type is already known, so Phase 16 should
-deterministically select its writing guidance before note-body creation or semantic patching.
+This is not another classification problem. The type is already known. If this capability is later
+needed, selection should therefore remain deterministic:
 
 ```text
 canonical note type
@@ -85,15 +87,24 @@ load type-aware writing guidance
 body creation / bounded semantic patch
 ```
 
-Start with the smallest representation. Short guidance may live as an optional field under the
-canonical type definition. If it grows large or example-heavy, move it to a dedicated Markdown profile
-keyed by type and keep only the stable reference in the type registry.
+Phase 16.6 deliberately does **not** introduce this representation. The existing Phase 16.3 corpus
+already exercised fifteen `CREATE_BODY` cases across multiple note semantics using one generic bounded
+writer contract, without demonstrating a type-specific failure that requires another configuration
+layer. The simplest initial CREATE path therefore remains one shared Luna-medium writer policy.
 
-Writing guidance controls human-readable rendering; `config/note-schema.json` remains the
-machine-readable owner of note types/properties and validation. Guidance must not silently invent
-metadata fields.
+If focused CREATE evidence or later real usage demonstrates a concrete type whose body is materially
+poor without specialized organization, start with the smallest representation. Short guidance may
+live as an optional schema-linked field or compact registry entry. If it grows large or example-heavy,
+move it to a dedicated Markdown profile keyed by type and keep only a stable reference in the type
+registry.
 
-This must be decided during Phase 16 before note-body rendering behavior is frozen.
+Writing guidance would control human-readable rendering only; `config/note-schema.json` remains the
+machine-readable owner of note types/properties and validation. Guidance must never silently invent
+metadata fields, change creation authorization, or become a second ontology.
+
+This direction remains available without freezing generic CREATE formatting forever, but it now has a
+clear evidence gate: **do not implement a profile system until measured body-quality failures justify
+it.**
 
 ## 3. Tag vocabulary evolution
 
@@ -286,14 +297,11 @@ preserve the required high recall.
 ## Placement
 
 ```text
-NOW / Phase 16
+NOW / Phase 16.6
   - current planner contract lives in phase-15-write-planning.md
   - generic delegation detection is implemented; no concrete app router or user model
-  - Luna writer evidence may motivate future cheap-reasoner benchmarks, but does not change retrieval
-
-Phase 16
-  - choose minimal type-aware writing-profile representation
-  - execute already-planned explicit tag changes after safe target resolution
+  - CREATE uses the shared Luna-medium writer only when free-text facts require body generation
+  - no type-writing-profile system unless focused evidence demonstrates a concrete need
 
 Before large-vault contextual retrieval is considered production-ready
   - reuse/extend the existing 1,000-note corpus with explicit long-note coverage when needed
@@ -305,6 +313,9 @@ Before large-vault contextual retrieval is considered production-ready
 When first concrete app exists
   - route the existing generic DelegateAction with cheap/local app selection
   - load only selected app detail
+
+Later writing-quality work, only if evidence requires it
+  - add the smallest schema-linked type-writing guidance representation
 
 Later ontology work
   - evolve tag vocabulary/types only from demonstrated needs
