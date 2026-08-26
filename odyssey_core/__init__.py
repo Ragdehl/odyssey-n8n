@@ -54,6 +54,7 @@ from .reference_binding import (
     ReferenceBindingError,
     ReferenceRenderingResult,
     render_reference_facts,
+    validate_rendered_facts,
 )
 from .reference_preflight import (
     ReferencePreflightError,
@@ -172,6 +173,7 @@ __all__ = [
     "ReferenceBindingError",
     "ReferenceRenderingResult",
     "render_reference_facts",
+    "validate_rendered_facts",
     "WRITER_CONTEXT_MODE",
     "WRITER_MODEL",
     "WRITER_REASONING_EFFORT",
