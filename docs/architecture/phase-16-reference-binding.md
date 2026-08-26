@@ -29,6 +29,30 @@ second time. CREATE names use `target.entity` when present, otherwise the human-
 Markdown writes, persistence, writer/model calls, or wikilink rendering. `name` is canonical
 metadata; the filename is a stable creation-time label and always contains the full stable ID.
 
+## Phase 16.5C scope
+
+Phase 16.5C is deliberately small. It does not resolve identity, allocate IDs, persist notes, run
+HITL, or decide whether occurrence wording should become a durable alias. It consumes the already
+validated `KnowledgeUnit` plus the Phase 16.5B preflight table and produces writer-ready facts.
+
+```text
+{{ref:N}}
+    |
+    +--> target has one safe path
+    |       -> [[vault/path-without-.md|mention]]
+    |
+    `--> target still needs clarification
+            -> mention as plain text
+            + explicit PendingReference result
+```
+
+The link target is always derived from the authoritative existing path or the preallocated CREATE
+path. The display text is the occurrence-local `mention`. The renderer never performs a second
+identity lookup and never guesses from a human name or alias.
+
+Phase 16.5C itself remains non-persisting. Durable pending-reference artifacts are a later
+application/HITL concern described below.
+
 ## Core ordering decision
 
 Reference materialization happens before semantic body writing:
@@ -46,13 +70,13 @@ resolve/authorize every referenced target
         |
         +--> same-request CREATE -> authorize CREATE, then allocate identity/path
         |
-        `--> ambiguous/unresolved -> no wikilink; preserve pending reference
+        `--> ambiguous/unresolved -> plain mention + explicit pending reference
         |
         v
 Core materializes safe references as [[wikilinks]]
         |
         v
-Luna receives facts with wikilinks already present
+Luna receives facts with resolved wikilinks already present
         |
         v
 bounded CREATE/UPDATE body operation
@@ -90,38 +114,118 @@ occurrence placement only; Core does not use offsets, string similarity, fuzzy m
 or Markdown AST parsing to rediscover placement. The Sol/low planner is explicitly instructed not to
 mark names used only to identify the target and not to create inverse relationship references.
 
-After safe identity binding:
+After safe identity binding, a fact may become:
 
 ```text
-"Compré [[Leche Pascual]] en [[Carrefour Balma]]."
+"Compré [[Leche Pascual - <full-id>|Leche Pascual]] en [[Carrefour Balma - <full-id>|Carrefour Balma]]."
+```
+
+If a target lives in a folder, use the vault-relative path without the `.md` suffix:
+
+```text
+[[products/Leche Pascual - <full-id>|Leche Pascual]]
 ```
 
 The invariant is that **reference placement is decided before the writer and can be materialized by
-Core without semantic inference**. Phase 16.5C will replace the temporary UPDATE fail-closed guard
-with reference target binding and pre-writer rendering; Phase 16.5A does not resolve targets or emit
-wikilinks.
+Core without semantic inference**. Phase 16.5C replaces the temporary UPDATE fail-closed guard with
+pre-writer rendering; it does not reopen target resolution.
 
-The actual Obsidian link target must be derived deterministically from the authoritative existing path or the preallocated CREATE path, with an optional display label when needed. A primary name or alias alone is never sufficient evidence for the physical link target when it could be ambiguous.
+The actual Obsidian link target must be derived deterministically from the authoritative existing path or the preallocated CREATE path. A primary name or alias alone is never sufficient evidence for the physical link target when it could be ambiguous.
+
+## Mention and alias separation
+
+`mention` and `aliases` are related but not equivalent.
+
+```text
+mention
+= how this reference is worded in this occurrence
+
+alias
+= a reusable identity expression worth storing on the target note
+```
+
+Some mentions may be good future aliases:
+
+```text
+name: Carrefour Balma
+mention: Carrefour
+```
+
+or:
+
+```text
+name: Marta García
+mention: la amiga de Laura
+```
+
+Other mentions are transient and should not become durable identity vocabulary:
+
+```text
+mention: la chica con la que cenamos ayer
+```
+
+Phase 16.5C therefore **does not automatically promote mentions to aliases**. It also does not
+forbid such promotion forever. Deciding whether a mention is a stable reusable identity phrase is a
+separate semantic write decision and should be added only with an explicit contract/evidence path,
+not hidden inside deterministic wikilink rendering.
 
 ## Existing referenced notes
 
 When a reference points to knowledge that already exists, reuse the existing Phase 9-11 identity stack. The planner does not choose the repository note; Core binds the reference only after one safe stable identity has been resolved.
 
-If several existing notes remain plausible, or identity otherwise remains ambiguous, Phase 16 must not guess and must not create a wikilink.
+If several existing notes remain plausible, or identity otherwise remains ambiguous, Phase 16 must not guess a canonical target.
 
-For the current non-HITL system:
+For Phase 16.5C:
 
 ```text
-unique safe target    -> materialize [[wikilink]]
-ambiguous target      -> keep human-readable text unlinked
-unresolved target     -> keep human-readable text unlinked unless CREATE is independently authorized
+unique safe target    -> materialize [[path|mention]]
+ambiguous target      -> keep mention as plain text + PendingReference
+unresolved target     -> keep mention as plain text + PendingReference unless CREATE is independently authorized
 ```
 
-An ambiguous or unresolved reference must remain represented as **pending reference work** in the materialization/application result so a later HITL flow can ask the user which target was intended. Do not invent a canonical Markdown metadata field or new persistence service merely to store pending references in this phase; the durable pending-work boundary is a later HITL/application-flow decision. Until that boundary exists, Core must at least return the unresolved reference explicitly rather than silently treating it as resolved.
+An ambiguous or unresolved reference must remain represented as **pending reference work** in the materialization/application result so a later HITL flow can ask the user which target was intended. Phase 16.5C does not persist that workflow state itself. Until a durable boundary exists, Core must at least return the unresolved reference explicitly rather than silently treating it as resolved.
 
 When ambiguity is specifically between several known existing notes, preserve the **candidate stable identities** as part of that pending work whenever the resolver has them. This lets future HITL present the real choices without re-running semantic discovery and avoids losing information such as "the reference could be Marta García or Marta López".
 
-The note mutation itself may still proceed when the unresolved reference does not otherwise make the requested knowledge unsafe; the text remains readable but unlinked.
+The note mutation itself may still proceed when the unresolved reference does not otherwise make the requested knowledge unsafe; the text remains readable and the pending ambiguity remains explicit.
+
+## Preferred durable pending-reference direction
+
+The approved future direction is to make unresolved ambiguity navigable in the Markdown graph once a
+stable pending-work/HITL boundary exists.
+
+Conceptually, Odyssey may create a small **internal pending-reference Markdown artifact**:
+
+```text
+pending reference artifact
+    mention: "Una Marta"
+    candidates:
+      -> [[Marta García - <id>|Marta García]]
+      -> [[Marta López - <id>|Marta López]]
+```
+
+A source note could then temporarily contain a human-readable link such as:
+
+```text
+[[pending/Marta-ambiguity-<uuid>|Una Marta]]
+```
+
+This is preferable to inventing one candidate as the answer because the graph itself preserves the
+ambiguity and its candidate set. Once HITL or later evidence resolves the identity, the source link
+should normally be replaced with the real target and the pending artifact archived or removed.
+Keeping the ambiguity artifact permanently as a proxy is not the default direction because it would
+pollute the knowledge graph with a false long-lived entity.
+
+Important boundaries:
+
+- the pending artifact is **workflow state**, not automatically a canonical user-knowledge note;
+- do not add a canonical Odyssey note type merely to implement it;
+- its storage location, lifecycle, cleanup, and backlink replacement need the stable application/HITL
+  boundary before implementation;
+- Phase 16.5C does not create or persist this artifact.
+
+This direction preserves the user's desired future UX without coupling simple reference rendering to
+persistence or HITL prematurely.
 
 ## References to notes created by the same request
 
@@ -171,6 +275,11 @@ Luna must receive the already-bound facts. It may organize or reconcile them acc
 
 The writer should preserve supplied wikilinks as part of the authoritative intended fact. Core remains responsible for validating the final Markdown and for rejecting writer output that corrupts required bound references.
 
+Because Phase 16.5C materially changes writer input from plain fact text to already-linked Markdown,
+focused live evidence must be rerun with the selected production `gpt-5.6-luna` / medium writer before
+treating UPDATE-with-links behavior as validated. This is a focused regression check, not model
+selection.
+
 ## Future HITL
 
 Ambiguous references are a concrete future HITL use case.
@@ -179,31 +288,32 @@ Ambiguous references are a concrete future HITL use case.
 reference -> multiple plausible notes
         |
         v
-no wikilink now
+Phase 16.5C: plain mention + PendingReference
         |
         v
-pending reference + candidate stable identities
+future durable pending artifact may link the candidate notes
         |
         v
-future HITL asks user to choose
+HITL asks user to choose
         |
         v
-bind chosen stable identity and update note safely
+replace source occurrence with real target
+        |
+        v
+archive/remove pending artifact
 ```
 
-A future durable pending-work representation may keep that ambiguity as a small internal artifact that itself points to the candidate notes. A Markdown artifact/note is one possible implementation because it would preserve the candidate links visibly and remain inspectable, but **do not introduce a new canonical Odyssey note type yet**. An unresolved reference is system workflow state, not automatically a user knowledge entity. Decide the representation only when the stable HITL/application boundary is designed; if evidence later shows that a dedicated internal Markdown type is the simplest durable representation, propose that ontology/schema addition explicitly then.
-
-HITL should be introduced only once Odyssey has a stable application boundary capable of preserving and resuming pending work. The current Phase 16 rule is simply: **fail closed on identity, do not link ambiguously, preserve the candidate set when known, and do not lose the fact that a reference remains pending.**
+HITL should be introduced only once Odyssey has a stable application boundary capable of preserving and resuming pending work. The current Phase 16.5C rule is simply: **do not guess identity, preserve the mention and candidate set, and keep rendering deterministic.**
 
 ## Immediate Phase 16 execution plan
 
 The remaining implementation order is:
 
-1. **Reference-binding contract** — refine the reference occurrence representation so Core knows exactly where a reference belongs before any writer call.
-2. **Reference-target preflight** — resolve existing targets and authorize same-request CREATE targets without persistence.
-3. **CREATE identity allocation** — deterministically allocate stable IDs/paths/display identity for authorized CREATE units before body generation.
-4. **Pre-writer wikilink materialization** — replace only safely bound reference occurrences with ordinary `[[wikilinks]]`; ambiguous references remain plain text and pending.
+1. **Reference-binding contract** — refine the reference occurrence representation so Core knows exactly where a reference belongs before any writer call. ✅
+2. **Reference-target preflight** — resolve existing targets and authorize same-request CREATE targets without persistence. ✅
+3. **CREATE identity allocation** — deterministically allocate stable IDs/paths/display identity for authorized CREATE units before body generation. ✅ (owned by Phase 16.5B)
+4. **Pre-writer wikilink materialization — Phase 16.5C** — replace safely bound reference occurrences with ordinary `[[path|mention]]`; unresolved references remain plain mentions plus explicit pending results. No persistence or HITL.
 5. **CREATE materialization + UPDATE integration** — feed already-linked facts to the selected Luna/medium writer, validate the bounded output, and persist once per staged note.
-6. **Remaining Phase 16 semantics** — guarded soft delete/inbound-link policy, explicit bulk cardinality, dependency/partial-success results, and type-change handling before Phase 17 orchestration.
+6. **Remaining Phase 16 semantics** — guarded soft delete/inbound-link policy, explicit bulk cardinality, dependency/partial-success results, type-change handling, and later durable pending-reference/HITL lifecycle before or alongside the stable application boundary as evidence dictates.
 
 This ordering supersedes the earlier informal idea of implementing CREATE first and adding wikilinks afterward. Reference placement must be made safe first because it changes the writer input contract for both CREATE and UPDATE.
