@@ -30,10 +30,12 @@ Final evidence is recorded in:
 
 - `results/2026-08-26-sol-low-focused-final5`: 10/10 occurrence cases passed.
 - `results/2026-08-26-sol-low-phase15-regression-final6`: 15/15 existing Phase 15.1 sentinels passed.
-- `results/2026-08-26-sol-low-late-phase15-final2`: 5/6 late-Phase-15 sentinels passed; the
-  existing T03 oracle consistently detects a relationship-unit `record` intent where its historical
-  Phase 15.2 evidence used `amend`. G01 passed on the retained rerun. This remains a review blocker,
-  not a silently weakened oracle.
+- `results/2026-08-26-sol-low-late-phase15-final2`: 6/6 late-Phase-15 sentinels pass under the
+  Phase 15 semantic contract. The already-recorded T03 output targets Marta, sets
+  `relationship_to_user` to `hermana`, explicitly adds `review`, and explicitly removes it in the
+  following unit without unrelated mutations. Its first unit uses `record`, which is valid alongside
+  `amend` for property `set` and explicit tag changes; the Phase 16.5 adapter no longer freezes the
+  historical `amend` label. No new live model call was required; the raw model output is unchanged.
 
 Earlier all-failure runs were caused by an intermittent provider-side condition; isolated diagnostic
 calls succeeded and the final runs completed with response usage. The production planner continues to

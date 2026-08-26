@@ -21,7 +21,6 @@ from benchmarks.phase15_2_selection_anchors.benchmark import load_cases as load_
 from benchmarks.phase15_2_selection_anchors.evaluate import (
     _handle_g01,
     _handle_t02,
-    _handle_t03,
 )
 from benchmarks.phase15_3_capability_delegation.benchmark import load_cases as load_phase15_3_cases
 from benchmarks.phase15_3_capability_delegation.evaluate import _delegate, _mixed_delegate_write
@@ -234,11 +233,11 @@ def _phase15_findings(case_id: str, plan: Any) -> list[str]:
 
 
 def _late_phase15_findings(case: dict[str, Any], plan: Any, oracle: str) -> list[str]:
-    """Apply the existing Phase 15.2/15.3 oracle handlers to a validated plan."""
+    """Apply the late-Phase-15 oracle appropriate to this benchmark adapter."""
     if oracle == "tag_retrieval":
         return _handle_t02(plan)
     if oracle == "tag_mutation":
-        return _handle_t03(plan)
+        return _handle_t03_canonical_contract(plan)
     if oracle == "graph_retrieval":
         return _handle_g01(plan)
     if oracle == "delegate":
@@ -246,6 +245,42 @@ def _late_phase15_findings(case: dict[str, Any], plan: Any, oracle: str) -> list
     if oracle == "mixed_delegate_write":
         return _mixed_delegate_write(plan)
     raise ValueError(f"Unknown late Phase 15 oracle: {oracle}")
+
+
+def _handle_t03_canonical_contract(plan: Any) -> list[str]:
+    """Validate T03 semantics without freezing the first unit's compatible intent label.
+
+    Phase 15 permits both ``record`` and ``amend`` to carry explicit property ``set`` and tag
+    changes. This Phase 16.5 adapter therefore preserves the historical sentinel's mutation
+    contract while accepting either valid label for the first ordered unit.
+    """
+    if len(plan.actions) != 1 or not hasattr(plan.actions[0], "units"):
+        return ["expected_one_write_action"]
+    units = plan.actions[0].units
+    if len(units) != 2:
+        return ["tag_mutation_sequence_collapsed_or_split"]
+    findings: list[str] = []
+    first, second = units
+    for unit in units:
+        if unit.target.entity != "Marta" or unit.target.type != "person":
+            findings.append("incorrect_marta_target")
+        if unit.target.filters or unit.target.link_scope is not None:
+            findings.append("unrelated_target_restriction")
+    if first.intent not in {"record", "amend"}:
+        findings.append("relationship_unit_has_incompatible_intent")
+    if [(p.field, p.op, p.value) for p in first.properties] != [
+        ("relationship_to_user", "set", "hermana")
+    ]:
+        findings.append("relationship_mutation_missing_or_wrong")
+    if [(c.op, c.value) for c in first.tag_changes] != [("add", "review")]:
+        findings.append("tag_addition_missing_or_wrong")
+    if first.facts or first.references:
+        findings.append("unrelated_first_unit_payload")
+    if second.intent != "remove" or second.properties or second.facts or second.references:
+        findings.append("tag_removal_unit_has_unrelated_payload")
+    if [(c.op, c.value) for c in second.tag_changes] != [("remove", "review")]:
+        findings.append("tag_removal_missing_or_wrong")
+    return findings
 
 
 def run(run_id: str, suite: str = "all") -> Path:
