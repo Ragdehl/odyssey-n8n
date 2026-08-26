@@ -19,6 +19,7 @@ BENCHMARK_DIR = Path(__file__).resolve().parent
 ROOT = BENCHMARK_DIR.parents[1]
 CASES_PATH = BENCHMARK_DIR / "cases.json"
 SNAPSHOT_PATH = BENCHMARK_DIR / "schema_snapshot.json"
+_PHASE16_5B_CANONICAL_SCHEMA_SHA256 = "419871146d1496286ef91d55cbbd00a4f9b59465297fd707bb69b6b0381e133c"
 
 
 class BenchmarkContractError(ValueError):
@@ -87,15 +88,14 @@ def schema_for(case: dict[str, Any]) -> dict[str, Any]:
     snapshot = load_json(SNAPSHOT_PATH)
     canonical_path = ROOT / snapshot["canonical_schema_path"]
     canonical_bytes = canonical_path.read_bytes()
-    canonical_schema = json.loads(canonical_bytes)
-    historical_hash = hashlib.sha256(canonical_bytes).hexdigest()
-    approved_name_evolution = canonical_schema.get("schema_version") == 2 and any(
-        field.get("id") == "name" and field.get("required") is True
-        for field in canonical_schema.get("metadata_fields", [])
-    )
-    if historical_hash != snapshot["canonical_schema_sha256"] and not approved_name_evolution:
+    canonical_hash = hashlib.sha256(canonical_bytes).hexdigest()
+    approved_hashes = {
+        snapshot["canonical_schema_sha256"],
+        _PHASE16_5B_CANONICAL_SCHEMA_SHA256,
+    }
+    if canonical_hash not in approved_hashes:
         raise BenchmarkContractError("Canonical schema drifted from the frozen Phase 15.1 snapshot")
-    schema = canonical_schema
+    schema = json.loads(canonical_bytes)
     if case["schema"] == "canonical":
         return schema
     variant = snapshot.get("synthetic_variants", {}).get(case["schema"])
