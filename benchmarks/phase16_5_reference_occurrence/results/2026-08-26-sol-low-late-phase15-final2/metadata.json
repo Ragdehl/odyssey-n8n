@@ -1,0 +1,9 @@
+{
+  "created_at": "2026-08-26T06:41:09.919029+00:00",
+  "benchmark_version": "16.5A.2",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "suite": "late_phase15",
+  "planned_calls": 6
+}

@@ -17,6 +17,14 @@ from benchmarks.phase15_1_schema_write_planning.benchmark import (
 from benchmarks.phase15_1_schema_write_planning.benchmark import (
     schema_for as phase15_schema_for,
 )
+from benchmarks.phase15_2_selection_anchors.benchmark import load_cases as load_phase15_2_cases
+from benchmarks.phase15_2_selection_anchors.evaluate import (
+    _handle_g01,
+    _handle_t02,
+    _handle_t03,
+)
+from benchmarks.phase15_3_capability_delegation.benchmark import load_cases as load_phase15_3_cases
+from benchmarks.phase15_3_capability_delegation.evaluate import _delegate, _mixed_delegate_write
 from odyssey_core.request_planning import OpenAIRequestPlanner, RequestPlanningError
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
@@ -34,6 +42,29 @@ def load_cases() -> list[dict[str, Any]]:
     if not isinstance(cases, list) or len(cases) != 10:
         raise ValueError("Phase 16.5A benchmark requires exactly ten cases")
     return cases
+
+
+def load_suite_cases(suite: str) -> list[tuple[str, dict[str, Any], dict[str, str]]]:
+    """Load one reproducible benchmark suite from existing frozen case files."""
+    if suite == "occurrence":
+        return [("occurrence", case, {}) for case in load_cases()]
+    if suite == "phase15_1":
+        return [("phase15_regression", case, {}) for case in load_phase15_cases()]
+    if suite == "late_phase15":
+        phase15_2 = {case["id"]: case for case in load_phase15_2_cases()}
+        phase15_3 = {case["id"]: case for case in load_phase15_3_cases()}
+        selected = [
+            ("phase15_2", phase15_2["T02"], {"oracle": "tag_retrieval"}),
+            ("phase15_2", phase15_2["T03"], {"oracle": "tag_mutation"}),
+            ("phase15_2", phase15_2["G01"], {"oracle": "graph_retrieval"}),
+            ("phase15_3", phase15_3["A04"], {"oracle": "delegate"}),
+            ("phase15_3", phase15_3["A10"], {"oracle": "delegate"}),
+            ("phase15_3", phase15_3["A12"], {"oracle": "mixed_delegate_write"}),
+        ]
+        return selected
+    if suite == "all":
+        return load_suite_cases("occurrence") + load_suite_cases("phase15_1")
+    raise ValueError(f"Unknown benchmark suite: {suite}")
 
 
 def _schema() -> dict[str, Any]:
@@ -202,11 +233,27 @@ def _phase15_findings(case_id: str, plan: Any) -> list[str]:
     return findings
 
 
-def run(run_id: str) -> Path:
+def _late_phase15_findings(case: dict[str, Any], plan: Any, oracle: str) -> list[str]:
+    """Apply the existing Phase 15.2/15.3 oracle handlers to a validated plan."""
+    if oracle == "tag_retrieval":
+        return _handle_t02(plan)
+    if oracle == "tag_mutation":
+        return _handle_t03(plan)
+    if oracle == "graph_retrieval":
+        return _handle_g01(plan)
+    if oracle == "delegate":
+        return _delegate(plan)
+    if oracle == "mixed_delegate_write":
+        return _mixed_delegate_write(plan)
+    raise ValueError(f"Unknown late Phase 15 oracle: {oracle}")
+
+
+def run(run_id: str, suite: str = "all") -> Path:
     """Run each synthetic request once through the production Sol/low planner.
 
     Args:
         run_id: New result-directory name; existing directories are never overwritten.
+        suite: Explicit occurrence, Phase 15.1, late Phase 15, or all-suite selection.
 
     Returns:
         Created result directory.
@@ -236,25 +283,28 @@ def run(run_id: str) -> Path:
         "model": "gpt-5.6-sol",
         "reasoning_effort": "low",
         "store": False,
-        "planned_calls": len(load_cases()) + len(load_phase15_cases()),
-        "regression_suite": "benchmarks/phase15_1_schema_write_planning/cases.json",
+        "suite": suite,
+        "planned_calls": len(load_suite_cases(suite)),
     }
     (directory / "metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
     )
     with (directory / "raw_results.jsonl").open("x", encoding="utf-8") as stream:
-        cases = [
-            ("occurrence", case, schema, metadata_context)
-            for case in load_cases()
-            for metadata_context in [
-                {"date": "2026-08-26", "time": "10:30", "timezone": "Europe/Paris"}
-            ]
-        ]
-        cases.extend(
-            ("phase15_regression", case, phase15_schema_for(case), case["current_context"])
-            for case in load_phase15_cases()
-        )
-        for suite, case, active_schema, context in cases:
+        cases = []
+        for case_suite, case, metadata in load_suite_cases(suite):
+            if case_suite == "phase15_regression":
+                active_schema, context = phase15_schema_for(case), case["current_context"]
+            else:
+                active_schema, context = (
+                    schema,
+                    {
+                        "date": "2026-08-26",
+                        "time": "10:30",
+                        "timezone": "Europe/Paris",
+                    },
+                )
+            cases.append((case_suite, case, metadata, active_schema, context))
+        for case_suite, case, metadata, active_schema, context in cases:
             planner = _planner(active_schema, context, recorder)
             try:
                 plan = planner.plan(case["request"])
@@ -262,7 +312,8 @@ def run(run_id: str) -> Path:
                 record = {
                     "id": case["id"],
                     "request": case["request"],
-                    "suite": suite,
+                    "suite": case_suite,
+                    "oracle": metadata.get("oracle"),
                     "status": "INVALID",
                     "error": str(error),
                     "usage": _usage(recorder.last_response),
@@ -270,15 +321,18 @@ def run(run_id: str) -> Path:
                     "raw_output": getattr(recorder.last_response, "output_text", None),
                 }
             else:
-                if suite == "occurrence":
+                if case_suite == "occurrence":
                     findings = _contract_findings(plan, case["expected"])
-                else:
+                elif case_suite == "phase15_regression":
                     findings = _phase15_findings(case["id"], plan)
+                else:
+                    findings = _late_phase15_findings(case, plan, metadata["oracle"])
                 usage = _usage(recorder.last_response)
                 record = {
                     "id": case["id"],
                     "request": case["request"],
-                    "suite": suite,
+                    "suite": case_suite,
+                    "oracle": metadata.get("oracle"),
                     "status": "PASS" if not findings else "CONTRACT_FAIL",
                     "findings": findings,
                     "units": len(
@@ -303,8 +357,11 @@ def main() -> None:
     """Parse the explicit one-run benchmark command."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument(
+        "--suite", choices=("occurrence", "phase15_1", "late_phase15", "all"), default="all"
+    )
     arguments = parser.parse_args()
-    print(run(arguments.run_id))
+    print(run(arguments.run_id, arguments.suite))
 
 
 if __name__ == "__main__":
