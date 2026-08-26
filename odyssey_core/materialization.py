@@ -12,7 +12,11 @@ from typing import Any, Protocol
 
 from odyssey_core.notes import Note, parse_note, validate_note
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation, update_entity
-from odyssey_core.reference_binding import required_bound_wikilinks
+from odyssey_core.reference_binding import (
+    ReferenceBindingError,
+    required_bound_wikilinks,
+    validate_rendered_facts,
+)
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
@@ -221,12 +225,11 @@ def materialize_update(
     """
     if unit.references and rendered_facts is None:
         raise MaterializationError("References require safe pre-writer rendered_facts")
-    if rendered_facts is not None and (
-        not isinstance(rendered_facts, tuple)
-        or len(rendered_facts) != len(unit.facts)
-        or not all(isinstance(fact, str) and "{{ref" not in fact for fact in rendered_facts)
-    ):
-        raise MaterializationError("Rendered facts do not match the KnowledgeUnit")
+    if rendered_facts is not None:
+        try:
+            validate_rendered_facts(unit, rendered_facts)
+        except ReferenceBindingError as error:
+            raise MaterializationError("Rendered facts do not match the KnowledgeUnit") from error
     if unit.intent == "delete":
         raise MaterializationError("Whole-note delete materialization is not implemented")
     path, existing = _load_existing_target(repository, schema, decision)
@@ -289,17 +292,18 @@ def materialize_update(
 def _validate_bound_wikilinks(
     original_body: str, rendered_body: str, facts: tuple[str, ...], intent: str
 ) -> None:
-    """Ensure bounded writer operations preserve prepared links and do not invent links."""
-    if intent == "remove":
-        return
+    """Ensure bounded writer operations preserve prepared links and never invent new links."""
     required = required_bound_wikilinks(facts)
-    if not required:
-        return
+    original = required_bound_wikilinks((original_body,))
     actual = required_bound_wikilinks((rendered_body,))
+    if intent == "remove":
+        if any(count > original[link] for link, count in actual.items()):
+            raise WriterOutputError("Writer output invented an unbound wikilink")
+        return
     for link, count in required.items():
         if actual[link] < count:
             raise WriterOutputError("Writer output dropped a required bound wikilink")
-    allowed = required_bound_wikilinks((original_body,)) + required
+    allowed = original + required
     if any(count > allowed[link] for link, count in actual.items()):
         raise WriterOutputError("Writer output invented an unbound wikilink")
 
