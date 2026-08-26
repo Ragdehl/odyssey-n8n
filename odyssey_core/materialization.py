@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from odyssey_core.notes import Note, parse_note, validate_note
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation, update_entity
+from odyssey_core.reference_binding import required_bound_wikilinks
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
@@ -22,12 +23,16 @@ WRITER_CONTEXT_MODE = "FULL_NOTE"
 _WRITER_INSTRUCTIONS = (
     "You are Odyssey's bounded Markdown writer. You receive already-interpreted facts and a fixed "
     "UPDATE intent. Do not resolve identity, choose a note ID or path, add metadata, properties, "
-    "tags, dates, URLs, wikilinks, or facts not supplied. Return the smallest faithful bounded "
+    "tags, dates, URLs, or facts not supplied. Supplied facts may contain Core-bound wikilinks: "
+    "preserve their exact targets and display text, do not invent additional wikilinks, and do not "
+    "resolve or alter link identity. Return the smallest faithful bounded "
     "operations against the supplied current Markdown body. Every old span must be exact. Do not "
     "rewrite the whole body. Use NO_CHANGE only when every supplied fact is already represented, "
     "and then return it as the only operation. Use APPEND for independent facts, REPLACE for "
     "corrections or temporal changes, and REMOVE only for exact supplied content. Preserve "
-    "unrelated information. Return only the requested Structured Outputs object."
+    "unrelated information. For record/amend, do not drop a supplied bound wikilink while "
+    "representing its fact; an explicit remove may remove that fact. Return only the requested "
+    "Structured Outputs object."
 )
 
 
@@ -192,6 +197,7 @@ def materialize_update(
     actor: str,
     now: str,
     writer: BoundedNoteWriter | None = None,
+    rendered_facts: tuple[str, ...] | None = None,
 ) -> EntityPersistenceResult:
     """Materialize one resolved existing-note UPDATE with one guarded persistence operation.
 
@@ -203,6 +209,7 @@ def materialize_update(
         actor: Application identity recorded by Phase 12 persistence.
         now: Explicit canonical lifecycle timestamp.
         writer: Injected writer required only for remaining non-duplicate facts.
+        rendered_facts: Core-rendered facts from Phase 16.5C. Required when references exist.
 
     Returns:
         The one Phase 12 persistence result.
@@ -212,21 +219,28 @@ def materialize_update(
         WriterProviderError: If the injected writer fails.
         WriterOutputError: If bounded operations cannot safely apply.
     """
-    if unit.references:
-        raise MaterializationError(
-            "UPDATE reference binding is not implemented; unresolved references are unsafe"
-        )
+    if unit.references and rendered_facts is None:
+        raise MaterializationError("References require safe pre-writer rendered_facts")
+    if rendered_facts is not None and (
+        not isinstance(rendered_facts, tuple)
+        or len(rendered_facts) != len(unit.facts)
+        or not all(isinstance(fact, str) and "{{ref" not in fact for fact in rendered_facts)
+    ):
+        raise MaterializationError("Rendered facts do not match the KnowledgeUnit")
     if unit.intent == "delete":
         raise MaterializationError("Whole-note delete materialization is not implemented")
     path, existing = _load_existing_target(repository, schema, decision)
     set_metadata, remove_metadata = _stage_structured_mutations(
         existing, unit.properties, unit.tag_changes
     )
+    prepared_facts = rendered_facts if rendered_facts is not None else unit.facts
     remaining_facts = (
-        unit.facts
+        prepared_facts
         if unit.intent == "remove"
         else tuple(
-            fact for fact in unit.facts if not is_exact_normalized_duplicate(existing.content, fact)
+            fact
+            for fact in prepared_facts
+            if not is_exact_normalized_duplicate(existing.content, fact)
         )
     )
     content = existing.content
@@ -247,9 +261,9 @@ def materialize_update(
             raise
         except Exception as error:
             raise WriterProviderError("Bounded writer failed") from error
-        content = apply_writer_operations(
-            existing.content, validate_writer_output(output, existing.content)
-        )
+        operations = validate_writer_output(output, existing.content)
+        content = apply_writer_operations(existing.content, operations)
+        _validate_bound_wikilinks(existing.content, content, remaining_facts, unit.intent)
     _validate_staged_note(existing, schema, set_metadata, remove_metadata, content)
     if not set_metadata and not remove_metadata and content == existing.content:
         return EntityPersistenceResult(
@@ -270,6 +284,24 @@ def materialize_update(
         actor=actor,
         now=now,
     )
+
+
+def _validate_bound_wikilinks(
+    original_body: str, rendered_body: str, facts: tuple[str, ...], intent: str
+) -> None:
+    """Ensure bounded writer operations preserve prepared links and do not invent links."""
+    if intent == "remove":
+        return
+    required = required_bound_wikilinks(facts)
+    if not required:
+        return
+    actual = required_bound_wikilinks((rendered_body,))
+    for link, count in required.items():
+        if actual[link] < count:
+            raise WriterOutputError("Writer output dropped a required bound wikilink")
+    allowed = required_bound_wikilinks((original_body,)) + required
+    if any(count > allowed[link] for link, count in actual.items()):
+        raise WriterOutputError("Writer output invented an unbound wikilink")
 
 
 def validate_writer_output(output: object, body: str) -> tuple[WriterOperation, ...]:

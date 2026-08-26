@@ -1,8 +1,9 @@
 # Phase 16 writing checkpoint
 
-Status: Phase 16.3 benchmark complete; the selected writer policy is now implemented for the first
-bounded existing-note UPDATE slice. CREATE and all broader materialization work remain tracked in
-GitHub issue #36.
+Status: Phase 16.3 benchmark complete; the selected writer policy is implemented for the bounded
+existing-note UPDATE slice. Phase 16.5C now supplies deterministic pre-writer wikilinks and
+explicit pending-reference results; CREATE body generation and broader materialization remain
+tracked in GitHub issue #36.
 
 ## Principle
 
@@ -153,7 +154,7 @@ Still outside this checkpoint:
 
 - CREATE materialization, including ID/path allocation and `CREATE_BODY` validation;
 - explicit bulk write cardinality;
-- wikilink/reference dependency materialization;
+- CREATE-time dependency persistence and broader wikilink/reference orchestration;
 - soft-delete persistence (`status: deleted` direction already chosen);
 - RequestPlan action orchestration (Phase 17);
 - n8n integration.
@@ -181,6 +182,12 @@ between materialization read and the persistence read, and then persists nothing
 replacement is atomic, but the current repository does not expose a compare-and-swap write, so a
 separate concurrent modification after that guard's read and before replacement is not detectable.
 No transaction framework is introduced for this bounded slice.
+
+When a unit contains Phase 16.5 references, callers must pass its Core-rendered `rendered_facts`
+explicitly. Raw `{{ref:N}}` markers fail closed. The writer receives the rendered facts and Core
+requires every supplied bound wikilink to remain exact in record/amend output; explicit remove
+operations may remove the requested linked fact. Core does not resolve references or persist
+pending work in this boundary.
 
 ## Evidence conclusion
 

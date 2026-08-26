@@ -1,0 +1,19 @@
+{
+  "phase": "16.5C",
+  "model": "gpt-5.6-luna",
+  "reasoning": "medium",
+  "context_mode": "FULL_NOTE",
+  "calls": 6,
+  "passed": 6,
+  "failed": 0,
+  "selection_rerun": false,
+  "sol_calls": 0,
+  "cases": [
+    "append_bound",
+    "replace_employer_bound",
+    "two_bound_links",
+    "repeated_bound_link",
+    "same_request_create_target",
+    "regression_no_links"
+  ]
+}
