@@ -259,7 +259,22 @@ def test_duplicate_existing_id_fails_closed(tmp_path: Path, schema: dict[str, An
         run(tmp_path, schema, action(unit("Marta", entity="Marta")))
 
 
-@pytest.mark.parametrize("name", ["What?", "What:", "What|", "What*", "What. ", "CON"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "What?",
+        "What:",
+        "What|",
+        "What*",
+        "What#",
+        "What^",
+        "What[",
+        "What]",
+        "What%",
+        "What. ",
+        "CON",
+    ],
+)
 def test_creation_filename_is_windows_portable(
     tmp_path: Path, schema: dict[str, Any], name: str
 ) -> None:
@@ -269,6 +284,7 @@ def test_creation_filename_is_windows_portable(
     assert result[0].path is not None
     label = result[0].path.removesuffix(" - full-id.md")
     assert not any(character in label for character in '<>:"/\\|?*')
+    assert not any(character in label for character in "#^[]%")
     assert not label.endswith((" ", "."))
     if name == "CON":
         assert label == "CON_"

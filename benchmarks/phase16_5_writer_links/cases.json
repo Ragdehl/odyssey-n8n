@@ -1,0 +1,64 @@
+{
+  "cases": [
+    {
+      "id": "append_bound",
+      "note_id": "person-bea",
+      "note_type": "person",
+      "intent": "amend",
+      "facts": ["Bea buys [[products/Leche Pascual - id|Leche Pascual]]."],
+      "current_body": "# Bea\n\n- Bea lives in Toulouse.",
+      "required_links": ["[[products/Leche Pascual - id|Leche Pascual]]"]
+    },
+    {
+      "id": "replace_employer_bound",
+      "note_id": "person-bea",
+      "note_type": "person",
+      "intent": "amend",
+      "facts": ["Bea now works at [[companies/Thales - thales-id|Thales]]."],
+      "current_body": "# Bea\n\n- Bea works at [[companies/Airbus - airbus-id|Airbus]].",
+      "required_links": ["[[companies/Thales - thales-id|Thales]]"]
+    },
+    {
+      "id": "two_bound_links",
+      "note_id": "person-bea",
+      "note_type": "person",
+      "intent": "amend",
+      "facts": ["Bea visited [[places/Toulouse - t-id|Toulouse]] with [[people/Marta - m-id|Marta]]."],
+      "current_body": "# Bea",
+      "required_links": [
+        "[[places/Toulouse - t-id|Toulouse]]",
+        "[[people/Marta - m-id|Marta]]"
+      ]
+    },
+    {
+      "id": "repeated_bound_link",
+      "note_id": "person-bea",
+      "note_type": "person",
+      "intent": "amend",
+      "facts": ["Bea likes [[products/Leche Pascual - id|Leche Pascual]] and buys [[products/Leche Pascual - id|Leche Pascual]]."],
+      "current_body": "# Bea",
+      "required_links": [
+        "[[products/Leche Pascual - id|Leche Pascual]]",
+        "[[products/Leche Pascual - id|Leche Pascual]]"
+      ]
+    },
+    {
+      "id": "same_request_create_target",
+      "note_id": "person-bea",
+      "note_type": "person",
+      "intent": "amend",
+      "facts": ["Bea buys [[products/New Product - full-create-id|New Product]]."],
+      "current_body": "# Bea",
+      "required_links": ["[[products/New Product - full-create-id|New Product]]"]
+    },
+    {
+      "id": "regression_no_links",
+      "note_id": "person-bea",
+      "note_type": "person",
+      "intent": "amend",
+      "facts": ["Bea plays piano."],
+      "current_body": "# Bea\n\n- Bea lives in Toulouse.",
+      "required_links": []
+    }
+  ]
+}

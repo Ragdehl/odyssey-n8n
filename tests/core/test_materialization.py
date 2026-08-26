@@ -117,7 +117,10 @@ def count_persistence(monkeypatch: pytest.MonkeyPatch, repository: VaultReposito
 
 
 def materialize(
-    repository: VaultRepository, knowledge: KnowledgeUnit, writer: FakeWriter | None = None
+    repository: VaultRepository,
+    knowledge: KnowledgeUnit,
+    writer: FakeWriter | None = None,
+    rendered_facts: tuple[str, ...] | None = None,
 ):
     """Execute the public UPDATE materialization API with stable lifecycle inputs."""
     return materialize_update(
@@ -128,6 +131,7 @@ def materialize(
         actor="phase16-test",
         now="2026-08-25T11:00:00+02:00",
         writer=writer,
+        rendered_facts=rendered_facts,
     )
 
 
@@ -406,14 +410,14 @@ def test_non_update_decision_is_rejected(repository: VaultRepository) -> None:
         )
 
 
-def test_update_with_unresolved_references_fails_before_writer_or_persistence(
+def test_update_with_references_without_rendered_facts_fails_closed(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Temporary Phase 16.5A guard rejects unresolved references before any mutation boundary."""
+    """Raw marker facts cannot reach the writer without an explicit renderer result."""
     calls = count_persistence(monkeypatch, repository)
     writer = FakeWriter({"operations": [{"op": "APPEND", "text": "must not run"}]})
 
-    with pytest.raises(MaterializationError, match="reference binding is not implemented"):
+    with pytest.raises(MaterializationError, match="rendered_facts"):
         materialize(
             repository,
             unit(
@@ -425,6 +429,54 @@ def test_update_with_unresolved_references_fails_before_writer_or_persistence(
 
     assert writer.requests == []
     assert calls == [0]
+
+
+def test_update_passes_rendered_reference_facts_to_writer(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prepared Core links reach the writer and are persisted in one bounded update."""
+    calls = count_persistence(monkeypatch, repository)
+    link = "[[products/Leche Pascual - id|Leche Pascual]]"
+    writer = FakeWriter({"operations": [{"op": "APPEND", "text": f"- Bea buys {link}."}]})
+
+    result = materialize(
+        repository,
+        unit(
+            facts=("Bea buys {{ref:0}}.",),
+            references=(KnowledgeReference(1, "product", "Leche Pascual"),),
+        ),
+        writer,
+        rendered_facts=(f"Bea buys {link}.",),
+    )
+
+    assert result.operation is PersistenceOperation.UPDATED
+    assert writer.requests[0].facts == (f"Bea buys {link}.",)
+    assert link in repository.read_text("people/bea.md")
+    assert calls == [1]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"operations": [{"op": "APPEND", "text": "- Bea buys milk."}]},
+        {"operations": [{"op": "APPEND", "text": "- Bea buys [[other/id|Milk]]."}]},
+    ],
+)
+def test_writer_cannot_drop_or_invent_bound_wikilinks(
+    repository: VaultRepository, response: object
+) -> None:
+    """Reject output that drops a required link or introduces an unrelated link."""
+    link = "[[products/Leche Pascual - id|Leche Pascual]]"
+    with pytest.raises(WriterOutputError, match="wikilink"):
+        materialize(
+            repository,
+            unit(
+                facts=("Bea buys {{ref:0}}.",),
+                references=(KnowledgeReference(1, "product", "Leche Pascual"),),
+            ),
+            FakeWriter(response),
+            rendered_facts=(f"Bea buys {link}.",),
+        )
 
 
 def test_delete_intent_is_rejected_without_persistence(

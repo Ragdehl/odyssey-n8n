@@ -49,6 +49,13 @@ from .persistence import (
     create_entity,
     update_entity,
 )
+from .reference_binding import (
+    PendingReference,
+    ReferenceBindingError,
+    ReferenceRenderingResult,
+    render_reference_facts,
+    validate_rendered_facts,
+)
 from .reference_preflight import (
     ReferencePreflightError,
     UnitTargetPreflight,
@@ -162,6 +169,11 @@ __all__ = [
     "UnitTargetPreflight",
     "allocate_stable_id",
     "preflight_write_action",
+    "PendingReference",
+    "ReferenceBindingError",
+    "ReferenceRenderingResult",
+    "render_reference_facts",
+    "validate_rendered_facts",
     "WRITER_CONTEXT_MODE",
     "WRITER_MODEL",
     "WRITER_REASONING_EFFORT",

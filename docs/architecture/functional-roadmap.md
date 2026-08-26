@@ -30,11 +30,12 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
   one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
-- ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A now freezes deterministic planner
+- ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A freezes deterministic planner
   occurrence markers and human-readable mentions; 16.5B preflights each target once and resolves or
-  preallocates referenced identities, while 16.5C materializes only safe `[[wikilinks]]` before Luna
-  and preserves
-  ambiguous/unresolved references as explicit pending work rather than guessing.
+  preallocates referenced identities; 16.5C deterministically renders only safely bound
+  `[[path|mention]]` links before Luna. Ambiguous/unresolved references remain readable plain mentions
+  plus explicit pending-reference results in 16.5C; a later durable HITL boundary may represent that
+  pending ambiguity as an internal Markdown artifact linking the candidate notes.
 - ⬜ **Phase 16.6 — CREATE materialization:** generate a complete body through the selected
   Luna/medium policy using the identity/path already preallocated by Phase 16.5B, validate it, and
   persist once.
@@ -45,8 +46,8 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
 benchmark evidence are centralized in [Phase 16 writing checkpoint](phase-16-writing.md). The
-pre-writer reference-binding order and pending-reference rules are centralized in
-[Phase 16 reference binding](phase-16-reference-binding.md).
+pre-writer reference-binding order, mention/alias boundary, and pending-reference direction are
+centralized in [Phase 16 reference binding](phase-16-reference-binding.md).
 
 ## Completed Phase 15 refinements
 
@@ -120,9 +121,11 @@ only for non-duplicate free text, validates exact bounded operations, and calls 
 
 ➡️ **Phase 16.5 — reference binding before body writing** remains in progress. Phase 16.5A freezes
 `KnowledgeReference(target_index, role, mention)` plus `{{ref:N}}` markers local to each unit's
-`references` array, so placement is preserved before Luna sees the facts. Phase 16.5B now owns
-target resolution and identity/path preallocation; wikilink rendering remains Phase 16.5C. See
-[Phase 16 reference binding](phase-16-reference-binding.md).
+`references` array, so placement is preserved before Luna sees the facts. Phase 16.5B owns target
+resolution and identity/path preallocation. Phase 16.5C is deliberately smaller: it consumes those
+results and replaces only safely bound marker occurrences with `[[vault/path-without-.md|mention]]`.
+It does not resolve identity, persist pending artifacts, run HITL, or decide which mentions should
+become aliases. See [Phase 16 reference binding](phase-16-reference-binding.md).
 
 The immediate execution order is:
 
@@ -133,18 +136,25 @@ The immediate execution order is:
         |
 3. allocate stable identity + path for authorized CREATEs (Phase 16.5B; no persistence yet)
         |
-4. Core materializes only safe [[wikilinks]] before the writer
+4. Core materializes only safe [[path|mention]] links before the writer (Phase 16.5C)
         |
 5. Luna receives already-linked facts for CREATE/UPDATE
         |
 6. validate complete staged notes and persist through bounded Phase 16 semantics
 ```
 
-If a reference target remains ambiguous among several notes, Odyssey must **not** create a wikilink.
-The human-readable text remains unlinked and the unresolved reference is returned as pending work so a
-future HITL path can ask which identity was intended. No second LLM should rediscover link placement
-after writer output. Same-request CREATE references can be linked once deterministic identity/path has
-been allocated; the referenced Markdown file does not need to have been persisted first.
+If a reference target remains ambiguous among several notes, Phase 16.5C must **not** guess one of
+them. The occurrence stays as its human-readable `mention`, and the unresolved reference is returned
+as pending work together with candidate stable IDs when known. No second LLM should rediscover link
+placement after writer output.
+
+The preferred later HITL direction is more navigable than silently leaving that ambiguity forever:
+once Odyssey has a durable pending-work boundary, it may create a small internal Markdown artifact
+that links the real candidates and let the source occurrence temporarily point to that artifact, for
+example `[[pending/Marta-ambiguity-<uuid>|Una Marta]]`. Once the identity is resolved, the source link
+should normally be replaced with the real target and the temporary artifact archived or removed.
+This is workflow state, not automatically a new canonical note type, and is intentionally outside
+simple Phase 16.5C rendering.
 
 A reference also does **not** authorize an automatic inverse mutation in the referenced note. Store the
 user-supplied relationship once and rely first on ordinary semantic context retrieval for reverse
@@ -167,8 +177,9 @@ Phase 16 materialization must still cover:
 - stable ID/path allocation only after identity/creation authorization;
 - deterministic schema property and explicit tag changes after target resolution;
 - deterministic reference occurrence binding before writer calls;
-- safe pre-writer `[[wikilink]]` materialization for resolved/preallocated identities;
-- explicit pending-reference results for ambiguous/unresolved references, with no guessed link;
+- safe pre-writer `[[path|mention]]` materialization for resolved/preallocated identities;
+- explicit pending-reference results for ambiguous/unresolved references, with no guessed canonical
+  target;
 - no automatic inverse/mirrored note mutation merely because a relationship wikilink was created;
 - minimal type-aware note-writing guidance where demonstrated before body rendering is finalized;
 - selected Luna/medium bounded free-text writing with full authoritative existing-note context;
@@ -180,6 +191,12 @@ Phase 16 materialization must still cover:
 
 Existing notes must be changed through bounded operations (`NO_CHANGE`, `REPLACE`, `REMOVE`,
 `INSERT_AFTER`, `APPEND`) validated and applied by Core, not routine whole-note LLM rewriting.
+
+Because 16.5C changes the writer input from plain facts to facts containing canonical wikilinks,
+focused live regression evidence with the already-selected `gpt-5.6-luna` / medium writer is required.
+The initial 6/6 live checkpoint is valid evidence but did not capture every exact request input. A
+frozen six-case runner now exists under `benchmarks/phase16_5_writer_links/`; rerun that small focused
+set before treating 16.5C as fully reproducible evidence. This is not a new model-selection benchmark.
 
 ## Remaining intended sequence
 
@@ -209,9 +226,16 @@ behavior, and measured performance. Do not broaden the architecture without evid
 The detailed cross-phase direction is centralized in
 [Future extension points](future-extension-points.md). In short:
 
-- 💡 **Human-in-the-loop:** minimal clarification/approval path when ambiguity or user control requires
-  it. Ambiguous reference binding is a concrete first use case: Phase 16 leaves the text unlinked and
-  must preserve explicit pending-reference work so a later stable application flow can resume it.
+- 💡 **Human-in-the-loop / durable pending references:** minimal clarification/approval path when
+  ambiguity or user control requires it. Ambiguous reference binding is a concrete first use case.
+  Prefer an inspectable internal Markdown pending artifact that links known candidate notes and can be
+  referenced temporarily from the source occurrence. After resolution, replace the source link with
+  the real note and archive/remove the temporary artifact. Keep this workflow state outside the
+  canonical user-knowledge ontology unless later evidence justifies a dedicated type.
+- 💡 **Mention-to-alias promotion:** some occurrence wording such as `Carrefour` or `la amiga de
+  Laura` may be useful reusable identity vocabulary, while transient phrases such as `la chica con la
+  que cenamos ayer` should not become durable aliases. Keep Phase 16.5C deterministic; introduce alias
+  promotion only through a separate explicit semantic contract with evidence.
 - 💡 **Derived identity/link graph index:** extend the rebuildable SQLite index with aliases and
   wikilinks/backlinks when graph execution is needed; Markdown remains authoritative.
 - 💡 **Graph retrieval:** keep ordinary semantic relationship questions semantic-first because
