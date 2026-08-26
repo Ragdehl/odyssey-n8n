@@ -30,8 +30,9 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
 - ✅ **Phase 16.4 — existing-note UPDATE materialization:** one already-resolved UPDATE now stages
   deterministic properties/tags, validates Luna-medium full-note bounded operations, and performs
   one revision-guarded Phase 12 update. CREATE remains deliberately unimplemented.
-- ➡️ **Phase 16.5 — pre-writer reference binding:** refine reference occurrence placement, resolve or
-  preallocate referenced identities, materialize only safe `[[wikilinks]]` before Luna, and preserve
+- ➡️ **Phase 16.5 — pre-writer reference binding:** Phase 16.5A now freezes deterministic planner
+  occurrence markers and human-readable mentions; the remaining work resolves or preallocates
+  referenced identities, materializes only safe `[[wikilinks]]` before Luna, and preserves
   ambiguous/unresolved references as explicit pending work rather than guessing.
 - ⬜ **Phase 16.6 — CREATE materialization:** deterministically allocate CREATE identity/path/display
   identity, generate a complete body through the selected Luna/medium policy using already-bound
@@ -116,10 +117,10 @@ UPDATE target, stages deterministic properties/tags, calls the selected full-not
 only for non-duplicate free text, validates exact bounded operations, and calls Phase 12
 `update_entity()` once with an expected revision. No orchestration boundary is introduced.
 
-➡️ **Phase 16.5 — reference binding before body writing** is now the next step. The current
-`KnowledgeReference(target_index, role)` preserves logical relationships but does not preserve enough
-placement information to safely insert a wikilink after a semantic writer has changed the sentence.
-Reference placement must therefore be made deterministic before Luna sees the facts. See
+➡️ **Phase 16.5 — reference binding before body writing** remains in progress. Phase 16.5A freezes
+`KnowledgeReference(target_index, role, mention)` plus `{{ref:N}}` markers local to each unit's
+`references` array, so placement is preserved before Luna sees the facts. Target resolution and
+wikilink rendering remain later 16.5B/C work. See
 [Phase 16 reference binding](phase-16-reference-binding.md).
 
 The immediate execution order is:
@@ -144,6 +145,11 @@ future HITL path can ask which identity was intended. No second LLM should redis
 after writer output. Same-request CREATE references can be linked once deterministic identity/path has
 been allocated; the referenced Markdown file does not need to have been persisted first.
 
+A reference also does **not** authorize an automatic inverse mutation in the referenced note. Store the
+user-supplied relationship once and rely first on ordinary semantic context retrieval for reverse
+natural-language questions; the context projection already renders wikilinks as readable entity text.
+Explicit graph/backlink traversal remains separate and evidence-driven.
+
 ⬜ **Phase 16.6 — CREATE materialization** follows that preflight. `save_knowledge` remains a likely
 later coordination boundary, but its exact API should be decided from implementation evidence rather
 than frozen prematurely.
@@ -162,6 +168,7 @@ Phase 16 materialization must still cover:
 - deterministic reference occurrence binding before writer calls;
 - safe pre-writer `[[wikilink]]` materialization for resolved/preallocated identities;
 - explicit pending-reference results for ambiguous/unresolved references, with no guessed link;
+- no automatic inverse/mirrored note mutation merely because a relationship wikilink was created;
 - minimal type-aware note-writing guidance where demonstrated before body rendering is finalized;
 - selected Luna/medium bounded free-text writing with full authoritative existing-note context;
 - Core validation of exact spans, schema, current revision, and required bound links before applying
@@ -206,8 +213,10 @@ The detailed cross-phase direction is centralized in
   must preserve explicit pending-reference work so a later stable application flow can resume it.
 - 💡 **Derived identity/link graph index:** extend the rebuildable SQLite index with aliases and
   wikilinks/backlinks when graph execution is needed; Markdown remains authoritative.
-- 💡 **Graph retrieval:** execute validated `link_scope` with bounded traversal and explicit unresolved
-  link handling.
+- 💡 **Graph retrieval:** keep ordinary semantic relationship questions semantic-first because
+  `ContextIndex` humanizes wikilinks before embedding. Use bounded graph/backlink traversal for
+  explicit structural/neighborhood questions, or later as a recall supplement only if benchmarks show
+  semantic retrieval misses inverse relationships.
 - 💡 **Structured analytics / aggregations:** deterministic counts, sums, averages and grouping over
   rebuildable structured/index data rather than loading the vault into an LLM.
 - 💡 **App/capability delegation:** let the top-level planner distinguish direct Core knowledge work

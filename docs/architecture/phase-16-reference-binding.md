@@ -4,7 +4,11 @@
 
 This document is the canonical contract for materializing semantic `KnowledgeUnit.references` into ordinary Markdown `[[wikilinks]]` during Phase 16.
 
-Phase 15 already preserves logical references between knowledge units, but the current `KnowledgeReference(target_index, role)` shape does not itself identify a stable repository note or a text span that can safely be rewritten after a semantic writer has changed the body. Phase 16 must therefore bind references **before** the CREATE/UPDATE writer sees the facts that contain them.
+Phase 15 preserves logical references between knowledge units and, in Phase 16.5A, preserves each
+reference occurrence before any semantic writer call. The closed `KnowledgeReference(target_index,
+role, mention)` shape carries the target unit, semantic role, and original human-readable wording.
+Phase 16 must still bind references **before** the CREATE/UPDATE writer sees the facts that contain
+them.
 
 The goal is to keep reference placement deterministic and avoid a second LLM call or post-hoc text guessing.
 
@@ -44,20 +48,30 @@ Do **not** ask a later LLM to rediscover which words in writer output represente
 
 ## Reference occurrence contract
 
-The current `KnowledgeReference` records which knowledge unit is referenced and the semantic role, but not where that reference occurs inside a fact. That is insufficient for deterministic pre-writer wikilink insertion.
-
-Before implementing reference materialization, refine the planning/materialization contract so each reference occurrence is bound to the fact text deterministically. A planner-emitted placeholder/token or an equivalent closed structured representation is acceptable; the exact representation must be chosen during the Phase 16 reference-binding implementation and validated locally.
-
-Conceptually:
+Phase 16.5A freezes a reserved internal planner marker. Every semantic reference occurrence is
+replaced in its fact by `{{ref:N}}`, where `N` is the zero-based index into that same
+KnowledgeUnit's `references` array. The matching `KnowledgeReference.mention` preserves the original
+human-readable wording, even when it differs from the referenced unit's canonical query.
 
 ```text
 fact:
   "Compré {{ref:1}} en {{ref:0}}."
 
 references:
-  ref:0 -> unit 0, role=store
-  ref:1 -> unit 1, role=product
+  ref:0 -> unit 0, role=store, mention="Carrefour Balma"
+  ref:1 -> unit 1, role=product, mention="Leche Pascual"
 ```
+
+The same marker may occur repeatedly. Every reference must have at least one marker in that unit's
+facts; every marker must resolve to a valid local reference index. Malformed or out-of-range markers,
+or planner-generated raw Markdown wikilinks, fail closed. References still cannot point to the
+KnowledgeUnit itself. A unit used only as a reference target may have no facts; its occurrence marker
+belongs to the referencing unit.
+
+Markers are an internal planner contract, not user-authored Markdown syntax. They preserve semantic
+occurrence placement only; Core does not use offsets, string similarity, fuzzy matching, another LLM,
+or Markdown AST parsing to rediscover placement. The Sol/low planner is explicitly instructed not to
+mark names used only to identify the target and not to create inverse relationship references.
 
 After safe identity binding:
 
@@ -65,7 +79,10 @@ After safe identity binding:
 "Compré [[Leche Pascual]] en [[Carrefour Balma]]."
 ```
 
-The placeholder syntax above is illustrative, not yet a frozen public schema. The invariant is that **reference placement is decided before the writer and can be materialized by Core without semantic inference**.
+The invariant is that **reference placement is decided before the writer and can be materialized by
+Core without semantic inference**. Phase 16.5B/C will replace the temporary UPDATE fail-closed guard
+with reference target binding and pre-writer rendering; Phase 16.5A does not resolve targets or emit
+wikilinks.
 
 The actual Obsidian link target must be derived deterministically from the authoritative existing path or the preallocated CREATE path, with an optional display label when needed. A primary name or alias alone is never sufficient evidence for the physical link target when it could be ambiguous.
 
@@ -109,6 +126,20 @@ Therefore the write group needs a preflight before any body is written:
 Identity/path allocation is not persistence. This allows unit A to contain a valid wikilink to new unit B even if B has not yet been written to disk.
 
 The exact multi-unit persistence/partial-success contract remains separate Phase 16 work. Do not introduce a generic workflow engine or Phase 17 RequestPlan orchestration merely to support this preflight.
+
+## No automatic inverse writes
+
+A semantic reference or wikilink authorizes only the fact the user actually supplied. Odyssey must not automatically create a mirrored or inverse fact in the referenced note merely to make reverse questions easier to answer.
+
+For example, if the user records:
+
+```text
+Laura is responsible for [[Marta]].
+```
+
+Odyssey may CREATE/UPDATE Laura and bind the reference to Marta, but it must not also update Marta with a generated inverse fact such as `Responsible: [[Laura]]` unless the user request independently requires that mutation or a future explicit domain rule justifies it.
+
+This avoids duplicated knowledge, extra writes, synchronization problems, and invented relation semantics. Reverse natural-language questions should first rely on ordinary semantic context retrieval, whose embedding projection already renders wikilinks as readable entity text. Explicit backlink/graph traversal remains a separate retrieval capability for structural graph questions or a future evidence-backed recall supplement. See [Semantic Candidate Retrieval](semantic-retrieval.md#relationship-retrieval-direction).
 
 ## Writer boundary
 

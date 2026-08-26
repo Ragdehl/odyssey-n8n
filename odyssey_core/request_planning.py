@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -25,6 +26,7 @@ _LINK_DIRECTIONS = ("incoming", "outgoing", "both")
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
+_REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestPlan. Use the supplied current date, time, and timezone.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, and link_scope. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
@@ -39,7 +41,13 @@ Use DelegateAction only when the requested operation needs a specialized capabil
 
 A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
 
+Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
+
 Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Do not attempt canonical type reassignment in Phase 15.1.
+
+When a fact semantically refers to another KnowledgeUnit, replace that occurrence in the fact with `{{ref:N}}`, where N is the zero-based index in that KnowledgeUnit's own `references` array. Preserve the original human-readable wording in that reference's `mention` field. The marker may occur repeatedly for repeated mentions. Do not emit Markdown `[[wikilinks]]`. Do not create a reference merely because another entity name appears: use a marker only for a semantic relationship that needs a KnowledgeReference. A name used only to identify the write target is not automatically a fact reference. References never authorize an inverse or mirrored write into the referenced unit.
+
+Example: for "La amiga de Marta ahora trabaja en Airbus", use target query "la amiga de Marta", fact "Ahora trabaja en {{ref:0}}.", and reference 0 with mention "Airbus". Do not create a reference to Marta because Marta only identifies the target. A reference-only target unit may have empty facts when another unit points to it.
 
 Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval, persistence, or entity resolution. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
@@ -106,10 +114,11 @@ class RetrieveAction:
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeReference:
-    """Represent one semantic in-plan reference to another knowledge unit."""
+    """Represent one semantic in-plan reference and its preserved fact wording."""
 
     target_index: int
     role: str
+    mention: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,8 +279,9 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                                             "minimum": 0,
                                                         },
                                                         "role": {"type": "string"},
+                                                        "mention": {"type": "string"},
                                                     },
-                                                    "required": ["target_index", "role"],
+                                                    "required": ["target_index", "role", "mention"],
                                                     "additionalProperties": False,
                                                 },
                                             },
@@ -920,19 +930,29 @@ def _validate_knowledge_unit(
     for reference in raw_references:
         if (
             not isinstance(reference, dict)
-            or set(reference) != {"target_index", "role"}
+            or set(reference) != {"target_index", "role", "mention"}
             or not isinstance(reference["target_index"], int)
             or isinstance(reference["target_index"], bool)
             or reference["target_index"] < 0
             or not isinstance(reference["role"], str)
             or not reference["role"].strip()
+            or not isinstance(reference["mention"], str)
+            or not reference["mention"].strip()
+            or "[[" in reference["mention"]
+            or "]]" in reference["mention"]
         ):
             raise RequestPlanningError("KnowledgeUnit reference is invalid")
         references.append(
             KnowledgeReference(
-                target_index=reference["target_index"], role=reference["role"].strip()
+                target_index=reference["target_index"],
+                role=reference["role"].strip(),
+                mention=reference["mention"].strip(),
             )
         )
+    marker_indexes = _validate_fact_reference_markers(raw_facts, len(references))
+    for reference_index in range(len(references)):
+        if reference_index not in marker_indexes:
+            raise RequestPlanningError("KnowledgeReference has no fact occurrence marker")
     return KnowledgeUnit(
         target=target,
         intent=intent,
@@ -941,6 +961,39 @@ def _validate_knowledge_unit(
         facts=tuple(fact.strip() for fact in raw_facts),
         references=tuple(references),
     )
+
+
+def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int) -> set[int]:
+    """Validate internal reference markers and return their local reference indexes.
+
+    Args:
+        facts: Untrusted planner fact strings for one KnowledgeUnit.
+        reference_count: Number of references in that same unit's references array.
+
+    Returns:
+        Set of local reference indexes represented by at least one marker.
+
+    Raises:
+        RequestPlanningError: If markers are malformed, out of range, or raw wikilinks appear.
+    """
+    indexes: set[int] = set()
+    for fact in facts:
+        if "[[" in fact or "]]" in fact:
+            raise RequestPlanningError("Planner facts must not contain Markdown wikilinks")
+        cursor = 0
+        while True:
+            start = fact.find("{{ref", cursor)
+            if start < 0:
+                break
+            match = _REFERENCE_MARKER_PATTERN.match(fact, start)
+            if match is None:
+                raise RequestPlanningError("KnowledgeUnit fact reference marker is malformed")
+            reference_index = int(match.group(1))
+            if reference_index >= reference_count:
+                raise RequestPlanningError("KnowledgeUnit fact reference marker is out of range")
+            indexes.add(reference_index)
+            cursor = match.end()
+    return indexes
 
 
 def _validate_property_changes(

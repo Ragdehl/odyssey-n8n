@@ -149,6 +149,42 @@ orchestration. The index is also compatible only with the canonical type and tag
 when it was built; registry drift fails explicitly and requires an explicit rebuild. Future
 interpretation supplies the retrieval need.
 
+### Relationship retrieval direction
+
+Ordinary relationship facts should remain stored once rather than being duplicated symmetrically
+into both linked notes merely to support reverse questions. Because the context projection
+humanizes wikilinks before embedding, a note such as:
+
+```text
+Laura is responsible for [[Marta]].
+```
+
+contributes retrieval text equivalent to `Laura is responsible for Marta.` A semantic query such as
+`Who is responsible for Marta?` can therefore retrieve Laura's note directly even though Marta's
+note contains no inverse fact.
+
+This is the default retrieval strategy for semantic relationship questions: search the ordinary
+context index first and do **not** automatically traverse backlinks or a link graph. The planner
+must distinguish an entity that is merely part of the retrieval condition from the actual result
+being sought; mentioning Marta in the question does not by itself mean the query should be scoped to
+Marta's own note.
+
+Graph/backlink traversal remains a separate explicit capability for structurally graph-oriented
+questions such as `Which notes link to Marta?`, `Show things connected to Marta`, or bounded
+multi-hop neighborhood requests. A future benchmark may also justify adding backlink candidates as
+a recall supplement when ordinary semantic retrieval demonstrably misses inverse relationship
+questions, but graph traversal must not become a default retrieval step without that evidence.
+
+This preserves a simple source-of-truth rule:
+
+```text
+write one relationship fact once
+        |
+        +--> semantic retrieval can answer inverse natural-language questions
+        |
+        `--> explicit graph retrieval handles structural/link-neighborhood questions
+```
+
 Phase 13 also accepts a small structured filter plan through `get_context(..., filters=...)`.
 Each filter has `field`, `op`, and `value`; fields are accepted only when the canonical schema
 marks them `filterable`. The supported operators are `eq` and `in` for strings, `eq`, `in`,

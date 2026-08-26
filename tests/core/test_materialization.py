@@ -26,6 +26,7 @@ from odyssey_core import (
     update_entity,
 )
 from odyssey_core.request_planning import (
+    KnowledgeReference,
     KnowledgeUnit,
     PropertyChange,
     SelectionCriteria,
@@ -78,10 +79,16 @@ def unit(
     tags: tuple[TagChange, ...] = (),
     facts: tuple[str, ...] = (),
     intent: str = "amend",
+    references: tuple[KnowledgeReference, ...] = (),
 ) -> KnowledgeUnit:
     """Build one already-validated unit aimed at the fixture target."""
     return KnowledgeUnit(
-        SelectionCriteria("Bea", "Bea", "person", (), None), intent, properties, tags, facts, ()
+        SelectionCriteria("Bea", "Bea", "person", (), None),
+        intent,
+        properties,
+        tags,
+        facts,
+        references,
     )
 
 
@@ -392,6 +399,27 @@ def test_non_update_decision_is_rejected(repository: VaultRepository) -> None:
             actor="test",
             now=NOW,
         )
+
+
+def test_update_with_unresolved_references_fails_before_writer_or_persistence(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Temporary Phase 16.5A guard rejects unresolved references before any mutation boundary."""
+    calls = count_persistence(monkeypatch, repository)
+    writer = FakeWriter({"operations": [{"op": "APPEND", "text": "must not run"}]})
+
+    with pytest.raises(MaterializationError, match="reference binding is not implemented"):
+        materialize(
+            repository,
+            unit(
+                facts=("Bea works with {{ref:0}}.",),
+                references=(KnowledgeReference(1, "colleague", "Ada"),),
+            ),
+            writer,
+        )
+
+    assert writer.requests == []
+    assert calls == [0]
 
 
 def test_delete_intent_is_rejected_without_persistence(
