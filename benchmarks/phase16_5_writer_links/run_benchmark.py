@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from odyssey_core.materialization import (
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from odyssey_core.materialization import (  # noqa: E402
     WRITER_CONTEXT_MODE,
     WRITER_MODEL,
     WRITER_REASONING_EFFORT,
