@@ -1,0 +1,9 @@
+{
+  "created_at": "2026-08-26T06:14:13.033841+00:00",
+  "benchmark_version": "16.5A.2",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "planned_calls": 10,
+  "regression_suite": "benchmarks/phase15_1_schema_write_planning/cases.json"
+}

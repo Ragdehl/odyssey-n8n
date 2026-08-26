@@ -2,15 +2,15 @@
   "benchmark_version": "16.5A.1",
   "fixed_context": {"date": "2026-08-26", "time": "10:30", "timezone": "Europe/Paris"},
   "cases": [
-    {"id": "R01", "request": "Apunta que compré Leche Pascual.", "expected": {"reference_count": 1, "mentions": ["Leche Pascual"]}},
-    {"id": "R02", "request": "Apunta que compré Leche Pascual en Carrefour Balma.", "expected": {"reference_count": 2, "mentions": ["Leche Pascual", "Carrefour Balma"]}},
-    {"id": "R03", "request": "Apunta que compré Leche Pascual y que volví a comprar Leche Pascual.", "expected": {"reference_count": 1, "mentions": ["Leche Pascual"], "repeated": true}},
-    {"id": "R04", "request": "Ajoute à l'achat : j'ai acheté du lait Pascual à Carrefour Balma.", "expected": {"reference_count": 2, "mentions": ["lait Pascual", "Carrefour Balma"]}},
+    {"id": "R01", "request": "Apunta que compré Leche Pascual.", "expected": {"reference_count": 1, "references": [{"mention": "Leche Pascual", "target_query": "Leche Pascual"}]}},
+    {"id": "R02", "request": "Apunta que compré Leche Pascual en Carrefour Balma.", "expected": {"reference_count": 2, "references": [{"mention": "Leche Pascual", "target_query": "Leche Pascual"}, {"mention": "Carrefour Balma", "target_query": "Carrefour Balma"}]}},
+    {"id": "R03", "request": "Apunta sobre la compra: compré Leche Pascual y elegí Leche Pascual como mi favorita.", "expected": {"reference_count": 1, "references": [{"mention": "Leche Pascual", "target_query": "Leche Pascual"}], "repeated": true}},
+    {"id": "R04", "request": "Ajoute à l'achat : j'ai acheté du lait Pascual à Carrefour Balma.", "expected": {"reference_count": 2, "references": [{"mention": "du lait Pascual", "target_query": "lait Pascual"}, {"mention": "Carrefour Balma", "target_query": "Carrefour Balma"}]}},
     {"id": "R05", "request": "Apunta que la compra fue ayer.", "expected": {"reference_count": 0}},
-    {"id": "R06", "request": "Actualiza la nota de Laura: trabaja en Airbus.", "expected": {"reference_count": 1, "mentions": ["Airbus"], "no_false_positive": ["Laura"]}},
-    {"id": "R07", "request": "Actualiza la nota de la amiga de Marta: ahora trabaja en Airbus.", "expected": {"reference_count": 1, "mentions": ["Airbus"], "no_false_positive": ["Marta"]}},
-    {"id": "R08", "request": "Apunta que compré Leche Pascual en Carrefour Balma y conserva las notas de ambas entidades.", "expected": {"reference_count": 2, "mentions": ["Leche Pascual", "Carrefour Balma"], "reference_only_target": true}},
-    {"id": "R09", "request": "Crea una compra de Leche Pascual en Carrefour Balma hoy.", "expected": {"reference_count": 2, "mentions": ["Leche Pascual", "Carrefour Balma"], "intent": "record"}},
-    {"id": "R10", "request": "Corrige la compra: ayer la hice en Carrefour Balma.", "expected": {"reference_count": 1, "mentions": ["Carrefour Balma"], "intent": "amend"}}
+    {"id": "R06", "request": "Corrige a Laura: trabaja en Airbus.", "expected": {"reference_count": 1, "references": [{"mention": "Airbus", "target_query": "Airbus"}], "no_false_positive": ["Laura"]}},
+    {"id": "R07", "request": "Actualiza la nota de la amiga de Marta: ahora trabaja en Airbus.", "expected": {"reference_count": 1, "references": [{"mention": "Airbus", "target_query": "Airbus"}], "no_false_positive": ["Marta"]}},
+    {"id": "R08", "request": "Apunta que compré Leche Pascual en Carrefour Balma y conserva las notas de ambas entidades.", "expected": {"reference_count": 2, "references": [{"mention": "Leche Pascual", "target_query": "Leche Pascual"}, {"mention": "Carrefour Balma", "target_query": "Carrefour Balma"}], "reference_only_target": true}},
+    {"id": "R09", "request": "Crea una compra de Leche Pascual en Carrefour Balma hoy.", "expected": {"reference_count": 2, "references": [{"mention": "Leche Pascual", "target_query": "Leche Pascual"}, {"mention": "Carrefour Balma", "target_query": "Carrefour Balma"}], "intent": "record"}},
+    {"id": "R10", "request": "Corrige la compra: ayer la hice en Carrefour Balma.", "expected": {"reference_count": 1, "references": [{"mention": "Carrefour Balma", "target_query": "Carrefour Balma"}], "intent": "amend"}}
   ]
 }
