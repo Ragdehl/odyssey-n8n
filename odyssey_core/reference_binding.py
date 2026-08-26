@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 _MARKER = re.compile(r"\{\{ref:(\d+)\}\}")
 _ANY_WIKILINK = re.compile(r"\[\[[^\[\]\r\n]+\]\]")
-_RENDERED_WIKILINK = re.compile(r"\[\[([^\[\]|\r\n]+)\|([^\[\]|\r\n]+)\]\]")
+_SAFE_TARGET_CAPTURE = r"[^\[\]|#^:%\r\n]+"
 
 
 class ReferenceBindingError(RuntimeError):
@@ -180,33 +180,37 @@ def _validate_rendered_fact(
         if rendered != source:
             raise ReferenceBindingError("Reference-free fact changed during rendering")
         return
+
     cursor = 0
     pattern: list[str] = ["^"]
-    reference_indexes: list[int] = []
-    for match in matches:
-        literal = source[cursor : match.start()]
-        pattern.append(re.escape(literal))
-        pattern.append("(.*?)")
-        reference_indexes.append(int(match.group(1)))
-        cursor = match.end()
-    pattern.append(re.escape(source[cursor:]))
-    pattern.append("$")
-    rendered_match = re.match("".join(pattern), rendered, flags=re.DOTALL)
-    if rendered_match is None:
-        raise ReferenceBindingError("Rendered fact changed text outside reference markers")
-    for reference_index, replacement in zip(
-        reference_indexes, rendered_match.groups(), strict=True
-    ):
+    link_group_names: list[str] = []
+    for ordinal, match in enumerate(matches):
+        reference_index = int(match.group(1))
         if reference_index >= len(references):
             raise ReferenceBindingError("Reference marker index is out of range")
         mention = references[reference_index].mention
-        if replacement == mention:
-            continue
-        link_match = _RENDERED_WIKILINK.fullmatch(replacement)
-        if link_match is None or link_match.group(2) != mention:
-            raise ReferenceBindingError("Reference marker was not replaced by its exact mention")
-        _wikilink_target(f"{link_match.group(1)}.md")
-        _wikilink_display(link_match.group(2))
+        literal = source[cursor : match.start()]
+        pattern.append(re.escape(literal))
+        plain = re.escape(mention)
+        if _is_safe_wikilink_display(mention):
+            group_name = f"target_{ordinal}"
+            pattern.append(
+                rf"(?:{plain}|\[\[(?P<{group_name}>{_SAFE_TARGET_CAPTURE})\|{plain}\]\])"
+            )
+            link_group_names.append(group_name)
+        else:
+            pattern.append(plain)
+        cursor = match.end()
+    pattern.append(re.escape(source[cursor:]))
+    pattern.append("$")
+
+    rendered_match = re.match("".join(pattern), rendered, flags=re.DOTALL)
+    if rendered_match is None:
+        raise ReferenceBindingError("Rendered fact changed text outside reference markers")
+    for group_name in link_group_names:
+        target = rendered_match.group(group_name)
+        if target is not None:
+            _wikilink_target(f"{target}.md")
     if "{{ref" in rendered or "}}" in rendered:
         raise ReferenceBindingError("Reference marker survived rendering")
 
@@ -226,14 +230,17 @@ def _wikilink_target(path: str) -> str:
     return path.removesuffix(".md")
 
 
+def _is_safe_wikilink_display(mention: str) -> bool:
+    """Return whether exact mention text is syntactically safe inside ``[[target|display]]``."""
+    return bool(mention) and not any(
+        character in mention or any(ord(item) < 32 or ord(item) == 127 for item in mention)
+        for character in ("|", "[", "]", "\r", "\n")
+    )
+
+
 def _wikilink_display(mention: str) -> str:
     """Return exact display text only when it cannot break Odyssey's wikilink syntax."""
-    if (
-        not isinstance(mention, str)
-        or not mention
-        or any(character in mention for character in "|[]\r\n")
-        or any(ord(character) < 32 or ord(character) == 127 for character in mention)
-    ):
+    if not isinstance(mention, str) or not _is_safe_wikilink_display(mention):
         raise ReferenceBindingError("Reference mention cannot safely form wikilink display text")
     return mention
 
