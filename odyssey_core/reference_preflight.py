@@ -168,23 +168,24 @@ def _find_existing_identity(
 
 
 def _safe_creation_name(name: str) -> str:
-    """Validate the human name used in a creation-time filename label."""
+    """Return a portable creation-time filename label without changing canonical metadata name."""
     value = name.strip()
     if not value:
         raise ReferencePreflightError("Canonical name cannot safely form a Markdown filename")
-    # These characters are invalid on Windows and can also be parsed as Obsidian wikilink
-    # syntax when the creation label is later used as a physical link target.
+    # These characters are invalid on Windows and/or parsed as structural Obsidian wikilink syntax.
     value = re.sub(r'[<>:"/\\|?*#^\[\]%]', "_", value)
     value = value.rstrip(" .")
     if not value or any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise ReferencePreflightError("Canonical name contains unsafe control characters")
-    if value.upper() in {
+    reserved = {
         "CON",
         "PRN",
         "AUX",
         "NUL",
-        *(f"COM{index}" for index in range(1, 10)),
-        *(f"LPT{index}" for index in range(1, 10)),
-    }:
-        value += "_"
+        *(f"COM{index}" for index in range(0, 10)),
+        *(f"LPT{index}" for index in range(0, 10)),
+    }
+    device_stem, separator, extension = value.partition(".")
+    if device_stem.upper() in reserved:
+        value = f"{device_stem}_{separator}{extension}" if separator else f"{device_stem}_"
     return value
