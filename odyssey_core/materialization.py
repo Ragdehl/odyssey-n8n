@@ -1,4 +1,4 @@
-"""UPDATE-only Phase 16 materialization through bounded writer operations."""
+"""Deterministic CREATE and bounded-writer UPDATE materialization."""
 
 from __future__ import annotations
 
@@ -11,12 +11,18 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from odyssey_core.notes import Note, parse_note, validate_note
-from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation, update_entity
+from odyssey_core.persistence import (
+    EntityPersistenceResult,
+    PersistenceOperation,
+    create_entity,
+    update_entity,
+)
 from odyssey_core.reference_binding import (
     ReferenceBindingError,
     required_bound_wikilinks,
     validate_rendered_facts,
 )
+from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
@@ -50,6 +56,142 @@ class WriterProviderError(MaterializationError):
 
 class WriterOutputError(MaterializationError):
     """Indicate malformed, unsafe, or conflicting bounded writer operations."""
+
+
+def materialize_create(
+    unit: KnowledgeUnit,
+    preflight: UnitTargetPreflight,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: str,
+    now: str,
+    rendered_facts: tuple[str, ...] | None = None,
+) -> EntityPersistenceResult:
+    """Materialize one preflight-authorized CREATE without semantic rendering.
+
+    Args:
+        unit: Validated record unit containing canonical mutations and prepared facts.
+        preflight: Matching Phase 16.5B CREATE identity and path allocation.
+        repository: Authoritative Markdown repository.
+        schema: Active canonical note schema.
+        actor: Application identity recorded by Phase 12 persistence.
+        now: Explicit canonical lifecycle timestamp.
+        rendered_facts: Phase 16.5C facts, required when the unit has references.
+
+    Returns:
+        The one Phase 12 CREATE persistence result at revision 1.
+
+    Raises:
+        MaterializationError: If the unit, preflight, references, metadata, or body is unsafe.
+        NoteValidationError: If the staged note cannot satisfy the canonical schema.
+        EntityAlreadyExistsError: If the preallocated ID already exists.
+        NoteAlreadyExistsError: If the preallocated path is occupied.
+    """
+    _validate_create_preconditions(unit, preflight)
+    if unit.references and rendered_facts is None:
+        raise MaterializationError("References require safe pre-writer rendered_facts")
+    if rendered_facts is not None:
+        try:
+            validate_rendered_facts(unit, rendered_facts)
+        except ReferenceBindingError as error:
+            raise MaterializationError("Rendered facts do not match the KnowledgeUnit") from error
+
+    prepared_facts = rendered_facts if rendered_facts is not None else unit.facts
+    if any("{{ref:" in fact for fact in prepared_facts):
+        raise MaterializationError("Raw reference markers cannot reach CREATE persistence")
+    metadata = _stage_create_metadata(unit, preflight)
+    content = "\n".join(prepared_facts)
+    _validate_create_candidate(metadata, content, preflight.stable_id or "", actor, now, schema)
+    return create_entity(
+        repository,
+        schema,
+        path=preflight.path or "",
+        entity_id=preflight.stable_id or "",
+        metadata=metadata,
+        content=content,
+        actor=actor,
+        now=now,
+    )
+
+
+def _validate_create_preconditions(unit: KnowledgeUnit, preflight: UnitTargetPreflight) -> None:
+    """Validate the immutable CREATE hand-off without resolving or allocating anything."""
+    if not isinstance(unit, KnowledgeUnit):
+        raise MaterializationError("CREATE materialization requires a KnowledgeUnit")
+    if unit.intent != "record":
+        raise MaterializationError("CREATE materialization requires record intent")
+    if not isinstance(preflight, UnitTargetPreflight):
+        raise MaterializationError("CREATE materialization requires target preflight")
+    if preflight.outcome is not WriteTargetOutcome.CREATE:
+        raise MaterializationError("CREATE materialization requires CREATE preflight")
+    if not isinstance(unit.target.type, str) or not unit.target.type.strip():
+        raise MaterializationError("CREATE target requires a canonical type")
+    if not isinstance(preflight.stable_id, str) or not preflight.stable_id.strip():
+        raise MaterializationError("CREATE preflight requires a preallocated stable ID")
+    if not isinstance(preflight.canonical_name, str) or not preflight.canonical_name.strip():
+        raise MaterializationError("CREATE preflight requires a canonical name")
+    if (
+        not isinstance(preflight.path, str)
+        or not preflight.path
+        or preflight.path.startswith(("/", "\\"))
+        or "\\" in preflight.path
+        or any(part in {"", ".", ".."} for part in preflight.path.split("/"))
+        or not preflight.path.endswith(".md")
+    ):
+        raise MaterializationError("CREATE preflight requires a safe Markdown path")
+
+
+def _stage_create_metadata(unit: KnowledgeUnit, preflight: UnitTargetPreflight) -> dict[str, Any]:
+    """Stage canonical CREATE metadata from empty domain state and explicit mutations."""
+    metadata: dict[str, Any] = {
+        "name": preflight.canonical_name,
+        "type": unit.target.type,
+    }
+    for change in unit.properties:
+        if not isinstance(change, PropertyChange) or change.field in {"name", "type", "tags"}:
+            raise MaterializationError("CREATE property mutation is not canonical")
+        if change.op == "set":
+            metadata[change.field] = change.value
+        elif change.op == "remove":
+            metadata.pop(change.field, None)
+        else:
+            raise MaterializationError("KnowledgeUnit property mutation is invalid")
+
+    tags: list[str] = []
+    for change in unit.tag_changes:
+        if not isinstance(change, TagChange):
+            raise MaterializationError("CREATE tag mutation is invalid")
+        if change.op == "add" and change.value not in tags:
+            tags.append(change.value)
+        elif change.op == "remove":
+            tags = [tag for tag in tags if tag != change.value]
+        else:
+            raise MaterializationError("KnowledgeUnit tag mutation is invalid")
+    if tags:
+        metadata["tags"] = tags
+    return metadata
+
+
+def _validate_create_candidate(
+    metadata: dict[str, Any],
+    content: str,
+    entity_id: str,
+    actor: str,
+    now: str,
+    schema: dict[str, Any],
+) -> None:
+    """Validate the complete staged CREATE note before invoking persistence."""
+    lifecycle = {
+        "id": entity_id,
+        "created_at": now,
+        "updated_at": now,
+        "created_by": actor,
+        "updated_by": actor,
+        "revision": 1,
+        "schema_version": schema.get("schema_version"),
+    }
+    validate_note(Note(metadata={**metadata, **lifecycle}, content=content), schema)
 
 
 @dataclass(frozen=True, slots=True)

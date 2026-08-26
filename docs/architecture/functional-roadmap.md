@@ -36,11 +36,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   referenced identities; 16.5C deterministically renders only safely bound `[[path|mention]]` links
   before any semantic writer. Ambiguous/unresolved references remain readable plain mentions plus
   explicit pending-reference results. Focused linked-writer evidence is reproducible at 6/6 PASS.
-- ➡️ **Phase 16.6 — CREATE materialization:** consume the already-preallocated CREATE identity/path,
+- ✅ **Phase 16.6 — CREATE materialization:** consume the already-preallocated CREATE identity/path,
   stage canonical metadata deterministically, render prepared facts deterministically by default,
   validate bound links/schema, and persist once. A future explicit writing skill may opt into semantic
   rendering; no generic CREATE LLM call is part of the initial implementation.
-- ⬜ **Phase 16.7 — remaining Phase 16 mutation semantics:** guarded soft delete/inbound-link policy,
+- ➡️ **Phase 16.7 — remaining Phase 16 mutation semantics:** guarded soft delete/inbound-link policy,
   explicit bulk cardinality, dependency/partial-success results, and type-change handling before
   general RequestPlan orchestration.
 
@@ -162,7 +162,7 @@ user-supplied relationship once and rely first on ordinary semantic context retr
 natural-language questions; the context projection already renders wikilinks as readable entity text.
 Explicit graph/backlink traversal remains separate and evidence-driven.
 
-➡️ **Phase 16.6 — CREATE materialization** now follows that completed preflight/binding boundary. The
+✅ **Phase 16.6 — CREATE materialization** now follows that completed preflight/binding boundary. The
 canonical contract is [Phase 16.6 CREATE materialization](phase-16-create-materialization.md).
 `save_knowledge` remains a likely later coordination boundary, but its exact API should be decided from
 implementation evidence rather than frozen prematurely.
