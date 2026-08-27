@@ -12,16 +12,23 @@ from odyssey_core import (
     ContextIndex,
     EntityAlreadyExistsError,
     EntityRevisionMismatchError,
+    MaterializationError,
     PersistenceOperation,
     ProtectedMetadataError,
+    SelectionCriteria,
     SemanticEntityIndex,
+    WriteTargetDecision,
+    WriteTargetOutcome,
     create_entity,
     find_exact_entity_candidates,
     get_context,
+    materialize_delete,
     soft_delete_entity,
     update_entity,
 )
 from odyssey_core.notes import Note, NoteValidationError, parse_note, validate_note
+from odyssey_core.request_planning import KnowledgeUnit
+from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
 from odyssey_core.storage import VaultRepository
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +48,21 @@ class Embedder:
     def embed_queries(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
         """Return one stable vector per query text."""
         return [[1.0, 0.0] for _ in texts]
+
+
+class RejectingReasoner:
+    """Fail a test when stale semantic evidence reaches contextual resolution."""
+
+    def __init__(self) -> None:
+        """Initialize the observable no-call guard."""
+        self.calls = 0
+
+    def resolve(self, request: object) -> object:
+        """Reject any unexpected contextual provider invocation."""
+        self.calls += 1
+        raise AssertionError(
+            f"Deleted semantic candidate reached contextual resolution: {request!r}"
+        )
 
 
 @pytest.fixture
@@ -142,6 +164,33 @@ def test_soft_delete_preserves_note_and_backlinks_with_revision_guard(
         )
 
 
+def test_materialize_delete_requires_one_resolved_factless_unit(
+    repository: VaultRepository, schema: dict
+) -> None:
+    """Exercise the DELETE unit-to-Core boundary and reject bulk DELETE before persistence."""
+    unit = KnowledgeUnit(
+        SelectionCriteria("Marta", "Marta", "person", (), None), "delete", (), (), (), (), "one"
+    )
+    decision = WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id="marta")
+    result = materialize_delete(
+        unit, decision, repository=repository, schema=schema, actor="test", now=NOW
+    )
+    assert result.operation is PersistenceOperation.DELETED
+    bulk = KnowledgeUnit(
+        SelectionCriteria(None, "all people", "person", (), None),
+        "delete",
+        (),
+        (),
+        (),
+        (),
+        "all_matching",
+    )
+    with pytest.raises(MaterializationError, match="cardinality=one"):
+        materialize_delete(
+            bulk, decision, repository=repository, schema=schema, actor="test", now=NOW
+        )
+
+
 def test_deleted_notes_are_excluded_from_exact_indexes_context_and_duplicate_ids(
     repository: VaultRepository, schema: dict, tmp_path: Path
 ) -> None:
@@ -192,3 +241,35 @@ def test_stale_context_index_cannot_return_currently_deleted_note(
     )
     package = get_context(repository, schema, index, Embedder(), query="Marta", limit=5)
     assert all(item.id != "marta" for item in package.items)
+
+
+def test_stale_semantic_index_cannot_resolve_or_disclose_deleted_candidate(
+    repository: VaultRepository, schema: dict, tmp_path: Path
+) -> None:
+    """Ground semantic candidates in current Markdown before contextual evidence construction."""
+    index = SemanticEntityIndex(tmp_path.parent / f"{tmp_path.name}-semantic.sqlite3")
+    index.rebuild(repository, schema, Embedder())
+    soft_delete_entity(
+        repository,
+        schema,
+        path="people/marta.md",
+        expected_id="marta",
+        expected_revision=1,
+        actor="test",
+        now=NOW,
+    )
+    reasoner = RejectingReasoner()
+    result = resolve_existing_entity(
+        "the person in Lyon",
+        "",
+        type="person",
+        repository=repository,
+        schema=schema,
+        semantic_index=index,
+        embedder=Embedder(),
+        contextual_reasoner=reasoner,
+        semantic_limit=5,
+    )
+    assert result.outcome is ExistingEntityOutcome.UNRESOLVED
+    assert result.id is None
+    assert reasoner.calls == 0
