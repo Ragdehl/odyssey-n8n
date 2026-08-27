@@ -30,6 +30,12 @@ _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestPlan. Use the supplied current date, time, and timezone.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, and link_scope. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
+resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
+represented by the selection. Do not infer `all_matching` from plural wording alone, from several
+semantic candidates, or from an explicit list of independent names. Preserve an all-matching intent
+even when current execution cannot authorize its selector. Cardinality belongs only to KnowledgeUnit;
+do not add it to SelectionCriteria. An all-matching unit has no singular entity identity.
 
 Hard filters can permanently remove valid notes: apply a deterministic restriction only when the request maps explicitly and safely to this capability contract. Otherwise preserve the meaning in `query`. Words such as before, earlier, previously, beforehand, antes, anteriormente, previamente, and ya había pensado describe knowledge semantics, not note lifecycle, unless the user explicitly refers to when a note, entry, or item was created, written, added, updated, modified, or recorded. Only that explicit lifecycle timing authorizes created_at or updated_at filters. Multiple RetrieveActions are only for genuinely independent candidate-set branches; ordinary semantic OR stays one query.
 
@@ -148,6 +154,7 @@ class KnowledgeUnit:
     tag_changes: tuple[TagChange, ...]
     facts: tuple[str, ...]
     references: tuple[KnowledgeReference, ...]
+    cardinality: str = "one"
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +263,10 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                         "type": "object",
                                         "properties": {
                                             "target": selection_schema,
+                                            "cardinality": {
+                                                "type": "string",
+                                                "enum": ["one", "all_matching"],
+                                            },
                                             "intent": {
                                                 "type": "string",
                                                 "enum": list(WRITE_INTENTS),
@@ -288,6 +299,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                         },
                                         "required": [
                                             "target",
+                                            "cardinality",
                                             "intent",
                                             "properties",
                                             "tag_changes",
@@ -857,6 +869,12 @@ def _validate_write_action(
         for reference in unit.references:
             if reference.target_index >= len(units) or reference.target_index == index:
                 raise RequestPlanningError("KnowledgeUnit reference target is invalid")
+    bulk_indexes = {index for index, unit in enumerate(units) if unit.cardinality == "all_matching"}
+    for _index, unit in enumerate(units):
+        if unit.cardinality == "all_matching" and unit.references:
+            raise RequestPlanningError("all_matching KnowledgeUnit cannot contain references")
+        if any(reference.target_index in bulk_indexes for reference in unit.references):
+            raise RequestPlanningError("KnowledgeReference cannot target an all_matching unit")
     referenced_targets = {reference.target_index for unit in units for reference in unit.references}
     for index, unit in enumerate(units):
         has_payload = bool(unit.properties or unit.tag_changes or unit.facts)
@@ -892,13 +910,29 @@ def _validate_knowledge_unit(
         RequestPlanningError: If target, intent, properties, facts, or references violate the
             Phase 15.1 contract.
     """
-    required = {"target", "intent", "properties", "tag_changes", "facts", "references"}
-    legacy_required = {"target", "intent", "properties", "facts", "references"}
-    if not isinstance(unit, dict) or (set(unit) != required and set(unit) != legacy_required):
+    required = {
+        "target",
+        "cardinality",
+        "intent",
+        "properties",
+        "tag_changes",
+        "facts",
+        "references",
+    }
+    legacy_required = required - {"cardinality"}
+    legacy_without_tags = legacy_required - {"tag_changes"}
+    if not isinstance(unit, dict) or (
+        set(unit) != required and set(unit) != legacy_required and set(unit) != legacy_without_tags
+    ):
         raise RequestPlanningError("KnowledgeUnit fields are invalid")
     target = _validate_selection(
         unit["target"], schema, retrieval_capabilities, label="KnowledgeUnit target"
     )
+    cardinality = unit.get("cardinality", "one")
+    if cardinality not in {"one", "all_matching"}:
+        raise RequestPlanningError("KnowledgeUnit cardinality is invalid")
+    if cardinality == "all_matching" and target.entity is not None:
+        raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
     intent = unit["intent"]
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
@@ -960,6 +994,7 @@ def _validate_knowledge_unit(
         tag_changes=tag_changes,
         facts=tuple(fact.strip() for fact in raw_facts),
         references=tuple(references),
+        cardinality=cardinality,
     )
 
 

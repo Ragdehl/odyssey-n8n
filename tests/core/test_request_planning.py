@@ -67,8 +67,10 @@ def output(*actions: dict, limitations: list[str] | None = None) -> dict:
 def unit(
     query: str,
     *,
+    entity: str | None = None,
     note_type: str | None = None,
     filters: list[dict] | None = None,
+    cardinality: str = "one",
     intent: str = "record",
     properties: list[dict] | None = None,
     facts: list[str] | None = None,
@@ -76,7 +78,8 @@ def unit(
 ) -> dict:
     """Build one raw Phase 15.2 semantic knowledge-unit fixture."""
     return {
-        "target": selection(query, note_type=note_type, filters=filters),
+        "target": selection(query, entity=entity, note_type=note_type, filters=filters),
+        "cardinality": cardinality,
         "intent": intent,
         "properties": [] if properties is None else properties,
         "tag_changes": [],
@@ -105,6 +108,47 @@ def test_simple_semantic_retrieval_and_semantic_idea_review_remain_unrestricted(
     action = plan.actions[0]
     assert isinstance(action, RetrieveAction)
     assert action.plan.type is None and action.plan.filters == ()
+
+
+def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> None:
+    """Keep one and all-matching explicit while rejecting unknown cardinality values."""
+    one = validate_request_plan(output(write(unit("Marta", cardinality="one"))), schema)
+    bulk = validate_request_plan(
+        output(write(unit("all people", note_type="person", cardinality="all_matching"))), schema
+    )
+    assert one.actions[0].units[0].cardinality == "one"  # type: ignore[union-attr]
+    assert bulk.actions[0].units[0].cardinality == "all_matching"  # type: ignore[union-attr]
+    plan_schema = request_plan_json_schema(schema)
+    unit_schema = plan_schema["properties"]["actions"]["items"]["anyOf"][1]["properties"]["units"][
+        "items"
+    ]
+    assert "cardinality" in unit_schema["required"]
+    with pytest.raises(RequestPlanningError, match="cardinality"):
+        validate_request_plan(output(write(unit("Marta", cardinality="many"))), schema)
+
+
+def test_bulk_cardinality_cannot_mix_singular_entity_or_references(schema: dict) -> None:
+    """Keep all-matching set membership distinct from identity and Phase 16.5 references."""
+    with pytest.raises(RequestPlanningError, match="entity"):
+        validate_request_plan(
+            output(write(unit("Marta", entity="Marta", cardinality="all_matching"))), schema
+        )
+    with pytest.raises(RequestPlanningError, match="cannot contain references"):
+        validate_request_plan(
+            output(
+                write(
+                    unit(
+                        "all people",
+                        note_type="person",
+                        cardinality="all_matching",
+                        facts=["See {{ref:0}}."],
+                        references=[{"target_index": 1, "role": "related", "mention": "Odyssey"}],
+                    ),
+                    unit("Odyssey", note_type="project"),
+                )
+            ),
+            schema,
+        )
 
 
 def test_lifecycle_and_alias_filters_use_dynamic_context_and_non_empty_query(schema: dict) -> None:
@@ -532,6 +576,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     assert write_schema["properties"]["kind"] == {"type": "string", "enum": ["write"]}
     assert set(unit_schema["required"]) == {
         "target",
+        "cardinality",
         "intent",
         "properties",
         "tag_changes",

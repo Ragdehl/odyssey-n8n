@@ -77,6 +77,10 @@ def preflight_write_action(
     allocated_paths: set[str] = set()
     existing_paths = set(repository.list_markdown_paths())
     for unit_index, unit in enumerate(action.units):
+        if unit.cardinality == "all_matching":
+            raise ReferencePreflightError(
+                "all_matching units cannot use single-identity reference preflight"
+            )
         decision = decide_write_target(
             unit,
             repository=repository,

@@ -19,7 +19,8 @@ from benchmarks.phase15_1_schema_write_planning.benchmark import (
 )
 from benchmarks.phase15_2_selection_anchors.benchmark import load_cases as load_phase15_2_cases
 from benchmarks.phase15_2_selection_anchors.evaluate import (
-    _handle_g01,
+    _exact_filters,
+    _graph_action,
     _handle_t02,
 )
 from benchmarks.phase15_3_capability_delegation.benchmark import load_cases as load_phase15_3_cases
@@ -239,12 +240,36 @@ def _late_phase15_findings(case: dict[str, Any], plan: Any, oracle: str) -> list
     if oracle == "tag_mutation":
         return _handle_t03_canonical_contract(plan)
     if oracle == "graph_retrieval":
-        return _handle_g01(plan)
+        return _handle_g01_phase16_7a_adjudication(plan)
     if oracle == "delegate":
         return _delegate(plan)
     if oracle == "mixed_delegate_write":
         return _mixed_delegate_write(plan)
     raise ValueError(f"Unknown late Phase 15 oracle: {oracle}")
+
+
+def _handle_g01_phase16_7a_adjudication(plan: Any) -> list[str]:
+    """Adjudicate current G01 output without rewriting the historical Phase 15.2 oracle.
+
+    Phase 15.2 historically recorded ``anchor.type=person`` for Marta. The canonical
+    ``SelectionCriteria.type`` is nullable, so the current Phase 16.7A sentinel accepts
+    the omitted optional narrowing hint while retaining the identity, graph direction,
+    depth, and exact-scope safety checks.
+    """
+    action, scope, findings = _graph_action(plan)
+    if action is None or scope is None:
+        return findings
+    if action.plan.entity is not None or action.plan.type is not None:
+        findings.append("outer_selection_is_anchor")
+    findings += _exact_filters(action.plan, [])
+    anchor = scope.anchor
+    if anchor.entity != "Marta" or anchor.type not in {None, "person"} or anchor.filters:
+        findings.append("incorrect_marta_anchor")
+    if scope.direction != "both":
+        findings.append("incorrect_graph_direction")
+    if scope.max_depth != 1:
+        findings.append("incorrect_graph_depth")
+    return findings
 
 
 def _handle_t03_canonical_contract(plan: Any) -> list[str]:
