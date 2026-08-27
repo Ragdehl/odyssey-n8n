@@ -42,19 +42,21 @@ def put_note(
             "schema_version": 2,
             **metadata,
         },
-        "Synthetic knowledge.",
+        f"Synthetic knowledge for {note_id}.",
     )
     path.write_text(serialize_note(value), encoding="utf-8")
 
 
-def bulk_unit(*, filters: tuple = (), intent: str = "amend", tags: tuple = ()) -> KnowledgeUnit:
+def bulk_unit(
+    *, filters: tuple = (), intent: str = "amend", tags: tuple = (), facts: tuple = ()
+) -> KnowledgeUnit:
     """Build a validated-shape all-matching unit with no singular identity evidence."""
     return KnowledgeUnit(
         SelectionCriteria(None, "all matching people", "person", filters, None),
         intent,
         (),
         tags,
-        (),
+        facts,
         (),
         "all_matching",
     )
@@ -125,6 +127,41 @@ def test_property_only_bulk_update_uses_deterministic_materialization(
     assert result.status == "SUCCESS" and len(result.succeeded) == 3
     for path in ("ana.md", "other.md", "zoe.md"):
         assert 'relationship_to_user: "friend"' in repository.read_text(path)
+
+
+def test_free_text_bulk_update_uses_one_writer_request_per_note(
+    repository: VaultRepository,
+) -> None:
+    """Keep free-text bulk reconciliation independent and bound to each current note."""
+
+    class RecordingWriter:
+        """Return one append operation while recording each independent writer context."""
+
+        def __init__(self) -> None:
+            self.requests = []
+
+        def write(self, request: object) -> object:
+            """Record one note-specific request and return a bounded append."""
+            self.requests.append(request)
+            return {"operations": [{"op": "APPEND", "text": "- Bulk fact."}]}
+
+    writer = RecordingWriter()
+    result = execute_bulk_update(
+        bulk_unit(facts=("Each note gets this fact.",)),
+        repository=repository,
+        schema=SCHEMA,
+        actor="pytest",
+        now=NOW,
+        writer=writer,  # type: ignore[arg-type]
+    )
+    assert result.status == "SUCCESS"
+    assert [request.note_id for request in writer.requests] == ["a-person", "other", "z-person"]
+    assert [request.current_body for request in writer.requests] == [
+        "Synthetic knowledge for a-person.",
+        "Synthetic knowledge for other.",
+        "Synthetic knowledge for z-person.",
+    ]
+    assert len({request.current_body for request in writer.requests}) == 3
 
 
 def test_empty_set_is_explicit_and_never_creates(repository: VaultRepository) -> None:

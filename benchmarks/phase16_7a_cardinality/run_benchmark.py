@@ -28,8 +28,10 @@ def evaluate(plan: Any, expectation: dict[str, Any]) -> list[str]:
         if any(unit.cardinality == "all_matching" for unit in units):
             failures.append("partial subset was classified as all_matching")
         return failures
-    if len(units) != expectation.get("units"):
+    if "units" in expectation and len(units) != expectation["units"]:
         failures.append(f"expected {expectation.get('units')} units, got {len(units)}")
+    if "min_units" in expectation and len(units) < expectation["min_units"]:
+        failures.append(f"expected at least {expectation['min_units']} units, got {len(units)}")
     if expectation.get("all_units_one") and any(unit.cardinality != "one" for unit in units):
         failures.append("independent named targets were not all cardinality one")
     if (
@@ -42,28 +44,76 @@ def evaluate(plan: Any, expectation: dict[str, Any]) -> list[str]:
         failures.append(f"expected type {expectation['type']!r}")
     if units and "intent" in expectation and units[0].intent != expectation["intent"]:
         failures.append(f"expected intent {expectation['intent']!r}")
-    if units and "fields" in expectation:
-        actual = {item.field for item in units[0].target.filters}
-        if not set(expectation["fields"]).issubset(actual):
+    if units and "filters" in expectation:
+        actual_filters = [asdict(item) for item in units[0].target.filters]
+        if actual_filters != expectation["filters"]:
+            failures.append(f"expected filters {expectation['filters']!r}, got {actual_filters!r}")
+    if units and "tag_changes" in expectation:
+        actual_tags = [asdict(item) for item in units[0].tag_changes]
+        if expectation.get("all_units_one"):
+            actual_tags = [asdict(item) for item in units[0].tag_changes]
+            if any(
+                [asdict(item) for item in unit.tag_changes] != expectation["tag_changes"]
+                for unit in units
+            ):
+                failures.append(
+                    "independent units did not preserve the exact requested tag mutation"
+                )
+        elif actual_tags != expectation["tag_changes"]:
             failures.append(
-                f"expected deterministic fields {expectation['fields']!r}, got {sorted(actual)!r}"
+                f"expected tag_changes {expectation['tag_changes']!r}, got {actual_tags!r}"
             )
-    if (
-        units
-        and "filters" in expectation
-        and len(units[0].target.filters) != expectation["filters"]
-    ):
-        failures.append("semantic-only case invented deterministic filters")
+    if units and "references_required" in expectation:
+        if not any(unit.references for unit in units):
+            failures.append("expected semantic reference occurrences")
+    if units and "properties" in expectation:
+        actual_properties = [asdict(item) for item in units[0].properties]
+        if actual_properties != expectation["properties"]:
+            failures.append(
+                f"expected properties {expectation['properties']!r}, got {actual_properties!r}"
+            )
     return failures
+
+
+def provider_diagnostic(error: BaseException) -> dict[str, str]:
+    """Extract a sanitized root provider error without exposing request data or credentials."""
+    root = error
+    while root.__cause__ is not None:
+        root = root.__cause__
+    message = str(root)
+    for secret_marker in ("sk-", "Bearer ", "api_key="):
+        if secret_marker in message:
+            message = message.split(secret_marker, 1)[0] + "[REDACTED]"
+    lowered = message.lower()
+    if type(root).__name__ == "RequestPlanningError" and "provider call failed" not in lowered:
+        category = "request/schema incompatibility"
+    elif "auth" in lowered or "401" in lowered or "403" in lowered:
+        category = "authentication/access"
+    elif "model" in lowered or "permission" in lowered:
+        category = "model availability/permissions"
+    elif "schema" in lowered or "400" in lowered:
+        category = "request/schema incompatibility"
+    elif "connect" in lowered or "dns" in lowered or "resolve" in lowered:
+        category = "networking/transport"
+    else:
+        category = "HTTP/provider failure"
+    return {
+        "root_error_type": type(root).__name__,
+        "root_error_message": message[:500],
+        "root_error_category": category,
+    }
 
 
 def main() -> int:
     """Execute all frozen cases with gpt-5.6-sol, low reasoning, and store=false."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("/tmp/phase16-7a-sol-low-results.json"))
+    parser.add_argument("--case-id", action="append", dest="case_ids")
     args = parser.parse_args()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    if args.case_ids:
+        cases = [case for case in cases if case["id"] in set(args.case_ids)]
     planner = OpenAIRequestPlanner.from_environment(
         schema,
         {"date": "2026-08-27", "time": "10:00", "timezone": "Europe/Paris"},
@@ -90,6 +140,7 @@ def main() -> int:
                     "status": "ERROR",
                     "failures": [type(error).__name__],
                     "error": str(error)[:300],
+                    **provider_diagnostic(error),
                 }
             )
     payload = {

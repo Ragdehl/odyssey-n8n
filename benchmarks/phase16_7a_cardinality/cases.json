@@ -2,19 +2,19 @@
   {
     "id": "A",
     "request": "Añade el tag review a todas las personas nacidas en 1990",
-    "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "fields": ["birth_date"]}
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "filters": [{"field": "birth_date", "op": "gte", "value": "1990-01-01"}, {"field": "birth_date", "op": "lt", "value": "1991-01-01"}], "tag_changes": [{"op": "add", "value": "review"}]}
   },
   {
     "id": "B",
     "request": "Quita el tag idea de todas las entradas de diario de agosto",
-    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "fields": ["entry_date"]}
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "filters": [{"field": "entry_date", "op": "gte", "value": "2026-08-01"}, {"field": "entry_date", "op": "lt", "value": "2026-09-01"}], "tag_changes": [{"op": "remove", "value": "idea"}]}
   },
-  {"id": "C", "request": "Marta ahora vive en Lyon", "expect": {"units": 1, "cardinality": "one"}},
+  {"id": "C", "request": "Marta ahora vive en Lyon", "expect": {"min_units": 1, "cardinality": "one", "all_units_one": true, "intent": "record"}},
   {"id": "D", "request": "Actualiza la tarea de la mudanza", "expect": {"units": 1, "cardinality": "one"}},
   {
     "id": "E",
     "request": "Añade el tag review a Marta y Laura",
-    "expect": {"units": 2, "cardinality": "one", "all_units_one": true}
+    "expect": {"units": 2, "cardinality": "one", "all_units_one": true, "tag_changes": [{"op": "add", "value": "review"}]}
   },
   {
     "id": "F",
@@ -29,13 +29,14 @@
   {
     "id": "H",
     "request": "Elimina todas las entradas de diario de agosto",
-    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "fields": ["entry_date"], "intent": "delete"}
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "filters": [{"field": "entry_date", "op": "gte", "value": "2026-08-01"}, {"field": "entry_date", "op": "lt", "value": "2026-09-01"}], "intent": "delete", "tag_changes": []}
   },
   {
     "id": "I",
-    "request": "Añade review al conjunto de personas nacidas en 1990",
-    "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "fields": ["birth_date"]}
+    "request": "Añade el tag review al conjunto de personas nacidas en 1990",
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "filters": [{"field": "birth_date", "op": "gte", "value": "1990-01-01"}, {"field": "birth_date", "op": "lt", "value": "1991-01-01"}], "tag_changes": [{"op": "add", "value": "review"}]}
   },
-  {"id": "J", "request": "Mets le tag review à Marta", "expect": {"units": 1, "cardinality": "one"}},
-  {"id": "K", "request": "Update the moving task", "expect": {"units": 1, "cardinality": "one"}}
+  {"id": "J", "request": "Mets le tag review à Marta", "expect": {"units": 1, "cardinality": "one", "tag_changes": [{"op": "add", "value": "review"}]}},
+  {"id": "K", "request": "Update the moving task", "expect": {"units": 1, "cardinality": "one"}},
+  {"id": "L", "request": "Set Marta's relationship to friend", "expect": {"units": 1, "cardinality": "one", "intent": "amend", "properties": [{"field": "relationship_to_user", "op": "set", "value": "friend"}]}}
 ]
