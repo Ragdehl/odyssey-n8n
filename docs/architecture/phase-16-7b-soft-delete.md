@@ -1,6 +1,6 @@
 # Phase 16.7B soft DELETE
 
-Status: **contract approved; implementation pending**
+Status: **implemented; deterministic verification passed**
 
 This document is the canonical contract for Phase 16.7B. It defines the initial deletion semantics for Odyssey notes before implementation.
 

@@ -22,6 +22,11 @@ Universal metadata supplies the technical fields shared by every note, such as s
 
 `id` is the stable technical identity and `name` is the authoritative current human-readable identity. The filename is a stable creation-time physical label, formatted as `<creation-name> - <full-id>.md`; it is not used as the current canonical name and is not automatically renamed when `name` changes. `aliases` remain separate alternate identity names. A reference `mention` is occurrence-local and is never promoted to an alias automatically. New names are derived from the interpreted planner target (`target.entity`, otherwise `target.query`); no naming LLM is involved.
 
+`deleted` is optional universal Core-managed lifecycle metadata. Its absence means active; when it is
+present it must be the boolean `true` to mark a recoverable retired note. Existing notes therefore
+remain valid without a vault-wide `deleted: false` rewrite. It is not a planner-writable property;
+the detailed active-knowledge and soft-delete contract is [Phase 16.7B](phase-16-7b-soft-delete.md).
+
 Every type definition has `id`, `name`, `description`, `examples`, `subtypes`, and `properties`. `properties` is always an array, including when empty. Each property is a lightweight definition with a stable `id`, non-empty `value_type`, boolean `required` marker, non-empty `description`, and optional `filterable` flag. The same flag on universal metadata fields tells deterministic context retrieval which fields may be constrained. This is intentionally not a general property language or JSON Schema system.
 
 A possible property is not automatically a property Odyssey should add. Structured properties are introduced only for a demonstrated deterministic query or processing requirement. Otherwise, Markdown and wikilinks remain the clearer human-first representation.

@@ -15,6 +15,7 @@ from odyssey_core.persistence import (
     EntityPersistenceResult,
     PersistenceOperation,
     create_entity,
+    soft_delete_entity,
     update_entity,
 )
 from odyssey_core.reference_binding import (
@@ -434,6 +435,49 @@ def materialize_update(
         set_metadata=set_metadata,
         remove_metadata=remove_metadata,
         content=content,
+        actor=actor,
+        now=now,
+    )
+
+
+def materialize_delete(
+    unit: KnowledgeUnit,
+    decision: WriteTargetDecision,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: str,
+    now: str,
+) -> EntityPersistenceResult:
+    """Materialize one resolved single-note DELETE through Core lifecycle persistence.
+
+    Args:
+        unit: Validated factless ``delete`` unit with ``cardinality=one``.
+        decision: Existing active target selected before this materialization boundary.
+        repository: Authoritative Markdown repository.
+        schema: Active canonical note schema.
+        actor: Application identity recorded by Core lifecycle metadata.
+        now: Explicit canonical lifecycle timestamp.
+
+    Returns:
+        The dedicated revision-guarded soft-delete persistence result.
+
+    Raises:
+        MaterializationError: If the planned delete or resolved target is unsafe.
+    """
+    if unit.intent != "delete" or unit.cardinality != "one":
+        raise MaterializationError(
+            "Delete materialization requires intent=delete and cardinality=one"
+        )
+    if unit.properties or unit.tag_changes or unit.facts or unit.references:
+        raise MaterializationError("Delete materialization requires an empty mutation payload")
+    path, existing = _load_existing_target(repository, schema, decision)
+    return soft_delete_entity(
+        repository,
+        schema,
+        path=path,
+        expected_id=decision.existing_note_id or "",
+        expected_revision=existing.metadata["revision"],
         actor=actor,
         now=now,
     )

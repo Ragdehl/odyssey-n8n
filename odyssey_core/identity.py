@@ -122,6 +122,7 @@ def find_exact_entity_candidates(
     query: str,
     *,
     type: str | None = None,
+    include_deleted: bool = False,
 ) -> tuple[ExactEntityCandidate, ...]:
     """Find deterministic exact-name and exact-alias candidates in a Markdown vault.
 
@@ -134,6 +135,7 @@ def find_exact_entity_candidates(
         schema: Parsed canonical schema used to validate every parsed note.
         query: Already-extracted entity name, such as ``"Carrefour"``.
         type: Optional canonical note type, such as ``"store"``.
+        include_deleted: Whether retired notes participate. Ordinary resolution keeps this false.
 
     Returns:
         Deterministically ordered exact identity candidates. The tuple is empty when no
@@ -164,6 +166,8 @@ def find_exact_entity_candidates(
             raise ExactEntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
 
         note_type = cast(str, note.metadata["type"])
+        if note.metadata.get("deleted") is True and not include_deleted:
+            continue
         if type is not None and note_type != type:
             continue
 
@@ -243,3 +247,23 @@ def resolve_exact_entity(
         type=type,
         candidates=candidates,
     )
+
+
+def find_deleted_exact_entity_candidates(
+    repository: VaultRepository, schema: dict[str, Any], query: str, *, type: str | None = None
+) -> tuple[ExactEntityCandidate, ...]:
+    """Find only deleted notes with exact canonical-name or alias evidence.
+
+    This narrow safety lookup shares ordinary exact normalization but never consults embeddings or
+    a contextual provider.
+    """
+    candidates = find_exact_entity_candidates(
+        repository, schema, query, type=type, include_deleted=True
+    )
+    deleted: list[ExactEntityCandidate] = []
+    for candidate in candidates:
+        note = parse_note(repository.read_text(candidate.path))
+        validate_note(note, schema)
+        if note.metadata.get("deleted") is True:
+            deleted.append(candidate)
+    return tuple(deleted)

@@ -25,6 +25,7 @@ from .identity import (
     ExactEntityResolution,
     ExactResolutionOutcome,
     MatchKind,
+    find_deleted_exact_entity_candidates,
     find_exact_entity_candidates,
     resolve_exact_entity,
 )
@@ -43,6 +44,7 @@ from .materialization import (
     build_openai_writer_payload,
     is_exact_normalized_duplicate,
     materialize_create,
+    materialize_delete,
     materialize_update,
     validate_writer_output,
     writer_output_json_schema,
@@ -55,6 +57,7 @@ from .persistence import (
     PersistenceOperation,
     ProtectedMetadataError,
     create_entity,
+    soft_delete_entity,
     update_entity,
 )
 from .reference_binding import (
@@ -122,6 +125,7 @@ __all__ = [
     "ExactEntityResolution",
     "ExactResolutionOutcome",
     "MatchKind",
+    "find_deleted_exact_entity_candidates",
     "find_exact_entity_candidates",
     "resolve_exact_entity",
     "DEFAULT_EMBEDDING_MODEL",
@@ -155,6 +159,7 @@ __all__ = [
     "PersistenceOperation",
     "ProtectedMetadataError",
     "create_entity",
+    "soft_delete_entity",
     "update_entity",
     "PLANNER_MODEL",
     "PLANNER_REASONING_EFFORT",
@@ -201,6 +206,7 @@ __all__ = [
     "build_openai_writer_payload",
     "is_exact_normalized_duplicate",
     "materialize_create",
+    "materialize_delete",
     "materialize_update",
     "validate_writer_output",
     "writer_output_json_schema",

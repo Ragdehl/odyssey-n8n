@@ -220,6 +220,38 @@ def test_e12_existing_delete_selects_only(tmp_path: Path, schema: dict) -> None:
     assert (tmp_path / path).read_text(encoding="utf-8") == before
 
 
+def test_implicit_create_with_exact_deleted_identity_fails_without_semantic_or_llm(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Use only exact deleted identity evidence as the pre-CREATE safety guard."""
+    write_note(tmp_path, "people/Marta.md", note("marta", "person", deleted=True))
+    index = FakeIndex()
+    reasoner = FakeReasoner()
+    result = decide(tmp_path, schema, unit("Marta lives in Lyon", entity="Marta"), index, reasoner)
+    assert result.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result.reason == "deleted_identity_collision"
+    assert result.candidate_note_ids == ("marta",)
+    assert reasoner.calls == 0
+
+
+def test_explicit_new_authorization_can_reuse_deleted_human_name(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Avoid permanently reserving a human-readable name after a soft delete."""
+    write_note(tmp_path, "people/Marta.md", note("old-marta", "person", deleted=True))
+    result = decide_write_target(
+        unit("A new Marta", entity="Marta"),
+        repository=VaultRepository(tmp_path),
+        schema=schema,
+        semantic_index=FakeIndex(),
+        embedder=FakeEmbedder(),
+        contextual_reasoner=FakeReasoner(),
+        semantic_limit=5,
+        explicit_new_entity=True,
+    )
+    assert result.outcome is WriteTargetOutcome.CREATE
+
+
 def test_unfiltered_target_skips_filter_id_scan(
     tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:

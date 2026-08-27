@@ -35,6 +35,8 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
         valid_type = isinstance(value, str)
     elif value_type == "integer":
         valid_type = isinstance(value, int) and not isinstance(value, bool)
+    elif value_type == "boolean":
+        valid_type = isinstance(value, bool)
     elif value_type == "array[string]":
         valid_type = isinstance(value, list) and all(isinstance(item, str) for item in value)
     elif value_type == "date":

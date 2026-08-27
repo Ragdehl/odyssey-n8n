@@ -8,6 +8,7 @@ from typing import Any
 
 from odyssey_core.context import find_filtered_note_ids
 from odyssey_core.contextual import ContextualReasoner
+from odyssey_core.identity import find_deleted_exact_entity_candidates
 from odyssey_core.request_planning import KnowledgeUnit
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
 from odyssey_core.semantic import SemanticEntityIndex, TextEmbedder
@@ -50,6 +51,7 @@ def decide_write_target(
     embedder: TextEmbedder,
     contextual_reasoner: ContextualReasoner,
     semantic_limit: int,
+    explicit_new_entity: bool = False,
 ) -> WriteTargetDecision:
     """Resolve one validated write target and authorize only safe later work.
 
@@ -67,6 +69,8 @@ def decide_write_target(
         embedder: Existing local query embedder.
         contextual_reasoner: Existing injected Phase 11 reasoner boundary.
         semantic_limit: Explicit Phase 11 semantic candidate budget.
+        explicit_new_entity: Explicit application-level NEW authorization. This is not inferred from
+            ordinary record wording and permits a fresh ID despite a deleted identity collision.
 
     Returns:
         Immutable UPDATE, CREATE, or NEEDS_CLARIFICATION authorization only.
@@ -111,6 +115,14 @@ def decide_write_target(
     if resolution.has_ambiguous_exact_evidence:
         return _clarification("ambiguous_existing_target", resolution.candidate_ids)
     if unit.intent == "record" and target.type is not None:
+        if not explicit_new_entity:
+            deleted = find_deleted_exact_entity_candidates(
+                repository, schema, reference, type=target.type
+            )
+            if deleted:
+                return _clarification(
+                    "deleted_identity_collision", tuple(item.id for item in deleted)
+                )
         return WriteTargetDecision(WriteTargetOutcome.CREATE, target_type=target.type)
     return _clarification("unresolved_existing_target")
 
