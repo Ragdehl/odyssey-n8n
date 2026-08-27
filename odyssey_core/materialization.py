@@ -62,6 +62,7 @@ def materialize_create(
     unit: KnowledgeUnit,
     preflight: UnitTargetPreflight,
     *,
+    unit_index: int,
     repository: VaultRepository,
     schema: dict[str, Any],
     actor: str,
@@ -73,6 +74,7 @@ def materialize_create(
     Args:
         unit: Validated record unit containing canonical mutations and prepared facts.
         preflight: Matching Phase 16.5B CREATE identity and path allocation.
+        unit_index: Ordered WriteAction index of ``unit``; must match ``preflight.unit_index``.
         repository: Authoritative Markdown repository.
         schema: Active canonical note schema.
         actor: Application identity recorded by Phase 12 persistence.
@@ -88,7 +90,7 @@ def materialize_create(
         EntityAlreadyExistsError: If the preallocated ID already exists.
         NoteAlreadyExistsError: If the preallocated path is occupied.
     """
-    _validate_create_preconditions(unit, preflight)
+    _validate_create_preconditions(unit, preflight, unit_index)
     if unit.references and rendered_facts is None:
         raise MaterializationError("References require safe pre-writer rendered_facts")
     if rendered_facts is not None:
@@ -115,7 +117,9 @@ def materialize_create(
     )
 
 
-def _validate_create_preconditions(unit: KnowledgeUnit, preflight: UnitTargetPreflight) -> None:
+def _validate_create_preconditions(
+    unit: KnowledgeUnit, preflight: UnitTargetPreflight, unit_index: int
+) -> None:
     """Validate the immutable CREATE hand-off without resolving or allocating anything."""
     if not isinstance(unit, KnowledgeUnit):
         raise MaterializationError("CREATE materialization requires a KnowledgeUnit")
@@ -123,6 +127,10 @@ def _validate_create_preconditions(unit: KnowledgeUnit, preflight: UnitTargetPre
         raise MaterializationError("CREATE materialization requires record intent")
     if not isinstance(preflight, UnitTargetPreflight):
         raise MaterializationError("CREATE materialization requires target preflight")
+    if not isinstance(unit_index, int) or isinstance(unit_index, bool) or unit_index < 0:
+        raise MaterializationError("CREATE materialization requires a non-negative unit index")
+    if preflight.unit_index != unit_index:
+        raise MaterializationError("CREATE preflight unit_index does not match the KnowledgeUnit")
     if preflight.outcome is not WriteTargetOutcome.CREATE:
         raise MaterializationError("CREATE materialization requires CREATE preflight")
     if not isinstance(unit.target.type, str) or not unit.target.type.strip():
