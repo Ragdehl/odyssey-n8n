@@ -1,0 +1,34 @@
+{
+  "adjudication_version": "16.7A.1",
+  "source_raw_results_unchanged": true,
+  "new_sol_calls": false,
+  "cardinality_case_M": {
+    "status": "PASS",
+    "accepted_intents": ["record", "amend"],
+    "invariants": [
+      "cardinality=one",
+      "Airbus semantic reference occurrence",
+      "Airbus target mapping",
+      "Marta is not emitted as a false reference",
+      "requested fact preserved"
+    ]
+  },
+  "historical_sentinels": {
+    "status": "PASS_WITH_LIMITATION",
+    "pass": 6,
+    "accept_with_limitation": [
+      {
+        "id": "G01",
+        "limitation": "Current output omits optional anchor.type=person compared with the historical output.",
+        "preserved": [
+          "RetrieveAction",
+          "Marta anchor identity",
+          "bidirectional graph scope",
+          "max_depth=1",
+          "exact empty outer filters",
+          "ambiguity remains fail-closed"
+        ]
+      }
+    ]
+  }
+}

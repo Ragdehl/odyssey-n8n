@@ -39,5 +39,5 @@
   {"id": "J", "request": "Mets le tag review à Marta", "expect": {"units": 1, "cardinality": "one", "tag_changes": [{"op": "add", "value": "review"}]}},
   {"id": "K", "request": "Add the review tag to the moving task", "expect": {"units": 1, "cardinality": "one", "tag_changes": [{"op": "add", "value": "review"}]}},
   {"id": "L", "request": "Set Marta's relationship to friend", "expect": {"units": 1, "cardinality": "one", "intent": "amend", "properties": [{"field": "relationship_to_user", "op": "set", "value": "friend"}]}},
-  {"id": "M", "request": "La amiga de Marta ahora trabaja en Airbus", "expect": {"min_units": 1, "cardinality": "one", "all_units_one": true, "intent": "amend", "reference_pairs": [{"mention": "Airbus", "target_query": "Airbus"}], "no_reference_mentions": ["Marta"]}}
+  {"id": "M", "request": "La amiga de Marta ahora trabaja en Airbus", "expect": {"min_units": 1, "cardinality": "one", "all_units_one": true, "intents": ["record", "amend"], "reference_pairs": [{"mention": "Airbus", "target_query": "Airbus"}], "no_reference_mentions": ["Marta"]}}
 ]

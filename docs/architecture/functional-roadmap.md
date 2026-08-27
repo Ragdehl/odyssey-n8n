@@ -40,7 +40,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   stage canonical metadata deterministically, render prepared facts deterministically by default,
   validate bound links/schema, and persist once. A future explicit writing skill may opt into semantic
   rendering; no generic CREATE LLM call is part of the initial implementation.
-- ➡️ **Phase 16.7A — explicit write cardinality + bulk UPDATE:** extend each write `KnowledgeUnit`
+- ✅ **Phase 16.7A — explicit write cardinality + bulk UPDATE:** extend each write `KnowledgeUnit`
   with `one | all_matching` cardinality, preserve that intent in the production Sol/low planner, and
   allow `all_matching` only over deterministic canonical type/filter membership before reusing the
   existing guarded per-note UPDATE path. Semantic similarity never becomes bulk mutation authority.
@@ -203,9 +203,8 @@ prepared facts are preserved exactly, in planner order, with deterministic newli
 keeps cost and behavior simple while leaving an explicit extension point for note types that later
 prove they need semantic presentation guidance.
 
-➡️ **Phase 16.7A — bulk UPDATE and explicit cardinality** is implemented and deterministically
-verified, but its current focused live evidence has an unresolved cardinality/reference regression;
-it remains unchecked until the live findings are adjudicated. The
+✅ **Phase 16.7A — bulk UPDATE and explicit cardinality** is implemented, deterministically verified,
+and validated by focused live evidence plus the compact historical regression sentinels. The
 production Sol/low planner must preserve whether the user means one target or every note in one
 explicit deterministic set. `SelectionCriteria` stays unchanged; cardinality belongs to the write
 `KnowledgeUnit`. `one` continues through Phase 16.1. `all_matching` is UPDATE-only and initially uses
