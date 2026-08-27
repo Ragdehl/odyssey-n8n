@@ -1,6 +1,6 @@
 # Phase 16.6 CREATE materialization
 
-Status: **contract defined; implementation pending**
+Status: **implemented; deterministic CREATE materialization accepted**
 
 This document is the canonical Phase 16.6 contract. It completes the per-note CREATE slice after
 Phase 16.5 has already decided target identity/path and rendered safe reference occurrences. It does
