@@ -40,9 +40,16 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   stage canonical metadata deterministically, render prepared facts deterministically by default,
   validate bound links/schema, and persist once. A future explicit writing skill may opt into semantic
   rendering; no generic CREATE LLM call is part of the initial implementation.
-- ➡️ **Phase 16.7 — remaining Phase 16 mutation semantics:** guarded soft delete/inbound-link policy,
-  explicit bulk cardinality, dependency/partial-success results, and type-change handling before
-  general RequestPlan orchestration.
+- ➡️ **Phase 16.7A — explicit write cardinality + bulk UPDATE:** extend each write `KnowledgeUnit`
+  with `one | all_matching` cardinality, preserve that intent in the production Sol/low planner, and
+  allow `all_matching` only over deterministic canonical type/filter membership before reusing the
+  existing guarded per-note UPDATE path. Semantic similarity never becomes bulk mutation authority.
+- ⬜ **Phase 16.7B — soft DELETE:** whole-note delete initially becomes `deleted: true`; deleted notes
+  remain recoverable but are excluded by default from normal retrieval, identity resolution, bulk
+  selection, and structured calculations. This requires an explicit schema/index contract.
+- ⬜ **Phase 16.7C — type migration:** treat type change as a schema migration rather than a raw
+  metadata flip. Preserve the old note until a valid destination representation exists, then soft-delete
+  the superseded representation. Stable-identity/inbound-link continuity must be decided before code.
 
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
@@ -50,7 +57,8 @@ benchmark evidence are centralized in [Phase 16 writing checkpoint](phase-16-wri
 pre-writer reference-binding order, mention/alias boundary, and pending-reference direction are
 centralized in [Phase 16 reference binding](phase-16-reference-binding.md). The active CREATE
 materialization contract is centralized in
-[Phase 16.6 CREATE materialization](phase-16-create-materialization.md).
+[Phase 16.6 CREATE materialization](phase-16-create-materialization.md). The active bulk-cardinality
+contract is [Phase 16.7A bulk UPDATE](phase-16-7a-bulk-update.md).
 
 ## Completed Phase 15 refinements
 
@@ -195,26 +203,71 @@ prepared facts are preserved exactly, in planner order, with deterministic newli
 keeps cost and behavior simple while leaving an explicit extension point for note types that later
 prove they need semantic presentation guidance.
 
-Phase 16 materialization must still cover after 16.6:
+➡️ **Phase 16.7A — bulk UPDATE and explicit cardinality** is the next implementation slice. The
+production Sol/low planner must preserve whether the user means one target or every note in one
+explicit deterministic set. `SelectionCriteria` stays unchanged; cardinality belongs to the write
+`KnowledgeUnit`. `one` continues through Phase 16.1. `all_matching` is UPDATE-only and initially uses
+only canonical `type`/filter membership, never semantic similarity or graph traversal. See
+[Phase 16.7A bulk UPDATE](phase-16-7a-bulk-update.md).
 
-- guarded whole-note delete behavior and inbound-link policy;
-- explicit bulk cardinality;
-- dependency/partial-success results across several units;
-- type-change requests.
+The initial bulk shape is intentionally narrow:
+
+```text
+KnowledgeUnit(cardinality=all_matching)
+        |
+        v
+deterministic type/filter membership
+        |
+        +--> 0 IDs -> explicit empty result / zero writes
+        |
+        `--> N stable IDs
+                |
+                v
+        existing materialize_update() per note
+                |
+                v
+        per-note success/failure result
+```
+
+Independent successful notes are not rolled back because another selected note fails. Phase 16.7A
+must return enough typed per-note evidence for Phase 17 to record unresolved work durably without
+reconstructing the original action. It does not build a generic transaction engine.
+
+After 16.7A, Phase 16 still has two explicit mutation-policy slices:
+
+- **16.7B soft DELETE:** initial behavior is `deleted: true`, with deleted notes excluded by default
+  from retrieval, identity resolution, bulk selection, and calculations. Because this adds canonical
+  lifecycle/domain state, it requires its own schema/index proposal before implementation.
+- **16.7C type migration:** destination content may need an LLM rewrite against the destination schema,
+  but the old canonical note must remain until a valid replacement exists. The unresolved architecture
+  question is identity continuity: blindly creating a new stable ID/path would leave inbound links on
+  the superseded note and split one logical identity. Decide preservation/replacement/link migration
+  before implementing it.
+
+Cross-unit dependency execution and general partial-success orchestration move to Phase 17 rather than
+being hidden inside Phase 16.7. The preferred temporary behavior is to create durable internal pending
+work with enough information to retry or resolve later; future HITL will operate on that pending work.
 
 Existing notes remain changed through bounded operations (`NO_CHANGE`, `REPLACE`, `REMOVE`,
 `INSERT_AFTER`, `APPEND`) validated and applied by Core, not routine whole-note LLM rewriting.
 
 No live LLM benchmark is required for the default Phase 16.6 implementation because that CREATE path
-makes no model call. Any later writing skill that activates semantic CREATE rendering must bring its
-own focused live evidence.
+makes no model call. Phase 16.7A **does** materially change the production Sol planner prompt and
+Structured Outputs contract, so it requires a small focused live Sol/low cardinality benchmark under
+AGENTS.md; do not rerun model selection.
 
 ## Remaining intended sequence
 
-⬜ **Phase 17 — executable application flow and stable application boundary**
+⬜ **Phase 17 — executable application flow, dependencies, and stable application boundary**
 
 Compose validated `RequestPlan` actions into a small Core application flow and return a stable
 application/API result. This is a composition boundary, not a generic workflow engine.
+
+Phase 17 owns cross-unit dependency execution and the durable pending-work boundary for operations that
+cannot complete cleanly. Until HITL exists, unresolved dependencies, ambiguous references, or failed
+independent targets should be preserved in a small inspectable internal Markdown pending artifact with
+the normalized action, affected stable IDs/candidates, failure reason, and enough context to retry or
+resolve later. This workflow state must not silently become ordinary indexed user knowledge.
 
 Phase 17 is also the natural point to introduce low-invasive request tracing: one propagated
 `trace_id`, traced adapters/wrappers around LLM and persistence boundaries, and a separate operational
@@ -237,12 +290,12 @@ behavior, and measured performance. Do not broaden the architecture without evid
 The detailed cross-phase direction is centralized in
 [Future extension points](future-extension-points.md). In short:
 
-- 💡 **Human-in-the-loop / durable pending references:** minimal clarification/approval path when
-  ambiguity or user control requires it. Ambiguous reference binding is a concrete first use case.
-  Prefer an inspectable internal Markdown pending artifact that links known candidate notes and can be
-  referenced temporarily from the source occurrence. After resolution, replace the source link with
-  the real note and archive/remove the temporary artifact. Keep this workflow state outside the
-  canonical user-knowledge ontology unless later evidence justifies a dedicated type.
+- 💡 **Human-in-the-loop / durable pending work:** minimal clarification/approval path when ambiguity,
+  dependency failure, partial success, or user control requires it. Ambiguous reference binding is the
+  first concrete case; Phase 17 extends the same direction to failed/deferred multi-unit work. Prefer
+  inspectable internal Markdown pending artifacts carrying real candidate/target IDs and enough context
+  to resolve or retry later. Keep this workflow state outside the canonical user-knowledge ontology
+  unless later evidence justifies a dedicated type.
 - 💡 **Mention-to-alias promotion:** some occurrence wording such as `Carrefour` or `la amiga de
   Laura` may be useful reusable identity vocabulary, while transient phrases such as `la chica con la
   que cenamos ayer` should not become durable aliases. Keep Phase 16.5C deterministic; introduce alias
@@ -254,7 +307,8 @@ The detailed cross-phase direction is centralized in
   explicit structural/neighborhood questions, or later as a recall supplement only if benchmarks show
   semantic retrieval misses inverse relationships.
 - 💡 **Structured analytics / aggregations:** deterministic counts, sums, averages and grouping over
-  rebuildable structured/index data rather than loading the vault into an LLM.
+  rebuildable structured/index data rather than loading the vault into an LLM. Deleted notes must be
+  excluded by default once the soft-delete contract exists.
 - 💡 **App/capability delegation:** let the top-level planner distinguish direct Core knowledge work
   from generic delegated capabilities; route delegated actions later with a cheap/local router over
   compact app manifests and load only the selected app contract. Purchase/ticket processing, project
