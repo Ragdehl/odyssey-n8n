@@ -233,6 +233,8 @@ def update_entity(
     remove_fields = tuple(remove_metadata)
     _check_protected_fields(set_metadata.keys(), "update_entity")
     _check_protected_fields(remove_fields, "update_entity")
+    if "type" in set_metadata or "type" in remove_fields:
+        raise ProtectedMetadataError("update_entity cannot mutate canonical type")
     if set(set_metadata) & set(remove_fields):
         raise ValueError("A metadata field cannot be both set and removed")
 

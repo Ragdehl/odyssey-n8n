@@ -8,12 +8,15 @@ from pathlib import Path
 import pytest
 
 from odyssey_core import (
+    EntityRevisionMismatchError,
     MaterializationError,
     PersistenceOperation,
+    ProtectedMetadataError,
     WriteTargetDecision,
     WriteTargetOutcome,
     create_entity,
     materialize_type_migration,
+    update_entity,
 )
 from odyssey_core.notes import parse_note
 from odyssey_core.request_planning import (
@@ -164,6 +167,67 @@ def test_destination_property_makes_journal_migration_valid(
     assert (
         parse_note(repository.read_text("notes/odyssey.md")).metadata["entry_date"] == "2026-08-27"
     )
+
+
+def test_ordinary_update_cannot_bypass_dedicated_type_migration(
+    repository: VaultRepository, schema: dict
+) -> None:
+    """Reject direct canonical type mutation without affecting the source note."""
+    before = repository.read_text("notes/odyssey.md")
+    with pytest.raises(ProtectedMetadataError):
+        update_entity(
+            repository,
+            schema,
+            path="notes/odyssey.md",
+            expected_id="odyssey",
+            set_metadata={"type": "project"},
+            actor="x",
+            now=NOW,
+        )
+    assert repository.read_text("notes/odyssey.md") == before
+
+
+def test_migration_persistence_guards_fail_closed(
+    repository: VaultRepository, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject stale, wrong-identity, and deleted migration sources before replacement."""
+    before = repository.read_text("notes/odyssey.md")
+    import odyssey_core.materialization as materialization
+
+    original = materialization.migrate_entity
+
+    def stale(*args: object, **kwargs: object):
+        kwargs["expected_revision"] = 99
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(materialization, "migrate_entity", stale)
+    with pytest.raises(EntityRevisionMismatchError):
+        materialize_type_migration(
+            unit("project"), decision(), repository=repository, schema=schema, actor="x", now=NOW
+        )
+    assert repository.read_text("notes/odyssey.md") == before
+    monkeypatch.undo()
+    with pytest.raises(MaterializationError):
+        materialize_type_migration(
+            unit("project"),
+            WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id="wrong"),
+            repository=repository,
+            schema=schema,
+            actor="x",
+            now=NOW,
+        )
+    assert repository.read_text("notes/odyssey.md") == before
+    note = parse_note(before)
+    note.metadata["deleted"] = True
+    from odyssey_core.notes import serialize_note
+
+    repository.replace_text("notes/odyssey.md", serialize_note(note))
+    deleted = repository.read_text("notes/odyssey.md")
+    with pytest.raises(MaterializationError):
+        materialize_type_migration(
+            unit("project"), decision(), repository=repository, schema=schema, actor="x", now=NOW
+        )
+    assert repository.read_text("notes/odyssey.md") == deleted
 
 
 def test_planner_destination_validation_and_type_property_protection(schema: dict) -> None:
