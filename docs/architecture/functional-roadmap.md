@@ -269,6 +269,15 @@ independent targets should be preserved in a small inspectable internal Markdown
 the normalized action, affected stable IDs/candidates, failure reason, and enough context to retry or
 resolve later. This workflow state must not silently become ordinary indexed user knowledge.
 
+Phase 17 should also introduce the smallest safe Git history boundary around the authoritative Markdown
+vault. Git is an audit/history/recovery layer, **not** the source of truth and not a dependency of
+per-note materializers. The application flow may group the successful Markdown mutations caused by one
+logical user request into one Git commit, so request-level diffs, history, audit, and later recovery map
+to user intent. Partial-success requests commit the successful independent changes and preserve failed
+or deferred work through the pending-work boundary. Start with local Git history only; remote backup,
+automatic push/pull, and multi-device conflict handling remain separate operational decisions. See
+[Phase 17 Git vault history direction](phase-17-git-vault-history.md).
+
 Phase 17 is also the natural point to introduce low-invasive request tracing: one propagated
 `trace_id`, traced adapters/wrappers around LLM and persistence boundaries, and a separate operational
 trace sink rather than manual logging in every domain function.
