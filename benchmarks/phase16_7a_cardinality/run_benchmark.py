@@ -72,6 +72,27 @@ def evaluate(plan: Any, expectation: dict[str, Any]) -> list[str]:
             failures.append(
                 f"expected properties {expectation['properties']!r}, got {actual_properties!r}"
             )
+    if units and "reference_pairs" in expectation:
+        actual_pairs: list[dict[str, str]] = []
+        for unit in units:
+            for reference in unit.references:
+                if not 0 <= reference.target_index < len(units):
+                    failures.append("reference target index is out of range")
+                    continue
+                actual_pairs.append(
+                    {
+                        "mention": reference.mention,
+                        "target_query": units[reference.target_index].target.query,
+                    }
+                )
+        if actual_pairs != expectation["reference_pairs"]:
+            failures.append(
+                f"expected reference pairs {expectation['reference_pairs']!r}, got {actual_pairs!r}"
+            )
+    if units and "no_reference_mentions" in expectation:
+        actual_mentions = [reference.mention for unit in units for reference in unit.references]
+        if any(mention in actual_mentions for mention in expectation["no_reference_mentions"]):
+            failures.append("target-identifying names were incorrectly emitted as references")
     return failures
 
 
