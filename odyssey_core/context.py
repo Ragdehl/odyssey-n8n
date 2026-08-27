@@ -398,7 +398,7 @@ def find_filtered_note_ids(
             raise ContextRetrievalError(
                 "Cannot safely inspect a note for deterministic target filtering"
             ) from error
-        if _metadata_matches_filters(
+        if note.metadata.get("deleted") is not True and _metadata_matches_filters(
             note.metadata, normalized_filters, _filter_definitions(schema)
         ):
             note_id = note.metadata["id"]
@@ -486,6 +486,8 @@ class ContextIndex:
             if note_id in seen_ids:
                 raise ContextIndexError(f"Cannot safely index duplicate note ID: {note_id}")
             seen_ids.add(note_id)
+            if note.metadata.get("deleted") is True:
+                continue
             note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
             if any(tag not in canonical_tags for tag in note_tags):
                 raise ContextIndexError(f"Cannot safely index unknown tag in note: {path}")
@@ -794,6 +796,15 @@ def get_context(
         except OSError as error:
             raise ContextRetrievalError(f"Unable to load indexed note: {candidate.path}") from error
         if hashlib.sha256(raw.encode("utf-8")).hexdigest() != candidate.source_hash:
+            try:
+                current = parse_note(raw)
+                validate_note(current, schema)
+            except (NoteFormatError, NoteValidationError):
+                raise ContextRetrievalError(
+                    f"Context index is stale for selected note: {candidate.path}"
+                ) from None
+            if current.metadata.get("deleted") is True:
+                continue
             raise ContextRetrievalError(
                 f"Context index is stale for selected note: {candidate.path}"
             )
@@ -804,6 +815,8 @@ def get_context(
             raise ContextRetrievalError(
                 f"Selected note is no longer valid: {candidate.path}"
             ) from error
+        if note.metadata.get("deleted") is True:
+            continue
         if (note.metadata.get("id"), note.metadata.get("type")) != (candidate.id, candidate.type):
             raise ContextRetrievalError(
                 f"Indexed note identity disagrees with source: {candidate.path}"

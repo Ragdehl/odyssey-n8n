@@ -304,6 +304,8 @@ class SemanticEntityIndex:
             if note_id in seen_ids:
                 raise SemanticIndexError(f"Cannot safely index duplicate note ID: {note_id}")
             seen_ids.add(note_id)
+            if note.metadata.get("deleted") is True:
+                continue
             projected.append(
                 _ProjectedNote(
                     path=path,

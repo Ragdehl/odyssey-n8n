@@ -87,6 +87,23 @@ def test_type_selection_freezes_all_ids_in_deterministic_order(repository: Vault
     assert all("review" in repository.read_text(path) for path in ("ana.md", "other.md", "zoe.md"))
 
 
+def test_bulk_selection_excludes_deleted_notes(repository: VaultRepository) -> None:
+    """Keep physically present retired notes out of deterministic all-matching membership."""
+    raw = repository.read_text("zoe.md").replace(
+        "schema_version: 2", "schema_version: 2\ndeleted: true"
+    )
+    repository.replace_text("zoe.md", raw)
+    result = execute_bulk_update(
+        bulk_unit(tags=(TagChange("add", "review"),)),
+        repository=repository,
+        schema=SCHEMA,
+        actor="pytest",
+        now=NOW,
+    )
+    assert result.selected_note_ids == ("a-person", "other")
+    assert "review" not in repository.read_text("zoe.md")
+
+
 def test_filters_select_only_matching_notes_and_property_only_needs_no_writer(
     repository: VaultRepository,
 ) -> None:

@@ -44,9 +44,10 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   with `one | all_matching` cardinality, preserve that intent in the production Sol/low planner, and
   allow `all_matching` only over deterministic canonical type/filter membership before reusing the
   existing guarded per-note UPDATE path. Semantic similarity never becomes bulk mutation authority.
-- ⬜ **Phase 16.7B — soft DELETE:** whole-note delete initially becomes `deleted: true`; deleted notes
-  remain recoverable but are excluded by default from normal retrieval, identity resolution, bulk
-  selection, and structured calculations. This requires an explicit schema/index contract.
+- ✅ **Phase 16.7B — soft DELETE:** whole-note delete now becomes recoverable `deleted: true` through
+  a guarded Core operation. Deleted notes are excluded by default from normal retrieval, identity
+  resolution, bulk selection, and structured calculations. See the canonical
+  [Phase 16.7B soft-delete contract](phase-16-7b-soft-delete.md).
 - ⬜ **Phase 16.7C — type migration:** treat type change as a schema migration rather than a raw
   metadata flip. Preserve the old note until a valid destination representation exists, then soft-delete
   the superseded representation. Stable-identity/inbound-link continuity must be decided before code.

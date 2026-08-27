@@ -19,6 +19,7 @@ _PROTECTED_FIELDS = frozenset(
         "updated_by",
         "revision",
         "schema_version",
+        "deleted",
     }
 )
 
@@ -29,6 +30,7 @@ class PersistenceOperation(StrEnum):
     CREATED = "CREATED"
     UPDATED = "UPDATED"
     NO_CHANGE = "NO_CHANGE"
+    DELETED = "DELETED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,4 +263,61 @@ def update_entity(
     repository.replace_text(path, serialize_note(updated))
     return EntityPersistenceResult(
         PersistenceOperation.UPDATED, expected_id, path, updated.metadata["revision"]
+    )
+
+
+def soft_delete_entity(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    *,
+    path: str,
+    expected_id: str,
+    expected_revision: int,
+    actor: str,
+    now: str,
+) -> EntityPersistenceResult:
+    """Retire one active entity while preserving its canonical Markdown and identity.
+
+    Args:
+        repository: Authoritative vault repository used for all filesystem access.
+        schema: Parsed canonical note schema.
+        path: Physical vault-relative Markdown path to retire without moving it.
+        expected_id: Stable ID required in the existing note at ``path``.
+        expected_revision: Authoritative revision observed before the delete decision.
+        actor: Application identity recorded as the lifecycle updater.
+        now: Explicit lifecycle timestamp in canonical date-time form.
+
+    Returns:
+        A ``DELETED`` result with the same stable ID and path and an incremented revision.
+
+    Raises:
+        EntityIdentityMismatchError: If the path no longer contains ``expected_id``.
+        EntityRevisionMismatchError: If the note changed after target resolution.
+        NoteValidationError: If the existing or resulting note is not canonical.
+        VaultRepository errors: If the target cannot be safely read or replaced.
+    """
+    if (
+        not isinstance(expected_revision, int)
+        or isinstance(expected_revision, bool)
+        or expected_revision < 1
+    ):
+        raise TypeError("expected_revision must be a positive integer")
+    existing = _validated_existing_note(repository, schema, path)
+    if existing.metadata.get("id") != expected_id:
+        raise EntityIdentityMismatchError(f"Expected entity ID at path {path!r}")
+    if existing.metadata.get("revision") != expected_revision:
+        raise EntityRevisionMismatchError(f"Expected entity revision at path {path!r}")
+    if existing.metadata.get("deleted") is True:
+        return EntityPersistenceResult(
+            PersistenceOperation.NO_CHANGE, expected_id, path, expected_revision
+        )
+    metadata = dict(existing.metadata)
+    metadata.update(
+        {"deleted": True, "updated_at": now, "updated_by": actor, "revision": expected_revision + 1}
+    )
+    updated = Note(metadata=metadata, content=existing.content)
+    validate_note(updated, schema)
+    repository.replace_text(path, serialize_note(updated))
+    return EntityPersistenceResult(
+        PersistenceOperation.DELETED, expected_id, path, expected_revision + 1
     )

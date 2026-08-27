@@ -224,6 +224,11 @@ def resolve_existing_entity(
         semantic_candidates = tuple(
             candidate for candidate in semantic_candidates if candidate.id in allowed_candidate_ids
         )
+    semantic_candidates = tuple(
+        candidate
+        for candidate in semantic_candidates
+        if _is_current_active_candidate(repository, schema, candidate.path, candidate.id)
+    )
     candidates = _merge_candidates(semantic_candidates, exact.candidates)
     if not candidates:
         return ExistingEntityResolution(
@@ -303,6 +308,20 @@ def _load_provider_evidence(repository: VaultRepository, schema: dict[str, Any],
             "Cannot safely load a contextual candidate note"
         ) from error
     return build_provider_evidence(note, path)
+
+
+def _is_current_active_candidate(
+    repository: VaultRepository, schema: dict[str, Any], path: str, expected_id: str
+) -> bool:
+    """Return whether derived evidence still names the current active source note."""
+    try:
+        note = parse_note(repository.read_text(path))
+        validate_note(note, schema)
+    except (NoteFormatError, NoteValidationError, OSError) as error:
+        raise ExistingEntityResolutionError(
+            "Cannot safely ground a semantic candidate note"
+        ) from error
+    return note.metadata.get("id") == expected_id and note.metadata.get("deleted") is not True
 
 
 def _safe_usage(usage: Mapping[str, Any] | None) -> dict[str, Any] | None:

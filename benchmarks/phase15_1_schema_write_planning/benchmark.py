@@ -22,6 +22,9 @@ SNAPSHOT_PATH = BENCHMARK_DIR / "schema_snapshot.json"
 _PHASE16_5B_CANONICAL_SCHEMA_SHA256 = (
     "419871146d1496286ef91d55cbbd00a4f9b59465297fd707bb69b6b0381e133c"
 )
+_PHASE16_7B_CANONICAL_SCHEMA_SHA256 = (
+    "2dc7a805ba4b0eeec451a8640d838d838c09ebf7619b188d7ba1499c030615bb"
+)
 
 
 class BenchmarkContractError(ValueError):
@@ -94,6 +97,7 @@ def schema_for(case: dict[str, Any]) -> dict[str, Any]:
     approved_hashes = {
         snapshot["canonical_schema_sha256"],
         _PHASE16_5B_CANONICAL_SCHEMA_SHA256,
+        _PHASE16_7B_CANONICAL_SCHEMA_SHA256,
     }
     if canonical_hash not in approved_hashes:
         raise BenchmarkContractError("Canonical schema drifted from the frozen Phase 15.1 snapshot")

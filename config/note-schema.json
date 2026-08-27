@@ -99,6 +99,13 @@
             "filterable": false
         },
         {
+            "id": "deleted",
+            "value_type": "boolean",
+            "required": false,
+            "description": "Core-managed lifecycle state. True means recoverable but excluded from ordinary active knowledge behavior.",
+            "filterable": false
+        },
+        {
             "id": "aliases",
             "value_type": "array[string]",
             "required": false,
