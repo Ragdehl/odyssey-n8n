@@ -1,0 +1,241 @@
+{
+  "generated_at": "2026-08-27T22:54:04.028443+00:00",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "model_selection": false,
+  "cases": [
+    {
+      "id": "C01",
+      "request": "Marta is a person.",
+      "expect": {
+        "no_migration": true
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Marta",
+                  "query": "Marta",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Marta is a person."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "C02",
+      "request": "Set Marta's relationship to friend.",
+      "expect": {
+        "no_migration": true,
+        "intent": "amend"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Marta",
+                  "query": "Marta",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [
+                  {
+                    "field": "relationship_to_user",
+                    "op": "set",
+                    "value": "friend"
+                  }
+                ],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "C03",
+      "request": "Record that Odyssey uses Markdown.",
+      "expect": {
+        "no_migration": true,
+        "intent": "record"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Odyssey",
+                  "query": "Odyssey",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Uses {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "uses",
+                    "mention": "Markdown"
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null
+              },
+              {
+                "target": {
+                  "entity": "Markdown",
+                  "query": "Markdown",
+                  "type": "concept",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "C04",
+      "request": "Delete Odyssey.",
+      "expect": {
+        "no_migration": true,
+        "intent": "delete"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Odyssey",
+                  "query": "Odyssey",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "delete",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "C05",
+      "request": "Add the review tag to all people born in 1990.",
+      "expect": {
+        "no_migration": true,
+        "cardinality": "all_matching"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "all people born in 1990",
+                  "type": "person",
+                  "filters": [
+                    {
+                      "field": "birth_date",
+                      "op": "gte",
+                      "value": "1990-01-01"
+                    },
+                    {
+                      "field": "birth_date",
+                      "op": "lt",
+                      "value": "1991-01-01"
+                    }
+                  ],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [],
+                "tag_changes": [
+                  {
+                    "op": "add",
+                    "value": "review"
+                  }
+                ],
+                "facts": [],
+                "references": [],
+                "cardinality": "all_matching",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    }
+  ],
+  "summary": {
+    "pass": 5,
+    "fail": 0,
+    "error": 0
+  }
+}

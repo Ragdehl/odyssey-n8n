@@ -1,0 +1,15 @@
+[
+  {"id":"M01","request":"Odyssey is not a concept, make it a project.","expect":{"migration":"project"}},
+  {"id":"M02","request":"Change Marta from concept to person.","expect":{"migration":"person"}},
+  {"id":"M03","request":"This note should actually be a journal entry dated 2026-08-27.","expect":{"migration":"journal_entry","entry_date":"2026-08-27"}},
+  {"id":"M04","request":"Make Odyssey a project.","expect":{"migration":"project"}},
+  {"id":"C01","request":"Marta is a person.","expect":{"no_migration":true}},
+  {"id":"C02","request":"Set Marta's relationship to friend.","expect":{"no_migration":true,"intent":"amend"}},
+  {"id":"C03","request":"Record that Odyssey uses Markdown.","expect":{"no_migration":true,"intent":"record"}},
+  {"id":"C04","request":"Delete Odyssey.","expect":{"no_migration":true,"intent":"delete"}},
+  {"id":"C05","request":"Add the review tag to all people born in 1990.","expect":{"no_migration":true,"cardinality":"all_matching"}},
+  {"id":"S01","request":"What do I know about Odyssey?","expect":{"action":"retrieve"}},
+  {"id":"S02","request":"Add the review tag to Marta.","expect":{"no_migration":true}},
+  {"id":"S03","request":"La amiga de Marta ahora trabaja en Airbus.","expect":{"no_migration":true,"references":true}},
+  {"id":"S04","request":"How many purchases did I make at Carrefour?","expect":{"action":"delegate"}}
+]

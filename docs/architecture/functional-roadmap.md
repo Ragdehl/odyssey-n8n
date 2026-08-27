@@ -48,7 +48,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   a guarded Core operation. Deleted notes are excluded by default from normal retrieval, identity
   resolution, bulk selection, and structured calculations. See the canonical
   [Phase 16.7B soft-delete contract](phase-16-7b-soft-delete.md).
-- ➡️ **Phase 16.7C — type migration:** change the canonical type of one active note in place while
+- ✅ **Phase 16.7C — type migration:** change the canonical type of one active note in place while
   preserving its stable ID, Markdown path, body, and existing wikilinks. Build and validate the full
   destination representation before one revision-guarded replacement; fail closed rather than lose
   source-only metadata or invent missing destination-required data. See the canonical

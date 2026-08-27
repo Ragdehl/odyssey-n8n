@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-08-27T22:54:40.614458+00:00",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "model_selection": false,
+  "cases": [
+    {
+      "id": "S03",
+      "request": "La amiga de Marta ahora trabaja en Airbus.",
+      "expect": {
+        "no_migration": true,
+        "references": true
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la amiga de Marta",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Ahora trabaja en {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "empleador",
+                    "mention": "Airbus"
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null
+              },
+              {
+                "target": {
+                  "entity": "Airbus",
+                  "query": "Airbus",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "S04",
+      "request": "How many purchases did I make at Carrefour?",
+      "expect": {
+        "action": "delegate"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "request": "Count how many purchases the user made at Carrefour.",
+            "selection": {
+              "entity": null,
+              "query": "purchases I made at Carrefour",
+              "type": "purchase",
+              "filters": [],
+              "link_scope": null
+            },
+            "kind": "delegate"
+          }
+        ],
+        "limitations": []
+      }
+    }
+  ],
+  "summary": {
+    "pass": 2,
+    "fail": 0,
+    "error": 0
+  }
+}

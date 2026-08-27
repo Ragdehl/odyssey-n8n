@@ -1,0 +1,126 @@
+{
+  "generated_at": "2026-08-27T22:53:30.222722+00:00",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "model_selection": false,
+  "cases": [
+    {
+      "id": "M02",
+      "request": "Change Marta from concept to person.",
+      "expect": {
+        "migration": "person"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Marta",
+                  "query": "Marta",
+                  "type": "concept",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": "person"
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "M03",
+      "request": "This note should actually be a journal entry dated 2026-08-27.",
+      "expect": {
+        "migration": "journal_entry",
+        "entry_date": "2026-08-27"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "this note",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [
+                  {
+                    "field": "entry_date",
+                    "op": "set",
+                    "value": "2026-08-27"
+                  }
+                ],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": "journal_entry"
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "M04",
+      "request": "Make Odyssey a project.",
+      "expect": {
+        "migration": "project"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Odyssey",
+                  "query": "Odyssey",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": "project"
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    }
+  ],
+  "summary": {
+    "pass": 3,
+    "fail": 0,
+    "error": 0
+  }
+}
