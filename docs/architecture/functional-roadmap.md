@@ -48,9 +48,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   a guarded Core operation. Deleted notes are excluded by default from normal retrieval, identity
   resolution, bulk selection, and structured calculations. See the canonical
   [Phase 16.7B soft-delete contract](phase-16-7b-soft-delete.md).
-- ⬜ **Phase 16.7C — type migration:** treat type change as a schema migration rather than a raw
-  metadata flip. Preserve the old note until a valid destination representation exists, then soft-delete
-  the superseded representation. Stable-identity/inbound-link continuity must be decided before code.
+- ➡️ **Phase 16.7C — type migration:** change the canonical type of one active note in place while
+  preserving its stable ID, Markdown path, body, and existing wikilinks. Build and validate the full
+  destination representation before one revision-guarded replacement; fail closed rather than lose
+  source-only metadata or invent missing destination-required data. See the canonical
+  [Phase 16.7C type-migration contract](phase-16-7c-type-migration.md).
 
 The canonical Phase 15 / 15.1 / 15.2 / 15.3 planner contract is centralized in
 [Phase 15 planning contract](phase-15-write-planning.md). The selected write policy and historical
@@ -235,16 +237,17 @@ Independent successful notes are not rolled back because another selected note f
 must return enough typed per-note evidence for Phase 17 to record unresolved work durably without
 reconstructing the original action. It does not build a generic transaction engine.
 
-After 16.7A, Phase 16 still has two explicit mutation-policy slices:
+Phase 16.7B is now implemented. Phase 16.7C is the remaining mutation-policy slice before Phase 17:
 
-- **16.7B soft DELETE:** initial behavior is `deleted: true`, with deleted notes excluded by default
-  from retrieval, identity resolution, bulk selection, and calculations. Because this adds canonical
-  lifecycle/domain state, it requires its own schema/index proposal before implementation.
-- **16.7C type migration:** destination content may need an LLM rewrite against the destination schema,
-  but the old canonical note must remain until a valid replacement exists. The unresolved architecture
-  question is identity continuity: blindly creating a new stable ID/path would leave inbound links on
-  the superseded note and split one logical identity. Decide preservation/replacement/link migration
-  before implementing it.
+- ✅ **16.7B soft DELETE:** one resolved active note becomes recoverable `deleted: true`; deleted notes
+  remain physically present but are excluded from active retrieval, identity resolution, context/index
+  projections, and deterministic bulk selection. See
+  [Phase 16.7B soft DELETE](phase-16-7b-soft-delete.md).
+- ➡️ **16.7C type migration:** preserve one logical entity in place. The planner represents the
+  requested destination type explicitly; Core builds and validates the full destination note before
+  replacing the same path once. Source-only properties are never silently discarded, destination
+  requirements are never invented, and type change alone does not invoke a migration LLM. See
+  [Phase 16.7C type migration](phase-16-7c-type-migration.md).
 
 Cross-unit dependency execution and general partial-success orchestration move to Phase 17 rather than
 being hidden inside Phase 16.7. The preferred temporary behavior is to create durable internal pending
@@ -254,9 +257,10 @@ Existing notes remain changed through bounded operations (`NO_CHANGE`, `REPLACE`
 `INSERT_AFTER`, `APPEND`) validated and applied by Core, not routine whole-note LLM rewriting.
 
 No live LLM benchmark is required for the default Phase 16.6 implementation because that CREATE path
-makes no model call. Phase 16.7A **does** materially change the production Sol planner prompt and
-Structured Outputs contract, so it requires a small focused live Sol/low cardinality benchmark under
-AGENTS.md; do not rerun model selection.
+makes no model call. Phase 16.7A materially changed the production Sol planner prompt and Structured
+Outputs contract and was validated with focused Sol/low evidence. Phase 16.7C also changes that planner
+contract by adding explicit destination type, so it requires focused live Sol/low migration cases plus
+compact historical regression sentinels; do not rerun model selection.
 
 ## Remaining intended sequence
 
