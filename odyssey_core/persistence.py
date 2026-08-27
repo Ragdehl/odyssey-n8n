@@ -31,6 +31,7 @@ class PersistenceOperation(StrEnum):
     UPDATED = "UPDATED"
     NO_CHANGE = "NO_CHANGE"
     DELETED = "DELETED"
+    MIGRATED = "MIGRATED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +233,8 @@ def update_entity(
     remove_fields = tuple(remove_metadata)
     _check_protected_fields(set_metadata.keys(), "update_entity")
     _check_protected_fields(remove_fields, "update_entity")
+    if "type" in set_metadata or "type" in remove_fields:
+        raise ProtectedMetadataError("update_entity cannot mutate canonical type")
     if set(set_metadata) & set(remove_fields):
         raise ValueError("A metadata field cannot be both set and removed")
 
@@ -263,6 +266,62 @@ def update_entity(
     repository.replace_text(path, serialize_note(updated))
     return EntityPersistenceResult(
         PersistenceOperation.UPDATED, expected_id, path, updated.metadata["revision"]
+    )
+
+
+def migrate_entity(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    *,
+    path: str,
+    expected_id: str,
+    expected_revision: int,
+    destination: Note,
+    actor: str,
+    now: str,
+) -> EntityPersistenceResult:
+    """Persist a complete active-note type migration at the same path and stable identity.
+
+    Args:
+        repository: Authoritative Markdown repository.
+        schema: Active canonical schema.
+        path: Existing vault-relative Markdown path retained by the migration.
+        expected_id: Stable source and destination identity.
+        expected_revision: Revision observed while staging the destination.
+        destination: Complete validated destination representation before update lifecycle fields.
+        actor: Lifecycle updater identity.
+        now: Canonical update timestamp.
+
+    Returns:
+        A ``MIGRATED`` result with exactly one incremented revision.
+
+    Raises:
+        EntityIdentityMismatchError: If source/destination identities differ.
+        EntityRevisionMismatchError: If source revision changed.
+        ProtectedMetadataError: If protected identity or creation lifecycle changed.
+    """
+    if not isinstance(destination, Note):
+        raise TypeError("destination must be a Note")
+    existing = _validated_existing_note(repository, schema, path)
+    if existing.metadata.get("id") != expected_id or destination.metadata.get("id") != expected_id:
+        raise EntityIdentityMismatchError(f"Expected entity ID at path {path!r}")
+    if existing.metadata.get("revision") != expected_revision:
+        raise EntityRevisionMismatchError(f"Expected entity revision at path {path!r}")
+    if existing.metadata.get("deleted") is True:
+        raise ValueError("Cannot migrate a deleted entity")
+    protected = ("id", "name", "created_at", "created_by", "schema_version", "deleted")
+    if any(destination.metadata.get(key) != existing.metadata.get(key) for key in protected):
+        raise ProtectedMetadataError("migrate_entity cannot alter identity or creation lifecycle")
+    if destination.metadata.get("type") == existing.metadata.get("type"):
+        raise ValueError("Migration requires a different canonical type")
+    validate_note(destination, schema)
+    metadata = dict(destination.metadata)
+    metadata.update({"updated_at": now, "updated_by": actor, "revision": expected_revision + 1})
+    updated = Note(metadata=metadata, content=destination.content)
+    validate_note(updated, schema)
+    repository.replace_text(path, serialize_note(updated))
+    return EntityPersistenceResult(
+        PersistenceOperation.MIGRATED, expected_id, path, expected_revision + 1
     )
 
 

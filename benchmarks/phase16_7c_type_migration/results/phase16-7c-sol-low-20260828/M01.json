@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-08-27T22:53:09.229639+00:00",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "model_selection": false,
+  "cases": [
+    {
+      "id": "M01",
+      "request": "Odyssey is not a concept, make it a project.",
+      "expect": {
+        "migration": "project"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Odyssey",
+                  "query": "Odyssey",
+                  "type": "concept",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": "project"
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    }
+  ],
+  "summary": {
+    "pass": 1,
+    "fail": 0,
+    "error": 0
+  }
+}

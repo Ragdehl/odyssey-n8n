@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-08-27T22:54:20.793401+00:00",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "store": false,
+  "model_selection": false,
+  "cases": [
+    {
+      "id": "S01",
+      "request": "What do I know about Odyssey?",
+      "expect": {
+        "action": "retrieve"
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "plan": {
+              "entity": "Odyssey",
+              "query": "What do I know about Odyssey?",
+              "type": null,
+              "filters": [],
+              "link_scope": null
+            },
+            "kind": "retrieve"
+          }
+        ],
+        "limitations": []
+      }
+    },
+    {
+      "id": "S02",
+      "request": "Add the review tag to Marta.",
+      "expect": {
+        "no_migration": true
+      },
+      "status": "PASS",
+      "failures": [],
+      "plan": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Marta",
+                  "query": "Marta",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null
+                },
+                "intent": "amend",
+                "properties": [],
+                "tag_changes": [
+                  {
+                    "op": "add",
+                    "value": "review"
+                  }
+                ],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": []
+      }
+    }
+  ],
+  "summary": {
+    "pass": 2,
+    "fail": 0,
+    "error": 0
+  }
+}
