@@ -72,12 +72,14 @@ def create(
     knowledge: KnowledgeUnit,
     target: UnitTargetPreflight | None = None,
     *,
+    unit_index: int = 0,
     rendered_facts: tuple[str, ...] | None = None,
 ):
     """Execute the public deterministic CREATE materialization boundary."""
     return materialize_create(
         knowledge,
-        target or preflight(),
+        target or preflight(index=unit_index),
+        unit_index=unit_index,
         repository=repository,
         schema=SCHEMA,
         actor="phase16-test",
@@ -107,6 +109,28 @@ def test_preallocated_identity_and_path_are_reused_exactly(repository: VaultRepo
     assert note.metadata["id"] == "full-preallocated-id"
     assert note.metadata["name"] == "Contextual Marta"
     assert note.metadata["type"] == "person"
+
+
+def test_preflight_unit_index_must_match_ordered_knowledge_unit(
+    repository: VaultRepository,
+) -> None:
+    """Reject a preflight row accidentally paired with a different ordered KnowledgeUnit."""
+    wrong_target = preflight(
+        index=1,
+        stable_id="other-id",
+        name="Other",
+        path="Other - other-id.md",
+    )
+    with pytest.raises(MaterializationError, match="unit_index"):
+        create(repository, unit(), wrong_target, unit_index=0)
+    assert repository.list_markdown_paths() == []
+
+
+def test_non_negative_unit_index_is_required(repository: VaultRepository) -> None:
+    """Keep the ordered caller hand-off explicit and fail closed on malformed indexes."""
+    with pytest.raises(MaterializationError, match="unit index"):
+        create(repository, unit(), preflight(index=0), unit_index=-1)
+    assert repository.list_markdown_paths() == []
 
 
 def test_properties_and_tags_are_deterministic_and_body_is_empty(
@@ -183,6 +207,22 @@ def test_required_bound_links_and_repetitions_survive_exactly(repository: VaultR
     )
     result = create(repository, knowledge, rendered_facts=facts)
     assert read_note(repository, result.path).content == "\n".join(facts)
+
+
+def test_two_different_bound_wikilinks_survive_exactly(repository: VaultRepository) -> None:
+    """Preserve several distinct pre-bound identities without re-resolving either target."""
+    odyssey = "[[projects/Odyssey-id|Odyssey]]"
+    marta = "[[people/Marta-id|Marta]]"
+    knowledge = unit(
+        facts=("Works on {{ref:0}} with {{ref:1}}.",),
+        references=(
+            KnowledgeReference(1, "project", "Odyssey"),
+            KnowledgeReference(2, "person", "Marta"),
+        ),
+    )
+    rendered = (f"Works on {odyssey} with {marta}.",)
+    result = create(repository, knowledge, rendered_facts=rendered)
+    assert read_note(repository, result.path).content == rendered[0]
 
 
 def test_duplicate_id_and_occupied_path_never_overwrite(repository: VaultRepository) -> None:
