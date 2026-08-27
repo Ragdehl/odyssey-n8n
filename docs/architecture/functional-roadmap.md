@@ -203,7 +203,9 @@ prepared facts are preserved exactly, in planner order, with deterministic newli
 keeps cost and behavior simple while leaving an explicit extension point for note types that later
 prove they need semantic presentation guidance.
 
-➡️ **Phase 16.7A — bulk UPDATE and explicit cardinality** is the next implementation slice. The
+➡️ **Phase 16.7A — bulk UPDATE and explicit cardinality** is implemented and deterministically
+verified; its required live Sol/low evidence is currently unavailable, so it remains unchecked in
+the roadmap until that evidence passes. The
 production Sol/low planner must preserve whether the user means one target or every note in one
 explicit deterministic set. `SelectionCriteria` stays unchanged; cardinality belongs to the write
 `KnowledgeUnit`. `one` continues through Phase 16.1. `all_matching` is UPDATE-only and initially uses

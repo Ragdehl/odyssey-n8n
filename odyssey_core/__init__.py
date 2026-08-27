@@ -1,5 +1,12 @@
 """Odyssey's Python application and domain core."""
 
+from .bulk_update import (
+    BulkUpdateFailure,
+    BulkUpdateResult,
+    BulkUpdateSuccess,
+    UnsupportedBulkSelectionError,
+    execute_bulk_update,
+)
 from .context import (
     ContextFilter,
     ContextIndex,
@@ -106,6 +113,11 @@ from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_
 
 __all__ = [
     "ExactEntityCandidate",
+    "BulkUpdateFailure",
+    "BulkUpdateResult",
+    "BulkUpdateSuccess",
+    "UnsupportedBulkSelectionError",
+    "execute_bulk_update",
     "ExactEntityLookupError",
     "ExactEntityResolution",
     "ExactResolutionOutcome",

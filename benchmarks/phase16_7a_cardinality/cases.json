@@ -1,0 +1,41 @@
+[
+  {
+    "id": "A",
+    "request": "Añade el tag review a todas las personas nacidas en 1990",
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "fields": ["birth_date"]}
+  },
+  {
+    "id": "B",
+    "request": "Quita el tag idea de todas las entradas de diario de agosto",
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "fields": ["entry_date"]}
+  },
+  {"id": "C", "request": "Marta ahora vive en Lyon", "expect": {"units": 1, "cardinality": "one"}},
+  {"id": "D", "request": "Actualiza la tarea de la mudanza", "expect": {"units": 1, "cardinality": "one"}},
+  {
+    "id": "E",
+    "request": "Añade el tag review a Marta y Laura",
+    "expect": {"units": 2, "cardinality": "one", "all_units_one": true}
+  },
+  {
+    "id": "F",
+    "request": "Actualiza algunas tareas de la mudanza",
+    "expect": {"not_all_matching": true}
+  },
+  {
+    "id": "G",
+    "request": "Actualiza todas las notas relacionadas con Odyssey",
+    "expect": {"units": 1, "cardinality": "all_matching", "type": null, "filters": 0}
+  },
+  {
+    "id": "H",
+    "request": "Elimina todas las entradas de diario de agosto",
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "fields": ["entry_date"], "intent": "delete"}
+  },
+  {
+    "id": "I",
+    "request": "Añade review al conjunto de personas nacidas en 1990",
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "fields": ["birth_date"]}
+  },
+  {"id": "J", "request": "Mets le tag review à Marta", "expect": {"units": 1, "cardinality": "one"}},
+  {"id": "K", "request": "Update the moving task", "expect": {"units": 1, "cardinality": "one"}}
+]
