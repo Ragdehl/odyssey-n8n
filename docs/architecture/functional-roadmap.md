@@ -269,6 +269,24 @@ independent targets should be preserved in a small inspectable internal Markdown
 the normalized action, affected stable IDs/candidates, failure reason, and enough context to retry or
 resolve later. This workflow state must not silently become ordinary indexed user knowledge.
 
+Phase 17 should also introduce the smallest safe Git history boundary around the authoritative Markdown
+vault. Git is an audit/history/recovery layer, **not** the source of truth and not a dependency of
+per-note materializers. The application flow may group the successful Markdown mutations caused by one
+logical user request into one Git commit, so request-level diffs, history, audit, and later recovery map
+to user intent. Partial-success requests commit the successful independent changes and preserve failed
+or deferred work through the pending-work boundary. Start with local Git history only; remote backup,
+automatic push/pull, and multi-device conflict handling remain separate operational decisions. See
+[Phase 17 Git vault history direction](phase-17-git-vault-history.md).
+
+Phase 17 should also persist one semantically queryable Markdown `user_request` record for each logical
+Odyssey request. This record reuses the canonical note/schema/index machinery but is internal history,
+not ordinary knowledge: Core excludes `user_request` from normal retrieval, identity resolution, bulk
+selection, and normal write creation by default. Explicit history questions may opt in through an
+explicit `type=user_request` retrieval chosen by the planner. The record preserves the user request,
+validated `RequestPlan`, execution outcome, and affected stable IDs without storing hidden model
+reasoning. Correlate it with request-level Git history through a stable `request_id`, not a self-referential
+commit SHA stored inside the same commit. See [Phase 17 semantic request records](phase-17-request-records.md).
+
 Phase 17 is also the natural point to introduce low-invasive request tracing: one propagated
 `trace_id`, traced adapters/wrappers around LLM and persistence boundaries, and a separate operational
 trace sink rather than manual logging in every domain function.
