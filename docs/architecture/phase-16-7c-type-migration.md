@@ -1,6 +1,6 @@
 # Phase 16.7C type migration
 
-Status: **contract approved; implementation pending**
+Status: **contract approved; implementation and focused live validation pending**
 
 This document is the canonical contract for Phase 16.7C. It replaces the earlier roadmap direction that suggested creating a new note and soft-deleting the old one.
 

@@ -577,6 +577,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     assert set(unit_schema["required"]) == {
         "target",
         "cardinality",
+        "destination_type",
         "intent",
         "properties",
         "tag_changes",

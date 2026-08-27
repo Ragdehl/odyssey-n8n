@@ -15,6 +15,7 @@ from odyssey_core.persistence import (
     EntityPersistenceResult,
     PersistenceOperation,
     create_entity,
+    migrate_entity,
     soft_delete_entity,
     update_entity,
 )
@@ -478,6 +479,65 @@ def materialize_delete(
         path=path,
         expected_id=decision.existing_note_id or "",
         expected_revision=existing.metadata["revision"],
+        actor=actor,
+        now=now,
+    )
+
+
+def materialize_type_migration(
+    unit: KnowledgeUnit,
+    decision: WriteTargetDecision,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: str,
+    now: str,
+) -> EntityPersistenceResult:
+    """Migrate one resolved active note in place without a writer or link rewrite.
+
+    Args:
+        unit: Validated ``amend`` unit with one destination type.
+        decision: Already-resolved existing source identity.
+        repository: Authoritative Markdown repository.
+        schema: Active canonical schema.
+        actor: Lifecycle updater identity.
+        now: Canonical update timestamp.
+
+    Returns:
+        The single revision-guarded migration persistence result.
+
+    Raises:
+        MaterializationError: If the migration is lossy, incomplete, or otherwise unsupported.
+    """
+    if unit.destination_type is None:
+        raise MaterializationError("Type migration requires destination_type")
+    if unit.intent != "amend" or unit.cardinality != "one":
+        raise MaterializationError("Type migration requires intent=amend and cardinality=one")
+    if unit.facts or unit.references:
+        raise MaterializationError("Initial type migration supports metadata-only mutations")
+    path, existing = _load_existing_target(repository, schema, decision)
+    if existing.metadata.get("deleted") is True:
+        raise MaterializationError("Type migration requires an active source note")
+    metadata = dict(existing.metadata)
+    metadata["type"] = unit.destination_type
+    set_metadata, remove_metadata = _stage_structured_mutations(
+        existing, unit.properties, unit.tag_changes
+    )
+    metadata.update(set_metadata)
+    for field in remove_metadata:
+        metadata.pop(field, None)
+    destination = Note(metadata=metadata, content=existing.content)
+    try:
+        validate_note(destination, schema)
+    except Exception as error:
+        raise MaterializationError("Type migration destination note is invalid") from error
+    return migrate_entity(
+        repository,
+        schema,
+        path=path,
+        expected_id=decision.existing_note_id or "",
+        expected_revision=existing.metadata["revision"],
+        destination=destination,
         actor=actor,
         now=now,
     )

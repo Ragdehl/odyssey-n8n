@@ -172,7 +172,7 @@ def test_frozen_prompt_preserves_phase15_while_production_advances_to_phase15_1(
     assert "amend/remove require at least one mutation across properties or facts" in production
     assert "record normally contains properties and/or facts" in production
     assert "must not create an extra retrieveaction" in production
-    assert "do not attempt canonical type reassignment in phase 15.1" in production
+    assert "set `destination_type` to null for ordinary writes" in production
 
 
 def test_oracle_rejects_extra_facts_and_allows_factless_reference_targets() -> None:

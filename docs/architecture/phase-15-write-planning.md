@@ -295,6 +295,7 @@ Conceptually:
 KnowledgeUnit
 ├─ target: SelectionCriteria
 ├─ intent: record | amend | remove | delete
+├─ destination_type: canonical type | null
 ├─ properties: PropertyChange[]
 ├─ tag_changes: TagChange[]
 ├─ facts: str[]
@@ -331,6 +332,8 @@ active schema/contract, including:
 - valid tag add/remove operations without whole-array replacement;
 - intent/payload compatibility;
 - valid reference indexes/roles;
+- an explicit canonical `destination_type` only for a single-note `amend` migration; its property
+  changes validate against that destination type rather than the source target type;
 - no repository IDs, paths, SQL, Markdown serialization, or persistence instructions invented by the
   planner.
 

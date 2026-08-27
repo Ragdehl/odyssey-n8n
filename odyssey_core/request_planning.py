@@ -49,7 +49,7 @@ A RetrieveAction exists only when the user asks to retrieve or inspect knowledge
 
 Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
 
-Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Do not attempt canonical type reassignment in Phase 15.1.
+Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
 
 When a fact semantically refers to another KnowledgeUnit, replace that occurrence in the fact with `{{ref:N}}`, where N is the zero-based index in that KnowledgeUnit's own `references` array. Preserve the original human-readable wording in that reference's `mention` field. The marker may occur repeatedly for repeated mentions. Do not emit Markdown `[[wikilinks]]`. Do not create a reference merely because another entity name appears: use a marker only for a semantic relationship that needs a KnowledgeReference. A name used only to identify the write target is not automatically a fact reference. References never authorize an inverse or mirrored write into the referenced unit.
 
@@ -155,6 +155,7 @@ class KnowledgeUnit:
     facts: tuple[str, ...]
     references: tuple[KnowledgeReference, ...]
     cardinality: str = "one"
+    destination_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,6 +268,15 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                                 "type": "string",
                                                 "enum": ["one", "all_matching"],
                                             },
+                                            "destination_type": {
+                                                "anyOf": [
+                                                    {"type": "null"},
+                                                    {
+                                                        "type": "string",
+                                                        "enum": sorted(write_capabilities["types"]),
+                                                    },
+                                                ]
+                                            },
                                             "intent": {
                                                 "type": "string",
                                                 "enum": list(WRITE_INTENTS),
@@ -300,6 +310,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                         "required": [
                                             "target",
                                             "cardinality",
+                                            "destination_type",
                                             "intent",
                                             "properties",
                                             "tag_changes",
@@ -877,7 +888,9 @@ def _validate_write_action(
             raise RequestPlanningError("KnowledgeReference cannot target an all_matching unit")
     referenced_targets = {reference.target_index for unit in units for reference in unit.references}
     for index, unit in enumerate(units):
-        has_payload = bool(unit.properties or unit.tag_changes or unit.facts)
+        has_payload = bool(
+            unit.properties or unit.tag_changes or unit.facts or unit.destination_type
+        )
         if unit.intent in {"amend", "remove"} and not has_payload:
             raise RequestPlanningError(
                 "KnowledgeUnit amend and remove intents require mutation payload"
@@ -918,11 +931,16 @@ def _validate_knowledge_unit(
         "tag_changes",
         "facts",
         "references",
+        "destination_type",
     }
-    legacy_required = required - {"cardinality"}
+    legacy_with_cardinality = required - {"destination_type"}
+    legacy_required = required - {"cardinality", "destination_type"}
     legacy_without_tags = legacy_required - {"tag_changes"}
     if not isinstance(unit, dict) or (
-        set(unit) != required and set(unit) != legacy_required and set(unit) != legacy_without_tags
+        set(unit) != required
+        and set(unit) != legacy_with_cardinality
+        and set(unit) != legacy_required
+        and set(unit) != legacy_without_tags
     ):
         raise RequestPlanningError("KnowledgeUnit fields are invalid")
     target = _validate_selection(
@@ -937,10 +955,18 @@ def _validate_knowledge_unit(
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
 
+    destination_type = unit.get("destination_type")
+    if destination_type is not None and destination_type not in write_capabilities["types"]:
+        raise RequestPlanningError("KnowledgeUnit destination_type is invalid")
+    if destination_type is not None and (cardinality != "one" or intent != "amend"):
+        raise RequestPlanningError("Type migration requires intent=amend and cardinality=one")
+
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
         raise RequestPlanningError("KnowledgeUnit properties must be a list")
-    properties = _validate_property_changes(raw_properties, target.type, intent, write_capabilities)
+    properties = _validate_property_changes(
+        raw_properties, destination_type or target.type, intent, write_capabilities
+    )
 
     raw_tag_changes = unit.get("tag_changes", [])
     tag_changes = _validate_tag_changes(raw_tag_changes, intent, retrieval_capabilities)
@@ -995,6 +1021,7 @@ def _validate_knowledge_unit(
         facts=tuple(fact.strip() for fact in raw_facts),
         references=tuple(references),
         cardinality=cardinality,
+        destination_type=destination_type,
     )
 
 
