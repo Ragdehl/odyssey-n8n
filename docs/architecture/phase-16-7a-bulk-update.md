@@ -1,6 +1,12 @@
 # Phase 16.7A bulk UPDATE and explicit cardinality
 
-Status: **implementation complete; deterministic verification passed; live Sol/low evidence unavailable**
+Status: **complete; deterministic verification passed; live Sol/low evidence passed**
+
+Focused live evidence: 13/13 cases passed with the production `OpenAIRequestPlanner`,
+`gpt-5.6-sol`, reasoning `low`, and `store=false`. No model-selection experiment was run.
+The benchmark covers deterministic bulk filters, semantic-only fail-closed intent preservation,
+singular and independent explicit targets, partial-subset safety, delete/amend regressions,
+property and tag mutations, and Phase 16.5 reference binding.
 
 This document is the canonical Phase 16.7A contract. It extends the already-validated Phase 15 write
 planning and Phase 16 per-note UPDATE materialization boundaries with one explicit distinction the

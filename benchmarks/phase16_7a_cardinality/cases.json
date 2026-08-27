@@ -7,7 +7,7 @@
   {
     "id": "B",
     "request": "Quita el tag idea de todas las entradas de diario de agosto",
-    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "filters": [{"field": "entry_date", "op": "gte", "value": "2026-08-01"}, {"field": "entry_date", "op": "lt", "value": "2026-09-01"}], "intent": "remove", "tag_changes": [{"op": "remove", "value": "idea"}]}
+    "expect": {"units": 1, "cardinality": "all_matching", "type": "journal_entry", "filters": [{"field": "entry_date", "op": "gte", "value": "2026-08-01"}, {"field": "entry_date", "op": "lt", "value": "2026-09-01"}], "intents": ["amend", "remove"], "tag_changes": [{"op": "remove", "value": "idea"}]}
   },
   {"id": "C", "request": "Marta ahora vive en Lyon", "expect": {"min_units": 1, "cardinality": "one", "all_units_one": true, "intent": "record"}},
   {"id": "D", "request": "Añade el tag review a la tarea de la mudanza", "expect": {"units": 1, "cardinality": "one", "tag_changes": [{"op": "add", "value": "review"}]}},
@@ -24,7 +24,7 @@
   {
     "id": "G",
     "request": "Añade el tag review a todas las notas relacionadas con Odyssey",
-    "expect": {"units": 1, "cardinality": "all_matching", "type": null, "filters": 0, "tag_changes": [{"op": "add", "value": "review"}]}
+    "expect": {"units": 1, "cardinality": "all_matching", "type": null, "filters": [], "query_contains": ["Odyssey"], "tag_changes": [{"op": "add", "value": "review"}]}
   },
   {
     "id": "H",
@@ -37,7 +37,7 @@
     "expect": {"units": 1, "cardinality": "all_matching", "type": "person", "filters": [{"field": "birth_date", "op": "gte", "value": "1990-01-01"}, {"field": "birth_date", "op": "lt", "value": "1991-01-01"}], "tag_changes": [{"op": "add", "value": "review"}]}
   },
   {"id": "J", "request": "Mets le tag review à Marta", "expect": {"units": 1, "cardinality": "one", "tag_changes": [{"op": "add", "value": "review"}]}},
-  {"id": "K", "request": "Update the moving task", "expect": {"units": 1, "cardinality": "one"}},
+  {"id": "K", "request": "Add the review tag to the moving task", "expect": {"units": 1, "cardinality": "one", "tag_changes": [{"op": "add", "value": "review"}]}},
   {"id": "L", "request": "Set Marta's relationship to friend", "expect": {"units": 1, "cardinality": "one", "intent": "amend", "properties": [{"field": "relationship_to_user", "op": "set", "value": "friend"}]}},
   {"id": "M", "request": "La amiga de Marta ahora trabaja en Airbus", "expect": {"min_units": 1, "cardinality": "one", "all_units_one": true, "intent": "amend", "reference_pairs": [{"mention": "Airbus", "target_query": "Airbus"}], "no_reference_mentions": ["Marta"]}}
 ]

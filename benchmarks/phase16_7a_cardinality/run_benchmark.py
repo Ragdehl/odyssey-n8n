@@ -44,10 +44,17 @@ def evaluate(plan: Any, expectation: dict[str, Any]) -> list[str]:
         failures.append(f"expected type {expectation['type']!r}")
     if units and "intent" in expectation and units[0].intent != expectation["intent"]:
         failures.append(f"expected intent {expectation['intent']!r}")
+    if units and "intents" in expectation and units[0].intent not in expectation["intents"]:
+        failures.append(f"expected intent in {expectation['intents']!r}, got {units[0].intent!r}")
     if units and "filters" in expectation:
         actual_filters = [asdict(item) for item in units[0].target.filters]
         if actual_filters != expectation["filters"]:
             failures.append(f"expected filters {expectation['filters']!r}, got {actual_filters!r}")
+    if units and "query_contains" in expectation:
+        query = units[0].target.query or ""
+        for fragment in expectation["query_contains"]:
+            if fragment not in query:
+                failures.append(f"expected target query to contain {fragment!r}, got {query!r}")
     if units and "tag_changes" in expectation:
         actual_tags = [asdict(item) for item in units[0].tag_changes]
         if expectation.get("all_units_one"):
