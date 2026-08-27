@@ -65,6 +65,18 @@ Examples:
 
 If a request has partial success, already-valid independent writes are not rolled back merely to produce an all-or-nothing Git commit. The commit contains the successful Markdown changes; Phase 17 pending-work state records failed or deferred operations separately.
 
+## Relationship with semantic request records
+
+Phase 17 also plans one queryable Markdown `user_request` record per logical Odyssey request. That record preserves the user request, validated plan, execution outcome, and affected stable IDs while remaining excluded from ordinary knowledge retrieval by default. See [Phase 17 semantic request records](phase-17-request-records.md).
+
+Correlate the semantic record and Git history using a shared stable `request_id`. Do not require the request record contained in a commit to store that same commit's final SHA because the SHA depends on the committed tree and would create a circular self-reference.
+
+Prefer a commit trailer or equivalent safe metadata such as:
+
+```text
+Odyssey-Request: <request_id>
+```
+
 ## Benefits
 
 The intended value is to obtain, with little new domain machinery:
@@ -111,8 +123,8 @@ Before implementation, decide the smallest safe details from actual application-
 
 1. exact adapter/API shape;
 2. how the application identifies the set of vault changes belonging to one request;
-3. commit-message format and trace correlation;
-4. behavior when no Markdown changed;
+3. commit-message format and trace/request correlation;
+4. behavior when no Markdown changed apart from a possible `user_request` history record;
 5. behavior when the vault already contains unrelated/uncommitted user edits;
 6. whether request-level automatic commits should be default or configurable;
 7. how later restore/revert operations revalidate schema, indexes, revisions, and application state.
