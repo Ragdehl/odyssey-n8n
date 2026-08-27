@@ -1,12 +1,13 @@
 # Phase 16.7A bulk UPDATE and explicit cardinality
 
-Status: **complete; deterministic verification passed; live Sol/low evidence passed**
+Status: **implementation complete; deterministic verification passed; live regression evidence blocked**
 
-Focused live evidence: 13/13 cases passed with the production `OpenAIRequestPlanner`,
-`gpt-5.6-sol`, reasoning `low`, and `store=false`. No model-selection experiment was run.
-The benchmark covers deterministic bulk filters, semantic-only fail-closed intent preservation,
-singular and independent explicit targets, partial-subset safety, delete/amend regressions,
-property and tag mutations, and Phase 16.5 reference binding.
+The cardinality benchmark was rerun with the production `OpenAIRequestPlanner`, `gpt-5.6-sol`,
+reasoning `low`, and `store=false`; A–L passed and M emitted a contract-compatible reference
+plan with `record` rather than the frozen `amend` intent. The compact historical sentinel suite
+then found a reproducible G01 regression: the Marta graph anchor lost its canonical `person`
+type. No model-selection experiment was run. Phase 16.7A remains blocked until the regression
+is adjudicated and resolved.
 
 This document is the canonical Phase 16.7A contract. It extends the already-validated Phase 15 write
 planning and Phase 16 per-note UPDATE materialization boundaries with one explicit distinction the
@@ -242,10 +243,10 @@ Do not rerun model selection. Add a small frozen cardinality benchmark that incl
 8. regression cases for references, tags, properties, record/amend/remove/delete intent compatibility.
 
 The implementation is in `odyssey_core/bulk_update.py`, with the frozen cases and runner in
-`benchmarks/phase16_7a_cardinality/`. The deterministic suite passes. The live runner was attempted
-with `gpt-5.6-sol`, low reasoning, `store=false`, and the production prompt/schema; the provider call
-failed for all 11 cases, so no model behavior or token cost is claimed as validated. This phase is
-not considered fully complete until that focused live evidence is available.
+`benchmarks/phase16_7a_cardinality/`. Deterministic verification passes, but the required live
+regression evidence is not complete: the cardinality run had 12 PASS and 1 FAIL (M intent), and
+historical sentinel G01 had a reproducible canonical-anchor-type regression. This phase is not
+considered fully complete until those live findings are adjudicated and no genuine regression remains.
 
 Deterministic tests remain required for schema and fail-closed behavior, but they do not replace this
 focused production-model evidence.
