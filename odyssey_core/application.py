@@ -66,6 +66,29 @@ class UnitStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class PendingWorkStatus:
+    """Describe whether incomplete post-plan work was made durable.
+
+    A completed request needs no record. An incomplete request always reports whether its record was
+    persisted, allowing callers to distinguish execution evidence from a later storage failure.
+    """
+
+    required: bool = False
+    persisted: bool = False
+    record_id: str | None = None
+    error: str | None = None
+
+
+class PendingWorkRecorder(Protocol):
+    """Describe the small create-only pending-work boundary used after execution."""
+
+    def record(
+        self, *, user_request: str, plan: RequestPlan, result: ApplicationResult, created_at: str
+    ) -> str:
+        """Persist one incomplete validated request and return its durable record ID."""
+
+
+@dataclass(frozen=True, slots=True)
 class DependencyEvidence:
     """Explain why one source unit could not safely execute.
 
@@ -119,6 +142,7 @@ class ApplicationResult:
     action_results: tuple[ActionResult, ...]
     affected_stable_note_ids: tuple[str, ...]
     planning_error: str | None = None
+    pending_work: PendingWorkStatus = PendingWorkStatus()
 
 
 def allocate_request_id() -> str:
@@ -143,6 +167,7 @@ def execute_request(
     request_id_factory: Callable[[], str] = allocate_request_id,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
+    pending_recorder: PendingWorkRecorder | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -162,6 +187,7 @@ def execute_request(
         request_id_factory: Injected one-per-request ID generator.
         preflight_id_allocator: Optional deterministic CREATE ID allocator.
         semantic_limit: Existing bounded semantic-resolution candidate budget.
+        pending_recorder: Optional create-only durable pending-work recorder.
 
     Returns:
         One stable request result. Planning failures return no action results and perform no writes.
@@ -223,7 +249,40 @@ def execute_request(
             raise TypeError("RequestPlan contains an unsupported action type")
         actions.append(result)
         affected.extend(_affected_ids(result))
-    return ApplicationResult(request_id, _overall_status(actions), tuple(actions), tuple(affected))
+    result = ApplicationResult(
+        request_id, _overall_status(actions), tuple(actions), tuple(affected)
+    )
+    if not any(action.status is not ActionStatus.COMPLETED for action in actions):
+        return result
+    if pending_recorder is None:
+        return ApplicationResult(
+            result.request_id,
+            result.status,
+            result.action_results,
+            result.affected_stable_note_ids,
+            pending_work=PendingWorkStatus(
+                required=True, error="pending recorder is not configured"
+            ),
+        )
+    try:
+        record_id = pending_recorder.record(
+            user_request=user_request, plan=plan, result=result, created_at=now
+        )
+    except Exception as error:
+        return ApplicationResult(
+            result.request_id,
+            result.status,
+            result.action_results,
+            result.affected_stable_note_ids,
+            pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
+        )
+    return ApplicationResult(
+        result.request_id,
+        result.status,
+        result.action_results,
+        result.affected_stable_note_ids,
+        pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
+    )
 
 
 def _execute_retrieve(

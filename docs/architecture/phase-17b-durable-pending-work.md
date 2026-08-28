@@ -1,6 +1,6 @@
 # Phase 17B durable pending work
 
-Status: **proposed contract; human approval required for the durable `state/` boundary**
+Status: **implemented; deterministic verification passed**
 
 This document is the canonical contract for Phase 17B. Phase 17A can now execute one validated
 `RequestPlan` and return typed deferred/failed/delegated evidence, but that evidence disappears when
@@ -96,11 +96,10 @@ Use a small JSON record format for Phase 17B. JSON is chosen because the state i
 evidence, not prose knowledge, and because using a non-Markdown format prevents accidental inclusion in
 canonical Markdown scans without adding exclusion rules.
 
-Architecture challenge result: **PROCEED with the revised separate-state design once the human approves
-the new durable `state/` boundary.**
+Architecture challenge result: **PROCEED with the revised separate-state design.**
 
-Human decision required: **YES** — adding a new persistent non-rebuildable application-state directory
-is a material storage-boundary decision. Merging the contract PR constitutes that approval.
+Human decision: **APPROVED** — the merged Phase 17B architecture contract approved the persistent
+non-rebuildable application-state directory and deterministic JSON representation.
 
 ## Source-of-truth boundary
 
@@ -372,8 +371,6 @@ Phase 17B is complete when deterministic tests prove at least:
 
 ## Open decisions
 
-- **Human approval required:** accept `/data/odyssey/state/pending/` as durable non-knowledge state and
-  deterministic JSON as the initial representation. Merging the contract PR resolves this decision.
-
-After that approval, the implementation should not broaden the phase unless repository evidence reveals
-a new material ambiguity.
+- **None.** The approved `/data/odyssey/state/pending/` boundary and deterministic JSON representation
+  are implemented. Do not broaden later work unless repository evidence reveals a new material
+  ambiguity.
