@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -74,13 +76,22 @@ class PendingWorkRepository:
         request_id = result.request_id
         target = self._path_for(request_id)
         encoded = (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        temporary: Path | None = None
         try:
-            with target.open("xb") as handle:
-                handle.write(encoded)
+            temporary = _write_temporary(self._root, request_id, encoded)
+            # A hard link is an exclusive publication primitive: it cannot replace an existing
+            # final record, while the final name appears only after the complete temp write.
+            os.link(temporary, target)
         except FileExistsError as error:
             raise PendingWorkError("pending record already exists") from error
         except OSError as error:
             raise PendingWorkError("pending record could not be created") from error
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
         return request_id
 
     def read(self, request_id: str) -> dict[str, Any]:
@@ -175,6 +186,25 @@ def project_pending_work(
         "affected_stable_note_ids": list(result.affected_stable_note_ids),
         "incomplete_actions": incomplete,
     }
+
+
+def _write_temporary(root: Path, request_id: str, encoded: bytes) -> Path:
+    """Write complete record bytes to a same-directory temporary file before publication."""
+    descriptor, name = tempfile.mkstemp(prefix=f".{request_id}.", suffix=".tmp", dir=root)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        temporary.unlink(missing_ok=True)
+        raise
+    return temporary
 
 
 def _selection(value: SelectionCriteria | None) -> dict[str, Any] | None:

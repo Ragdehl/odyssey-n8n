@@ -21,7 +21,6 @@ from .materialization import (
     materialize_type_migration,
     materialize_update,
 )
-from .pending_work import PendingWorkError
 from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import UnitTargetPreflight, preflight_write_action
 from .request_planning import (
@@ -269,7 +268,7 @@ def execute_request(
         record_id = pending_recorder.record(
             user_request=user_request, plan=plan, result=result, created_at=now
         )
-    except (PendingWorkError, OSError, UnicodeError, TypeError, ValueError) as error:
+    except Exception as error:
         return ApplicationResult(
             result.request_id,
             result.status,

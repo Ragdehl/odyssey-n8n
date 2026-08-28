@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 import odyssey_core.application as application
+import odyssey_core.pending_work as pending_work
 from odyssey_core import (
     ActionResult,
     ActionStatus,
@@ -220,6 +221,32 @@ def test_symlinked_record_is_rejected_without_following_it(tmp_path: Path) -> No
         repository.list_ids()
 
 
+def test_failed_temporary_write_leaves_no_final_record_and_allows_retry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Remove failed staging output so a later clean create remains possible."""
+    action = write_action()
+    args: dict[str, Any] = {
+        "user_request": "x",
+        "plan": RequestPlan((action,), ()),
+        "result": incomplete_result(action),
+        "created_at": "now",
+    }
+    repository = PendingWorkRepository(tmp_path)
+
+    def fail_write(*_args: Any, **_kwargs: Any) -> Path:
+        """Simulate a disk failure during complete temporary-file construction."""
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pending_work, "_write_temporary", fail_write)
+    with pytest.raises(PendingWorkError):
+        repository.record(**args)
+    assert not (tmp_path / "request-17b.json").exists()
+
+    monkeypatch.undo()
+    assert repository.record(**args) == "request-17b"
+
+
 def test_execute_request_reports_missing_or_successful_pending_recorder(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -251,6 +278,45 @@ def test_execute_request_reports_missing_or_successful_pending_recorder(
     )
     assert persisted.pending_work.persisted and persisted.pending_work.record_id == "request-17b"
     assert (tmp_path / "request-17b.json").exists()
+
+
+def test_runtime_error_from_recorder_is_returned_as_durability_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch ordinary custom-recorder exceptions while preserving execution evidence."""
+    action = write_action()
+    evidence = incomplete_result(action).action_results[0]
+    plan = RequestPlan((action,), ())
+    monkeypatch.setattr(application, "_execute_write", lambda *_args, **_kwargs: evidence)
+
+    class RuntimeFailingRecorder:
+        """Simulate an adapter-specific ordinary failure."""
+
+        def record(self, **kwargs: Any) -> str:
+            """Raise the backend failure that must not escape the application boundary."""
+            raise RuntimeError("pending backend unavailable")
+
+    result = application.execute_request(
+        "raw",
+        planner=type("Planner", (), {"plan": lambda self, request: plan})(),
+        repository=object(),
+        schema={},
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="test",
+        now="now",
+        context_limit=1,
+        request_id_factory=lambda: "request-17b",
+        pending_recorder=RuntimeFailingRecorder(),
+    )
+    assert result.status is ApplicationStatus.PARTIAL
+    assert result.action_results == (evidence,)
+    assert result.affected_stable_note_ids == ("airbus-1",)
+    assert result.pending_work == application.PendingWorkStatus(
+        required=True, persisted=False, error="pending backend unavailable"
+    )
 
 
 def test_completed_and_preplan_failure_never_call_pending_recorder(
