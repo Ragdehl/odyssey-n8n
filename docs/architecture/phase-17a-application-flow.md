@@ -157,6 +157,31 @@ Do not include hidden model reasoning or chain-of-thought.
 - The result must make partial success explicit.
 - Per-note materializers retain their existing revision/schema/identity guards.
 
+## Deterministic testing policy for model-backed boundaries
+
+Phase 17A tests validate application composition, not whether already-evidenced production models happen to return the same output again.
+
+Ordinary automated tests and CI **must not call live model APIs**. Inject deterministic fakes, mocks, or stubs for model-backed boundaries such as:
+
+- the Sol request planner;
+- the contextual resolver/reasoner;
+- the Luna semantic UPDATE writer;
+- any later model-backed or external adapter used by the application boundary.
+
+Tests may supply already-validated `RequestPlan` values or controlled fake model outputs and should assert deterministic behavior including:
+
+- action and dependency ordering;
+- calls made and calls deliberately not made;
+- partial-success semantics;
+- affected stable IDs and persistence outcomes;
+- ambiguity/deferred evidence;
+- `request_id` propagation;
+- failure handling without accidental writes.
+
+The normal pytest/CI suite must run without OpenAI credentials, without network access, without spending model tokens, and without depending on model variability.
+
+No new live Sol/Luna benchmark is required merely because Phase 17A composes existing boundaries. If implementation materially changes a production model prompt, model-facing instruction, Structured Outputs schema, or semantic writer contract, follow `AGENTS.md` and run focused live evidence only for the changed contract plus proportional historical sentinels. Do not use live calls simply to prove orchestration code works.
+
 ## Acceptance criteria
 
 Phase 17A is complete when deterministic tests prove that one application call can compose the existing primitives for representative requests including:
