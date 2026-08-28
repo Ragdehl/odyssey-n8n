@@ -87,6 +87,12 @@ returns immutable `ApplicationResult` / `ActionResult` / `UnitResult` evidence. 
 distinguishes `completed`, `partial`, `needs_attention`, and `failed`; successful affected stable IDs
 remain available in planner action order.
 
+Each `UnitResult` carries a tuple of `DependencyEvidence` values. This preserves every unresolved
+reference from a source unit, including each target unit index, bounded reason, and candidate stable
+IDs, rather than collapsing multiple pending references into one source-level item. Cycle members are
+reported as `CYCLIC_CREATE_DEPENDENCY`; every non-cycle descendant is still returned and is deferred
+with `DEPENDENCY_FAILED` when its prerequisite cannot succeed.
+
 Single-cardinality `WriteAction` values preflight and render references exactly once. The executor
 uses only those immutable results: it orders same-request CREATE prerequisites ahead of sources that
 reference them, defers ambiguous references and failed prerequisites, and fails closed for CREATE

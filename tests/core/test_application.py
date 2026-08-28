@@ -105,17 +105,30 @@ def test_create_dependency_runs_target_first_with_preflighted_identity(
         ),
     )
     calls: list[int] = []
-    monkeypatch.setattr(application, "preflight_write_action", lambda *args, **kwargs: preflight)
+    preflight_calls: list[tuple[Any, ...]] = []
+
+    def preflight_once(*args: Any, **kwargs: Any) -> tuple[UnitTargetPreflight, ...]:
+        preflight_calls.append(args)
+        return preflight
+
+    render_calls: list[tuple[Any, ...]] = []
+
+    def render_once(*args: Any) -> ReferenceRenderingResult:
+        render_calls.append(args)
+        assert args[1] is preflight
+        return ReferenceRenderingResult((("Works at [[Airbus - airbus-id|Airbus]].",), ()), ())
+
+    monkeypatch.setattr(application, "preflight_write_action", preflight_once)
     monkeypatch.setattr(
         application,
         "render_reference_facts",
-        lambda *args: ReferenceRenderingResult(
-            (("Works at [[Airbus - airbus-id|Airbus]].",), ()), ()
-        ),
+        render_once,
     )
+    rendered_by_index: dict[int, tuple[str, ...]] = {}
 
     def create(*args: Any, unit_index: int, **kwargs: Any) -> EntityPersistenceResult:
         calls.append(unit_index)
+        rendered_by_index[unit_index] = kwargs["rendered_facts"]
         item = preflight[unit_index]
         return EntityPersistenceResult(
             PersistenceOperation.CREATED, item.stable_id or "", item.path or "", 1
@@ -125,6 +138,9 @@ def test_create_dependency_runs_target_first_with_preflighted_identity(
     result = run(RequestPlan((action,), ()), monkeypatch)
 
     assert calls == [1, 0]
+    assert len(preflight_calls) == 1
+    assert len(render_calls) == 1
+    assert rendered_by_index[0] == ("Works at [[Airbus - airbus-id|Airbus]].",)
     assert result.affected_stable_note_ids == ("laura-id", "airbus-id")
     assert [item.status for item in result.action_results[0].unit_results] == [
         UnitStatus.SUCCEEDED,
@@ -202,7 +218,7 @@ def test_failed_create_defers_dependent_but_runs_independent(
     target_result, source_result, independent_result = result.action_results[0].unit_results
     assert target_result.status is UnitStatus.FAILED
     assert source_result.status is UnitStatus.DEFERRED
-    assert source_result.dependency is not None
+    assert source_result.dependencies
     assert independent_result.status is UnitStatus.SUCCEEDED
     assert result.status is ApplicationStatus.PARTIAL
 
@@ -329,3 +345,95 @@ def test_bulk_and_cyclic_create_are_explicit_and_provider_free(
     assert {item.reason for item in cyclic.action_results[0].unit_results} == {
         "CYCLIC_CREATE_DEPENDENCY"
     }
+
+
+def test_cycle_descendant_gets_dependency_failure_and_independent_unit_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return complete results when a downstream unit depends on a CREATE cycle."""
+    first = unit("A", references=(KnowledgeReference(1, "peer", "B"),))
+    second = unit("B", references=(KnowledgeReference(0, "peer", "A"),))
+    descendant = unit("C", references=(KnowledgeReference(0, "peer", "A"),))
+    independent = unit("D")
+    action = WriteAction((first, second, descendant, independent))
+    preflight = tuple(
+        UnitTargetPreflight(index, WriteTargetOutcome.CREATE, f"{name}-id", name, f"{name}.md")
+        for index, name in enumerate(("A", "B", "C", "D"))
+    )
+    writes: list[int] = []
+    monkeypatch.setattr(application, "preflight_write_action", lambda *args, **kwargs: preflight)
+    monkeypatch.setattr(
+        application,
+        "render_reference_facts",
+        lambda *args: ReferenceRenderingResult(((), (), (), ()), ()),
+    )
+
+    def create(*args: Any, unit_index: int, **kwargs: Any) -> EntityPersistenceResult:
+        writes.append(unit_index)
+        item = preflight[unit_index]
+        return EntityPersistenceResult(
+            PersistenceOperation.CREATED, item.stable_id or "", item.path or "", 1
+        )
+
+    monkeypatch.setattr(application, "materialize_create", create)
+    result = run(RequestPlan((action,), ()), monkeypatch)
+
+    units = result.action_results[0].unit_results
+    assert len(units) == 4
+    assert units[0].reason == units[1].reason == "CYCLIC_CREATE_DEPENDENCY"
+    assert units[2].reason == "DEPENDENCY_FAILED"
+    assert units[3].status is UnitStatus.SUCCEEDED
+    assert writes == [3]
+
+
+def test_multiple_pending_references_remain_typed_and_block_source_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preserve every unresolved reference from one source unit for future pending work."""
+    source = unit(
+        "Laura",
+        references=(
+            KnowledgeReference(1, "friend", "Marta"),
+            KnowledgeReference(2, "employer", "Airbus"),
+        ),
+    )
+    action = WriteAction((source, unit("Marta"), unit("Airbus")))
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.CREATE, "laura-id", "Laura", "Laura.md"),
+        UnitTargetPreflight(
+            1,
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            candidate_note_ids=("marta-1", "marta-2"),
+            reason="ambiguous Marta",
+        ),
+        UnitTargetPreflight(
+            2,
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            candidate_note_ids=("airbus-1",),
+            reason="ambiguous Airbus",
+        ),
+    )
+    monkeypatch.setattr(application, "preflight_write_action", lambda *args, **kwargs: preflight)
+    pending = (
+        PendingReference(0, 0, 1, "friend", "Marta", "ambiguous Marta", ("marta-1", "marta-2")),
+        PendingReference(0, 1, 2, "employer", "Airbus", "ambiguous Airbus", ("airbus-1",)),
+    )
+    monkeypatch.setattr(
+        application,
+        "render_reference_facts",
+        lambda *args: ReferenceRenderingResult((("Marta and Airbus",), (), ()), pending),
+    )
+    monkeypatch.setattr(
+        application, "materialize_create", lambda *args, **kwargs: pytest.fail("must not write")
+    )
+
+    result = run(RequestPlan((action,), ()), monkeypatch)
+
+    source_result = result.action_results[0].unit_results[0]
+    assert source_result.status is UnitStatus.DEFERRED
+    assert source_result.reason == "REFERENCE_DEPENDENCY_UNRESOLVED"
+    assert source_result.dependencies == (
+        application.DependencyEvidence(0, 1, "ambiguous Marta", ("marta-1", "marta-2")),
+        application.DependencyEvidence(0, 2, "ambiguous Airbus", ("airbus-1",)),
+    )
+    assert source_result.candidates == ("marta-1", "marta-2", "airbus-1")

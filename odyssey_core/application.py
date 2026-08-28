@@ -92,7 +92,7 @@ class UnitResult:
     stable_note_id: str | None = None
     reason: str | None = None
     candidates: tuple[str, ...] = ()
-    dependency: DependencyEvidence | None = None
+    dependencies: tuple[DependencyEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,7 +372,9 @@ def _execute_single_units(
     writer: BoundedNoteWriter | None,
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
-    pending_by_source = {item.source_unit_index: item for item in pending}
+    pending_by_source: dict[int, list[PendingReference]] = {}
+    for item in pending:
+        pending_by_source.setdefault(item.source_unit_index, []).append(item)
     dependencies = _create_dependencies(action, preflight)
     results: dict[int, UnitResult] = {}
     for index, target in enumerate(preflight):
@@ -384,14 +386,22 @@ def _execute_single_units(
                 candidates=target.candidate_note_ids,
             )
         elif index in pending_by_source:
-            item = pending_by_source[index]
+            items = pending_by_source[index]
             results[index] = UnitResult(
                 index,
                 UnitStatus.DEFERRED,
-                reason=item.reason,
-                candidates=item.candidate_stable_ids,
-                dependency=DependencyEvidence(
-                    index, item.target_unit_index, item.reason, item.candidate_stable_ids
+                reason="REFERENCE_DEPENDENCY_UNRESOLVED",
+                candidates=tuple(
+                    candidate for item in items for candidate in item.candidate_stable_ids
+                ),
+                dependencies=tuple(
+                    DependencyEvidence(
+                        index,
+                        item.target_unit_index,
+                        item.reason,
+                        item.candidate_stable_ids,
+                    )
+                    for item in items
                 ),
             )
     for cycle_index in _cyclic_nodes(dependencies):
@@ -400,7 +410,7 @@ def _execute_single_units(
                 cycle_index,
                 UnitStatus.DEFERRED,
                 reason="CYCLIC_CREATE_DEPENDENCY",
-                dependency=DependencyEvidence(cycle_index, None, "CYCLIC_CREATE_DEPENDENCY"),
+                dependencies=(DependencyEvidence(cycle_index, None, "CYCLIC_CREATE_DEPENDENCY"),),
             )
     for index in _topological_order(dependencies):
         if index in results:
@@ -418,7 +428,7 @@ def _execute_single_units(
                 index,
                 UnitStatus.DEFERRED,
                 reason="DEPENDENCY_FAILED",
-                dependency=DependencyEvidence(index, failed_dependency, "DEPENDENCY_FAILED"),
+                dependencies=(DependencyEvidence(index, failed_dependency, "DEPENDENCY_FAILED"),),
             )
             continue
         unit = action.units[index]
@@ -487,7 +497,12 @@ def _create_dependencies(
 
 def _topological_order(dependencies: dict[int, set[int]]) -> tuple[int, ...]:
     """Return a stable dependency-first order, leaving cyclic nodes for explicit deferral."""
+    cyclic = set(_cyclic_nodes(dependencies))
     remaining = {node: set(edges) for node, edges in dependencies.items()}
+    for node in cyclic:
+        remaining.pop(node, None)
+    for edges in remaining.values():
+        edges.difference_update(cyclic)
     ordered: list[int] = []
     while ready := sorted(node for node, edges in remaining.items() if not edges):
         for node in ready:
