@@ -95,11 +95,18 @@ application result for every outcome.
 
 ➡️ **Phase 17B — durable pending work**
 
-Persist unresolved dependencies, ambiguous references, failed/deferred targets, and other actionable
-incomplete work in a small inspectable internal Markdown/application-state boundary. Preserve the
-original `request_id`, normalized action/unit evidence, candidate/affected stable IDs, failure reason,
-and enough context to retry or resolve later. Future HITL operates on this state instead of
-reconstructing ambiguity from scratch. Pending work is not ordinary indexed user knowledge.
+Persist actionable incomplete post-plan work so ambiguity, dependency failures, failed/deferred targets,
+partial bulk failures, and delegated work survive process exit without semantic reconstruction. Reuse the
+17A `request_id` and preserve the validated incomplete action together with typed execution evidence.
+
+Keep this state outside canonical knowledge. The proposed Phase 17B storage boundary adds
+`/data/odyssey/state/pending/` as durable non-knowledge application state and uses deterministic JSON,
+not canonical Markdown notes. This avoids adding ontology types or exclusions to vault scanning,
+indexing, resolution, and bulk membership. A fully completed request creates no pending record; a
+planning failure before a valid `RequestPlan` is operational failure rather than Phase 17B state.
+Pending-persistence failure must be explicit and must not roll back successful note mutations.
+
+See the canonical [Phase 17B durable pending-work contract](phase-17b-durable-pending-work.md).
 
 ⬜ **Phase 17C — local Git history per logical request**
 
