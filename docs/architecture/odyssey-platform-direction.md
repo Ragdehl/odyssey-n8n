@@ -149,6 +149,41 @@ The exact schema-extension mechanism is future work. Neither an LLM nor an appli
 
 The product principle is: **simple by default, structured underneath, inspectable and extensible when the user wants control.**
 
+### Agent-guided schema evolution
+
+A future user-facing schema editor should preferably be conversational rather than requiring the user to design schema JSON or manually understand ontology mechanics.
+
+Conceptually, a dedicated **schema coach** (agent or equivalent bounded assistant) could guide an explicit property/type creation request:
+
+```text
+"Quiero guardar dónde conocí a cada persona"
+                 |
+                 v
+          schema coach
+                 |
+      +----------+----------+
+      |                     |
+      v                     v
+existing overlap?      missing details?
+      |                     |
+reuse/extend          ask user briefly
+      +----------+----------+
+                 |
+                 v
+        proposed schema change
+                 |
+           user approval
+                 |
+                 v
+      validated schema update
+```
+
+Before proposing a new property/type, the schema coach should inspect the current registered schema and relevant domain extensions for semantic overlap, aliases, near-duplicates, incompatible value types, or an existing structure that should be reused instead. It should ask only the missing questions needed to define a safe property, such as intended meaning, applicable note type(s), value type/cardinality, whether the value links to another entity type, and any validation constraints that matter.
+
+The assistant should explain meaningful collisions or migration consequences in ordinary language. It may recommend reusing or extending an existing property rather than creating another one. It must not apply a schema mutation merely because the model suggested it: the output is a **proposal**, followed by explicit user approval and deterministic validation/migration checks at the schema boundary.
+
+This is intended to preserve zero-configuration use while still allowing non-technical users to evolve their personal ontology safely. The detailed schema-coach prompt, model choice, proposal format, overlap detection, migration behavior, and rollback contract remain future implementation work and require their own evidence before production use.
+
 ## User-owned and configurable knowledge storage
 
 **Odyssey must not require canonical Markdown notes to live inside a centrally hosted Odyssey server.**
