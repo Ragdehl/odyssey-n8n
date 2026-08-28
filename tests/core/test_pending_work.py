@@ -16,6 +16,7 @@ from odyssey_core import (
     ApplicationStatus,
     BulkUpdateFailure,
     BulkUpdateResult,
+    BulkUpdateSuccess,
     DelegateAction,
     DependencyEvidence,
     KnowledgeReference,
@@ -29,6 +30,7 @@ from odyssey_core import (
     UnitStatus,
     WriteAction,
 )
+from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 
 
 def selection(name: str | None = "Laura") -> SelectionCriteria:
@@ -130,7 +132,16 @@ def test_bulk_evidence_and_delegate_are_projected_without_execution(tmp_path: Pa
         "write",
         ActionStatus.FAILED,
         bulk_result=BulkUpdateResult(
-            "all_matching", ("a", "b"), (), (BulkUpdateFailure("b", "OSError", "disk"),), "FAILURE"
+            "all_matching",
+            ("a", "b"),
+            (
+                BulkUpdateSuccess(
+                    "a",
+                    EntityPersistenceResult(PersistenceOperation.UPDATED, "a", "A.md", 3),
+                ),
+            ),
+            (BulkUpdateFailure("b", "OSError", "disk"),),
+            "PARTIAL_SUCCESS",
         ),
     )
     delegate = DelegateAction("translate this", selection())
@@ -149,6 +160,17 @@ def test_bulk_evidence_and_delegate_are_projected_without_execution(tmp_path: Pa
     assert record["incomplete_actions"][0]["execution_result"]["bulk_result"][
         "selected_note_ids"
     ] == ["a", "b"]
+    bulk_evidence = record["incomplete_actions"][0]["execution_result"]["bulk_result"]
+    assert bulk_evidence["succeeded"] == [
+        {
+            "stable_id": "a",
+            "result": {"operation": "UPDATED", "id": "a", "path": "A.md", "revision": 3},
+        }
+    ]
+    assert bulk_evidence["failed"] == [
+        {"stable_id": "b", "error_type": "OSError", "reason": "disk"}
+    ]
+    assert bulk_evidence["status"] == "PARTIAL_SUCCESS"
 
     delegated_result = ApplicationResult(
         "request-delegate",
