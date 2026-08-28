@@ -99,8 +99,8 @@ Persist actionable incomplete post-plan work so ambiguity, dependency failures, 
 partial bulk failures, and delegated work survive process exit without semantic reconstruction. Reuse the
 17A `request_id` and preserve the validated incomplete action together with typed execution evidence.
 
-Keep this state outside canonical knowledge. The proposed Phase 17B storage boundary adds
-`/data/odyssey/state/pending/` as durable non-knowledge application state and uses deterministic JSON,
+Keep this state outside canonical knowledge. The approved Phase 17B storage boundary uses
+`/data/odyssey/state/pending/` as durable non-knowledge application state and deterministic JSON,
 not canonical Markdown notes. This avoids adding ontology types or exclusions to vault scanning,
 indexing, resolution, and bulk membership. A fully completed request creates no pending record; a
 planning failure before a valid `RequestPlan` is operational failure rather than Phase 17B state.
@@ -108,7 +108,7 @@ Pending-persistence failure must be explicit and must not roll back successful n
 
 See the canonical [Phase 17B durable pending-work contract](phase-17b-durable-pending-work.md).
 
-⬜ **Phase 17C — local Git history per logical request**
+➡️ **Phase 17C — local Git history per logical request**
 
 Add the smallest local Git adapter around the authoritative Markdown vault. Per-note materializers
 remain unaware of Git. Prefer one local commit for the successful Markdown mutations caused by one
