@@ -16,6 +16,7 @@ Raspberry Pi host                n8n container
 /data/odyssey        <------>    /odyssey
 ├── vault/                       ├── vault/
 ├── config/                      ├── config/
+├── state/                       ├── state/
 └── runtime/                     └── runtime/
 ```
 
@@ -23,11 +24,12 @@ The directories have distinct responsibilities:
 
 - `vault/` holds the authoritative Markdown knowledge that Obsidian will eventually use.
 - `config/` is reserved for runtime or deployment configuration if a demonstrated need emerges. The canonical application schema is version-controlled in the Git repository at `config/note-schema.json` and is not copied here in Phase 2.
+- `state/` holds durable Odyssey application/workflow state that must survive process restarts but is not canonical user knowledge. Phase 17B first uses `state/pending/` for incomplete validated requests. State here is non-rebuildable unless the corresponding workflow explicitly says otherwise.
 - `runtime/` holds derived indexes, caches, and other disposable runtime state. Everything here must be rebuildable from the authoritative files and configuration.
 
 Workflows use `/odyssey` and never the Raspberry Pi host path. This storage boundary keeps ontology logic independent of deployment-specific paths and allows the physical storage implementation to change without rewriting ontology workflows.
 
-n8n's native file nodes must be restricted at runtime with `N8N_RESTRICT_FILE_ACCESS_TO=/odyssey/vault`. This is the deployment security boundary for note-file access: it permits vault reads while rejecting resolved paths under `/odyssey/config`, `/odyssey/runtime`, other container locations, and symlink escapes from the vault. Workflow path validation remains a separate defense and must accept only safe vault-relative targets.
+n8n's native file nodes must be restricted at runtime with `N8N_RESTRICT_FILE_ACCESS_TO=/odyssey/vault`. This is the deployment security boundary for ordinary note-file access: it permits vault reads while rejecting resolved paths under `/odyssey/config`, `/odyssey/state`, `/odyssey/runtime`, other container locations, and symlink escapes from the vault. Workflow path validation remains a separate defense and must accept only safe vault-relative targets. Phase 17B Core pending-state access therefore does not implicitly authorize n8n native file nodes to browse or mutate application state; the Phase 18 integration must expose only the explicit Core boundary it actually needs.
 
 The initial write boundary is deliberately create-only. `storage_write` checks that a target is absent and refuses readable existing notes rather than overwriting them. This simple contract prevents ordinary accidental replacement while leaving revisions and controlled updates to a later explicit primitive. The native existence preflight is not an atomic compare-and-create guarantee, so concurrent creates for the same path are outside the supported contract.
 
@@ -55,7 +57,9 @@ filesystem
 
 The Phase 8 Markdown codec is the separate serialization boundary immediately above the repository. It converts constrained YAML-frontmatter Markdown to and from a generic `Note(metadata, content)` without knowing which ontology fields are valid. Canonical note-instance validation is another separate layer above the codec and receives the parsed canonical schema explicitly. The generic note has no filesystem path: metadata such as `id` represents logical identity while vault placement remains a storage concern.
 
-The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema will be decided when a workflow needs it; Phase 2 adds no deployment step or Docker mount.
+Phase 17B adds a separate, deliberately narrow pending-work repository rooted at `state/pending/`. It stores deterministic JSON workflow evidence and does not reuse `VaultRepository`, the Markdown codec, or the canonical note schema. This separation is intentional: pending work must survive restarts, but it must never appear in ordinary knowledge scans, embeddings, identity resolution, or bulk selection. The pending root is configured explicitly and is not created or populated with real personal state merely by importing Core code or running unit tests.
+
+The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, durable application/workflow state lives in `/data/odyssey/state`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema or invokes the pending-state boundary will be decided when a workflow needs it; the storage layout does not itself widen native file-node permissions.
 
 `~/odyssey-data` is only a convenience symlink to `/data/odyssey` for interactive host use. It is not a second data location and workflows must not depend on it.
 
@@ -63,4 +67,4 @@ Cloud synchronization, including services such as OneDrive, is external to the O
 
 ## Permissions
 
-The host user `ragdehl` and the n8n container user `node` both use UID/GID `1000:1000`. The storage root and its three directories use ownership `1000:1000` and mode `0755`. This lets n8n read the tree and create or update owner-writable files without world-writable permissions or an additional permission mechanism.
+The host user `ragdehl` and the n8n container user `node` both use UID/GID `1000:1000`. The storage root and its durable/runtime child directories should use ownership `1000:1000` and mode `0755` unless a later security review narrows specific state permissions. This lets approved Core/runtime code read the tree and create or update owner-writable files without world-writable permissions or an additional permission mechanism.
