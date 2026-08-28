@@ -148,6 +148,11 @@ representation reuses `request_id` and never stores hidden model reasoning. See
 The detailed cross-phase direction is centralized in
 [Future extension points](future-extension-points.md). Important preserved directions include:
 
+- 💡 **Odyssey platform boundary:** evolve toward a persistent knowledge layer used by humans,
+  ordinary applications, and AI agents through Core + server interfaces such as HTTP and MCP. Canonical
+  Markdown remains user/workspace-owned and storage-location agnostic rather than being required to live
+  in a centrally hosted server. Domain applications/extensions, SDKs, deployment modes, and permissions
+  remain later contracts after real E2E evidence. See [Odyssey platform direction](odyssey-platform-direction.md).
 - 💡 **Human-in-the-loop:** build on Phase 17B durable pending work when ambiguity, dependency failure,
   partial success, or explicit user control requires clarification/approval.
 - 💡 **Mention-to-alias promotion:** keep current reference binding deterministic; add semantic alias
