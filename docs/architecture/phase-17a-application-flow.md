@@ -1,6 +1,6 @@
 # Phase 17A executable application flow
 
-Status: **contract approved; implementation pending**
+Status: **implemented; deterministic verification passed**
 
 This document is the canonical contract for Phase 17A. It intentionally narrows the earlier broad Phase 17 direction into a small executable Core application boundary first, while preserving later Phase 17 work explicitly so it is not forgotten.
 
@@ -78,6 +78,32 @@ Exact public names remain an implementation detail, but the boundary must:
 6. return one stable `ApplicationResult` containing `request_id`, overall status, ordered action results, affected stable IDs, and deferred/unsupported work evidence.
 
 Do not create a generic DAG/workflow abstraction unless implementation evidence proves one is necessary.
+
+## Implemented Core boundary
+
+`odyssey_core.application.execute_request()` is the Phase 17A public composition API. It receives an
+injected planner and existing Core dependencies, generates exactly one injectable `request_id`, and
+returns immutable `ApplicationResult` / `ActionResult` / `UnitResult` evidence. `ApplicationStatus`
+distinguishes `completed`, `partial`, `needs_attention`, and `failed`; successful affected stable IDs
+remain available in planner action order.
+
+Each `UnitResult` carries a tuple of `DependencyEvidence` values. This preserves every unresolved
+reference from a source unit, including each target unit index, bounded reason, and candidate stable
+IDs, rather than collapsing multiple pending references into one source-level item. Cycle members are
+reported as `CYCLIC_CREATE_DEPENDENCY`; every non-cycle descendant is still returned and is deferred
+with `DEPENDENCY_FAILED` when its prerequisite cannot succeed.
+
+Single-cardinality `WriteAction` values preflight and render references exactly once. The executor
+uses only those immutable results: it orders same-request CREATE prerequisites ahead of sources that
+reference them, defers ambiguous references and failed prerequisites, and fails closed for CREATE
+cycles. Existing referenced notes are already linkable and therefore do not gain a dependency on an
+unrelated mutation of that note. Independent units continue after a failure. Mixed single/bulk action
+composition and multi-unit bulk are explicitly deferred in this initial boundary rather than
+duplicating the Phase 16.5 single-identity contract.
+
+Retrieve actions use `get_context()` with an explicit injected limit; unsupported link-scope execution
+returns deferred evidence. Delegate actions remain typed deferred work. No application code contacts a
+model provider directly: tests inject a frozen planner and patch or fake all model-backed boundaries.
 
 ## Action execution
 

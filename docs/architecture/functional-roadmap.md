@@ -50,7 +50,7 @@ Canonical detail for these completed phases lives in:
 
 ## Current phase
 
-➡️ **Phase 17A — executable Core application flow + stable `request_id`**
+✅ **Phase 17A — executable Core application flow + stable `request_id`**
 
 Compose the already-validated planner, retrieval, target/reference preflight, CREATE/UPDATE/DELETE/type
 migration, and deterministic bulk UPDATE primitives into one small application boundary that can execute
@@ -86,9 +86,14 @@ production model-facing contract materially changes, following `AGENTS.md`.
 
 See the canonical [Phase 17A executable application-flow contract](phase-17a-application-flow.md).
 
+Implementation lives in `odyssey_core.application.execute_request()`. It composes the existing planner,
+retrieval, reference-preflight/binding, materialization, deterministic bulk UPDATE, and delegation
+boundaries without adding a workflow engine. One generated `request_id` is returned through the typed
+application result for every outcome.
+
 ## Remaining intended sequence
 
-⬜ **Phase 17B — durable pending work**
+➡️ **Phase 17B — durable pending work**
 
 Persist unresolved dependencies, ambiguous references, failed/deferred targets, and other actionable
 incomplete work in a small inspectable internal Markdown/application-state boundary. Preserve the

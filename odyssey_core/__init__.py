@@ -1,5 +1,17 @@
 """Odyssey's Python application and domain core."""
 
+from .application import (
+    ActionResult,
+    ActionStatus,
+    ApplicationResult,
+    ApplicationStatus,
+    DependencyEvidence,
+    RequestPlanner,
+    UnitResult,
+    UnitStatus,
+    allocate_request_id,
+    execute_request,
+)
 from .bulk_update import (
     BulkUpdateFailure,
     BulkUpdateResult,
@@ -117,6 +129,16 @@ from .semantic import (
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
 __all__ = [
+    "ActionResult",
+    "ActionStatus",
+    "ApplicationResult",
+    "ApplicationStatus",
+    "DependencyEvidence",
+    "RequestPlanner",
+    "UnitResult",
+    "UnitStatus",
+    "allocate_request_id",
+    "execute_request",
     "ExactEntityCandidate",
     "BulkUpdateFailure",
     "BulkUpdateResult",
