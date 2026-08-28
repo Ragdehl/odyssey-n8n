@@ -93,7 +93,7 @@ application result for every outcome.
 
 ## Remaining intended sequence
 
-➡️ **Phase 17B — durable pending work**
+✅ **Phase 17B — durable pending work**
 
 Persist actionable incomplete post-plan work so ambiguity, dependency failures, failed/deferred targets,
 partial bulk failures, and delegated work survive process exit without semantic reconstruction. Reuse the

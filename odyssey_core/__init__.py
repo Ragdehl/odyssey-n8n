@@ -6,6 +6,8 @@ from .application import (
     ApplicationResult,
     ApplicationStatus,
     DependencyEvidence,
+    PendingWorkRecorder,
+    PendingWorkStatus,
     RequestPlanner,
     UnitResult,
     UnitStatus,
@@ -62,6 +64,7 @@ from .materialization import (
     validate_writer_output,
     writer_output_json_schema,
 )
+from .pending_work import PendingWorkError, PendingWorkRepository, project_pending_work
 from .persistence import (
     EntityAlreadyExistsError,
     EntityIdentityMismatchError,
@@ -134,6 +137,11 @@ __all__ = [
     "ApplicationResult",
     "ApplicationStatus",
     "DependencyEvidence",
+    "PendingWorkRecorder",
+    "PendingWorkStatus",
+    "PendingWorkError",
+    "PendingWorkRepository",
+    "project_pending_work",
     "RequestPlanner",
     "UnitResult",
     "UnitStatus",
