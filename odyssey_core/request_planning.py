@@ -243,7 +243,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """Build the strict Structured Outputs schema for the active canonical schema.
 
     Args:
-        schema: Parsed canonical Odyssey schema that defines types, filters, and writable properties.
+        schema: Parsed canonical schema that defines types, filters, and writable properties.
 
     Returns:
         Closed JSON Schema accepted by the Responses API for one Phase 15.1 RequestPlan.
@@ -493,7 +493,17 @@ class OpenAIRequestPlanner:
 
 
 def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the shared query/type/filter selection contract."""
+    """Build the shared query/type/filter Structured Outputs shape.
+
+    Args:
+        capabilities: Dynamic retrieval/selection capability projection from the canonical schema.
+
+    Returns:
+        Closed JSON Schema for either a RetrieveAction plan or KnowledgeUnit target.
+
+    Raises:
+        RequestPlanningError: If no deterministic planner filters are available.
+    """
     alternatives = _filter_json_schema_alternatives(capabilities)
     if not alternatives:
         raise RequestPlanningError("Canonical schema exposes no planner filters")
@@ -572,7 +582,14 @@ def _tag_changes_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Build strict dynamic filter alternatives shared by retrieval and write selection."""
+    """Build strict dynamic filter alternatives shared by retrieval and write selection.
+
+    Args:
+        capabilities: Dynamic selection capabilities keyed by canonical filter field.
+
+    Returns:
+        JSON Schema alternatives for every supported field/operator combination.
+    """
     alternatives: list[dict[str, Any]] = []
     for field, definition in capabilities["filters"].items():
         scalar: dict[str, Any] = {
@@ -597,7 +614,17 @@ def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[di
 
 
 def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build dynamic strict property-change alternatives from type-specific properties."""
+    """Build dynamic strict property-change alternatives from type-specific properties.
+
+    Args:
+        write_capabilities: Writable type/property projection from the canonical schema.
+
+    Returns:
+        Closed array schema supporting generic set/remove changes for known properties.
+
+    Raises:
+        RequestPlanningError: If a projected property uses an unsupported value type.
+    """
     alternatives: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for type_definition in write_capabilities["types"].values():
@@ -642,7 +669,17 @@ def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict
 
 
 def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]:
-    """Map one supported property definition to its basic strict JSON value shape."""
+    """Map one supported property definition to its basic strict JSON value shape.
+
+    Args:
+        definition: Schema-derived writable property capability.
+
+    Returns:
+        JSON Schema fragment for the property's value type.
+
+    Raises:
+        RequestPlanningError: If the property value type has no Structured Outputs mapping.
+    """
     value_type = definition["value_type"]
     if value_type == "integer":
         return {"type": "integer"}
@@ -687,7 +724,20 @@ def _validate_action(
 def _validate_delegate_action(
     action: Mapping[str, Any], schema: Mapping[str, Any], capabilities: Mapping[str, Any]
 ) -> DelegateAction:
-    """Validate generic delegated work without selecting or executing an application."""
+    """Validate generic delegated work without selecting or executing an application.
+
+    Args:
+        action: Untrusted delegated-action object returned by the planner.
+        schema: Parsed canonical schema used by optional shared selection validation.
+        capabilities: Dynamic shared selection capabilities derived from that schema.
+
+    Returns:
+        Immutable delegated work containing only a subrequest and optional generic selection.
+
+    Raises:
+        RequestPlanningError: If the action is not closed, has an empty request, or has invalid
+            shared selection criteria.
+    """
     if set(action) != {"kind", "request", "selection"}:
         raise RequestPlanningError("DelegateAction fields are invalid")
     request, raw_selection = action["request"], action["selection"]
@@ -696,7 +746,9 @@ def _validate_delegate_action(
     selection = (
         None
         if raw_selection is None
-        else _validate_selection(raw_selection, schema, capabilities, label="DelegateAction selection")
+        else _validate_selection(
+            raw_selection, schema, capabilities, label="DelegateAction selection"
+        )
     )
     return DelegateAction(request=request.strip(), selection=selection)
 
@@ -708,7 +760,20 @@ def _validate_selection(
     *,
     label: str,
 ) -> SelectionCriteria:
-    """Validate the shared query/type/filters selection contract."""
+    """Validate the shared query/type/filters selection contract.
+
+    Args:
+        raw: Untrusted selection object emitted by the planner.
+        schema: Parsed canonical schema used by the shared deterministic filter validator.
+        capabilities: Dynamic selection capabilities derived from that schema.
+        label: Human-readable contract name used in validation errors.
+
+    Returns:
+        Immutable validated selection criteria reusable by retrieval or write targeting.
+
+    Raises:
+        RequestPlanningError: If query, type, filter shape, or filter semantics are invalid.
+    """
     required = {"entity", "query", "type", "filters", "link_scope"}
     legacy_required = {"query", "type", "filters"}
     if not isinstance(raw, dict) or (set(raw) != required and set(raw) != legacy_required):
@@ -808,7 +873,21 @@ def _validate_write_action(
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
 ) -> WriteAction:
-    """Validate one semantic write action without resolving identity or persisting data."""
+    """Validate one semantic write action without resolving identity or persisting data.
+
+    Args:
+        action: Untrusted write-action object returned by the planner.
+        schema: Parsed canonical schema used by shared target-filter validation.
+        retrieval_capabilities: Dynamic query/type/filter contract for write targets.
+        write_capabilities: Dynamic canonical property contract for write mutations.
+
+    Returns:
+        Immutable semantic write preparation with safe targets, payloads, and references.
+
+    Raises:
+        RequestPlanningError: If units are malformed, violate intent payload rules, or reference an
+            unknown or self target.
+    """
     raw_units = action.get("units")
     if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
         raise RequestPlanningError("WriteAction must contain non-empty units")
@@ -828,7 +907,9 @@ def _validate_write_action(
             raise RequestPlanningError("KnowledgeReference cannot target an all_matching unit")
     referenced_targets = {reference.target_index for unit in units for reference in unit.references}
     for index, unit in enumerate(units):
-        has_payload = bool(unit.properties or unit.tag_changes or unit.facts or unit.destination_type)
+        has_payload = bool(
+            unit.properties or unit.tag_changes or unit.facts or unit.destination_type
+        )
         if unit.intent in {"amend", "remove"} and not has_payload:
             raise RequestPlanningError(
                 "KnowledgeUnit amend and remove intents require mutation payload"
@@ -846,7 +927,21 @@ def _validate_knowledge_unit(
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
 ) -> KnowledgeUnit:
-    """Validate one write target, mutation payload, and local reference set."""
+    """Validate one write target, mutation payload, and local reference set.
+
+    Args:
+        unit: Untrusted model object for one semantic write target.
+        schema: Parsed canonical schema used for deterministic target-filter validation.
+        retrieval_capabilities: Shared query/type/filter capability projection.
+        write_capabilities: Type-scoped writable property capability projection.
+
+    Returns:
+        One immutable KnowledgeUnit with no physical persistence authority.
+
+    Raises:
+        RequestPlanningError: If target, intent, properties, facts, or references violate the
+            Phase 15.1 contract.
+    """
     required = {
         "target",
         "cardinality",
@@ -956,7 +1051,18 @@ def _validate_knowledge_unit(
 
 
 def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int) -> set[int]:
-    """Validate internal reference markers and return their local reference indexes."""
+    """Validate internal reference markers and return their local reference indexes.
+
+    Args:
+        facts: Untrusted planner fact strings for one KnowledgeUnit.
+        reference_count: Number of references in that same unit's references array.
+
+    Returns:
+        Set of local reference indexes represented by at least one marker.
+
+    Raises:
+        RequestPlanningError: If markers are malformed, out of range, or raw wikilinks appear.
+    """
     indexes: set[int] = set()
     for fact in facts:
         if "[[" in fact or "]]" in fact:
@@ -983,7 +1089,21 @@ def _validate_property_changes(
     intent: str,
     write_capabilities: Mapping[str, Any],
 ) -> tuple[PropertyChange, ...]:
-    """Validate property changes against the selected type and shared Core value rules."""
+    """Validate property changes against the selected type and shared Core value rules.
+
+    Args:
+        raw_properties: Untrusted ordered property-change objects from one KnowledgeUnit.
+        note_type: Canonical target type used to scope allowed property IDs.
+        intent: Semantic write intent controlling the allowed property operation.
+        write_capabilities: Active schema-derived type/property capability projection.
+
+    Returns:
+        Immutable validated property changes in planner order.
+
+    Raises:
+        RequestPlanningError: If field scope, operation, uniqueness, nullability, or value semantics
+            violate the active write contract.
+    """
     if raw_properties and note_type is None:
         raise RequestPlanningError("KnowledgeUnit properties require a canonical target type")
     if intent == "delete" and raw_properties:
@@ -1031,7 +1151,19 @@ def _validate_property_changes(
 def _validate_tag_changes(
     raw_tag_changes: Any, intent: str, capabilities: Mapping[str, Any]
 ) -> tuple[TagChange, ...]:
-    """Validate explicit controlled-tag item mutations for one knowledge unit."""
+    """Validate explicit controlled-tag item mutations for one knowledge unit.
+
+    Args:
+        raw_tag_changes: Untrusted ordered tag operations from the planner.
+        intent: Write intent that restricts allowed tag operations.
+        capabilities: Selection capabilities containing the schema-derived tag registry.
+
+    Returns:
+        Immutable item-level tag changes in planner order.
+
+    Raises:
+        RequestPlanningError: If operations are malformed, unknown, conflicting, or incompatible.
+    """
     if not isinstance(raw_tag_changes, list):
         raise RequestPlanningError("KnowledgeUnit tag_changes must be a list")
     allowed_ops = {
