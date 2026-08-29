@@ -997,9 +997,7 @@ def _validate_knowledge_unit(
         or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
     ):
         raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
-    if any(
-        "\n" in fact or "\r" in fact or "<!-- odyssey:fact" in fact for fact in raw_facts
-    ):
+    if any("\n" in fact or "\r" in fact or "<!-- odyssey:fact" in fact for fact in raw_facts):
         raise RequestPlanningError(
             "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers"
         )
