@@ -243,7 +243,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """Build the strict Structured Outputs schema for the active canonical schema.
 
     Args:
-        schema: Parsed canonical schema that defines types, filters, and writable properties.
+        schema: Parsed canonical Odyssey schema that defines types, filters, and writable properties.
 
     Returns:
         Closed JSON Schema accepted by the Responses API for one Phase 15.1 RequestPlan.
