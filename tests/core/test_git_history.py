@@ -127,6 +127,27 @@ def test_unrelated_staged_file_is_not_in_request_commit(tmp_path: Path) -> None:
     assert "manual.md" in git(tmp_path, "diff", "--cached", "--name-only")
 
 
+def test_unrelated_unstaged_file_is_not_in_request_commit(tmp_path: Path) -> None:
+    """An unrelated manual working-tree edit remains dirty and outside the request commit."""
+    repository = vault(tmp_path)
+    note(repository)
+    note(repository, "manual.md", "manual")
+    repository.replace_text("manual.md", repository.read_text("manual.md") + "Manual edit.\n")
+    recorder = GitHistoryRecorder(repository.root)
+    snapshot = recorder.begin("request-unstaged")
+    repository.replace_text("marta.md", repository.read_text("marta.md") + "Changed.\n")
+    result = recorder.record(
+        request_id="request-unstaged",
+        snapshot=snapshot,
+        affected_stable_note_ids=("marta",),
+        repository=repository,
+        schema=SCHEMA,
+    )
+    assert result.status is HistoryStatus.COMMITTED
+    assert git(tmp_path, "show", "--format=", "--name-only", "HEAD").strip() == "marta.md"
+    assert "manual.md" in git(tmp_path, "diff", "--name-only")
+
+
 def test_pre_dirty_affected_path_is_skipped(tmp_path: Path) -> None:
     """Known user edits on an affected path prevent automatic attribution."""
     repository = vault(tmp_path)
@@ -155,12 +176,46 @@ def test_no_changes_and_wrong_root_fail_closed(tmp_path: Path) -> None:
         GitHistoryRecorder(child).begin("request-root")
 
 
+def test_begin_requires_explicit_baseline_commit(tmp_path: Path) -> None:
+    """A freshly initialized repository is not silently bootstrapped by Odyssey."""
+    git(tmp_path, "init", "-q")
+    with pytest.raises(RuntimeError, match="baseline"):
+        GitHistoryRecorder(tmp_path).begin("request-no-baseline")
+
+
+def test_status_snapshot_preserves_both_rename_paths(tmp_path: Path) -> None:
+    """Porcelain -z rename records retain both destination and source path boundaries."""
+    repository = vault(tmp_path)
+    note(repository)
+    git(tmp_path, "mv", "marta.md", "renamed.md")
+    snapshot = GitHistoryRecorder(tmp_path).begin("request-rename")
+    assert {"marta.md", "renamed.md"} <= snapshot.dirty_paths
+
+
 def test_missing_id_is_explicit_failure(tmp_path: Path) -> None:
     """Unresolvable successful IDs never broaden the candidate path set."""
     repository = vault(tmp_path)
     note(repository)
     result = record(repository, "request-missing", ("unknown",))
     assert result.status is HistoryStatus.FAILED
+
+
+def test_repeated_affected_id_is_deduplicated_for_attribution(tmp_path: Path) -> None:
+    """Repeated successful touches of one stable identity still produce one safe path commit."""
+    repository = vault(tmp_path)
+    note(repository)
+    recorder = GitHistoryRecorder(repository.root)
+    snapshot = recorder.begin("request-repeat")
+    repository.replace_text("marta.md", repository.read_text("marta.md") + "Changed twice.\n")
+    result = recorder.record(
+        request_id="request-repeat",
+        snapshot=snapshot,
+        affected_stable_note_ids=("marta", "marta"),
+        repository=repository,
+        schema=SCHEMA,
+    )
+    assert result.status is HistoryStatus.COMMITTED
+    assert git(tmp_path, "show", "--format=", "--name-only", "HEAD").strip() == "marta.md"
 
 
 def test_create_and_multi_note_attribution_make_one_commit(tmp_path: Path) -> None:
