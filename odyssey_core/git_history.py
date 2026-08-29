@@ -90,10 +90,8 @@ class GitHistoryRecorder:
         root = self._git_root()
         if repository.root.resolve() != root:
             return GitHistoryResult(HistoryStatus.FAILED, reason="repository root mismatch")
-        if len(set(affected_stable_note_ids)) != len(affected_stable_note_ids):
-            return GitHistoryResult(HistoryStatus.FAILED, reason="affected IDs are ambiguous")
         paths: list[str] = []
-        for stable_id in affected_stable_note_ids:
+        for stable_id in dict.fromkeys(affected_stable_note_ids):
             matches: list[str] = []
             for path in repository.list_markdown_paths():
                 try:
@@ -139,11 +137,14 @@ class GitHistoryRecorder:
         return GitHistoryResult(HistoryStatus.COMMITTED, commit_sha=sha)
 
     def _git_root(self) -> Path:
-        """Return the exact vault root after rejecting a parent repository."""
+        """Return the exact initialized vault Git root with an existing baseline commit."""
         root = self.vault_root.resolve(strict=True)
         actual = Path(self._run(root, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
         if actual != root:
             raise RuntimeError("Git repository root does not match vault root")
+        head = self._run(root, "rev-parse", "--verify", "HEAD", check=False)
+        if head.returncode != 0:
+            raise RuntimeError("Git repository has no baseline commit")
         return root
 
     @staticmethod
@@ -157,7 +158,7 @@ class GitHistoryRecorder:
         return result
 
     def _status_paths(self, root: Path) -> set[str]:
-        """Parse NUL-delimited porcelain status while preserving safe path boundaries."""
+        """Parse NUL-delimited porcelain status while preserving rename/copy path pairs."""
         result = self._run(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
         tokens = result.stdout.split("\0")
         paths: set[str] = set()
@@ -167,7 +168,7 @@ class GitHistoryRecorder:
             if len(entry) < 4:
                 raise RuntimeError("Git status output is malformed")
             paths.add(entry[3:])
-            if entry[1] in "RC" or entry[2] in "RC":
+            if entry[0] in "RC" or entry[1] in "RC":
                 index += 1
                 if index >= len(tokens) - 1:
                     raise RuntimeError("Git status rename output is malformed")
