@@ -3,8 +3,11 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from odyssey_core.request_planning import (
     RequestPlan,
+    RequestPlanningError,
     WriteAction,
     plan_fact_ordinals,
     validate_request_plan,
@@ -62,6 +65,16 @@ def test_atomic_split_contract_accepts_three_independent_facts() -> None:
         "Marta tiene dos hijos.",
         "Marta se va a mudar a Lyon.",
     )
+
+
+@pytest.mark.parametrize(
+    "fact",
+    ["line one\nline two", "line one\rline two", "human <!-- odyssey:fact text"],
+)
+def test_planner_rejects_noncanonical_atomic_fact_text(fact: str) -> None:
+    """Reject fact text that cannot safely round-trip through canonical atomic markup."""
+    with pytest.raises(RequestPlanningError, match="single-line"):
+        _plan([_unit([fact])])
 
 
 def test_property_conversational_fact_and_unregistered_concept_contracts() -> None:
