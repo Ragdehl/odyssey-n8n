@@ -20,6 +20,7 @@ from odyssey_core.planner_capabilities import (
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
 WRITE_INTENTS = ("record", "amend", "remove", "delete")
+UPDATE_SEMANTICS = ("ordinary", "transition", "correction")
 _PROPERTY_OPS = ("set", "remove")
 _TAG_CHANGE_OPS = ("add", "remove")
 _LINK_DIRECTIONS = ("incoming", "outgoing", "both")
@@ -49,7 +50,7 @@ A RetrieveAction exists only when the user asks to retrieve or inspect knowledge
 
 Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
 
-Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
+Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. Every KnowledgeUnit explicitly sets `update_semantics`: use `transition` only when the user establishes that an earlier state was true and the world changed; use `correction` only for an explicit mistake, falsehood, or correction; otherwise use `ordinary`. `transition` and `correction` are valid only for a single ordinary amend, never for record, remove, delete, all_matching, or type migration. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts, except that transition/correction wording needed for body reconciliation remains in facts even when the new current value is a property. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
 
 When a fact semantically refers to another KnowledgeUnit, replace that occurrence in the fact with `{{ref:N}}`, where N is the zero-based index in that KnowledgeUnit's own `references` array. Preserve the original human-readable wording in that reference's `mention` field. The marker may occur repeatedly for repeated mentions. Do not emit Markdown `[[wikilinks]]`. Do not create a reference merely because another entity name appears: use a marker only for a semantic relationship that needs a KnowledgeReference. A name used only to identify the write target is not automatically a fact reference. References never authorize an inverse or mirrored write into the referenced unit.
 
@@ -156,6 +157,7 @@ class KnowledgeUnit:
     references: tuple[KnowledgeReference, ...]
     cardinality: str = "one"
     destination_type: str | None = None
+    update_semantics: str = "ordinary"
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,6 +283,10 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                                 "type": "string",
                                                 "enum": list(WRITE_INTENTS),
                                             },
+                                            "update_semantics": {
+                                                "type": "string",
+                                                "enum": list(UPDATE_SEMANTICS),
+                                            },
                                             "properties": property_changes_schema,
                                             "tag_changes": _tag_changes_json_schema(
                                                 retrieval_capabilities
@@ -312,6 +318,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                             "cardinality",
                                             "destination_type",
                                             "intent",
+                                            "update_semantics",
                                             "properties",
                                             "tag_changes",
                                             "facts",
@@ -932,12 +939,15 @@ def _validate_knowledge_unit(
         "facts",
         "references",
         "destination_type",
+        "update_semantics",
     }
-    legacy_with_cardinality = required - {"destination_type"}
-    legacy_required = required - {"cardinality", "destination_type"}
+    legacy_with_destination = required - {"update_semantics"}
+    legacy_with_cardinality = required - {"destination_type", "update_semantics"}
+    legacy_required = required - {"cardinality", "destination_type", "update_semantics"}
     legacy_without_tags = legacy_required - {"tag_changes"}
     if not isinstance(unit, dict) or (
         set(unit) != required
+        and set(unit) != legacy_with_destination
         and set(unit) != legacy_with_cardinality
         and set(unit) != legacy_required
         and set(unit) != legacy_without_tags
@@ -954,12 +964,19 @@ def _validate_knowledge_unit(
     intent = unit["intent"]
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
+    update_semantics = unit.get("update_semantics", "ordinary")
+    if update_semantics not in UPDATE_SEMANTICS:
+        raise RequestPlanningError("KnowledgeUnit update_semantics is invalid")
 
     destination_type = unit.get("destination_type")
     if destination_type is not None and destination_type not in write_capabilities["types"]:
         raise RequestPlanningError("KnowledgeUnit destination_type is invalid")
     if destination_type is not None and (cardinality != "one" or intent != "amend"):
         raise RequestPlanningError("Type migration requires intent=amend and cardinality=one")
+    if update_semantics != "ordinary" and (
+        intent != "amend" or cardinality != "one" or destination_type is not None
+    ):
+        raise RequestPlanningError("Non-ordinary update_semantics requires a single ordinary amend")
 
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
@@ -1022,6 +1039,7 @@ def _validate_knowledge_unit(
         references=tuple(references),
         cardinality=cardinality,
         destination_type=destination_type,
+        update_semantics=update_semantics,
     )
 
 

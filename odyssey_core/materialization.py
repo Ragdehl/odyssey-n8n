@@ -40,8 +40,13 @@ _WRITER_INSTRUCTIONS = (
     "resolve or alter link identity. Return the smallest faithful bounded "
     "operations against the supplied current Markdown body. Every old span must be exact. Do not "
     "rewrite the whole body. Use NO_CHANGE only when every supplied fact is already represented, "
-    "and then return it as the only operation. Use APPEND for independent facts, REPLACE for "
-    "corrections or temporal changes, and REMOVE only for exact supplied content. Preserve "
+    "and then return it as the only operation. The supplied update_semantics is authoritative: "
+    "for correction, replace or remove conflicting false body knowledge when needed; for "
+    "transition, preserve a prior true current-state assertion as natural historical knowledge "
+    "and represent the new current state; for ordinary, do not treat conflicting prior knowledge "
+    "as false or remove it. Use APPEND for independent facts. REMOVE is only for explicit remove "
+    "intent or correction. Structured property context is read-only evidence for natural body "
+    "reconciliation; never render schema syntax or mutate metadata. Preserve "
     "unrelated information. For record/amend, do not drop a supplied bound wikilink while "
     "representing its fact; an explicit remove may remove that fact. Return only the requested "
     "Structured Outputs object."
@@ -213,6 +218,29 @@ class WriterRequest:
     intent: str
     facts: tuple[str, ...]
     current_body: str
+    update_semantics: str = "ordinary"
+    structured_property_changes: tuple[StructuredPropertyChangeContext, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredPropertyChangeContext:
+    """Describe one authorized current-property change for read-only body reconciliation.
+
+    Args:
+        field: Canonical field whose mutation has already been validated.
+        previous_present: Whether the authoritative note had the field before the request.
+        previous_value: Authoritative previous field value, or ``None`` when absent.
+        op: Authorized property operation from the KnowledgeUnit.
+        new_present: Whether the requested post-update property will be present.
+        new_value: Requested post-update value, or ``None`` when absent.
+    """
+
+    field: str
+    previous_present: bool
+    previous_value: Any | None
+    op: str
+    new_present: bool
+    new_value: Any | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,7 +332,19 @@ def build_openai_writer_payload(request: WriterRequest) -> dict[str, Any]:
                         "canonical_note_id": request.note_id,
                         "canonical_note_type": request.note_type,
                         "write_intent": request.intent,
+                        "update_semantics": request.update_semantics,
                         "facts": list(request.facts),
+                        "structured_property_changes": [
+                            {
+                                "field": change.field,
+                                "previous_present": change.previous_present,
+                                "previous_value": change.previous_value,
+                                "op": change.op,
+                                "new_present": change.new_present,
+                                "new_value": change.new_value,
+                            }
+                            for change in request.structured_property_changes
+                        ],
                         "current_authoritative_markdown_body": request.current_body,
                     },
                     ensure_ascii=False,
@@ -388,6 +428,9 @@ def materialize_update(
     set_metadata, remove_metadata = _stage_structured_mutations(
         existing, unit.properties, unit.tag_changes
     )
+    structured_property_changes = _structured_property_changes(existing, unit.properties)
+    # Reject malformed deterministic metadata before a writer call can spend provider work.
+    _validate_staged_note(existing, schema, set_metadata, remove_metadata, existing.content)
     prepared_facts = rendered_facts if rendered_facts is not None else unit.facts
     remaining_facts = (
         prepared_facts
@@ -399,7 +442,12 @@ def materialize_update(
         )
     )
     content = existing.content
-    if remaining_facts:
+    requires_property_reconciliation = (
+        unit.cardinality == "one"
+        and bool(structured_property_changes)
+        and (unit.update_semantics in {"ordinary", "transition"})
+    )
+    if remaining_facts or requires_property_reconciliation:
         if writer is None:
             raise MaterializationError("A bounded writer is required for non-duplicate facts")
         try:
@@ -410,13 +458,17 @@ def materialize_update(
                     unit.intent,
                     remaining_facts,
                     existing.content,
+                    unit.update_semantics,
+                    structured_property_changes,
                 )
             )
         except MaterializationError:
             raise
         except Exception as error:
             raise WriterProviderError("Bounded writer failed") from error
-        operations = validate_writer_output(output, existing.content)
+        operations = validate_writer_output(
+            output, existing.content, unit.intent, unit.update_semantics
+        )
         content = apply_writer_operations(existing.content, operations)
         _validate_bound_wikilinks(existing.content, content, remaining_facts, unit.intent)
     _validate_staged_note(existing, schema, set_metadata, remove_metadata, content)
@@ -562,14 +614,38 @@ def _validate_bound_wikilinks(
         raise WriterOutputError("Writer output invented an unbound wikilink")
 
 
-def validate_writer_output(output: object, body: str) -> tuple[WriterOperation, ...]:
-    """Validate untrusted writer output against the exact supplied authoritative body."""
+def validate_writer_output(
+    output: object,
+    body: str,
+    intent: str = "amend",
+    update_semantics: str = "ordinary",
+) -> tuple[WriterOperation, ...]:
+    """Validate bounded writer output against body and semantic removal authority.
+
+    Args:
+        output: Untrusted Structured Outputs object.
+        body: Exact authoritative body supplied to the writer.
+        intent: Authorized KnowledgeUnit mutation intent.
+        update_semantics: Truth relationship supplied by the validated KnowledgeUnit.
+
+    Returns:
+        Safe, exact-span operations ready for deterministic application.
+
+    Raises:
+        WriterOutputError: If output is malformed, ambiguous, or removes knowledge without authority.
+    """
     if not isinstance(output, Mapping) or set(output) != {"operations"}:
         raise WriterOutputError("Writer output has an invalid schema")
     raw_operations = output["operations"]
     if not isinstance(raw_operations, list) or not raw_operations:
         raise WriterOutputError("Writer output requires non-empty operations")
     operations = tuple(_validate_operation(item) for item in raw_operations)
+    if (
+        any(operation.op == "REMOVE" for operation in operations)
+        and intent != "remove"
+        and update_semantics != "correction"
+    ):
+        raise WriterOutputError("Writer REMOVE lacks explicit removal authority")
     if any(operation.op == "NO_CHANGE" for operation in operations) and len(operations) != 1:
         raise WriterOutputError("NO_CHANGE cannot be combined with mutations")
     ranges: list[tuple[int, int]] = []
@@ -674,6 +750,36 @@ def _stage_structured_mutations(
     if set(set_metadata) & set(remove_metadata):
         raise MaterializationError("Structured mutations both set and remove one field")
     return set_metadata, tuple(remove_metadata)
+
+
+def _structured_property_changes(
+    existing: Note, properties: tuple[PropertyChange, ...]
+) -> tuple[StructuredPropertyChangeContext, ...]:
+    """Derive actual authorized property changes from the authoritative note.
+
+    Exact no-op sets and removal of absent fields are excluded, so the writer receives only bounded
+    context that could require body reconciliation. Previous values always come from authoritative
+    metadata rather than planner output.
+    """
+    changes: list[StructuredPropertyChangeContext] = []
+    for change in properties:
+        previous_present = change.field in existing.metadata
+        previous_value = existing.metadata.get(change.field)
+        new_present = change.op == "set"
+        new_value = change.value if new_present else None
+        if previous_present == new_present and previous_value == new_value:
+            continue
+        changes.append(
+            StructuredPropertyChangeContext(
+                field=change.field,
+                previous_present=previous_present,
+                previous_value=previous_value if previous_present else None,
+                op=change.op,
+                new_present=new_present,
+                new_value=new_value,
+            )
+        )
+    return tuple(changes)
 
 
 def _validate_staged_note(

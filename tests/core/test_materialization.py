@@ -84,6 +84,7 @@ def unit(
     tags: tuple[TagChange, ...] = (),
     facts: tuple[str, ...] = (),
     intent: str = "amend",
+    update_semantics: str = "ordinary",
     references: tuple[KnowledgeReference, ...] = (),
 ) -> KnowledgeUnit:
     """Build one already-validated unit aimed at the fixture target."""
@@ -94,6 +95,7 @@ def unit(
         tags,
         facts,
         references,
+        update_semantics=update_semantics,
     )
 
 
@@ -201,19 +203,21 @@ def test_remove_exact_existing_fact_reaches_writer_and_persists_once(
 
 
 @pytest.mark.parametrize(
-    ("fact", "response", "present", "absent"),
+    ("fact", "response", "present", "absent", "update_semantics"),
     [
         (
             "Bea works at Thales.",
             {"operations": [{"op": "REPLACE", "old": "Airbus", "new": "Thales"}]},
             "Thales",
             "Airbus",
+            "ordinary",
         ),
         (
             "Bea no longer lives in Toulouse.",
             {"operations": [{"op": "REMOVE", "old": "- Bea lives in Toulouse.\n"}]},
             "Unrelated",
             "Bea lives in Toulouse",
+            "correction",
         ),
         (
             "Bea stopped piano.",
@@ -228,14 +232,22 @@ def test_remove_exact_existing_fact_reaches_writer_and_persists_once(
             },
             "stopped playing",
             "lives in Toulouse",
+            "ordinary",
         ),
     ],
 )
 def test_replace_remove_and_negation_apply_exact_spans(
-    repository: VaultRepository, fact: str, response: object, present: str, absent: str
+    repository: VaultRepository,
+    fact: str,
+    response: object,
+    present: str,
+    absent: str,
+    update_semantics: str,
 ) -> None:
     """A03-A05: replacements and removals preserve unrelated authoritative text."""
-    result = materialize(repository, unit(facts=(fact,)), FakeWriter(response))
+    result = materialize(
+        repository, unit(facts=(fact,), update_semantics=update_semantics), FakeWriter(response)
+    )
     body = repository.read_text("people/bea.md")
     assert result.operation is PersistenceOperation.UPDATED
     assert present in body and absent not in body
@@ -269,7 +281,9 @@ def test_property_only_and_tag_only_updates_skip_writer(
     """A07-A08: canonical properties and controlled tags mutate deterministically."""
     calls = count_persistence(monkeypatch, repository)
     result = materialize(
-        repository, unit(properties=(PropertyChange("relationship_to_user", "set", "friend"),))
+        repository,
+        unit(properties=(PropertyChange("relationship_to_user", "set", "friend"),)),
+        FakeWriter({"operations": [{"op": "NO_CHANGE"}]}),
     )
     assert result.operation is PersistenceOperation.UPDATED and calls == [1]
     result = materialize(

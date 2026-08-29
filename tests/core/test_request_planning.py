@@ -579,6 +579,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
         "cardinality",
         "destination_type",
         "intent",
+        "update_semantics",
         "properties",
         "tag_changes",
         "facts",
