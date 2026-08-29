@@ -8,6 +8,7 @@ from odyssey_core.atomic_facts import (
     find_unique_atomic_fact,
     parse_atomic_facts,
     remove_atomic_fact,
+    render_atomic_facts,
 )
 from odyssey_core.fact_selection import FactCandidate
 
@@ -32,6 +33,16 @@ def test_malformed_odyssey_marker_fails_closed() -> None:
     with pytest.raises(AtomicFactError):
         parse_atomic_facts("- fact\n  <!-- odyssey:fact request=R1 -->")
     assert parse_atomic_facts("<!-- user comment -->") == ()
+
+
+@pytest.mark.parametrize(
+    "fact",
+    ["line one\nline two", "line one\rline two", "human <!-- odyssey:fact text"],
+)
+def test_renderer_rejects_noncanonical_fact_text(fact: str) -> None:
+    """Keep canonical fact text single-line and outside Odyssey's reserved marker namespace."""
+    with pytest.raises(AtomicFactError):
+        render_atomic_facts((fact,), "R1", (0,), "2026-08-29")
 
 
 def test_exact_marked_fact_removal_leaves_neighbors_untouched() -> None:
