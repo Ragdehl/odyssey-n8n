@@ -220,6 +220,7 @@ def test_failed_create_defers_dependent_but_runs_independent(
     assert source_result.status is UnitStatus.DEFERRED
     assert source_result.dependencies
     assert independent_result.status is UnitStatus.SUCCEEDED
+    assert result.status is ApplicationStatus.PARTIAL
 
 
 def test_execute_request_create_does_not_forward_fact_selector(
