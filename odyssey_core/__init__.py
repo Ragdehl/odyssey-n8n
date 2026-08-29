@@ -33,6 +33,7 @@ from .context import (
     get_context,
     validate_context_filters,
 )
+from .git_history import GitHistoryRecorder, GitHistoryResult, HistoryRecorder, HistoryStatus
 from .identity import (
     ExactEntityCandidate,
     ExactEntityLookupError,
@@ -136,6 +137,10 @@ __all__ = [
     "ActionStatus",
     "ApplicationResult",
     "ApplicationStatus",
+    "GitHistoryRecorder",
+    "GitHistoryResult",
+    "HistoryRecorder",
+    "HistoryStatus",
     "DependencyEvidence",
     "PendingWorkRecorder",
     "PendingWorkStatus",
