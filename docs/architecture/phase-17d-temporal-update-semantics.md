@@ -51,7 +51,11 @@ fact 2  Marta se va a mudar a Lyon.
 
 Atomicity matters because later duplicate detection, retrieval, correction/removal, provenance, and possible fact-level indexing need to address one unit of knowledge without rewriting unrelated content.
 
-A fact does not need an unrelated generated UUID. The minimal durable locator is derived from the already-established logical `request_id` plus a deterministic request-wide fact ordinal.
+A fact does not need an unrelated generated UUID. Within one note, the minimal durable locator is
+derived from the already-established logical `request_id` plus a deterministic plan fact ordinal.
+For `all_matching`, one planned fact may materialize in several notes; a derived global key is
+`(note_id, request_id, ordinal)`. The hidden marker keeps only request and ordinal because its
+containing note already supplies `note_id`.
 
 ```text
 request R123
@@ -88,7 +92,8 @@ Conceptually:
 
 The exact localized wording of the visible capture heading is presentation policy; the machine parser must not depend on natural-language heading text for identity/provenance. The hidden fact marker is the durable machine correlation.
 
-A single request may create facts in several notes. The request-wide ordinal therefore remains unique within that logical request regardless of destination note.
+A single request may create facts in several notes. The same planned ordinal may recur in different
+notes for `all_matching`, while remaining unique within each containing note/request pair.
 
 Do not embed Git commit SHAs in facts. The correlation remains:
 
