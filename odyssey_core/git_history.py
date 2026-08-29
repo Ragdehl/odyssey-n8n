@@ -90,29 +90,32 @@ class GitHistoryRecorder:
         root = self._git_root()
         if repository.root.resolve() != root:
             return GitHistoryResult(HistoryStatus.FAILED, reason="repository root mismatch")
+        requested_ids = tuple(dict.fromkeys(affected_stable_note_ids))
+        if not requested_ids:
+            return GitHistoryResult(HistoryStatus.NO_CHANGES)
+
+        matches_by_id = {stable_id: [] for stable_id in requested_ids}
+        for path in repository.list_markdown_paths():
+            try:
+                note = parse_note(repository.read_text(path))
+                validate_note(note, schema)
+            except (NoteFormatError, NoteValidationError, OSError):
+                return GitHistoryResult(HistoryStatus.FAILED, reason="canonical attribution failed")
+            stable_id = note.metadata.get("id")
+            if stable_id in matches_by_id:
+                matches_by_id[stable_id].append(path)
+
         paths: list[str] = []
-        for stable_id in dict.fromkeys(affected_stable_note_ids):
-            matches: list[str] = []
-            for path in repository.list_markdown_paths():
-                try:
-                    note = parse_note(repository.read_text(path))
-                    validate_note(note, schema)
-                except (NoteFormatError, NoteValidationError, OSError):
-                    return GitHistoryResult(
-                        HistoryStatus.FAILED, reason="canonical attribution failed"
-                    )
-                if note.metadata.get("id") == stable_id:
-                    matches.append(path)
+        for stable_id in requested_ids:
+            matches = matches_by_id[stable_id]
             if len(matches) != 1:
                 return GitHistoryResult(HistoryStatus.FAILED, reason="affected ID cannot be mapped")
             paths.append(matches[0])
-        paths = sorted(set(paths))
+        paths.sort()
         if set(paths) & snapshot.dirty_paths:
             return GitHistoryResult(
                 HistoryStatus.SKIPPED_UNSAFE, reason="affected path was pre-dirty"
             )
-        if not paths:
-            return GitHistoryResult(HistoryStatus.NO_CHANGES)
         self._run(root, "add", "--", *paths)
         diff = self._run(root, "diff", "--cached", "--quiet", "--", *paths, check=False)
         if diff.returncode == 0:
