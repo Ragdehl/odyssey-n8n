@@ -44,6 +44,11 @@ class VaultRepository:
             raise VaultAccessError("Vault root is unusable")
         self._root = root
 
+    @property
+    def root(self) -> Path:
+        """Return the resolved canonical filesystem root owned by this vault repository."""
+        return self._root
+
     def contains_filesystem_path(self, path: Path) -> bool:
         """Report whether a filesystem path resolves beneath the configured vault.
 

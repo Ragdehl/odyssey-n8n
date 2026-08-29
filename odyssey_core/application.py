@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .context import ContextPackage, get_context
+from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
 from .materialization import (
     BoundedNoteWriter,
     materialize_create,
@@ -143,6 +144,7 @@ class ApplicationResult:
     affected_stable_note_ids: tuple[str, ...]
     planning_error: str | None = None
     pending_work: PendingWorkStatus = PendingWorkStatus()
+    history: GitHistoryResult = GitHistoryResult.disabled()
 
 
 def allocate_request_id() -> str:
@@ -168,6 +170,7 @@ def execute_request(
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
     pending_recorder: PendingWorkRecorder | None = None,
+    history_recorder: HistoryRecorder | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -188,6 +191,7 @@ def execute_request(
         preflight_id_allocator: Optional deterministic CREATE ID allocator.
         semantic_limit: Existing bounded semantic-resolution candidate budget.
         pending_recorder: Optional create-only durable pending-work recorder.
+        history_recorder: Optional request-level local Git history recorder.
 
     Returns:
         One stable request result. Planning failures return no action results and perform no writes.
@@ -210,9 +214,22 @@ def execute_request(
             (),
             (),
             _safe_reason(error),
+            history=(
+                GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="planning failed")
+                if history_recorder is not None
+                else GitHistoryResult.disabled()
+            ),
         )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a RequestPlan")
+
+    history_snapshot: GitHistorySnapshot | None = None
+    history_error: str | None = None
+    if history_recorder is not None:
+        try:
+            history_snapshot = history_recorder.begin(request_id)
+        except Exception as error:
+            history_error = _safe_reason(error)
 
     actions: list[ActionResult] = []
     affected: list[str] = []
@@ -250,8 +267,34 @@ def execute_request(
         actions.append(result)
         affected.extend(_affected_ids(result))
     result = ApplicationResult(
-        request_id, _overall_status(actions), tuple(actions), tuple(affected)
+        request_id,
+        _overall_status(actions),
+        tuple(actions),
+        tuple(affected),
+        history=(
+            GitHistoryResult(HistoryStatus.FAILED, reason=history_error)
+            if history_error is not None
+            else GitHistoryResult.disabled()
+        ),
     )
+    if history_recorder is not None and history_error is None and history_snapshot is not None:
+        try:
+            history = history_recorder.record(
+                request_id=request_id,
+                snapshot=history_snapshot,
+                affected_stable_note_ids=result.affected_stable_note_ids,
+                repository=repository,
+                schema=schema,
+            )
+        except Exception as error:
+            history = GitHistoryResult(HistoryStatus.FAILED, reason=_safe_reason(error))
+        result = ApplicationResult(
+            result.request_id,
+            result.status,
+            result.action_results,
+            result.affected_stable_note_ids,
+            history=history,
+        )
     if not any(action.status is not ActionStatus.COMPLETED for action in actions):
         return result
     if pending_recorder is None:
@@ -260,6 +303,7 @@ def execute_request(
             result.status,
             result.action_results,
             result.affected_stable_note_ids,
+            history=result.history,
             pending_work=PendingWorkStatus(
                 required=True, error="pending recorder is not configured"
             ),
@@ -274,6 +318,7 @@ def execute_request(
             result.status,
             result.action_results,
             result.affected_stable_note_ids,
+            history=result.history,
             pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
         )
     return ApplicationResult(
@@ -281,6 +326,7 @@ def execute_request(
         result.status,
         result.action_results,
         result.affected_stable_note_ids,
+        history=result.history,
         pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
     )
 

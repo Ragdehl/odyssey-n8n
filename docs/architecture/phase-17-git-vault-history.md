@@ -227,6 +227,10 @@ affected paths ∩ pre-request dirty paths
 
 Unrelated pre-existing dirty files are not an error and are never staged.
 
+The commit operation must remain path-restricted as well as staging-restricted. In particular, the
+adapter uses an equivalent of `git commit --only -- <affected paths>` so unrelated files that were
+already staged by the user remain staged and cannot enter the Odyssey request commit.
+
 The adapter must not use broad commands such as `git add .`, `git add -A`, or a repository-wide commit shortcut.
 
 ## Commit metadata
