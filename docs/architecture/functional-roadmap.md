@@ -59,7 +59,7 @@ Canonical detail for these completed phases lives in:
 
 ## Current phase
 
-➡️ **Phase 17D — append-first atomic facts + correction/removal semantics**
+✅ **Phase 17D — append-first atomic facts + correction/removal semantics**
 
 Before the first real E2E, refine the canonical entity-note body so ordinary knowledge is logically
 atomic and append-first while the physical source of truth remains one Markdown note per entity.
@@ -96,7 +96,7 @@ default.
 
 ## Remaining intended sequence
 
-⬜ **Phase 17E — pre-E2E schema utility + retrieval validation**
+➡️ **Phase 17E — pre-E2E schema utility + retrieval validation**
 
 Before n8n/E2E integration, challenge the initial schema and retrieval assumptions against the product
 model established in 17D.
