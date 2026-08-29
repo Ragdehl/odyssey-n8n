@@ -91,6 +91,99 @@ An application should decide what its domain means and how users interact with i
 
 A normal Android/web/desktop application would usually call an HTTP/SDK boundary. An AI assistant would usually use MCP. Both should reach the same underlying knowledge and safety rules.
 
+## Zero-configuration first, explicit structure when wanted
+
+For the personal product, the default experience should be **capture first, structure automatically**. A user should be able to empty their head in ordinary language without first choosing a note type, defining properties, filling a form, selecting tags, or maintaining a personal ontology.
+
+```text
+"Álex tiene dos hijos, Asi y Asae. Creo que uno tiene siete años."
+                         |
+                         v
+                      Odyssey
+                         |
+             +-----------+-----------+
+             |                       |
+             v                       v
+       existing structure      safe new knowledge
+       reused/updated           prepared or clarified
+```
+
+Odyssey should map incoming knowledge to existing validated types/properties when it can do so safely. It must not invent schema merely because a sentence contains a new concept; ambiguity or a missing structural contract should remain explicit rather than silently creating arbitrary metadata.
+
+Automatic structure is the default UX, **not a restriction on user control**. A user should eventually be able to inspect and edit structured properties directly and, through an explicit supported schema-extension flow, create custom properties or types when the built-in/domain structure does not fit their needs.
+
+Examples might include a user deciding that they personally want:
+
+```text
+person
+  met_at
+  children_names
+
+recipe
+  freezer_friendly
+```
+
+Likewise, an application/domain pack may need to register its own domain structure, for example:
+
+```text
+project
+  status
+  deadline
+  owner
+```
+
+The intended ownership hierarchy is therefore conceptually:
+
+```text
+Core schema
+    |
+    +--> registered domain/app extensions
+    |
+    `--> explicit user-defined extensions
+              |
+              v
+        canonical note values
+```
+
+The exact schema-extension mechanism is future work. Neither an LLM nor an application may add arbitrary frontmatter fields silently. User-created and app-provided properties must eventually pass through one explicit validated extension contract covering at least ownership, namespacing/collisions, type compatibility, migrations, installation/removal where applicable, and schema validation.
+
+The product principle is: **simple by default, structured underneath, inspectable and extensible when the user wants control.**
+
+### Agent-guided schema evolution
+
+A future user-facing schema editor should preferably be conversational rather than requiring the user to design schema JSON or manually understand ontology mechanics.
+
+Conceptually, a dedicated **schema coach** (agent or equivalent bounded assistant) could guide an explicit property/type creation request:
+
+```text
+"Quiero guardar dónde conocí a cada persona"
+                 |
+                 v
+          schema coach
+                 |
+      +----------+----------+
+      |                     |
+      v                     v
+existing overlap?      missing details?
+      |                     |
+reuse/extend          ask user briefly
+      +----------+----------+
+                 |
+                 v
+        proposed schema change
+                 |
+           user approval
+                 |
+                 v
+      validated schema update
+```
+
+Before proposing a new property/type, the schema coach should inspect the current registered schema and relevant domain extensions for semantic overlap, aliases, near-duplicates, incompatible value types, or an existing structure that should be reused instead. It should ask only the missing questions needed to define a safe property, such as intended meaning, applicable note type(s), value type/cardinality, whether the value links to another entity type, and any validation constraints that matter.
+
+The assistant should explain meaningful collisions or migration consequences in ordinary language. It may recommend reusing or extending an existing property rather than creating another one. It must not apply a schema mutation merely because the model suggested it: the output is a **proposal**, followed by explicit user approval and deterministic validation/migration checks at the schema boundary.
+
+This is intended to preserve zero-configuration use while still allowing non-technical users to evolve their personal ontology safely. The detailed schema-coach prompt, model choice, proposal format, overlap detection, migration behavior, and rollback contract remain future implementation work and require their own evidence before production use.
+
 ## User-owned and configurable knowledge storage
 
 **Odyssey must not require canonical Markdown notes to live inside a centrally hosted Odyssey server.**
@@ -207,7 +300,7 @@ After Odyssey is being used end-to-end, revisit at least:
 2. whether the existing local filesystem vault abstraction is sufficient or needs a storage interface;
 3. which deployment modes matter first: local, self-hosted, or managed;
 4. what real application should become the first reusable domain extension;
-5. how domain schema extensions can remain safe and reversible;
+5. how domain schema extensions can remain safe and reversible for both applications and explicit user-defined structure;
 6. when authentication and authorization become necessary;
 7. how Obsidian/direct-file access should coexist with future fine-grained permissions;
 8. whether third-party SDK/app support has enough demonstrated demand to justify a public extension contract.
