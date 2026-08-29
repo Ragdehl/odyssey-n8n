@@ -18,6 +18,7 @@ from odyssey_core.atomic_facts import (
     remove_atomic_fact,
     render_atomic_facts,
 )
+from odyssey_core.fact_selection import AtomicFactSelector, FactCandidate, validate_fact_selection
 from odyssey_core.notes import Note, parse_note, validate_note
 from odyssey_core.persistence import (
     EntityPersistenceResult,
@@ -370,6 +371,7 @@ def materialize_update(
     rendered_facts: tuple[str, ...] | None = None,
     request_id: str | None = None,
     fact_ordinals: tuple[int, ...] | None = None,
+    fact_selector: AtomicFactSelector | None = None,
 ) -> EntityPersistenceResult:
     """Materialize one resolved existing-note UPDATE with one guarded persistence operation.
 
@@ -417,6 +419,7 @@ def materialize_update(
     content = existing.content
     if request_id is not None and unit.intent == "remove":
         try:
+            existing_atomic = parse_atomic_facts(existing.content)
             targets = tuple(
                 target
                 for description in prepared_facts
@@ -429,6 +432,21 @@ def materialize_update(
         ):
             for target in sorted(targets, key=lambda item: item.start, reverse=True):
                 content = remove_atomic_fact(content, target)
+            remaining_facts = ()
+        elif existing_atomic:
+            if fact_selector is None or len(prepared_facts) != 1:
+                raise MaterializationError("Atomic fact removal is ambiguous or lacks a selector")
+            candidates = tuple(FactCandidate(fact.locator, fact.text) for fact in existing_atomic)
+            selected = validate_fact_selection(
+                fact_selector.select(
+                    decision.existing_note_id or "", prepared_facts[0], candidates
+                ),
+                candidates,
+            )
+            if selected.outcome != "MATCH":
+                raise MaterializationError(f"Atomic fact selector returned {selected.outcome}")
+            target = next(fact for fact in existing_atomic if fact.locator == selected.locator)
+            content = remove_atomic_fact(content, target)
             remaining_facts = ()
     if request_id is not None and unit.intent != "remove":
         if fact_ordinals is None or len(fact_ordinals) != len(prepared_facts):

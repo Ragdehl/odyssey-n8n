@@ -25,6 +25,8 @@ from odyssey_core import (
     materialize_update,
     update_entity,
 )
+from odyssey_core.atomic_facts import append_atomic_facts
+from odyssey_core.notes import parse_note, serialize_note
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -198,6 +200,71 @@ def test_remove_exact_existing_fact_reaches_writer_and_persists_once(
     assert len(writer.requests) == 1
     assert calls == [1]
     assert "Bea works at Airbus." not in repository.read_text("people/bea.md")
+
+
+def test_request_context_removes_marked_fact_without_writer(repository: VaultRepository) -> None:
+    """Use parser-derived atomic spans for explicit marked-fact removal and preserve neighbors."""
+    existing = repository.read_text("people/bea.md")
+    note = parse_note(existing)
+    note.content = append_atomic_facts(
+        "Legacy prose.", ("Bea works at Airbus.", "Bea plays piano."), "old", (0, 1), NOW
+    )
+    repository.replace_text("people/bea.md", serialize_note(note))
+    removal = unit(intent="remove", facts=("Bea works at Airbus.",))
+    result = materialize_update(
+        removal,
+        decision(),
+        repository=repository,
+        schema=SCHEMA,
+        actor="test",
+        now=NOW,
+        request_id="remove-request",
+        fact_ordinals=(3,),
+    )
+    body = parse_note(repository.read_text("people/bea.md")).content
+    assert result.operation is PersistenceOperation.UPDATED
+    assert (
+        "Bea works at Airbus." not in body
+        and "Bea plays piano." in body
+        and "Legacy prose." in body
+    )
+
+
+def test_ordered_remove_then_add_correction_preserves_plan_ordinal(
+    repository: VaultRepository,
+) -> None:
+    """Compose correction as safe removal followed by append with its original ordinal."""
+    note = parse_note(repository.read_text("people/bea.md"))
+    note.content = append_atomic_facts(
+        "Legacy prose.", ("Bea works at Airbus.", "Bea plays piano."), "old", (0, 1), NOW
+    )
+    repository.replace_text("people/bea.md", serialize_note(note))
+    remove = unit(intent="remove", facts=("Bea works at Airbus.",))
+    amend = unit(facts=("Bea works at Thales.",))
+    materialize_update(
+        remove,
+        decision(),
+        repository=repository,
+        schema=SCHEMA,
+        actor="test",
+        now=NOW,
+        request_id="correction-request",
+        fact_ordinals=(0,),
+    )
+    materialize_update(
+        amend,
+        decision(),
+        repository=repository,
+        schema=SCHEMA,
+        actor="test",
+        now=NOW,
+        request_id="correction-request",
+        fact_ordinals=(1,),
+    )
+    body = repository.read_text("people/bea.md")
+    assert "Bea works at Airbus." not in body
+    assert "Bea works at Thales." in body and "ordinal=1" in body
+    assert "Bea plays piano." in body and "Legacy prose." in body
 
 
 @pytest.mark.parametrize(

@@ -186,6 +186,25 @@ class RequestPlan:
     limitations: tuple[str, ...]
 
 
+def plan_fact_ordinals(plan: RequestPlan) -> tuple[tuple[int, ...], ...]:
+    """Return write-unit fact ordinals flattened in validated request-plan order.
+
+    Retrieval and delegated actions contribute no ordinals. The result is ordered by write action
+    and then unit, and remains unchanged by later execution success or failure.
+    """
+    if not isinstance(plan, RequestPlan):
+        raise TypeError("plan must be a RequestPlan")
+    next_ordinal = 0
+    result: list[tuple[int, ...]] = []
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            continue
+        for unit in action.units:
+            result.append(tuple(range(next_ordinal, next_ordinal + len(unit.facts))))
+            next_ordinal += len(unit.facts)
+    return tuple(result)
+
+
 def render_request_planner_prompt(
     schema: Mapping[str, Any], current_context: Mapping[str, str]
 ) -> str:

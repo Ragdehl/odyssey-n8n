@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .context import ContextPackage, get_context
+from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
 from .materialization import (
     BoundedNoteWriter,
@@ -167,6 +168,7 @@ def execute_request(
     now: str,
     context_limit: int,
     writer: BoundedNoteWriter | None = None,
+    fact_selector: AtomicFactSelector | None = None,
     request_id_factory: Callable[[], str] = allocate_request_id,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
@@ -261,6 +263,7 @@ def execute_request(
                 preflight_id_allocator,
                 request_id,
                 unit_ordinals,
+                fact_selector,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -390,6 +393,7 @@ def _execute_write(
     id_allocator: Callable[[], str] | None,
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
+    fact_selector: AtomicFactSelector | None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     cardinalities = {unit.cardinality for unit in action.units}
@@ -447,6 +451,7 @@ def _execute_write(
         writer,
         request_id,
         unit_ordinals,
+        fact_selector,
     )
     return ActionResult(
         action_index, action.kind, _action_status(results), unit_results=tuple(results)
@@ -504,6 +509,7 @@ def _execute_single_units(
     writer: BoundedNoteWriter | None,
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
+    fact_selector: AtomicFactSelector | None,
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
     pending_by_source: dict[int, list[PendingReference]] = {}
@@ -581,6 +587,7 @@ def _execute_single_units(
                     rendered_facts=rendered_facts[index],
                     request_id=request_id,
                     fact_ordinals=unit_ordinals[index],
+                    fact_selector=fact_selector,
                 )
             elif unit.intent == "delete":
                 persisted = materialize_delete(

@@ -9,6 +9,7 @@ from odyssey_core.atomic_facts import (
     parse_atomic_facts,
     remove_atomic_fact,
 )
+from odyssey_core.fact_selection import FactCandidate
 
 
 def test_atomic_facts_render_parse_and_note_scoped_identity() -> None:
@@ -46,3 +47,13 @@ def test_exact_marked_fact_removal_leaves_neighbors_untouched() -> None:
         and "Has two children." in result
         and "Legacy prose." in result
     )
+
+
+def test_locator_is_note_scoped_for_global_identity() -> None:
+    """Use the same request/ordinal locator in distinct containing notes without collision."""
+    fact = parse_atomic_facts(
+        append_atomic_facts("", ("Works at Airbus.",), "R1", (0,), "2026-08-29")
+    )[0]
+    assert fact.locator == "R1:0"
+    assert fact.global_identity("marta") != fact.global_identity("ada")
+    assert FactCandidate(fact.locator, fact.text).text == "Works at Airbus."

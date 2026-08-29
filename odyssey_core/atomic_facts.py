@@ -28,6 +28,11 @@ class AtomicFact:
         """Return the derived globally unique ``(note_id, request_id, ordinal)`` identity."""
         return (note_id, self.request_id, self.ordinal)
 
+    @property
+    def locator(self) -> str:
+        """Return the note-scoped request/ordinal locator supplied to bounded selection."""
+        return f"{self.request_id}:{self.ordinal}"
+
 
 def parse_atomic_facts(body: str) -> tuple[AtomicFact, ...]:
     """Parse only Odyssey-marked list-item facts while leaving legacy Markdown untouched.
