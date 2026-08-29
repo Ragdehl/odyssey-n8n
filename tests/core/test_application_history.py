@@ -37,7 +37,9 @@ class FakePlanner:
 class FakeHistoryRecorder:
     """Provide controllable request-level history behavior for application tests."""
 
-    def __init__(self, *, begin_error: Exception | None = None, record_error: Exception | None = None):
+    def __init__(
+        self, *, begin_error: Exception | None = None, record_error: Exception | None = None
+    ):
         self.begin_error = begin_error
         self.record_error = record_error
         self.begin_calls = 0
