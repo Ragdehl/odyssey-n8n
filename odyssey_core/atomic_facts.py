@@ -81,7 +81,14 @@ def render_atomic_facts(
     heading = f"## Added {now[:10]}"
     blocks = [heading]
     for text, ordinal in zip(facts, ordinals, strict=True):
-        if not isinstance(ordinal, int) or ordinal < 0 or not text.strip():
+        if (
+            not isinstance(ordinal, int)
+            or ordinal < 0
+            or not text.strip()
+            or "\n" in text
+            or "\r" in text
+            or _MARKER_PREFIX in text
+        ):
             raise AtomicFactError("Atomic fact rendering input is invalid")
         blocks.append(
             f"- {text.strip()}\n  <!-- odyssey:fact request={request_id} ordinal={ordinal} -->"
