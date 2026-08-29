@@ -587,7 +587,6 @@ def _execute_single_units(
                     rendered_facts=rendered_facts[index],
                     request_id=request_id,
                     fact_ordinals=unit_ordinals[index],
-                    fact_selector=fact_selector,
                 )
             elif unit.intent == "delete":
                 persisted = materialize_delete(
@@ -609,6 +608,7 @@ def _execute_single_units(
                     rendered_facts=rendered_facts[index],
                     request_id=request_id,
                     fact_ordinals=unit_ordinals[index],
+                    fact_selector=fact_selector,
                 )
         except Exception as error:
             results[index] = UnitResult(

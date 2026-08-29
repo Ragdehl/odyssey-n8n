@@ -18,7 +18,7 @@ from openai import OpenAI  # noqa: E402
 
 from odyssey_core.fact_selection import (  # noqa: E402
     FactCandidate,
-    fact_selection_schema,
+    OpenAILunaFactSelector,
     validate_fact_selection,
 )
 from odyssey_core.request_planning import OpenAIRequestPlanner, WriteAction  # noqa: E402
@@ -52,15 +52,6 @@ LUNA_CASES = [
 ]
 
 
-def usage(response: Any) -> dict[str, Any] | None:
-    value = getattr(response, "usage", None)
-    return (
-        value.model_dump(mode="json")
-        if value is not None and hasattr(value, "model_dump")
-        else None
-    )
-
-
 def write_row(path: Path, row: dict[str, Any]) -> None:
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -68,13 +59,13 @@ def write_row(path: Path, row: dict[str, Any]) -> None:
         os.fsync(stream.fileno())
 
 
-def run(output_dir: Path) -> None:
+def run(output_dir: Path, *, luna_only: bool = False) -> None:
     """Run the fixed planner and selector matrices and persist inspectable evidence."""
     output_dir.mkdir(parents=True, exist_ok=True)
     client = OpenAI(max_retries=0)
     planner = OpenAIRequestPlanner(client, SCHEMA, CONTEXT)
     result_path = output_dir / "results.jsonl"
-    for case_id, text in SOL_CASES:
+    for case_id, text in () if luna_only else SOL_CASES:
         row: dict[str, Any] = {
             "suite": "sol",
             "case": case_id,
@@ -118,6 +109,7 @@ def run(output_dir: Path) -> None:
         except Exception as exc:
             row.update({"pass": False, "reason": f"{type(exc).__name__}: {exc}"})
         write_row(result_path, row)
+    selector = OpenAILunaFactSelector()
     for case_id, description, raw_candidates, expected in LUNA_CASES:
         candidates = tuple(FactCandidate(locator, text) for locator, text in raw_candidates)
         row = {
@@ -129,37 +121,7 @@ def run(output_dir: Path) -> None:
             "reasoning": "medium",
         }
         try:
-            response = client.responses.create(
-                model="gpt-5.6-luna",
-                reasoning={"effort": "medium"},
-                store=False,
-                input=[
-                    {
-                        "role": "system",
-                        "content": "Select only from supplied atomic fact locators. Return MATCH, NO_MATCH, or AMBIGUOUS.",
-                    },
-                    {
-                        "role": "user",
-                        "content": json.dumps(
-                            {
-                                "note_id": "marta",
-                                "description": description,
-                                "candidates": [asdict(c) for c in candidates],
-                            }
-                        ),
-                    },
-                ],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "odyssey_fact_selection",
-                        "strict": True,
-                        "schema": fact_selection_schema(),
-                    }
-                },
-            )
-            row["usage"] = usage(response)
-            value = json.loads(response.output_text)
+            value = selector.select("marta", description, candidates)
             selected = validate_fact_selection(value, candidates)
             ok = selected.outcome == expected and (
                 selected.locator in {c.locator for c in candidates}
@@ -199,4 +161,6 @@ def run(output_dir: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, required=True)
-    run(parser.parse_args().output_dir)
+    parser.add_argument("--luna-only", action="store_true")
+    arguments = parser.parse_args()
+    run(arguments.output_dir, luna_only=arguments.luna_only)
