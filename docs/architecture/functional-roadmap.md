@@ -122,6 +122,18 @@ Git remains audit/history/recovery infrastructure, never source of truth. Remote
 push/pull, and multi-device conflict handling remain separate operational decisions. See
 [Phase 17C local Git vault history](phase-17-git-vault-history.md).
 
+⬜ **Phase 17D — temporal knowledge preservation and correction semantics**
+
+Before the first real E2E, distinguish **corrections of false knowledge** from **real-world state
+transitions**. A transition such as `Marta ha dejado Airbus y ahora trabaja en Thales` should update the
+current structured property while preserving the prior true Airbus fact as canonical historical
+knowledge. A correction such as `me equivoqué: Marta nunca trabajó en Airbus` may remove or replace the
+false fact under the existing safety rules.
+
+Do not rely on Git history as the only place where past truth survives, and do not introduce generic
+event sourcing. Preserve explicit dates when supplied and do not invent unsupported temporal precision.
+See [Phase 17D temporal update semantics](phase-17d-temporal-update-semantics.md).
+
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
 
 Expose the stable application boundary through n8n and prove one real bounded E2E use case. n8n remains
