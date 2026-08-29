@@ -37,6 +37,12 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **COND
   retrieval/resolution/bulk behavior.
 - ✅ **Phase 16.7C — type migration:** one active note can change canonical type in place while
   preserving stable ID/path and failing closed on information loss or missing required destination data.
+- ✅ **Phase 17A — executable Core application flow + stable `request_id`:** one logical request composes
+  retrieval, bounded writes, dependencies, bulk behavior, and typed deferred evidence.
+- ✅ **Phase 17B — durable pending work:** actionable incomplete post-plan work survives process exit
+  outside canonical knowledge, keyed by the same `request_id`.
+- ✅ **Phase 17C — local Git history per logical request:** successful Markdown mutations can be audited
+  and recovered through request-correlated local Git commits without making Git the source of truth.
 
 Canonical detail for these completed phases lives in:
 
@@ -47,99 +53,90 @@ Canonical detail for these completed phases lives in:
 - [Phase 16.7A bulk UPDATE](phase-16-7a-bulk-update.md)
 - [Phase 16.7B soft DELETE](phase-16-7b-soft-delete.md)
 - [Phase 16.7C type migration](phase-16-7c-type-migration.md)
+- [Phase 17A executable application flow](phase-17a-application-flow.md)
+- [Phase 17B durable pending work](phase-17b-durable-pending-work.md)
+- [Phase 17C local Git vault history](phase-17-git-vault-history.md)
 
 ## Current phase
 
-✅ **Phase 17A — executable Core application flow + stable `request_id`**
+➡️ **Phase 17D — append-first atomic facts + correction/removal semantics**
 
-Compose the already-validated planner, retrieval, target/reference preflight, CREATE/UPDATE/DELETE/type
-migration, and deterministic bulk UPDATE primitives into one small application boundary that can execute
-one logical user request and return a stable typed result.
+Before the first real E2E, refine the canonical entity-note body so ordinary knowledge is logically
+atomic and append-first while the physical source of truth remains one Markdown note per entity.
 
 ```text
-raw request
-    |
-    v
-validated RequestPlan
-    |
-    v
-17A application executor
-    |
-    +--> retrieve
-    +--> bounded writes
-    +--> cross-unit dependencies
-    +--> deterministic bulk UPDATE
-    `--> typed deferred/delegated evidence
+one entity Markdown note
+        |
+        +--> sparse current structured state when justified
+        |
+        `--> append-first atomic facts
+                |
+                +--> request-correlated provenance
+                +--> human-visible capture chronology
+                +--> exact/reliable duplicate suppression
+                `--> targeted correction/removal when prior knowledge is false or explicitly deleted
 ```
 
-Phase 17A introduces one stable `request_id` per logical request. The same identifier is intentionally
-reused later by durable pending work, Git history, semantic request history, and operational tracing.
-It is generated once at the application boundary, not once per action or note.
+This phase replaces the assumption that ordinary real-world transitions require destructive free-text
+rewrites. A statement such as `Marta ahora trabaja en Thales` should normally become new canonical
+knowledge without erasing the earlier Airbus knowledge. Explicit correction and removal remain special
+mutation paths that may address an earlier fact safely.
 
-17A is a **composition boundary, not a generic workflow engine**. It reuses existing Core primitives
-rather than reimplementing their semantics.
+Keep the representation minimal: a fact does not need its own unrelated UUID when a request-derived
+locator such as `request_id + ordinal` is sufficient. Avoid event sourcing, universal historical/current
+state flags, redundant per-fact timestamps, or Git SHAs embedded in facts unless implementation evidence
+shows a concrete need. The human-readable note should still expose useful capture chronology while
+preserving separately any real-world date supplied by the user.
 
-Ordinary 17A automated tests use deterministic fakes/mocks/stubs for Sol, contextual reasoning, Luna,
-and other model/external boundaries. Normal pytest/CI must run without OpenAI credentials or network,
-spend no model tokens, and never depend on model variability. Live evidence is required only if a
-production model-facing contract materially changes, following `AGENTS.md`.
-
-See the canonical [Phase 17A executable application-flow contract](phase-17a-application-flow.md).
-
-Implementation lives in `odyssey_core.application.execute_request()`. It composes the existing planner,
-retrieval, reference-preflight/binding, materialization, deterministic bulk UPDATE, and delegation
-boundaries without adding a workflow engine. One generated `request_id` is returned through the typed
-application result for every outcome.
+The governing direction is documented in [Odyssey knowledge-model direction](knowledge-model-direction.md).
+The earlier [Phase 17D temporal update semantics](phase-17d-temporal-update-semantics.md) preserves the
+problem statement and evidence that motivated this refinement; implementation should reconcile that
+contract with the simpler append-first model rather than continuing free-form temporal rewriting by
+default.
 
 ## Remaining intended sequence
 
-✅ **Phase 17B — durable pending work**
+⬜ **Phase 17E — pre-E2E schema utility + retrieval validation**
 
-Persist actionable incomplete post-plan work so ambiguity, dependency failures, failed/deferred targets,
-partial bulk failures, and delegated work survive process exit without semantic reconstruction. Reuse the
-17A `request_id` and preserve the validated incomplete action together with typed execution evidence.
+Before n8n/E2E integration, challenge the initial schema and retrieval assumptions against the product
+model established in 17D.
 
-Keep this state outside canonical knowledge. The approved Phase 17B storage boundary uses
-`/data/odyssey/state/pending/` as durable non-knowledge application state and deterministic JSON,
-not canonical Markdown notes. This avoids adding ontology types or exclusions to vault scanning,
-indexing, resolution, and bulk membership. A fully completed request creates no pending record; a
-planning failure before a valid `RequestPlan` is operational failure rather than Phase 17B state.
-Pending-persistence failure must be explicit and must not roll back successful note mutations.
+### Schema utility review
 
-See the canonical [Phase 17B durable pending-work contract](phase-17b-durable-pending-work.md).
+Review every current canonical type and property and classify it as `KEEP`, `DEFER`, or `REMOVE` based
+primarily on **direct user value**, not internal token savings. A type/property earns its complexity when
+it unlocks a recurring user-visible view, action, filter, comparison, calculation, automation, or domain
+behavior that ordinary facts cannot provide as well.
 
-➡️ **Phase 17C — local Git history per logical request**
+Preserve the future emergent-schema direction without implementing a generic schema engine yet:
+Odyssey may later detect repeated knowledge patterns and propose a useful new type/property in ordinary
+product language, but schema mutation requires explicit user approval. A later approved promotion must
+be able to backfill existing knowledge and safely relink historical mentions to newly canonical entities
+using normal identity/reference safety; ambiguous mentions remain unresolved/pending rather than being
+blindly rewritten.
 
-Add the smallest local Git adapter around the authoritative Markdown vault. Per-note materializers
-remain unaware of Git. Prefer one local commit for the successful Markdown mutations caused by one
-logical request and correlate it through:
+### Retrieval benchmark
 
-```text
-Odyssey-Request: <request_id>
-```
+Benchmark the existing whole-note MiniLM strategy against fact-level and combined entity+fact retrieval.
+This is a retrieval experiment only. Previous fragment-level evidence showed that smaller fragments can
+increase semantic similarity but are **not safe autonomous write authority**; do not forget or overextend
+that result.
 
-Git remains audit/history/recovery infrastructure, never source of truth. Remote backup, automatic
-push/pull, and multi-device conflict handling remain separate operational decisions. See
-[Phase 17C local Git vault history](phase-17-git-vault-history.md).
+Measure recall, practical Top-K behavior, long-note dilution, Spanish/French/contextual cases, stronger-
+model input-token reduction, latency, and local resource cost before changing production retrieval.
+Do not replace the current local MiniLM model merely because another model might be stronger; first test
+whether the better retrieval unit itself solves the observed dilution problem.
 
-⬜ **Phase 17D — temporal knowledge preservation and correction semantics**
-
-Before the first real E2E, distinguish **corrections of false knowledge** from **real-world state
-transitions**. A transition such as `Marta ha dejado Airbus y ahora trabaja en Thales` should update the
-current structured property while preserving the prior true Airbus fact as canonical historical
-knowledge. A correction such as `me equivoqué: Marta nunca trabajó en Airbus` may remove or replace the
-false fact under the existing safety rules.
-
-Do not rely on Git history as the only place where past truth survives, and do not introduce generic
-event sourcing. Preserve explicit dates when supplied and do not invent unsupported temporal precision.
-See [Phase 17D temporal update semantics](phase-17d-temporal-update-semantics.md).
+See [Odyssey knowledge-model direction](knowledge-model-direction.md) for the canonical rationale and
+migration/relinking constraints.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
 
-Expose the stable application boundary through n8n and prove one real bounded E2E use case. n8n remains
-responsible for external triggers/integrations while domain behavior stays in `odyssey_core`.
+Expose the stable application boundary through n8n and prove one real bounded E2E use case **after** the
+17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains responsible
+for external triggers/integrations while domain behavior stays in `odyssey_core`.
 
-⬜ **Phase 19 — end-to-end hardening, tracing, and evidence-driven history refinements**
+⬜ **Phase 19 — end-to-end hardening, tracing, manual-edit ingestion, and evidence-driven refinements**
 
 Harden the proven flow with repeatable integration/failure-path evidence, idempotency, operational
 behavior, and measured performance. Add low-invasive operational tracing around real LLM,
@@ -147,6 +144,11 @@ persistence, and external boundaries rather than manual logging in every domain 
 
 Phase 17A already propagates `request_id`. Introduce a separate `trace_id` only if real retries or
 subtraces prove that one logical request needs multiple operational traces.
+
+Define direct user/Obsidian filesystem edits as a later ingestion boundary: detect external changes
+without self-trigger loops, inspect/ingest the diff, preserve user wording where possible, normalize only
+what is required, rebuild derived state, and audit through the normal request/Git boundary. Git remains
+history/diff infrastructure rather than the always-on filesystem trigger.
 
 Reassess semantic request history after the first real E2E. The product goal remains to answer questions
 such as “what did I ask yesterday?” and “what changed when I told you Marta moved?”, but the earlier
@@ -165,6 +167,9 @@ The detailed cross-phase direction is centralized in
   Markdown remains user/workspace-owned and storage-location agnostic rather than being required to live
   in a centrally hosted server. Domain applications/extensions, SDKs, deployment modes, and permissions
   remain later contracts after real E2E evidence. See [Odyssey platform direction](odyssey-platform-direction.md).
+- 💡 **Emergent schema coach:** after real usage justifies it, observe recurring knowledge patterns and
+  propose types/properties in terms of the user capability they unlock; require explicit approval and
+  safe backfill/relinking rather than silent ontology growth.
 - 💡 **Human-in-the-loop:** build on Phase 17B durable pending work when ambiguity, dependency failure,
   partial success, or explicit user control requires clarification/approval.
 - 💡 **Mention-to-alias promotion:** keep current reference binding deterministic; add semantic alias
@@ -184,7 +189,7 @@ The detailed cross-phase direction is centralized in
   selector before reducing strong-model context.
 - 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces
   with safe usage/cost/error metadata, redaction, and retention controls once the E2E exists.
-- 💡 **Multi-user ownership/sharing:** design authentication, authorization, and storage boundaries first.
+- 💡 **Multi-user ownership/sharing:** design authentication/authorization/storage boundaries first.
 - 💡 **Performance/index optimization:** optimize only from measurements.
 - 💡 **Proactive Memory/Context Layer:** non-disruptive resurfacing only after the direct E2E flow proves
   useful.
