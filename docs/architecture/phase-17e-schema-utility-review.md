@@ -49,11 +49,11 @@ When an application later proposes a type/property, the extension boundary shoul
 
 Detailed domain properties should generally be decided when the corresponding application is designed, rather than pre-modelled now. Phase 17E only needs to preserve clear ownership and avoid prematurely expanding Core ontology.
 
-## Decisions so far
+## Type decisions
 
 ### `concept` — KEEP
 
-**Ownership:** likely Core-owned generic type.
+**Ownership:** Core-owned generic type.
 
 **Note value:** an abstract subject with stable identity can accumulate knowledge and links across contexts.
 
@@ -105,6 +105,85 @@ Detailed domain properties should generally be decided when the corresponding ap
 
 **Type-specific properties:** none now. Fields such as brand, barcode, category, or other commerce structure should be designed only when the application proves the user-facing need. Transaction-specific values such as a paid price should not automatically become product properties when they naturally belong to a purchase occurrence.
 
+### `purchase` — KEEP
+
+**Ownership:** domain-owned in a future Purchases application; retained in the current registry until the extension boundary exists.
+
+**Note value:** a concrete purchase occurrence can deserve stable identity because products, store, documents, prices, totals, and later questions can all refer back to the same transaction.
+
+**Type value:** distinguishes the transaction/occurrence from reusable product and store identities and enables purchase-specific retrieval and later analytics.
+
+**Type-specific properties:** none now. Transaction structure such as store, purchase date, total, currency, and line items should be designed with the Purchases application.
+
+**Boundary to preserve:** a purchase is the transaction/occurrence; a receipt or ticket is a document that may evidence that purchase. Do not collapse the two concepts automatically.
+
+### `recipe` — KEEP
+
+**Ownership:** domain-owned in a future Recipes/cooking application; retained in the current registry until the extension boundary exists.
+
+**Note value:** a recipe is reusable knowledge with stable identity that can accumulate ingredients, preparation, variations, comments, and links over time.
+
+**Type value:** enables recipe-only retrieval and lets a cooking application distinguish a recipe from products/ingredients or ordinary concepts.
+
+**Type-specific properties:** none now. Structure such as servings, preparation time, ingredients, cooking time, or freezer suitability should be designed only when the cooking application demonstrates the concrete behavior it needs.
+
+### `document` — KEEP
+
+**Ownership:** Core-owned generic type.
+
+**Note value:** a document or document-like artifact can have stable identity independent from the physical PDF/DOCX/image and can accumulate facts, links, provenance, and later questions around that same artifact.
+
+**Type value:** documents occur across many domains and applications, so Core benefits from distinguishing document identities from concepts, people, tasks, projects, or domain transactions.
+
+**Type-specific properties:** none now. Possible fields such as document date, issuer, file path, MIME type, expiry date, or document subtype should be introduced only when real cross-domain or app behavior justifies them.
+
+**Boundary to preserve:** the canonical Markdown note represents knowledge about the document; it does not require the source file itself to be embedded in that note.
+
+### `person` — KEEP
+
+**Ownership:** Core-owned generic type.
+
+**Note value:** a person has reusable identity across essentially every domain and can accumulate facts and relationships over time.
+
+**Type value:** lets Core resolve and retrieve people as stable entities independent from any particular contacts, family, project, or business application.
+
+**Current type-specific properties:** defer them from the minimal Core contract:
+
+- `birth_date` — **DEFER from Core**. Useful structured knowledge, but its concrete behavior belongs naturally to future People/Contacts/Family capabilities unless cross-domain evidence later justifies making it universal.
+- `relationship_to_user` — **DEFER from Core**. A relationship can remain ordinary knowledge initially; future people/family or multi-user semantics may require a richer relationship model than one user-relative string.
+
+The type remains Core-owned even if these current properties move to a later domain extension.
+
+### `journal_entry` — KEEP
+
+**Ownership:** domain-owned in a future Journaling/capture application; retained in the current registry until the extension boundary exists.
+
+**Note value:** a journal entry represents a personal experience, reflection, or occurrence situated in time when there may be no stable external entity that should own the knowledge. A present-tense personal reflection such as `Hoy estoy pensando si cambiar el sofá` may legitimately be journal knowledge when the thing being preserved is the user's lived reflection at that moment.
+
+**Type value:** enables diary/time-oriented retrieval without forcing personal experiences or reflections into `concept` merely because they lack another entity class.
+
+**`entry_date`: KEEP with the Journaling domain.** It is semantically central to the entry because it records the date the journal content refers to, which may differ from Odyssey's `created_at` lifecycle timestamp. The domain should own that property together with the type.
+
+### Type review summary
+
+```text
+CORE-OWNED GENERIC TYPES
+├─ concept
+├─ document
+└─ person
+
+DOMAIN / APP-OWNED TYPES
+├─ project       -> Projects/Tasks
+├─ task          -> Projects/Tasks
+├─ store         -> Purchases
+├─ product       -> Purchases/commerce
+├─ purchase      -> Purchases
+├─ recipe        -> Recipes/cooking
+└─ journal_entry -> Journaling
+```
+
+All current types remain `KEEP` as useful registered types for now. The important Phase 17E change is ownership: not every useful type belongs permanently to Core. Domain-owned types remain in the single current registry only as an implementation bridge until a safe schema-extension/registration boundary exists.
+
 ## Type composition decision
 
 ### Multiple simultaneous canonical types — DEFER
@@ -131,7 +210,7 @@ The primary type answers:
 
 A subtype, if later activated, should represent a genuine specialization of that parent type, for example a possible future `document -> invoice` relationship when the specialization unlocks useful behavior. The canonical schema already reserves an optional controlled `subtype`, but planner capabilities currently exclude it; Phase 17E does not activate subtype behavior merely because the field exists.
 
-Roles or relationships should not be modeled as additional types when an existing structured property expresses them more directly. For example, a child remains `type: person`; if the relationship to the user matters for recurring filtering or behavior, `relationship_to_user: child` is the appropriate structure rather than a second `child` type.
+Roles or relationships should not be modeled as additional types when an existing structured property expresses them more directly. For example, a child remains `type: person`; if the relationship to the user matters for recurring filtering or behavior, a future relationship property/contract is more appropriate than a second `child` type.
 
 Reconsider multi-type notes only after a concrete case demonstrates that **one stable identity genuinely needs the independent user-facing capabilities/property contracts of two canonical types at the same time**. At that point, evaluate composition conflicts explicitly, including required properties, incompatible type combinations, property-name collisions, migration semantics, and planner/retrieval complexity.
 
@@ -214,4 +293,4 @@ These are candidates, not reserved names. The naming family must not imply a mon
 
 ## Next review target
 
-`purchase`
+Common metadata fields (`id`, `name`, `type`, `subtype`, lifecycle metadata, aliases, tags).
