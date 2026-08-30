@@ -7,11 +7,12 @@ import sqlite3
 import sys
 import types
 from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
-from odyssey_core.notes import Note, serialize_note
+from odyssey_core.notes import Note, serialize_note, validate_note
 from odyssey_core.semantic import (
     FastEmbedTextEmbedder,
     SemanticEntityIndex,
@@ -112,6 +113,12 @@ def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
         name="Beatriz Alonso",
         origin="spouse",
     )
+    schema = json.loads((REPOSITORY_ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
+    validate_note(note, schema)
 
     projection = build_semantic_retrieval_text(note, "people/Beatriz Alonso.md")
 

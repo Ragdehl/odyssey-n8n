@@ -12,7 +12,7 @@ import pytest
 
 from odyssey_core.contextual import ContextualProviderError, ContextualResolutionError
 from odyssey_core.identity import ExactEntityLookupError
-from odyssey_core.notes import Note, serialize_note
+from odyssey_core.notes import Note, serialize_note, validate_note
 from odyssey_core.resolution import (
     ExistingEntityOutcome,
     ResolutionSource,
@@ -281,6 +281,7 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
         name="Ada Lovelace",
         origin="colleague",
     )
+    validate_note(note, schema)
     first = build_provider_evidence(note, "people/Ada Lovelace.md")
     second = build_provider_evidence(note, "people/Ada Lovelace.md")
     assert first == second
