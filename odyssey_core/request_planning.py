@@ -139,7 +139,7 @@ class PropertyChange:
 
 @dataclass(frozen=True, slots=True)
 class TagChange:
-    """Legacy tag mutation value accepted only when reading historical plans."""
+    """Explicit generic free-form tag mutation requested by the user."""
 
     op: str
     value: str

@@ -33,6 +33,10 @@ SOL_CASES = [
     ("correction", "Me equivoqué: Marta no trabaja en Airbus; trabaja en Thales."),
     ("explicit_remove", "Borra lo de que Marta tiene dos hijos."),
     ("reference_regression", "La amiga de Marta ahora trabaja en Airbus."),
+    ("person_sentinel", "Guarda que Carlos nació el 3 de mayo de 1980."),
+    ("journal_property_sentinel", "Hoy estoy pensando si cambiar el sofá."),
+    ("type_sentinel", "Busca mis notas de tipo proyecto sobre Odyssey."),
+    ("ordinary_write_sentinel", "Marta trabaja en Thales."),
 ]
 LUNA_CASES = [
     ("unique_match", "borra el hecho del piano", [("r:1", "Marta toca el piano.")], "MATCH"),
@@ -87,7 +91,7 @@ def run(output_dir: Path, *, luna_only: bool = False) -> None:
             if case_id == "atomic_split":
                 ok = len(facts) == 3
             elif case_id == "property_fact":
-                ok = "relationship_to_user" in properties and bool(facts)
+                ok = bool(facts) and "birth_date" not in properties
             elif case_id == "unregistered_concept":
                 ok = bool(facts) and "employer" not in properties
             elif case_id == "correction":
@@ -98,6 +102,14 @@ def run(output_dir: Path, *, luna_only: bool = False) -> None:
                 ok = any(u.intent == "remove" and u.facts for u in units)
             elif case_id == "reference_regression":
                 ok = any("{{ref:0}}" in f for f in facts) and any(u.references for u in units)
+            elif case_id == "person_sentinel":
+                ok = bool(facts) and "birth_date" not in properties
+            elif case_id == "journal_property_sentinel":
+                ok = bool(facts) and all(field == "entry_date" for field in properties)
+            elif case_id == "type_sentinel":
+                ok = any(getattr(action, "kind", None) == "retrieve" for action in plan.actions)
+            elif case_id == "ordinary_write_sentinel":
+                ok = bool(facts) and all(u.intent in {"record", "amend"} for u in units)
             else:
                 ok = bool(facts) and all(u.intent in {"record", "amend"} for u in units)
             row.update(
