@@ -25,10 +25,6 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
 
     Raises:
         NoteValidationError: If the value violates its declared type or constraints.
-
-    Example:
-        A definition with ``{"value_type": "integer", "constraints": {"minimum": 1}}``
-        accepts ``1`` and raises :class:`NoteValidationError` for ``0``.
     """
     value_type = definition.get("value_type")
     if value_type == "string":
@@ -41,6 +37,21 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
         valid_type = isinstance(value, list) and all(isinstance(item, str) for item in value)
     elif value_type == "date":
         valid_type = isinstance(value, str) and _is_date(value)
+    elif value_type == "actor_pair":
+        # Phase 17E writes the canonical [human, app] pair. A legacy non-empty string remains
+        # readable during migration and is interpreted as historical app-only provenance.
+        valid_type = (
+            isinstance(value, str)
+            and bool(value.strip())
+        ) or (
+            isinstance(value, list)
+            and len(value) == 2
+            and all(
+                item is None or (isinstance(item, str) and bool(item.strip()))
+                for item in value
+            )
+            and any(item is not None for item in value)
+        )
     else:
         raise NoteValidationError(f"Schema declares unsupported value type for {field_id!r}")
     if not valid_type:
@@ -59,14 +70,7 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
 
 
 def _is_date(value: str) -> bool:
-    """Return whether text is a strict ISO calendar date without a time component.
-
-    Args:
-        value: Candidate date text.
-
-    Returns:
-        True only for a valid ``YYYY-MM-DD`` calendar date.
-    """
+    """Return whether text is a strict ISO calendar date without a time component."""
     if len(value) != 10 or value[4:5] != "-" or value[7:8] != "-":
         return False
     try:
@@ -76,14 +80,7 @@ def _is_date(value: str) -> bool:
 
 
 def _is_date_time(value: Any) -> bool:
-    """Return whether text is an ISO date-time with an explicit UTC offset.
-
-    Args:
-        value: Candidate date-time metadata value.
-
-    Returns:
-        True only for a valid time-zone-aware ISO date-time string.
-    """
+    """Return whether text is an ISO date-time with an explicit UTC offset."""
     if not isinstance(value, str) or "T" not in value:
         return False
     try:
@@ -98,22 +95,6 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     This checks only invariants visible in the current note. Historical guarantees,
     such as identity stability and revision progression, require lifecycle context and
     are deliberately outside this validator.
-
-    Args:
-        note: Generic note instance to validate.
-        schema: Parsed canonical schema definition supplied by the composition layer.
-
-    Raises:
-        NoteValidationError: If note content, metadata, type, subtype, or schema version
-            violates the supplied schema contract.
-
-    Example:
-        Load the canonical JSON schema, then validate a parsed or constructed note::
-
-            validate_note(note, schema)
-
-        Successful validation returns ``None``; a contract violation raises
-        :class:`NoteValidationError` with the failing field or invariant.
     """
     if not isinstance(note, Note):
         raise NoteValidationError("Expected an Odyssey Note")
@@ -124,13 +105,11 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     try:
         universal = {definition["id"]: definition for definition in schema["metadata_fields"]}
         types = {definition["id"]: definition for definition in schema["types"]}
-        registered_tags = {definition["id"] for definition in schema["tags"]}
+        registered_tags = {definition["id"] for definition in schema.get("tags", [])}
         canonical_version = schema["schema_version"]
     except (KeyError, TypeError):
         raise NoteValidationError("Supplied schema is not a usable canonical schema") from None
 
-    # Universal requirements are checked before selecting a note type because type-specific
-    # validation depends on a valid universal ``type`` field.
     missing_universal = sorted(
         field_id
         for field_id, definition in universal.items()
