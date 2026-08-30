@@ -157,6 +157,25 @@ knowledge resolution/retrieval before E2E evidence justifies the representation.
 representation reuses `request_id` and never stores hidden model reasoning. See
 [Future semantic request history](phase-17-request-records.md).
 
+## Committed post-E2E product work
+
+The following directions are **planned product work**, not optional ideas. Their exact phase numbers and
+implementation order should be assigned after the first real E2E and Phase 19 hardening expose the right
+boundaries; do not implement speculative infrastructure before then.
+
+- ⬜ **Composable applications / capability dependencies:** Odyssey applications should be able to reuse
+  lower-level capabilities or applications instead of reimplementing them independently. A target shape
+  is `Reminders -> Tasks -> Projects`, with explicit dependencies and higher-level installation able to
+  install/activate required dependencies. The first implementation should define the smallest safe
+  dependency contract, prevent circular dependency graphs, and keep Odyssey Core as the shared canonical
+  knowledge/write boundary.
+- ⬜ **Multi-user shared knowledge and collaboration:** implement real shared knowledge after the Core/E2E
+  boundary is stable. Use a shared household shopping/list scenario as an early validation case: one user
+  can add missing items and another authorized user sees and can update the same shared knowledge promptly.
+  This work must cover authentication, read/write authorization, private-vs-shared boundaries,
+  synchronization/event propagation, conflict handling, and storage design before claiming privacy or
+  collaboration guarantees.
+
 ## Conditional later work
 
 The detailed cross-phase direction is centralized in
@@ -180,13 +199,8 @@ The detailed cross-phase direction is centralized in
   or benchmarks justify bounded graph traversal.
 - 💡 **Structured analytics / aggregations:** deterministic counts, sums, averages, and grouping over
   rebuildable structured/index data rather than loading the vault into an LLM.
-- 💡 **App/capability delegation and composition:** route planned delegated actions later through compact
-  capability contracts. Applications may depend explicitly on reusable lower-level capabilities/apps
-  (for example Reminders -> Tasks -> Projects) so higher-level products compose proven behavior rather
-  than reimplement it incompatibly. Define the smallest dependency/installation contract only when the
-  first real composed applications exist; avoid circular dependencies and keep Core as the shared safe
-  knowledge boundary. Purchase/ticket, project, and translation workflows remain expected application
-  families.
+- 💡 **App/capability delegation:** route planned delegated actions later through compact capability
+  contracts; purchase/ticket, project, and translation workflows remain expected application families.
 - 💡 **Type-aware writing profiles:** absent by default; add only when a note type demonstrates a real
   semantic body-organization need.
 - 💡 **Tag vocabulary evolution:** keep explicit-only controlled tags until evidence justifies change.
@@ -194,10 +208,6 @@ The detailed cross-phase direction is centralized in
   selector before reducing strong-model context.
 - 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces
   with safe usage/cost/error metadata, redaction, and retention controls once the E2E exists.
-- 💡 **Multi-user ownership/sharing:** design authentication/authorization/storage boundaries first, with
-  a shared household note/list (for example a jointly editable shopping list visible promptly to both
-  users) as an early concrete validation scenario for shared identity, read/write grants,
-  synchronization/event propagation, conflict handling, and the private-vs-shared boundary.
 - 💡 **Performance/index optimization:** optimize only from measurements.
 - 💡 **Proactive Memory/Context Layer:** non-disruptive resurfacing only after the direct E2E flow proves
   useful.
