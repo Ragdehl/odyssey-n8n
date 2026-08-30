@@ -973,7 +973,7 @@ def _validate_knowledge_unit(
     properties = _validate_property_changes(
         raw_properties, destination_type or target.type, intent, write_capabilities
     )
-    tag_changes = _validate_tag_changes(unit.get("tag_changes", []), intent, retrieval_capabilities)
+    tag_changes = _validate_tag_changes(unit.get("tag_changes", []), intent)
 
     raw_facts = unit["facts"]
     if (
@@ -1131,16 +1131,12 @@ def _validate_property_changes(
     return tuple(changes)
 
 
-def _validate_tag_changes(
-    raw_tag_changes: Any, intent: str, capabilities: Mapping[str, Any]
-) -> tuple[Any, ...]:
+def _validate_tag_changes(raw_tag_changes: Any, intent: str) -> tuple[TagChange, ...]:
     """Validate explicit free-form tag mutations for one knowledge unit.
 
     Args:
         raw_tag_changes: Untrusted ordered tag operations from the planner.
         intent: Write intent that restricts allowed tag operations.
-        capabilities: Selection capabilities containing the schema-derived tag registry.
-
     Returns:
         Immutable item-level tag changes in planner order.
 

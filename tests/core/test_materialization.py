@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -121,13 +122,14 @@ def materialize(
     knowledge: KnowledgeUnit,
     writer: FakeWriter | None = None,
     rendered_facts: tuple[str, ...] | None = None,
+    schema: dict[str, Any] = SCHEMA,
 ):
     """Execute the public UPDATE materialization API with stable lifecycle inputs."""
     return materialize_update(
         knowledge,
         decision(),
         repository=repository,
-        schema=SCHEMA,
+        schema=schema,
         actor="phase16-test",
         now="2026-08-25T11:00:00+02:00",
         writer=writer,
@@ -331,14 +333,29 @@ def test_replace_and_append_apply_once(
 def test_property_only_and_tag_only_updates_skip_writer(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A07-A08: generic tags mutate deterministically without writer involvement."""
+    """A07-A08: generic properties and tags mutate without writer involvement."""
+    schema = deepcopy(SCHEMA)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Synthetic app-owned property for Core contract testing.",
+        }
+    ]
     calls = count_persistence(monkeypatch, repository)
     result = materialize(
-        repository, unit(tags=(TagChange("add", "review"), TagChange("remove", "idea")))
+        repository, unit(properties=(PropertyChange("origin", "set", "friend"),)), schema=schema
     )
     assert result.operation is PersistenceOperation.UPDATED and calls == [1]
+    result = materialize(
+        repository,
+        unit(tags=(TagChange("add", "review"), TagChange("remove", "idea"))),
+        schema=schema,
+    )
+    assert result.operation is PersistenceOperation.UPDATED and calls == [2]
     raw = repository.read_text("people/bea.md")
-    assert 'tags: ["review"]' in raw
+    assert 'origin: "friend"' in raw and 'tags: ["review"]' in raw
 
 
 def test_structured_and_free_text_commit_together(

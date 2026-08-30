@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ from odyssey_core import (
     execute_bulk_update,
 )
 from odyssey_core.notes import Note, serialize_note
-from odyssey_core.request_planning import KnowledgeUnit
+from odyssey_core.request_planning import KnowledgeUnit, PropertyChange
 from odyssey_core.storage import VaultRepository
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -126,21 +127,30 @@ def test_property_only_bulk_update_uses_deterministic_materialization(
     repository: VaultRepository,
 ) -> None:
     """Apply one canonical property mutation per selected note without a writer."""
+    schema = deepcopy(SCHEMA)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Synthetic app-owned property for Core contract testing.",
+        }
+    ]
     unit = KnowledgeUnit(
         SelectionCriteria(None, "all people", "person", (), None),
         "amend",
+        (PropertyChange("origin", "set", "friend"),),
         (),
-        (TagChange("add", "friend"),),
         (),
         (),
         "all_matching",
     )
     result = execute_bulk_update(
-        unit, repository=repository, schema=SCHEMA, actor="pytest", now=NOW
+        unit, repository=repository, schema=schema, actor="pytest", now=NOW
     )
     assert result.status == "SUCCESS" and len(result.succeeded) == 3
     for path in ("ana.md", "other.md", "zoe.md"):
-        assert "friend" in repository.read_text(path)
+        assert 'origin: "friend"' in repository.read_text(path)
 
 
 def test_free_text_bulk_update_uses_one_writer_request_per_note(
