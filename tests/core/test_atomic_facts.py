@@ -25,7 +25,16 @@ def test_atomic_facts_render_parse_and_note_scoped_identity() -> None:
     facts = parse_atomic_facts(body)
     assert [fact.text for fact in facts] == ["Works at Thales.", "Has two children."]
     assert facts[0].global_identity("marta") == ("marta", "R1", 4)
-    assert "## Added 2026-08-29" in body and "Legacy prose." in body
+    assert "## Añadido el 29 de agosto de 2026" in body and "Legacy prose." in body
+
+
+def test_capture_heading_uses_calendar_day_not_timestamp_details() -> None:
+    """Expose the request capture day once in readable prose without per-fact timestamps."""
+    rendered = render_atomic_facts(
+        ("Works at Thales.",), "R1", (0,), "2026-08-30T23:45:00+02:00"
+    )
+    assert rendered.startswith("## Añadido el 30 de agosto de 2026\n- Works at Thales.")
+    assert "23:45" not in rendered
 
 
 def test_malformed_odyssey_marker_fails_closed() -> None:
