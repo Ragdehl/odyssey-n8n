@@ -23,9 +23,37 @@ What deterministic filter, sort, comparison, calculation, reminder, automation, 
 
 Structure is not justified merely because it saves LLM tokens or is easy to model.
 
+## Schema ownership boundary
+
+Odyssey Core owns the **mechanism** for registered schema, not the product meaning of every domain type.
+
+```text
+Odyssey Core
+    |
+    +--> registry / validation
+    +--> safe create/update/delete
+    +--> retrieval / links / history
+    |
+    `--> registered schema values
+            |
+            +--> Core-owned generic types
+            +--> app/domain-owned types and properties
+            `--> future explicit user-defined extensions
+```
+
+A domain application owns the semantics and user-facing behavior of the types/properties it contributes. Core should be able to validate, store, retrieve, mutate, link, and audit those values without implementing the application's business workflow.
+
+Therefore Phase 17E should not force every current type to remain permanently Core-owned merely because it currently lives in the single canonical `note-schema.json`. Until a safe extension/registration mechanism exists, useful domain types may remain in the current registry as an implementation bridge.
+
+When an application later proposes a type/property, the extension boundary should detect overlap with existing registered schema and prefer reuse when the proposed structure represents the same fundamental entity class. Roles or app-specific states should normally be properties rather than duplicate types. True new entity classes may be registered as domain-owned types through the future validated extension contract.
+
+Detailed domain properties should generally be decided when the corresponding application is designed, rather than pre-modelled now. Phase 17E only needs to preserve clear ownership and avoid prematurely expanding Core ontology.
+
 ## Decisions so far
 
 ### `concept` — KEEP
+
+**Ownership:** likely Core-owned generic type.
 
 **Note value:** an abstract subject with stable identity can accumulate knowledge and links across contexts.
 
@@ -37,11 +65,25 @@ Structure is not justified merely because it saves LLM tokens or is easy to mode
 
 ### `project` — KEEP
 
+**Ownership:** domain-owned in the future Projects/Tasks application; retained in the current registry until the extension boundary exists.
+
 **Note value:** a project deserves persistent identity because decisions, ideas, tasks, documents, facts, and links can accumulate around the same initiative over time.
 
 **Type value:** enables project-only views/retrieval and a stable project identity that later project-oriented applications or workflows can target.
 
-**Type-specific properties:** none. Keep none in Core for now. Fields such as `status`, `deadline`, `priority`, `owner`, or `progress` should be introduced only when a concrete recurring user capability demonstrates that they belong in canonical Odyssey knowledge rather than in a project application/domain layer.
+**Type-specific properties:** none now. Project-specific fields such as `status`, `deadline`, `priority`, `owner`, or `progress` should be defined by the Projects/Tasks domain when that application is designed, then registered through Odyssey's schema boundary rather than becoming ad hoc frontmatter.
+
+### `task` — KEEP
+
+**Ownership:** domain-owned in the future Projects/Tasks application; retained in the current registry until the extension boundary exists.
+
+**Note value:** an actionable item can deserve persistent identity when context, facts, documents, projects, dependencies, and later updates accumulate around the same action.
+
+**Type value:** distinguishes actionable knowledge from ordinary facts/concepts and enables task-only views, retrieval, and later task application behavior.
+
+**Type-specific properties:** none now. Expected future domain properties such as `status`, `due_date`, project membership, or parent/subtask relations should be designed with the Projects/Tasks application. Odyssey Core should supply the generic validated property/reference mechanism rather than owning task workflow semantics.
+
+**Future schema capability to revisit:** relationships such as `project: [[Odyssey]]` or `parent_task: [[Another task]]` suggest a future typed entity-reference property contract. Do not add that contract during this review without the application use case and extension design.
 
 ## Type composition decision
 
@@ -77,4 +119,4 @@ This keeps Odyssey from introducing ontology composition machinery before there 
 
 ## Next review target
 
-`task`
+`store`
