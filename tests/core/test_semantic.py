@@ -103,7 +103,6 @@ def write_note(vault: Path, path: str, note: Note) -> None:
 
 
 def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
-    pytest.skip("Fixture uses deferred person properties")
     """Project names, aliases, type, domain metadata, and readable link labels."""
     note = valid_note(
         "person-beatriz",
@@ -111,6 +110,7 @@ def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
         "Partner of [[people/Xavi|Xavi]]. Related to [[Atomic notes]].",
         aliases=["Bea"],
         name="Beatriz Alonso",
+        origin="spouse",
     )
 
     projection = build_semantic_retrieval_text(note, "people/Beatriz Alonso.md")
@@ -118,7 +118,7 @@ def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
     assert "Name: Beatriz Alonso" in projection
     assert "Aliases: Bea" in projection
     assert "Type: person" in projection
-    assert "Relationship To User: spouse" in projection
+    assert "Origin: spouse" in projection
     assert "Partner of Xavi. Related to Atomic notes." in projection
     assert "created_at" not in projection
     assert "[[" not in projection

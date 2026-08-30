@@ -1,6 +1,7 @@
 """Provider-free planner contract regressions for append-first Phase 17D."""
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -17,10 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
 
 
-def _plan(units: list[dict]) -> object:
+def _plan(units: list[dict], schema: dict = SCHEMA) -> object:
     """Validate a minimal provider-shaped write plan."""
     return validate_request_plan(
-        {"actions": [{"kind": "write", "units": units}], "limitations": []}, SCHEMA
+        {"actions": [{"kind": "write", "units": units}], "limitations": []}, schema
     )
 
 
@@ -78,19 +79,23 @@ def test_planner_rejects_noncanonical_atomic_fact_text(fact: str) -> None:
 
 
 def test_property_conversational_fact_and_unregistered_concept_contracts() -> None:
-    pytest.skip("Deferred person relationship property")
     """Retain registered conversational knowledge while leaving employer unregistered."""
+    schema = deepcopy(SCHEMA)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
     action = _plan(
         [
             _unit(
                 ["Ahora es mi jefa."],
-                properties=[{"field": "relationship_to_user", "op": "set", "value": "jefa"}],
+                properties=[{"field": "origin", "op": "set", "value": "colleague"}],
             )
-        ]
+        ],
+        schema,
     )
     unit = action.actions[0].units[0]
-    assert unit.facts == ("Ahora es mi jefa.",) and unit.properties[0].value == "jefa"
-    unregistered = _plan([_unit(["Marta ahora trabaja en Thales."])])
+    assert unit.facts == ("Ahora es mi jefa.",) and unit.properties[0].value == "colleague"
+    unregistered = _plan([_unit(["Marta ahora trabaja en Thales."])], schema)
     assert unregistered.actions[0].units[0].properties == ()
 
 

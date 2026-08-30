@@ -358,6 +358,31 @@ def test_property_only_and_tag_only_updates_skip_writer(
     assert 'origin: "friend"' in raw and 'tags: ["review"]' in raw
 
 
+def test_update_tag_mutations_are_idempotent_and_revision_guarded(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Treat repeated tag adds and absent removes as deterministic no-ops."""
+    update_entity(
+        repository,
+        SCHEMA,
+        path="people/bea.md",
+        expected_id="person-bea",
+        set_metadata={"tags": ["review"]},
+        actor="setup",
+        now=NOW,
+    )
+    before = parse_note(repository.read_text("people/bea.md"))
+    calls = count_persistence(monkeypatch, repository)
+    add_result = materialize(repository, unit(tags=(TagChange("add", "review"),)))
+    remove_result = materialize(repository, unit(tags=(TagChange("remove", "missing"),)))
+    after = parse_note(repository.read_text("people/bea.md"))
+    assert add_result.operation is PersistenceOperation.NO_CHANGE
+    assert remove_result.operation is PersistenceOperation.NO_CHANGE
+    assert calls == [0]
+    assert after.metadata["revision"] == before.metadata["revision"]
+    assert after.metadata["tags"] == ["review"]
+
+
 def test_structured_and_free_text_commit_together(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:

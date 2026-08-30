@@ -267,8 +267,11 @@ def test_provider_failure_is_not_converted_to_unresolved(
 
 
 def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]) -> None:
-    pytest.skip("Fixture uses deferred person properties")
     """Retain identity evidence while removing lifecycle and retrieval-only information."""
+    schema = json.loads(json.dumps(schema))
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
     note = valid_note(
         "ada",
         "person",
@@ -276,6 +279,7 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
         "[[people/Xavi#Section|mi amigo]], and [[Xavi]].",
         aliases=["A. Lovelace"],
         name="Ada Lovelace",
+        origin="colleague",
     )
     first = build_provider_evidence(note, "people/Ada Lovelace.md")
     second = build_provider_evidence(note, "people/Ada Lovelace.md")
@@ -288,7 +292,7 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
     )
     assert "Name: Ada Lovelace" in first
     assert "Aliases: A. Lovelace" in first
-    assert "Relationship To User: colleague" in first
+    assert "Origin: colleague" in first
     assert "Xavi" in first and "[[" not in first
     assert "people/" not in first
     assert "Section" not in first

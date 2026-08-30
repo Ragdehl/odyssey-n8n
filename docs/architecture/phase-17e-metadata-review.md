@@ -47,7 +47,7 @@ Rules:
 - human identity uses stable user IDs, not display names;
 - this provenance is not itself the future authorization model. Authentication/authorization and sharing remain separate contracts.
 
-The active schema stores `created_by` and `updated_by` as named objects; bounded read normalization may still accept legacy scalar values at explicit compatibility boundaries.
+Canonical schema-v3 notes store and validate named `{human, app}` provenance objects. Legacy scalar actor inputs remain accepted only at the bounded persistence input-normalization boundary; no persisted-v2 read migration is defined here.
 
 ## Tags
 

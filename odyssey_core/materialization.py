@@ -735,8 +735,9 @@ def _stage_structured_mutations(
     for change in tag_changes:
         if not isinstance(change, TagChange):
             raise MaterializationError("KnowledgeUnit tag mutation is invalid")
-        if change.op == "add" and change.value not in tags:
-            tags.append(change.value)
+        if change.op == "add":
+            if change.value not in tags:
+                tags.append(change.value)
         elif change.op == "remove":
             tags = [tag for tag in tags if tag != change.value]
         else:
