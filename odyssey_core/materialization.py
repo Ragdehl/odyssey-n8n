@@ -25,6 +25,7 @@ from odyssey_core.persistence import (
     PersistenceOperation,
     create_entity,
     migrate_entity,
+    normalize_actor_provenance,
     soft_delete_entity,
     update_entity,
 )
@@ -182,19 +183,20 @@ def _stage_create_metadata(unit: KnowledgeUnit, preflight: UnitTargetPreflight) 
             metadata.pop(change.field, None)
         else:
             raise MaterializationError("KnowledgeUnit property mutation is invalid")
-
     tags: list[str] = []
     for change in unit.tag_changes:
         if not isinstance(change, TagChange):
             raise MaterializationError("CREATE tag mutation is invalid")
-        if change.op == "add" and change.value not in tags:
-            tags.append(change.value)
+        if change.op == "add":
+            if change.value not in tags:
+                tags.append(change.value)
         elif change.op == "remove":
             tags = [tag for tag in tags if tag != change.value]
         else:
-            raise MaterializationError("KnowledgeUnit tag mutation is invalid")
+            raise MaterializationError("CREATE tag mutation is invalid")
     if tags:
         metadata["tags"] = tags
+
     return metadata
 
 
@@ -211,8 +213,8 @@ def _validate_create_candidate(
         "id": entity_id,
         "created_at": now,
         "updated_at": now,
-        "created_by": actor,
-        "updated_by": actor,
+        "created_by": normalize_actor_provenance(actor),
+        "updated_by": normalize_actor_provenance(actor),
         "revision": 1,
         "schema_version": schema.get("schema_version"),
     }
@@ -719,7 +721,7 @@ def _load_existing_target(
 def _stage_structured_mutations(
     existing: Note, properties: tuple[PropertyChange, ...], tag_changes: tuple[TagChange, ...]
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
-    """Stage canonical properties and explicit controlled tags without persistence."""
+    """Stage canonical property and explicit free-form tag mutations without persistence."""
     set_metadata: dict[str, Any] = {}
     remove_metadata: list[str] = []
     for change in properties:
@@ -731,11 +733,14 @@ def _stage_structured_mutations(
             raise MaterializationError("KnowledgeUnit property mutation is invalid")
     tags = list(existing.metadata.get("tags", []))
     for change in tag_changes:
-        if change.op == "add" and change.value not in tags:
-            tags.append(change.value)
+        if not isinstance(change, TagChange):
+            raise MaterializationError("KnowledgeUnit tag mutation is invalid")
+        if change.op == "add":
+            if change.value not in tags:
+                tags.append(change.value)
         elif change.op == "remove":
             tags = [tag for tag in tags if tag != change.value]
-        elif change.op != "add":
+        else:
             raise MaterializationError("KnowledgeUnit tag mutation is invalid")
     if tag_changes:
         if tags:

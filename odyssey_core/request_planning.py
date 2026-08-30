@@ -41,13 +41,14 @@ Hard filters can permanently remove valid notes: apply a deterministic restricti
 
 RetrieveAction.plan and every KnowledgeUnit.target use the same selection shape. A non-null DelegateAction.selection obeys those same SelectionCriteria rules. Entity is only a safely explicit primary-name/alias candidate from the user's wording; it is never an Odyssey ID and does not assert repository existence. Do not turn every noun phrase or mentioned name into entity: contextual descriptions such as "la tienda de la esquina" and "la amiga de Marta" keep entity=null. A null link_scope means the direct note only, never a graph neighborhood. Ordinary knowledge about one entity uses that direct selection. When the user explicitly selects notes through linked, related, backlink/reference, direction, or bounded-hop graph meaning that the existing LinkScope can represent, link_scope is required; retaining that graph meaning only in query is insufficient. Its non-recursive anchor independently selects the one safe note identity. Do not execute traversal.
 
-Tags are explicit-only. Semantic words such as idea, reflection, decision, review, or question never create a tags filter or tag mutation. Emit tags contains a controlled canonical ID only when the user explicitly says tag/etiqueta, and emit add/remove TagChange only when explicitly requested. Never replace the complete tags array and never invent an unknown tag ID.
 
 Use DelegateAction only when the requested operation needs a specialized capability that RetrieveAction or WriteAction cannot express, such as aggregate computation (count, sum, average, grouping or comparison), analysis of an external artifact, or translation. DelegateAction.request preserves that specialized operation and its material constraints. DelegateAction.selection preserves the already interpreted Odyssey candidate set, including any representable link_scope, filters, type, or entity; it may be null only when the request has no safely representable Odyssey knowledge candidate set, as may occur for an external artifact. Do not keyword-route: recording an intention to compare is WriteAction, while asking for the comparison now is DelegateAction. DelegateAction never chooses an application, app_id, router, SQL, execution instruction, or result. Preserve independent action order. Do not create cross-action result bindings or placeholders.
 
 A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
 
 Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
+
+Tags are generic free-form metadata. Emit a tag filter only when the user explicitly asks to search by a tag, using `tags` with `contains`; emit `tag_changes` only when the user explicitly asks to add or remove a tag. Never infer tags from semantic words such as idea, decision, reflection, or review, and never require a registry or controlled vocabulary.
 
 Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independently meaningful knowledge into one atomic `facts` entry each, preserving their order and references. Use only record, amend, remove, and delete. For an explicit correction, use a remove unit describing the false prior fact plus a separate amend unit with corrected fact(s) and any authorized property change. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. For conversational knowledge that safely maps to a property, emit both the property and its human knowledge fact; properties do not replace retained knowledge. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
 
@@ -138,7 +139,7 @@ class PropertyChange:
 
 @dataclass(frozen=True, slots=True)
 class TagChange:
-    """Represent one explicit controlled-tag item mutation requested by the user."""
+    """Explicit generic free-form tag mutation requested by the user."""
 
     op: str
     value: str
@@ -301,9 +302,21 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                                 "enum": list(WRITE_INTENTS),
                                             },
                                             "properties": property_changes_schema,
-                                            "tag_changes": _tag_changes_json_schema(
-                                                retrieval_capabilities
-                                            ),
+                                            "tag_changes": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "op": {
+                                                            "type": "string",
+                                                            "enum": ["add", "remove"],
+                                                        },
+                                                        "value": {"type": "string"},
+                                                    },
+                                                    "required": ["op", "value"],
+                                                    "additionalProperties": False,
+                                                },
+                                            },
                                             "facts": {
                                                 "type": "array",
                                                 "items": {"type": "string"},
@@ -559,25 +572,6 @@ def _note_selector_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any
         },
         "required": ["entity", "query", "type", "filters"],
         "additionalProperties": False,
-    }
-
-
-def _tag_changes_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the controlled item-level tag mutation Structured Outputs shape."""
-    tag_values = capabilities["filters"].get("tags", {}).get("controlled_values", [])
-    if not tag_values:
-        raise RequestPlanningError("Canonical schema exposes no controlled tags")
-    return {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "op": {"type": "string", "enum": list(_TAG_CHANGE_OPS)},
-                "value": {"type": "string", "enum": tag_values},
-            },
-            "required": ["op", "value"],
-            "additionalProperties": False,
-        },
     }
 
 
@@ -952,15 +946,8 @@ def _validate_knowledge_unit(
         "references",
         "destination_type",
     }
-    legacy_with_cardinality = required - {"destination_type"}
-    legacy_required = required - {"cardinality", "destination_type"}
-    legacy_without_tags = legacy_required - {"tag_changes"}
-    if not isinstance(unit, dict) or (
-        set(unit) != required
-        and set(unit) != legacy_with_cardinality
-        and set(unit) != legacy_required
-        and set(unit) != legacy_without_tags
-    ):
+    minimum = required - {"cardinality", "destination_type", "tag_changes"}
+    if not isinstance(unit, dict) or not minimum.issubset(unit) or set(unit) - required:
         raise RequestPlanningError("KnowledgeUnit fields are invalid")
     target = _validate_selection(
         unit["target"], schema, retrieval_capabilities, label="KnowledgeUnit target"
@@ -986,9 +973,7 @@ def _validate_knowledge_unit(
     properties = _validate_property_changes(
         raw_properties, destination_type or target.type, intent, write_capabilities
     )
-
-    raw_tag_changes = unit.get("tag_changes", [])
-    tag_changes = _validate_tag_changes(raw_tag_changes, intent, retrieval_capabilities)
+    tag_changes = _validate_tag_changes(unit.get("tag_changes", []), intent)
 
     raw_facts = unit["facts"]
     if (
@@ -1001,7 +986,7 @@ def _validate_knowledge_unit(
         raise RequestPlanningError(
             "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers"
         )
-    if intent == "delete" and (raw_properties or raw_tag_changes or raw_facts):
+    if intent == "delete" and (raw_properties or tag_changes or raw_facts):
         raise RequestPlanningError(
             "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts"
         )
@@ -1146,16 +1131,12 @@ def _validate_property_changes(
     return tuple(changes)
 
 
-def _validate_tag_changes(
-    raw_tag_changes: Any, intent: str, capabilities: Mapping[str, Any]
-) -> tuple[TagChange, ...]:
-    """Validate explicit controlled-tag item mutations for one knowledge unit.
+def _validate_tag_changes(raw_tag_changes: Any, intent: str) -> tuple[TagChange, ...]:
+    """Validate explicit free-form tag mutations for one knowledge unit.
 
     Args:
         raw_tag_changes: Untrusted ordered tag operations from the planner.
         intent: Write intent that restricts allowed tag operations.
-        capabilities: Selection capabilities containing the schema-derived tag registry.
-
     Returns:
         Immutable item-level tag changes in planner order.
 
@@ -1164,30 +1145,33 @@ def _validate_tag_changes(
     """
     if not isinstance(raw_tag_changes, list):
         raise RequestPlanningError("KnowledgeUnit tag_changes must be a list")
-    allowed_ops = {
-        "record": {"add", "remove"},
-        "amend": {"add", "remove"},
-        "remove": {"remove"},
-        "delete": set(),
-    }[intent]
-    controlled_values = set(capabilities["filters"].get("tags", {}).get("controlled_values", []))
-    if not controlled_values:
-        raise RequestPlanningError("Canonical schema exposes no controlled tags")
-    changes: list[TagChange] = []
-    seen: set[str] = set()
-    for raw in raw_tag_changes:
-        if not isinstance(raw, dict) or set(raw) != {"op", "value"}:
-            raise RequestPlanningError("Each tag change must contain op and value")
-        op, value = raw["op"], raw["value"]
-        if op not in _TAG_CHANGE_OPS or op not in allowed_ops:
-            raise RequestPlanningError("KnowledgeUnit tag operation is incompatible with intent")
-        if not isinstance(value, str) or value not in controlled_values:
-            raise RequestPlanningError("KnowledgeUnit tag value is not a controlled tag")
-        if value in seen:
-            raise RequestPlanningError("KnowledgeUnit tag changes must not duplicate or conflict")
-        seen.add(value)
-        changes.append(TagChange(op=op, value=value))
-    return tuple(changes)
+    if intent == "delete" and raw_tag_changes:
+        raise RequestPlanningError("Delete intent cannot mutate tags")
+    if intent == "remove" and any(
+        item.get("op") == "add" for item in raw_tag_changes if isinstance(item, dict)
+    ):
+        raise RequestPlanningError("Remove intent cannot add tags")
+    result = []
+    seen = set()
+    for item in raw_tag_changes:
+        if not isinstance(item, dict) or set(item) != {"op", "value"}:
+            raise RequestPlanningError("Tag change is invalid")
+        op, value = item["op"], item["value"]
+        if (
+            op not in _TAG_CHANGE_OPS
+            or not isinstance(value, str)
+            or not value.strip()
+            or value != value.strip()
+            or "\n" in value
+            or "\r" in value
+        ):
+            raise RequestPlanningError("Tag change is invalid")
+        key = value
+        if key in seen:
+            raise RequestPlanningError("Duplicate or conflicting tag change")
+        seen.add(key)
+        result.append(TagChange(op, value))
+    return tuple(result)
 
 
 def _validate_planner_filters(

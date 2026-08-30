@@ -108,10 +108,10 @@ def test_schema_accepts_optional_boolean_deleted_and_rejects_non_boolean(schema:
         "type": "person",
         "created_at": NOW,
         "updated_at": NOW,
-        "created_by": "test",
-        "updated_by": "test",
+        "created_by": {"human": None, "app": "test"},
+        "updated_by": {"human": None, "app": "test"},
         "revision": 1,
-        "schema_version": 2,
+        "schema_version": 3,
     }
     validate_note(Note(metadata, ""), schema)  # type: ignore[arg-type]
     validate_note(Note({**metadata, "deleted": True}, ""), schema)  # type: ignore[arg-type]

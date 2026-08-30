@@ -12,7 +12,7 @@ import pytest
 
 from odyssey_core.contextual import ContextualProviderError, ContextualResolutionError
 from odyssey_core.identity import ExactEntityLookupError
-from odyssey_core.notes import Note, serialize_note
+from odyssey_core.notes import Note, serialize_note, validate_note
 from odyssey_core.resolution import (
     ExistingEntityOutcome,
     ResolutionSource,
@@ -79,10 +79,10 @@ def valid_note(note_id: str, note_type: str, content: str, **metadata: object) -
         "type": note_type,
         "created_at": "2026-08-16T12:00:00Z",
         "updated_at": "2026-08-16T12:00:00Z",
-        "created_by": "pytest",
-        "updated_by": "pytest",
+        "created_by": {"human": None, "app": "pytest"},
+        "updated_by": {"human": None, "app": "pytest"},
         "revision": 1,
-        "schema_version": 2,
+        "schema_version": 3,
         **metadata,
     }
     return Note(metadata=values, content=content)  # type: ignore[arg-type]
@@ -268,15 +268,20 @@ def test_provider_failure_is_not_converted_to_unresolved(
 
 def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]) -> None:
     """Retain identity evidence while removing lifecycle and retrieval-only information."""
+    schema = json.loads(json.dumps(schema))
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
     note = valid_note(
         "ada",
         "person",
         "Links: [[people/Xavi]], [[people/Xavi|mi amigo]], [[people/Xavi#Section]], "
         "[[people/Xavi#Section|mi amigo]], and [[Xavi]].",
         aliases=["A. Lovelace"],
-        relationship_to_user="colleague",
         name="Ada Lovelace",
+        origin="colleague",
     )
+    validate_note(note, schema)
     first = build_provider_evidence(note, "people/Ada Lovelace.md")
     second = build_provider_evidence(note, "people/Ada Lovelace.md")
     assert first == second
@@ -288,7 +293,7 @@ def test_provider_evidence_is_deterministic_and_minimized(schema: dict[str, Any]
     )
     assert "Name: Ada Lovelace" in first
     assert "Aliases: A. Lovelace" in first
-    assert "Relationship To User: colleague" in first
+    assert "Origin: colleague" in first
     assert "Xavi" in first and "[[" not in first
     assert "people/" not in first
     assert "Section" not in first

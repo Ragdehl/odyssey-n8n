@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -36,10 +37,10 @@ def put_note(
             "type": note_type,
             "created_at": "2026-08-24T12:00:00Z",
             "updated_at": "2026-08-24T12:00:00Z",
-            "created_by": "pytest",
-            "updated_by": "pytest",
+            "created_by": {"human": None, "app": "pytest"},
+            "updated_by": {"human": None, "app": "pytest"},
             "revision": 1,
-            "schema_version": 2,
+            "schema_version": 3,
             **metadata,
         },
         f"Synthetic knowledge for {note_id}.",
@@ -65,9 +66,9 @@ def bulk_unit(
 @pytest.fixture
 def repository(tmp_path: Path) -> VaultRepository:
     """Provide deterministic people with different birth years and tag states."""
-    put_note(tmp_path, "z-person", "Zoe", birth_date="1990-07-01", tags=["idea"])
-    put_note(tmp_path, "a-person", "Ana", birth_date="1990-01-02", tags=[])
-    put_note(tmp_path, "other", "Other", birth_date="1989-12-31", tags=["idea"])
+    put_note(tmp_path, "z-person", "Zoe", tags=["idea"])
+    put_note(tmp_path, "a-person", "Ana", tags=[])
+    put_note(tmp_path, "other", "Other", tags=["idea"])
     return VaultRepository(tmp_path)
 
 
@@ -88,9 +89,9 @@ def test_type_selection_freezes_all_ids_in_deterministic_order(repository: Vault
 
 
 def test_bulk_selection_excludes_deleted_notes(repository: VaultRepository) -> None:
-    """Keep physically present retired notes out of deterministic all-matching membership."""
+    """Keep physically present deleted notes out of deterministic all-matching membership."""
     raw = repository.read_text("zoe.md").replace(
-        "schema_version: 2", "schema_version: 2\ndeleted: true"
+        "schema_version: 3", "schema_version: 3\ndeleted: true"
     )
     repository.replace_text("zoe.md", raw)
     result = execute_bulk_update(
@@ -107,11 +108,8 @@ def test_bulk_selection_excludes_deleted_notes(repository: VaultRepository) -> N
 def test_filters_select_only_matching_notes_and_property_only_needs_no_writer(
     repository: VaultRepository,
 ) -> None:
-    """Apply deterministic birth-date membership without invoking a semantic writer."""
-    filters = (
-        {"field": "birth_date", "op": "gte", "value": "1990-01-01"},
-        {"field": "birth_date", "op": "lt", "value": "1991-01-01"},
-    )
+    """Apply deterministic membership without invoking a semantic writer."""
+    filters = ({"field": "tags", "op": "contains", "value": "idea"},)
     result = execute_bulk_update(
         bulk_unit(filters=filters, tags=(TagChange("add", "review"),)),
         repository=repository,
@@ -119,31 +117,40 @@ def test_filters_select_only_matching_notes_and_property_only_needs_no_writer(
         actor="pytest",
         now=NOW,
     )
-    assert result.selected_note_ids == ("a-person", "z-person")
+    assert result.selected_note_ids == ("other", "z-person")
     assert len(result.succeeded) == 2
-    assert "review" in repository.read_text("ana.md")
-    assert "review" not in repository.read_text("other.md")
+    assert "review" not in repository.read_text("ana.md")
+    assert "review" in repository.read_text("other.md")
 
 
 def test_property_only_bulk_update_uses_deterministic_materialization(
     repository: VaultRepository,
 ) -> None:
     """Apply one canonical property mutation per selected note without a writer."""
+    schema = deepcopy(SCHEMA)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Synthetic app-owned property for Core contract testing.",
+        }
+    ]
     unit = KnowledgeUnit(
         SelectionCriteria(None, "all people", "person", (), None),
         "amend",
-        (PropertyChange("relationship_to_user", "set", "friend"),),
+        (PropertyChange("origin", "set", "friend"),),
         (),
         (),
         (),
         "all_matching",
     )
     result = execute_bulk_update(
-        unit, repository=repository, schema=SCHEMA, actor="pytest", now=NOW
+        unit, repository=repository, schema=schema, actor="pytest", now=NOW
     )
     assert result.status == "SUCCESS" and len(result.succeeded) == 3
     for path in ("ana.md", "other.md", "zoe.md"):
-        assert 'relationship_to_user: "friend"' in repository.read_text(path)
+        assert 'origin: "friend"' in repository.read_text(path)
 
 
 def test_free_text_bulk_update_uses_one_writer_request_per_note(
@@ -184,7 +191,7 @@ def test_free_text_bulk_update_uses_one_writer_request_per_note(
 def test_empty_set_is_explicit_and_never_creates(repository: VaultRepository) -> None:
     """Treat no deterministic matches as EMPTY_SET with no persistence."""
     result = execute_bulk_update(
-        bulk_unit(filters=({"field": "birth_date", "op": "eq", "value": "2000-01-01"},)),
+        bulk_unit(filters=({"field": "tags", "op": "contains", "value": "missing"},)),
         repository=repository,
         schema=SCHEMA,
         actor="pytest",

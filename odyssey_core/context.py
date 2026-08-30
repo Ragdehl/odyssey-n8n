@@ -153,6 +153,8 @@ def build_context_retrieval_text(note: Any, path: str) -> str:
 
 
 def _canonical_values(schema: dict[str, Any], key: str) -> tuple[str, ...]:
+    if key not in schema:
+        return ()
     try:
         values = tuple(sorted(definition["id"] for definition in schema[key]))
     except (KeyError, TypeError):
@@ -223,10 +225,11 @@ def _is_date_time(value: Any) -> bool:
 
 def _canonical_subtypes(schema: dict[str, Any]) -> set[str]:
     """Return all subtype IDs from their authoritative per-type registries."""
-    try:
-        return {subtype["id"] for note_type in schema["types"] for subtype in note_type["subtypes"]}
-    except (KeyError, TypeError):
-        raise ValueError("Supplied schema is not a usable canonical schema") from None
+    return {
+        subtype["id"]
+        for note_type in schema.get("types", [])
+        for subtype in note_type.get("subtypes", [])
+    }
 
 
 def _normalize_property_value(
@@ -280,6 +283,8 @@ def _validate_filter_value(
         raise ValueError("Array fields support only the 'contains' operator")
     result: list[str | int] = []
     for item in values:
+        if value_type == "array[string]" and (not isinstance(item, str) or not item.strip()):
+            raise ValueError("Array membership values must be non-empty strings")
         result.append(
             _normalize_property_value(
                 definition, item, allow_date_boundary=op in {"gt", "gte", "lt", "lte"}
@@ -310,7 +315,6 @@ def _normalize_filters(
         raise ValueError("Required tags must not contain duplicates")
     raw_filters.extend(ContextFilter("tags", "contains", tag) for tag in required_tag_values)
     canonical_types = set(_canonical_values(schema, "types"))
-    canonical_tags = set(_canonical_values(schema, "tags"))
     canonical_subtypes = _canonical_subtypes(schema)
     normalized: list[tuple[str, str, tuple[str | int, ...]]] = []
     for raw in raw_filters:
@@ -330,8 +334,6 @@ def _normalize_filters(
         registry = definition.get("constraints", {}).get("registry")
         if registry == "types" and any(item not in canonical_types for item in values):
             raise ValueError(f"Unknown canonical note type in filter: {values}")
-        if registry == "tags" and any(item not in canonical_tags for item in values):
-            raise ValueError(f"Unknown canonical tag in filter: {values}")
         if registry == "types[].subtypes" and any(
             item not in canonical_subtypes for item in values
         ):
@@ -489,8 +491,6 @@ class ContextIndex:
             if note.metadata.get("deleted") is True:
                 continue
             note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
-            if any(tag not in canonical_tags for tag in note_tags):
-                raise ContextIndexError(f"Cannot safely index unknown tag in note: {path}")
             projected.append(
                 (
                     note_id,
@@ -631,20 +631,15 @@ class ContextIndex:
                     raise ContextIndexError("Context index markers are incompatible")
                 try:
                     stored_types = tuple(sorted(json.loads(metadata["canonical_types"])))
-                    stored_tags = tuple(sorted(json.loads(metadata["canonical_tags"])))
+                    json.loads(metadata["canonical_tags"])
                     stored_subtypes = tuple(sorted(json.loads(metadata["canonical_subtypes"])))
                 except (KeyError, TypeError, json.JSONDecodeError) as error:
                     raise ContextIndexError(
                         "Context index is incompatible or stale; rebuild is required"
                     ) from error
                 current_types = _canonical_values(schema, "types")
-                current_tags = _canonical_values(schema, "tags")
                 current_subtypes = tuple(sorted(_canonical_subtypes(schema)))
-                if (
-                    stored_types != current_types
-                    or stored_tags != current_tags
-                    or stored_subtypes != current_subtypes
-                ):
+                if stored_types != current_types or stored_subtypes != current_subtypes:
                     raise ContextIndexError(
                         "Context index is incompatible or stale with the canonical type/tag/"
                         "subtype registries; rebuild is required"

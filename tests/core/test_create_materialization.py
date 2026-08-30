@@ -140,13 +140,11 @@ def test_properties_and_tags_are_deterministic_and_body_is_empty(
     result = create(
         repository,
         unit(
-            properties=(PropertyChange("relationship_to_user", "set", "friend"),),
             tags=(TagChange("add", "idea"), TagChange("add", "review")),
         ),
     )
     note = read_note(repository, result.path)
     assert result.operation is PersistenceOperation.CREATED
-    assert note.metadata["relationship_to_user"] == "friend"
     assert note.metadata["tags"] == ["idea", "review"]
     assert note.content == ""
 
@@ -249,7 +247,6 @@ def test_result_is_schema_valid_revision_one(repository: VaultRepository) -> Non
     result = create(
         repository,
         unit(
-            properties=(PropertyChange("relationship_to_user", "set", "friend"),),
             facts=("A fact.",),
         ),
     )

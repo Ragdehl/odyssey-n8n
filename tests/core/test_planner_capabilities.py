@@ -48,7 +48,9 @@ def test_write_capabilities_are_schema_driven(schema: dict) -> None:
         "description": "Vehicle registration number.",
         "constraints": {},
     }
-    assert capabilities["types"]["person"]["properties"]["birth_date"]["value_type"] == "date"
+    assert (
+        capabilities["types"]["car"]["properties"]["registration_number"]["value_type"] == "string"
+    )
 
 
 def test_write_capabilities_fail_closed_on_unsupported_property_semantics(schema: dict) -> None:

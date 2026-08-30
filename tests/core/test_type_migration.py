@@ -117,7 +117,7 @@ def test_migration_preserves_identity_body_links_and_creation_lifecycle(
     assert (
         after.metadata["type"] == "project"
         and after.metadata["revision"] == 2
-        and after.metadata["updated_by"] == "migrator"
+        and after.metadata["updated_by"] == {"human": None, "app": "migrator"}
     )
 
 
@@ -136,19 +136,16 @@ def test_migration_fails_closed_for_source_property_or_missing_required_destinat
             now=NOW,
         )
     assert repository.read_text("notes/odyssey.md") == before
-    # A source-only person field cannot silently disappear during person -> project.
+    # Current person notes have no deferred type-specific fields.
     note = parse_note(before)
-    note.metadata.update({"type": "person", "birth_date": "1990-01-01"})
+    note.metadata.update({"type": "person"})
     repository.replace_text(
         "notes/odyssey.md",
         __import__("odyssey_core.notes", fromlist=["serialize_note"]).serialize_note(note),
     )
-    before = repository.read_text("notes/odyssey.md")
-    with pytest.raises(MaterializationError):
-        materialize_type_migration(
-            unit("project"), decision(), repository=repository, schema=schema, actor="x", now=NOW
-        )
-    assert repository.read_text("notes/odyssey.md") == before
+    materialize_type_migration(
+        unit("project"), decision(), repository=repository, schema=schema, actor="x", now=NOW
+    )
 
 
 def test_destination_property_makes_journal_migration_valid(

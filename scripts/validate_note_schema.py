@@ -11,10 +11,9 @@ from pathlib import Path
 from typing import Any
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "tags", "types"}
-REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "subtypes", "properties"}
+TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "types"}
+REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "properties"}
 REQUIRED_FIELD_DEFINITION_FIELDS = {"id", "value_type", "required", "description"}
-REQUIRED_TAG_FIELDS = {"id", "description"}
 
 
 def _validate_optional_filterable(definition: dict[str, Any], location: str) -> None:
@@ -28,35 +27,13 @@ class SchemaValidationError(ValueError):
 
 
 def _require_non_empty_string(value: Any, location: str) -> None:
-    """Require a meaningful text value in an Odyssey schema definition.
-
-    Args:
-        value: Candidate value from the schema.
-        location: Human-readable location used in validation errors.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If the value is not a non-empty string.
-    """
+    """Require a meaningful text value in an Odyssey schema definition."""
     if not isinstance(value, str) or not value.strip():
         raise SchemaValidationError(f"{location} must be a non-empty string")
 
 
 def _validate_subtypes(subtypes: Any, type_id: str) -> None:
-    """Validate the controlled subtype definitions belonging to a note type.
-
-    Args:
-        subtypes: Candidate subtype registry from a type definition.
-        type_id: Parent note type identifier used for context and uniqueness scope.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If the subtype registry violates its contract.
-    """
+    """Validate the controlled subtype definitions belonging to a note type."""
     if not isinstance(subtypes, list):
         raise SchemaValidationError(f"type {type_id!r} subtypes must be an array")
     seen: set[str] = set()
@@ -78,18 +55,7 @@ def _validate_subtypes(subtypes: Any, type_id: str) -> None:
 
 
 def _validate_properties(properties: Any, type_id: str) -> None:
-    """Validate deterministic domain properties declared for a note type.
-
-    Args:
-        properties: Candidate property definitions from a type definition.
-        type_id: Note type identifier that owns the property definitions.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If a property is malformed or duplicated within the type.
-    """
+    """Validate deterministic domain properties declared for a note type."""
     if not isinstance(properties, list):
         raise SchemaValidationError(f"type {type_id!r} properties must be an array")
     seen: set[str] = set()
@@ -120,17 +86,7 @@ def _validate_properties(properties: Any, type_id: str) -> None:
 
 
 def _validate_types(types: Any) -> None:
-    """Validate the canonical registry of Odyssey note type definitions.
-
-    Args:
-        types: Candidate note type registry.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If the registry or any note type violates the type contract.
-    """
+    """Validate the canonical registry of Odyssey note type definitions."""
     if not isinstance(types, list):
         raise SchemaValidationError("types must be an array")
     seen: set[str] = set()
@@ -152,50 +108,11 @@ def _validate_types(types: Any) -> None:
         examples = note_type["examples"]
         if not isinstance(examples, list) or any(not isinstance(item, str) for item in examples):
             raise SchemaValidationError(f"type {type_id!r} examples must be an array of strings")
-        _validate_subtypes(note_type["subtypes"], type_id)
         _validate_properties(note_type["properties"], type_id)
 
 
-def _validate_tags(tags: Any) -> None:
-    """Validate the canonical controlled tag registry.
-
-    Args:
-        tags: Candidate top-level tag registry.
-
-    Raises:
-        SchemaValidationError: If a tag entry is malformed or duplicated.
-    """
-    if not isinstance(tags, list):
-        raise SchemaValidationError("tags must be an array")
-    seen: set[str] = set()
-    for index, tag in enumerate(tags):
-        location = f"tag at index {index}"
-        if not isinstance(tag, dict):
-            raise SchemaValidationError(f"{location} must be an object")
-        missing = REQUIRED_TAG_FIELDS - tag.keys()
-        if missing:
-            raise SchemaValidationError(f"{location} missing required fields: {sorted(missing)}")
-        tag_id = tag["id"]
-        if not isinstance(tag_id, str) or not ID_PATTERN.fullmatch(tag_id):
-            raise SchemaValidationError(f"{location} has invalid id {tag_id!r}")
-        if tag_id in seen:
-            raise SchemaValidationError(f"duplicate tag id {tag_id!r}")
-        seen.add(tag_id)
-        _require_non_empty_string(tag["description"], f"tag {tag_id!r} description")
-
-
 def _validate_metadata_fields(metadata_fields: Any) -> None:
-    """Validate Odyssey's canonical universal metadata definitions.
-
-    Args:
-        metadata_fields: Candidate universal metadata field definitions.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If a definition is malformed or a field ID is duplicated.
-    """
+    """Validate Odyssey's canonical universal metadata definitions."""
     if not isinstance(metadata_fields, list):
         raise SchemaValidationError("metadata_fields must be an array")
     definitions: dict[str, dict[str, Any]] = {}
@@ -224,17 +141,7 @@ def _validate_metadata_fields(metadata_fields: Any) -> None:
 def _validate_architectural_metadata_invariants(
     definitions: dict[str, dict[str, Any]],
 ) -> None:
-    """Protect the minimum metadata invariants required by Odyssey's note model.
-
-    Args:
-        definitions: Validated metadata definitions indexed by their stable IDs.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If identity, type control, or subtype control is missing.
-    """
+    """Protect the minimum metadata invariants required by Odyssey's Core note model."""
     identity = definitions.get("id")
     if identity is None:
         raise SchemaValidationError("Odyssey metadata must define the id field")
@@ -252,53 +159,29 @@ def _validate_architectural_metadata_invariants(
     ):
         raise SchemaValidationError("type must be controlled by the canonical types registry")
 
-    subtype = definitions.get("subtype")
-    if subtype is None:
-        raise SchemaValidationError("Odyssey metadata must define the optional subtype field")
-    if subtype["required"] is not False:
-        raise SchemaValidationError("Odyssey metadata field 'subtype' must be optional")
-    subtype_constraints = subtype.get("constraints")
-    if not isinstance(subtype_constraints, dict) or not (
-        subtype_constraints.get("registry") == "types[].subtypes"
-        and subtype_constraints.get("parent_field") == "type"
-        and subtype_constraints.get("controlled") is True
-        and subtype_constraints.get("allow_unregistered") is False
-    ):
-        raise SchemaValidationError(
-            "subtype must be controlled by its parent type and disallow unregistered values"
-        )
-
+    for field_id in ("created_by", "updated_by"):
+        provenance = definitions.get(field_id)
+        if provenance is None:
+            raise SchemaValidationError(f"Odyssey metadata must define the {field_id} field")
+        if provenance["required"] is not True or provenance["value_type"] != "object":
+            raise SchemaValidationError(f"{field_id} must be a required object provenance field")
     tags = definitions.get("tags")
     if tags is None:
         raise SchemaValidationError("Odyssey metadata must define the optional tags field")
-    if tags["required"] is not False or tags["value_type"] != "array[string]":
-        raise SchemaValidationError("tags must be an optional array[string] field")
-    tag_constraints = tags.get("constraints")
-    if not isinstance(tag_constraints, dict) or not (
-        tag_constraints.get("registry") == "tags"
-        and tag_constraints.get("controlled") is True
-        and tag_constraints.get("allow_unregistered") is False
-        and tag_constraints.get("unique_items") is True
+    if (
+        tags["required"] is not False
+        or tags["value_type"] != "array[string]"
+        or tags.get("constraints", {}).get("unique_items") is not True
+        or tags.get("filterable") is not True
+        or tags.get("filter_operations") != ["contains"]
+        or "controlled_values" in tags
+        or "registry" in tags.get("constraints", {})
     ):
-        raise SchemaValidationError("tags must use the controlled canonical tags registry")
+        raise SchemaValidationError("tags must be the generic free-form contains-filterable field")
 
 
 def validate_schema(schema: Any) -> None:
-    """Validate that data follows the canonical Odyssey schema-definition contract.
-
-    Args:
-        schema: Parsed candidate schema to validate.
-
-    Returns:
-        None.
-
-    Raises:
-        SchemaValidationError: If the schema shape or definitions are inconsistent.
-
-    Example:
-        ``validate_schema({"schema_version": 1, "metadata_fields": ..., "types": ...})``
-        returns ``None`` when every definition and architectural invariant is valid.
-    """
+    """Validate that data follows the canonical Odyssey schema-definition contract."""
     if not isinstance(schema, dict):
         raise SchemaValidationError("schema root must be an object")
     missing = TOP_LEVEL_KEYS - schema.keys()
@@ -311,25 +194,11 @@ def validate_schema(schema: Any) -> None:
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
         raise SchemaValidationError("schema_version must be a positive integer")
     _validate_metadata_fields(schema["metadata_fields"])
-    _validate_tags(schema["tags"])
     _validate_types(schema["types"])
 
 
 def load_schema(path: Path) -> Any:
-    """Load an Odyssey note schema from a JSON file.
-
-    Args:
-        path: Location of the schema file.
-
-    Returns:
-        Parsed JSON value for validation.
-
-    Raises:
-        SchemaValidationError: If the file cannot be read or does not contain valid JSON.
-
-    Example:
-        ``load_schema(Path("config/note-schema.json"))`` returns the parsed JSON value.
-    """
+    """Load an Odyssey note schema from a JSON file."""
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -337,11 +206,7 @@ def load_schema(path: Path) -> Any:
 
 
 def main() -> int:
-    """Validate a requested schema file and report a command-line pass or failure.
-
-    Returns:
-        Process exit code: zero for a valid schema and one for a validation failure.
-    """
+    """Validate a requested schema file and report a command-line pass or failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "schema",

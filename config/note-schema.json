@@ -1,12 +1,16 @@
 {
-    "schema_version": 2,
+    "schema_version": 3,
     "metadata_fields": [
         {
             "id": "id",
             "value_type": "string",
             "required": true,
             "description": "Stable identifier for the logical note or entity; independent of the filename and unchanged when the note is renamed.",
-            "constraints": {"non_empty": true, "stable": true, "filename_independent": true},
+            "constraints": {
+                "non_empty": true,
+                "stable": true,
+                "filename_independent": true
+            },
             "filterable": false
         },
         {
@@ -14,7 +18,9 @@
             "value_type": "string",
             "required": true,
             "description": "Canonical human-readable identity; independent of the creation-time filename label.",
-            "constraints": {"non_empty": true},
+            "constraints": {
+                "non_empty": true
+            },
             "filterable": false
         },
         {
@@ -28,19 +34,9 @@
                 "ideas sobre Odyssey -> no type restriction",
                 "decisiones sobre Odyssey -> no type restriction"
             ],
-            "constraints": {"registry": "types", "controlled": true},
-            "filterable": true
-        },
-        {
-            "id": "subtype",
-            "value_type": "string",
-            "required": false,
-            "description": "Optional controlled subtype registered under the selected parent type.",
             "constraints": {
-                "registry": "types[].subtypes",
-                "parent_field": "type",
-                "controlled": true,
-                "allow_unregistered": false
+                "registry": "types",
+                "controlled": true
             },
             "filterable": true
         },
@@ -53,7 +49,9 @@
             "retrieval_examples": [
                 "¿Qué escribí ayer sobre n8n? -> created_at day range in the supplied timezone"
             ],
-            "constraints": {"format": "date-time"},
+            "constraints": {
+                "format": "date-time"
+            },
             "filterable": true
         },
         {
@@ -62,24 +60,26 @@
             "required": true,
             "description": "Timestamp of the latest Odyssey modification to the note.",
             "retrieval_guidance": "Odyssey note-lifecycle modification timestamp. Use for modifiqué, actualicé, or cambié. Serialize as timezone-aware ISO 8601 (for example 2026-08-20T00:00:00+02:00); never emit timezone-less lifecycle datetimes. Prefer half-open ranges: gte start, lt next boundary.",
-            "retrieval_examples": ["¿Qué modifiqué hoy? -> today updated_at range"],
-            "constraints": {"format": "date-time"},
+            "retrieval_examples": [
+                "¿Qué modifiqué hoy? -> today updated_at range"
+            ],
+            "constraints": {
+                "format": "date-time"
+            },
             "filterable": true
         },
         {
             "id": "created_by",
-            "value_type": "string",
+            "value_type": "object",
             "required": true,
-            "description": "Application or process that originally created the note.",
-            "constraints": {"non_empty": true},
+            "description": "Named provenance object with stable human and app IDs; at least one must be non-null.",
             "filterable": false
         },
         {
             "id": "updated_by",
-            "value_type": "string",
+            "value_type": "object",
             "required": true,
-            "description": "Application or process responsible for the latest note modification.",
-            "constraints": {"non_empty": true},
+            "description": "Named provenance object with stable human and app IDs; at least one must be non-null.",
             "filterable": false
         },
         {
@@ -87,7 +87,9 @@
             "value_type": "integer",
             "required": true,
             "description": "Positive integer incremented whenever Odyssey updates the note.",
-            "constraints": {"minimum": 1},
+            "constraints": {
+                "minimum": 1
+            },
             "filterable": false
         },
         {
@@ -95,7 +97,9 @@
             "value_type": "integer",
             "required": true,
             "description": "Version of the note metadata and schema format.",
-            "constraints": {"minimum": 1},
+            "constraints": {
+                "minimum": 1
+            },
             "filterable": false
         },
         {
@@ -111,60 +115,24 @@
             "required": false,
             "description": "Alternative names useful for entity resolution; aliases do not create separate entities.",
             "retrieval_guidance": "Use deterministic exact matching only when the user explicitly asks for an exact alias. Ordinary name or entity search remains semantic.",
-            "retrieval_examples": ["alias exacto Ody -> aliases contains Ody"],
-            "constraints": {"unique_items": true},
+            "retrieval_examples": [
+                "alias exacto Ody -> aliases contains Ody"
+            ],
+            "constraints": {
+                "unique_items": true
+            },
             "filterable": true
         },
         {
             "id": "tags",
             "value_type": "array[string]",
             "required": false,
-            "description": "Controlled cross-cutting facets for lightweight classification and later knowledge retrieval.",
+            "description": "Optional free-form tags explicitly chosen by the user or application; Core does not assign semantic meaning.",
             "constraints": {
-                "unique_items": true,
-                "registry": "tags",
-                "controlled": true,
-                "allow_unregistered": false
+                "unique_items": true
             },
-            "filterable": true
-        }
-    ],
-    "tags": [
-        {
-            "id": "idea",
-            "description": "A possible proposal or direction that has not yet become a decision; not an actionable task."
-        },
-        {
-            "id": "decision",
-            "description": "A choice already made that is worth retaining as future context; not a tentative possibility."
-        },
-        {
-            "id": "question",
-            "description": "An open question worth retaining as knowledge or work context, rather than every transient user question."
-        },
-        {
-            "id": "reflection",
-            "description": "A personal observation, reasoning, interpretation, or conclusion worth retaining without implying action or decision."
-        },
-        {
-            "id": "reference",
-            "description": "Knowledge retained primarily for later consultation; it does not replace the document note type."
-        },
-        {
-            "id": "hypothesis",
-            "description": "An explanation or proposition believed possible but not established as fact and open to revision."
-        },
-        {
-            "id": "explore",
-            "description": "A topic, possibility, or question deliberately marked for further investigation; not task status."
-        },
-        {
-            "id": "someday",
-            "description": "A possibility worth retaining without a current commitment or date; not task scheduling or status."
-        },
-        {
-            "id": "review",
-            "description": "Knowledge explicitly worth revisiting later; not generic update metadata or task status."
+            "filterable": true,
+            "filter_operations": ["contains"]
         }
     ],
     "types": [
@@ -172,101 +140,100 @@
             "id": "concept",
             "name": "Concept",
             "description": "Reusable identifiable abstract subject, domain concept, or topic with semantic identity of its own that can accumulate knowledge across contexts; not a generic fallback for events, tasks, opinions, reflections, questions, arbitrary statements, or underclassified entities.",
-            "examples": ["Entity resolution", "Photosynthesis"],
-            "subtypes": [],
+            "examples": [
+                "Entity resolution",
+                "Photosynthesis"
+            ],
             "properties": []
         },
         {
             "id": "project",
             "name": "Project",
             "description": "Goal-oriented initiative or area of work that can accumulate knowledge and tasks.",
-            "examples": ["Odyssey", "Kitchen renovation"],
-            "subtypes": [],
+            "examples": [
+                "Odyssey",
+                "Kitchen renovation"
+            ],
             "properties": []
         },
         {
             "id": "task",
             "name": "Task",
             "description": "Action that can be managed by a task workflow without defining task-specific lifecycle fields in the canonical note schema.",
-            "examples": ["Renew passport", "Review Odyssey schema"],
-            "subtypes": [],
+            "examples": [
+                "Renew passport",
+                "Review Odyssey schema"
+            ],
             "properties": []
         },
         {
             "id": "store",
             "name": "Store",
             "description": "Physical or virtual establishment where purchases can occur.",
-            "examples": ["Carrefour Balma", "Lidl"],
-            "subtypes": [],
+            "examples": [
+                "Carrefour Balma",
+                "Lidl"
+            ],
             "properties": []
         },
         {
             "id": "product",
             "name": "Product",
             "description": "Identifiable product that can recur across purchases or other knowledge contexts.",
-            "examples": ["Leche Lactel", "Arduino Uno"],
-            "subtypes": [],
+            "examples": [
+                "Leche Lactel",
+                "Arduino Uno"
+            ],
             "properties": []
         },
         {
             "id": "purchase",
             "name": "Purchase",
             "description": "Human-readable record of a purchase occurrence that can link naturally to stores and products.",
-            "examples": ["Compra Carrefour 2026-08-13", "Online hardware order"],
-            "subtypes": [],
+            "examples": [
+                "Compra Carrefour 2026-08-13",
+                "Online hardware order"
+            ],
             "properties": []
         },
         {
             "id": "recipe",
             "name": "Recipe",
             "description": "Reusable cooking recipe that can link naturally to product or ingredient notes.",
-            "examples": ["Tortilla española", "Tomato soup"],
-            "subtypes": [],
+            "examples": [
+                "Tortilla española",
+                "Tomato soup"
+            ],
             "properties": []
         },
         {
             "id": "document",
             "name": "Document",
             "description": "Document or document-like artifact worth representing as an independent knowledge object.",
-            "examples": ["Apartment lease", "Project requirements brief"],
-            "subtypes": [],
+            "examples": [
+                "Apartment lease",
+                "Project requirements brief"
+            ],
             "properties": []
         },
         {
             "id": "person",
             "name": "Person",
             "description": "Person with a reusable identity that can be referenced from personal knowledge and domain notes.",
-            "examples": ["Carlos García", "Ada Lovelace"],
-            "subtypes": [],
-            "properties": [
-                {
-                    "id": "birth_date",
-                    "value_type": "date",
-                    "required": false,
-                    "description": "Known date of birth of the person.",
-                    "retrieval_guidance": "Person domain date. Serialize as YYYY-MM-DD (for example 1990-12-31). Use half-open ranges for years or months.",
-                    "retrieval_examples": [
-                        "personas nacidas después de 1990 -> birth_date gt 1990-12-31",
-                        "personas nacidas en 1990 -> gte 1990-01-01, lt 1991-01-01"
-                    ],
-                    "filterable": true
-                },
-                {
-                    "id": "relationship_to_user",
-                    "value_type": "string",
-                    "required": false,
-                    "description": "How the person is related to the user.",
-                    "retrieval_guidance": "Use deterministic filtering only when the request maps safely to an exact stored relationship value. Never invent relationship values; otherwise keep the wording semantic.",
-                    "filterable": true
-                }
-            ]
+            "examples": [
+                "Carlos García",
+                "Ada Lovelace"
+            ],
+            "properties": []
         },
         {
             "id": "journal_entry",
             "name": "Journal Entry",
             "description": "Diary or journal entry describing a day, experience, reflection, or personal occurrence.",
-            "examples": ["13 August 2026", "First day in Madrid"],
-            "subtypes": [],
+            "examples": [
+                "13 August 2026",
+                "First day in Madrid"
+            ],
             "properties": [
                 {
                     "id": "entry_date",

@@ -25,10 +25,6 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
 
     Raises:
         NoteValidationError: If the value violates its declared type or constraints.
-
-    Example:
-        A definition with ``{"value_type": "integer", "constraints": {"minimum": 1}}``
-        accepts ``1`` and raises :class:`NoteValidationError` for ``0``.
     """
     value_type = definition.get("value_type")
     if value_type == "string":
@@ -41,6 +37,8 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
         valid_type = isinstance(value, list) and all(isinstance(item, str) for item in value)
     elif value_type == "date":
         valid_type = isinstance(value, str) and _is_date(value)
+    elif value_type == "object":
+        valid_type = isinstance(value, dict)
     else:
         raise NoteValidationError(f"Schema declares unsupported value type for {field_id!r}")
     if not valid_type:
@@ -54,19 +52,20 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
         raise NoteValidationError(f"Metadata field {field_id!r} must be at least {minimum}")
     if constraints.get("unique_items") is True and len(value) != len(set(value)):
         raise NoteValidationError(f"Metadata field {field_id!r} must contain unique items")
+    if value_type == "array[string]" and field_id == "tags":
+        if any(
+            not item.strip() or "\n" in item or "\r" in item or item != item.strip()
+            for item in value
+        ):
+            raise NoteValidationError(
+                "Tags must be non-empty single-line strings without surrounding whitespace"
+            )
     if constraints.get("format") == "date-time" and not _is_date_time(value):
         raise NoteValidationError(f"Metadata field {field_id!r} must be a date-time")
 
 
 def _is_date(value: str) -> bool:
-    """Return whether text is a strict ISO calendar date without a time component.
-
-    Args:
-        value: Candidate date text.
-
-    Returns:
-        True only for a valid ``YYYY-MM-DD`` calendar date.
-    """
+    """Return whether text is a strict ISO calendar date without a time component."""
     if len(value) != 10 or value[4:5] != "-" or value[7:8] != "-":
         return False
     try:
@@ -76,14 +75,7 @@ def _is_date(value: str) -> bool:
 
 
 def _is_date_time(value: Any) -> bool:
-    """Return whether text is an ISO date-time with an explicit UTC offset.
-
-    Args:
-        value: Candidate date-time metadata value.
-
-    Returns:
-        True only for a valid time-zone-aware ISO date-time string.
-    """
+    """Return whether text is an ISO date-time with an explicit UTC offset."""
     if not isinstance(value, str) or "T" not in value:
         return False
     try:
@@ -98,22 +90,6 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     This checks only invariants visible in the current note. Historical guarantees,
     such as identity stability and revision progression, require lifecycle context and
     are deliberately outside this validator.
-
-    Args:
-        note: Generic note instance to validate.
-        schema: Parsed canonical schema definition supplied by the composition layer.
-
-    Raises:
-        NoteValidationError: If note content, metadata, type, subtype, or schema version
-            violates the supplied schema contract.
-
-    Example:
-        Load the canonical JSON schema, then validate a parsed or constructed note::
-
-            validate_note(note, schema)
-
-        Successful validation returns ``None``; a contract violation raises
-        :class:`NoteValidationError` with the failing field or invariant.
     """
     if not isinstance(note, Note):
         raise NoteValidationError("Expected an Odyssey Note")
@@ -124,13 +100,10 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     try:
         universal = {definition["id"]: definition for definition in schema["metadata_fields"]}
         types = {definition["id"]: definition for definition in schema["types"]}
-        registered_tags = {definition["id"] for definition in schema["tags"]}
         canonical_version = schema["schema_version"]
     except (KeyError, TypeError):
         raise NoteValidationError("Supplied schema is not a usable canonical schema") from None
 
-    # Universal requirements are checked before selecting a note type because type-specific
-    # validation depends on a valid universal ``type`` field.
     missing_universal = sorted(
         field_id
         for field_id, definition in universal.items()
@@ -162,20 +135,25 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
 
     for field_id, value in note.metadata.items():
         validate_field_value(field_id, value, allowed[field_id])
+        if field_id in {"created_by", "updated_by"}:
+            _validate_provenance_value(field_id, value)
 
-    tags = note.metadata.get("tags")
-    if tags is not None and any(tag not in registered_tags for tag in tags):
-        unknown_tags = sorted(set(tags) - registered_tags)
-        raise NoteValidationError(f"Unregistered tags: {unknown_tags}")
-
-    subtype = note.metadata.get("subtype")
-    if subtype is not None:
-        registered_subtypes = {definition["id"] for definition in note_type["subtypes"]}
-        if subtype not in registered_subtypes:
-            raise NoteValidationError(
-                f"Subtype {subtype!r} is not registered under type {note_type_id!r}"
-            )
     if note.metadata.get("schema_version") != canonical_version:
         raise NoteValidationError(
             "Note schema_version is incompatible with the supplied canonical schema"
         )
+
+
+def _validate_provenance_value(field_id: str, value: Any) -> None:
+    """Require canonical named human/app provenance for schema-v3 lifecycle metadata."""
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"human", "app"}
+        or any(
+            item is not None and (not isinstance(item, str) or not item.strip())
+            for item in value.values()
+        )
+        or value["human"] is None
+        and value["app"] is None
+    ):
+        raise NoteValidationError(f"Metadata field {field_id!r} must be a valid provenance object")

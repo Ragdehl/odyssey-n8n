@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -54,10 +55,10 @@ def _write_note(
         "type": note_type,
         "created_at": "2026-08-15T10:00:00+02:00",
         "updated_at": "2026-08-15T10:00:00+02:00",
-        "created_by": "test",
-        "updated_by": "test",
+        "created_by": {"human": None, "app": "test"},
+        "updated_by": {"human": None, "app": "test"},
         "revision": 1,
-        "schema_version": 2,
+        "schema_version": 3,
     }
     if aliases is not None:
         metadata["aliases"] = aliases
@@ -262,18 +263,22 @@ def test_partial_name_is_not_a_candidate_or_resolution(
 def test_relationship_context_does_not_become_an_exact_identity_match(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
-    """Leave role-based references for future contextual resolution."""
+    """Arbitrary structured properties are not exact identity evidence."""
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
     _write_note(
         repository,
         "documents/Beatriz.md",
         note_id="person-beatriz",
         note_type="person",
         aliases=["Bea"],
-        extra_metadata={"relationship_to_user": "spouse"},
+        extra_metadata={"origin": "colleague"},
         content="# Beatriz\n\nThe mother of my children.\n",
     )
 
-    result = resolve_exact_entity(repository, schema, "my wife", type="person")
+    result = resolve_exact_entity(repository, schema, "colleague", type="person")
 
     assert result.outcome is ExactResolutionOutcome.NO_EXACT_MATCH
     assert result.candidates == ()

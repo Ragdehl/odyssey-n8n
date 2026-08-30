@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -70,8 +71,6 @@ def repository(tmp_path: Path) -> VaultRepository:
         metadata={
             "name": "Bea",
             "type": "person",
-            "relationship_to_user": "partner",
-            "tags": ["idea"],
         },
         content="# Bea\n\n- Bea works at Airbus.\n- Bea lives in Toulouse.\n\nUnrelated *formatting*.",
         actor="test",
@@ -123,13 +122,14 @@ def materialize(
     knowledge: KnowledgeUnit,
     writer: FakeWriter | None = None,
     rendered_facts: tuple[str, ...] | None = None,
+    schema: dict[str, Any] = SCHEMA,
 ):
     """Execute the public UPDATE materialization API with stable lifecycle inputs."""
     return materialize_update(
         knowledge,
         decision(),
         repository=repository,
-        schema=SCHEMA,
+        schema=schema,
         actor="phase16-test",
         now="2026-08-25T11:00:00+02:00",
         writer=writer,
@@ -333,38 +333,74 @@ def test_replace_and_append_apply_once(
 def test_property_only_and_tag_only_updates_skip_writer(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A07-A08: canonical properties and controlled tags mutate deterministically."""
+    """A07-A08: generic properties and tags mutate without writer involvement."""
+    schema = deepcopy(SCHEMA)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Synthetic app-owned property for Core contract testing.",
+        }
+    ]
     calls = count_persistence(monkeypatch, repository)
     result = materialize(
-        repository, unit(properties=(PropertyChange("relationship_to_user", "set", "friend"),))
+        repository, unit(properties=(PropertyChange("origin", "set", "friend"),)), schema=schema
     )
     assert result.operation is PersistenceOperation.UPDATED and calls == [1]
     result = materialize(
-        repository, unit(tags=(TagChange("add", "review"), TagChange("remove", "idea")))
+        repository,
+        unit(tags=(TagChange("add", "review"), TagChange("remove", "idea"))),
+        schema=schema,
     )
     assert result.operation is PersistenceOperation.UPDATED and calls == [2]
     raw = repository.read_text("people/bea.md")
-    assert 'relationship_to_user: "friend"' in raw and 'tags: ["review"]' in raw
+    assert 'origin: "friend"' in raw and 'tags: ["review"]' in raw
+
+
+def test_update_tag_mutations_are_idempotent_and_revision_guarded(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Treat repeated tag adds and absent removes as deterministic no-ops."""
+    update_entity(
+        repository,
+        SCHEMA,
+        path="people/bea.md",
+        expected_id="person-bea",
+        set_metadata={"tags": ["review"]},
+        actor="setup",
+        now=NOW,
+    )
+    before = parse_note(repository.read_text("people/bea.md"))
+    calls = count_persistence(monkeypatch, repository)
+    add_result = materialize(repository, unit(tags=(TagChange("add", "review"),)))
+    remove_result = materialize(repository, unit(tags=(TagChange("remove", "missing"),)))
+    after = parse_note(repository.read_text("people/bea.md"))
+    assert add_result.operation is PersistenceOperation.NO_CHANGE
+    assert remove_result.operation is PersistenceOperation.NO_CHANGE
+    assert calls == [0]
+    assert after.metadata["revision"] == before.metadata["revision"]
+    assert after.metadata["tags"] == ["review"]
 
 
 def test_structured_and_free_text_commit_together(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A09: deterministic and writer changes result in exactly one persisted update."""
+    """A09: deterministic tags and writer changes commit together once."""
     calls = count_persistence(monkeypatch, repository)
     writer = FakeWriter({"operations": [{"op": "APPEND", "text": "- Bea plays piano."}]})
 
     materialize(
         repository,
         unit(
-            properties=(PropertyChange("relationship_to_user", "set", "friend"),),
+            tags=(TagChange("add", "review"),),
             facts=("Bea plays piano.",),
         ),
         writer,
     )
 
     raw = repository.read_text("people/bea.md")
-    assert calls == [1] and 'relationship_to_user: "friend"' in raw and "plays piano" in raw
+    assert calls == [1] and 'tags: ["review"]' in raw and "plays piano" in raw
 
 
 @pytest.mark.parametrize(
@@ -402,7 +438,7 @@ def test_provider_failure_persists_nothing(
         materialize(
             repository,
             unit(
-                properties=(PropertyChange("relationship_to_user", "set", "friend"),),
+                tags=(TagChange("add", "review"),),
                 facts=("new fact",),
             ),
             FakeWriter(WriterProviderError("offline")),
@@ -452,7 +488,7 @@ def test_changed_target_revision_fails_closed_before_materializer_persistence(
                 SCHEMA,
                 path="people/bea.md",
                 expected_id="person-bea",
-                set_metadata={"relationship_to_user": "colleague"},
+                set_metadata={"tags": ["colleague"]},
                 actor="other-writer",
                 now="2026-08-25T10:30:00+02:00",
             )
@@ -461,7 +497,7 @@ def test_changed_target_revision_fails_closed_before_materializer_persistence(
     with pytest.raises(EntityRevisionMismatchError):
         materialize(repository, unit(facts=("Bea plays piano.",)), StaleWriter())
     raw = repository.read_text("people/bea.md")
-    assert 'relationship_to_user: "colleague"' in raw and "plays piano" not in raw
+    assert 'tags: ["colleague"]' in raw and "plays piano" not in raw
 
 
 def test_non_update_decision_is_rejected(repository: VaultRepository) -> None:

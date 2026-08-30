@@ -7,11 +7,12 @@ import sqlite3
 import sys
 import types
 from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
-from odyssey_core.notes import Note, serialize_note
+from odyssey_core.notes import Note, serialize_note, validate_note
 from odyssey_core.semantic import (
     FastEmbedTextEmbedder,
     SemanticEntityIndex,
@@ -86,10 +87,10 @@ def valid_note(note_id: str, note_type: str, content: str, **metadata: object) -
         "type": note_type,
         "created_at": "2026-08-16T12:00:00Z",
         "updated_at": "2026-08-16T12:00:00Z",
-        "created_by": "pytest",
-        "updated_by": "pytest",
+        "created_by": {"human": None, "app": "pytest"},
+        "updated_by": {"human": None, "app": "pytest"},
         "revision": 1,
-        "schema_version": 2,
+        "schema_version": 3,
         **metadata,
     }
     return Note(metadata=values, content=content)  # type: ignore[arg-type]
@@ -109,16 +110,22 @@ def test_projection_includes_useful_fields_and_human_wikilink_text() -> None:
         "person",
         "Partner of [[people/Xavi|Xavi]]. Related to [[Atomic notes]].",
         aliases=["Bea"],
-        relationship_to_user="spouse",
         name="Beatriz Alonso",
+        origin="spouse",
     )
+    schema = json.loads((REPOSITORY_ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
+    validate_note(note, schema)
 
     projection = build_semantic_retrieval_text(note, "people/Beatriz Alonso.md")
 
     assert "Name: Beatriz Alonso" in projection
     assert "Aliases: Bea" in projection
     assert "Type: person" in projection
-    assert "Relationship To User: spouse" in projection
+    assert "Origin: spouse" in projection
     assert "Partner of Xavi. Related to Atomic notes." in projection
     assert "created_at" not in projection
     assert "[[" not in projection

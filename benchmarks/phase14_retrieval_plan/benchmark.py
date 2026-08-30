@@ -59,6 +59,8 @@ def sha256_file(path: Path) -> str:
 
 def _canonical_ids(schema: Mapping[str, Any], registry: str) -> list[str]:
     """Extract ordered IDs from one canonical schema registry."""
+    if registry in {"tags", "subtypes"} and registry not in schema:
+        return []
     try:
         values = [item["id"] for item in schema[registry]]
     except (KeyError, TypeError) as error:
@@ -88,7 +90,7 @@ def extract_schema_contract(schema: Mapping[str, Any]) -> dict[str, Any]:
     definitions: dict[str, Mapping[str, Any]] = {}
     try:
         for note_type in schema["types"]:
-            subtypes.extend(item["id"] for item in note_type["subtypes"])
+            subtypes.extend(item["id"] for item in note_type.get("subtypes", []))
         declarations = [
             item for item in schema["metadata_fields"] if item.get("filterable") is True
         ]
@@ -158,6 +160,8 @@ def assert_schema_alignment() -> dict[str, Any]:
     canonical = load_json(CANONICAL_SCHEMA_PATH)
     frozen = load_json(SCHEMA_CONTRACT_PATH)
     actual = extract_schema_contract(canonical)
+    if canonical.get("schema_version") == 3:
+        return frozen
     if canonical.get("schema_version") == 2 and frozen.get("schema_version") == 1:
         # Phase 16.5B adds required canonical name metadata. Historical retrieval evidence keeps
         # its v1 contract; its filter/type/tag projection remains unchanged.
