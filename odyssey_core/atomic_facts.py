@@ -5,9 +5,24 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import date
 
 _MARKER = re.compile(r"^[ \t]*<!-- odyssey:fact request=([^\s>]+) ordinal=(\d+) -->[ \t]*$")
 _MARKER_PREFIX = "<!-- odyssey:fact"
+_SPANISH_MONTHS = (
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+)
 
 
 class AtomicFactError(ValueError):
@@ -70,6 +85,27 @@ def normalize_atomic_fact(text: str) -> str:
     return " ".join(unicodedata.normalize("NFC", text).strip().split())
 
 
+def _capture_heading(now: str) -> str:
+    """Render the canonical human-visible Spanish heading for one capture date.
+
+    Args:
+        now: Canonical ISO date or timestamp whose calendar date identifies when Odyssey captured
+            the facts.
+
+    Returns:
+        A level-two Markdown heading with the date written for a human reader.
+
+    Raises:
+        AtomicFactError: If ``now`` does not begin with a valid ISO calendar date.
+    """
+    try:
+        captured = date.fromisoformat(now[:10])
+    except (TypeError, ValueError) as error:
+        raise AtomicFactError("Atomic fact capture time must begin with a valid ISO date") from error
+    month = _SPANISH_MONTHS[captured.month - 1]
+    return f"## Añadido el {captured.day} de {month} de {captured.year}"
+
+
 def render_atomic_facts(
     facts: tuple[str, ...], request_id: str, ordinals: tuple[int, ...], now: str
 ) -> str:
@@ -78,7 +114,7 @@ def render_atomic_facts(
         raise AtomicFactError(
             "Atomic fact rendering requires matching facts, ordinals, and request_id"
         )
-    heading = f"## Added {now[:10]}"
+    heading = _capture_heading(now)
     blocks = [heading]
     for text, ordinal in zip(facts, ordinals, strict=True):
         if (
