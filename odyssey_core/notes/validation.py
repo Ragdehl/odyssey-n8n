@@ -40,15 +40,11 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
     elif value_type == "actor_pair":
         # Phase 17E writes the canonical [human, app] pair. A legacy non-empty string remains
         # readable during migration and is interpreted as historical app-only provenance.
-        valid_type = (
-            isinstance(value, str)
-            and bool(value.strip())
-        ) or (
+        valid_type = (isinstance(value, str) and bool(value.strip())) or (
             isinstance(value, list)
             and len(value) == 2
             and all(
-                item is None or (isinstance(item, str) and bool(item.strip()))
-                for item in value
+                item is None or (isinstance(item, str) and bool(item.strip())) for item in value
             )
             and any(item is not None for item in value)
         )
