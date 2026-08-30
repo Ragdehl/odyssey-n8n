@@ -11,7 +11,6 @@ from .model import MetadataScalar, Note
 
 _KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 _NUMBER_PATTERN = re.compile(r"^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
-_PROPERTY_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):(?:[ \t]*(.*))$")
 
 
 class NoteFormatError(ValueError):
@@ -253,10 +252,10 @@ def _parse_frontmatter(source: str) -> dict[str, Any]:
             continue
         if line[:1].isspace() or line.lstrip().startswith("#"):
             raise NoteFormatError("Unexpected indentation or comment in frontmatter")
-        match = _PROPERTY_PATTERN.fullmatch(line)
-        if match is None:
+        key, separator, serialized = line.partition(":")
+        if not separator or _KEY_PATTERN.fullmatch(key) is None:
             raise NoteFormatError("Frontmatter property is malformed")
-        key, serialized = match.groups()
+        serialized = serialized.lstrip(" \t")
         if key in metadata:
             raise NoteFormatError(f"Duplicate metadata key: {key}")
         if serialized:

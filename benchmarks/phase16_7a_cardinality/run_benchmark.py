@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -135,9 +136,14 @@ def provider_diagnostic(error: BaseException) -> dict[str, str]:
 def main() -> int:
     """Execute all frozen cases with gpt-5.6-sol, low reasoning, and store=false."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=Path("/tmp/phase16-7a-sol-low-results.json"))
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--case-id", action="append", dest="case_ids")
     args = parser.parse_args()
+    if args.output is None:
+        with tempfile.NamedTemporaryFile(
+            prefix="phase16-7a-sol-low-results-", suffix=".json", delete=False
+        ) as temporary:
+            args.output = Path(temporary.name)
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     if args.case_ids:

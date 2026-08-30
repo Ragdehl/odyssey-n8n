@@ -732,9 +732,13 @@ class ContextIndex:
                             ),
                         )
                     )
+        # JSONDecodeError is a ValueError subclass, so translate it before preserving
+        # caller-facing validation errors raised by query/filter/domain checks.
+        except json.JSONDecodeError as error:
+            raise ContextIndexError("Unable to read a compatible context index") from error
         except ValueError:
             raise
-        except (OSError, sqlite3.Error, KeyError, TypeError, json.JSONDecodeError) as error:
+        except (OSError, sqlite3.Error, KeyError, TypeError) as error:
             raise ContextIndexError("Unable to read a compatible context index") from error
         candidates.sort(
             key=lambda item: (-item.similarity, item.primary_name.casefold(), item.path, item.id)

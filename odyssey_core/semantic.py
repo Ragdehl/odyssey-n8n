@@ -488,9 +488,13 @@ class SemanticEntityIndex:
                             similarity=similarity,
                         )
                     )
+        # JSONDecodeError is a ValueError subclass, so translate it before preserving
+        # caller-facing validation errors raised by reference/type/limit validation.
+        except json.JSONDecodeError as error:
+            raise SemanticIndexError("Unable to read a compatible semantic index") from error
         except ValueError:
             raise
-        except (OSError, sqlite3.Error, KeyError, json.JSONDecodeError) as error:
+        except (OSError, sqlite3.Error, KeyError) as error:
             raise SemanticIndexError("Unable to read a compatible semantic index") from error
 
         candidates.sort(

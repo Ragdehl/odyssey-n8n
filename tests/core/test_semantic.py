@@ -307,6 +307,23 @@ def test_missing_index_fails_safely(tmp_path: Path) -> None:
         index.find_candidates(KeywordEmbedder(), "my wife")
 
 
+def test_semantic_index_translates_corrupt_json_metadata(tmp_path: Path, schema: dict) -> None:
+    """Translate corrupt stored canonical-type JSON into the documented index error."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    index = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(VaultRepository(vault), schema, embedder)
+    with sqlite3.connect(index.path) as connection:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = ?", ("{broken", "canonical_types")
+        )
+        connection.commit()
+
+    with pytest.raises(SemanticIndexError, match="compatible semantic index"):
+        index.find_candidates(embedder, "my wife")
+
+
 def test_index_cannot_be_stored_inside_authoritative_vault(tmp_path: Path, schema: dict) -> None:
     """Enforce that disposable semantic state stays outside canonical Markdown knowledge."""
     vault = tmp_path / "vault"

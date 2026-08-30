@@ -15,12 +15,42 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
-
-import numpy as np
-from fastembed import TextEmbedding
+from urllib.parse import urlsplit
 
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 OUTCOMES = {"RESOLVED", "AMBIGUOUS", "UNRESOLVED"}
+LOCAL_SERVER_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def validate_local_server_url(value: str) -> str:
+    """Validate a benchmark server URL is an unauthenticated local HTTP endpoint.
+
+    Args:
+        value: Candidate URL supplied to the local model-server benchmark.
+
+    Returns:
+        The unchanged URL when it targets loopback over HTTP.
+
+    Raises:
+        ValueError: If the URL has credentials, a non-HTTP scheme, a malformed
+            port, or a non-loopback host.
+    """
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port or 0
+    except (AttributeError, ValueError) as error:
+        raise ValueError("server URL is malformed") from error
+    if (
+        parsed.scheme != "http"
+        or not parsed.netloc
+        or hostname not in LOCAL_SERVER_HOSTS
+        or not 0 <= port <= 65535
+    ):
+        raise ValueError("server URL must be an HTTP loopback URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("server URL must not contain credentials")
+    return value
 
 
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
@@ -146,6 +176,9 @@ def build_phase10_candidates(
     Returns:
         Cases augmented with candidate documents and cosine scores.
     """
+    import numpy as np
+    from fastembed import TextEmbedding
+
     model = TextEmbedding(
         model_name=EMBEDDING_MODEL,
         cache_dir=str(cache_dir) if cache_dir else None,
@@ -184,6 +217,7 @@ def rerank_onnx(cases: list[dict[str, Any]], model_dir: Path) -> list[dict[str, 
     Raises:
         OSError: If model artifacts cannot be loaded.
     """
+    import numpy as np
     import onnxruntime as ort
     from tokenizers import Tokenizer
 
@@ -499,7 +533,11 @@ def main() -> None:
         default=Path(__file__).with_name("phase11a_contextual_resolution_cases.json"),
     )
     parser.add_argument("--cross-encoder-dir", type=Path)
-    parser.add_argument("--server-url", default="http://127.0.0.1:8080/v1/chat/completions")
+    parser.add_argument(
+        "--server-url",
+        type=validate_local_server_url,
+        default="http://127.0.0.1:8080/v1/chat/completions",
+    )
     parser.add_argument("--model", default="local-gguf")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--max-cases", type=int)
