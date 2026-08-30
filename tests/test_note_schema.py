@@ -91,7 +91,9 @@ class NoteSchemaValidationTests(unittest.TestCase):
 
     def test_journal_entry_date_remains_required(self) -> None:
         journal_entry = self.type_definition("journal_entry")
-        entry_date = next(item for item in journal_entry["properties"] if item["id"] == "entry_date")
+        entry_date = next(
+            item for item in journal_entry["properties"] if item["id"] == "entry_date"
+        )
         self.assertEqual(entry_date["value_type"], "date")
         self.assertIs(entry_date["required"], True)
 
@@ -161,7 +163,9 @@ class NoteSchemaValidationTests(unittest.TestCase):
         self.assert_invalid(missing, "must define the id field")
 
         optional = copy.deepcopy(self.schema)
-        next(field for field in optional["metadata_fields"] if field["id"] == "id")["required"] = False
+        next(field for field in optional["metadata_fields"] if field["id"] == "id")["required"] = (
+            False
+        )
         self.assert_invalid(optional, "field 'id' must be required")
 
     def test_controlled_type_is_required(self) -> None:
@@ -172,7 +176,9 @@ class NoteSchemaValidationTests(unittest.TestCase):
         self.assert_invalid(missing, "must define the type field")
 
         optional = copy.deepcopy(self.schema)
-        next(field for field in optional["metadata_fields"] if field["id"] == "type")["required"] = False
+        next(field for field in optional["metadata_fields"] if field["id"] == "type")[
+            "required"
+        ] = False
         self.assert_invalid(optional, "field 'type' must be required")
 
         uncontrolled = copy.deepcopy(self.schema)
