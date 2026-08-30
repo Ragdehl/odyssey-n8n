@@ -30,9 +30,7 @@ def test_atomic_facts_render_parse_and_note_scoped_identity() -> None:
 
 def test_capture_heading_uses_calendar_day_not_timestamp_details() -> None:
     """Expose the request capture day once in readable prose without per-fact timestamps."""
-    rendered = render_atomic_facts(
-        ("Works at Thales.",), "R1", (0,), "2026-08-30T23:45:00+02:00"
-    )
+    rendered = render_atomic_facts(("Works at Thales.",), "R1", (0,), "2026-08-30T23:45:00+02:00")
     assert rendered.startswith("## Añadido el 30 de agosto de 2026\n- Works at Thales.")
     assert "23:45" not in rendered
 
