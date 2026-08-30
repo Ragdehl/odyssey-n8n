@@ -988,7 +988,7 @@ def _validate_knowledge_unit(
         )
     if intent == "delete" and (raw_properties or tag_changes or raw_facts):
         raise RequestPlanningError(
-            "KnowledgeUnit delete intent requires empty properties and facts"
+            "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts"
         )
 
     raw_references = unit["references"]
@@ -1151,6 +1151,10 @@ def _validate_tag_changes(
         raise RequestPlanningError("KnowledgeUnit tag_changes must be a list")
     if intent == "delete" and raw_tag_changes:
         raise RequestPlanningError("Delete intent cannot mutate tags")
+    if intent == "remove" and any(
+        item.get("op") == "add" for item in raw_tag_changes if isinstance(item, dict)
+    ):
+        raise RequestPlanningError("Remove intent cannot add tags")
     result = []
     seen = set()
     for item in raw_tag_changes:
@@ -1166,9 +1170,9 @@ def _validate_tag_changes(
             or "\r" in value
         ):
             raise RequestPlanningError("Tag change is invalid")
-        key = (op, value)
+        key = value
         if key in seen:
-            raise RequestPlanningError("Duplicate tag change")
+            raise RequestPlanningError("Duplicate or conflicting tag change")
         seen.add(key)
         result.append(TagChange(op, value))
     return tuple(result)

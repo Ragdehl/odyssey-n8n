@@ -137,17 +137,14 @@ def test_properties_and_tags_are_deterministic_and_body_is_empty(
     repository: VaultRepository,
 ) -> None:
     """Persist structured-only CREATE metadata once without a writer or body formatting."""
-    pytest.skip("Deferred person relationship property")
     result = create(
         repository,
         unit(
-            properties=(PropertyChange("relationship_to_user", "set", "friend"),),
             tags=(TagChange("add", "idea"), TagChange("add", "review")),
         ),
     )
     note = read_note(repository, result.path)
     assert result.operation is PersistenceOperation.CREATED
-    assert note.metadata["relationship_to_user"] == "friend"
     assert note.metadata["tags"] == ["idea", "review"]
     assert note.content == ""
 
@@ -247,11 +244,9 @@ def test_duplicate_id_and_occupied_path_never_overwrite(repository: VaultReposit
 
 def test_result_is_schema_valid_revision_one(repository: VaultRepository) -> None:
     """Confirm the single persisted result is a canonical revision-one note."""
-    pytest.skip("Deferred person relationship property")
     result = create(
         repository,
         unit(
-            properties=(PropertyChange("relationship_to_user", "set", "friend"),),
             facts=("A fact.",),
         ),
     )

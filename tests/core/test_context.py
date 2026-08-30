@@ -204,18 +204,21 @@ def test_context_type_filter_excludes_other_canonical_types(tmp_path: Path, sche
 
 def test_structured_property_equality_and_in_filters(tmp_path: Path, schema: dict) -> None:
     """Filter schema-declared domain properties through one structured API."""
-    pytest.skip("Deferred person relationship property")
+    schema = copy_schema(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "filterable": True}
+    ]
     vault = tmp_path / "vault"
     vault.mkdir()
     write_note(
         vault,
         "people/Ada.md",
-        note("ada", "person", "Engineer.", aliases=["Ada"]),
+        note("ada", "person", "Engineer.", aliases=["Ada"], origin="colleague"),
     )
     write_note(
         vault,
         "people/Bea.md",
-        note("bea", "person", "Friend.", aliases=["Bea"]),
+        note("bea", "person", "Friend.", aliases=["Bea"], origin="friend"),
     )
     repository = VaultRepository(vault)
     index = ContextIndex(tmp_path / "context.sqlite3")
@@ -228,7 +231,7 @@ def test_structured_property_equality_and_in_filters(tmp_path: Path, schema: dic
         embedder,
         query="person",
         limit=2,
-        filters=(ContextFilter("relationship_to_user", "eq", "colleague"),),
+        filters=(ContextFilter("origin", "eq", "colleague"),),
     )
     assert [item.id for item in package.items] == ["ada"]
     package = get_context(
@@ -248,7 +251,7 @@ def test_structured_property_equality_and_in_filters(tmp_path: Path, schema: dic
         embedder,
         query="person",
         limit=2,
-        filters=({"field": "relationship_to_user", "op": "in", "value": ["friend", "colleague"]},),
+        filters=({"field": "origin", "op": "in", "value": ["friend", "colleague"]},),
     )
     assert [item.id for item in package.items] == ["ada", "bea"]
 

@@ -328,43 +328,37 @@ def test_replace_and_append_apply_once(
     assert "Thales" in body and "plays piano" in body and "Airbus" not in body
 
 
-@pytest.mark.skip(reason="Retired person properties and Core tags")
 def test_property_only_and_tag_only_updates_skip_writer(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A07-A08: canonical properties and controlled tags mutate deterministically."""
+    """A07-A08: generic tags mutate deterministically without writer involvement."""
     calls = count_persistence(monkeypatch, repository)
-    result = materialize(
-        repository, unit(properties=(PropertyChange("relationship_to_user", "set", "friend"),))
-    )
-    assert result.operation is PersistenceOperation.UPDATED and calls == [1]
     result = materialize(
         repository, unit(tags=(TagChange("add", "review"), TagChange("remove", "idea")))
     )
-    assert result.operation is PersistenceOperation.UPDATED and calls == [2]
+    assert result.operation is PersistenceOperation.UPDATED and calls == [1]
     raw = repository.read_text("people/bea.md")
-    assert 'relationship_to_user: "friend"' in raw and 'tags: ["review"]' in raw
+    assert 'tags: ["review"]' in raw
 
 
-@pytest.mark.skip(reason="Retired relationship_to_user property")
 def test_structured_and_free_text_commit_together(
     repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A09: deterministic and writer changes result in exactly one persisted update."""
+    """A09: deterministic tags and writer changes commit together once."""
     calls = count_persistence(monkeypatch, repository)
     writer = FakeWriter({"operations": [{"op": "APPEND", "text": "- Bea plays piano."}]})
 
     materialize(
         repository,
         unit(
-            properties=(PropertyChange("relationship_to_user", "set", "friend"),),
+            tags=(TagChange("add", "review"),),
             facts=("Bea plays piano.",),
         ),
         writer,
     )
 
     raw = repository.read_text("people/bea.md")
-    assert calls == [1] and 'relationship_to_user: "friend"' in raw and "plays piano" in raw
+    assert calls == [1] and 'tags: ["review"]' in raw and "plays piano" in raw
 
 
 @pytest.mark.parametrize(
@@ -402,7 +396,7 @@ def test_provider_failure_persists_nothing(
         materialize(
             repository,
             unit(
-                properties=(PropertyChange("relationship_to_user", "set", "friend"),),
+                tags=(TagChange("add", "review"),),
                 facts=("new fact",),
             ),
             FakeWriter(WriterProviderError("offline")),
@@ -437,7 +431,6 @@ def test_writer_no_change_and_unrelated_formatting_are_preserved(
     assert repository.read_text("people/bea.md") == before
 
 
-@pytest.mark.skip(reason="Retired relationship_to_user property")
 def test_changed_target_revision_fails_closed_before_materializer_persistence(
     repository: VaultRepository,
 ) -> None:
@@ -453,7 +446,7 @@ def test_changed_target_revision_fails_closed_before_materializer_persistence(
                 SCHEMA,
                 path="people/bea.md",
                 expected_id="person-bea",
-                set_metadata={"relationship_to_user": "colleague"},
+                set_metadata={"tags": ["colleague"]},
                 actor="other-writer",
                 now="2026-08-25T10:30:00+02:00",
             )
@@ -462,7 +455,7 @@ def test_changed_target_revision_fails_closed_before_materializer_persistence(
     with pytest.raises(EntityRevisionMismatchError):
         materialize(repository, unit(facts=("Bea plays piano.",)), StaleWriter())
     raw = repository.read_text("people/bea.md")
-    assert 'relationship_to_user: "colleague"' in raw and "plays piano" not in raw
+    assert 'tags: ["colleague"]' in raw and "plays piano" not in raw
 
 
 def test_non_update_decision_is_rejected(repository: VaultRepository) -> None:

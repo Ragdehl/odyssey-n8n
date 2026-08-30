@@ -73,6 +73,7 @@ def unit(
     cardinality: str = "one",
     intent: str = "record",
     properties: list[dict] | None = None,
+    tag_changes: list[dict] | None = None,
     facts: list[str] | None = None,
     references: list[dict] | None = None,
 ) -> dict:
@@ -82,7 +83,7 @@ def unit(
         "cardinality": cardinality,
         "intent": intent,
         "properties": [] if properties is None else properties,
-        "tag_changes": [],
+        "tag_changes": [] if tag_changes is None else tag_changes,
         "facts": ["Remember this fact."] if facts is None else facts,
         "references": [] if references is None else references,
     }
@@ -214,28 +215,31 @@ def test_mixed_retrieval_and_write_actions_preserve_request_order(schema: dict) 
 
 def test_structured_property_only_record_amend_and_remove_are_valid(schema: dict) -> None:
     """Treat canonical properties as first-class semantic payload rather than requiring prose facts."""
-    pytest.skip("Deferred person properties")
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "concept")["properties"] = [
+        {"id": "source", "value_type": "string", "required": False, "description": "Source."}
+    ]
     plan = validate_request_plan(
         output(
             write(
                 unit(
                     "Marta",
-                    note_type="person",
-                    properties=[prop("birth_date", "1990-05-03")],
+                    note_type="concept",
+                    properties=[prop("source", "a")],
                     facts=[],
                 ),
                 unit(
                     "Marta",
-                    note_type="person",
+                    note_type="concept",
                     intent="amend",
-                    properties=[prop("relationship_to_user", "hermana")],
+                    properties=[prop("source", "b")],
                     facts=[],
                 ),
                 unit(
                     "Marta",
-                    note_type="person",
+                    note_type="concept",
                     intent="remove",
-                    properties=[prop("birth_date", None, op="remove")],
+                    properties=[prop("source", None, op="remove")],
                     facts=[],
                 ),
             )
@@ -244,10 +248,8 @@ def test_structured_property_only_record_amend_and_remove_are_valid(schema: dict
     )
     action = plan.actions[0]
     assert isinstance(action, WriteAction)
-    assert action.units[0].properties == (
-        PropertyChange(field="birth_date", op="set", value="1990-05-03"),
-    )
-    assert action.units[1].properties[0].value == "hermana"
+    assert action.units[0].properties == (PropertyChange(field="source", op="set", value="a"),)
+    assert action.units[1].properties[0].value == "b"
     assert action.units[2].properties[0].op == "remove"
 
 
@@ -255,16 +257,26 @@ def test_write_target_reuses_filters_without_turning_identity_evidence_into_muta
     schema: dict,
 ) -> None:
     """Keep target selection and requested mutation separate even when both use properties."""
-    pytest.skip("Deferred person properties")
+    schema = deepcopy(schema)
+    person = next(item for item in schema["types"] if item["id"] == "person")
+    person["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Origin.",
+            "filterable": True,
+        }
+    ]
     plan = validate_request_plan(
         output(
             write(
                 unit(
                     "la persona",
                     note_type="person",
-                    filters=[{"field": "birth_date", "op": "eq", "value": "1990-05-03"}],
+                    filters=[{"field": "origin", "op": "eq", "value": "legacy"}],
                     intent="amend",
-                    properties=[prop("relationship_to_user", "hermana")],
+                    properties=[prop("origin", "updated")],
                     facts=[],
                 )
             )
@@ -272,22 +284,32 @@ def test_write_target_reuses_filters_without_turning_identity_evidence_into_muta
         schema,
     )
     item = plan.actions[0].units[0]  # type: ignore[union-attr]
-    assert item.target.filters[0].field == "birth_date"
-    assert [change.field for change in item.properties] == ["relationship_to_user"]
+    assert item.target.filters[0].field == "origin"
+    assert [change.field for change in item.properties] == ["origin"]
 
 
 def test_same_property_can_identify_old_value_and_set_corrected_value(schema: dict) -> None:
     """Do not deduplicate a field across target selection and mutation payload."""
-    pytest.skip("Deferred person properties")
+    schema = deepcopy(schema)
+    person = next(item for item in schema["types"] if item["id"] == "person")
+    person["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Origin.",
+            "filterable": True,
+        }
+    ]
     plan = validate_request_plan(
         output(
             write(
                 unit(
                     "la persona",
                     note_type="person",
-                    filters=[{"field": "birth_date", "op": "eq", "value": "1990-05-03"}],
+                    filters=[{"field": "origin", "op": "eq", "value": "old"}],
                     intent="amend",
-                    properties=[prop("birth_date", "1990-05-04")],
+                    properties=[prop("origin", "new")],
                     facts=[],
                 )
             )
@@ -295,8 +317,8 @@ def test_same_property_can_identify_old_value_and_set_corrected_value(schema: di
         schema,
     )
     item = plan.actions[0].units[0]  # type: ignore[union-attr]
-    assert item.target.filters[0].value == "1990-05-03"
-    assert item.properties[0].value == "1990-05-04"
+    assert item.target.filters[0].value == "old"
+    assert item.properties[0].value == "new"
 
 
 def test_write_intents_multiple_targets_and_references(schema: dict) -> None:
@@ -449,26 +471,38 @@ def test_invalid_model_output_fails_closed(schema: dict) -> None:
 
 def test_relationship_capability_uses_core_supported_string_operators(schema: dict) -> None:
     """Advertise only the equality operators Core accepts for relationship values."""
-    pytest.skip("Deferred person relationship property")
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {
+            "id": "origin",
+            "value_type": "string",
+            "required": False,
+            "description": "Origin.",
+            "filterable": True,
+        }
+    ]
     prompt = render_request_planner_prompt(schema, CONTEXT)
     retrieval_json = prompt.split(
         "Planner retrieval/selection capabilities (derived dynamically from the canonical schema):\n\n",
         1,
     )[1].split("\n\nPlanner writable", 1)[0]
     capabilities = json.loads(retrieval_json)
-    assert capabilities["filters"]["relationship_to_user"]["operators"] == ["eq", "in"]
+    assert capabilities["filters"]["origin"]["operators"] == ["eq", "in"]
 
 
 def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     """Give Sol the canonical property registry in the same interpretation call."""
-    pytest.skip("Deferred person properties")
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "description": "Origin."}
+    ]
     prompt = render_request_planner_prompt(schema, CONTEXT)
     write_json = prompt.split(
         "Planner writable type/property capabilities (derived dynamically from the same canonical schema):\n\n",
         1,
     )[1]
     capabilities = json.loads(write_json)
-    assert capabilities["types"]["person"]["properties"]["birth_date"]["value_type"] == "date"
+    assert capabilities["types"]["person"]["properties"]["origin"]["value_type"] == "string"
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
 
 
@@ -623,3 +657,22 @@ def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None
     """Keep production planning independent from historical benchmark files."""
     source = (ROOT / "odyssey_core" / "request_planning.py").read_text(encoding="utf-8")
     assert "benchmarks.phase14" not in source and "planner_capabilities.json" not in source
+
+
+def test_tag_changes_reject_duplicate_or_conflicting_values(schema: dict) -> None:
+    """Reject repeated tag values regardless of operation and preserve remove safety."""
+    for changes in (
+        [{"op": "add", "value": "muebles"}, {"op": "add", "value": "muebles"}],
+        [{"op": "add", "value": "muebles"}, {"op": "remove", "value": "muebles"}],
+    ):
+        with pytest.raises(RequestPlanningError, match="Duplicate or conflicting"):
+            validate_request_plan(output(write(unit("sofa", tag_changes=changes))), schema)
+    with pytest.raises(RequestPlanningError, match="cannot add tags"):
+        validate_request_plan(
+            output(
+                write(
+                    unit("sofa", intent="remove", tag_changes=[{"op": "add", "value": "muebles"}])
+                )
+            ),
+            schema,
+        )

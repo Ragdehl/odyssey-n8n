@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -271,17 +272,20 @@ def test_unfiltered_target_skips_filter_id_scan(
 def test_filters_narrow_exact_candidates_without_similarity_approximation(
     tmp_path: Path, schema: dict
 ) -> None:
-    pytest.skip("Deferred person relationship property")
     """Use validated target filters to restrict exact candidates before selection."""
+    schema = deepcopy(schema)
+    next(item for item in schema["types"] if item["id"] == "person")["properties"] = [
+        {"id": "origin", "value_type": "string", "required": False, "filterable": True}
+    ]
     write_note(
         tmp_path,
         "people/Marta one.md",
-        note("one", "person", aliases=["Marta"]),
+        note("one", "person", aliases=["Marta"], origin="friend"),
     )
     write_note(
         tmp_path,
         "people/Marta two.md",
-        note("two", "person", aliases=["Marta"]),
+        note("two", "person", aliases=["Marta"], origin="colleague"),
     )
     result = decide(
         tmp_path,
@@ -289,7 +293,7 @@ def test_filters_narrow_exact_candidates_without_similarity_approximation(
         unit(
             "Marta",
             entity="Marta",
-            filters=(ContextFilter("relationship_to_user", "eq", "colleague"),),
+            filters=(ContextFilter("origin", "eq", "colleague"),),
         ),
     )
     assert result.outcome is WriteTargetOutcome.UPDATE

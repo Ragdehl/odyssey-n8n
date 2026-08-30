@@ -47,7 +47,7 @@ Rules:
 - human identity uses stable user IDs, not display names;
 - this provenance is not itself the future authorization model. Authentication/authorization and sharing remain separate contracts.
 
-The active schema currently stores `created_by` and `updated_by` as strings, so applying this decision is a real schema/code migration and requires compatibility tests.
+The active schema stores `created_by` and `updated_by` as named objects; bounded read normalization may still accept legacy scalar values at explicit compatibility boundaries.
 
 ## Tags
 
@@ -55,7 +55,7 @@ The active schema currently stores `created_by` and `updated_by` as strings, so 
 
 `tags` are **not Core-owned semantics**.
 
-Core may eventually provide a generic registered-tag storage/validation mechanism, but Core must not decide what tags exist or infer when they apply. Tag vocabulary and inference/application policy belong to the user or to the application/domain that needs them.
+Core provides a generic free-form tag storage/validation mechanism, but Core must not decide what tags exist or infer when they apply. Tag vocabulary and inference/application policy belong to the user or to the application/domain that needs them.
 
 ```text
 Core
@@ -90,6 +90,19 @@ The main reason is that Phase 17D made atomic facts the meaningful knowledge uni
 **KEEP as a generic Core mechanism.** Core owns optional `tags` storage, validation, explicit add/remove mutation, and exact membership filtering. Tag values remain free-form and user/app chosen; Core defines no vocabulary, registry, controlled IDs, semantic meaning, or inference policy.
 
 The planner retains only an explicit-only `TagChange` mechanism for free-form values, and retrieval exposes exact `tags contains` filtering without any registry.
+
+## Future effective-schema composition
+
+Future application work must compose an effective schema at an explicit boundary:
+
+```text
+Core schema + installed app/domain contributions
+        -> validated effective schema
+        -> planner capabilities
+        -> Sol
+```
+
+An application may add supported properties to existing types, register genuinely new types, and contribute guidance without redefining the fundamental Core meaning of an existing type. Collisions and incompatible contributions must be detected before the effective schema is exposed to planning or persistence. This is a future extension requirement, not Phase 17E implementation scope.
 
 ## Implementation consequences to validate
 

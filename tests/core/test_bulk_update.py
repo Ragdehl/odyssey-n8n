@@ -16,7 +16,7 @@ from odyssey_core import (
     execute_bulk_update,
 )
 from odyssey_core.notes import Note, serialize_note
-from odyssey_core.request_planning import KnowledgeUnit, PropertyChange
+from odyssey_core.request_planning import KnowledgeUnit
 from odyssey_core.storage import VaultRepository
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,7 +71,6 @@ def repository(tmp_path: Path) -> VaultRepository:
     return VaultRepository(tmp_path)
 
 
-@pytest.mark.skip(reason="Retired Core tag bulk-update contract")
 def test_type_selection_freezes_all_ids_in_deterministic_order(repository: VaultRepository) -> None:
     """Select every canonical person once, independent of filesystem discovery order."""
     result = execute_bulk_update(
@@ -109,11 +108,7 @@ def test_filters_select_only_matching_notes_and_property_only_needs_no_writer(
     repository: VaultRepository,
 ) -> None:
     """Apply deterministic membership without invoking a semantic writer."""
-    pytest.skip("Deferred person birth-date property")
-    filters = (
-        {"field": "birth_date", "op": "gte", "value": "1990-01-01"},
-        {"field": "birth_date", "op": "lt", "value": "1991-01-01"},
-    )
+    filters = ({"field": "tags", "op": "contains", "value": "idea"},)
     result = execute_bulk_update(
         bulk_unit(filters=filters, tags=(TagChange("add", "review"),)),
         repository=repository,
@@ -121,22 +116,21 @@ def test_filters_select_only_matching_notes_and_property_only_needs_no_writer(
         actor="pytest",
         now=NOW,
     )
-    assert result.selected_note_ids == ("a-person", "z-person")
+    assert result.selected_note_ids == ("other", "z-person")
     assert len(result.succeeded) == 2
-    assert "review" in repository.read_text("ana.md")
-    assert "review" not in repository.read_text("other.md")
+    assert "review" not in repository.read_text("ana.md")
+    assert "review" in repository.read_text("other.md")
 
 
 def test_property_only_bulk_update_uses_deterministic_materialization(
     repository: VaultRepository,
 ) -> None:
     """Apply one canonical property mutation per selected note without a writer."""
-    pytest.skip("Deferred person relationship property")
     unit = KnowledgeUnit(
         SelectionCriteria(None, "all people", "person", (), None),
         "amend",
-        (PropertyChange("relationship_to_user", "set", "friend"),),
         (),
+        (TagChange("add", "friend"),),
         (),
         (),
         "all_matching",
@@ -146,7 +140,7 @@ def test_property_only_bulk_update_uses_deterministic_materialization(
     )
     assert result.status == "SUCCESS" and len(result.succeeded) == 3
     for path in ("ana.md", "other.md", "zoe.md"):
-        assert 'relationship_to_user: "friend"' in repository.read_text(path)
+        assert "friend" in repository.read_text(path)
 
 
 def test_free_text_bulk_update_uses_one_writer_request_per_note(
@@ -186,9 +180,8 @@ def test_free_text_bulk_update_uses_one_writer_request_per_note(
 
 def test_empty_set_is_explicit_and_never_creates(repository: VaultRepository) -> None:
     """Treat no deterministic matches as EMPTY_SET with no persistence."""
-    pytest.skip("Deferred person birth-date filter")
     result = execute_bulk_update(
-        bulk_unit(filters=({"field": "birth_date", "op": "eq", "value": "2000-01-01"},)),
+        bulk_unit(filters=({"field": "tags", "op": "contains", "value": "missing"},)),
         repository=repository,
         schema=SCHEMA,
         actor="pytest",
