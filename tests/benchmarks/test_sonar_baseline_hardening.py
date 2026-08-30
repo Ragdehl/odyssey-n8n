@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from benchmarks.phase14_retrieval_plan.run_benchmark import validate_run_id
+from benchmarks.phase16_7a_cardinality.run_benchmark import create_default_output_path
 from benchmarks.run_phase11a_contextual_resolution import validate_local_server_url
 
 
@@ -40,3 +41,15 @@ def test_local_server_url_rejects_external_or_malformed_destinations() -> None:
     ):
         with pytest.raises(ValueError):
             validate_local_server_url(value)
+
+
+def test_default_benchmark_output_path_is_private_and_reportable() -> None:
+    """Create an unpredictable temporary destination for the benchmark default."""
+    path = create_default_output_path()
+    try:
+        assert path.name.startswith("phase16-7a-sol-low-results-")
+        assert path.suffix == ".json"
+        assert path.exists()
+        assert path.stat().st_mode & 0o777 == 0o600
+    finally:
+        path.unlink()

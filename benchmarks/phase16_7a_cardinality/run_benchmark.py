@@ -133,6 +133,19 @@ def provider_diagnostic(error: BaseException) -> dict[str, str]:
     }
 
 
+def create_default_output_path() -> Path:
+    """Create a private temporary result path for an omitted benchmark output.
+
+    Returns:
+        An exclusively-created temporary JSON path that the benchmark can report
+        and populate after execution.
+    """
+    with tempfile.NamedTemporaryFile(
+        prefix="phase16-7a-sol-low-results-", suffix=".json", delete=False
+    ) as temporary:
+        return Path(temporary.name)
+
+
 def main() -> int:
     """Execute all frozen cases with gpt-5.6-sol, low reasoning, and store=false."""
     parser = argparse.ArgumentParser()
@@ -140,10 +153,7 @@ def main() -> int:
     parser.add_argument("--case-id", action="append", dest="case_ids")
     args = parser.parse_args()
     if args.output is None:
-        with tempfile.NamedTemporaryFile(
-            prefix="phase16-7a-sol-low-results-", suffix=".json", delete=False
-        ) as temporary:
-            args.output = Path(temporary.name)
+        args.output = create_default_output_path()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     if args.case_ids:
@@ -195,6 +205,7 @@ def main() -> int:
     args.output.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    print(f"output={args.output}")
     print(json.dumps(payload["summary"], ensure_ascii=False))
     return 0 if payload["summary"]["fail"] == 0 and payload["summary"]["error"] == 0 else 1
 

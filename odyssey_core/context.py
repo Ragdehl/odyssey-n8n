@@ -658,7 +658,12 @@ class ContextIndex:
                     raise ContextIndexError(
                         "Context index embedding model does not match query model"
                     )
-                dimension = int(metadata["dimension"])
+                try:
+                    dimension = int(metadata["dimension"])
+                except (KeyError, TypeError, ValueError) as error:
+                    raise ContextIndexError(
+                        "Context index has invalid embedding dimension metadata"
+                    ) from error
                 if dimension == 0:
                     return ()
                 vector_values = list(embedder.embed_queries([f"Query: {query.strip()}"]))

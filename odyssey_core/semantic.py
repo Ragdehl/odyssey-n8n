@@ -447,7 +447,13 @@ class SemanticEntityIndex:
                     raise SemanticIndexError(
                         "Semantic index embedding version does not match query runtime"
                     )
-                if int(metadata["dimension"]) == 0:
+                try:
+                    dimension = int(metadata["dimension"])
+                except (KeyError, TypeError, ValueError) as error:
+                    raise SemanticIndexError(
+                        "Semantic index has invalid embedding dimension metadata"
+                    ) from error
+                if dimension == 0:
                     return ()
                 query_text = f"Reference: {reference.strip()}"
                 if context.strip():
@@ -458,7 +464,7 @@ class SemanticEntityIndex:
                         "Embedding runtime returned the wrong number of vectors"
                     )
                 query_vector = _normalized_vector(query_vectors[0])
-                if len(query_vector) != int(metadata["dimension"]):
+                if len(query_vector) != dimension:
                     raise SemanticIndexError(
                         "Query embedding dimension does not match semantic index"
                     )

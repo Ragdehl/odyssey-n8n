@@ -324,6 +324,25 @@ def test_semantic_index_translates_corrupt_json_metadata(tmp_path: Path, schema:
         index.find_candidates(embedder, "my wife")
 
 
+def test_semantic_index_translates_non_integer_dimension_metadata(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Translate corrupt stored dimension metadata into the documented index error."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    index = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(VaultRepository(vault), schema, embedder)
+    with sqlite3.connect(index.path) as connection:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = ?", ("not-an-integer", "dimension")
+        )
+        connection.commit()
+
+    with pytest.raises(SemanticIndexError, match="invalid embedding dimension"):
+        index.find_candidates(embedder, "my wife")
+
+
 def test_index_cannot_be_stored_inside_authoritative_vault(tmp_path: Path, schema: dict) -> None:
     """Enforce that disposable semantic state stays outside canonical Markdown knowledge."""
     vault = tmp_path / "vault"
