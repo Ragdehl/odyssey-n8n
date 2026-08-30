@@ -95,6 +95,16 @@ Detailed domain properties should generally be decided when the corresponding ap
 
 **Type-specific properties:** none now. Store-specific structure such as address, chain, online/offline state, or other commerce fields should be defined only when the Purchases application demonstrates a concrete user-facing need.
 
+### `product` — KEEP
+
+**Ownership:** domain-owned in a future Purchases/commerce application; retained in the current registry until the extension boundary exists.
+
+**Note value:** a product has reusable identity across repeated purchases and other contexts, allowing facts and purchase history to accumulate around the same thing rather than creating a new entity for every occurrence.
+
+**Type value:** lets commerce-oriented applications distinguish products from general concepts and supports product-only retrieval, recurrence, comparison, and later purchase analysis.
+
+**Type-specific properties:** none now. Fields such as brand, barcode, category, or other commerce structure should be designed only when the application proves the user-facing need. Transaction-specific values such as a paid price should not automatically become product properties when they naturally belong to a purchase occurrence.
+
 ## Type composition decision
 
 ### Multiple simultaneous canonical types — DEFER
@@ -126,6 +136,48 @@ Roles or relationships should not be modeled as additional types when an existin
 Reconsider multi-type notes only after a concrete case demonstrates that **one stable identity genuinely needs the independent user-facing capabilities/property contracts of two canonical types at the same time**. At that point, evaluate composition conflicts explicitly, including required properties, incompatible type combinations, property-name collisions, migration semantics, and planner/retrieval complexity.
 
 This keeps Odyssey from introducing ontology composition machinery before there is evidence that it solves a real user problem.
+
+## Application composition direction
+
+Future Odyssey applications should be independently useful products, but they should not be forced to reimplement generic capabilities already provided by another reusable application/capability.
+
+Prefer explicit composition when it produces real reuse:
+
+```text
+Reminder capability
+        ^
+        |
+     Tasks app
+        ^
+        |
+   Projects app
+```
+
+For example, a Tasks application may depend on a reusable reminder capability rather than implement reminders itself, and a Projects application may reuse Tasks rather than invent a second incompatible task system. Installation of a higher-level application may later install or activate its declared dependencies automatically.
+
+Do not implement a general package/plugin manager now. The first real applications should define the smallest dependency contract from evidence. A future dependency mechanism should at least make dependencies explicit, prevent circular dependency graphs, keep Odyssey Core as the shared safe knowledge boundary, and avoid applications bypassing Core to mutate canonical notes independently.
+
+The goal is **Lego-like composition of reusable capabilities**, not a monolith and not a collection of isolated applications that duplicate the same behavior differently.
+
+## Shared knowledge / household use case
+
+Multi-user sharing has a concrete personal-product use case worth preserving: **shared household knowledge that both users can update and see promptly**, such as a common shopping list.
+
+Example:
+
+```text
+user A: "falta queso y cereales"
+             |
+             v
+      shared knowledge/list
+             |
+             v
+user B sees the updated list when shopping
+```
+
+This is more useful as a design target than abstract multi-user support because it exercises real requirements: stable shared identity, read/write authorization, synchronization or event propagation, conflict handling, and a clear distinction between private and shared knowledge.
+
+Do not implement sharing during Phase 17E. When multi-user work becomes justified, use shared household notes/lists as an early validation scenario and design authentication, authorization, storage/synchronization boundaries, and concurrent-write behavior before claiming real privacy or collaboration semantics.
 
 ## Product-family naming direction
 
@@ -162,4 +214,4 @@ These are candidates, not reserved names. The naming family must not imply a mon
 
 ## Next review target
 
-`product`
+`purchase`
