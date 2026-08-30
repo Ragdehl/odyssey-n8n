@@ -38,15 +38,7 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
     elif value_type == "date":
         valid_type = isinstance(value, str) and _is_date(value)
     elif value_type == "object":
-        valid_type = (
-            isinstance(value, dict)
-            and set(value) == {"human", "app"}
-            and all(
-                item is None or (isinstance(item, str) and bool(item.strip()))
-                for item in value.values()
-            )
-            and any(item is not None for item in value.values())
-        ) or (isinstance(value, str) and bool(value.strip()))
+        valid_type = isinstance(value, dict)
     else:
         raise NoteValidationError(f"Schema declares unsupported value type for {field_id!r}")
     if not valid_type:
@@ -143,8 +135,25 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
 
     for field_id, value in note.metadata.items():
         validate_field_value(field_id, value, allowed[field_id])
+        if field_id in {"created_by", "updated_by"}:
+            _validate_provenance_value(field_id, value)
 
     if note.metadata.get("schema_version") != canonical_version:
         raise NoteValidationError(
             "Note schema_version is incompatible with the supplied canonical schema"
         )
+
+
+def _validate_provenance_value(field_id: str, value: Any) -> None:
+    """Require canonical named human/app provenance for schema-v3 lifecycle metadata."""
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"human", "app"}
+        or any(
+            item is not None and (not isinstance(item, str) or not item.strip())
+            for item in value.values()
+        )
+        or value["human"] is None
+        and value["app"] is None
+    ):
+        raise NoteValidationError(f"Metadata field {field_id!r} must be a valid provenance object")

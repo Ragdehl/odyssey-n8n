@@ -16,6 +16,7 @@ from odyssey_core import (
     update_entity,
 )
 from odyssey_core.notes import NoteFormatError, NoteValidationError
+from odyssey_core.persistence import normalize_actor_provenance
 from odyssey_core.storage import InvalidNotePath, VaultRepository
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +44,11 @@ def create_person(repository: VaultRepository, path: str = "people/bea.md", **kw
     arguments.update(kwargs)
     arguments["metadata"] = {"name": "Bea", **arguments["metadata"]}
     return create_entity(repository, SCHEMA, **arguments)
+
+
+def test_legacy_actor_string_normalizes_to_named_app_provenance() -> None:
+    """Keep scalar actor input compatibility at the persistence boundary only."""
+    assert normalize_actor_provenance("legacy-app") == {"human": None, "app": "legacy-app"}
 
 
 def test_create_serializes_domain_data_and_core_lifecycle(repository: VaultRepository) -> None:

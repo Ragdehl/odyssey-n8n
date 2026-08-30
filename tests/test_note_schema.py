@@ -121,6 +121,20 @@ class NoteSchemaValidationTests(unittest.TestCase):
         self.assertNotIn("controlled_values", self.schema)
         self.assertIn("tags", {field["id"] for field in self.schema["metadata_fields"]})
 
+    def test_generic_tags_contract_cannot_drift(self) -> None:
+        for mutate in (
+            lambda schema, field: schema["metadata_fields"].remove(field),
+            lambda schema, field: field.update(required=True),
+            lambda schema, field: field.update(value_type="string"),
+            lambda schema, field: field["constraints"].pop("unique_items"),
+            lambda schema, field: field.update(filter_operations=["eq"]),
+            lambda schema, field: field.update(controlled_values=["idea"]),
+        ):
+            schema = copy.deepcopy(self.schema)
+            field = next(item for item in schema["metadata_fields"] if item["id"] == "tags")
+            mutate(schema, field)
+            self.assert_invalid(schema, "tags")
+
     def test_tag_registry_hook_still_validates_explicit_future_definitions(self) -> None:
         self.skipTest("Core tags are free-form; no registry")
 

@@ -14,7 +14,6 @@ ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "types"}
 REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "properties"}
 REQUIRED_FIELD_DEFINITION_FIELDS = {"id", "value_type", "required", "description"}
-REQUIRED_TAG_FIELDS = {"id", "description"}
 
 
 def _validate_optional_filterable(definition: dict[str, Any], location: str) -> None:
@@ -112,32 +111,6 @@ def _validate_types(types: Any) -> None:
         _validate_properties(note_type["properties"], type_id)
 
 
-def _validate_tags(tags: Any) -> None:
-    """Validate the optional top-level tag registry.
-
-    Phase 17E intentionally leaves this registry empty in Core. Keeping the structural hook here
-    lets a later explicit extension contract reuse validation without giving Core a built-in
-    vocabulary.
-    """
-    if not isinstance(tags, list):
-        raise SchemaValidationError("tags must be an array")
-    seen: set[str] = set()
-    for index, tag in enumerate(tags):
-        location = f"tag at index {index}"
-        if not isinstance(tag, dict):
-            raise SchemaValidationError(f"{location} must be an object")
-        missing = REQUIRED_TAG_FIELDS - tag.keys()
-        if missing:
-            raise SchemaValidationError(f"{location} missing required fields: {sorted(missing)}")
-        tag_id = tag["id"]
-        if not isinstance(tag_id, str) or not ID_PATTERN.fullmatch(tag_id):
-            raise SchemaValidationError(f"{location} has invalid id {tag_id!r}")
-        if tag_id in seen:
-            raise SchemaValidationError(f"duplicate tag id {tag_id!r}")
-        seen.add(tag_id)
-        _require_non_empty_string(tag["description"], f"tag {tag_id!r} description")
-
-
 def _validate_metadata_fields(metadata_fields: Any) -> None:
     """Validate Odyssey's canonical universal metadata definitions."""
     if not isinstance(metadata_fields, list):
@@ -192,10 +165,19 @@ def _validate_architectural_metadata_invariants(
             raise SchemaValidationError(f"Odyssey metadata must define the {field_id} field")
         if provenance["required"] is not True or provenance["value_type"] != "object":
             raise SchemaValidationError(f"{field_id} must be a required object provenance field")
-
-    # Phase 17E deliberately removes `subtype` and `tags` from the active universal metadata.
-    # Their registries remain schema-definition hooks only; Core does not require or expose those
-    # fields until a real extension use case reintroduces them.
+    tags = definitions.get("tags")
+    if tags is None:
+        raise SchemaValidationError("Odyssey metadata must define the optional tags field")
+    if (
+        tags["required"] is not False
+        or tags["value_type"] != "array[string]"
+        or tags.get("constraints", {}).get("unique_items") is not True
+        or tags.get("filterable") is not True
+        or tags.get("filter_operations") != ["contains"]
+        or "controlled_values" in tags
+        or "registry" in tags.get("constraints", {})
+    ):
+        raise SchemaValidationError("tags must be the generic free-form contains-filterable field")
 
 
 def validate_schema(schema: Any) -> None:

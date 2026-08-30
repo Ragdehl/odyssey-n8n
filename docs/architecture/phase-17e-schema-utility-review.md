@@ -195,7 +195,7 @@ one canonical note
     |
     +--> one primary `type`
     |
-    +--> optional controlled `subtype` only for a true stable specialization (`is-a`)
+    +--> no `subtype` in the active Core schema (deferred until a true stable specialization)
     |
     +--> properties for structured roles/relationships/state when they unlock user behavior
     |
@@ -208,7 +208,7 @@ The primary type answers:
 
 > What fundamental kind of entity is this?
 
-A subtype, if later activated, should represent a genuine specialization of that parent type, for example a possible future `document -> invoice` relationship when the specialization unlocks useful behavior. The canonical schema already reserves an optional controlled `subtype`, but planner capabilities currently exclude it; Phase 17E does not activate subtype behavior merely because the field exists.
+Subtype remains deferred. If later activated, it should represent a genuine specialization of that parent type, for example a possible future `document -> invoice` relationship when the specialization unlocks useful behavior. The current canonical schema does not reserve or expose a `subtype` field.
 
 Roles or relationships should not be modeled as additional types when an existing structured property expresses them more directly. For example, a child remains `type: person`; if the relationship to the user matters for recurring filtering or behavior, a future relationship property/contract is more appropriate than a second `child` type.
 
@@ -293,4 +293,4 @@ These are candidates, not reserved names. The naming family must not imply a mon
 
 ## Next review target
 
-Common metadata fields (`id`, `name`, `type`, `subtype`, lifecycle metadata, aliases, tags).
+Common metadata fields (`id`, `name`, `type`, lifecycle metadata, aliases, tags); `subtype` is deferred and absent.

@@ -233,6 +233,20 @@ class NoteValidationTests(unittest.TestCase):
             self.schema,
         )
 
+    def test_v3_provenance_requires_named_nonempty_actor_object(self) -> None:
+        valid = self.valid_metadata()
+        for field in ("created_by", "updated_by"):
+            for value in (
+                "legacy",
+                {"human": None, "app": None},
+                {"human": "", "app": None},
+                {"human": "u", "app": None, "extra": "x"},
+                {"human": "u"},
+            ):
+                candidate = dict(valid)
+                candidate[field] = value
+                self.assert_invalid(candidate)
+
     def test_every_required_universal_field_is_enforced(self) -> None:
         """Reject omission of each required universal field from the canonical schema."""
         required = [field["id"] for field in self.schema["metadata_fields"] if field["required"]]
