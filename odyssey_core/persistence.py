@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, TypeAlias
+from typing import Any
 
 from .notes import Note, parse_note, serialize_note, validate_note
 from .storage import VaultRepository
 
-ActorInput: TypeAlias = str | Sequence[str | None]
+type ActorInput = str | Sequence[str | None]
 
 _PROTECTED_FIELDS = frozenset(
     {
