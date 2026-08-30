@@ -101,7 +101,9 @@ def _capture_heading(now: str) -> str:
     try:
         captured = date.fromisoformat(now[:10])
     except (TypeError, ValueError) as error:
-        raise AtomicFactError("Atomic fact capture time must begin with a valid ISO date") from error
+        raise AtomicFactError(
+            "Atomic fact capture time must begin with a valid ISO date"
+        ) from error
     month = _SPANISH_MONTHS[captured.month - 1]
     return f"## Añadido el {captured.day} de {month} de {captured.year}"
 
