@@ -70,16 +70,16 @@
         },
         {
             "id": "created_by",
-            "value_type": "actor_pair",
+            "value_type": "object",
             "required": true,
-            "description": "Ordered provenance pair [human, app] for note creation. Position 0 is a stable human user ID or null; position 1 is a stable application/capability ID or null; at least one must be present.",
+            "description": "Named provenance object with stable human and app IDs; at least one must be non-null.",
             "filterable": false
         },
         {
             "id": "updated_by",
-            "value_type": "actor_pair",
+            "value_type": "object",
             "required": true,
-            "description": "Ordered provenance pair [human, app] for the latest note modification. Position 0 is a stable human user ID or null; position 1 is a stable application/capability ID or null; at least one must be present.",
+            "description": "Named provenance object with stable human and app IDs; at least one must be non-null.",
             "filterable": false
         },
         {
@@ -122,9 +122,19 @@
                 "unique_items": true
             },
             "filterable": true
+        },
+        {
+            "id": "tags",
+            "value_type": "array[string]",
+            "required": false,
+            "description": "Optional free-form tags explicitly chosen by the user or application; Core does not assign semantic meaning.",
+            "constraints": {
+                "unique_items": true
+            },
+            "filterable": true,
+            "filter_operations": ["contains"]
         }
     ],
-    "tags": [],
     "types": [
         {
             "id": "concept",
@@ -134,7 +144,6 @@
                 "Entity resolution",
                 "Photosynthesis"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -145,7 +154,6 @@
                 "Odyssey",
                 "Kitchen renovation"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -156,7 +164,6 @@
                 "Renew passport",
                 "Review Odyssey schema"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -167,7 +174,6 @@
                 "Carrefour Balma",
                 "Lidl"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -178,7 +184,6 @@
                 "Leche Lactel",
                 "Arduino Uno"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -189,7 +194,6 @@
                 "Compra Carrefour 2026-08-13",
                 "Online hardware order"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -200,7 +204,6 @@
                 "Tortilla española",
                 "Tomato soup"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -211,7 +214,6 @@
                 "Apartment lease",
                 "Project requirements brief"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -222,7 +224,6 @@
                 "Carlos García",
                 "Ada Lovelace"
             ],
-            "subtypes": [],
             "properties": []
         },
         {
@@ -233,7 +234,6 @@
                 "13 August 2026",
                 "First day in Madrid"
             ],
-            "subtypes": [],
             "properties": [
                 {
                     "id": "entry_date",

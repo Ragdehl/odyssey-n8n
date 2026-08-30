@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "tags", "types"}
-REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "subtypes", "properties"}
+TOP_LEVEL_KEYS = {"schema_version", "metadata_fields", "types"}
+REQUIRED_TYPE_FIELDS = {"id", "name", "description", "examples", "properties"}
 REQUIRED_FIELD_DEFINITION_FIELDS = {"id", "value_type", "required", "description"}
 REQUIRED_TAG_FIELDS = {"id", "description"}
 
@@ -109,7 +109,6 @@ def _validate_types(types: Any) -> None:
         examples = note_type["examples"]
         if not isinstance(examples, list) or any(not isinstance(item, str) for item in examples):
             raise SchemaValidationError(f"type {type_id!r} examples must be an array of strings")
-        _validate_subtypes(note_type["subtypes"], type_id)
         _validate_properties(note_type["properties"], type_id)
 
 
@@ -191,10 +190,8 @@ def _validate_architectural_metadata_invariants(
         provenance = definitions.get(field_id)
         if provenance is None:
             raise SchemaValidationError(f"Odyssey metadata must define the {field_id} field")
-        if provenance["required"] is not True or provenance["value_type"] != "actor_pair":
-            raise SchemaValidationError(
-                f"{field_id} must be a required actor_pair provenance field"
-            )
+        if provenance["required"] is not True or provenance["value_type"] != "object":
+            raise SchemaValidationError(f"{field_id} must be a required object provenance field")
 
     # Phase 17E deliberately removes `subtype` and `tags` from the active universal metadata.
     # Their registries remain schema-definition hooks only; Core does not require or expose those
@@ -215,7 +212,6 @@ def validate_schema(schema: Any) -> None:
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
         raise SchemaValidationError("schema_version must be a positive integer")
     _validate_metadata_fields(schema["metadata_fields"])
-    _validate_tags(schema["tags"])
     _validate_types(schema["types"])
 
 

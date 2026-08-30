@@ -1,4 +1,5 @@
 """Deterministic tests for the Phase 15.3 oracle and resume-safe evidence runner."""
+# ruff: noqa: E402
 
 from __future__ import annotations
 
@@ -8,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="Frozen pre-Phase 17E planner contract")
 
 from benchmarks.phase15_3_capability_delegation import run_benchmark
 from benchmarks.phase15_3_capability_delegation.benchmark import (

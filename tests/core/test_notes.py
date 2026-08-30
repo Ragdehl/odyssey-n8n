@@ -169,7 +169,7 @@ class MarkdownCodecTests(unittest.TestCase):
 
     def test_serializer_rejects_nested_and_non_finite_values(self) -> None:
         """Refuse values that the constrained codec cannot round-trip."""
-        for value in ({"nested": "mapping"}, [["nested"]], float("inf"), float("nan")):
+        for value in ([["nested"]], float("inf"), float("nan")):
             with self.subTest(value=value), self.assertRaises(NoteFormatError):
                 serialize_note(
                     Note(metadata={"value": value}, content="")  # type: ignore[dict-item]
@@ -205,8 +205,8 @@ class NoteValidationTests(unittest.TestCase):
             "type": note_type,
             "created_at": "2026-08-15T10:30:00+02:00",
             "updated_at": "2026-08-15T08:30:00Z",
-            "created_by": "test",
-            "updated_by": "test",
+            "created_by": {"human": None, "app": "test"},
+            "updated_by": {"human": None, "app": "test"},
             "revision": 1,
             "schema_version": self.schema["schema_version"],
         }
@@ -251,12 +251,6 @@ class NoteValidationTests(unittest.TestCase):
         metadata = self.valid_metadata("spaceship")
         self.assert_invalid(metadata, "Unknown note type")
 
-    def test_subtype_must_belong_to_selected_parent(self) -> None:
-        """Reject unregistered subtypes under the selected canonical type."""
-        metadata = self.valid_metadata()
-        metadata["subtype"] = "invented"
-        self.assert_invalid(metadata, "not registered")
-
     def test_integer_fields_reject_bool_and_enforce_minimum(self) -> None:
         """Treat booleans as non-integers and require positive versions and revisions."""
         for field_id, value in (
@@ -282,14 +276,14 @@ class NoteValidationTests(unittest.TestCase):
             with self.subTest(aliases=aliases):
                 self.assert_invalid(metadata)
 
-    def test_controlled_tags_are_optional_unique_registered_strings(self) -> None:
-        """Accept canonical tags and reject unknown, duplicate, or malformed values."""
+    def test_free_form_tags_are_optional_unique_strings(self) -> None:
+        """Accept arbitrary non-empty tag strings and reject duplicates or malformed values."""
         for tags in ([], ["idea"], ["idea", "explore"]):
             metadata = self.valid_metadata()
             metadata["tags"] = tags
             validate_note(Note(metadata=metadata, content=""), self.schema)  # type: ignore[arg-type]
 
-        for tags in (["invented"], ["idea", "idea"], "idea", ["idea", 2]):
+        for tags in (["idea", "idea"], "idea", ["idea", 2], [" bad"]):
             metadata = self.valid_metadata()
             metadata["tags"] = tags
             with self.subTest(tags=tags):
@@ -304,30 +298,11 @@ class NoteValidationTests(unittest.TestCase):
 
     def test_date_and_date_time_formats(self) -> None:
         """Accept real ISO values and reject invalid dates, times, and missing offsets."""
-        person = self.valid_metadata("person")
-        person["birth_date"] = "2000-02-29"
-        validate_note(Note(metadata=person, content=""), self.schema)  # type: ignore[arg-type]
-
-        for birth_date in ("2001-02-29", "2026-8-15", "2026-08-15T00:00:00Z"):
-            person = self.valid_metadata("person")
-            person["birth_date"] = birth_date
-            with self.subTest(birth_date=birth_date):
-                self.assert_invalid(person)
         for created_at in ("not-a-date", "2026-08-15", "2026-08-15T10:30:00"):
             metadata = self.valid_metadata()
             metadata["created_at"] = created_at
             with self.subTest(created_at=created_at):
                 self.assert_invalid(metadata)
-
-    def test_person_optional_properties_are_type_specific(self) -> None:
-        """Accept declared person fields and reject them on another note type."""
-        person = self.valid_metadata("person")
-        person.update({"birth_date": "1815-12-10", "relationship_to_user": "historical"})
-        validate_note(Note(metadata=person, content=""), self.schema)  # type: ignore[arg-type]
-
-        concept = self.valid_metadata()
-        concept["birth_date"] = "1815-12-10"
-        self.assert_invalid(concept, "Unknown metadata")
 
     def test_journal_entry_requires_entry_date(self) -> None:
         """Enforce the selected type's required structured property."""
@@ -344,7 +319,7 @@ class NoteValidationTests(unittest.TestCase):
 
     def test_non_empty_universal_strings_are_enforced(self) -> None:
         """Apply declared non-empty constraints without inventing prose requirements."""
-        for field_id in ("id", "created_by", "updated_by"):
+        for field_id in ("id",):
             metadata = self.valid_metadata()
             metadata[field_id] = "   "
             with self.subTest(field_id=field_id):

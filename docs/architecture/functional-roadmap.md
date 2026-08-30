@@ -203,7 +203,7 @@ The detailed cross-phase direction is centralized in
   contracts; purchase/ticket, project, and translation workflows remain expected application families.
 - 💡 **Type-aware writing profiles:** absent by default; add only when a note type demonstrates a real
   semantic body-organization need.
-- 💡 **Tag vocabulary evolution:** keep explicit-only controlled tags until evidence justifies change.
+- 💡 **Generic tags:** Core stores and filters explicitly requested free-form tags; vocabulary and meaning remain user/app-owned, with no inference or registry.
 - 💡 **Large-vault retrieval reduction:** retain high-recall local candidate retrieval and benchmark any
   selector before reducing strong-model context.
 - 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces

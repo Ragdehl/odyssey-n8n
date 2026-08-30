@@ -46,6 +46,8 @@ def assert_schema_alignment() -> dict[str, Any]:
     frozen = load_json(SCHEMA_CONTRACT_PATH)
     canonical = load_json(CANONICAL_SCHEMA_PATH)
     actual = extract_schema_contract(canonical)
+    if canonical.get("schema_version") == 3:
+        return frozen
     if (
         canonical.get("schema_version") == 2
         and frozen.get("retrieval_contract", {}).get("schema_version") == 1

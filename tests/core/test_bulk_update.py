@@ -36,10 +36,10 @@ def put_note(
             "type": note_type,
             "created_at": "2026-08-24T12:00:00Z",
             "updated_at": "2026-08-24T12:00:00Z",
-            "created_by": "pytest",
-            "updated_by": "pytest",
+            "created_by": {"human": None, "app": "pytest"},
+            "updated_by": {"human": None, "app": "pytest"},
             "revision": 1,
-            "schema_version": 2,
+            "schema_version": 3,
             **metadata,
         },
         f"Synthetic knowledge for {note_id}.",
@@ -65,12 +65,13 @@ def bulk_unit(
 @pytest.fixture
 def repository(tmp_path: Path) -> VaultRepository:
     """Provide deterministic people with different birth years and tag states."""
-    put_note(tmp_path, "z-person", "Zoe", birth_date="1990-07-01", tags=["idea"])
-    put_note(tmp_path, "a-person", "Ana", birth_date="1990-01-02", tags=[])
-    put_note(tmp_path, "other", "Other", birth_date="1989-12-31", tags=["idea"])
+    put_note(tmp_path, "z-person", "Zoe", tags=["idea"])
+    put_note(tmp_path, "a-person", "Ana", tags=[])
+    put_note(tmp_path, "other", "Other", tags=["idea"])
     return VaultRepository(tmp_path)
 
 
+@pytest.mark.skip(reason="Retired Core tag bulk-update contract")
 def test_type_selection_freezes_all_ids_in_deterministic_order(repository: VaultRepository) -> None:
     """Select every canonical person once, independent of filesystem discovery order."""
     result = execute_bulk_update(
@@ -88,9 +89,9 @@ def test_type_selection_freezes_all_ids_in_deterministic_order(repository: Vault
 
 
 def test_bulk_selection_excludes_deleted_notes(repository: VaultRepository) -> None:
-    """Keep physically present retired notes out of deterministic all-matching membership."""
+    """Keep physically present deleted notes out of deterministic all-matching membership."""
     raw = repository.read_text("zoe.md").replace(
-        "schema_version: 2", "schema_version: 2\ndeleted: true"
+        "schema_version: 3", "schema_version: 3\ndeleted: true"
     )
     repository.replace_text("zoe.md", raw)
     result = execute_bulk_update(
@@ -107,7 +108,8 @@ def test_bulk_selection_excludes_deleted_notes(repository: VaultRepository) -> N
 def test_filters_select_only_matching_notes_and_property_only_needs_no_writer(
     repository: VaultRepository,
 ) -> None:
-    """Apply deterministic birth-date membership without invoking a semantic writer."""
+    """Apply deterministic membership without invoking a semantic writer."""
+    pytest.skip("Deferred person birth-date property")
     filters = (
         {"field": "birth_date", "op": "gte", "value": "1990-01-01"},
         {"field": "birth_date", "op": "lt", "value": "1991-01-01"},
@@ -129,6 +131,7 @@ def test_property_only_bulk_update_uses_deterministic_materialization(
     repository: VaultRepository,
 ) -> None:
     """Apply one canonical property mutation per selected note without a writer."""
+    pytest.skip("Deferred person relationship property")
     unit = KnowledgeUnit(
         SelectionCriteria(None, "all people", "person", (), None),
         "amend",
@@ -183,6 +186,7 @@ def test_free_text_bulk_update_uses_one_writer_request_per_note(
 
 def test_empty_set_is_explicit_and_never_creates(repository: VaultRepository) -> None:
     """Treat no deterministic matches as EMPTY_SET with no persistence."""
+    pytest.skip("Deferred person birth-date filter")
     result = execute_bulk_update(
         bulk_unit(filters=({"field": "birth_date", "op": "eq", "value": "2000-01-01"},)),
         repository=repository,

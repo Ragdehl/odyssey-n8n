@@ -100,7 +100,7 @@ def test_frozen_capabilities_remain_historical_after_production_operator_fix() -
         "lt",
         "lte",
     ]
-    assert production["filters"]["relationship_to_user"]["operators"] == ["eq", "in"]
+    assert "relationship_to_user" not in production["filters"]
     rendered = render_prompt()
     assert (
         '"current_context":{"date":"2026-08-20","time":"10:30","timezone":"Europe/Madrid"}'

@@ -37,17 +37,16 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
         valid_type = isinstance(value, list) and all(isinstance(item, str) for item in value)
     elif value_type == "date":
         valid_type = isinstance(value, str) and _is_date(value)
-    elif value_type == "actor_pair":
-        # Phase 17E writes the canonical [human, app] pair. A legacy non-empty string remains
-        # readable during migration and is interpreted as historical app-only provenance.
-        valid_type = (isinstance(value, str) and bool(value.strip())) or (
-            isinstance(value, list)
-            and len(value) == 2
+    elif value_type == "object":
+        valid_type = (
+            isinstance(value, dict)
+            and set(value) == {"human", "app"}
             and all(
-                item is None or (isinstance(item, str) and bool(item.strip())) for item in value
+                item is None or (isinstance(item, str) and bool(item.strip()))
+                for item in value.values()
             )
-            and any(item is not None for item in value)
-        )
+            and any(item is not None for item in value.values())
+        ) or (isinstance(value, str) and bool(value.strip()))
     else:
         raise NoteValidationError(f"Schema declares unsupported value type for {field_id!r}")
     if not valid_type:
@@ -61,6 +60,14 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
         raise NoteValidationError(f"Metadata field {field_id!r} must be at least {minimum}")
     if constraints.get("unique_items") is True and len(value) != len(set(value)):
         raise NoteValidationError(f"Metadata field {field_id!r} must contain unique items")
+    if value_type == "array[string]" and field_id == "tags":
+        if any(
+            not item.strip() or "\n" in item or "\r" in item or item != item.strip()
+            for item in value
+        ):
+            raise NoteValidationError(
+                "Tags must be non-empty single-line strings without surrounding whitespace"
+            )
     if constraints.get("format") == "date-time" and not _is_date_time(value):
         raise NoteValidationError(f"Metadata field {field_id!r} must be a date-time")
 
@@ -101,7 +108,6 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     try:
         universal = {definition["id"]: definition for definition in schema["metadata_fields"]}
         types = {definition["id"]: definition for definition in schema["types"]}
-        registered_tags = {definition["id"] for definition in schema.get("tags", [])}
         canonical_version = schema["schema_version"]
     except (KeyError, TypeError):
         raise NoteValidationError("Supplied schema is not a usable canonical schema") from None
@@ -138,18 +144,6 @@ def validate_note(note: Note, schema: dict[str, Any]) -> None:
     for field_id, value in note.metadata.items():
         validate_field_value(field_id, value, allowed[field_id])
 
-    tags = note.metadata.get("tags")
-    if tags is not None and any(tag not in registered_tags for tag in tags):
-        unknown_tags = sorted(set(tags) - registered_tags)
-        raise NoteValidationError(f"Unregistered tags: {unknown_tags}")
-
-    subtype = note.metadata.get("subtype")
-    if subtype is not None:
-        registered_subtypes = {definition["id"] for definition in note_type["subtypes"]}
-        if subtype not in registered_subtypes:
-            raise NoteValidationError(
-                f"Subtype {subtype!r} is not registered under type {note_type_id!r}"
-            )
     if note.metadata.get("schema_version") != canonical_version:
         raise NoteValidationError(
             "Note schema_version is incompatible with the supplied canonical schema"

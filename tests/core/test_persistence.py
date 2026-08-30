@@ -35,7 +35,7 @@ def create_person(repository: VaultRepository, path: str = "people/bea.md", **kw
     arguments = {
         "path": path,
         "entity_id": "person-bea",
-        "metadata": {"name": "Bea", "type": "person", "relationship_to_user": "esposa"},
+        "metadata": {"name": "Bea", "type": "person"},
         "content": "# Bea\n\nOriginal body.",
         "actor": "phase12-test",
         "now": NOW,
@@ -55,7 +55,7 @@ def test_create_serializes_domain_data_and_core_lifecycle(repository: VaultRepos
     assert 'aliases: ["Bea"]' in raw
     assert raw.endswith("# Bea\n\nOriginal body.")
     assert 'created_at: "2026-08-18T10:00:00+02:00"' in raw
-    assert 'created_by: "phase12-test"' in raw
+    assert 'created_by: {"app": "phase12-test", "human": null}' in raw
     assert "revision: 1" in raw
 
 
@@ -65,16 +65,15 @@ def test_create_persists_valid_controlled_tags(repository: VaultRepository) -> N
     assert 'tags: ["idea", "explore"]' in repository.read_text("people/bea.md")
 
 
-def test_create_unknown_tags_fail_before_write(repository: VaultRepository) -> None:
-    """Reject unregistered tags without creating a target note."""
-    with pytest.raises(NoteValidationError):
-        create_person(repository, metadata={"type": "person", "tags": ["invented"]})
-    assert "people/bea.md" not in repository.list_markdown_paths()
+def test_create_accepts_arbitrary_tags(repository: VaultRepository) -> None:
+    """Persist free-form tags without a Core registry."""
+    create_person(repository, metadata={"type": "person", "tags": ["invented"]})
+    assert 'tags: ["invented"]' in repository.read_text("people/bea.md")
 
 
 def test_create_rejects_duplicate_path_without_overwrite(repository: VaultRepository) -> None:
     """Create-only storage preserves an existing note."""
-    create_person(repository)
+    create_person(repository, metadata={"type": "person", "aliases": ["Bea"]})
     with pytest.raises(OSError):
         create_person(repository, content="replacement")
     assert repository.read_text("people/bea.md").endswith("# Bea\n\nOriginal body.")
@@ -92,7 +91,7 @@ def test_create_validates_before_write_and_rejects_protected_metadata(
 ) -> None:
     """Invalid domain data and caller lifecycle injection leave no target."""
     with pytest.raises(NoteValidationError):
-        create_person(repository, metadata={"type": "person", "birth_date": "tomorrow"})
+        create_person(repository, metadata={"type": "person", "retired_field": "x"})
     assert "people/bea.md" not in repository.list_markdown_paths()
     with pytest.raises(ProtectedMetadataError):
         create_person(repository, metadata={"type": "person", "revision": 99})
@@ -118,8 +117,8 @@ def test_update_sets_properties_and_preserves_creation_lifecycle(
     raw = repository.read_text("people/bea.md")
     assert 'aliases: ["Bea", "B"]' in raw
     assert 'created_at: "2026-08-18T10:00:00+02:00"' in raw
-    assert 'created_by: "phase12-test"' in raw
-    assert 'updated_by: "updater"' in raw
+    assert 'created_by: {"app": "phase12-test", "human": null}' in raw
+    assert 'updated_by: {"app": "updater", "human": null}' in raw
     assert "revision: 2" in raw
 
 
@@ -164,7 +163,7 @@ def test_update_invalid_tags_fails_closed_and_identical_tags_are_no_change(
             SCHEMA,
             path="people/bea.md",
             expected_id="person-bea",
-            set_metadata={"tags": ["invented"]},
+            set_metadata={"tags": [" bad"]},
             actor="updater",
             now=NOW,
         )
@@ -259,7 +258,7 @@ def test_update_content_none_preserves_body(repository: VaultRepository) -> None
         SCHEMA,
         path="people/bea.md",
         expected_id="person-bea",
-        set_metadata={"relationship_to_user": "partner"},
+        set_metadata={"aliases": ["Bea"]},
         actor="updater",
         now="2026-08-18T11:00:00+02:00",
     )
@@ -270,7 +269,7 @@ def test_update_no_change_does_not_write_or_bump_revision(
     repository: VaultRepository, monkeypatch
 ) -> None:
     """Identical explicit mutations return NO_CHANGE and avoid replacement."""
-    create_person(repository)
+    create_person(repository, metadata={"type": "person", "aliases": ["Bea"]})
 
     def fail_replace(*args: object, **kwargs: object) -> None:
         raise AssertionError("no-op update must not write")
@@ -281,7 +280,7 @@ def test_update_no_change_does_not_write_or_bump_revision(
         SCHEMA,
         path="people/bea.md",
         expected_id="person-bea",
-        set_metadata={"relationship_to_user": "esposa"},
+        set_metadata={"aliases": ["Bea"]},
         actor="different-actor",
         now="2026-08-18T12:00:00+02:00",
     )

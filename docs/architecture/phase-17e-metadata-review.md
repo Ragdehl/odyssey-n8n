@@ -87,9 +87,9 @@ The main reason is that Phase 17D made atomic facts the meaningful knowledge uni
 
 ### `tags` field itself
 
-**DEFER as a Core schema field until a real user/app requirement proves the generic contract needed.** This does not forbid tags. A future app or user-defined extension may introduce tags through the schema-extension boundary, at which point Core can provide generic validation/storage without owning their meaning.
+**KEEP as a generic Core mechanism.** Core owns optional `tags` storage, validation, explicit add/remove mutation, and exact membership filtering. Tag values remain free-form and user/app chosen; Core defines no vocabulary, registry, controlled IDs, semantic meaning, or inference policy.
 
-The current planner's explicit-only `TagChange` machinery and built-in tag filtering should therefore be treated as candidates for removal/simplification when the Phase 17E implementation pass applies these decisions.
+The planner retains only an explicit-only `TagChange` mechanism for free-form values, and retrieval exposes exact `tags contains` filtering without any registry.
 
 ## Implementation consequences to validate
 

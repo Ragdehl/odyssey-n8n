@@ -44,6 +44,8 @@ def _serialize_scalar(value: Any) -> str:
         return str(value)
     if isinstance(value, float) and math.isfinite(value):
         return repr(value)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
     raise NoteFormatError("Metadata values must be supported finite scalars")
 
 
@@ -179,6 +181,14 @@ def _parse_scalar(source: str, *, allow_array: bool = True) -> Any:
         return [
             _parse_scalar(token, allow_array=False) for token in _split_inline_array(value[1:-1])
         ]
+    if value.startswith("{"):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            raise NoteFormatError("Metadata object is malformed") from None
+        if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
+            raise NoteFormatError("Metadata object is malformed")
+        return parsed
     if any(character in value for character in "[]{}"):
         raise NoteFormatError("Nested metadata structures are unsupported")
     if value.startswith('"'):

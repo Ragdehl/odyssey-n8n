@@ -10,7 +10,7 @@ from typing import Any
 from .notes import Note, parse_note, serialize_note, validate_note
 from .storage import VaultRepository
 
-type ActorInput = str | Sequence[str | None]
+type ActorInput = str | Mapping[str, str | None] | Sequence[str | None]
 
 _PROTECTED_FIELDS = frozenset(
     {
@@ -62,24 +62,27 @@ class EntityRevisionMismatchError(ValueError):
     """Indicate that an entity changed after a caller read its authoritative revision."""
 
 
-def normalize_actor_provenance(actor: ActorInput) -> list[str | None]:
-    """Normalize caller provenance to canonical ``[human, app]`` metadata.
+def normalize_actor_provenance(actor: ActorInput) -> dict[str, str | None]:
+    """Normalize caller provenance to canonical named human/app metadata.
 
-    A legacy non-empty string is temporarily accepted as an app-only actor so existing internal
-    callers can migrate incrementally. New callers should pass a two-item sequence where position 0
-    is the stable human user ID (or ``None``) and position 1 is the stable app/capability ID (or
-    ``None``). At least one position must be present.
+    Legacy strings and pairs are accepted at this boundary for compatibility; new persistence writes
+    the named object with exact ``human`` and ``app`` keys.
     """
     if isinstance(actor, str):
         value = actor.strip()
         if not value:
             raise TypeError("actor string must be non-empty")
-        return [None, value]
-    if isinstance(actor, (bytes, bytearray, memoryview)) or not isinstance(actor, Sequence):
-        raise TypeError("actor must be a non-empty app string or a [human, app] pair")
-    values = list(actor)
+        return {"human": None, "app": value}
+    if isinstance(actor, Mapping):
+        if set(actor) != {"human", "app"}:
+            raise TypeError("actor object must contain exactly human and app keys")
+        values = [actor["human"], actor["app"]]
+    else:
+        if isinstance(actor, (bytes, bytearray, memoryview)) or not isinstance(actor, Sequence):
+            raise TypeError("actor must be a non-empty app string or a human/app object")
+        values = list(actor)
     if len(values) != 2:
-        raise TypeError("actor pair must contain exactly [human, app]")
+        raise TypeError("actor pair must contain exactly human and app")
     normalized: list[str | None] = []
     for value in values:
         if value is None:
@@ -87,10 +90,10 @@ def normalize_actor_provenance(actor: ActorInput) -> list[str | None]:
         elif isinstance(value, str) and value.strip():
             normalized.append(value.strip())
         else:
-            raise TypeError("actor pair values must be non-empty strings or None")
+            raise TypeError("actor values must be non-empty strings or None")
     if normalized == [None, None]:
-        raise TypeError("actor pair must identify a human, an app, or both")
-    return normalized
+        raise TypeError("actor must identify a human, an app, or both")
+    return {"human": normalized[0], "app": normalized[1]}
 
 
 def _check_protected_fields(fields: Sequence[str], operation: str) -> None:
