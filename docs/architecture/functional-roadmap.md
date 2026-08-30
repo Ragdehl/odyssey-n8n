@@ -180,8 +180,13 @@ The detailed cross-phase direction is centralized in
   or benchmarks justify bounded graph traversal.
 - 💡 **Structured analytics / aggregations:** deterministic counts, sums, averages, and grouping over
   rebuildable structured/index data rather than loading the vault into an LLM.
-- 💡 **App/capability delegation:** route planned delegated actions later through compact capability
-  contracts; purchase/ticket, project, and translation workflows remain expected application families.
+- 💡 **App/capability delegation and composition:** route planned delegated actions later through compact
+  capability contracts. Applications may depend explicitly on reusable lower-level capabilities/apps
+  (for example Reminders -> Tasks -> Projects) so higher-level products compose proven behavior rather
+  than reimplement it incompatibly. Define the smallest dependency/installation contract only when the
+  first real composed applications exist; avoid circular dependencies and keep Core as the shared safe
+  knowledge boundary. Purchase/ticket, project, and translation workflows remain expected application
+  families.
 - 💡 **Type-aware writing profiles:** absent by default; add only when a note type demonstrates a real
   semantic body-organization need.
 - 💡 **Tag vocabulary evolution:** keep explicit-only controlled tags until evidence justifies change.
@@ -189,7 +194,10 @@ The detailed cross-phase direction is centralized in
   selector before reducing strong-model context.
 - 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces
   with safe usage/cost/error metadata, redaction, and retention controls once the E2E exists.
-- 💡 **Multi-user ownership/sharing:** design authentication/authorization/storage boundaries first.
+- 💡 **Multi-user ownership/sharing:** design authentication/authorization/storage boundaries first, with
+  a shared household note/list (for example a jointly editable shopping list visible promptly to both
+  users) as an early concrete validation scenario for shared identity, read/write grants,
+  synchronization/event propagation, conflict handling, and the private-vs-shared boundary.
 - 💡 **Performance/index optimization:** optimize only from measurements.
 - 💡 **Proactive Memory/Context Layer:** non-disruptive resurfacing only after the direct E2E flow proves
   useful.
