@@ -49,7 +49,7 @@ A RetrieveAction exists only when the user asks to retrieve or inspect knowledge
 
 Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
 
-Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independent targets and preserve references between units. Use only record, amend, remove, and delete. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. If a fact is fully represented by a canonical property, do not duplicate it in facts; keep only remaining free-text knowledge in facts. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
+Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independently meaningful knowledge into one atomic `facts` entry each, preserving their order and references. Use only record, amend, remove, and delete. For an explicit correction, use a remove unit describing the false prior fact plus a separate amend unit with corrected fact(s) and any authorized property change. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. For conversational knowledge that safely maps to a property, emit both the property and its human knowledge fact; properties do not replace retained knowledge. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
 
 When a fact semantically refers to another KnowledgeUnit, replace that occurrence in the fact with `{{ref:N}}`, where N is the zero-based index in that KnowledgeUnit's own `references` array. Preserve the original human-readable wording in that reference's `mention` field. The marker may occur repeatedly for repeated mentions. Do not emit Markdown `[[wikilinks]]`. Do not create a reference merely because another entity name appears: use a marker only for a semantic relationship that needs a KnowledgeReference. A name used only to identify the write target is not automatically a fact reference. References never authorize an inverse or mirrored write into the referenced unit.
 
@@ -184,6 +184,25 @@ class RequestPlan:
 
     actions: tuple[RequestAction, ...]
     limitations: tuple[str, ...]
+
+
+def plan_fact_ordinals(plan: RequestPlan) -> tuple[tuple[int, ...], ...]:
+    """Return write-unit fact ordinals flattened in validated request-plan order.
+
+    Retrieval and delegated actions contribute no ordinals. The result is ordered by write action
+    and then unit, and remains unchanged by later execution success or failure.
+    """
+    if not isinstance(plan, RequestPlan):
+        raise TypeError("plan must be a RequestPlan")
+    next_ordinal = 0
+    result: list[tuple[int, ...]] = []
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            continue
+        for unit in action.units:
+            result.append(tuple(range(next_ordinal, next_ordinal + len(unit.facts))))
+            next_ordinal += len(unit.facts)
+    return tuple(result)
 
 
 def render_request_planner_prompt(
@@ -978,6 +997,10 @@ def _validate_knowledge_unit(
         or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
     ):
         raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
+    if any("\n" in fact or "\r" in fact or "<!-- odyssey:fact" in fact for fact in raw_facts):
+        raise RequestPlanningError(
+            "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers"
+        )
     if intent == "delete" and (raw_properties or raw_tag_changes or raw_facts):
         raise RequestPlanningError(
             "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts"

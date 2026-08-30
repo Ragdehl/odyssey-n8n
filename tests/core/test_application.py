@@ -223,6 +223,69 @@ def test_failed_create_defers_dependent_but_runs_independent(
     assert result.status is ApplicationStatus.PARTIAL
 
 
+def test_execute_request_create_does_not_forward_fact_selector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CREATE receives request ordinals but never the UPDATE-only fact selector."""
+    action = WriteAction((unit("Marta"),))
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.CREATE, "marta-id", "Marta", "Marta.md"),
+    )
+    monkeypatch.setattr(application, "preflight_write_action", lambda *args, **kwargs: preflight)
+    monkeypatch.setattr(
+        application, "render_reference_facts", lambda *args: ReferenceRenderingResult(((),), ())
+    )
+    calls: list[dict[str, Any]] = []
+
+    def create(*args: Any, **kwargs: Any) -> EntityPersistenceResult:
+        calls.append(kwargs)
+        item = preflight[0]
+        return EntityPersistenceResult(
+            PersistenceOperation.CREATED, item.stable_id or "", item.path or "", 1
+        )
+
+    monkeypatch.setattr(application, "materialize_create", create)
+    selector = object()
+    result = run(RequestPlan((action,), ()), monkeypatch, fact_selector=selector)
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert calls[0]["request_id"] == "request-17a"
+    assert calls[0]["fact_ordinals"] == ()
+    assert "fact_selector" not in calls[0]
+
+
+def test_execute_request_update_forwards_fact_selector(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An injected selector reaches UPDATE materialization through request execution."""
+    target_unit = KnowledgeUnit(
+        SelectionCriteria("Marta", "Marta", "person", (), None),
+        "remove",
+        (),
+        (),
+        ("lo del piano",),
+        (),
+    )
+    action = WriteAction((target_unit,))
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.UPDATE, "marta-id", "Marta", "Marta.md"),
+    )
+    monkeypatch.setattr(application, "preflight_write_action", lambda *args, **kwargs: preflight)
+    monkeypatch.setattr(
+        application, "render_reference_facts", lambda *args: ReferenceRenderingResult(((),), ())
+    )
+    calls: list[dict[str, Any]] = []
+
+    def update(*args: Any, **kwargs: Any) -> EntityPersistenceResult:
+        calls.append(kwargs)
+        return EntityPersistenceResult(PersistenceOperation.UPDATED, "marta-id", "Marta.md", 2)
+
+    monkeypatch.setattr(application, "materialize_update", update)
+    selector = object()
+    result = run(RequestPlan((action,), ()), monkeypatch, fact_selector=selector)
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert calls[0]["fact_selector"] is selector
+
+
 def test_delegate_and_planning_failure_are_typed_without_mutation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

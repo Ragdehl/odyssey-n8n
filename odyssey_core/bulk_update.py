@@ -53,6 +53,8 @@ def execute_bulk_update(
     actor: str,
     now: str,
     writer: BoundedNoteWriter | None = None,
+    request_id: str | None = None,
+    fact_ordinals: tuple[int, ...] | None = None,
 ) -> BulkUpdateResult:
     """Execute one deterministic all-matching UPDATE independently for every selected note.
 
@@ -115,6 +117,8 @@ def execute_bulk_update(
                 actor=actor,
                 now=now,
                 writer=writer,
+                request_id=request_id,
+                fact_ordinals=fact_ordinals,
             )
         except Exception as error:  # Independent targets must not hide prior successes.
             failed.append(BulkUpdateFailure(stable_id, type(error).__name__, _safe_reason(error)))

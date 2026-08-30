@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .context import ContextPackage, get_context
+from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
 from .materialization import (
     BoundedNoteWriter,
@@ -26,6 +27,7 @@ from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import UnitTargetPreflight, preflight_write_action
 from .request_planning import (
     DelegateAction,
+    KnowledgeUnit,
     RequestPlan,
     RetrieveAction,
     WriteAction,
@@ -166,6 +168,7 @@ def execute_request(
     now: str,
     context_limit: int,
     writer: BoundedNoteWriter | None = None,
+    fact_selector: AtomicFactSelector | None = None,
     request_id_factory: Callable[[], str] = allocate_request_id,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
@@ -233,12 +236,18 @@ def execute_request(
 
     actions: list[ActionResult] = []
     affected: list[str] = []
+    next_fact_ordinal = 0
     for action_index, action in enumerate(plan.actions):
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
                 action_index, action, repository, schema, context_index, embedder, context_limit
             )
         elif isinstance(action, WriteAction):
+            unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
+                tuple(range(start, start + len(unit.facts)))
+                for start, unit in _fact_ordinal_starts(action, next_fact_ordinal)
+            )
+            next_fact_ordinal += sum(len(unit.facts) for unit in action.units)
             result = _execute_write(
                 action_index,
                 action,
@@ -252,6 +261,9 @@ def execute_request(
                 writer,
                 semantic_limit,
                 preflight_id_allocator,
+                request_id,
+                unit_ordinals,
+                fact_selector,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -379,6 +391,9 @@ def _execute_write(
     writer: BoundedNoteWriter | None,
     semantic_limit: int,
     id_allocator: Callable[[], str] | None,
+    request_id: str,
+    unit_ordinals: tuple[tuple[int, ...], ...],
+    fact_selector: AtomicFactSelector | None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     cardinalities = {unit.cardinality for unit in action.units}
@@ -394,7 +409,17 @@ def _execute_write(
             reason="UNSUPPORTED_MIXED_CARDINALITY",
         )
     if cardinalities == {"all_matching"}:
-        return _execute_bulk(action_index, action, repository, schema, actor, now, writer)
+        return _execute_bulk(
+            action_index,
+            action,
+            repository,
+            schema,
+            actor,
+            now,
+            writer,
+            request_id,
+            unit_ordinals[0],
+        )
     try:
         kwargs: dict[str, Any] = {}
         if id_allocator is not None:
@@ -424,6 +449,9 @@ def _execute_write(
         actor,
         now,
         writer,
+        request_id,
+        unit_ordinals,
+        fact_selector,
     )
     return ActionResult(
         action_index, action.kind, _action_status(results), unit_results=tuple(results)
@@ -438,6 +466,8 @@ def _execute_bulk(
     actor: str,
     now: str,
     writer: BoundedNoteWriter | None,
+    request_id: str,
+    fact_ordinals: tuple[int, ...],
 ) -> ActionResult:
     """Execute one or more independent all-matching updates through the existing bulk primitive."""
     if len(action.units) != 1:
@@ -452,6 +482,8 @@ def _execute_bulk(
             actor=actor,
             now=now,
             writer=writer,
+            request_id=request_id,
+            fact_ordinals=fact_ordinals,
         )
     except Exception as error:
         return ActionResult(
@@ -475,6 +507,9 @@ def _execute_single_units(
     actor: str,
     now: str,
     writer: BoundedNoteWriter | None,
+    request_id: str,
+    unit_ordinals: tuple[tuple[int, ...], ...],
+    fact_selector: AtomicFactSelector | None,
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
     pending_by_source: dict[int, list[PendingReference]] = {}
@@ -550,6 +585,8 @@ def _execute_single_units(
                     actor=actor,
                     now=now,
                     rendered_facts=rendered_facts[index],
+                    request_id=request_id,
+                    fact_ordinals=unit_ordinals[index],
                 )
             elif unit.intent == "delete":
                 persisted = materialize_delete(
@@ -569,6 +606,9 @@ def _execute_single_units(
                     now=now,
                     writer=writer,
                     rendered_facts=rendered_facts[index],
+                    request_id=request_id,
+                    fact_ordinals=unit_ordinals[index],
+                    fact_selector=fact_selector,
                 )
         except Exception as error:
             results[index] = UnitResult(
@@ -586,6 +626,16 @@ def _execute_single_units(
                 stable_note_id=persisted.id,
             )
     return [results[index] for index in range(len(action.units))]
+
+
+def _fact_ordinal_starts(action: WriteAction, start: int) -> tuple[tuple[int, KnowledgeUnit], ...]:
+    """Return each unit paired with its request-plan fact-ordinal start."""
+    pairs: list[tuple[int, KnowledgeUnit]] = []
+    current = start
+    for unit in action.units:
+        pairs.append((current, unit))
+        current += len(unit.facts)
+    return tuple(pairs)
 
 
 def _create_dependencies(

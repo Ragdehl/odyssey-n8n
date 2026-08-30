@@ -10,6 +10,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from odyssey_core.atomic_facts import (
+    append_atomic_facts,
+    find_unique_atomic_fact,
+    normalize_atomic_fact,
+    parse_atomic_facts,
+    remove_atomic_fact,
+    render_atomic_facts,
+)
+from odyssey_core.fact_selection import AtomicFactSelector, FactCandidate, validate_fact_selection
 from odyssey_core.notes import Note, parse_note, validate_note
 from odyssey_core.persistence import (
     EntityPersistenceResult,
@@ -70,6 +79,8 @@ def materialize_create(
     actor: str,
     now: str,
     rendered_facts: tuple[str, ...] | None = None,
+    request_id: str | None = None,
+    fact_ordinals: tuple[int, ...] | None = None,
 ) -> EntityPersistenceResult:
     """Materialize one preflight-authorized CREATE without semantic rendering.
 
@@ -105,7 +116,11 @@ def materialize_create(
     if any("{{ref:" in fact for fact in prepared_facts):
         raise MaterializationError("Raw reference markers cannot reach CREATE persistence")
     metadata = _stage_create_metadata(unit, preflight)
-    content = "\n".join(prepared_facts)
+    content = (
+        render_atomic_facts(prepared_facts, request_id, fact_ordinals or (), now)
+        if request_id is not None and prepared_facts
+        else "\n".join(prepared_facts)
+    )
     _validate_create_candidate(metadata, content, preflight.stable_id or "", actor, now, schema)
     return create_entity(
         repository,
@@ -354,6 +369,9 @@ def materialize_update(
     now: str,
     writer: BoundedNoteWriter | None = None,
     rendered_facts: tuple[str, ...] | None = None,
+    request_id: str | None = None,
+    fact_ordinals: tuple[int, ...] | None = None,
+    fact_selector: AtomicFactSelector | None = None,
 ) -> EntityPersistenceResult:
     """Materialize one resolved existing-note UPDATE with one guarded persistence operation.
 
@@ -399,6 +417,59 @@ def materialize_update(
         )
     )
     content = existing.content
+    if request_id is not None and unit.intent == "remove":
+        try:
+            existing_atomic = parse_atomic_facts(existing.content)
+            targets = tuple(
+                target
+                for description in prepared_facts
+                if (target := find_unique_atomic_fact(existing.content, description)) is not None
+            )
+        except ValueError as error:
+            raise MaterializationError("Existing atomic facts are malformed") from error
+        if len(targets) == len(prepared_facts) and len({target.start for target in targets}) == len(
+            targets
+        ):
+            for target in sorted(targets, key=lambda item: item.start, reverse=True):
+                content = remove_atomic_fact(content, target)
+            remaining_facts = ()
+        elif existing_atomic:
+            if fact_selector is None or len(prepared_facts) != 1:
+                raise MaterializationError("Atomic fact removal is ambiguous or lacks a selector")
+            candidates = tuple(FactCandidate(fact.locator, fact.text) for fact in existing_atomic)
+            selected = validate_fact_selection(
+                fact_selector.select(
+                    decision.existing_note_id or "", prepared_facts[0], candidates
+                ),
+                candidates,
+            )
+            if selected.outcome != "MATCH":
+                raise MaterializationError(f"Atomic fact selector returned {selected.outcome}")
+            target = next(fact for fact in existing_atomic if fact.locator == selected.locator)
+            content = remove_atomic_fact(content, target)
+            remaining_facts = ()
+    if request_id is not None and unit.intent != "remove":
+        if fact_ordinals is None or len(fact_ordinals) != len(prepared_facts):
+            raise MaterializationError("Atomic UPDATE requires one deterministic ordinal per fact")
+        try:
+            known = {
+                normalize_atomic_fact(item.text) for item in parse_atomic_facts(existing.content)
+            }
+        except ValueError as error:
+            raise MaterializationError("Existing atomic facts are malformed") from error
+        additions = tuple(
+            fact for fact in prepared_facts if normalize_atomic_fact(fact) not in known
+        )
+        addition_ordinals = tuple(
+            ordinal
+            for fact, ordinal in zip(prepared_facts, fact_ordinals, strict=True)
+            if normalize_atomic_fact(fact) not in known
+        )
+        if additions:
+            content = append_atomic_facts(
+                existing.content, additions, request_id, addition_ordinals, now
+            )
+        remaining_facts = ()
     if remaining_facts:
         if writer is None:
             raise MaterializationError("A bounded writer is required for non-duplicate facts")
