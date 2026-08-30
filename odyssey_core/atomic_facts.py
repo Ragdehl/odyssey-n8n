@@ -9,20 +9,6 @@ from datetime import date
 
 _MARKER = re.compile(r"^[ \t]*<!-- odyssey:fact request=([^\s>]+) ordinal=(\d+) -->[ \t]*$")
 _MARKER_PREFIX = "<!-- odyssey:fact"
-_SPANISH_MONTHS = (
-    "enero",
-    "febrero",
-    "marzo",
-    "abril",
-    "mayo",
-    "junio",
-    "julio",
-    "agosto",
-    "septiembre",
-    "octubre",
-    "noviembre",
-    "diciembre",
-)
 
 
 class AtomicFactError(ValueError):
@@ -86,14 +72,14 @@ def normalize_atomic_fact(text: str) -> str:
 
 
 def _capture_heading(now: str) -> str:
-    """Render the canonical human-visible Spanish heading for one capture date.
+    """Render the canonical compact human-visible heading for one capture date.
 
     Args:
         now: Canonical ISO date or timestamp whose calendar date identifies when Odyssey captured
             the facts.
 
     Returns:
-        A level-two Markdown heading with the date written for a human reader.
+        A level-one Markdown heading with the capture date in ``DD-MM-YYYY`` form.
 
     Raises:
         AtomicFactError: If ``now`` does not begin with a valid ISO calendar date.
@@ -104,8 +90,7 @@ def _capture_heading(now: str) -> str:
         raise AtomicFactError(
             "Atomic fact capture time must begin with a valid ISO date"
         ) from error
-    month = _SPANISH_MONTHS[captured.month - 1]
-    return f"## Añadido el {captured.day} de {month} de {captured.year}"
+    return f"# Added {captured.day:02d}-{captured.month:02d}-{captured.year}"
 
 
 def render_atomic_facts(
