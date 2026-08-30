@@ -85,6 +85,16 @@ Detailed domain properties should generally be decided when the corresponding ap
 
 **Future schema capability to revisit:** relationships such as `project: [[Odyssey]]` or `parent_task: [[Another task]]` suggest a future typed entity-reference property contract. Do not add that contract during this review without the application use case and extension design.
 
+### `store` — KEEP
+
+**Ownership:** domain-owned in a future Purchases application; retained in the current registry until the extension boundary exists.
+
+**Note value:** a physical or virtual store has reusable identity across many purchases and can accumulate facts or links over time.
+
+**Type value:** enables store-only collections/retrieval and gives a purchases application a stable identity for where purchases occurred.
+
+**Type-specific properties:** none now. Store-specific structure such as address, chain, online/offline state, or other commerce fields should be defined only when the Purchases application demonstrates a concrete user-facing need.
+
 ## Type composition decision
 
 ### Multiple simultaneous canonical types — DEFER
@@ -117,6 +127,39 @@ Reconsider multi-type notes only after a concrete case demonstrates that **one s
 
 This keeps Odyssey from introducing ontology composition machinery before there is evidence that it solves a real user problem.
 
+## Product-family naming direction
+
+Future applications built on Odyssey should have independent product identities while clearly belonging to the same family. Prefer names from *The Odyssey* or closely related Greek mythology **only when the mythological role meaningfully matches the application's function**.
+
+The name `Odyssey` should have a conceptual relationship with Homer's poem rather than being a decorative Greek reference. The useful metaphor is that the product accumulates experiences, people, places, decisions, and knowledge over time, preserves their identity and history, and helps the user navigate back to what matters later.
+
+A concise product definition to preserve is:
+
+> **Odyssey is a persistent knowledge layer that turns fragments accumulated through life and work into connected, durable knowledge that humans, applications, and AI agents can safely return to and use.**
+
+Possible future naming directions, to be decided only when each application's real scope is known:
+
+```text
+Projects / tasks      -> Athena
+                         strategy, guidance, planning, helping Odysseus act
+
+Messaging / mail /
+translation           -> Hermes
+                         messenger, movement of information, crossing boundaries
+
+Home / property       -> Ithaca
+                         home, destination, return
+
+Recipes / food        -> Circe or another food/hospitality-related name
+                         candidate only; decide from the real application scope
+
+Time / scheduling     -> Chronos
+                         only if the application is fundamentally about time;
+                         avoid confusing Chronos (time) with Cronus/Kronos (Titan)
+```
+
+These are candidates, not reserved names. The naming family must not imply a monolithic Odyssey UI: applications may be independently developed while depending on Odyssey as the persistent knowledge layer.
+
 ## Next review target
 
-`store`
+`product`
