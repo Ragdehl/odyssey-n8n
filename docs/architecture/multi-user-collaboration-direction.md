@@ -31,6 +31,12 @@ one logical shared note
 This direction should be designed as infrastructure/capability beneath Odyssey applications, not
 reimplemented separately by Projects, Shopping, Reminders, or other domain applications.
 
+Collaboration itself is **not** assumed to be a unique Odyssey feature. Contemporary knowledge tools
+already support combinations of private and shared spaces, shared notes, collaboration, permissions,
+and AI over shared knowledge. Odyssey should therefore not position this direction merely as "notes can
+be shared". The product hypothesis worth preserving is the combination of collaboration with Odyssey's
+user-owned/local knowledge model and common knowledge layer for applications and agents.
+
 ## 1. One logical note, multiple replicas
 
 A shared note must not become several unrelated notes that merely happen to contain similar text.
@@ -163,6 +169,97 @@ Shopping app -----+--> Odyssey collaboration capability --> authorization + sync
 Notes UI --------/
 ```
 
+### Effective knowledge view
+
+The more important product goal is that a user should normally ask **their Odyssey**, not manually choose
+between a private workspace, a household workspace, and a project workspace before every query.
+
+For a given authenticated user, Odyssey should derive an effective authorized knowledge view from:
+
+```text
+user's private local knowledge
++
+notes shared directly with the user
++
+notes shared with groups the user belongs to
+=
+effective knowledge visible to that user
+```
+
+For example:
+
+```text
+Edgar
+  |
+  +--> Edgar private notes
+  +--> notes shared with user:Edgar
+  +--> group:household notes
+  `--> group:project-x notes
+              |
+              v
+      authorized knowledge view
+              |
+      +-------+--------+
+      |       |        |
+   retrieval apps    agents
+```
+
+This should be a permission-filtered knowledge layer, not an instruction to give a model the whole
+system and ask it to ignore forbidden notes. Authorization must constrain candidate knowledge **before**
+semantic retrieval results or note content are exposed to an LLM, application, agent, or other caller.
+
+Conceptually:
+
+```text
+identity + grants
+      |
+      v
+authorized note/fact universe
+      |
+      v
+retrieval / indexes
+      |
+      v
+LLM, app, or agent
+```
+
+A private note owned by another user must therefore be absent from the caller's retrievable universe,
+not merely filtered from the final generated answer.
+
+The same authorized knowledge view should be reusable across Odyssey applications. A shopping app,
+projects app, MCP agent, and ordinary conversational query may each use different domain behavior while
+relying on the same underlying access decision. This is more important to the intended architecture
+than reproducing a conventional collaborative-workspace UI.
+
+### Local-private versus synchronized-shared boundary
+
+A strong deployment hypothesis to evaluate is that **private local-only notes do not need to be uploaded
+to the collaboration server at all**. Only knowledge that crosses a sharing boundary would require the
+shared synchronization service.
+
+Example:
+
+```text
+user vault
+  |
+  +--> 10,000 private notes ----------------> remain local/user-owned
+  |
+  `--> 50 explicitly shared notes ----------> sync service
+                                                |
+                                                +--> authorized user replicas
+                                                `--> authorized group replicas
+```
+
+This is not yet a final storage contract: backup, remote personal access, cross-device use, encryption,
+and deployment mode may justify additional services later. But multi-user collaboration itself must not
+silently imply that every private vault becomes centrally hosted.
+
+The potential Odyssey differentiation is therefore not "it can share notes". It is the possibility of a
+**personal/local memory layer whose authorized subset can become shared knowledge**, while applications
+and agents query one permission-aware knowledge layer rather than each owning a separate collaboration
+model. This hypothesis should be tested against contemporary alternatives again when the feature is
+actually designed; do not treat it as unique merely because it is written here.
+
 ## 5. Synchronization and offline replicas
 
 A collaboration service should coordinate revisions of shared logical notes. It does not imply that a
@@ -275,6 +372,25 @@ linked private budgeting reflection  -> link does not leak its content
 
 This validates that collaboration does not weaken the private-memory model.
 
+### Permission-aware retrieval across private and shared knowledge
+
+```text
+Edgar asks: "¿Qué tengo pendiente esta tarde?"
+
+retrieval may use:
+  + Edgar private tasks
+  + household shopping knowledge
+  + Project X shared tasks
+
+retrieval must not use:
+  - partner private tasks
+  - private notes belonging to another group member
+  - notes from groups Edgar is not authorized to access
+```
+
+This validates the effective knowledge view and the requirement that authorization happens before
+retrieval/LLM exposure.
+
 ### Project group
 
 ```text
@@ -298,6 +414,8 @@ The implementation phase must explicitly decide and test:
 - group creation, membership, removal, and administration;
 - minimal read/write/ownership permission semantics;
 - authorization enforcement before retrieval as well as before writes;
+- whether retrieval indexes are per-user, permission-filtered, partitioned, or another safe design;
+- how permissions interact with fact-level retrieval if Odyssey indexes facts separately from notes;
 - how private links/references appear inside shared knowledge;
 - central shared-state persistence versus user-owned local replicas;
 - revision identifiers and synchronization protocol;
@@ -323,6 +441,13 @@ Until the dedicated multi-user phase:
 - preserve private-by-default behavior;
 - treat groups as a supported future authorization principal, even if the first prototype begins with
   individual grants;
+- preserve the architectural possibility that private local-only notes never traverse the collaboration
+  server merely because multi-user support exists;
+- require authorization filtering before retrieval/LLM exposure, not only before final response output;
+- treat `private + directly shared + group-shared` as the conceptual effective knowledge view for a user,
+  without implementing it prematurely;
+- never claim collaboration itself, or this exact product combination, as unique without a fresh market
+  comparison when product positioning matters;
 - never claim multi-user privacy guarantees until the real authentication, authorization, storage, and
   sync boundaries are implemented and tested.
 
