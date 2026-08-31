@@ -27,6 +27,7 @@ from odyssey_core.notes import (  # noqa: E402
 from odyssey_core.semantic import (  # noqa: E402
     FastEmbedTextEmbedder,
     SemanticEntityIndex,
+    _normalized_vector,
     build_semantic_retrieval_text,
 )
 from odyssey_core.storage import VaultRepository  # noqa: E402
@@ -556,6 +557,95 @@ def retrieve_projection_texts(
     return projections
 
 
+def relationship_projection_ab(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    specs: tuple[NoteSpec, ...],
+    queries: list[dict[str, Any]],
+    embedder: FastEmbedTextEmbedder,
+) -> dict[str, Any]:
+    """Compare current and retired-relationship benchmark projections.
+
+    This diagnostic deliberately bypasses the production index so the schema-v2 relationship
+    wording can be added only to disposable benchmark text. It uses the same model, query text,
+    type filtering, and deterministic tie-breakers as the current dense retrieval path.
+
+    Args:
+        repository: Disposable vault containing the frozen historical notes.
+        schema: Current schema used to parse the compatibility-adapted notes.
+        specs: Frozen note specifications, including retired relationship wording.
+        queries: Frozen historical query and oracle definitions.
+        embedder: The selected local MiniLM runtime.
+
+    Returns:
+        Aggregate metrics and the target rank for the affected French query in both variants.
+    """
+    current = retrieve_projection_texts(repository, schema)
+    spec_by_id = {spec.id: spec for spec in specs}
+    historical_equivalent = dict(current)
+    for note_id, text in current.items():
+        relationship = spec_by_id[note_id].relationship
+        if relationship is not None:
+            historical_equivalent[note_id] = f"{text}\nRelationship To User: {relationship}"
+
+    note_metadata = {}
+    for path in repository.list_markdown_paths():
+        note = parse_note(repository.read_text(path))
+        note_metadata[str(note.metadata["id"])] = (
+            str(note.metadata["type"]),
+            str(note.metadata["name"]),
+            path,
+        )
+
+    def rank(projections: dict[str, str]) -> list[dict[str, Any]]:
+        vectors = {
+            note_id: _normalized_vector(vector)
+            for note_id, vector in zip(
+                projections, embedder.embed_documents(list(projections.values())), strict=True
+            )
+        }
+        rows = []
+        for query in queries:
+            query_text = f"Reference: {query['reference'].strip()}"
+            if query["context"].strip():
+                query_text += f"\nContext: {query['context'].strip()}"
+            query_vector = _normalized_vector(embedder.embed_queries([query_text])[0])
+            candidates = [
+                (
+                    sum(left * right for left, right in zip(vector, query_vector, strict=True)),
+                    note_id,
+                )
+                for note_id, vector in vectors.items()
+                if note_metadata[note_id][0] == query["type"]
+            ]
+            candidates.sort(
+                key=lambda item: (
+                    -item[0],
+                    note_metadata[item[1]][1].casefold(),
+                    note_metadata[item[1]][2],
+                )
+            )
+            rows.append({**query, "ranking": [note_id for _, note_id in candidates]})
+        return rows
+
+    current_rows = rank(current)
+    historical_rows = rank(historical_equivalent)
+    target_query = next(row for row in current_rows if row["id"] == "fr-wife-femme")
+    historical_target_query = next(row for row in historical_rows if row["id"] == "fr-wife-femme")
+    return {
+        "current": {
+            "metrics": metrics(current_rows),
+            "target_rank": target_query["ranking"].index("person-fr-epouse") + 1,
+        },
+        "historical_equivalent": {
+            "metrics": metrics(historical_rows),
+            "target_rank": historical_target_query["ranking"].index("person-fr-epouse") + 1,
+        },
+        "affected_query": "fr-wife-femme",
+        "projection_addition": "Relationship To User: <NoteSpec.relationship>",
+    }
+
+
 def rerank_top_candidates(
     rows: list[dict[str, Any]], projection_texts: dict[str, str], model_dir: Path, limit: int
 ) -> tuple[list[dict[str, Any]], dict[str, float]]:
@@ -627,6 +717,7 @@ def run(
     schema_path: Path,
     cache_dir: Path | None,
     cross_encoder_dir: Path | None = None,
+    relationship_ab: bool = False,
 ) -> dict[str, Any]:
     """Build the frozen vault and measure unchanged dense retrieval at broad cutoffs."""
     queries = load_json(queries_path)["queries"]
@@ -729,6 +820,10 @@ def run(
                     "timing": timing,
                 }
             result["cross_encoder_reranking"] = reranked_results
+        if relationship_ab:
+            result["relationship_projection_ab"] = relationship_projection_ab(
+                repository, schema, specs, queries, embedder
+            )
         return result
 
 
@@ -745,9 +840,20 @@ def main() -> None:
     )
     parser.add_argument("--cache-dir", type=Path)
     parser.add_argument("--cross-encoder-dir", type=Path)
+    parser.add_argument(
+        "--relationship-ab",
+        action="store_true",
+        help="Run the benchmark-only retired relationship projection diagnostic.",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = run(args.queries, args.schema, args.cache_dir, args.cross_encoder_dir)
+    result = run(
+        args.queries,
+        args.schema,
+        args.cache_dir,
+        args.cross_encoder_dir,
+        args.relationship_ab,
+    )
     rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")

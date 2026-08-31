@@ -70,6 +70,27 @@ baseline, although it is also a single known difficult synonym case. The Phase 1
 is therefore not reinterpreted; production retrieval remains unchanged and the evidence does not
 support declaring a retrieval strategy adopted.
 
+### Retired relationship wording A/B
+
+To test that explanation directly, the same frozen corpus, queries, MiniLM artifact, and query
+construction were rerun with a benchmark-only projection variant. It appended
+`Relationship To User: épouse` from the frozen `NoteSpec` to the affected note; it did not restore
+the field to the schema or production notes, and did not change the query or oracle.
+
+| Projection | `fr-wife-femme` rank | Recall@20 | Recall@50 | Recall@100 |
+|---|---:|---:|---:|---:|
+| Current schema-v3-compatible | 105 | 90.0% | 95.0% | 97.5% |
+| Historical-equivalent wording | 18 | 95.0% | 100.0% | 100.0% |
+
+The retired relationship wording restores the affected case and the sentinel Top-100 result, so
+the one changed Top-100 outcome is explained on this fixture. There is no demonstrated broad
+MiniLM degradation: current Recall@20 and Recall@50 are higher than the historical baseline, and
+the difference is attributable to removal of an intentional schema-v2 semantic signal. This does
+not justify restoring `relationship_to_user` to Odyssey Core. If a real need emerges, future
+domain/application schema contributions can provide useful semantic signals through the approved
+schema-ownership direction. The retrieval strategy recommendation remains **INSUFFICIENT
+EVIDENCE**.
+
 ## Planner precondition
 
 `run_planner_live.py` attempted 11 current production planner requests with `gpt-5.6-sol` and low
