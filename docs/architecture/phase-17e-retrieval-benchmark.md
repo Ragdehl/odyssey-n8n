@@ -1,6 +1,6 @@
 # Phase 17E retrieval benchmark
 
-Status: **benchmark evidence complete; planner decomposition evidence blocked by provider access**
+Status: **benchmark evidence complete; planner decomposition evidence obtained for semantic review**
 
 This checkpoint compares the current whole-note retrieval projection with identity-preserving
 atomic-fact units and a deterministic entity-plus-fact fusion. It is evidence only. Production
@@ -173,14 +173,32 @@ EVIDENCE**.
 
 ## Planner precondition
 
-`run_planner_live.py` attempted 11 current production planner requests with `gpt-5.6-sol` and low
-reasoning. All calls reached the planner boundary but failed with a sanitized `ConnectError` caused
-by temporary DNS name-resolution failure; no Sol output was produced. Atomic-fact decomposition
-remains unvalidated and is not used to justify the retrieval recommendation. A future rerun requires
-provider access; no production prompt change is indicated by this blocked evidence.
+The existing 11 cases were run with the current production planner, `gpt-5.6-sol`, and low
+reasoning. All 11 calls succeeded and their raw validated outputs are preserved in
+[`planner_live_results.jsonl`](../../benchmarks/phase17e_retrieval/planner_live_results.jsonl).
+The semantic review below supersedes the harness's literal placeholder-sensitive result; references
+such as `{{ref:0}}` retain their mention in the adjacent `references` array and are not missing
+material by themselves.
 
-A bounded environment diagnosis on 2026-09-01 found the required `OPENAI_API_KEY` variable present
-without inspecting its value, but DNS resolution failed for both `api.openai.com` and
-`api.github.com` with `gaierror: [Errno -3] Temporary failure in name resolution`. The current
-blocker is therefore DNS resolution unavailable; authentication, model access, and planner
-behavior could not be tested. No networking, credentials, or machine configuration was changed.
+| Case | Semantic result | Units / facts produced in order | Reason |
+|---|---|---|---|
+| multiple-clear-spanish | PASS | Marta: trabaja en Thales; vive en Lyon; tiene dos hijos | Three independent facts remain one entity; references preserve employer/residence. |
+| many-facts-same-entity | PASS | Carlos: nació en Madrid; estudió arquitectura; trabaja para Acme; corre maratones; tiene una hija Alba; quiere aprender japonés | Six independent facts remain attributable to Carlos. |
+| one-coherent-concept | FAIL | revisión del conocimiento: four separately phrased sentences | One coherent explanation was over-split into four facts. |
+| long-reflection | FAIL | journal: date; changed work relationship; former success measure; current values; coherent reflection to retain | Meaning is preserved, but the coherent reflection was over-split into five facts. |
+| mixed-request | PASS | Marta: trabaja en Thales; vive en Lyon. Unlinked request: comprar bicicleta; bicicleta se rompe; comparar precios | Target facts and independent decision facts are separated. |
+| multiple-entities | PASS | Ana: vive en París; trabaja como médica; hermano Luis. Luis: estudia música; toca piano | Entity boundaries and related reference are preserved. |
+| spanish-close-clauses | AMBIGUOUS | casa de Balma: one combined fact covering garden, breakfast, and shared impression | Coherence is preserved, but the planner emitted no explicit target entity. |
+| french | PASS | Claire: trabaja en Thales; vive en Lyon; ama fotografía; guarda cuadernos | Independent facts remain with Claire; references preserve the named places/company. |
+| long-request | PASS | Marta: works at Thales since March; lives in Lyon; two children; studies photography; may learn Italian; prefers train; wants Lisbon visit because friend lives there | Seven meaningful facts remain one entity with references. |
+| related-clauses | AMBIGUOUS | decision to move to Lyon: one combined fact containing the related reasons | Correct coherence, but the planner emitted no explicit decision target entity. |
+| concept-with-independent-fact | PASS | Odyssey: Markdown is source of truth and enables inspection. Marta: works at Thales | Concept and independent person fact are separate units. |
+
+The successful calls demonstrate that Sol can split multiple independent facts for one entity,
+preserve multiple entities, retain references, and separate mixed requests. The two FAIL cases show
+over-splitting of coherent conceptual/reflection material; the two AMBIGUOUS cases preserve semantic
+coherence but lack an explicit target entity. No under-splitting of independent facts was observed
+in this set. The current production planner prompt is unchanged. This is useful evidence that
+fact-based retrieval remains viable for further evaluation, but the over-splitting and target
+ambiguities mean the planner precondition is not sufficiently trustworthy to justify a production
+retrieval change or adoption decision. The recommendation remains **INSUFFICIENT EVIDENCE**.
