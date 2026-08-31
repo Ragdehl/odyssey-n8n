@@ -43,7 +43,7 @@ then adds reciprocal-rank evidence (`1 / (60 + rank)`) from the whole-note rank 
 rank. There is no generic reranker or learned fusion.
 
 For every strategy, Top-K is reported twice where facts are involved: raw retrieved units and
-unique entities. Exact-fact recall is reported only for cases with an exact fact oracle. Payload
+unique entities. ANY- and ALL-required-fact evidence is reported only for cases with a fact oracle. Payload
 tokens are an approximate `characters / 4` planning measure, not a provider tokenizer count.
 Vector bytes are the float32 payload only; SQLite/index metadata and model artifacts are reported
 separately when real evidence is available.

@@ -38,15 +38,16 @@ Whole-note indexed 1,536,000 float32 vector bytes; fact-level indexed 7,898,112;
 174 for fact-level, and 155 for combined. At Top 100, means were approximately 14,255, 2,035,
 and 2,049 tokens. These are characters/4 planning estimates, not provider-tokenizer counts.
 
-The corrected aggregate does not support a production adoption decision: combined improves Top-5
+The corrected aggregate does not support a production adoption decision: Combined is the leading
+candidate, improving Top-5
 entity recall but ties whole-note at Top-50/100 and has higher query/vector cost, while fact-level
 has weaker Top-5 entity recall and lower all-required-fact recall. Recommendation: **INSUFFICIENT EVIDENCE**.
 The isolated controls found no rank degradation: the shared target ranked 1 at every 21/51/101-fact
 note tier for all three strategies; the 65/85/171-word target fact ranked 1 at every fact-length
-tier for fact-level and combined (whole-note exact-fact rank is not applicable). This is a null
+tier for fact-level and combined (whole-note required-fact evidence is not applicable). This is a null
 result on the controlled fixture, not proof that dilution cannot occur. The recommendation remains
 **INSUFFICIENT EVIDENCE** because aggregate strategy differences are modest, cost-sensitive, and
-the planner precondition is blocked. This remains retrieval evidence only and does not authorize
+the planner still has an unresolved coherent-material over-splitting issue. This remains retrieval evidence only and does not authorize
 writes or change production retrieval. The corpus is deterministic and synthetic; its scale queries
 and distractors do not represent a live vault distribution.
 
@@ -54,7 +55,7 @@ and distractors do not represent a live vault distribution.
 
 The fact-level arm was rerun once against the same 1,000-entity corpus and local MiniLM artifact;
 the complete ranked fact list was then evaluated at each width. The machine-readable output keeps
-per-query first-entity-fact and exact-fact ranks, plus misses at every width.
+per-query first-entity-fact and required-fact ranks, plus misses at every width.
 
 | Raw fact width | Raw-unit entity recall | All-required-fact recall | True unique-entity recall | Mean / median unique entities in raw cutoff |
 |---:|---:|---:|---:|---:|
