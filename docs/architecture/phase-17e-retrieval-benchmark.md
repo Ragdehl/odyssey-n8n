@@ -176,9 +176,9 @@ EVIDENCE**.
 The existing 11 cases were run with the current production planner, `gpt-5.6-sol`, and low
 reasoning. All 11 calls succeeded and their raw validated outputs are preserved in
 [`planner_live_results.jsonl`](../../benchmarks/phase17e_retrieval/planner_live_results.jsonl).
-The semantic review below supersedes the harness's literal placeholder-sensitive result; references
-such as `{{ref:0}}` retain their mention in the adjacent `references` array and are not missing
-material by themselves.
+The semantic review uses the corrected offline evaluator: references such as `{{ref:0}}` retain
+their mention in the adjacent `references` array, and target identity accepts either `entity` or
+the human-readable `query` when `entity` is intentionally null.
 
 | Case | Semantic result | Units / facts produced in order | Reason |
 |---|---|---|---|
@@ -188,17 +188,18 @@ material by themselves.
 | long-reflection | FAIL | journal: date; changed work relationship; former success measure; current values; coherent reflection to retain | Meaning is preserved, but the coherent reflection was over-split into five facts. |
 | mixed-request | PASS | Marta: trabaja en Thales; vive en Lyon. Unlinked request: comprar bicicleta; bicicleta se rompe; comparar precios | Target facts and independent decision facts are separated. |
 | multiple-entities | PASS | Ana: vive en París; trabaja como médica; hermano Luis. Luis: estudia música; toca piano | Entity boundaries and related reference are preserved. |
-| spanish-close-clauses | AMBIGUOUS | casa de Balma: one combined fact covering garden, breakfast, and shared impression | Coherence is preserved, but the planner emitted no explicit target entity. |
+| spanish-close-clauses | PASS | casa de Balma: one combined fact covering garden, breakfast, and shared impression | Null entity is acceptable because the identity query preserves the target description. |
 | french | PASS | Claire: trabaja en Thales; vive en Lyon; ama fotografía; guarda cuadernos | Independent facts remain with Claire; references preserve the named places/company. |
 | long-request | PASS | Marta: works at Thales since March; lives in Lyon; two children; studies photography; may learn Italian; prefers train; wants Lisbon visit because friend lives there | Seven meaningful facts remain one entity with references. |
-| related-clauses | AMBIGUOUS | decision to move to Lyon: one combined fact containing the related reasons | Correct coherence, but the planner emitted no explicit decision target entity. |
-| concept-with-independent-fact | PASS | Odyssey: Markdown is source of truth and enables inspection. Marta: works at Thales | Concept and independent person fact are separate units. |
+| related-clauses | PASS | decision to move to Lyon: one combined fact containing the related reasons | Null entity is acceptable because the identity query preserves the target description. |
+| concept-with-independent-fact | PASS | Odyssey: Markdown is source of truth and enables inspection. Marta: works at Thales | Two intended facts now satisfy the corrected oracle. |
 
-The successful calls demonstrate that Sol can split multiple independent facts for one entity,
-preserve multiple entities, retain references, and separate mixed requests. The two FAIL cases show
-over-splitting of coherent conceptual/reflection material; the two AMBIGUOUS cases preserve semantic
-coherence but lack an explicit target entity. No under-splitting of independent facts was observed
-in this set. The current production planner prompt is unchanged. This is useful evidence that
-fact-based retrieval remains viable for further evaluation, but the over-splitting and target
-ambiguities mean the planner precondition is not sufficiently trustworthy to justify a production
-retrieval change or adoption decision. The recommendation remains **INSUFFICIENT EVIDENCE**.
+The corrected offline evaluation is 9 PASS, 2 FAIL, and 0 AMBIGUOUS. The successful calls demonstrate
+that Sol can split multiple independent facts for one entity, preserve multiple entities, retain
+references, and separate mixed requests. The two FAIL cases show over-splitting of coherent
+conceptual/reflection material; the former target/reference failures were evaluator false negatives.
+No under-splitting of independent facts was observed in this set. The current production planner
+prompt is unchanged. This is useful evidence that fact-based retrieval remains viable for further
+evaluation, but the over-splitting issue means the planner precondition is not sufficiently
+trustworthy to justify a production retrieval change or adoption decision. The recommendation
+remains **INSUFFICIENT EVIDENCE**.

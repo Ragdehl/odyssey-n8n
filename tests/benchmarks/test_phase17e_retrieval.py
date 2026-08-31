@@ -16,8 +16,36 @@ from benchmarks.phase17e_retrieval.benchmark import (
     run_strategy,
     validate_scale_oracles,
 )
+from benchmarks.phase17e_retrieval.run_planner_live import evaluate_units, reevaluate_saved_results
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_planner_evaluator_counts_reference_mentions_and_query_identity() -> None:
+    """Accept preserved references and null entities represented by target queries."""
+    case = {
+        "min_facts": 1,
+        "max_facts": 1,
+        "entities": ["casa de Balma"],
+        "required": ["jardín"],
+    }
+    units = [
+        {
+            "target": {"entity": None, "query": "la casa de Balma"},
+            "facts": ["Tiene un {{ref:0}} luminoso."],
+            "references": [{"mention": "jardín"}],
+        }
+    ]
+    result = evaluate_units(units, case)
+    assert result["status"] == "PASS"
+
+
+def test_offline_planner_results_use_corrected_concept_oracle(tmp_path: Path) -> None:
+    """Re-evaluate preserved planner output without contacting the provider."""
+    output = ROOT / "benchmarks/phase17e_retrieval/planner_live_results.jsonl"
+    cases = ROOT / "benchmarks/phase17e_retrieval/planner_cases.json"
+    passed = reevaluate_saved_results(output, cases, tmp_path / "planner-evaluation.jsonl")
+    assert passed == 9
 
 
 class KeywordEmbedder:
