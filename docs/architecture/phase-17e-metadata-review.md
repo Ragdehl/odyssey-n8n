@@ -1,6 +1,6 @@
 # Phase 17E common metadata review
 
-Status: **IN PROGRESS**
+Status: **COMPLETED**
 
 This supporting decision record belongs to the Phase 17E schema utility review. It records the common-metadata decisions separately from the type-by-type review so implementation changes can be applied and validated coherently.
 

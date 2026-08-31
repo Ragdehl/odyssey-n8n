@@ -1,0 +1,26 @@
+{
+  "notes": [
+    {"id":"marta","path":"people/Marta.md","name":"Marta","type":"person","facts":["Trabaja en Thales.","Vive en Lyon.","Le gusta cocinar con su familia.","Estudia fotografía los sábados.","Tiene un perro llamado Nube."]},
+    {"id":"marta-garcia","path":"people/Marta Garcia.md","name":"Marta García","type":"person","facts":["Trabaja en Airbus.","Vive en Toulouse.","Le gusta el senderismo."]},
+    {"id":"beatriz","path":"people/Beatriz.md","name":"Beatriz Alonso","type":"person","facts":["Partner of Xavi.","Works as a doctor in Barcelona.","Has two children.","Collects old maps."]},
+    {"id":"xavi","path":"people/Xavi.md","name":"Xavi","type":"person","facts":["Partner of Beatriz.","Works in design."]},
+    {"id":"claire","path":"people/Claire.md","name":"Claire Martin","type":"person","facts":["Travaille chez Thales.","Habite à Lyon.","Aime la photographie.","Cuisine souvent avec ses amis."]},
+    {"id":"claire-dubois","path":"people/Claire Dubois.md","name":"Claire Dubois","type":"person","facts":["Travaille chez Airbus.","Habite à Paris."]},
+    {"id":"odyssey","path":"projects/Odyssey.md","name":"Odyssey","type":"project","facts":["Personal knowledge system.","Uses Markdown as source of truth.","Retrieval is evidence only."]},
+    {"id":"short-store","path":"stores/Carrefour.md","name":"Carrefour Balma","type":"store","facts":["Store in Balma."]}
+  ],
+  "queries": [
+    {"id":"q1","query":"Where does Marta work now?","expected_entities":["marta"],"expected_facts":["Trabaja en Thales."],"category":"specific-fact","note_shape":"long"},
+    {"id":"q2","query":"¿En qué empresa trabaja Marta?","expected_entities":["marta"],"expected_facts":["Trabaja en Thales."],"category":"spanish","note_shape":"long"},
+    {"id":"q3","query":"Marta in Lyon and cooking with family","expected_entities":["marta"],"expected_facts":["Vive en Lyon."],"category":"spanish","note_shape":"long"},
+    {"id":"q4","query":"Who is Xavi's partner?","expected_entities":["beatriz"],"expected_facts":["Partner of Xavi."],"category":"contextual-entity","note_shape":"long"},
+    {"id":"q5","query":"Quelle personne travaille chez Thales et habite à Lyon ?","expected_entities":["claire"],"expected_facts":["Travaille chez Thales."],"category":"french","note_shape":"long"},
+    {"id":"q6","query":"Quel est le métier de Claire Martin ?","expected_entities":["claire"],"expected_facts":["Travaille chez Thales."],"category":"french","note_shape":"long"},
+    {"id":"q7","query":"What is Odyssey's source of truth?","expected_entities":["odyssey"],"expected_facts":["Uses Markdown as source of truth."],"category":"specific-fact","note_shape":"short"},
+    {"id":"q8","query":"Which shop is in Balma?","expected_entities":["short-store"],"expected_facts":["Store in Balma."],"category":"short-control","note_shape":"short"},
+    {"id":"q9","query":"Where does Marta Garcia work?","expected_entities":["marta-garcia"],"expected_facts":["Trabaja en Airbus."],"category":"entity-disambiguation","note_shape":"short"},
+    {"id":"q10","query":"Who lives in Paris?","expected_entities":["claire-dubois"],"expected_facts":["Habite à Paris."],"category":"entity-disambiguation","note_shape":"short"},
+    {"id":"q11","query":"What does Claire Martin enjoy photographing?","expected_entities":["claire"],"expected_facts":["Aime la photographie."],"category":"specific-fact","note_shape":"long"},
+    {"id":"q12","query":"What does Beatriz collect?","expected_entities":["beatriz"],"expected_facts":["Collects old maps."],"category":"specific-fact","note_shape":"long"}
+  ]
+}

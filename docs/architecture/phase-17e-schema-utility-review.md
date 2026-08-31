@@ -1,6 +1,6 @@
 # Phase 17E schema utility review
 
-Status: **IN PROGRESS**
+Status: **COMPLETED**
 
 This document is the working decision record for the Phase 17E pre-E2E schema utility review defined in the canonical Functional Roadmap and governed by the Odyssey knowledge-model direction.
 
