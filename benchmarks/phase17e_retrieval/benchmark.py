@@ -98,10 +98,8 @@ def build_corpus(
         tier_specs = (("medium", 20), ("long", 50), ("very-long", 100))
         for tier, count in tier_specs:
             facts = tuple(
-                [
-                    f"Maintains a meaningful recurring activity {index} related to community life."
-                    for index in range(count)
-                ]
+                f"Maintains a meaningful recurring activity {index} related to community life."
+                for index in range(count)
             )
             target = TIER_TARGETS[tier]
             facts = facts[: count // 2] + (target,) + facts[count // 2 :]
@@ -130,14 +128,12 @@ def build_corpus(
             )
         for number in range(len(corpus), scale_size):
             name = f"Scale Person {number:04d}"
-            facts = tuple(
-                (
-                    f"Works at Company {number % 17} in City {number % 23}.",
-                    f"Studies subject {number % 11} during the week.",
-                    f"Enjoys activity {number % 19} with close friends.",
-                    f"Keeps a collection of object {number % 13}.",
-                    f"Plans a project about topic {number % 29}.",
-                )
+            facts = (
+                f"Works at Company {number % 17} in City {number % 23}.",
+                f"Studies subject {number % 11} during the week.",
+                f"Enjoys activity {number % 19} with close friends.",
+                f"Keeps a collection of object {number % 13}.",
+                f"Plans a project about topic {number % 29}.",
             )
             item = {
                 "id": f"scale-{number:04d}",
@@ -339,7 +335,7 @@ def _metric_table(
                 if len(entities) == top:
                     break
             facts = {fact for _, fact in units}
-            unit_hits += bool(set(case.expected_entities) & set(entity for entity, _ in units))
+            unit_hits += bool(set(case.expected_entities) & {entity for entity, _ in units})
             entity_hits += set(case.expected_entities).issubset(entities)
             if case.expected_facts:
                 matched = len(set(case.expected_facts) & facts)

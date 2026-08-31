@@ -154,5 +154,7 @@ def test_scale_corpus_has_meaningful_cutoffs_and_controlled_dilution_tiers() -> 
     assert len(corpus) == 1000
     assert [len(corpus[index].facts) for index in (8, 9, 10)] == [21, 51, 101]
     lengths = [len(TIER_TARGETS[tier].split()) for tier in ("medium", "long", "very-long")]
-    assert lengths[0] >= 40 and lengths[1] >= 80 and lengths[2] >= 150
+    assert lengths[0] >= 40
+    assert lengths[1] >= 80
+    assert lengths[2] >= 150
     validate_scale_oracles(corpus, query_cases(data, scale_size=1000))
