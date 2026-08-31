@@ -15,7 +15,7 @@ from odyssey_core.context import build_context_retrieval_text
 from odyssey_core.notes import Note, validate_note
 from odyssey_core.semantic import FastEmbedTextEmbedder, TextEmbedder, _normalized_vector
 
-TOPS = (5, 20, 50, 100)
+TOPS = (5, 20, 50, 100, 200, 300, 500)
 RRF_K = 60
 FIXTURE_TIMESTAMP = "2026-08-31T00:00:00Z"
 TIER_TARGETS = {
@@ -392,6 +392,116 @@ def _payload_stats(
     return result
 
 
+def _fact_width_stats(
+    rankings: list[list[tuple[str, str]]],
+    cases: tuple[QueryCase, ...],
+    texts: list[tuple[str, str, str]],
+) -> dict[str, Any]:
+    """Report raw-fact width, unique-entity width, ranks, and grouped payload estimates."""
+    text_by_unit = {(entity, fact): text for entity, fact, text in texts}
+    result: dict[str, Any] = {"widths": {}, "ranks": [], "misses": {}}
+    for top in TOPS:
+        raw_entity_counts = []
+        max_slots = []
+        unique_entity_scans = []
+        raw_entity_hits = unique_entity_hits = exact_fact_hits = 0
+        for case, ranking in zip(cases, rankings, strict=True):
+            raw = ranking[:top]
+            counts: dict[str, int] = {}
+            for entity, _ in raw:
+                counts[entity] = counts.get(entity, 0) + 1
+            raw_entities = set(counts)
+            raw_entity_counts.append(len(raw_entities))
+            max_slots.append(max(counts.values(), default=0))
+            raw_entity_hits += bool(raw_entities & set(case.expected_entities))
+            unique = []
+            for _scanned, (entity, _) in enumerate(ranking, start=1):
+                if entity not in unique:
+                    unique.append(entity)
+                if len(unique) == top:
+                    break
+            unique_entity_scans.append(_scanned if unique else 0)
+            unique_entity_hits += set(case.expected_entities).issubset(unique)
+            if case.expected_facts:
+                exact_fact_hits += set(case.expected_facts).issubset({fact for _, fact in raw})
+        fact_case_count = sum(bool(case.expected_facts) for case in cases)
+        result["widths"][str(top)] = {
+            "raw_fact_entity_recall": raw_entity_hits / len(cases),
+            "raw_fact_exact_recall": (
+                exact_fact_hits / fact_case_count if fact_case_count else None
+            ),
+            "raw_unique_entity_count": _summary(raw_entity_counts),
+            "raw_max_facts_per_entity": _summary(max_slots),
+            "unique_entity_recall": unique_entity_hits / len(cases),
+            "unique_entity_raw_units_scanned": _summary(unique_entity_scans),
+            "grouped_payload": {
+                str(limit): {
+                    "chars": _summary(
+                        [
+                            _grouped_payload_summary(ranking, text_by_unit, top, limit)["chars"]
+                            for ranking in rankings
+                        ]
+                    ),
+                    "approx_tokens": _summary(
+                        [
+                            _grouped_payload_summary(ranking, text_by_unit, top, limit)[
+                                "approx_tokens"
+                            ]
+                            for ranking in rankings
+                        ]
+                    ),
+                }
+                for limit in (1, 2, 3)
+            },
+        }
+    for case, ranking in zip(cases, rankings, strict=True):
+        entity_ranks = [
+            index
+            for index, (entity, _) in enumerate(ranking, start=1)
+            if entity in case.expected_entities
+        ]
+        fact_ranks = [
+            index for index, (_, fact) in enumerate(ranking, start=1) if fact in case.expected_facts
+        ]
+        result["ranks"].append(
+            {
+                "id": case.id,
+                "first_expected_entity_fact_rank": min(entity_ranks, default=None),
+                "expected_exact_fact_rank": min(fact_ranks, default=None),
+            }
+        )
+    for top in (100, 200, 300, 500):
+        result["misses"][str(top)] = [
+            row["id"]
+            for row in result["ranks"]
+            if row["first_expected_entity_fact_rank"] is None
+            or row["first_expected_entity_fact_rank"] > top
+        ]
+    return result
+
+
+def _grouped_payload_summary(
+    ranking: list[tuple[str, str]],
+    text_by_unit: dict[tuple[str, str], str],
+    entity_limit: int,
+    facts_per_entity: int,
+) -> dict[str, float]:
+    """Estimate payload after retaining the first N ranked facts per selected entity."""
+    selected: list[tuple[str, str]] = []
+    counts: dict[str, int] = {}
+    entities: list[str] = []
+    for entity, fact in ranking:
+        if entity not in counts:
+            if len(entities) == entity_limit:
+                break
+            entities.append(entity)
+        if counts.get(entity, 0) < facts_per_entity:
+            selected.append((entity, fact))
+            counts[entity] = counts.get(entity, 0) + 1
+    chars = sum(len(text_by_unit[unit]) for unit in selected)
+    return {"chars": round(chars, 2), "approx_tokens": round(chars / 4, 2)}
+
+
 def _summary(values: list[float]) -> dict[str, float]:
     """Return mean, median, minimum, and maximum for a measured query series."""
     return {
@@ -473,7 +583,7 @@ def run_strategy(
     if strategy == "whole_note":
         metrics["fact"] = {str(top): None for top in TOPS}
     payloads = [text for _, _, text in units]
-    return {
+    result = {
         "strategy": strategy,
         "unit_count": len(units),
         "entity_count": len(corpus),
@@ -491,6 +601,9 @@ def run_strategy(
             [{"entity": entity, "fact": fact} for entity, fact in ranking] for ranking in rankings
         ],
     }
+    if strategy in {"fact_level", "combined"}:
+        result["fact_width"] = _fact_width_stats(rankings, cases, units)
+    return result
 
 
 def run(

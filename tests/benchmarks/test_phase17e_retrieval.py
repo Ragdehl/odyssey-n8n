@@ -73,6 +73,7 @@ def test_fact_projection_retains_identity_and_entity_metrics_deduplicate_units()
     assert result["unit_count"] > result["entity_count"]
     assert result["metrics"]["entity"]["20"] == 1.0
     assert result["metrics"]["fact"]["20"] == 1.0
+    assert set(result["fact_width"]["widths"]) == {"5", "20", "50", "100", "200", "300", "500"}
     assert result["vector_count"] == result["unit_count"]
     assert all(item["fact"] for item in result["rankings"][0][:5])
 

@@ -50,6 +50,46 @@ the planner precondition is blocked. This remains retrieval evidence only and do
 writes or change production retrieval. The corpus is deterministic and synthetic; its scale queries
 and distractors do not represent a live vault distribution.
 
+## Fact-level width sweep
+
+The fact-level arm was rerun once against the same 1,000-entity corpus and local MiniLM artifact;
+the complete ranked fact list was then evaluated at each width. The machine-readable output keeps
+per-query first-entity-fact and exact-fact ranks, plus misses at every width.
+
+| Raw fact width | Raw-unit entity recall | Exact-fact recall | True unique-entity recall | Mean / median unique entities in raw cutoff |
+|---:|---:|---:|---:|---:|
+| 100 | 86.4% | 68.2% | 86.4% | 79.95 / 91 |
+| 200 | 95.5% | 68.2% | 95.5% | 167.27 / 188.5 |
+| 300 | 95.5% | 68.2% | 95.5% | 259.23 / 287 |
+| 500 | 100.0% | 68.2% | 100.0% | 443.73 / 487 |
+
+At raw widths 100/200/300/500, the maximum facts consumed by one entity had mean/median/max
+values of 14.27/4/81, 18.23/4.5/101, 19.09/4.5/101, and 21.09/5/101 respectively. This shows
+substantial repeated-unit occupancy in some rankings, while the raw and true unique-entity recall
+values happen to coincide for these cases.
+
+The fact-level misses are `scale-100`, `scale-400`, and `scale-700` at Top-100; only `scale-100`
+remains at Top-200 and Top-300; none remain at Top-500. First expected-entity-fact ranks range
+from 1 to 477 (median 2); exact-fact ranks range from 1 to 208 (median 2). The complete per-query
+rank list is retained in the benchmark JSON output rather than duplicated here.
+
+| Raw fact width | Retrieved payload mean chars / approximate tokens | Grouped 1 / 2 / 3 facts per entity, mean approximate tokens |
+|---:|---:|---:|
+| 100 | 8,141 / 2,035 | 1,925 / 1,997 / 2,035 |
+| 200 | 15,857 / 3,964 | 3,770 / 3,913 / 3,953 |
+| 300 | 23,356 / 5,839 | 5,611 / 5,864 / 5,908 |
+| 500 | 38,211 / 9,553 | 9,299 / 10,010 / 10,085 |
+
+Grouped estimates retain the first ranked facts for the first K distinct entities and count each
+identity-preserving `Name`/`Type`/`Fact` projection once per retained unit; they are planning
+estimates, not a production grouping algorithm. For comparison, whole-note Top-100 payload has a
+mean of approximately 57,019 chars / 14,255 tokens. Widening fact retrieval reaches full entity
+recall only at 500 on this fixture, where its ungrouped payload is still smaller than whole-note
+Top-100 but materially larger than fact Top-100. The improvement stops between 200 and 300, then
+the final difficult case arrives only at 500, so fact-level remains a credible candidate but not
+an adoption decision or a reason to add a production grouping algorithm. Recommendation remains
+**INSUFFICIENT EVIDENCE**.
+
 ## Historical MiniLM regression sentinel
 
 The frozen Phase 11B.1c 1,000-note/40-query dense retrieval sentinel was rerun with the same
