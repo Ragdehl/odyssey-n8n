@@ -9,6 +9,14 @@ local runtime:
   > /data/odyssey/runtime/phase17e-retrieval/results.json
 ```
 
+Use the previously selected offline artifact explicitly for the scale run:
+
+```bash
+./.venv/bin/python -m benchmarks.phase17e_retrieval.benchmark \
+  --cache-dir /data/odyssey/runtime/phase11a-benchmark/embedding-cache \
+  --scale-size 1000
+```
+
 The benchmark uses the canonical schema and one frozen synthetic corpus in `cases.json`. The
 corpus deliberately contains long heterogeneous notes, short controls, Spanish and French
 queries, contextual/entity-disambiguation queries, exact-fact queries, and reusable identity
@@ -41,5 +49,11 @@ Vector bytes are the float32 payload only; SQLite/index metadata and model artif
 separately when real evidence is available.
 
 The real run requires the existing Odyssey MiniLM artifact because the production adapter is
-offline-only. If it is unavailable, the runner fails explicitly; deterministic tests use a fake
-embedder and are not model evidence.
+offline-only. The prior Odyssey artifact is expected at
+`/data/odyssey/runtime/phase11a-benchmark/embedding-cache`; `--cache-dir` makes discovery explicit.
+If it is unavailable, the runner fails explicitly; deterministic tests use a fake embedder and are
+not model evidence.
+
+`run_planner_live.py` uses the current production `OpenAIRequestPlanner` boundary with
+`gpt-5.6-sol` and low reasoning. It writes raw JSONL evidence to a caller-selected path and applies
+only a tolerant, human-readable rubric; it does not change the production prompt.

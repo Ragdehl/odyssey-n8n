@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+import statistics
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,11 @@ from odyssey_core.semantic import FastEmbedTextEmbedder, TextEmbedder, _normaliz
 
 TOPS = (5, 20, 50, 100)
 RRF_K = 60
+TIER_TARGETS = {
+    "medium": "The central fact explains a coherent long-form idea about preserving personal knowledge and making careful decisions from context while keeping evidence separate from authority and leaving room for later human review. It also emphasizes that a useful record should preserve chronology, distinguish observation from interpretation, and make uncertainty visible so that future readers can understand both what was known and why a conclusion was reached.",
+    "long": "The central fact explains a coherent long-form idea about preserving personal knowledge and making careful decisions from context. It connects capture, interpretation, retrieval, and later review as related parts of one durable practice. The idea is not a list of independent events; it is a single explanation of why trustworthy systems should keep source material authoritative, expose uncertainty, and use derived evidence to support rather than silently replace human judgment. This paragraph remains one meaningful conceptual fact even though it contains several sentences and qualifications.",
+    "very-long": "The central fact explains a coherent long-form idea about preserving personal knowledge and making careful decisions from context. It connects capture, interpretation, retrieval, and later review as related parts of one durable practice. The idea is not a list of independent events; it is a single explanation of why trustworthy systems should keep source material authoritative, expose uncertainty, and use derived evidence to support rather than silently replace human judgment. This paragraph remains one meaningful conceptual fact even though it contains several sentences and qualifications. It also describes how people revisit assumptions, compare evidence across languages and situations, retain historical context without confusing it with current truth, and leave ambiguous references unresolved until identity can be established safely. The point is conceptual coherence, not mechanical sentence splitting, and the whole passage should remain attributable to one concept note. It includes practical reflection about patience, revision, evidence, communication, and the responsibility to avoid turning a plausible interpretation into an irreversible claim before the person concerned has had an opportunity to review it.",
+}
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,7 @@ class QueryCase:
     expected_facts: tuple[str, ...]
     category: str
     note_shape: str
+    fact_shape: str = "short"
 
 
 def load_cases(path: Path) -> dict[str, Any]:
@@ -46,7 +53,9 @@ def load_cases(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def build_corpus(data: dict[str, Any], schema: dict[str, Any]) -> tuple[CorpusNote, ...]:
+def build_corpus(
+    data: dict[str, Any], schema: dict[str, Any], *, scale_size: int = 0
+) -> tuple[CorpusNote, ...]:
     """Build and validate isolated canonical notes from the frozen corpus definition."""
     corpus: list[CorpusNote] = []
     for item in data["notes"]:
@@ -82,12 +91,93 @@ def build_corpus(data: dict[str, Any], schema: dict[str, Any]) -> tuple[CorpusNo
                 facts,
             )
         )
+    if scale_size:
+        if scale_size < len(corpus):
+            raise ValueError("scale_size cannot be smaller than diagnostic corpus")
+        tier_specs = (("medium", 20), ("long", 50), ("very-long", 100))
+        for tier, count in tier_specs:
+            facts = tuple(
+                [
+                    f"Maintains a meaningful recurring activity {index} related to community life."
+                    for index in range(count)
+                ]
+            )
+            target = TIER_TARGETS[tier]
+            facts = facts[: count // 2] + (target,) + facts[count // 2 :]
+            note_id = f"tier-{tier}"
+            path = f"concepts/Tier {tier}.md"
+            content = render_atomic_facts(
+                facts, f"fixture-{note_id}", tuple(range(len(facts))), "2026-08-31"
+            )
+            note = Note(
+                metadata={
+                    "id": note_id,
+                    "name": f"Tier {tier}",
+                    "type": "concept",
+                    "created_at": "2026-08-31T00:00:00Z",
+                    "updated_at": "2026-08-31T00:00:00Z",
+                    "created_by": {"human": None, "app": "phase17e-benchmark"},
+                    "updated_by": {"human": None, "app": "phase17e-benchmark"},
+                    "revision": 1,
+                    "schema_version": 3,
+                },
+                content=content,
+            )
+            validate_note(note, schema)
+            corpus.append(
+                CorpusNote(note_id, path, note, build_context_retrieval_text(note, path), facts)
+            )
+        for number in range(len(corpus), scale_size):
+            name = f"Scale Person {number:04d}"
+            facts = tuple(
+                (
+                    f"Works at Company {number % 17} in City {number % 23}.",
+                    f"Studies subject {number % 11} during the week.",
+                    f"Enjoys activity {number % 19} with close friends.",
+                    f"Keeps a collection of object {number % 13}.",
+                    f"Plans a project about topic {number % 29}.",
+                )
+            )
+            item = {
+                "id": f"scale-{number:04d}",
+                "path": f"people/Scale Person {number:04d}.md",
+                "name": name,
+                "type": "person",
+                "facts": facts,
+            }
+            content = render_atomic_facts(
+                facts, f"fixture-scale-{number}", tuple(range(5)), "2026-08-31"
+            )
+            note = Note(
+                metadata={
+                    "id": item["id"],
+                    "name": name,
+                    "type": "person",
+                    "created_at": "2026-08-31T00:00:00Z",
+                    "updated_at": "2026-08-31T00:00:00Z",
+                    "created_by": {"human": None, "app": "phase17e-benchmark"},
+                    "updated_by": {"human": None, "app": "phase17e-benchmark"},
+                    "revision": 1,
+                    "schema_version": 3,
+                },
+                content=content,
+            )
+            validate_note(note, schema)
+            corpus.append(
+                CorpusNote(
+                    item["id"],
+                    item["path"],
+                    note,
+                    build_context_retrieval_text(note, item["path"]),
+                    facts,
+                )
+            )
     return tuple(corpus)
 
 
-def query_cases(data: dict[str, Any]) -> tuple[QueryCase, ...]:
+def query_cases(data: dict[str, Any], *, scale_size: int = 0) -> tuple[QueryCase, ...]:
     """Return immutable query cases with explicit entity and fact oracles."""
-    return tuple(
+    cases = [
         QueryCase(
             item["id"],
             item["query"],
@@ -95,9 +185,37 @@ def query_cases(data: dict[str, Any]) -> tuple[QueryCase, ...]:
             tuple(item.get("expected_facts", ())),
             item["category"],
             item["note_shape"],
+            item.get("fact_shape", "short"),
         )
         for item in data["queries"]
-    )
+    ]
+    if scale_size:
+        for tier in ("medium", "long", "very-long"):
+            cases.append(
+                QueryCase(
+                    f"tier-{tier}",
+                    "central coherent idea about careful knowledge decisions",
+                    (f"tier-{tier}",),
+                    (TIER_TARGETS[tier],),
+                    "note-dilution",
+                    tier,
+                    tier,
+                )
+            )
+    for number in (100, 250, 400, 550, 700, 850, 999):
+        if number >= scale_size:
+            continue
+        cases.append(
+            QueryCase(
+                f"scale-{number}",
+                f"Which person works at Company {number % 17} and studies subject {number % 11}?",
+                (f"scale-{number:04d}",),
+                (f"Works at Company {number % 17} in City {number % 23}.",),
+                "scale-contextual",
+                "scale",
+            )
+        )
+    return tuple(cases)
 
 
 def _rank(query_vector: Any, vectors: list[tuple[float, ...]]) -> list[int]:
@@ -115,13 +233,17 @@ def _metric_table(
         unit_hits = entity_hits = fact_hits = 0
         for case, ranked in zip(cases, ranking, strict=True):
             units = ranked[:top]
-            entities = {entity for entity, _ in units}
+            entities = []
+            for entity, _ in ranked:
+                if entity not in entities:
+                    entities.append(entity)
+                if len(entities) == top:
+                    break
             facts = {fact for _, fact in units}
-            unit_hits += bool(
-                set(case.expected_entities) & entities
-            )  # one unit per entity is enough
+            unit_hits += bool(set(case.expected_entities) & set(entity for entity, _ in units))
             entity_hits += set(case.expected_entities).issubset(entities)
-            fact_hits += not case.expected_facts or set(case.expected_facts).issubset(facts)
+            if case.expected_facts:
+                fact_hits += set(case.expected_facts).issubset(facts)
         count = len(cases)
         output["unit"][str(top)] = unit_hits / count
         output["entity"][str(top)] = entity_hits / count
@@ -148,6 +270,44 @@ def _evaluate(ranking: list[list[tuple[str, str]]], cases: tuple[QueryCase, ...]
         for category in sorted({case.category for case in cases})
     }
     return metrics
+
+
+def _payload_stats(
+    rankings: list[list[tuple[str, str]]], texts: list[tuple[str, str, str]]
+) -> dict[str, Any]:
+    """Summarize raw-unit and first-seen unique-entity payload at every cutoff."""
+    text_by_unit = {(entity, fact): text for entity, fact, text in texts}
+    result: dict[str, Any] = {}
+    for top in TOPS:
+        raw = [sum(len(text_by_unit[unit]) for unit in ranking[:top]) for ranking in rankings]
+        unique_values = []
+        for ranking in rankings:
+            seen: set[str] = set()
+            selected = []
+            for entity, fact in ranking:
+                if entity not in seen:
+                    seen.add(entity)
+                    selected.append((entity, fact))
+                if len(selected) == top:
+                    break
+            unique_values.append(sum(len(text_by_unit[unit]) for unit in selected))
+        result[str(top)] = {
+            "raw_units_chars": _summary(raw),
+            "raw_units_approx_tokens": _summary([value / 4 for value in raw]),
+            "unique_entities_chars": _summary(unique_values),
+            "unique_entities_approx_tokens": _summary([value / 4 for value in unique_values]),
+        }
+    return result
+
+
+def _summary(values: list[float]) -> dict[str, float]:
+    """Return mean, median, minimum, and maximum for a measured query series."""
+    return {
+        "mean": round(statistics.mean(values), 2),
+        "median": round(statistics.median(values), 2),
+        "min": round(min(values), 2),
+        "max": round(max(values), 2),
+    }
 
 
 def run_strategy(
@@ -218,6 +378,8 @@ def run_strategy(
         rankings.append([(units[index][0], units[index][1]) for index in fused])
     query_seconds = time.perf_counter() - started
     metrics = _evaluate(rankings, cases)
+    if strategy == "whole_note":
+        metrics["fact"] = {str(top): None for top in TOPS}
     payloads = [text for _, _, text in units]
     return {
         "strategy": strategy,
@@ -232,16 +394,19 @@ def run_strategy(
         "build_seconds": round(build_seconds, 6),
         "query_seconds": round(query_seconds, 6),
         "metrics": metrics,
+        "retrieved_payload": _payload_stats(rankings, units),
         "rankings": [
             [{"entity": entity, "fact": fact} for entity, fact in ranking] for ranking in rankings
         ],
     }
 
 
-def run(data: dict[str, Any], schema: dict[str, Any], embedder: TextEmbedder) -> dict[str, Any]:
+def run(
+    data: dict[str, Any], schema: dict[str, Any], embedder: TextEmbedder, *, scale_size: int = 0
+) -> dict[str, Any]:
     """Run all three arms with one corpus, query set, model, and runtime."""
-    corpus = build_corpus(data, schema)
-    cases = query_cases(data)
+    corpus = build_corpus(data, schema, scale_size=scale_size)
+    cases = query_cases(data, scale_size=scale_size)
     return {
         "runtime": {
             "architecture": platform.machine(),
@@ -266,12 +431,14 @@ def main() -> None:
     parser.add_argument(
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
     )
+    parser.add_argument("--cache-dir", type=Path)
+    parser.add_argument("--scale-size", type=int, default=1000)
     args = parser.parse_args()
     data = load_cases(args.cases)
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     started = time.perf_counter()
-    embedder = FastEmbedTextEmbedder()
-    result = run(data, schema, embedder)
+    embedder = FastEmbedTextEmbedder(cache_dir=args.cache_dir, local_files_only=True)
+    result = run(data, schema, embedder, scale_size=args.scale_size)
     result["runtime"]["model_load_seconds"] = round(time.perf_counter() - started, 6)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

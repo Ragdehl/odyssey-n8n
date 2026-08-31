@@ -7,6 +7,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from benchmarks.phase17e_retrieval.benchmark import (
+    TIER_TARGETS,
+    QueryCase,
+    _metric_table,
     build_corpus,
     load_cases,
     query_cases,
@@ -85,3 +88,26 @@ def test_three_strategy_outputs_are_comparable_and_fusion_is_deterministic() -> 
     assert whole["unit_count"] == whole["entity_count"] == 8
     assert first["rankings"] == second["rankings"]
     assert first["metrics"]["entity"]["20"] == 1.0
+
+
+def test_unique_entity_top_k_scans_past_repeated_fact_units_and_fact_oracle_is_optional() -> None:
+    """Separate raw-unit Top-K from true unique-entity Top-K and omit unlabelled facts."""
+    case = QueryCase("q", "q", ("target",), (), "test", "short")
+    ranking = [
+        [("same", "a"), ("same", "b"), ("same", "c"), ("same", "d"), ("same", "e"), ("target", "f")]
+    ]
+    metrics = _metric_table(ranking, (case,))
+    assert metrics["unit"]["5"] == 0.0
+    assert metrics["entity"]["5"] == 1.0
+    assert metrics["fact"]["5"] is None
+
+
+def test_scale_corpus_has_meaningful_cutoffs_and_controlled_dilution_tiers() -> None:
+    """Keep the stress corpus schema-valid and exercise note/fact length tiers."""
+    data = load_cases(ROOT / "benchmarks/phase17e_retrieval/cases.json")
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    corpus = build_corpus(data, schema, scale_size=1000)
+    assert len(corpus) == 1000
+    assert [len(corpus[index].facts) for index in (8, 9, 10)] == [21, 51, 101]
+    lengths = [len(TIER_TARGETS[tier].split()) for tier in ("medium", "long", "very-long")]
+    assert lengths[0] >= 40 and lengths[1] >= 80 and lengths[2] >= 150
