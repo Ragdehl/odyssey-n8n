@@ -47,7 +47,7 @@ note tier for all three strategies; the 65/85/171-word target fact ranked 1 at e
 tier for fact-level and combined (whole-note required-fact evidence is not applicable). This is a null
 result on the controlled fixture, not proof that dilution cannot occur. The recommendation remains
 **INSUFFICIENT EVIDENCE** because aggregate strategy differences are modest, cost-sensitive, and
-the planner still has an unresolved coherent-material over-splitting issue. This remains retrieval evidence only and does not authorize
+the planner revalidation is now complete; the separate retrieval adoption decision remains pending. This remains retrieval evidence only and does not authorize
 writes or change production retrieval. The corpus is deterministic and synthetic; its scale queries
 and distractors do not represent a live vault distribution.
 
@@ -174,8 +174,8 @@ EVIDENCE**.
 
 ## Planner precondition
 
-The existing 11 cases were run with the current production planner, `gpt-5.6-sol`, and low
-reasoning. All 11 calls succeeded and their raw validated outputs are preserved in
+Final planner evidence is documented in
+the [Phase 17E planner semantic-atomicity contract](phase-17e-planner-atomicity.md); raw outputs are preserved in
 [`planner_live_results.jsonl`](../../benchmarks/phase17e_retrieval/planner_live_results.jsonl).
 The semantic review uses the corrected offline evaluator: references such as `{{ref:0}}` retain
 their mention in the adjacent `references` array, and target identity accepts either `entity` or
@@ -185,8 +185,8 @@ the human-readable `query` when `entity` is intentionally null.
 |---|---|---|---|
 | multiple-clear-spanish | PASS | Marta: trabaja en Thales; vive en Lyon; tiene dos hijos | Three independent facts remain one entity; references preserve employer/residence. |
 | many-facts-same-entity | PASS | Carlos: nació en Madrid; estudió arquitectura; trabaja para Acme; corre maratones; tiene una hija Alba; quiere aprender japonés | Six independent facts remain attributable to Carlos. |
-| one-coherent-concept | FAIL | revisión del conocimiento: four separately phrased sentences | One coherent explanation was over-split into four facts. |
-| long-reflection | FAIL | journal: date; changed work relationship; former success measure; current values; coherent reflection to retain | Meaning is preserved, but the coherent reflection was over-split into five facts. |
+| one-coherent-concept | PASS after refinement | revisión del conocimiento: one coherent fact | Semantic-atomicity clarification preserved the explanation as one fact. |
+| long-reflection | PASS after refinement | journal: one coherent reflection fact | Semantic-atomicity clarification preserved the reflection as one fact. |
 | mixed-request | PASS | Marta: trabaja en Thales; vive en Lyon. Unlinked request: comprar bicicleta; bicicleta se rompe; comparar precios | Target facts and independent decision facts are separated. |
 | multiple-entities | PASS | Ana: vive en París; trabaja como médica; hermano Luis. Luis: estudia música; toca piano | Entity boundaries and related reference are preserved. |
 | spanish-close-clauses | PASS | casa de Balma: one combined fact covering garden, breakfast, and shared impression | Null entity is acceptable because the identity query preserves the target description. |
@@ -195,12 +195,10 @@ the human-readable `query` when `entity` is intentionally null.
 | related-clauses | PASS | decision to move to Lyon: one combined fact containing the related reasons | Null entity is acceptable because the identity query preserves the target description. |
 | concept-with-independent-fact | PASS | Odyssey: Markdown is source of truth and enables inspection. Marta: works at Thales | Two intended facts now satisfy the corrected oracle. |
 
-The corrected offline evaluation is 9 PASS, 2 FAIL, and 0 AMBIGUOUS. The successful calls demonstrate
-that Sol can split multiple independent facts for one entity, preserve multiple entities, retain
-references, and separate mixed requests. The two FAIL cases show over-splitting of coherent
-conceptual/reflection material; the former target/reference failures were evaluator false negatives.
-No under-splitting of independent facts was observed in this set. The current production planner
-prompt is unchanged. This is useful evidence that fact-based retrieval remains viable for further
-evaluation, but the over-splitting issue means the planner precondition is not sufficiently
-trustworthy to justify a production retrieval change or adoption decision. The recommendation
-remains **INSUFFICIENT EVIDENCE**.
+The final corrected evaluation is 11/11 PASS for the preserved cases, with no new regressions; the
+five additional cases also pass. The stability rerun passed both original critical cases. Sol splits
+independent facts for one entity, preserves multiple entities and references, and keeps coherent
+material unified. The production planner prompt now contains one concise semantic-atomicity
+clarification; no schema, RequestPlan, retrieval, or persistence contract changed. The planner
+precondition is sufficiently trustworthy to proceed to the separate retrieval adoption decision,
+but this benchmark does not adopt Combined. The recommendation remains **INSUFFICIENT EVIDENCE**.

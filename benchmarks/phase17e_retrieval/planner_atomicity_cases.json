@@ -1,0 +1,42 @@
+[
+  {
+    "id": "atomicity-coherent-explanation",
+    "request": "Un sistema de conocimiento es confiable cuando conserva el contexto, muestra la incertidumbre y permite revisar una decisión al aparecer nueva evidencia, porque así una sugerencia no se confunde con un hecho confirmado.",
+    "min_facts": 1,
+    "max_facts": 1,
+    "entities": ["sistema de conocimiento"],
+    "required": ["contexto", "incertidumbre", "nueva evidencia"]
+  },
+  {
+    "id": "atomicity-reflection-contrast",
+    "request": "Antes medía el éxito por trabajar más horas y buscar aprobación externa; ahora valoro la atención, el descanso y ayudar a otras personas, una reflexión sobre cómo cambió mi relación con el trabajo.",
+    "min_facts": 1,
+    "max_facts": 1,
+    "entities": ["relación con el trabajo"],
+    "required": ["Antes", "ahora", "descanso"]
+  },
+  {
+    "id": "atomicity-decision-reasons",
+    "request": "Quiero mudarme a Lyon porque tendríamos más espacio y estaríamos cerca de nuestros amigos.",
+    "min_facts": 1,
+    "max_facts": 1,
+    "entities": ["decisión de mudarme a Lyon"],
+    "required": ["más espacio", "cerca de nuestros amigos"]
+  },
+  {
+    "id": "atomicity-independent-sentence",
+    "request": "Marta vive en Lyon y trabaja en Thales.",
+    "min_facts": 2,
+    "max_facts": 2,
+    "entities": ["Marta"],
+    "required": ["Lyon", "Thales"]
+  },
+  {
+    "id": "atomicity-mixed-concept-fact",
+    "request": "La fuente Markdown facilita revisar las notas con herramientas normales porque conserva el contexto visible. Además, Marta trabaja en Thales.",
+    "min_facts": 2,
+    "max_facts": 2,
+    "entities": ["fuente Markdown", "Marta"],
+    "required": ["herramientas normales", "Thales"]
+  }
+]

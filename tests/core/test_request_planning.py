@@ -518,6 +518,15 @@ def test_prompt_and_schema_freeze_reference_occurrence_contract(schema: dict) ->
     assert reference_schema["required"] == ["target_index", "role", "mention"]
 
 
+def test_prompt_explains_semantic_atomicity_not_punctuation_segmentation(schema: dict) -> None:
+    """Keep coherent explanations together while separating independent same-sentence facts."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    assert "Atomicity is semantic, not punctuation-based" in prompt
+    assert "keep sentences or clauses together" in prompt
+    assert "Marta vive en Lyon y trabaja en Thales" in prompt
+    assert "Quiero mudarme a Lyon porque" in prompt
+
+
 def test_dynamic_capabilities_reflect_schema_changes_and_controlled_tags(schema: dict) -> None:
     """Render caller schema fields and the controlled tag registry without static values."""
     pytest.skip("Retired controlled tag registry")

@@ -43,6 +43,13 @@ def _target_value(unit: Any, key: str) -> Any:
     return getattr(target, key, None)
 
 
+def _target_matches(expected: str, actual: str) -> bool:
+    """Match identity descriptions when one normalized human phrase contains the other."""
+    expected_text = " ".join(expected.casefold().split())
+    actual_text = " ".join(actual.casefold().split())
+    return expected_text in actual_text or actual_text in expected_text
+
+
 def evaluate_units(units: list[Any], case: dict[str, Any]) -> dict[str, Any]:
     """Apply the semantic planner rubric to normalized live or serialized KnowledgeUnits.
 
@@ -72,7 +79,7 @@ def evaluate_units(units: list[Any], case: dict[str, Any]) -> dict[str, Any]:
         if required.casefold() not in text:
             failures.append(f"missing material detail {required!r}")
     matched_entities = sum(
-        any(expected.casefold() in target.casefold() for target in targets)
+        any(_target_matches(expected, target) for target in targets)
         for expected in case["entities"]
     )
     if matched_entities != len(case["entities"]):

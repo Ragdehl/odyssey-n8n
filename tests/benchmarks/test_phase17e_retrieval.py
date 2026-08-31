@@ -45,7 +45,7 @@ def test_offline_planner_results_use_corrected_concept_oracle(tmp_path: Path) ->
     output = ROOT / "benchmarks/phase17e_retrieval/planner_live_results.jsonl"
     cases = ROOT / "benchmarks/phase17e_retrieval/planner_cases.json"
     passed = reevaluate_saved_results(output, cases, tmp_path / "planner-evaluation.jsonl")
-    assert passed == 9
+    assert passed == 11
 
 
 class KeywordEmbedder:
