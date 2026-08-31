@@ -22,31 +22,38 @@ projection calls the current `build_context_retrieval_text` directly. Fact proje
 ## Results
 
 The diagnostic corpus (8 notes/12 queries) was retained and supplemented by a deterministic,
-schema-v3-compatible scale corpus of 1,000 entities and 22 queries total. Scale notes include
-21-, 51-, and 101-fact controlled dilution tiers; fact projections include approximately 65-,
-85-, and 150-word coherent long-fact tiers.
+schema-v3-compatible scale corpus of 1,000 entities and 22 queries total. Scale single-target
+oracles combine company, city, subject, and activity attributes; deterministic tests prove one
+matching entity per query. Scale notes include 21-, 51-, and 101-fact controlled dilution tiers;
+fact projections include approximately 65-, 85-, and 171-word coherent long-fact tiers.
 
 | Strategy | Entity Recall@5/20/50/100 | Exact Fact Recall@5/20/50/100 | Units / vectors | Build s | Query s |
 |---|---|---|---:|---:|---:|
-| Whole-note | 68.2% / 72.7% / 72.7% / 81.8% | N/A | 1,000 / 1,000 | 94.79 | 0.85 |
-| Fact-level | 72.7% / 72.7% / 77.3% / 77.3% | 68.2% / 72.7% / 77.3% / 77.3% | 5,142 / 5,142 | 103.03 | 3.60 |
-| Combined | 72.7% / 72.7% / 77.3% / 77.3% | 72.7% / 72.7% / 77.3% / 77.3% | 5,142 / 6,142 | 199.72 | 8.57 |
+| Whole-note | 72.7% / 77.3% / 90.9% / 90.9% | N/A | 1,000 / 1,000 | 96.10 | 0.97 |
+| Fact-level | 68.2% / 86.4% / 86.4% / 86.4% | 63.6% / 68.2% / 68.2% / 68.2% | 5,142 / 5,142 | 104.09 | 3.47 |
+| Combined | 77.3% / 86.4% / 90.9% / 90.9% | 68.2% / 68.2% / 72.7% / 77.3% | 5,142 / 6,142 | 199.72 | 8.41 |
 
 Whole-note indexed 1,536,000 float32 vector bytes; fact-level indexed 7,898,112; combined
 9,434,112. At Top 5, mean raw retrieved payload was approximately 1,353 tokens for whole-note,
-173 for fact-level, and 155 for combined. At Top 100, means were approximately 14,262, 2,034,
-and 2,045 tokens. These are characters/4 planning estimates, not provider-tokenizer counts.
+174 for fact-level, and 155 for combined. At Top 100, means were approximately 14,255, 2,035,
+and 2,049 tokens. These are characters/4 planning estimates, not provider-tokenizer counts.
 
-The result supports **ADOPT COMBINED**: it improves exact-fact recall over fact-only and entity
-recall over whole-note on this corpus, while materially increasing build/vector/query cost. This
-remains retrieval evidence only and does not authorize writes or change production retrieval.
-The corpus is deterministic and synthetic; its scale queries and distractors do not represent a
-live vault distribution.
+The corrected aggregate does not support a production adoption decision: combined improves Top-5
+entity recall but ties whole-note at Top-50/100 and has higher query/vector cost, while fact-level
+has weaker Top-5 entity recall and lower exact-fact recall. Recommendation: **INSUFFICIENT EVIDENCE**.
+The isolated controls found no rank degradation: the shared target ranked 1 at every 21/51/101-fact
+note tier for all three strategies; the 65/85/171-word target fact ranked 1 at every fact-length
+tier for fact-level and combined (whole-note exact-fact rank is not applicable). This is a null
+result on the controlled fixture, not proof that dilution cannot occur. The recommendation remains
+**INSUFFICIENT EVIDENCE** because aggregate strategy differences are modest, cost-sensitive, and
+the planner precondition is blocked. This remains retrieval evidence only and does not authorize
+writes or change production retrieval. The corpus is deterministic and synthetic; its scale queries
+and distractors do not represent a live vault distribution.
 
 ## Planner precondition
 
 `run_planner_live.py` attempted 11 current production planner requests with `gpt-5.6-sol` and low
-reasoning. All calls reached the planner boundary but failed with the same provider-call error;
-no Sol output was produced. Atomic-fact decomposition remains unvalidated and is not used to
-justify the retrieval recommendation. A future rerun requires provider access; no production
-prompt change is indicated by this blocked evidence.
+reasoning. All calls reached the planner boundary but failed with a sanitized `ConnectError` caused
+by temporary DNS name-resolution failure; no Sol output was produced. Atomic-fact decomposition
+remains unvalidated and is not used to justify the retrieval recommendation. A future rerun requires
+provider access; no production prompt change is indicated by this blocked evidence.

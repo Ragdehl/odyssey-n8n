@@ -46,6 +46,24 @@ def evaluate(plan: Any, case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def provider_diagnostic(error: BaseException) -> dict[str, str]:
+    """Classify a wrapped provider failure without exposing credentials or request content."""
+    root = error
+    while root.__cause__ is not None:
+        root = root.__cause__
+    message = str(root)
+    for marker in ("sk-", "Bearer ", "api_key="):
+        if marker in message:
+            message = message.split(marker, 1)[0] + "[REDACTED]"
+    lowered = message.casefold()
+    category = (
+        "network/provider access"
+        if any(word in lowered for word in ("connect", "dns", "resolve", "name resolution"))
+        else "provider/model access or implementation"
+    )
+    return {"category": category, "root_type": type(root).__name__, "message": message[:300]}
+
+
 def main() -> None:
     """Run current production planner settings and preserve sanitized inspectable evidence."""
     parser = argparse.ArgumentParser()
@@ -84,8 +102,9 @@ def main() -> None:
                     {
                         "evaluation": {
                             "pass": False,
-                            "failures": [f"{type(error).__name__}: {error}"],
-                        }
+                            "failures": [f"{type(error).__name__}: provider call failed"],
+                        },
+                        "provider_diagnostic": provider_diagnostic(error),
                     }
                 )
             rows.append(row)

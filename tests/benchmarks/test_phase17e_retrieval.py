@@ -14,6 +14,7 @@ from benchmarks.phase17e_retrieval.benchmark import (
     load_cases,
     query_cases,
     run_strategy,
+    validate_scale_oracles,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -111,3 +112,4 @@ def test_scale_corpus_has_meaningful_cutoffs_and_controlled_dilution_tiers() -> 
     assert [len(corpus[index].facts) for index in (8, 9, 10)] == [21, 51, 101]
     lengths = [len(TIER_TARGETS[tier].split()) for tier in ("medium", "long", "very-long")]
     assert lengths[0] >= 40 and lengths[1] >= 80 and lengths[2] >= 150
+    validate_scale_oracles(corpus, query_cases(data, scale_size=1000))

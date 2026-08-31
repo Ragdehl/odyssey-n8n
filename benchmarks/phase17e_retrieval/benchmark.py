@@ -17,6 +17,7 @@ from odyssey_core.semantic import FastEmbedTextEmbedder, TextEmbedder, _normaliz
 
 TOPS = (5, 20, 50, 100)
 RRF_K = 60
+FIXTURE_TIMESTAMP = "2026-08-31T00:00:00Z"
 TIER_TARGETS = {
     "medium": "The central fact explains a coherent long-form idea about preserving personal knowledge and making careful decisions from context while keeping evidence separate from authority and leaving room for later human review. It also emphasizes that a useful record should preserve chronology, distinguish observation from interpretation, and make uncertainty visible so that future readers can understand both what was known and why a conclusion was reached.",
     "long": "The central fact explains a coherent long-form idea about preserving personal knowledge and making careful decisions from context. It connects capture, interpretation, retrieval, and later review as related parts of one durable practice. The idea is not a list of independent events; it is a single explanation of why trustworthy systems should keep source material authoritative, expose uncertainty, and use derived evidence to support rather than silently replace human judgment. This paragraph remains one meaningful conceptual fact even though it contains several sentences and qualifications.",
@@ -70,8 +71,8 @@ def build_corpus(
                 "id": item["id"],
                 "name": item["name"],
                 "type": item["type"],
-                "created_at": "2026-08-31T00:00:00Z",
-                "updated_at": "2026-08-31T00:00:00Z",
+                "created_at": FIXTURE_TIMESTAMP,
+                "updated_at": FIXTURE_TIMESTAMP,
                 "created_by": {"human": None, "app": "phase17e-benchmark"},
                 "updated_by": {"human": None, "app": "phase17e-benchmark"},
                 "revision": 1,
@@ -114,8 +115,8 @@ def build_corpus(
                     "id": note_id,
                     "name": f"Tier {tier}",
                     "type": "concept",
-                    "created_at": "2026-08-31T00:00:00Z",
-                    "updated_at": "2026-08-31T00:00:00Z",
+                    "created_at": FIXTURE_TIMESTAMP,
+                    "updated_at": FIXTURE_TIMESTAMP,
                     "created_by": {"human": None, "app": "phase17e-benchmark"},
                     "updated_by": {"human": None, "app": "phase17e-benchmark"},
                     "revision": 1,
@@ -153,8 +154,8 @@ def build_corpus(
                     "id": item["id"],
                     "name": name,
                     "type": "person",
-                    "created_at": "2026-08-31T00:00:00Z",
-                    "updated_at": "2026-08-31T00:00:00Z",
+                    "created_at": FIXTURE_TIMESTAMP,
+                    "updated_at": FIXTURE_TIMESTAMP,
                     "created_by": {"human": None, "app": "phase17e-benchmark"},
                     "updated_by": {"human": None, "app": "phase17e-benchmark"},
                     "revision": 1,
@@ -208,14 +209,105 @@ def query_cases(data: dict[str, Any], *, scale_size: int = 0) -> tuple[QueryCase
         cases.append(
             QueryCase(
                 f"scale-{number}",
-                f"Which person works at Company {number % 17} and studies subject {number % 11}?",
+                f"Which person works at Company {number % 17} in City {number % 23}, studies subject {number % 11}, and enjoys activity {number % 19}?",
                 (f"scale-{number:04d}",),
-                (f"Works at Company {number % 17} in City {number % 23}.",),
+                (
+                    f"Works at Company {number % 17} in City {number % 23}.",
+                    f"Studies subject {number % 11} during the week.",
+                    f"Enjoys activity {number % 19} with close friends.",
+                ),
                 "scale-contextual",
                 "scale",
             )
         )
     return tuple(cases)
+
+
+def validate_scale_oracles(corpus: tuple[CorpusNote, ...], cases: tuple[QueryCase, ...]) -> None:
+    """Prove each generated scale query matches exactly one fixture entity by all attributes."""
+    scale_cases = [case for case in cases if case.category == "scale-contextual"]
+    for case in scale_cases:
+        matches = [
+            note.id
+            for note in corpus
+            if all(
+                fragment.casefold() in " ".join(note.facts).casefold()
+                for fragment in case.expected_facts
+            )
+        ]
+        if matches != list(case.expected_entities):
+            raise ValueError(f"Scale oracle {case.id} is not unique: {matches!r}")
+
+
+def run_note_length_controls(
+    corpus: tuple[CorpusNote, ...], embedder: TextEmbedder
+) -> dict[str, Any]:
+    """Measure the same coherent target across isolated note-length variants and distractors."""
+    controls: dict[str, list[dict[str, Any]]] = {
+        name: [] for name in ("whole_note", "fact_level", "combined")
+    }
+    distractors = tuple(note for note in corpus if not note.id.startswith("tier-"))[:50]
+    query = QueryCase(
+        "control",
+        "coherent long-form idea about preserving personal knowledge",
+        (),
+        (),
+        "control",
+        "control",
+    )
+    for tier in ("medium", "long", "very-long"):
+        target = next(note for note in corpus if note.id == f"tier-{tier}")
+        for strategy in controls:
+            result = run_strategy(distractors + (target,), (query,), embedder, strategy)
+            rank = next(
+                index + 1
+                for index, item in enumerate(result["rankings"][0])
+                if item["entity"] == target.id
+            )
+            controls[strategy].append(
+                {
+                    "tier": tier,
+                    "facts": len(target.facts),
+                    "target_rank": rank,
+                    "recall_at_5": rank <= 5,
+                }
+            )
+    return {"query": query.query, "fixed_distractors": len(distractors), "results": controls}
+
+
+def run_fact_length_controls(
+    corpus: tuple[CorpusNote, ...], embedder: TextEmbedder
+) -> dict[str, Any]:
+    """Measure target-fact rank while only its coherent prose length changes."""
+    controls: dict[str, list[dict[str, Any]]] = {
+        name: [] for name in ("whole_note", "fact_level", "combined")
+    }
+    distractors = tuple(note for note in corpus if not note.id.startswith("tier-"))[:50]
+    query = QueryCase(
+        "control-fact",
+        "coherent long-form idea about preserving personal knowledge",
+        (),
+        (),
+        "control",
+        "control",
+    )
+    for tier in ("medium", "long", "very-long"):
+        target = next(note for note in corpus if note.id == f"tier-{tier}")
+        for strategy in controls:
+            result = run_strategy(distractors + (target,), (query,), embedder, strategy)
+            ranking = result["rankings"][0]
+            rank = next(
+                (
+                    index + 1
+                    for index, item in enumerate(ranking)
+                    if item["fact"] == TIER_TARGETS[tier]
+                ),
+                None,
+            )
+            controls[strategy].append(
+                {"tier": tier, "words": len(TIER_TARGETS[tier].split()), "target_fact_rank": rank}
+            )
+    return {"query": query.query, "fixed_distractors": len(distractors), "results": controls}
 
 
 def _rank(query_vector: Any, vectors: list[tuple[float, ...]]) -> list[int]:
@@ -402,12 +494,17 @@ def run_strategy(
 
 
 def run(
-    data: dict[str, Any], schema: dict[str, Any], embedder: TextEmbedder, *, scale_size: int = 0
+    data: dict[str, Any],
+    schema: dict[str, Any],
+    embedder: TextEmbedder,
+    *,
+    scale_size: int = 0,
+    skip_controls: bool = False,
 ) -> dict[str, Any]:
     """Run all three arms with one corpus, query set, model, and runtime."""
     corpus = build_corpus(data, schema, scale_size=scale_size)
     cases = query_cases(data, scale_size=scale_size)
-    return {
+    result = {
         "runtime": {
             "architecture": platform.machine(),
             "model": embedder.model_name,
@@ -420,6 +517,10 @@ def run(
             for name in ("whole_note", "fact_level", "combined")
         ],
     }
+    if scale_size and not skip_controls:
+        result["controlled_note_length"] = run_note_length_controls(corpus, embedder)
+        result["controlled_fact_length"] = run_fact_length_controls(corpus, embedder)
+    return result
 
 
 def main() -> None:
@@ -433,12 +534,15 @@ def main() -> None:
     )
     parser.add_argument("--cache-dir", type=Path)
     parser.add_argument("--scale-size", type=int, default=1000)
+    parser.add_argument("--skip-controls", action="store_true")
     args = parser.parse_args()
     data = load_cases(args.cases)
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     started = time.perf_counter()
     embedder = FastEmbedTextEmbedder(cache_dir=args.cache_dir, local_files_only=True)
-    result = run(data, schema, embedder, scale_size=args.scale_size)
+    result = run(
+        data, schema, embedder, scale_size=args.scale_size, skip_controls=args.skip_controls
+    )
     result["runtime"]["model_load_seconds"] = round(time.perf_counter() - started, 6)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
