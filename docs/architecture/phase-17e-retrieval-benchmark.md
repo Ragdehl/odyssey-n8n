@@ -50,6 +50,26 @@ the planner precondition is blocked. This remains retrieval evidence only and do
 writes or change production retrieval. The corpus is deterministic and synthetic; its scale queries
 and distractors do not represent a live vault distribution.
 
+## Historical MiniLM regression sentinel
+
+The frozen Phase 11B.1c 1,000-note/40-query dense retrieval sentinel was rerun with the same
+multilingual MiniLM artifact from `/data/odyssey/runtime/phase11a-benchmark/embedding-cache`.
+The smallest schema-v3 compatibility adaptation was benchmark-only: the retired scalar
+`relationship_to_user` metadata field was omitted while its wording remained in the frozen note
+body, and the old scalar audit fields were represented using the current typed metadata shape.
+Query and oracle semantics were not changed.
+
+| Set | Recall@5 | Recall@20 | Recall@50 | Recall@100 | Historical @20/@50/@100 |
+|---|---:|---:|---:|---:|---:|
+| All 40 | 82.5% | 90.0% | 95.0% | 97.5% | 87.5% / 92.5% / 100% |
+| Contextual-only 25 | 76.0% | 84.0% | 92.0% | 96.0% | 80% / 88% / 100% |
+
+Top-100 does **not** remain 100%: one French synonym-mismatch query (`ma femme`) ranked its
+historical expected entity at 105. This is a regression-sentinel failure relative to the frozen
+baseline, although it is also a single known difficult synonym case. The Phase 17E recommendation
+is therefore not reinterpreted; production retrieval remains unchanged and the evidence does not
+support declaring a retrieval strategy adopted.
+
 ## Planner precondition
 
 `run_planner_live.py` attempted 11 current production planner requests with `gpt-5.6-sol` and low

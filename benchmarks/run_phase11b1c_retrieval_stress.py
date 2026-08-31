@@ -407,15 +407,18 @@ def metadata(spec: NoteSpec, ordinal: int) -> dict[str, Any]:
         "type": spec.type,
         "created_at": TIMESTAMP,
         "updated_at": TIMESTAMP,
-        "created_by": "phase11b1c-stress-generator",
-        "updated_by": "phase11b1c-stress-generator",
+        # Phase 17E compatibility: preserve the frozen body/query/oracle fixture while adapting
+        # only the provenance shape required by the current schema-v3 validator.
+        "created_by": {"human": None, "app": "phase11b1c-stress-generator"},
+        "updated_by": {"human": None, "app": "phase11b1c-stress-generator"},
         "revision": 1,
-        "schema_version": 2,
+        "schema_version": 3,
     }
     if spec.aliases:
         values["aliases"] = list(spec.aliases)
-    if spec.relationship is not None:
-        values["relationship_to_user"] = spec.relationship
+    # Phase 11B.1c predated schema-v3's typed metadata allow-list.  Keep the
+    # relationship wording in the frozen note body, but omit the retired
+    # metadata field so the historical fixture can pass the current validator.
     if spec.type == "journal_entry":
         values["entry_date"] = f"2026-07-{ordinal % 28 + 1:02d}"
     return values
