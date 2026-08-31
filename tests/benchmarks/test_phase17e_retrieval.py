@@ -72,7 +72,9 @@ def test_fact_projection_retains_identity_and_entity_metrics_deduplicate_units()
     result = run_strategy(corpus, cases, KeywordEmbedder(), "fact_level")
     assert result["unit_count"] > result["entity_count"]
     assert result["metrics"]["entity"]["20"] == 1.0
-    assert result["metrics"]["fact"]["20"] == 1.0
+    assert result["metrics"]["fact_all_required"]["20"] == 1.0
+    assert result["metrics"]["fact_any_required"]["20"] == 1.0
+    assert result["metrics"]["fact_coverage"]["20"]["mean"] == 1.0
     assert set(result["fact_width"]["widths"]) == {"5", "20", "50", "100", "200", "300", "500"}
     assert result["vector_count"] == result["unit_count"]
     assert all(item["fact"] for item in result["rankings"][0][:5])
@@ -101,7 +103,19 @@ def test_unique_entity_top_k_scans_past_repeated_fact_units_and_fact_oracle_is_o
     metrics = _metric_table(ranking, (case,))
     assert metrics["unit"]["5"] == 0.0
     assert metrics["entity"]["5"] == 1.0
-    assert metrics["fact"]["5"] is None
+    assert metrics["fact_all_required"]["5"] is None
+    assert metrics["fact_any_required"]["5"] is None
+    assert metrics["fact_coverage"]["5"]["mean"] is None
+
+
+def test_multi_fact_metrics_distinguish_any_all_and_coverage() -> None:
+    """Count partial multi-fact evidence without treating it as complete retrieval."""
+    cases = (QueryCase("multi", "q", ("target",), ("a", "b"), "test", "short"),)
+    ranking = [[("target", "a"), ("other", "x")]]
+    metrics = _metric_table(ranking, cases)
+    assert metrics["fact_any_required"]["5"] == 1.0
+    assert metrics["fact_all_required"]["5"] == 0.0
+    assert metrics["fact_coverage"]["5"] == {"mean": 0.5, "median": 0.5}
 
 
 def test_scale_corpus_has_meaningful_cutoffs_and_controlled_dilution_tiers() -> None:

@@ -27,7 +27,7 @@ oracles combine company, city, subject, and activity attributes; deterministic t
 matching entity per query. Scale notes include 21-, 51-, and 101-fact controlled dilution tiers;
 fact projections include approximately 65-, 85-, and 171-word coherent long-fact tiers.
 
-| Strategy | Entity Recall@5/20/50/100 | Exact Fact Recall@5/20/50/100 | Units / vectors | Build s | Query s |
+| Strategy | Entity Recall@5/20/50/100 | All-required-fact Recall@5/20/50/100 | Units / vectors | Build s | Query s |
 |---|---|---|---:|---:|---:|
 | Whole-note | 72.7% / 77.3% / 90.9% / 90.9% | N/A | 1,000 / 1,000 | 96.10 | 0.97 |
 | Fact-level | 68.2% / 86.4% / 86.4% / 86.4% | 63.6% / 68.2% / 68.2% / 68.2% | 5,142 / 5,142 | 104.09 | 3.47 |
@@ -40,7 +40,7 @@ and 2,049 tokens. These are characters/4 planning estimates, not provider-tokeni
 
 The corrected aggregate does not support a production adoption decision: combined improves Top-5
 entity recall but ties whole-note at Top-50/100 and has higher query/vector cost, while fact-level
-has weaker Top-5 entity recall and lower exact-fact recall. Recommendation: **INSUFFICIENT EVIDENCE**.
+has weaker Top-5 entity recall and lower all-required-fact recall. Recommendation: **INSUFFICIENT EVIDENCE**.
 The isolated controls found no rank degradation: the shared target ranked 1 at every 21/51/101-fact
 note tier for all three strategies; the 65/85/171-word target fact ranked 1 at every fact-length
 tier for fact-level and combined (whole-note exact-fact rank is not applicable). This is a null
@@ -56,7 +56,7 @@ The fact-level arm was rerun once against the same 1,000-entity corpus and local
 the complete ranked fact list was then evaluated at each width. The machine-readable output keeps
 per-query first-entity-fact and exact-fact ranks, plus misses at every width.
 
-| Raw fact width | Raw-unit entity recall | Exact-fact recall | True unique-entity recall | Mean / median unique entities in raw cutoff |
+| Raw fact width | Raw-unit entity recall | All-required-fact recall | True unique-entity recall | Mean / median unique entities in raw cutoff |
 |---:|---:|---:|---:|---:|
 | 100 | 86.4% | 68.2% | 86.4% | 79.95 / 91 |
 | 200 | 95.5% | 68.2% | 95.5% | 167.27 / 188.5 |
@@ -70,7 +70,7 @@ values happen to coincide for these cases.
 
 The fact-level misses are `scale-100`, `scale-400`, and `scale-700` at Top-100; only `scale-100`
 remains at Top-200 and Top-300; none remain at Top-500. First expected-entity-fact ranks range
-from 1 to 477 (median 2); exact-fact ranks range from 1 to 208 (median 2). The complete per-query
+from 1 to 477 (median 2); required-fact ranks range from 1 to 208 (median 2). The complete per-query
 rank list is retained in the benchmark JSON output rather than duplicated here.
 
 | Raw fact width | Retrieved payload mean chars / approximate tokens | Grouped 1 / 2 / 3 facts per entity, mean approximate tokens |
@@ -89,6 +89,46 @@ Top-100 but materially larger than fact Top-100. The improvement stops between 2
 the final difficult case arrives only at 500, so fact-level remains a credible candidate but not
 an adoption decision or a reason to add a production grouping algorithm. Recommendation remains
 **INSUFFICIENT EVIDENCE**.
+
+### Corrected multi-fact evidence
+
+The earlier all-required-fact value is explicitly named here. `ANY` means at least one required
+fact was retrieved; `ALL` means every required fact was retrieved; coverage is the fraction of
+required facts present, averaged and median across the 22 cases with fact oracles. Whole-note
+fact evidence is not applicable because whole-note units are not individual fact units.
+
+| Strategy / width | Entity recall | ANY required fact | ALL required facts | Mean / median coverage |
+|---|---:|---:|---:|---:|
+| Whole-note / 100 | 90.9% | N/A | N/A | N/A |
+| Fact-level / 100 | 86.4% | 95.5% | 68.2% | 78.8% / 100% |
+| Fact-level / 200 | 95.5% | 95.5% | 68.2% | 78.8% / 100% |
+| Fact-level / 300 | 95.5% | 100% | 68.2% | 80.3% / 100% |
+| Fact-level / 500 | 100% | 100% | 68.2% | 80.3% / 100% |
+| Combined / 100 | 90.9% | 100% | 77.3% | 89.4% / 100% |
+| Combined / 200 | 90.9% | 100% | 95.5% | 98.5% / 100% |
+| Combined / 300 | 95.5% | 100% | 95.5% | 98.5% / 100% |
+| Combined / 500 | 100% | 100% | 100% | 100% / 100% |
+
+The seven scale-contextual multi-fact cases are:
+
+| Case | Expected entity | Facts | Coverage 100 / 200 / 300 / 500 | First / last required rank |
+|---|---|---:|---:|---:|
+| scale-100 | Scale Person 0100 | 3 | Fact 0/0/33/33%; Combined 33/67/67/100% | Fact 208 / 2089; Combined 47 / 412 |
+| scale-250 | Scale Person 0250 | 3 | Fact 33/33/33/33%; Combined 67/100/100/100% | Fact 6 / 1948; Combined 3 / 136 |
+| scale-400 | Scale Person 0400 | 3 | Fact 33/33/33/33%; Combined 100/100/100/100% | Fact 40 / 1653; Combined 36 / 73 |
+| scale-550 | Scale Person 0550 | 3 | Fact 67/67/67/67%; Combined 67/100/100/100% | Fact 6 / 1563; Combined 8 / 138 |
+| scale-700 | Scale Person 0700 | 3 | Fact 33/33/33/33%; Combined 67/100/100/100% | Fact 4 / 2028; Combined 8 / 123 |
+| scale-850 | Scale Person 0850 | 3 | Fact 33/33/33/33%; Combined 33/100/100/100% | Fact 12 / 1823; Combined 11 / 133 |
+| scale-999 | Scale Person 0999 | 3 | Fact 33/33/33/33%; Combined 100/100/100/100% | Fact 9 / 1298; Combined 2 / 44 |
+
+Required fact ranks are preserved individually in each strategy's `fact_width.ranks` output;
+`last` is null when the complete ranking does not contain every required fact. Fact-only does not
+retrieve all three required facts for any of these seven within Top-500, whereas Combined reaches
+all three for all seven by Top-500. Combined therefore reaches full entity and evidence recall at
+the same width as fact-only, but reaches materially higher evidence completeness by Top-200. Its
+Top-200 payload is approximately 4,054 tokens versus fact-only 3,964 and whole-note Top-100
+14,255, so the safety-net gain has a measurable fusion cost. No production grouping, hydration, or
+retrieval change follows from this benchmark.
 
 ## Historical MiniLM regression sentinel
 

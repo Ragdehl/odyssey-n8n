@@ -319,10 +319,17 @@ def _rank(query_vector: Any, vectors: list[tuple[float, ...]]) -> list[int]:
 def _metric_table(
     ranking: list[list[tuple[str, str]]], cases: tuple[QueryCase, ...]
 ) -> dict[str, Any]:
-    """Calculate unit, unique-entity, and exact-fact recall for one case slice."""
-    output: dict[str, Any] = {"unit": {}, "entity": {}, "fact": {}}
+    """Calculate candidate recall and clearly separated required-fact evidence metrics."""
+    output: dict[str, Any] = {
+        "unit": {},
+        "entity": {},
+        "fact_any_required": {},
+        "fact_all_required": {},
+        "fact_coverage": {},
+    }
     for top in TOPS:
-        unit_hits = entity_hits = fact_hits = 0
+        unit_hits = entity_hits = any_fact_hits = all_fact_hits = 0
+        coverage: list[float] = []
         for case, ranked in zip(cases, ranking, strict=True):
             units = ranked[:top]
             entities = []
@@ -335,12 +342,20 @@ def _metric_table(
             unit_hits += bool(set(case.expected_entities) & set(entity for entity, _ in units))
             entity_hits += set(case.expected_entities).issubset(entities)
             if case.expected_facts:
-                fact_hits += set(case.expected_facts).issubset(facts)
+                matched = len(set(case.expected_facts) & facts)
+                any_fact_hits += matched > 0
+                all_fact_hits += matched == len(set(case.expected_facts))
+                coverage.append(matched / len(set(case.expected_facts)))
         count = len(cases)
         output["unit"][str(top)] = unit_hits / count
         output["entity"][str(top)] = entity_hits / count
         fact_cases = sum(bool(case.expected_facts) for case in cases)
-        output["fact"][str(top)] = fact_hits / fact_cases if fact_cases else None
+        output["fact_any_required"][str(top)] = any_fact_hits / fact_cases if fact_cases else None
+        output["fact_all_required"][str(top)] = all_fact_hits / fact_cases if fact_cases else None
+        output["fact_coverage"][str(top)] = {
+            "mean": statistics.mean(coverage) if coverage else None,
+            "median": statistics.median(coverage) if coverage else None,
+        }
     return output
 
 
@@ -404,7 +419,8 @@ def _fact_width_stats(
         raw_entity_counts = []
         max_slots = []
         unique_entity_scans = []
-        raw_entity_hits = unique_entity_hits = exact_fact_hits = 0
+        raw_entity_hits = unique_entity_hits = any_fact_hits = exact_fact_hits = 0
+        coverage: list[float] = []
         for case, ranking in zip(cases, rankings, strict=True):
             raw = ranking[:top]
             counts: dict[str, int] = {}
@@ -423,13 +439,24 @@ def _fact_width_stats(
             unique_entity_scans.append(_scanned if unique else 0)
             unique_entity_hits += set(case.expected_entities).issubset(unique)
             if case.expected_facts:
-                exact_fact_hits += set(case.expected_facts).issubset({fact for _, fact in raw})
+                expected = set(case.expected_facts)
+                matched = expected & {fact for _, fact in raw}
+                exact_fact_hits += matched == expected
+                any_fact_hits += bool(matched)
+                coverage.append(len(matched) / len(expected))
         fact_case_count = sum(bool(case.expected_facts) for case in cases)
         result["widths"][str(top)] = {
             "raw_fact_entity_recall": raw_entity_hits / len(cases),
-            "raw_fact_exact_recall": (
-                exact_fact_hits / fact_case_count if fact_case_count else None
-            ),
+            "raw_fact_any_required_recall": any_fact_hits / fact_case_count
+            if fact_case_count
+            else None,
+            "raw_fact_all_required_recall": exact_fact_hits / fact_case_count
+            if fact_case_count
+            else None,
+            "raw_fact_coverage": {
+                "mean": statistics.mean(coverage) if coverage else None,
+                "median": statistics.median(coverage) if coverage else None,
+            },
             "raw_unique_entity_count": _summary(raw_entity_counts),
             "raw_max_facts_per_entity": _summary(max_slots),
             "unique_entity_recall": unique_entity_hits / len(cases),
@@ -460,14 +487,29 @@ def _fact_width_stats(
             for index, (entity, _) in enumerate(ranking, start=1)
             if entity in case.expected_entities
         ]
-        fact_ranks = [
-            index for index, (_, fact) in enumerate(ranking, start=1) if fact in case.expected_facts
-        ]
+        required_ranks = {
+            fact: next(
+                (
+                    index
+                    for index, (_, ranked_fact) in enumerate(ranking, start=1)
+                    if ranked_fact == fact
+                ),
+                None,
+            )
+            for fact in case.expected_facts
+        }
+        present_ranks = [rank for rank in required_ranks.values() if rank is not None]
         result["ranks"].append(
             {
                 "id": case.id,
                 "first_expected_entity_fact_rank": min(entity_ranks, default=None),
-                "expected_exact_fact_rank": min(fact_ranks, default=None),
+                "required_fact_ranks": required_ranks,
+                "first_required_fact_rank": min(present_ranks, default=None),
+                "last_required_fact_rank": (
+                    max(required_ranks.values())
+                    if required_ranks and None not in required_ranks.values()
+                    else None
+                ),
             }
         )
     for top in (100, 200, 300, 500):
@@ -581,7 +623,9 @@ def run_strategy(
     query_seconds = time.perf_counter() - started
     metrics = _evaluate(rankings, cases)
     if strategy == "whole_note":
-        metrics["fact"] = {str(top): None for top in TOPS}
+        metrics["fact_any_required"] = {str(top): None for top in TOPS}
+        metrics["fact_all_required"] = {str(top): None for top in TOPS}
+        metrics["fact_coverage"] = {str(top): {"mean": None, "median": None} for top in TOPS}
     payloads = [text for _, _, text in units]
     result = {
         "strategy": strategy,
