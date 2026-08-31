@@ -174,7 +174,9 @@ boundaries; do not implement speculative infrastructure before then.
   can add missing items and another authorized user sees and can update the same shared knowledge promptly.
   This work must cover authentication, read/write authorization, private-vs-shared boundaries,
   synchronization/event propagation, conflict handling, and storage design before claiming privacy or
-  collaboration guarantees.
+  collaboration guarantees. Preserve the private/local-memory direction, group principals, permission-
+  filtered effective knowledge view, and sync/conflict guardrails defined in
+  [Multi-user collaboration direction](multi-user-collaboration-direction.md).
 
 ## Conditional later work
 

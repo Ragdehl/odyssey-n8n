@@ -158,26 +158,23 @@ security model.
 
 ## 4. Future multi-user ownership and sharing
 
-A future Odyssey application may support multiple users and notes that are private, shared read-only,
-or shared read/write.
+The detailed product/architecture direction now lives in
+[Multi-user collaboration direction](multi-user-collaboration-direction.md). Keep this section only as a
+cross-phase pointer so there is one canonical owner for the contract.
 
-Conceptually that may eventually require ownership/grant semantics, but **do not add `owner`, `users`,
-or permission arrays to the note schema merely to reserve them**. Frontmatter cannot enforce privacy
-if a user can access the underlying vault directly.
+The preserved summary is:
 
-A multi-user phase must first decide:
+- keep the current single-user architecture simple until the dedicated post-E2E phase;
+- do not add speculative `owner`, `users`, group, ACL, or revision fields to the canonical note schema;
+- treat users and groups as future authorization principals rather than ordinary note properties;
+- preserve one logical shared-note identity across synchronized local replicas;
+- enforce authorization before retrieval/LLM exposure as well as before writes;
+- preserve the possibility that private local-only knowledge never traverses the collaboration server;
+- detect synchronization conflicts without silent data loss;
+- keep collaboration as shared Odyssey infrastructure reusable by applications and agents.
 
-- authentication and stable user identity;
-- ownership semantics;
-- read/write grant model;
-- where authorization is enforced before note access;
-- private versus shared storage/vault boundaries;
-- interaction with Obsidian/direct filesystem access;
-- whether sharing metadata belongs in Markdown, a separate authorization store, or both;
-- audit requirements for permission changes.
-
-The current single-user architecture should remain simple. Stable note IDs, explicit application
-boundaries and rebuildable indexes do not block a later multi-user design.
+The Functional Roadmap owns phase/status placement; the linked multi-user document owns the detailed
+future contract and validation scenarios.
 
 ## 5. Large-vault retrieval reduction with a cheap reasoner
 
@@ -332,6 +329,7 @@ Later ontology work
   - evolve tag vocabulary/types only from demonstrated needs
 
 Later multi-user phase
+  - follow multi-user-collaboration-direction.md
   - design authentication/authorization/storage boundaries first
   - add sharing metadata only after the security model is real
 ```
