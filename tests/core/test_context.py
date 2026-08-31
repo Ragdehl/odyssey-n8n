@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -557,6 +558,44 @@ def test_context_index_rejects_changed_type_registry(tmp_path: Path, schema: dic
     )
     with pytest.raises(ContextIndexError, match="incompatible or stale"):
         get_context(repository, changed_schema, index, embedder, query="anything", limit=1)
+
+
+def test_context_index_translates_corrupt_json_metadata(tmp_path: Path, schema: dict) -> None:
+    """Translate corrupt stored filter JSON into the documented index error."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    with sqlite3.connect(index.path) as connection:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = ?", ("{broken", "filter_definitions")
+        )
+        connection.commit()
+
+    with pytest.raises(ContextIndexError, match="compatible context index"):
+        get_context(repository, schema, index, embedder, query="anything", limit=1)
+
+
+def test_context_index_translates_non_integer_dimension_metadata(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Translate corrupt stored dimension metadata into the documented index error."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repository, schema, embedder)
+    with sqlite3.connect(index.path) as connection:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = ?", ("not-an-integer", "dimension")
+        )
+        connection.commit()
+
+    with pytest.raises(ContextIndexError, match="invalid embedding dimension"):
+        get_context(repository, schema, index, embedder, query="anything", limit=1)
 
 
 def test_failed_rebuild_preserves_previous_index_and_index_is_outside_vault(

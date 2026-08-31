@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -42,6 +43,28 @@ DEFAULT_CONFIGURATIONS = (
     ("gpt-5.6-terra", "low"),
     ("gpt-5.6-sol", "low"),
 )
+
+
+def validate_run_id(value: str) -> str:
+    """Validate a benchmark run ID as one safe result-directory name.
+
+    Args:
+        value: Caller-supplied immutable benchmark identifier.
+
+    Returns:
+        The unchanged identifier.
+
+    Raises:
+        ValueError: If the value is empty, contains path separators, or is not a
+            simple identifier character sequence.
+    """
+    if (
+        not isinstance(value, str)
+        or not value
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value)
+    ):
+        raise ValueError("run ID must be a simple directory name")
+    return value
 
 
 def parse_configuration(value: str) -> tuple[str, str]:
@@ -190,6 +213,7 @@ def prepare_run(
     Raises:
         BenchmarkContractError: If a historical run would be overwritten or changed.
     """
+    run_id = validate_run_id(run_id)
     run_dir = RESULTS_DIR / run_id
     metadata_path = run_dir / "metadata.json"
     if metadata_path.exists():
@@ -289,7 +313,9 @@ def parser() -> argparse.ArgumentParser:
         help="MODEL:EFFORT; repeat for each candidate (defaults to the cost-conscious matrix)",
     )
     value.add_argument(
-        "--run-id", help="Immutable result directory name; defaults to UTC timestamp"
+        "--run-id",
+        type=validate_run_id,
+        help="Immutable result directory name; defaults to UTC timestamp",
     )
     value.add_argument("--case-id", action="append", help="Run only this case; repeat as needed")
     value.add_argument(
