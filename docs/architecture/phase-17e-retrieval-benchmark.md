@@ -178,3 +178,9 @@ reasoning. All calls reached the planner boundary but failed with a sanitized `C
 by temporary DNS name-resolution failure; no Sol output was produced. Atomic-fact decomposition
 remains unvalidated and is not used to justify the retrieval recommendation. A future rerun requires
 provider access; no production prompt change is indicated by this blocked evidence.
+
+A bounded environment diagnosis on 2026-09-01 found the required `OPENAI_API_KEY` variable present
+without inspecting its value, but DNS resolution failed for both `api.openai.com` and
+`api.github.com` with `gaierror: [Errno -3] Temporary failure in name resolution`. The current
+blocker is therefore DNS resolution unavailable; authentication, model access, and planner
+behavior could not be tested. No networking, credentials, or machine configuration was changed.
