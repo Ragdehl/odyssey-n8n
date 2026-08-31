@@ -57,7 +57,7 @@ Canonical detail for these completed phases lives in:
 - [Phase 17B durable pending work](phase-17b-durable-pending-work.md)
 - [Phase 17C local Git vault history](phase-17-git-vault-history.md)
 
-## Current phase
+## Completed phase
 
 ✅ **Phase 17D — append-first atomic facts + correction/removal semantics**
 
@@ -94,14 +94,19 @@ problem statement and evidence that motivated this refinement; implementation sh
 contract with the simpler append-first model rather than continuing free-form temporal rewriting by
 default.
 
-## Remaining intended sequence
+## Current phase
 
 ➡️ **Phase 17E — pre-E2E schema utility + retrieval validation**
 
 Before n8n/E2E integration, challenge the initial schema and retrieval assumptions against the product
 model established in 17D.
 
-### Schema utility review
+### ✅ Phase 17E schema utility and metadata review — completed
+
+The type/property and common-metadata reviews are complete. Their detailed decisions remain in the
+[schema utility review](phase-17e-schema-utility-review.md) and [common metadata review](phase-17e-metadata-review.md).
+
+### ➡️ Phase 17E retrieval benchmark — current remaining subphase
 
 Review every current canonical type and property and classify it as `KEEP`, `DEFER`, or `REMOVE` based
 primarily on **direct user value**, not internal token savings. A type/property earns its complexity when
@@ -114,8 +119,6 @@ product language, but schema mutation requires explicit user approval. A later a
 be able to backfill existing knowledge and safely relink historical mentions to newly canonical entities
 using normal identity/reference safety; ambiguous mentions remain unresolved/pending rather than being
 blindly rewritten.
-
-### Retrieval benchmark
 
 Benchmark the existing whole-note MiniLM strategy against fact-level and combined entity+fact retrieval.
 This is a retrieval experiment only. Previous fragment-level evidence showed that smaller fragments can
@@ -130,7 +133,7 @@ whether the better retrieval unit itself solves the observed dilution problem.
 See [Odyssey knowledge-model direction](knowledge-model-direction.md) for the canonical rationale and
 migration/relinking constraints.
 
-⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
+⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E retrieval is settled**
 
 Expose the stable application boundary through n8n and prove one real bounded E2E use case **after** the
 17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains responsible
