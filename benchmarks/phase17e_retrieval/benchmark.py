@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import platform
 import statistics
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -653,6 +654,7 @@ def run(
     *,
     scale_size: int = 0,
     skip_controls: bool = False,
+    strategies: tuple[str, ...] = ("whole_note", "fact_level", "combined"),
 ) -> dict[str, Any]:
     """Run all three arms with one corpus, query set, model, and runtime."""
     corpus = build_corpus(data, schema, scale_size=scale_size)
@@ -665,11 +667,11 @@ def run(
         },
         "cases": len(cases),
         "notes": len(corpus),
-        "strategies": [
-            run_strategy(corpus, cases, embedder, name)
-            for name in ("whole_note", "fact_level", "combined")
-        ],
+        "strategies": [],
     }
+    for name in strategies:
+        print(f"running strategy={name} notes={len(corpus)} cases={len(cases)}", file=sys.stderr)
+        result["strategies"].append(run_strategy(corpus, cases, embedder, name))
     if scale_size and not skip_controls:
         result["controlled_note_length"] = run_note_length_controls(corpus, embedder)
         result["controlled_fact_length"] = run_fact_length_controls(corpus, embedder)
@@ -688,13 +690,26 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path)
     parser.add_argument("--scale-size", type=int, default=1000)
     parser.add_argument("--skip-controls", action="store_true")
+    parser.add_argument(
+        "--strategy",
+        choices=("whole_note", "fact_level", "combined", "all"),
+        default="all",
+        help="Run one retrieval arm, or all historical arms.",
+    )
     args = parser.parse_args()
     data = load_cases(args.cases)
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     started = time.perf_counter()
     embedder = FastEmbedTextEmbedder(cache_dir=args.cache_dir, local_files_only=True)
     result = run(
-        data, schema, embedder, scale_size=args.scale_size, skip_controls=args.skip_controls
+        data,
+        schema,
+        embedder,
+        scale_size=args.scale_size,
+        skip_controls=args.skip_controls,
+        strategies=("whole_note", "fact_level", "combined")
+        if args.strategy == "all"
+        else (args.strategy,),
     )
     result["runtime"]["model_load_seconds"] = round(time.perf_counter() - started, 6)
     print(json.dumps(result, ensure_ascii=False, indent=2))
