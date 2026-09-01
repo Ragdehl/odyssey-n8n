@@ -106,7 +106,7 @@ model established in 17D.
 The type/property and common-metadata reviews are complete. Their detailed decisions remain in the
 [schema utility review](phase-17e-schema-utility-review.md) and [common metadata review](phase-17e-metadata-review.md).
 
-### ➡️ Phase 17E retrieval benchmark — current remaining subphase
+### ✅ Phase 17E retrieval benchmark — evidence completed
 
 Review every current canonical type and property and classify it as `KEEP`, `DEFER`, or `REMOVE` based
 primarily on **direct user value**, not internal token savings. A type/property earns its complexity when
@@ -133,7 +133,23 @@ whether the better retrieval unit itself solves the observed dilution problem.
 See [Odyssey knowledge-model direction](knowledge-model-direction.md) for the canonical rationale and
 migration/relinking constraints.
 
-⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E retrieval is settled**
+### ✅ Phase 17E planner semantic-atomicity refinement — completed
+
+The retrieval benchmark is complete as evidence. Its leading Combined candidate remains unadopted;
+whole-note retrieval remains production behavior. The focused current subphase validates whether the
+production Sol/low planner preserves semantic atomicity: independently meaningful facts should split,
+while coherent explanations, reflections, and decisions with dependent reasons should remain unified.
+See the [planner semantic-atomicity contract](phase-17e-planner-atomicity.md). Planner revalidation
+succeeded; the remaining retrieval adoption decision is separate and does not authorize production
+retrieval changes by itself.
+
+### ➡️ Phase 17E retrieval adoption decision — next focused subphase
+
+Use the completed retrieval evidence and planner revalidation to decide whether any retrieval-unit
+change is warranted. Combined remains the leading candidate but is not adopted; whole-note retrieval
+remains production behavior until an explicit evidence-backed decision.
+
+⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
 Expose the stable application boundary through n8n and prove one real bounded E2E use case **after** the
 17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains responsible
