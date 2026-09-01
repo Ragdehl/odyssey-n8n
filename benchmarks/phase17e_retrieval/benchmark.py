@@ -220,6 +220,17 @@ def query_cases(data: dict[str, Any], *, scale_size: int = 0) -> tuple[QueryCase
     return tuple(cases)
 
 
+def required_evidence_pairs(case: QueryCase) -> frozenset[tuple[str, str]]:
+    """Return identity-aware required evidence pairs for an unambiguous case oracle."""
+    if not case.expected_facts:
+        return frozenset()
+    if len(case.expected_entities) == 1:
+        return frozenset((case.expected_entities[0], fact) for fact in case.expected_facts)
+    if len(case.expected_entities) == len(case.expected_facts):
+        return frozenset(zip(case.expected_entities, case.expected_facts, strict=True))
+    raise ValueError(f"case {case.id} cannot map expected facts to entities unambiguously")
+
+
 def validate_scale_oracles(corpus: tuple[CorpusNote, ...], cases: tuple[QueryCase, ...]) -> None:
     """Prove each generated scale query matches exactly one fixture entity by all attributes."""
     scale_cases = [case for case in cases if case.category == "scale-contextual"]
@@ -335,14 +346,15 @@ def _metric_table(
                     entities.append(entity)
                 if len(entities) == top:
                     break
-            facts = {fact for _, fact in units}
+            evidence = set(units)
+            required = required_evidence_pairs(case)
             unit_hits += bool(set(case.expected_entities) & {entity for entity, _ in units})
             entity_hits += set(case.expected_entities).issubset(entities)
             if case.expected_facts:
-                matched = len(set(case.expected_facts) & facts)
+                matched = len(required & evidence)
                 any_fact_hits += matched > 0
                 all_fact_hits += matched == len(set(case.expected_facts))
-                coverage.append(matched / len(set(case.expected_facts)))
+                coverage.append(matched / len(required))
         count = len(cases)
         output["unit"][str(top)] = unit_hits / count
         output["entity"][str(top)] = entity_hits / count
@@ -436,8 +448,8 @@ def _fact_width_stats(
             unique_entity_scans.append(_scanned if unique else 0)
             unique_entity_hits += set(case.expected_entities).issubset(unique)
             if case.expected_facts:
-                expected = set(case.expected_facts)
-                matched = expected & {fact for _, fact in raw}
+                expected = required_evidence_pairs(case)
+                matched = expected & set(raw)
                 exact_fact_hits += matched == expected
                 any_fact_hits += bool(matched)
                 coverage.append(len(matched) / len(expected))
@@ -488,12 +500,12 @@ def _fact_width_stats(
             fact: next(
                 (
                     index
-                    for index, (_, ranked_fact) in enumerate(ranking, start=1)
-                    if ranked_fact == fact
+                    for index, (ranked_entity, ranked_fact) in enumerate(ranking, start=1)
+                    if (ranked_entity, ranked_fact) == (entity, fact)
                 ),
                 None,
             )
-            for fact in case.expected_facts
+            for entity, fact in required_evidence_pairs(case)
         }
         present_ranks = [rank for rank in required_ranks.values() if rank is not None]
         result["ranks"].append(

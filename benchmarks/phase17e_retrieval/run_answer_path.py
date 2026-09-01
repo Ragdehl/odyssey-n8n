@@ -11,7 +11,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, query_cases
+from benchmarks.phase17e_retrieval.benchmark import (
+    build_corpus,
+    load_cases,
+    query_cases,
+    required_evidence_pairs,
+)
 from benchmarks.phase17e_retrieval.reduction import grounded_candidates, select_cases
 
 MODEL = "gpt-5.6-sol"
@@ -132,11 +137,19 @@ def validate_answer(value: object, supplied_locators: set[str]) -> dict[str, Any
 
 
 def evaluate_support(
-    response: dict[str, Any], grounded_by_locator: dict[str, str], expected_facts: tuple[str, ...]
+    response: dict[str, Any],
+    grounded_by_locator: dict[str, tuple[str, str]],
+    expected_entities: tuple[str, ...],
+    expected_facts: tuple[str, ...],
 ) -> bool:
     """Measure whether cited grounded evidence covers every required benchmark fact."""
-    supported_facts = {grounded_by_locator[locator] for locator in response["supporting_locators"]}
-    return set(expected_facts).issubset(supported_facts)
+    supported = {grounded_by_locator[locator] for locator in response["supporting_locators"]}
+    from benchmarks.phase17e_retrieval.benchmark import QueryCase
+
+    required = required_evidence_pairs(
+        QueryCase("answer", "", expected_entities, expected_facts, "", "")
+    )
+    return required.issubset(supported)
 
 
 def _tokens(text: str) -> int:
@@ -254,7 +267,7 @@ def run_live(
         response_value = validate_answer(
             json.loads(response.output_text), {item["locator"] for item in selected}
         )
-        grounded_by_locator = {item["locator"]: item["fact"] for item in selected}
+        grounded_by_locator = {item["locator"]: (item["entity"], item["fact"]) for item in selected}
         usage = response.usage.model_dump() if response.usage else None
         rows.append(
             {
@@ -271,7 +284,7 @@ def run_live(
                 "answer": response_value["answer"],
                 "supporting_locators": response_value["supporting_locators"],
                 "required_evidence_supported": evaluate_support(
-                    response_value, grounded_by_locator, case.expected_facts
+                    response_value, grounded_by_locator, case.expected_entities, case.expected_facts
                 ),
                 "usage": usage,
             }

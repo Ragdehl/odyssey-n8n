@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from benchmarks.phase17e_retrieval.benchmark import QueryCase, required_evidence_pairs
 from benchmarks.phase17e_retrieval.reduction import (
     REASONING_EFFORTS,
     select_cases,
@@ -32,7 +33,10 @@ def test_answer_contract_and_oracle() -> None:
         {"marta#fact-0"},
     )
     assert evaluate_support(
-        response, {"marta#fact-0": "Trabaja en Thales."}, ("Trabaja en Thales.",)
+        response,
+        {"marta#fact-0": ("marta", "Trabaja en Thales.")},
+        ("marta",),
+        ("Trabaja en Thales.",),
     )
 
 
@@ -42,6 +46,22 @@ def test_answer_rejects_invalid_support() -> None:
         validate_answer({"answer": "x", "supporting_locators": ["unknown"]}, {"known"})
     with pytest.raises(ValueError):
         validate_answer({"answer": "x", "supporting_locators": ["known", "known"]}, {"known"})
+
+
+def test_answer_support_requires_expected_entity_identity() -> None:
+    """Matching fact text from another entity does not satisfy the oracle."""
+    response = {"answer": "x", "supporting_locators": ["other#fact-0"]}
+    assert not evaluate_support(
+        response, {"other#fact-0": ("other", "Same fact")}, ("target",), ("Same fact",)
+    )
+
+
+def test_required_evidence_pairs_require_one_entity_for_all_labelled_facts() -> None:
+    """Repeated fact text on another entity cannot satisfy a labelled case oracle."""
+    case = QueryCase("multi", "", ("target",), ("same", "same"), "test", "test")
+    required = required_evidence_pairs(case)
+    assert required == frozenset({("target", "same")})
+    assert ("other", "same") not in required
 
 
 def test_answer_aggregates_split_selector_branches() -> None:

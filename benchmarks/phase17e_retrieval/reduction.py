@@ -8,7 +8,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, query_cases
+from benchmarks.phase17e_retrieval.benchmark import (
+    build_corpus,
+    load_cases,
+    query_cases,
+    required_evidence_pairs,
+)
 
 MODEL = "gpt-5.6-luna"
 REASONING = "none"
@@ -166,8 +171,8 @@ def run_live(
             usage = None
             error = type(exc).__name__
         selected = [item for item in candidates if item["locator"] in selection["locators"]]
-        required = set(case.expected_facts)
-        selected_facts = {item["fact"] for item in selected}
+        required = required_evidence_pairs(case)
+        selected_facts = {(item["entity"], item["fact"]) for item in selected}
         rows.append(
             {
                 "case": case.id,
