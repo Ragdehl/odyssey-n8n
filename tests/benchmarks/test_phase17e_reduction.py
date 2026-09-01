@@ -76,6 +76,19 @@ def test_checkpoint_round_trip_and_incompatible_inputs_fail_closed(tmp_path) -> 
         load_checkpoint(output, checkpoint_identity(luna, ranking))
 
 
+def test_checkpoint_identity_includes_reasoning_and_cases(tmp_path) -> None:
+    """Reasoning and focused case selections cannot share a checkpoint."""
+    luna = tmp_path / "luna"
+    ranking = tmp_path / "ranking"
+    luna.write_text("luna", encoding="utf-8")
+    ranking.write_text("ranking", encoding="utf-8")
+    low = checkpoint_identity(luna, ranking, "low", ("q1",))
+    medium = checkpoint_identity(luna, ranking, "medium", ("q1",))
+    other_case = checkpoint_identity(luna, ranking, "low", ("q2",))
+    assert low["reasoning"] != medium["reasoning"]
+    assert low["cases"] != other_case["cases"]
+
+
 def test_case_filter_preserves_frozen_order() -> None:
     """Repeated case selection returns requested cases in corpus order."""
     cases = tuple(SimpleNamespace(id=value) for value in ("q1", "scale-100", "q2"))

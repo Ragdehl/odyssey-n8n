@@ -12,13 +12,18 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, query_cases
-from benchmarks.phase17e_retrieval.reduction import grounded_candidates
+from benchmarks.phase17e_retrieval.reduction import grounded_candidates, select_cases
 
 MODEL = "gpt-5.6-sol"
 REASONING = "low"
 
 
-def checkpoint_identity(answer_artifact: Path, ranking_artifact: Path) -> dict[str, str]:
+def checkpoint_identity(
+    answer_artifact: Path,
+    ranking_artifact: Path,
+    reasoning: str = REASONING,
+    case_ids: tuple[str, ...] = (),
+) -> dict[str, str]:
     """Return stable identities for the persisted selector and ranking inputs."""
 
     def digest(path: Path) -> str:
@@ -26,7 +31,8 @@ def checkpoint_identity(answer_artifact: Path, ranking_artifact: Path) -> dict[s
 
     return {
         "model": MODEL,
-        "reasoning": REASONING,
+        "reasoning": reasoning,
+        "cases": ",".join(case_ids),
         "luna_artifact": str(answer_artifact.resolve()),
         "luna_artifact_sha256": digest(answer_artifact),
         "ranking_artifact": str(ranking_artifact.resolve()),
@@ -133,17 +139,19 @@ def run_live(
     schema_path: Path,
     scale_size: int,
     output: Path,
+    reasoning: str = REASONING,
+    case_ids: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Send persisted decisions and re-grounded evidence to Sol, never to Luna."""
     from openai import OpenAI
 
-    identity = checkpoint_identity(answer_artifact, ranking_artifact)
+    identity = checkpoint_identity(answer_artifact, ranking_artifact, reasoning, case_ids)
     completed = load_checkpoint(output, identity)
     data = load_cases(cases_path)
     corpus = build_corpus(
         data, json.loads(schema_path.read_text(encoding="utf-8")), scale_size=scale_size
     )
-    cases = query_cases(data, scale_size=scale_size)
+    cases = select_cases(query_cases(data, scale_size=scale_size), case_ids)
     decisions = {
         row["case"]: row for row in json.loads(answer_artifact.read_text(encoding="utf-8"))["rows"]
     }
@@ -172,7 +180,7 @@ def run_live(
         try:
             response = client.responses.create(
                 model=MODEL,
-                reasoning={"effort": "low"},
+                reasoning={"effort": reasoning},
                 store=False,
                 input=[
                     {
@@ -227,7 +235,7 @@ def run_live(
     return {
         "phase_status": "LIVE_SOL_EVIDENCE_OBTAINED",
         "model": MODEL,
-        "reasoning": "low",
+        "reasoning": reasoning,
         "luna_artifact": str(answer_artifact),
         "ranking_artifact": str(ranking_artifact),
         "checkpoint_identity": identity,
@@ -243,6 +251,8 @@ def main() -> None:
     parser.add_argument("--ranking-artifact", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--scale-size", type=int, default=1000)
+    parser.add_argument("--reasoning", choices=("low", "medium", "high"), default=REASONING)
+    parser.add_argument("--case", dest="case_ids", action="append", default=[])
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.json"))
     parser.add_argument(
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
@@ -257,6 +267,8 @@ def main() -> None:
                 args.schema,
                 args.scale_size,
                 args.output,
+                args.reasoning,
+                tuple(args.case_ids),
             ),
             ensure_ascii=False,
             indent=2,
