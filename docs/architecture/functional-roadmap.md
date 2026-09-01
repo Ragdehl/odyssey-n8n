@@ -146,15 +146,27 @@ retrieval changes by itself.
 ### ✅ Phase 17E retrieval adoption decision — completed focused subphase
 
 The evidence-backed decision adopts Combined whole-note + atomic-fact retrieval with a local
-Top-500 candidate width and the already-tested fixed reciprocal-rank fusion (`RRF_K = 60`). Final
-strong-model context remains independently bounded and is hydrated/validated from authoritative
-current Markdown, with retrieval retaining evidence-only authority. Top-300 is the lean fallback
-candidate for later E2E measurement. Top-400 was not rerun because complete rankings were not
-preserved and its known rank-412 miss cannot reach full required-fact recall. See the
+Top-500 candidate width and the already-tested fixed reciprocal-rank fusion (`RRF_K = 60`). Top-300
+remains the lean fallback candidate for later real E2E measurement. See the
 [retrieval adoption decision](phase-17e-retrieval-adoption.md).
 
-Production Combined retrieval is not implemented by this decision; whole-note behavior remains
-current production behavior until the separate implementation PR is reviewed and merged.
+Production Combined retrieval is not implemented by this decision; whole-note behavior remains current
+production behavior until the remaining reduction evidence and the separate implementation PR are
+reviewed and merged.
+
+### ➡️ Phase 17E retrieval reduction + answer-path evidence — current focused subphase
+
+Top-500 proves broad candidate recall, but a relevant required fact can appear deep in the fused ranking.
+A small final `context_limit` therefore cannot safely be implemented as simple rank truncation without
+potentially erasing the recall gain. Before production Combined wiring, compare deterministic truncation
+with a bounded high-recall Luna fact-locator selector that can explicitly escalate instead of guessing.
+Then run a compact live `retrieval -> grounded facts -> Sol` answer-path check and measure required-fact
+retention, answer quality, provider tokens/cost, latency, and escalation behavior. See the
+[retrieval reduction evidence contract](phase-17e-retrieval-reduction-evidence.md).
+
+The following step, only after this evidence closes the final-context policy, is the bounded production
+Combined implementation in `ContextIndex` / `get_context`. Phase 18 remains blocked until that production
+checkpoint is merged.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
