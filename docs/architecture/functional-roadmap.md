@@ -154,7 +154,7 @@ Production Combined retrieval is not implemented by this decision; whole-note be
 production behavior until the remaining reduction evidence and the separate implementation PR are
 reviewed and merged.
 
-### ➡️ Phase 17E retrieval reduction + answer-path evidence — Luna/none safety failure; low staged next
+### ➡️ Phase 17E retrieval reduction + answer-path evidence — revised Luna/none passed; answer path pending
 
 Top-500 proves broad candidate recall, but a relevant required fact can appear deep in the fused ranking.
 Retrieval must therefore not invent a fixed final fact/note count or treat the caller's context budget as
@@ -166,13 +166,11 @@ check and measure required-fact retention, observed evidence/token reduction, an
 cost, latency, and escalation behavior. The caller/higher layer remains responsible for any final context
 budget. See the [retrieval reduction evidence contract](phase-17e-retrieval-reduction-evidence.md).
 
-The deterministic baseline and benchmark-only selector harness are complete. Manual Luna/none evidence
-has valid decisions but includes two unsafe non-escalated required-fact drops (`scale-100` and
-`scale-700`) among 21 selections, so Luna/none fails the safety gate despite strong natural compression.
-Luna/low is justified and is staged first on those two cases plus `q2`; the full low suite and focused
-Sol answer path follow only if those targeted cases are safe. Retrieval/selector may discover and filter
-grounded evidence; the caller/higher layer owns the final context budget. Production Combined remains
-deferred and Phase 18 remains blocked until the separate production retrieval checkpoint is merged.
+The deterministic baseline and benchmark-only selector harness are complete. Revised manual Luna/none
+evidence passes the 22-case safety gate with 19 SELECT decisions retaining all required facts and safe
+ESCALATE decisions for `q6`, `scale-100`, and `scale-700`; low and medium converted none of these.
+The persisted-decision -> re-grounding -> Sol answer-path harness is prepared for manual execution.
+q6 is flagged for later benchmark-oracle review. Production Combined remains deferred.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 

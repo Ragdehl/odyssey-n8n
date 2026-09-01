@@ -10,6 +10,36 @@ from benchmarks.phase17e_retrieval.reduction import (
     selector_schema,
     validate_selection,
 )
+from benchmarks.phase17e_retrieval.run_answer_path import (
+    aggregate_rows,
+    answer_schema,
+    evaluate_answer,
+    validate_answer,
+)
+
+
+def test_answer_contract_and_oracle() -> None:
+    """Answer validation and local oracle remain closed and deterministic."""
+    assert answer_schema()["additionalProperties"] is False
+    answer = validate_answer({"answer": "Trabaja en Thales."})
+    assert evaluate_answer(answer, ("Trabaja en Thales.",))
+
+
+def test_answer_aggregates_split_selector_branches() -> None:
+    """Answer-path summaries keep SELECT and ESCALATE measurements separate."""
+    row = {
+        "decision": "SELECT",
+        "oracle_correct": True,
+        "sol_input_tokens": 10,
+        "sol_output_tokens": 2,
+        "sol_reasoning_tokens": 0,
+        "evidence_fact_count": 1,
+        "evidence_text_tokens": 4,
+    }
+    summary = aggregate_rows([row, {**row, "decision": "ESCALATE", "oracle_correct": False}])
+    assert summary["select"]["case_count"] == 1
+    assert summary["escalate"]["correct"] == 0
+    assert summary["overall"]["case_count"] == 2
 
 
 def test_case_filter_preserves_frozen_order() -> None:

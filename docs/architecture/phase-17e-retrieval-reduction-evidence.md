@@ -157,7 +157,7 @@ The benchmark must close these before implementation:
 The final caller context budget is **not** an open retrieval decision; it remains owned by the higher
 layer/caller.
 
-## Evidence checkpoint
+## Revised selector evidence checkpoint
 
 The complete Combined ranking artifact was recovered from the frozen 1,000-entity corpus using the
 existing MiniLM artifact and persisted outside the repository for reuse. The run took approximately
@@ -173,34 +173,32 @@ closed output is `SELECT` with supplied locators or `ESCALATE` with no locators.
 and duplicate locators, re-grounds selected facts from validated current benchmark notes, and never
 owns a context budget or answer authority.
 
-The initial in-sandbox smoke test failed with `APIConnectionError` and was correctly recorded as
-`PROVIDER_ERROR` / `NO_EVIDENCE`. A subsequent manual Raspberry-shell run produced valid evidence for
-all 22 cases using `gpt-5.6-luna` with reasoning `none`: 21 `SELECT`, one semantic `ESCALATE` (`q2`),
-and no provider errors. `SELECT` retained all required facts for 19/21 valid selections, but dropped
-required facts without escalation in two cases: `scale-100` and `scale-700`. This is a safety-gate
-failure, despite strong natural compression: selected facts averaged/median 3.6/2 (min 1, max 27),
-with average retained evidence of 1.8%. Luna usage was 400,560 input tokens, 1,065 output tokens,
-and zero reasoning tokens. The 400,560-token Luna input is an important cost signal for the later
-comparison and is not itself evidence of savings.
+The revised `gpt-5.6-luna` selector v2 with reasoning `none` passed the current 22-case safety gate:
+19 `SELECT`, 3 safe `ESCALATE` (`q6`, `scale-100`, and `scale-700`), and no provider errors. All 19
+SELECT decisions retained every required benchmark fact. SELECT retained 1.7% of candidate fact
+evidence on average (selected facts: average 2.3, median 2, minimum 1, maximum 5). Targeted reasoning
+`low` and `medium` each reproduced all three escalations and did not convert any of them, so extra
+Luna reasoning stages are not justified by current evidence. `high` was intentionally not run: Luna
+does not need to resolve every query; ESCALATE is the safe refusal to reduce when recall cannot be
+preserved.
 
-The harness now supports `--reasoning none|low|medium|high` and repeated `--case ID` filters, while
-retaining the full-suite default. The reasoning choices are benchmark-only and do not change production
-configuration. Because `none` failed the safety gate, the revised selector prompt is being tested from
-the cheapest effort upward on only `scale-100`, `scale-700`, and `q2`. If a targeted run is safe
-(`SELECT` with all required facts or semantic `ESCALATE`), the next broader run is permitted; any unsafe
-non-escalated drop stops that effort's experiment. The focused Sol answer-path suite remains unrun until
-the revised selector clears its staged safety gate.
+The answer-path harness is `benchmarks/phase17e_retrieval/run_answer_path.py`. It consumes persisted
+Luna and Combined artifacts, validates and re-grounds SELECT locators, and re-grounds the full Top-500
+for ESCALATE before sending evidence to Sol/low. The broad escalation payload is benchmark evidence,
+not a production context limit; final budgeting remains with the caller/higher layer. The existing
+oracle evaluates answers locally and is never shown to Sol. Codex makes no provider calls.
 
-The prior original-prompt runs remain historical evidence, not validation of the revised prompt. The
-two unsafe `none` cases expose an ambiguity between retaining enough evidence to identify an answer
-entity and retaining evidence supporting every material query constraint. The revised instruction now
-requires evidence for every condition in conjunctive queries and escalation when that cannot be done
-confidently. Codex cannot access the provider; live runs are performed manually from the Raspberry shell.
+The prior original-prompt runs remain historical evidence, not validation of the revised prompt. Codex
+cannot access the provider; live runs are performed manually from the Raspberry shell.
 
 ## Decision
 
-**D. Production Combined should remain deferred.** Luna/none has valid provider evidence but fails the
-safety gate through two unsafe non-escalated required-fact drops. Luna/low is justified and remains a
-staged experiment, not yet a production decision. Until that experiment and the compact Sol suite are
-complete, the caller/higher layer continues to own any final context budget and production retrieval
-remains unchanged.
+**D. Production Combined should remain deferred.** The revised Luna/none selector passed the current
+safety gate, but this remains benchmark-only evidence. The intended path is Combined Top-500 ->
+Luna/none -> SELECT or ESCALATE -> authoritative re-grounding -> Sol/low. A direct broad-Sol path is
+the conceptual comparison; token counts must remain separate from model prices. Production retrieval,
+planner behavior, and caller-owned context budgeting remain unchanged.
+
+Benchmark-quality observation: q6 (`Quel est le métier de Claire Martin ?`) expects `Travaille chez
+Thales.`, which describes an employer rather than a profession. Keep the frozen benchmark unchanged;
+review this oracle later.
