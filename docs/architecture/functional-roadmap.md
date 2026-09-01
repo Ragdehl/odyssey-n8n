@@ -227,6 +227,10 @@ The detailed cross-phase direction is centralized in
 - 💡 **Generic tags:** Core stores and filters explicitly requested free-form tags; vocabulary and meaning remain user/app-owned, with no inference or registry.
 - 💡 **Large-vault retrieval reduction:** retain high-recall local candidate retrieval and benchmark any
   selector before reducing strong-model context.
+- 💡 **Cost-aware request planning:** after the first real E2E exposes planner cost, benchmark Luna as a
+  first-pass `PLAN | ESCALATE` planner with the current Sol/low planner as fallback. Reuse historical Luna
+  failure cases as mandatory escalation evidence; adopt only if final planner quality matches the Sol
+  baseline, unsafe non-escalation is strictly controlled, and total measured cost is materially lower.
 - 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces
   with safe usage/cost/error metadata, redaction, and retention controls once the E2E exists.
 - 💡 **Performance/index optimization:** optimize only from measurements.
