@@ -17,6 +17,7 @@ from benchmarks.phase17e_retrieval.reduction import grounded_candidates, select_
 MODEL = "gpt-5.6-sol"
 REASONING = "low"
 PRESENTATIONS = ("flat", "grouped")
+PROMPTS = ("baseline", "conjunctive")
 
 
 def checkpoint_identity(
@@ -25,6 +26,7 @@ def checkpoint_identity(
     reasoning: str = REASONING,
     case_ids: tuple[str, ...] = (),
     presentation: str = "flat",
+    answer_prompt: str = "baseline",
 ) -> dict[str, str]:
     """Return stable identities for the persisted selector and ranking inputs."""
 
@@ -36,6 +38,7 @@ def checkpoint_identity(
         "reasoning": reasoning,
         "cases": ",".join(case_ids),
         "escalate_presentation": presentation,
+        "answer_prompt": answer_prompt,
         "luna_artifact": str(answer_artifact.resolve()),
         "luna_artifact_sha256": digest(answer_artifact),
         "ranking_artifact": str(ranking_artifact.resolve()),
@@ -96,6 +99,19 @@ def present_evidence(selected: list[dict[str, str]], presentation: str) -> list[
     for item in selected:
         groups.setdefault(item["entity"], []).append(item)
     return [{"entity": entity, "facts": facts} for entity, facts in groups.items()]
+
+
+def answer_system_prompt(answer_prompt: str) -> str:
+    """Return the selected benchmark-only Sol grounding instruction."""
+    baseline = "Answer only from supplied grounded evidence. Do not retrieve or infer unsupported knowledge. Return a compact answer and cite every supplied locator that supports it in supporting_locators."
+    if answer_prompt == "baseline":
+        return baseline
+    if answer_prompt == "conjunctive":
+        return (
+            baseline
+            + " For multi-condition queries, examine all supplied candidate entities. Every requested condition must be satisfied by the same entity; do not stop after finding an entity that satisfies only part of the query. Before concluding that no match exists or evidence is insufficient, check whether another supplied entity satisfies all material conditions."
+        )
+    raise ValueError(f"unknown answer prompt: {answer_prompt}")
 
 
 def validate_answer(value: object, supplied_locators: set[str]) -> dict[str, Any]:
@@ -162,12 +178,13 @@ def run_live(
     reasoning: str = REASONING,
     case_ids: tuple[str, ...] = (),
     presentation: str = "flat",
+    answer_prompt: str = "baseline",
 ) -> dict[str, Any]:
     """Send persisted decisions and re-grounded evidence to Sol, never to Luna."""
     from openai import OpenAI
 
     identity = checkpoint_identity(
-        answer_artifact, ranking_artifact, reasoning, case_ids, presentation
+        answer_artifact, ranking_artifact, reasoning, case_ids, presentation, answer_prompt
     )
     completed = load_checkpoint(output, identity)
     data = load_cases(cases_path)
@@ -212,7 +229,7 @@ def run_live(
                 input=[
                     {
                         "role": "system",
-                        "content": "Answer only from supplied grounded evidence. Do not retrieve or infer unsupported knowledge. Return a compact answer and cite every supplied locator that supports it in supporting_locators.",
+                        "content": answer_system_prompt(answer_prompt),
                     },
                     {
                         "role": "user",
@@ -282,6 +299,7 @@ def main() -> None:
     parser.add_argument("--reasoning", choices=("low", "medium", "high"), default=REASONING)
     parser.add_argument("--case", dest="case_ids", action="append", default=[])
     parser.add_argument("--escalate-presentation", choices=PRESENTATIONS, default="flat")
+    parser.add_argument("--answer-prompt", choices=PROMPTS, default="baseline")
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.json"))
     parser.add_argument(
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
@@ -299,6 +317,7 @@ def main() -> None:
                 args.reasoning,
                 tuple(args.case_ids),
                 args.escalate_presentation,
+                args.answer_prompt,
             ),
             ensure_ascii=False,
             indent=2,

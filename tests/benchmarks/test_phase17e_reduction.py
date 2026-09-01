@@ -13,6 +13,7 @@ from benchmarks.phase17e_retrieval.reduction import (
 from benchmarks.phase17e_retrieval.run_answer_path import (
     aggregate_rows,
     answer_schema,
+    answer_system_prompt,
     checkpoint_identity,
     evaluate_support,
     load_checkpoint,
@@ -88,9 +89,20 @@ def test_checkpoint_identity_includes_reasoning_and_cases(tmp_path) -> None:
     medium = checkpoint_identity(luna, ranking, "medium", ("q1",))
     other_case = checkpoint_identity(luna, ranking, "low", ("q2",))
     grouped = checkpoint_identity(luna, ranking, "low", ("q1",), "grouped")
+    conjunctive = checkpoint_identity(luna, ranking, "low", ("q1",), "flat", "conjunctive")
     assert low["reasoning"] != medium["reasoning"]
     assert low["cases"] != other_case["cases"]
     assert low["escalate_presentation"] != grouped["escalate_presentation"]
+    assert low["answer_prompt"] != conjunctive["answer_prompt"]
+
+
+def test_answer_prompt_variants_preserve_baseline_and_add_conjunctive_guidance() -> None:
+    """The prompt experiment leaves baseline text unchanged and adds only its guidance."""
+    baseline = answer_system_prompt("baseline")
+    conjunctive = answer_system_prompt("conjunctive")
+    assert "same entity" not in baseline
+    assert "same entity" in conjunctive
+    assert baseline in conjunctive
 
 
 def test_non_prefix_cases_use_original_persisted_rankings() -> None:
