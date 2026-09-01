@@ -143,11 +143,18 @@ See the [planner semantic-atomicity contract](phase-17e-planner-atomicity.md). P
 succeeded; the remaining retrieval adoption decision is separate and does not authorize production
 retrieval changes by itself.
 
-### ➡️ Phase 17E retrieval adoption decision — next focused subphase
+### ✅ Phase 17E retrieval adoption decision — completed focused subphase
 
-Use the completed retrieval evidence and planner revalidation to decide whether any retrieval-unit
-change is warranted. Combined remains the leading candidate but is not adopted; whole-note retrieval
-remains production behavior until an explicit evidence-backed decision.
+The evidence-backed decision adopts Combined whole-note + atomic-fact retrieval with a local
+Top-500 candidate width and the already-tested fixed reciprocal-rank fusion (`RRF_K = 60`). Final
+strong-model context remains independently bounded and is hydrated/validated from authoritative
+current Markdown, with retrieval retaining evidence-only authority. Top-300 is the lean fallback
+candidate for later E2E measurement. Top-400 was not rerun because complete rankings were not
+preserved and its known rank-412 miss cannot reach full required-fact recall. See the
+[retrieval adoption decision](phase-17e-retrieval-adoption.md).
+
+Production Combined retrieval is not implemented by this decision; whole-note behavior remains
+current production behavior until the separate implementation PR is reviewed and merged.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
