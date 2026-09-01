@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from openai import APIError
+
 from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, query_cases
 
 MODEL = "gpt-5.6-luna"
@@ -75,6 +77,46 @@ def _tokens(text: str) -> int:
     return round(len(text) / 4)
 
 
+def _call_selector(
+    client: Any, query: str, candidates: list[dict[str, str]]
+) -> tuple[dict[str, Any], Any]:
+    """Call Luna once and validate its closed locator decision."""
+    response = client.responses.create(
+        model=MODEL,
+        reasoning={"effort": REASONING},
+        store=False,
+        input=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a relevance filter only. Retain ALL supplied facts that may be "
+                    "needed to answer the query. Remove only facts you can safely judge irrelevant. "
+                    "Do not answer, summarize, rewrite, infer, resolve identity, or mutate anything. "
+                    "If safe reduction is uncertain, return ESCALATE with an empty locator list. "
+                    "Never choose a target number of facts."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {"query": query, "candidates": candidates}, ensure_ascii=False
+                ),
+            },
+        ],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "odyssey_relevance_selection",
+                "strict": True,
+                "schema": selector_schema(),
+            }
+        },
+    )
+    return validate_selection(
+        json.loads(response.output_text), {item["locator"] for item in candidates}
+    ), response.usage
+
+
 def run_live(
     artifact: Path, cases_path: Path, schema_path: Path, scale_size: int
 ) -> dict[str, Any]:
@@ -89,43 +131,15 @@ def run_live(
     cases = query_cases(data, scale_size=scale_size)
     client = OpenAI(max_retries=0)
     rows = []
-    for case, ranking in zip(cases, ranking_data, strict=True):
+    for case_index, (case, ranking) in enumerate(zip(cases, ranking_data, strict=True)):
         candidates = grounded_candidates(ranking[:500], corpus)
-        supplied = {item["locator"] for item in candidates}
-        payload = {"query": case.query, "candidates": candidates}
         started = time.perf_counter()
         error = None
+        status = "PROVIDER_ERROR"
         try:
-            response = client.responses.create(
-                model=MODEL,
-                reasoning={"effort": REASONING},
-                store=False,
-                input=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a relevance filter only. Retain ALL supplied facts that may be "
-                            "needed to answer the query. Remove only facts you can safely judge irrelevant. "
-                            "Do not answer, summarize, rewrite, infer, resolve identity, or mutate anything. "
-                            "If safe reduction is uncertain, return ESCALATE with an empty locator list. "
-                            "Never choose a target number of facts."
-                        ),
-                    },
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                ],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "odyssey_relevance_selection",
-                        "strict": True,
-                        "schema": selector_schema(),
-                    }
-                },
-            )
-            raw = json.loads(response.output_text)
-            selection = validate_selection(raw, supplied)
-            usage = response.usage
-        except Exception as exc:  # Provider and validation failures are benchmark escalation.
+            selection, usage = _call_selector(client, case.query, candidates)
+            status = selection["decision"]
+        except (APIError, OSError, TypeError, ValueError, KeyError) as exc:
             selection = {"decision": "ESCALATE", "locators": []}
             usage = None
             error = type(exc).__name__
@@ -140,20 +154,34 @@ def run_live(
                 "reasoning": REASONING,
                 "candidate_count": len(candidates),
                 "candidate_fact_tokens": _tokens("\n".join(item["fact"] for item in candidates)),
-                "selection": selection,
+                "status": status,
+                "evidence_status": "VALID" if status in {"SELECT", "ESCALATE"} else "NO_EVIDENCE",
+                "selection": selection if status in {"SELECT", "ESCALATE"} else None,
                 "selected_count": len(selected),
                 "selected_fact_tokens": _tokens("\n".join(item["fact"] for item in selected)),
                 "required_fact_count": len(required),
                 "required_any": bool(required & selected_facts) if required else True,
                 "required_all": required.issubset(selected_facts),
-                "dropped_without_escalation": bool(required - selected_facts)
-                and selection["decision"] == "SELECT",
+                "dropped_without_escalation": status == "SELECT"
+                and bool(required - selected_facts),
                 "latency_seconds": round(time.perf_counter() - started, 3),
                 "usage": getattr(usage, "model_dump", lambda: None)() if usage else None,
                 "error": error,
             }
         )
-    return {"model": MODEL, "reasoning": REASONING, "rows": rows}
+        if case_index == 0 and status == "PROVIDER_ERROR":
+            return {
+                "phase_status": "BLOCKED_ON_LIVE_PROVIDER_EVIDENCE",
+                "model": MODEL,
+                "reasoning": REASONING,
+                "rows": rows,
+            }
+    return {
+        "phase_status": "LIVE_EVIDENCE_OBTAINED",
+        "model": MODEL,
+        "reasoning": REASONING,
+        "rows": rows,
+    }
 
 
 def main() -> None:
@@ -174,7 +202,8 @@ def main() -> None:
         json.dumps(
             {
                 "cases": len(rows),
-                "escalations": sum(r["selection"]["decision"] == "ESCALATE" for r in rows),
+                "semantic_escalations": sum(r["status"] == "ESCALATE" for r in rows),
+                "provider_errors": sum(r["status"] == "PROVIDER_ERROR" for r in rows),
             }
         )
     )

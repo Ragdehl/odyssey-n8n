@@ -173,17 +173,18 @@ closed output is `SELECT` with supplied locators or `ESCALATE` with no locators.
 and duplicate locators, re-grounds selected facts from validated current benchmark notes, and never
 owns a context budget or answer authority.
 
-The first and cheapest live configuration tested was `gpt-5.6-luna` with reasoning `none`. All 22
-provider calls failed with `APIConnectionError`, so the harness fail-closed to `ESCALATE` for every
-case. Consequently there is no live evidence for selector recall, natural reduction, provider
-tokens/cost, or Luna latency, and Luna/low was not tested. The focused Sol answer-path suite was not
-run because its prerequisite selector evidence was unavailable. The raw fail-closed evidence is
-preserved in the local runtime artifact, not committed with credentials or personal data.
+The first and cheapest live configuration tested was `gpt-5.6-luna` with reasoning `none`. A required
+one-call smoke test failed with `APIConnectionError`; the harness stopped before issuing the remaining
+21 calls. The result is recorded as `PROVIDER_ERROR` / `NO_EVIDENCE`, not semantic `ESCALATE`. There
+is therefore no live evidence for selector recall, natural reduction, provider tokens/cost, or Luna
+latency, and Luna/low was not tested. The focused Sol answer-path suite was not run because its
+prerequisite selector evidence was unavailable. The raw fail-closed evidence is preserved in the local
+runtime artifact, not committed with credentials or personal data.
 
 ## Decision
 
-**D. Production Combined should remain deferred.** No safe economical semantic-reduction path was
-demonstrated because provider access was unavailable. This is an evidence blocker, not evidence that
-Luna is unsafe. When provider access is restored, rerun `gpt-5.6-luna`/`none` first, test `low` only
-if the safety gate fails, and then run the compact Sol suite. Until then, the caller/higher layer
-continues to own any final context budget and production retrieval remains unchanged.
+**BLOCKED: insufficient live provider evidence.** Production Combined remains deferred operationally,
+but this is missing evidence rather than negative evidence against Luna. When provider access is
+restored, rerun `gpt-5.6-luna`/`none` first, test `low` only if the safety gate fails, and then run the
+compact Sol suite. Until then, the caller/higher layer continues to own any final context budget and
+production retrieval remains unchanged.
