@@ -1,6 +1,6 @@
 # Phase 17E retrieval reduction and answer-path evidence
 
-Status: **proposed focused subphase before production Combined implementation**
+Status: **evidence checkpoint complete; production Combined remains deferred**
 
 ## Objective
 
@@ -156,3 +156,34 @@ The benchmark must close these before implementation:
 
 The final caller context budget is **not** an open retrieval decision; it remains owned by the higher
 layer/caller.
+
+## Evidence checkpoint
+
+The complete Combined ranking artifact was recovered from the frozen 1,000-entity corpus using the
+existing MiniLM artifact and persisted outside the repository for reuse. The run took approximately
+217 seconds to load the model, 201 seconds to build Combined vectors, and 8.7 seconds to query the
+22-case suite. The `scale-100` required fact remains at fused rank 412.
+
+The diagnostic fused-prefix baseline retained all required facts for 63.2% of cases at Top-5, Top-10,
+and Top-20; 94.7% at Top-200, Top-300, and Top-400; and 100% only at Top-500. These are observations,
+not production limits.
+
+The benchmark-only selector implementation is in `benchmarks/phase17e_retrieval/reduction.py`. Its
+closed output is `SELECT` with supplied locators or `ESCALATE` with no locators. It rejects unknown
+and duplicate locators, re-grounds selected facts from validated current benchmark notes, and never
+owns a context budget or answer authority.
+
+The first and cheapest live configuration tested was `gpt-5.6-luna` with reasoning `none`. All 22
+provider calls failed with `APIConnectionError`, so the harness fail-closed to `ESCALATE` for every
+case. Consequently there is no live evidence for selector recall, natural reduction, provider
+tokens/cost, or Luna latency, and Luna/low was not tested. The focused Sol answer-path suite was not
+run because its prerequisite selector evidence was unavailable. The raw fail-closed evidence is
+preserved in the local runtime artifact, not committed with credentials or personal data.
+
+## Decision
+
+**D. Production Combined should remain deferred.** No safe economical semantic-reduction path was
+demonstrated because provider access was unavailable. This is an evidence blocker, not evidence that
+Luna is unsafe. When provider access is restored, rerun `gpt-5.6-luna`/`none` first, test `low` only
+if the safety gate fails, and then run the compact Sol suite. Until then, the caller/higher layer
+continues to own any final context budget and production retrieval remains unchanged.

@@ -154,7 +154,7 @@ Production Combined retrieval is not implemented by this decision; whole-note be
 production behavior until the remaining reduction evidence and the separate implementation PR are
 reviewed and merged.
 
-### ➡️ Phase 17E retrieval reduction + answer-path evidence — current focused subphase
+### ✅ Phase 17E retrieval reduction + answer-path evidence — benchmark checkpoint complete; live gate blocked
 
 Top-500 proves broad candidate recall, but a relevant required fact can appear deep in the fused ranking.
 Retrieval must therefore not invent a fixed final fact/note count or treat the caller's context budget as
@@ -166,9 +166,12 @@ check and measure required-fact retention, observed evidence/token reduction, an
 cost, latency, and escalation behavior. The caller/higher layer remains responsible for any final context
 budget. See the [retrieval reduction evidence contract](phase-17e-retrieval-reduction-evidence.md).
 
-The following step, only after this evidence closes the relevance-reduction policy, is the bounded
-production Combined implementation in `ContextIndex` / `get_context`. Phase 18 remains blocked until that
-production checkpoint is merged.
+The deterministic baseline and benchmark-only selector harness are complete. The cheapest live Luna
+configuration could not be evaluated because provider access failed, so no safe economical reduction
+policy was demonstrated and the production Combined implementation remains deferred. Retrieval/selector
+may discover and filter grounded evidence; the caller/higher layer owns the final context budget. The
+focused Sol answer-path gate remains to be rerun when provider access is restored. Phase 18 remains
+blocked until the separate production retrieval checkpoint is merged.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
