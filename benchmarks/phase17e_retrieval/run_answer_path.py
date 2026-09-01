@@ -65,6 +65,11 @@ def load_checkpoint(output: Path, identity: dict[str, str]) -> dict[str, dict[st
     return {row["case"]: row for row in rows}
 
 
+def map_rankings(all_cases: tuple[Any, ...], rankings: list[Any]) -> dict[str, Any]:
+    """Associate each persisted ranking with its full frozen case ordering."""
+    return dict(zip((case.id for case in all_cases), rankings, strict=True))
+
+
 def answer_schema() -> dict[str, Any]:
     """Return Sol's closed answer and supporting-locator schema."""
     return {
@@ -151,12 +156,13 @@ def run_live(
     corpus = build_corpus(
         data, json.loads(schema_path.read_text(encoding="utf-8")), scale_size=scale_size
     )
-    cases = select_cases(query_cases(data, scale_size=scale_size), case_ids)
+    all_cases = query_cases(data, scale_size=scale_size)
+    cases = select_cases(all_cases, case_ids)
     decisions = {
         row["case"]: row for row in json.loads(answer_artifact.read_text(encoding="utf-8"))["rows"]
     }
     ranking = json.loads(ranking_artifact.read_text(encoding="utf-8"))["strategies"][0]["rankings"]
-    rankings = dict(zip((case.id for case in cases), ranking, strict=True))
+    rankings = map_rankings(all_cases, ranking)
     client = OpenAI(max_retries=0)
     rows = [completed[case.id] for case in cases if case.id in completed]
     for index, case in enumerate(cases, 1):

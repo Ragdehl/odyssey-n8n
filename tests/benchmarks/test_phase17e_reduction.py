@@ -16,6 +16,7 @@ from benchmarks.phase17e_retrieval.run_answer_path import (
     checkpoint_identity,
     evaluate_support,
     load_checkpoint,
+    map_rankings,
     validate_answer,
     write_checkpoint,
 )
@@ -87,6 +88,16 @@ def test_checkpoint_identity_includes_reasoning_and_cases(tmp_path) -> None:
     other_case = checkpoint_identity(luna, ranking, "low", ("q2",))
     assert low["reasoning"] != medium["reasoning"]
     assert low["cases"] != other_case["cases"]
+
+
+def test_non_prefix_cases_use_original_persisted_rankings() -> None:
+    """Focused non-prefix selections still resolve their own full-suite rankings."""
+    all_cases = tuple(
+        SimpleNamespace(id=case_id) for case_id in ("q1", "scale-100", "q2", "scale-700")
+    )
+    selected = select_cases(all_cases, ("scale-100", "scale-700"))
+    rankings = map_rankings(all_cases, ["rank-q1", "rank-100", "rank-q2", "rank-700"])
+    assert [rankings[case.id] for case in selected] == ["rank-100", "rank-700"]
 
 
 def test_case_filter_preserves_frozen_order() -> None:
