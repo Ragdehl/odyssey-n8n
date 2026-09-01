@@ -8,12 +8,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from openai import APIError
-
 from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, query_cases
 
 MODEL = "gpt-5.6-luna"
 REASONING = "none"
+REASONING_EFFORTS = ("none", "low")
 
 
 def selector_schema() -> dict[str, Any]:
@@ -77,13 +76,23 @@ def _tokens(text: str) -> int:
     return round(len(text) / 4)
 
 
+def select_cases(all_cases: tuple[Any, ...], case_ids: tuple[str, ...] | None) -> tuple[Any, ...]:
+    """Filter frozen cases by optional repeated CLI identifiers and reject unknown IDs."""
+    requested = set(case_ids or ())
+    known = {case.id for case in all_cases}
+    unknown = requested - known
+    if unknown:
+        raise ValueError(f"unknown benchmark case ids: {sorted(unknown)!r}")
+    return tuple(case for case in all_cases if not requested or case.id in requested)
+
+
 def _call_selector(
-    client: Any, query: str, candidates: list[dict[str, str]]
+    client: Any, query: str, candidates: list[dict[str, str]], reasoning: str
 ) -> tuple[dict[str, Any], Any]:
     """Call Luna once and validate its closed locator decision."""
     response = client.responses.create(
         model=MODEL,
-        reasoning={"effort": REASONING},
+        reasoning={"effort": reasoning},
         store=False,
         input=[
             {
@@ -118,26 +127,35 @@ def _call_selector(
 
 
 def run_live(
-    artifact: Path, cases_path: Path, schema_path: Path, scale_size: int
+    artifact: Path,
+    cases_path: Path,
+    schema_path: Path,
+    scale_size: int,
+    *,
+    reasoning: str = REASONING,
+    case_ids: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Run the cheapest Luna selector across the frozen cases and preserve audit evidence."""
-    from openai import OpenAI
+    from openai import APIError, OpenAI
 
     artifact_data = json.loads(artifact.read_text(encoding="utf-8"))
     ranking_data = artifact_data["strategies"][0]["rankings"]
     data = load_cases(cases_path)
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     corpus = build_corpus(data, schema, scale_size=scale_size)
-    cases = query_cases(data, scale_size=scale_size)
+    all_cases = query_cases(data, scale_size=scale_size)
+    rankings_by_case = dict(zip((case.id for case in all_cases), ranking_data, strict=True))
+    cases = select_cases(all_cases, case_ids)
     client = OpenAI(max_retries=0)
     rows = []
-    for case_index, (case, ranking) in enumerate(zip(cases, ranking_data, strict=True)):
+    for case_index, case in enumerate(cases):
+        ranking = rankings_by_case[case.id]
         candidates = grounded_candidates(ranking[:500], corpus)
         started = time.perf_counter()
         error = None
         status = "PROVIDER_ERROR"
         try:
-            selection, usage = _call_selector(client, case.query, candidates)
+            selection, usage = _call_selector(client, case.query, candidates, reasoning)
             status = selection["decision"]
         except (APIError, OSError, TypeError, ValueError, KeyError) as exc:
             selection = {"decision": "ESCALATE", "locators": []}
@@ -151,7 +169,7 @@ def run_live(
                 "case": case.id,
                 "query": case.query,
                 "model": MODEL,
-                "reasoning": REASONING,
+                "reasoning": reasoning,
                 "candidate_count": len(candidates),
                 "candidate_fact_tokens": _tokens("\n".join(item["fact"] for item in candidates)),
                 "status": status,
@@ -173,13 +191,13 @@ def run_live(
             return {
                 "phase_status": "BLOCKED_ON_LIVE_PROVIDER_EVIDENCE",
                 "model": MODEL,
-                "reasoning": REASONING,
+                "reasoning": reasoning,
                 "rows": rows,
             }
     return {
         "phase_status": "LIVE_EVIDENCE_OBTAINED",
         "model": MODEL,
-        "reasoning": REASONING,
+        "reasoning": reasoning,
         "rows": rows,
     }
 
@@ -190,12 +208,21 @@ def main() -> None:
     parser.add_argument("--artifact", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--scale-size", type=int, default=1000)
+    parser.add_argument("--reasoning", choices=REASONING_EFFORTS, default=REASONING)
+    parser.add_argument("--case", dest="case_ids", action="append", default=[])
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.json"))
     parser.add_argument(
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
     )
     args = parser.parse_args()
-    result = run_live(args.artifact, args.cases, args.schema, args.scale_size)
+    result = run_live(
+        args.artifact,
+        args.cases,
+        args.schema,
+        args.scale_size,
+        reasoning=args.reasoning,
+        case_ids=tuple(args.case_ids),
+    )
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     rows = result["rows"]
     print(

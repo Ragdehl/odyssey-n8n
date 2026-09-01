@@ -173,18 +173,27 @@ closed output is `SELECT` with supplied locators or `ESCALATE` with no locators.
 and duplicate locators, re-grounds selected facts from validated current benchmark notes, and never
 owns a context budget or answer authority.
 
-The first and cheapest live configuration tested was `gpt-5.6-luna` with reasoning `none`. A required
-one-call smoke test failed with `APIConnectionError`; the harness stopped before issuing the remaining
-21 calls. The result is recorded as `PROVIDER_ERROR` / `NO_EVIDENCE`, not semantic `ESCALATE`. There
-is therefore no live evidence for selector recall, natural reduction, provider tokens/cost, or Luna
-latency, and Luna/low was not tested. The focused Sol answer-path suite was not run because its
-prerequisite selector evidence was unavailable. The raw fail-closed evidence is preserved in the local
-runtime artifact, not committed with credentials or personal data.
+The initial in-sandbox smoke test failed with `APIConnectionError` and was correctly recorded as
+`PROVIDER_ERROR` / `NO_EVIDENCE`. A subsequent manual Raspberry-shell run produced valid evidence for
+all 22 cases using `gpt-5.6-luna` with reasoning `none`: 21 `SELECT`, one semantic `ESCALATE` (`q2`),
+and no provider errors. `SELECT` retained all required facts for 19/21 valid selections, but dropped
+required facts without escalation in two cases: `scale-100` and `scale-700`. This is a safety-gate
+failure, despite strong natural compression: selected facts averaged/median 3.6/2 (min 1, max 27),
+with average retained evidence of 1.8%. Luna usage was 400,560 input tokens, 1,065 output tokens,
+and zero reasoning tokens. The 400,560-token Luna input is an important cost signal for the later
+comparison and is not itself evidence of savings.
+
+The harness now supports `--reasoning none|low` and repeated `--case ID` filters, while retaining the
+full-suite default. Because `none` failed the safety gate, `low` is justified by the phase contract,
+but it must first be tested only on `scale-100`, `scale-700`, and `q2` to avoid unnecessary provider
+cost. If any targeted low run again produces an unsafe non-escalated drop, the low experiment stops;
+only an all-safe targeted result permits the operator to run the full 22-case low suite. The focused
+Sol answer-path suite remains unrun until valid low selector evidence exists.
 
 ## Decision
 
-**BLOCKED: insufficient live provider evidence.** Production Combined remains deferred operationally,
-but this is missing evidence rather than negative evidence against Luna. When provider access is
-restored, rerun `gpt-5.6-luna`/`none` first, test `low` only if the safety gate fails, and then run the
-compact Sol suite. Until then, the caller/higher layer continues to own any final context budget and
-production retrieval remains unchanged.
+**D. Production Combined should remain deferred.** Luna/none has valid provider evidence but fails the
+safety gate through two unsafe non-escalated required-fact drops. Luna/low is justified and remains a
+staged experiment, not yet a production decision. Until that experiment and the compact Sol suite are
+complete, the caller/higher layer continues to own any final context budget and production retrieval
+remains unchanged.

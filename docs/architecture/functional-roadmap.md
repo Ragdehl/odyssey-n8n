@@ -154,7 +154,7 @@ Production Combined retrieval is not implemented by this decision; whole-note be
 production behavior until the remaining reduction evidence and the separate implementation PR are
 reviewed and merged.
 
-### ✅ Phase 17E retrieval reduction + answer-path evidence — benchmark checkpoint complete; live gate blocked
+### ➡️ Phase 17E retrieval reduction + answer-path evidence — Luna/none safety failure; low staged next
 
 Top-500 proves broad candidate recall, but a relevant required fact can appear deep in the fused ranking.
 Retrieval must therefore not invent a fixed final fact/note count or treat the caller's context budget as
@@ -166,12 +166,13 @@ check and measure required-fact retention, observed evidence/token reduction, an
 cost, latency, and escalation behavior. The caller/higher layer remains responsible for any final context
 budget. See the [retrieval reduction evidence contract](phase-17e-retrieval-reduction-evidence.md).
 
-The deterministic baseline and benchmark-only selector harness are complete. The cheapest live Luna
-configuration could not be evaluated because provider access failed, so no safe economical reduction
-policy was demonstrated and the production Combined implementation remains deferred. Retrieval/selector
-may discover and filter grounded evidence; the caller/higher layer owns the final context budget. The
-focused Sol answer-path gate remains to be rerun when provider access is restored. Phase 18 remains
-blocked until the separate production retrieval checkpoint is merged.
+The deterministic baseline and benchmark-only selector harness are complete. Manual Luna/none evidence
+has valid decisions but includes two unsafe non-escalated required-fact drops (`scale-100` and
+`scale-700`) among 21 selections, so Luna/none fails the safety gate despite strong natural compression.
+Luna/low is justified and is staged first on those two cases plus `q2`; the full low suite and focused
+Sol answer path follow only if those targeted cases are safe. Retrieval/selector may discover and filter
+grounded evidence; the caller/higher layer owns the final context budget. Production Combined remains
+deferred and Phase 18 remains blocked until the separate production retrieval checkpoint is merged.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
