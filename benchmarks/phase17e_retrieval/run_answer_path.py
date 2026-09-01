@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -12,6 +15,48 @@ from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, qu
 from benchmarks.phase17e_retrieval.reduction import grounded_candidates
 
 MODEL = "gpt-5.6-sol"
+REASONING = "low"
+
+
+def checkpoint_identity(answer_artifact: Path, ranking_artifact: Path) -> dict[str, str]:
+    """Return stable identities for the persisted selector and ranking inputs."""
+
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    return {
+        "model": MODEL,
+        "reasoning": REASONING,
+        "luna_artifact": str(answer_artifact.resolve()),
+        "luna_artifact_sha256": digest(answer_artifact),
+        "ranking_artifact": str(ranking_artifact.resolve()),
+        "ranking_artifact_sha256": digest(ranking_artifact),
+    }
+
+
+def write_checkpoint(
+    output: Path, identity: dict[str, str], rows: list[dict[str, Any]], status: str
+) -> None:
+    """Atomically persist completed answer rows so interruption loses no paid results."""
+    payload = {"phase_status": status, "checkpoint_identity": identity, "rows": rows}
+    temporary = output.with_name(f".{output.name}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, output)
+
+
+def load_checkpoint(output: Path, identity: dict[str, str]) -> dict[str, dict[str, Any]]:
+    """Load and validate a compatible checkpoint, failing closed on mismatch."""
+    if not output.exists():
+        return {}
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    if payload.get("checkpoint_identity") != identity or not isinstance(payload.get("rows"), list):
+        raise ValueError("answer-path checkpoint is incompatible with current inputs")
+    rows = payload["rows"]
+    if any(not isinstance(row, dict) or not isinstance(row.get("case"), str) for row in rows):
+        raise ValueError("answer-path checkpoint contains invalid rows")
+    if len({row["case"] for row in rows}) != len(rows):
+        raise ValueError("answer-path checkpoint contains duplicate cases")
+    return {row["case"]: row for row in rows}
 
 
 def answer_schema() -> dict[str, Any]:
@@ -87,10 +132,13 @@ def run_live(
     cases_path: Path,
     schema_path: Path,
     scale_size: int,
+    output: Path,
 ) -> dict[str, Any]:
     """Send persisted decisions and re-grounded evidence to Sol, never to Luna."""
     from openai import OpenAI
 
+    identity = checkpoint_identity(answer_artifact, ranking_artifact)
+    completed = load_checkpoint(output, identity)
     data = load_cases(cases_path)
     corpus = build_corpus(
         data, json.loads(schema_path.read_text(encoding="utf-8")), scale_size=scale_size
@@ -102,8 +150,12 @@ def run_live(
     ranking = json.loads(ranking_artifact.read_text(encoding="utf-8"))["strategies"][0]["rankings"]
     rankings = dict(zip((case.id for case in cases), ranking, strict=True))
     client = OpenAI(max_retries=0)
-    rows = []
-    for case in cases:
+    rows = [completed[case.id] for case in cases if case.id in completed]
+    for index, case in enumerate(cases, 1):
+        if case.id in completed:
+            print(f"[{index}/{len(cases)}] {case.id} (resumed)", file=sys.stderr)
+            continue
+        print(f"[{index}/{len(cases)}] {case.id}", file=sys.stderr)
         decision = decisions[case.id]
         candidates = grounded_candidates(rankings[case.id][:500], corpus)
         selected = (
@@ -117,31 +169,35 @@ def run_live(
             f"[{item['locator']}] {item['entity']}: {item['fact']}" for item in selected
         )
         started = time.perf_counter()
-        response = client.responses.create(
-            model=MODEL,
-            reasoning={"effort": "low"},
-            store=False,
-            input=[
-                {
-                    "role": "system",
-                    "content": "Answer only from supplied grounded evidence. Do not retrieve or infer unsupported knowledge. Return a compact answer and cite every supplied locator that supports it in supporting_locators.",
+        try:
+            response = client.responses.create(
+                model=MODEL,
+                reasoning={"effort": "low"},
+                store=False,
+                input=[
+                    {
+                        "role": "system",
+                        "content": "Answer only from supplied grounded evidence. Do not retrieve or infer unsupported knowledge. Return a compact answer and cite every supplied locator that supports it in supporting_locators.",
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {"query": case.query, "evidence": selected}, ensure_ascii=False
+                        ),
+                    },
+                ],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "odyssey_answer",
+                        "strict": True,
+                        "schema": answer_schema(),
+                    }
                 },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {"query": case.query, "evidence": selected}, ensure_ascii=False
-                    ),
-                },
-            ],
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "odyssey_answer",
-                    "strict": True,
-                    "schema": answer_schema(),
-                }
-            },
-        )
+            )
+        except Exception:
+            write_checkpoint(output, identity, rows, "PROVIDER_ERROR")
+            raise
         response_value = validate_answer(
             json.loads(response.output_text), {item["locator"] for item in selected}
         )
@@ -167,12 +223,14 @@ def run_live(
                 "usage": usage,
             }
         )
+        write_checkpoint(output, identity, rows, "CHECKPOINT")
     return {
         "phase_status": "LIVE_SOL_EVIDENCE_OBTAINED",
         "model": MODEL,
         "reasoning": "low",
         "luna_artifact": str(answer_artifact),
         "ranking_artifact": str(ranking_artifact),
+        "checkpoint_identity": identity,
         "rows": rows,
         "aggregates": aggregate_rows(rows),
     }
@@ -193,7 +251,12 @@ def main() -> None:
     args.output.write_text(
         json.dumps(
             run_live(
-                args.luna_artifact, args.ranking_artifact, args.cases, args.schema, args.scale_size
+                args.luna_artifact,
+                args.ranking_artifact,
+                args.cases,
+                args.schema,
+                args.scale_size,
+                args.output,
             ),
             ensure_ascii=False,
             indent=2,

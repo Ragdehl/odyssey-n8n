@@ -13,8 +13,11 @@ from benchmarks.phase17e_retrieval.reduction import (
 from benchmarks.phase17e_retrieval.run_answer_path import (
     aggregate_rows,
     answer_schema,
+    checkpoint_identity,
     evaluate_support,
+    load_checkpoint,
     validate_answer,
+    write_checkpoint,
 )
 
 
@@ -55,6 +58,22 @@ def test_answer_aggregates_split_selector_branches() -> None:
     assert summary["select"]["case_count"] == 1
     assert summary["escalate"]["correct"] == 0
     assert summary["overall"]["case_count"] == 2
+
+
+def test_checkpoint_round_trip_and_incompatible_inputs_fail_closed(tmp_path) -> None:
+    """Completed rows resume only when model and persisted input identities match."""
+    luna = tmp_path / "luna.json"
+    ranking = tmp_path / "ranking.json"
+    output = tmp_path / "answers.json"
+    luna.write_text("luna", encoding="utf-8")
+    ranking.write_text("ranking", encoding="utf-8")
+    identity = checkpoint_identity(luna, ranking)
+    row = {"case": "q1", "required_evidence_supported": True}
+    write_checkpoint(output, identity, [row], "CHECKPOINT")
+    assert load_checkpoint(output, identity) == {"q1": row}
+    ranking.write_text("changed", encoding="utf-8")
+    with pytest.raises(ValueError, match="incompatible"):
+        load_checkpoint(output, checkpoint_identity(luna, ranking))
 
 
 def test_case_filter_preserves_frozen_order() -> None:
