@@ -28,6 +28,15 @@ for the existing cases and 5/5 PASS for the new cases. The two original critical
 in the permitted stability rerun. The raw outputs are preserved in
 [`planner_live_results.jsonl`](../../benchmarks/phase17e_retrieval/planner_live_results.jsonl) and
 [`planner_atomicity_live_results.jsonl`](../../benchmarks/phase17e_retrieval/planner_atomicity_live_results.jsonl).
+The permitted second stability run for the two critical cases is preserved in
+[`planner_critical_stability_run2.jsonl`](../../benchmarks/phase17e_retrieval/planner_critical_stability_run2.jsonl).
+
+The evaluator's symmetric containment is a benchmark correction: `entities` are semantic target
+descriptions, while Sol may return a shorter canonical identity or a more specific query. The
+smallest rule is normalized containment in either direction; clearly unrelated descriptions do not
+match. This affects the existing `one-coherent-concept` case (its expected description is longer
+than Sol's returned identity) and no other current case. It changes benchmark evaluation only, not
+production planner behavior or expectations.
 
 The evidence showed that independent facts still split, references and multiple entities remain
 attributable, and coherent explanations, reflections, and dependent-reason decisions remain unified.
@@ -42,6 +51,6 @@ to proceed to a separate retrieval adoption decision, but this subphase does not
 
 ## Open decisions
 
-- Whether the single prompt clarification is sufficient for production planner atomicity.
-- Whether the remaining evidence is sufficient to proceed to a separate Phase 17E retrieval adoption
-  decision. No production adoption is authorized by this subphase.
+None. The single semantic-atomicity clarification is sufficient for this focused planner
+precondition, and the evidence is sufficient to proceed to the separate Phase 17E retrieval
+adoption decision. This subphase does not adopt Combined.

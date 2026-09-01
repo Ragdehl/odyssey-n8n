@@ -16,7 +16,11 @@ from benchmarks.phase17e_retrieval.benchmark import (
     run_strategy,
     validate_scale_oracles,
 )
-from benchmarks.phase17e_retrieval.run_planner_live import evaluate_units, reevaluate_saved_results
+from benchmarks.phase17e_retrieval.run_planner_live import (
+    _target_matches,
+    evaluate_units,
+    reevaluate_saved_results,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -38,6 +42,17 @@ def test_planner_evaluator_counts_reference_mentions_and_query_identity() -> Non
     ]
     result = evaluate_units(units, case)
     assert result["status"] == "PASS"
+
+
+def test_target_matching_accepts_both_description_directions() -> None:
+    """Treat benchmark entities as semantic descriptions when either side is more specific."""
+    assert _target_matches("Una buena revisión del conocimiento", "Revisión del conocimiento")
+    assert _target_matches("Alba", "Alba, hija de Carlos")
+
+
+def test_target_matching_rejects_unrelated_descriptions() -> None:
+    """Do not let unrelated target descriptions satisfy a benchmark entity oracle."""
+    assert not _target_matches("revisión del conocimiento", "decisión de comprar una bicicleta")
 
 
 def test_offline_planner_results_use_corrected_concept_oracle(tmp_path: Path) -> None:
