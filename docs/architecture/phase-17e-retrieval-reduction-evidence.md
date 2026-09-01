@@ -183,12 +183,19 @@ with average retained evidence of 1.8%. Luna usage was 400,560 input tokens, 1,0
 and zero reasoning tokens. The 400,560-token Luna input is an important cost signal for the later
 comparison and is not itself evidence of savings.
 
-The harness now supports `--reasoning none|low` and repeated `--case ID` filters, while retaining the
-full-suite default. Because `none` failed the safety gate, `low` is justified by the phase contract,
-but it must first be tested only on `scale-100`, `scale-700`, and `q2` to avoid unnecessary provider
-cost. If any targeted low run again produces an unsafe non-escalated drop, the low experiment stops;
-only an all-safe targeted result permits the operator to run the full 22-case low suite. The focused
-Sol answer-path suite remains unrun until valid low selector evidence exists.
+The harness now supports `--reasoning none|low|medium|high` and repeated `--case ID` filters, while
+retaining the full-suite default. The reasoning choices are benchmark-only and do not change production
+configuration. Because `none` failed the safety gate, the revised selector prompt is being tested from
+the cheapest effort upward on only `scale-100`, `scale-700`, and `q2`. If a targeted run is safe
+(`SELECT` with all required facts or semantic `ESCALATE`), the next broader run is permitted; any unsafe
+non-escalated drop stops that effort's experiment. The focused Sol answer-path suite remains unrun until
+the revised selector clears its staged safety gate.
+
+The prior original-prompt runs remain historical evidence, not validation of the revised prompt. The
+two unsafe `none` cases expose an ambiguity between retaining enough evidence to identify an answer
+entity and retaining evidence supporting every material query constraint. The revised instruction now
+requires evidence for every condition in conjunctive queries and escalation when that cannot be done
+confidently. Codex cannot access the provider; live runs are performed manually from the Raspberry shell.
 
 ## Decision
 

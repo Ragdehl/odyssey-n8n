@@ -12,7 +12,7 @@ from benchmarks.phase17e_retrieval.benchmark import build_corpus, load_cases, qu
 
 MODEL = "gpt-5.6-luna"
 REASONING = "none"
-REASONING_EFFORTS = ("none", "low")
+REASONING_EFFORTS = ("none", "low", "medium", "high")
 
 
 def selector_schema() -> dict[str, Any]:
@@ -99,7 +99,11 @@ def _call_selector(
                 "role": "system",
                 "content": (
                     "You are a relevance filter only. Retain ALL supplied facts that may be "
-                    "needed to answer the query. Remove only facts you can safely judge irrelevant. "
+                    "needed to answer the query. For conjunctive or multi-condition queries, "
+                    "preserve evidence for EVERY material condition, not merely enough to identify "
+                    "the answer entity. If the answer depends on A AND B AND C, retain evidence "
+                    "supporting A, B, and C. If you cannot confidently preserve every condition, "
+                    "return ESCALATE. Remove only facts you can safely judge irrelevant. "
                     "Do not answer, summarize, rewrite, infer, resolve identity, or mutate anything. "
                     "If safe reduction is uncertain, return ESCALATE with an empty locator list. "
                     "Never choose a target number of facts."

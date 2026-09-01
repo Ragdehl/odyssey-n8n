@@ -30,9 +30,9 @@ def test_case_filter_rejects_unknown_id() -> None:
         select_cases((SimpleNamespace(id="q1"),), ("missing",))
 
 
-def test_reasoning_efforts_are_cheap_then_low() -> None:
-    """The CLI exposes only the staged reasoning configurations."""
-    assert REASONING_EFFORTS == ("none", "low")
+def test_reasoning_efforts_are_staged() -> None:
+    """The CLI exposes the staged benchmark configurations without production changes."""
+    assert REASONING_EFFORTS == ("none", "low", "medium", "high")
 
 
 def test_selector_schema_is_closed() -> None:
