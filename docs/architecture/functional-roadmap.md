@@ -172,6 +172,12 @@ ESCALATE decisions for `q6`, `scale-100`, and `scale-700`; low and medium conver
 The persisted-decision -> re-grounding -> Sol answer-path harness is prepared for manual execution.
 q6 is flagged for later benchmark-oracle review. Production Combined remains deferred.
 
+Identity-aware correction: Combined ALL-required recall is 72.7% / 81.8% / 86.4% / 90.9% / 90.9% at
+Top-100 / 200 / 300 / 400 / 500; `scale-100` and `scale-700` remain misses beyond Top-500. The earlier
+Top-500 100% claim is invalid. Before production Combined implementation, a deferred subphase must
+benchmark entity-level multi-fact aggregation and alternative conjunctive retrieval strategies. No
+replacement algorithm is selected here; whole-note retrieval remains production behavior.
+
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
 Expose the stable application boundary through n8n and prove one real bounded E2E use case **after** the

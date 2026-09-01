@@ -8,7 +8,7 @@ Close the remaining evidence gap between the adopted **Combined Top-500 candidat
 grounded relevant evidence that a higher layer may choose to provide to a strong model.
 
 The adoption benchmark proved candidate recall, not safe semantic reduction. A relevant required fact can
-occur as deep as Combined rank 412 in the frozen scale fixture. Therefore retrieval must not silently
+occur beyond Combined Top-500 in the frozen scale fixture. Therefore retrieval must not silently
 turn the Top-500 candidate pool into an arbitrary fixed Top-N final context and thereby destroy the recall
 that motivated Top-500.
 
@@ -53,7 +53,7 @@ focused Sol answer-path evidence
    rerunning a silent full three-arm benchmark.
 3. Establish a fused-rank-only **diagnostic baseline** showing how required-fact retention changes when a
    downstream consumer naively takes progressively smaller prefixes of the Top-500 ranking. These widths
-   are benchmark observations only, not a production retrieval contract. The known rank-412 case must
+   are benchmark observations only, not a production retrieval contract. The known deep-rank cases must
    remain visible as a sentinel.
 4. Benchmark `gpt-5.6-luna` as a **bounded high-recall relevance selector over supplied Combined fact
    candidates**. Luna may return only supplied fact locators or an explicit escalation outcome; it must
@@ -162,11 +162,28 @@ layer/caller.
 The complete Combined ranking artifact was recovered from the frozen 1,000-entity corpus using the
 existing MiniLM artifact and persisted outside the repository for reuse. The run took approximately
 217 seconds to load the model, 201 seconds to build Combined vectors, and 8.7 seconds to query the
-22-case suite. The `scale-100` required fact remains at fused rank 412.
+22-case suite. Identity-aware auditing found the two Top-500 misses are `scale-100` and `scale-700`.
+
+## Corrected identity-aware retrieval evidence
+
+The earlier required-fact metrics discarded entity identity and overstated recall. Corrected Combined
+ALL-required recall is 16/22 (72.7%) at Top-100, 18/22 (81.8%) at Top-200, 19/22 (86.4%) at Top-300,
+20/22 (90.9%) at Top-400, and 20/22 (90.9%) at Top-500. Target fact ranks are:
+
+| Case | Whole-note rank | Raw fact ranks (Works / Studies / Enjoys) | Combined ranks (Works / Studies / Enjoys) |
+|---|---:|---:|---:|
+| scale-100 | 270 | 477 / 3479 / 1215 | 1049 / 1753 / 1466 |
+| scale-700 | 373 | 142 / 3932 / 1358 | 565 / 2407 / 1951 |
+
+Successful scale whole-note ranks were 23 (`scale-250`), 11 (`scale-400`), 28 (`scale-550`), 42
+(`scale-850`), and 2 (`scale-999`). The regenerated local MiniLM benchmark reproduced the persisted
+Combined ranks. Combined independently adds whole/entity RRF and each fact's RRF; it has no entity-level
+aggregation term rewarding several facts from one entity jointly satisfying a conjunctive query. This
+demonstrates a limitation, but does not select a replacement algorithm.
 
 The diagnostic fused-prefix baseline retained all required facts for 63.2% of cases at Top-5, Top-10,
-and Top-20; 94.7% at Top-200, Top-300, and Top-400; and 100% only at Top-500. These are observations,
-not production limits.
+and Top-20; 94.7% at Top-200, Top-300, and Top-400; and an earlier, identity-unaware 100% at Top-500.
+Those earlier observations are superseded by the corrected identity-aware metrics above.
 
 The benchmark-only selector implementation is in `benchmarks/phase17e_retrieval/reduction.py`. Its
 closed output is `SELECT` with supplied locators or `ESCALATE` with no locators. It rejects unknown
@@ -202,3 +219,8 @@ planner behavior, and caller-owned context budgeting remain unchanged.
 Benchmark-quality observation: q6 (`Quel est le métier de Claire Martin ?`) expects `Travaille chez
 Thales.`, which describes an employer rather than a profession. Keep the frozen benchmark unchanged;
 review this oracle later.
+
+The identity-aware persisted Sol audit is 19/19 supported for SELECT, 1/3 for ESCALATE, and 20/22
+overall. The two failed ESCALATE scale cases did not contain the target entity's required evidence in
+Top-500, so they are retrieval-coverage failures, not Sol reasoning failures. The previous Combined
+Top-500 adoption assumption requires reconsideration before production implementation.
