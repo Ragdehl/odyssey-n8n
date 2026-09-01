@@ -16,6 +16,7 @@ from benchmarks.phase17e_retrieval.reduction import grounded_candidates, select_
 
 MODEL = "gpt-5.6-sol"
 REASONING = "low"
+PRESENTATIONS = ("flat", "grouped")
 
 
 def checkpoint_identity(
@@ -23,6 +24,7 @@ def checkpoint_identity(
     ranking_artifact: Path,
     reasoning: str = REASONING,
     case_ids: tuple[str, ...] = (),
+    presentation: str = "flat",
 ) -> dict[str, str]:
     """Return stable identities for the persisted selector and ranking inputs."""
 
@@ -33,6 +35,7 @@ def checkpoint_identity(
         "model": MODEL,
         "reasoning": reasoning,
         "cases": ",".join(case_ids),
+        "escalate_presentation": presentation,
         "luna_artifact": str(answer_artifact.resolve()),
         "luna_artifact_sha256": digest(answer_artifact),
         "ranking_artifact": str(ranking_artifact.resolve()),
@@ -81,6 +84,18 @@ def answer_schema() -> dict[str, Any]:
         "required": ["answer", "supporting_locators"],
         "additionalProperties": False,
     }
+
+
+def present_evidence(selected: list[dict[str, str]], presentation: str) -> list[Any]:
+    """Format identical grounded facts flat or grouped by canonical entity for Sol."""
+    if presentation == "flat":
+        return selected
+    if presentation != "grouped":
+        raise ValueError(f"unknown evidence presentation: {presentation}")
+    groups: dict[str, list[dict[str, str]]] = {}
+    for item in selected:
+        groups.setdefault(item["entity"], []).append(item)
+    return [{"entity": entity, "facts": facts} for entity, facts in groups.items()]
 
 
 def validate_answer(value: object, supplied_locators: set[str]) -> dict[str, Any]:
@@ -146,11 +161,14 @@ def run_live(
     output: Path,
     reasoning: str = REASONING,
     case_ids: tuple[str, ...] = (),
+    presentation: str = "flat",
 ) -> dict[str, Any]:
     """Send persisted decisions and re-grounded evidence to Sol, never to Luna."""
     from openai import OpenAI
 
-    identity = checkpoint_identity(answer_artifact, ranking_artifact, reasoning, case_ids)
+    identity = checkpoint_identity(
+        answer_artifact, ranking_artifact, reasoning, case_ids, presentation
+    )
     completed = load_checkpoint(output, identity)
     data = load_cases(cases_path)
     corpus = build_corpus(
@@ -182,6 +200,9 @@ def run_live(
         evidence = "\n".join(
             f"[{item['locator']}] {item['entity']}: {item['fact']}" for item in selected
         )
+        presented_evidence = present_evidence(
+            selected, presentation if decision["status"] == "ESCALATE" else "flat"
+        )
         started = time.perf_counter()
         try:
             response = client.responses.create(
@@ -196,7 +217,8 @@ def run_live(
                     {
                         "role": "user",
                         "content": json.dumps(
-                            {"query": case.query, "evidence": selected}, ensure_ascii=False
+                            {"query": case.query, "evidence": presented_evidence},
+                            ensure_ascii=False,
                         ),
                     },
                 ],
@@ -259,6 +281,7 @@ def main() -> None:
     parser.add_argument("--scale-size", type=int, default=1000)
     parser.add_argument("--reasoning", choices=("low", "medium", "high"), default=REASONING)
     parser.add_argument("--case", dest="case_ids", action="append", default=[])
+    parser.add_argument("--escalate-presentation", choices=PRESENTATIONS, default="flat")
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.json"))
     parser.add_argument(
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
@@ -275,6 +298,7 @@ def main() -> None:
                 args.output,
                 args.reasoning,
                 tuple(args.case_ids),
+                args.escalate_presentation,
             ),
             ensure_ascii=False,
             indent=2,

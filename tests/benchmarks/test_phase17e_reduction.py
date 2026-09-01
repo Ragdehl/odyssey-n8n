@@ -17,6 +17,7 @@ from benchmarks.phase17e_retrieval.run_answer_path import (
     evaluate_support,
     load_checkpoint,
     map_rankings,
+    present_evidence,
     validate_answer,
     write_checkpoint,
 )
@@ -86,8 +87,10 @@ def test_checkpoint_identity_includes_reasoning_and_cases(tmp_path) -> None:
     low = checkpoint_identity(luna, ranking, "low", ("q1",))
     medium = checkpoint_identity(luna, ranking, "medium", ("q1",))
     other_case = checkpoint_identity(luna, ranking, "low", ("q2",))
+    grouped = checkpoint_identity(luna, ranking, "low", ("q1",), "grouped")
     assert low["reasoning"] != medium["reasoning"]
     assert low["cases"] != other_case["cases"]
+    assert low["escalate_presentation"] != grouped["escalate_presentation"]
 
 
 def test_non_prefix_cases_use_original_persisted_rankings() -> None:
@@ -98,6 +101,23 @@ def test_non_prefix_cases_use_original_persisted_rankings() -> None:
     selected = select_cases(all_cases, ("scale-100", "scale-700"))
     rankings = map_rankings(all_cases, ["rank-q1", "rank-100", "rank-q2", "rank-700"])
     assert [rankings[case.id] for case in selected] == ["rank-100", "rank-700"]
+
+
+def test_grouped_presentation_preserves_ranked_facts_and_select_is_flat() -> None:
+    """Grouping changes shape only for escalation and preserves every ranked locator."""
+    selected = [
+        {"locator": "b#1", "entity": "b", "fact": "B1"},
+        {"locator": "a#1", "entity": "a", "fact": "A1"},
+        {"locator": "a#2", "entity": "a", "fact": "A2"},
+    ]
+    grouped = present_evidence(selected, "grouped")
+    assert [group["entity"] for group in grouped] == ["b", "a"]
+    assert [item["locator"] for group in grouped for item in group["facts"]] == [
+        "b#1",
+        "a#1",
+        "a#2",
+    ]
+    assert present_evidence(selected, "flat") == selected
 
 
 def test_case_filter_preserves_frozen_order() -> None:
