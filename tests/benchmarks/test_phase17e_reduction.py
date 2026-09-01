@@ -13,7 +13,7 @@ from benchmarks.phase17e_retrieval.reduction import (
 from benchmarks.phase17e_retrieval.run_answer_path import (
     aggregate_rows,
     answer_schema,
-    evaluate_answer,
+    evaluate_support,
     validate_answer,
 )
 
@@ -21,22 +21,37 @@ from benchmarks.phase17e_retrieval.run_answer_path import (
 def test_answer_contract_and_oracle() -> None:
     """Answer validation and local oracle remain closed and deterministic."""
     assert answer_schema()["additionalProperties"] is False
-    answer = validate_answer({"answer": "Trabaja en Thales."})
-    assert evaluate_answer(answer, ("Trabaja en Thales.",))
+    response = validate_answer(
+        {"answer": "Marta trabaja en Thales.", "supporting_locators": ["marta#fact-0"]},
+        {"marta#fact-0"},
+    )
+    assert evaluate_support(
+        response, {"marta#fact-0": "Trabaja en Thales."}, ("Trabaja en Thales.",)
+    )
+
+
+def test_answer_rejects_invalid_support() -> None:
+    """Unknown, duplicate, and absent support citations fail closed."""
+    with pytest.raises(ValueError):
+        validate_answer({"answer": "x", "supporting_locators": ["unknown"]}, {"known"})
+    with pytest.raises(ValueError):
+        validate_answer({"answer": "x", "supporting_locators": ["known", "known"]}, {"known"})
 
 
 def test_answer_aggregates_split_selector_branches() -> None:
     """Answer-path summaries keep SELECT and ESCALATE measurements separate."""
     row = {
         "decision": "SELECT",
-        "oracle_correct": True,
+        "required_evidence_supported": True,
         "sol_input_tokens": 10,
         "sol_output_tokens": 2,
         "sol_reasoning_tokens": 0,
         "evidence_fact_count": 1,
         "evidence_text_tokens": 4,
     }
-    summary = aggregate_rows([row, {**row, "decision": "ESCALATE", "oracle_correct": False}])
+    summary = aggregate_rows(
+        [row, {**row, "decision": "ESCALATE", "required_evidence_supported": False}]
+    )
     assert summary["select"]["case_count"] == 1
     assert summary["escalate"]["correct"] == 0
     assert summary["overall"]["case_count"] == 2

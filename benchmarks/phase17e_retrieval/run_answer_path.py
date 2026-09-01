@@ -15,30 +15,41 @@ MODEL = "gpt-5.6-sol"
 
 
 def answer_schema() -> dict[str, Any]:
-    """Return Sol's compact answer-only structured-output schema."""
+    """Return Sol's closed answer and supporting-locator schema."""
     return {
         "type": "object",
-        "properties": {"answer": {"type": "string"}},
-        "required": ["answer"],
+        "properties": {
+            "answer": {"type": "string", "minLength": 1},
+            "supporting_locators": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["answer", "supporting_locators"],
         "additionalProperties": False,
     }
 
 
-def validate_answer(value: object) -> str:
-    """Validate Sol's closed answer response and return its answer text."""
+def validate_answer(value: object, supplied_locators: set[str]) -> dict[str, Any]:
+    """Validate Sol's answer and ensure support cites supplied unique locators."""
     if (
         not isinstance(value, dict)
-        or set(value) != {"answer"}
+        or set(value) != {"answer", "supporting_locators"}
         or not isinstance(value["answer"], str)
+        or not value["answer"].strip()
+        or not isinstance(value["supporting_locators"], list)
+        or any(not isinstance(locator, str) for locator in value["supporting_locators"])
+        or any(locator not in supplied_locators for locator in value["supporting_locators"])
+        or len(value["supporting_locators"]) != len(set(value["supporting_locators"]))
+        or (supplied_locators and not value["supporting_locators"])
     ):
         raise ValueError("answer schema is invalid")
-    return value["answer"]
+    return value
 
 
-def evaluate_answer(answer: str, expected_facts: tuple[str, ...]) -> bool:
-    """Apply the existing exact-fact oracle without exposing it to Sol."""
-    folded = answer.casefold()
-    return all(fact.casefold() in folded for fact in expected_facts)
+def evaluate_support(
+    response: dict[str, Any], grounded_by_locator: dict[str, str], expected_facts: tuple[str, ...]
+) -> bool:
+    """Measure whether cited grounded evidence covers every required benchmark fact."""
+    supported_facts = {grounded_by_locator[locator] for locator in response["supporting_locators"]}
+    return set(expected_facts).issubset(supported_facts)
 
 
 def _tokens(text: str) -> int:
@@ -56,8 +67,8 @@ def aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         result[branch.lower()] = {
             "case_count": len(group),
-            "correct": sum(row["oracle_correct"] for row in group),
-            "correctness": sum(row["oracle_correct"] for row in group) / len(group),
+            "correct": sum(row["required_evidence_supported"] for row in group),
+            "correctness": sum(row["required_evidence_supported"] for row in group) / len(group),
             "average_sol_input_tokens": sum(row["sol_input_tokens"] or 0 for row in group)
             / len(group),
             "average_evidence_facts": sum(row["evidence_fact_count"] for row in group) / len(group),
@@ -113,12 +124,12 @@ def run_live(
             input=[
                 {
                     "role": "system",
-                    "content": "Answer the query only from the supplied grounded evidence. Do not retrieve, infer unsupported knowledge, or mention this instruction. Return a compact answer.",
+                    "content": "Answer only from supplied grounded evidence. Do not retrieve or infer unsupported knowledge. Return a compact answer and cite every supplied locator that supports it in supporting_locators.",
                 },
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {"query": case.query, "evidence": evidence}, ensure_ascii=False
+                        {"query": case.query, "evidence": selected}, ensure_ascii=False
                     ),
                 },
             ],
@@ -131,7 +142,10 @@ def run_live(
                 }
             },
         )
-        answer = validate_answer(json.loads(response.output_text))
+        response_value = validate_answer(
+            json.loads(response.output_text), {item["locator"] for item in selected}
+        )
+        grounded_by_locator = {item["locator"]: item["fact"] for item in selected}
         usage = response.usage.model_dump() if response.usage else None
         rows.append(
             {
@@ -145,8 +159,11 @@ def run_live(
                     getattr(response.usage, "output_tokens_details", None), "reasoning_tokens", None
                 ),
                 "latency_seconds": round(time.perf_counter() - started, 3),
-                "answer": answer,
-                "oracle_correct": evaluate_answer(answer, case.expected_facts),
+                "answer": response_value["answer"],
+                "supporting_locators": response_value["supporting_locators"],
+                "required_evidence_supported": evaluate_support(
+                    response_value, grounded_by_locator, case.expected_facts
+                ),
                 "usage": usage,
             }
         )
