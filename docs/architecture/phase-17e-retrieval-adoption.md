@@ -27,15 +27,15 @@ These are local candidate costs, not strong-model context costs:
 Combined Top-500 local candidates
         |
         v
-current authoritative Markdown hydration and validation
+authoritative Markdown re-grounding
         |
         v
-deduplicated bounded context package -> strong model
+bounded grounded evidence -> strong model
 ```
 
 ## Frozen fusion rule
 
-Use the benchmarked deterministic reciprocal-rank fusion unchanged. For each whole-note rank and atomic-fact rank (both one-based), the score is:
+Use the benchmarked deterministic reciprocal-rank fusion unchanged for notes that have atomic facts. For each whole-note rank and atomic-fact rank (both one-based), the score is:
 
 ```text
 1 / (60 + whole_note_rank) + 1 / (60 + atomic_fact_rank)
@@ -43,25 +43,37 @@ Use the benchmarked deterministic reciprocal-rank fusion unchanged. For each who
 
 The whole-note score is applied to each fact unit belonging to that note; ties use stable unit order. This is fixed evidence fusion, not a learned reranker, semantic threshold, second LLM, graph retrieval, or ranking service.
 
+The benchmark's Combined ranking contains fact units, with whole-note rank acting as a global signal; it does not itself emit a whole-note result unit. Production must therefore preserve a deterministic compatibility fallback for an active note that has **no atomic-fact units**: keep one whole-note fallback candidate using the whole-note reciprocal-rank contribution `1 / (60 + whole_note_rank)`. This fallback prevents currently valid factless/metadata-only notes from disappearing. It does not change the benchmark recall claim and must be covered explicitly by the implementation tests.
+
 ## Production context boundary
 
-The subsequent implementation should reuse `ContextIndex.find_candidates` and `get_context`. Combined whole-note and fact hits are associated by authoritative note ID/path. Whole-note hits supply global entity/ranking signal; fact hits supply precise evidence. They do not become separate final context entries. The note is selected once, then its current Markdown body is read, parsed, schema-validated, identity-checked, and returned through the existing `ContextPackage`. This hydrates fact evidence from the source of truth and prevents duplicate whole/fact payload for one note.
+Combined candidate ranking and final strong-model context are different boundaries.
 
-Missing, deleted, malformed, identity-mismatched, or stale indexed material must fail closed using existing context retrieval errors/guards. Semantic ranking remains evidence only and never authorizes identity resolution, writes, bulk mutation, or schema changes.
+For a normal atomic-fact hit, the final context must **not** hydrate the entire note body merely because that note was selected. Doing so would discard the principal precision/context-size benefit demonstrated by fact retrieval. Instead, the implementation must re-read the authoritative Markdown note, parse and validate it, verify note identity/source freshness, and re-ground the selected atomic fact by its existing Odyssey fact locator/text before exposing that exact current fact as evidence.
 
-Top-500 is an independent local candidate limit. Final context must use the existing bounded `get_context(..., limit=...)` / `ContextPackage` boundary, with a deterministic bounded note/context policy from hydrated candidates rather than forwarding all 500 units. No numeric strong-model token budget is invented here; measurement-only tuning belongs to Phase 19/E2E work.
+Whole-note rank for a note with atomic facts is ranking/global-entity evidence only and does not independently inject the whole note into final context. Multiple selected facts from the same note are deduplicated by fact identity and may be grouped under one note identity for presentation, while preserving the number and order of grounded evidence units.
+
+For the explicit factless-note fallback, the current authoritative note body/projection may be returned as one bounded whole-note evidence unit because no atomic fact exists to hydrate. This is a compatibility path, not the default for factful notes.
+
+The current `ContextPackage` stores full `note.content`, so the subsequent implementation may need the **smallest compatible extension** of the context result shape to carry grounded fact evidence. Reuse the existing vault read, parse, schema validation, source-hash, deletion, and identity guards; do not pretend the current full-note `ContextItem.content` contract already provides compact fact context.
+
+Missing, deleted, malformed, identity-mismatched, removed-fact, or stale indexed material must fail closed or be skipped only where the existing context contract already permits that behavior. Semantic ranking remains evidence only and never authorizes identity resolution, writes, bulk mutation, or schema changes.
+
+Top-500 is the independent raw local candidate limit. The caller-visible final context budget remains independently bounded: after authoritative grounding and deduplication, retain at most the caller-requested final `limit` **grounded evidence units** in fused rank order, then group them by note only for representation. Grouping must not silently add extra facts or full note bodies. No numeric strong-model token budget is invented here; measurement-only tuning belongs to Phase 19/E2E work.
 
 ## Final contract
 
 - **Retrieval strategy:** Combined whole-note + atomic-fact retrieval.
-- **Candidate width:** Top-500 local Combined candidates.
-- **Fusion rule:** Exact tested fixed reciprocal-rank fusion with `RRF_K = 60`, summing one-based whole-note and fact reciprocal-rank contributions.
-- **Authoritative grounding:** Current authoritative Markdown vault; group by note identity and hydrate/validate each selected note once through the existing Core context boundary.
-- **Final-context policy:** Bounded independently from candidate width using the existing bounded `get_context`/`ContextPackage` contract; do not send all raw candidates to the strong model.
+- **Candidate width:** Top-500 raw local Combined candidates.
+- **Fusion rule:** Exact tested fixed reciprocal-rank fusion with `RRF_K = 60`, summing one-based whole-note and fact reciprocal-rank contributions for fact units.
+- **Factless compatibility:** One whole-note fallback candidate for an active note with no atomic facts, scored from the whole-note reciprocal-rank contribution only; no benchmark-recall claim is attached to this fallback.
+- **Authoritative grounding:** Current authoritative Markdown vault; re-read and validate the note, then expose the exact currently grounded selected fact rather than the whole body for normal fact hits.
+- **Final-context policy:** After grounding/deduplication, at most the caller-requested final `limit` evidence units are retained in fused rank order; grouping by note is representational and must not expand the evidence set.
+- **Whole-note payload:** Whole-note rank is ranking evidence only for factful notes; full-note content is allowed only for the explicit factless fallback.
 - **Insufficient-evidence behavior:** Return bounded incomplete evidence or fail closed; never infer missing knowledge from ranking scores.
 - **Authority:** Retrieval is evidence only and has no write, identity, bulk-mutation, or schema authority.
 - **Lean optimization candidate:** Top-300, to be reconsidered only with real E2E cost/recall evidence.
-- **Implementation next step:** A separate production Combined retrieval implementation PR.
+- **Implementation next step:** A separate production Combined retrieval implementation PR, including the minimal context-result representation change needed for grounded facts and deterministic tests for factless-note fallback.
 
 ## Open decisions
 
