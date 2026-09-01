@@ -157,16 +157,18 @@ reviewed and merged.
 ### ➡️ Phase 17E retrieval reduction + answer-path evidence — current focused subphase
 
 Top-500 proves broad candidate recall, but a relevant required fact can appear deep in the fused ranking.
-A small final `context_limit` therefore cannot safely be implemented as simple rank truncation without
-potentially erasing the recall gain. Before production Combined wiring, compare deterministic truncation
-with a bounded high-recall Luna fact-locator selector that can explicitly escalate instead of guessing.
-Then run a compact live `retrieval -> grounded facts -> Sol` answer-path check and measure required-fact
-retention, answer quality, provider tokens/cost, latency, and escalation behavior. See the
-[retrieval reduction evidence contract](phase-17e-retrieval-reduction-evidence.md).
+Retrieval must therefore not invent a fixed final fact/note count or treat the caller's context budget as
+a retrieval-owned truncation rule. Before production Combined wiring, use simple rank-prefix truncation
+only as a diagnostic baseline and benchmark a bounded high-recall Luna fact-locator selector that removes
+irrelevant evidence without being forced to return a predetermined number of facts, with explicit
+escalation instead of guessing. Then run a compact live `retrieval -> grounded facts -> Sol` answer-path
+check and measure required-fact retention, observed evidence/token reduction, answer quality, provider
+cost, latency, and escalation behavior. The caller/higher layer remains responsible for any final context
+budget. See the [retrieval reduction evidence contract](phase-17e-retrieval-reduction-evidence.md).
 
-The following step, only after this evidence closes the final-context policy, is the bounded production
-Combined implementation in `ContextIndex` / `get_context`. Phase 18 remains blocked until that production
-checkpoint is merged.
+The following step, only after this evidence closes the relevance-reduction policy, is the bounded
+production Combined implementation in `ContextIndex` / `get_context`. Phase 18 remains blocked until that
+production checkpoint is merged.
 
 ⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
 
