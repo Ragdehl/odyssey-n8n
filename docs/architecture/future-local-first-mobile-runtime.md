@@ -97,7 +97,7 @@ one AI-provider/gateway account
 "Connect Odyssey"
   |
   v
-scoped/revocable application credential
+dedicated/revocable application credential
   |
   v
 Odyssey calls Luna / Sol / other models
@@ -111,10 +111,18 @@ However, do not adopt a gateway solely for convenience without evaluating:
 - provider and model feature parity (Structured Outputs, reasoning controls, Responses-compatible behavior, etc.);
 - pricing/fees and billing ownership;
 - availability and vendor dependency;
-- credential revocation/limits/scoping;
+- credential revocation, expiry, limits, and any available scoping controls;
 - whether direct provider OAuth or a better standard becomes available later.
 
 Other future deployment choices remain possible, including an Odyssey-managed relay, a user-self-hosted proxy, or eventually suitable local models. The provider boundary should remain replaceable.
+
+### References for this future option
+
+- OpenAI API key safety guidance: <https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety>
+- OpenRouter OAuth PKCE: <https://openrouter.ai/docs/guides/overview/auth/oauth>
+- OpenRouter BYOK: <https://openrouter.ai/docs/guides/overview/auth/byok>
+
+These links document the current external behavior only; they do not make OpenRouter or any provider part of Odyssey's committed architecture.
 
 ## Candidate future phase
 
