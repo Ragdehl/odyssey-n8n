@@ -48,15 +48,15 @@ def _validated_output(path: Path) -> Path:
         path: Requested benchmark output path.
 
     Returns:
-        A resolved path whose parent remains inside the repository.
+        A path using only the requested filename beneath the repository root.
 
     Raises:
         ValueError: If the output path escapes the repository tree.
     """
-    resolved = path.resolve()
-    if not resolved.is_relative_to(REPOSITORY_ROOT):
-        raise ValueError("benchmark paths must remain inside the repository")
-    return resolved
+    name = path.name
+    if not name or name in {".", ".."}:
+        raise ValueError("benchmark output must have a filename")
+    return REPOSITORY_ROOT / name
 
 
 def selector_schema() -> dict[str, Any]:
