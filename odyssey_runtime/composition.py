@@ -49,7 +49,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
     Returns:
         A persistent-process composition that reuses the local embedder and derived indexes for
-        every request.
+        every request while refreshing time-sensitive planner context per call.
 
     Raises:
         ValueError: If required runtime configuration is invalid.
@@ -72,9 +72,6 @@ def build_runtime_from_environment() -> RuntimeComposition:
     embedder = FastEmbedTextEmbedder(cache_dir=embedding_cache, local_files_only=True)
     context_index = ContextIndex(runtime_root / "context.sqlite3")
     semantic_index = SemanticEntityIndex(runtime_root / "semantic.sqlite3")
-    clock = _current_time()
-    planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
-    planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
     contextual_reasoner = OpenAIContextualReasoner(
         os.environ.get("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-sol"),
         reasoning_effort="medium",
@@ -87,8 +84,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
 
     def core_execute(user_request: str) -> ApplicationResult:
-        """Execute one request through the existing Core application boundary."""
-        result = execute_request(
+        """Execute one request with fresh planner and persistence clock context."""
+        clock = _current_time()
+        planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
+        planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
+        return execute_request(
             user_request,
             planner=planner,
             repository=repository,
@@ -98,14 +98,13 @@ def build_runtime_from_environment() -> RuntimeComposition:
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
             actor=actor,
-            now=_current_time()["timestamp"],
+            now=clock["timestamp"],
             context_limit=context_limit,
             writer=writer,
             fact_selector=fact_selector,
             pending_recorder=pending_recorder,
             history_recorder=history_recorder,
         )
-        return result
 
     def refresh_indexes() -> None:
         """Rebuild both derived indexes from authoritative Markdown after a mutation."""
