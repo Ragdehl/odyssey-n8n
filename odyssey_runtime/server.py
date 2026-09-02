@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
 from .composition import RuntimeComposition
@@ -15,6 +15,10 @@ MAX_REQUEST_BYTES = 1_048_576
 
 def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765) -> None:
     """Serve the bounded runtime contract until the process receives a shutdown signal.
+
+    Requests are handled serially because Core write/Git/index-refresh concurrency is not yet an
+    adopted Odyssey contract. This keeps the first runtime fail-simple until later E2E evidence
+    justifies concurrent execution.
 
     Args:
         runtime: Long-lived Core composition to invoke.
@@ -27,7 +31,7 @@ def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     handler = _handler_for(runtime)
-    with ThreadingHTTPServer((host, port), handler) as server:
+    with HTTPServer((host, port), handler) as server:
         server.serve_forever()
 
 
