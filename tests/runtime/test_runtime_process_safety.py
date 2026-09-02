@@ -7,8 +7,8 @@ from pathlib import Path
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_runtime import composition
-from odyssey_runtime.composition import RuntimeComposition
 from odyssey_runtime import server as runtime_server
+from odyssey_runtime.composition import RuntimeComposition
 
 
 def _result() -> ApplicationResult:
