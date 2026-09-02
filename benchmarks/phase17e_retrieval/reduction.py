@@ -41,6 +41,24 @@ def repository_path(path: Path) -> Path:
     return resolved
 
 
+def _validated_output(path: Path) -> Path:
+    """Return a writable repository-contained output path for a benchmark artifact.
+
+    Parameters:
+        path: Requested benchmark output path.
+
+    Returns:
+        A resolved path whose parent remains inside the repository.
+
+    Raises:
+        ValueError: If the output path escapes the repository tree.
+    """
+    resolved = path.resolve()
+    if not resolved.is_relative_to(REPOSITORY_ROOT):
+        raise ValueError("benchmark paths must remain inside the repository")
+    return resolved
+
+
 def selector_schema() -> dict[str, Any]:
     """Return the closed schema for high-recall supplied-locator selection."""
     return {
@@ -248,7 +266,7 @@ def main() -> None:
     artifact = repository_path(args.artifact)
     cases = repository_path(args.cases)
     schema = repository_path(args.schema)
-    output = repository_path(args.output)
+    output = _validated_output(args.output)
     result = run_live(
         artifact,
         cases,

@@ -1,5 +1,7 @@
 """Deterministic tests for the Phase 17E reduction harness boundary."""
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import pytest
@@ -84,21 +86,23 @@ def test_answer_aggregates_split_selector_branches() -> None:
     assert summary["overall"]["case_count"] == 2
 
 
-def test_checkpoint_round_trip_and_incompatible_inputs_fail_closed(tmp_path) -> None:
+def test_checkpoint_round_trip_and_incompatible_inputs_fail_closed() -> None:
     """Completed rows resume only when model and persisted input identities match."""
-    luna = tmp_path / "luna.json"
-    ranking = tmp_path / "ranking.json"
-    output = tmp_path / "answers.json"
-    luna.write_text("luna", encoding="utf-8")
-    ranking.write_text("ranking", encoding="utf-8")
-    identity = checkpoint_identity(luna, ranking)
-    row = {"case": "q1", "required_evidence_supported": True}
-    write_checkpoint(output, identity, [row], "CHECKPOINT")
-    assert load_checkpoint(output, identity) == {"q1": row}
-    ranking.write_text("changed", encoding="utf-8")
-    incompatible_identity = checkpoint_identity(luna, ranking)
-    with pytest.raises(ValueError, match="incompatible"):
-        load_checkpoint(output, incompatible_identity)
+    with TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as directory:
+        root = Path(directory)
+        luna = root / "luna.json"
+        ranking = root / "ranking.json"
+        output = root / "answers.json"
+        luna.write_text("luna", encoding="utf-8")
+        ranking.write_text("ranking", encoding="utf-8")
+        identity = checkpoint_identity(luna, ranking)
+        row = {"case": "q1", "required_evidence_supported": True}
+        write_checkpoint(output, identity, [row], "CHECKPOINT")
+        assert load_checkpoint(output, identity) == {"q1": row}
+        ranking.write_text("changed", encoding="utf-8")
+        incompatible_identity = checkpoint_identity(luna, ranking)
+        with pytest.raises(ValueError, match="incompatible"):
+            load_checkpoint(output, incompatible_identity)
 
 
 def test_checkpoint_identity_includes_reasoning_and_cases(tmp_path) -> None:

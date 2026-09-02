@@ -59,6 +59,9 @@ def write_checkpoint(
     output: Path, identity: dict[str, str], rows: list[dict[str, Any]], status: str
 ) -> None:
     """Atomically persist completed answer rows so interruption loses no paid results."""
+    output = output.resolve()
+    if not output.is_relative_to(Path(__file__).resolve().parents[2]):
+        raise ValueError("benchmark paths must remain inside the repository")
     payload = {"phase_status": status, "checkpoint_identity": identity, "rows": rows}
     temporary = output.with_name(f".{output.name}.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -326,7 +329,9 @@ def main() -> None:
     ranking_artifact = repository_path(args.ranking_artifact)
     cases = repository_path(args.cases)
     schema = repository_path(args.schema)
-    output = repository_path(args.output)
+    output = args.output.resolve()
+    if not output.is_relative_to(Path(__file__).resolve().parents[2]):
+        raise ValueError("benchmark paths must remain inside the repository")
     output.write_text(
         json.dumps(
             run_live(
