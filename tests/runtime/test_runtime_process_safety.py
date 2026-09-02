@@ -118,7 +118,9 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
             return None
 
     monkeypatch.setattr(runtime_server, "HTTPServer", FakeHTTPServer)
-    runtime = RuntimeComposition(core_execute=lambda request: _result(), refresh_indexes=lambda: None)
+    runtime = RuntimeComposition(
+        core_execute=lambda request: _result(), refresh_indexes=lambda: None
+    )
 
     runtime_server.serve(runtime, host="127.0.0.1", port=18765)
 
