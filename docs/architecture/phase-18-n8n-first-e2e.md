@@ -1,6 +1,6 @@
 # Phase 18 — n8n integration and first real Odyssey E2E
 
-Status: **current phase contract; implementation not yet complete**
+Status: **current phase contract; Phase 18.2 checkpoint blocked by provider quota**
 
 ## Objective
 
@@ -121,7 +121,7 @@ Conceptually:
        n8n                         app
 ```
 
-The Raspberry implementation should choose the smallest reliable local transport after inspecting the real environment. A tiny long-lived local HTTP adapter is preferred when it avoids repeatedly loading local embedding/model resources or coupling the n8n container to the Python environment. A one-shot CLI/process boundary remains acceptable if measurement shows it is simpler and sufficiently cheap.
+The Raspberry environment selected the smallest reliable local transport: a tiny long-lived host HTTP adapter. It avoids repeatedly loading local embedding/model resources while keeping n8n decoupled from the Python environment. A one-shot CLI/process boundary is no longer an open option for this phase.
 
 Whichever transport is selected:
 
@@ -178,7 +178,8 @@ part of the 18.2 deployment/E2E step.
 Phase 18.1 does not activate Combined retrieval, Top-500 retrieval, Luna retrieval reduction,
 query decomposition, Luna-first planning, MCP, authentication, or any new Docker service.
 Installation and lifecycle supervision of the host process are deployment work for the real E2E,
-not hidden side effects of Core.
+not hidden side effects of Core. Phase 18.1 is complete; the Phase 18.2 write checkpoint remains
+incomplete until provider access is restored.
 
 ## Index freshness
 
@@ -200,6 +201,38 @@ next request sees the new knowledge
 ```
 
 The initial E2E may use the simplest safe rebuild/refresh mechanism already supported by the indexes. Incremental optimization is out of scope unless measurement proves the full refresh is a blocker.
+
+## Phase 18.2 write checkpoint evidence
+
+The first real WRITE attempt was run on 2026-09-02 against a disposable workspace only:
+
+```text
+/data/odyssey/e2e/phase18/20260902T211826Z-phase18-write/
+    vault/      local Git repository, initially empty
+    runtime/    derived context.sqlite3 and semantic.sqlite3
+    pending/    durable pending-work root
+```
+
+The host runtime used the repository schema, the existing read-only FastEmbed cache,
+`TZ=Europe/Paris`, actor `phase18-e2e`, and Docker bridge address `172.18.0.1:8765`. n8n
+execution `104` entered the development workflow `Odyssey — runtime bridge (Phase 18 E2E)` and
+successfully reached the HTTP adapter. The requested input was exactly:
+
+```text
+Marta trabaja en Thales y vive en Lyon.
+```
+
+The adapter returned request ID `2311178f-875c-40b3-8b04-9366294a0def`, with application status
+`failed` and bounded error `Request planner provider call failed`. A bounded provider diagnostic
+confirmed HTTP 429 `credit_balance_exhausted` from `gpt-5.6-sol` with reasoning `low`. No validated
+RequestPlan was available, so no Core mutation was attempted: the disposable vault has no Markdown
+notes, no Git commit or request trailer, no pending work, and the two derived SQLite databases
+contain no written knowledge. Luna was not called because Sol planning failed first. Provider cost
+and token usage are unavailable for this failed/quota-rejected request.
+
+This is an environment/provider-quota failure at the planner boundary, not evidence of semantic
+write correctness. The run stopped before Phase 18.3, and no request was sent to the real personal
+vault at `/data/odyssey/vault`.
 
 ## Acceptance criteria
 
@@ -234,7 +267,7 @@ If a user-facing Sol answer boundary is added before Phase 18 closes, it must be
 
 ## Open decisions
 
-1. **Local transport:** tiny persistent HTTP adapter versus a simpler one-shot process/CLI boundary. Resolve from the actual Raspberry/n8n environment; do not turn the choice into a Core requirement.
+1. **Local transport:** **resolved in Phase 18.1** as the persistent host HTTP adapter; do not reopen this decision.
 2. **Read response surface:** first prove grounded retrieval end-to-end; then decide whether the same Phase 18 closes with a thin user-facing Sol answer adapter or whether that is split into the final Phase 18 substep.
 3. **Index refresh granularity:** use the simplest safe existing rebuild first; optimize incrementally only if real measurements justify it.
 
@@ -244,8 +277,8 @@ No retrieval-strategy decision is open in Phase 18: current whole-note retrieval
 
 ```text
 18.0  contract + architecture challenge                         ✅ documented here
-18.1  runtime dependency assembly + thin local adapter          ⬜
-18.2  n8n -> Core real WRITE E2E                               ⬜
+18.1  runtime dependency assembly + thin local adapter          ✅
+18.2  n8n -> Core real WRITE E2E                               current / blocked by provider quota
 18.3  post-write index freshness + n8n -> Core READ E2E         ⬜
 18.4  grounded user-facing answer surface, if kept in Phase 18  ⬜
 18.5  final evidence / deterministic verification / PR review   ⬜
