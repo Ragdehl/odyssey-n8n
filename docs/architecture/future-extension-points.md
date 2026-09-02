@@ -300,6 +300,66 @@ Benchmark the simpler `MiniLM -> Luna -> Sol` path first. Add a local intermedia
 measured Luna cost, latency, or candidate volume creates a concrete problem and the new stage can
 preserve the required high recall.
 
+## 6. Cost-aware top-level request planning with Luna escalation
+
+**Status: future benchmark hypothesis only; current production planning remains `gpt-5.6-sol` / low.**
+
+Earlier planner/model benchmarks asked whether a cheaper model could replace the strong planner. A
+more useful cost question is different: can Luna safely handle simple requests while recognizing the
+requests for which it should defer to the already-evidenced Sol planner?
+
+The target experiment is:
+
+```text
+user request
+     |
+     v
+Luna first-pass planner
+     |
+     +--> PLAN      -> Core validates -> execute normal RequestPlan path
+     |
+     `--> ESCALATE  -> Sol / low -> Core validates -> execute normal RequestPlan path
+```
+
+Do not treat vague model confidence as sufficient evidence. The Luna boundary should have a closed,
+validated outcome such as `PLAN | ESCALATE`; an escalation must not carry an authoritative partial
+plan that can accidentally execute. Core validation remains mandatory for every accepted plan, and Sol
+remains the fallback until live evidence justifies otherwise.
+
+The key safety metric is **unsafe non-escalation**: a case where Luna returns `PLAN`, the plan is
+semantically wrong in a material way, and Luna should instead have escalated. A router that handles many
+simple cases cheaply but confidently accepts difficult wrong plans is worse than the current Sol-only
+baseline.
+
+Reuse the existing frozen planner evidence rather than inventing an easier benchmark. In particular,
+include the historical cases on which Luna previously failed or underperformed, plus representative
+simple cases that Luna should be able to handle without escalation. Preserve regression coverage for
+multi-action requests, ambiguous targets, references, bulk/cardinality behavior, schema/property
+mutations, coherent atomicity, retrieval actions, and delegation where those behaviors are relevant to
+the production planner contract.
+
+Measure at least:
+
+- semantic correctness of Luna-handled `PLAN` cases;
+- unsafe non-escalation count/rate, reported separately from ordinary accuracy;
+- escalation recall on the historical Luna failure set;
+- fraction of all requests handled by Luna without Sol;
+- final end-to-end planner correctness after Sol fallback;
+- Luna input/output/reasoning tokens;
+- fallback Sol input/output/reasoning tokens;
+- total real cost per request and across the frozen corpus versus Sol-only;
+- latency, including the penalty on requests that require both Luna and Sol.
+
+Adoption requires end-to-end quality to remain at least at the current Sol baseline while producing a
+material measured cost reduction. The acceptance bar for unsafe non-escalation should be strict; a
+small average accuracy gain or cost saving must not hide critical wrong plans that bypass escalation.
+If Luna escalates most requests, or if the double-call path erases the cost benefit, keep Sol-only.
+
+Do not add a third model, local classifier, or heuristic complexity detector before this simple
+`Luna -> Sol` experiment proves that another routing layer is necessary. This is a cost optimization,
+not a new planning authority: the canonical `RequestPlan` schema, deterministic validation, and all
+existing write/retrieval/identity authority boundaries remain unchanged.
+
 ## Placement
 
 ```text
@@ -316,6 +376,12 @@ Before large-vault contextual retrieval is considered production-ready
   - measure recall separately for short/medium/long/very-long notes
   - only if that is safe, test Luna resolution with fail-closed escalation to the strong resolver
   - evaluate compact revision-bound retrieval evidence before sending full note bodies
+
+After the first E2E exposes real planner cost distribution
+  - benchmark Luna first-pass `PLAN | ESCALATE` routing against the current Sol/low planner
+  - reuse historical Luna failure cases as mandatory escalation evidence
+  - compare total Luna+fallback-Sol cost and latency against Sol-only
+  - adopt only with Sol-baseline end-to-end quality and strict unsafe-non-escalation evidence
 
 When first concrete app exists
   - route the existing generic DelegateAction with cheap/local app selection
@@ -336,4 +402,5 @@ Later multi-user phase
 
 The general rule is progressive disclosure and one canonical owner per contract: the main planner
 preserves meaning it already understands, while app instructions, writing skills, analytics,
-graph execution, retrieval reduction, and authorization are loaded or executed only when needed.
+graph execution, retrieval reduction, authorization, and cost-aware model routing are loaded or
+executed only when needed.

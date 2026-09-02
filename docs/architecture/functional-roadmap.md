@@ -219,6 +219,10 @@ The detailed cross-phase direction is centralized in
   selector before reducing strong-model context. The next preserved retrieval experiment is the
   [query-decomposed multi-fact retrieval hypothesis](future-query-decomposed-retrieval.md), not another
   pre-E2E search over arbitrary note/entity combinations.
+- 💡 **Cost-aware request planning:** after the first real E2E exposes planner cost, benchmark Luna as a
+  first-pass `PLAN | ESCALATE` planner with the current Sol/low planner as fallback. Reuse historical Luna
+  failure cases as mandatory escalation evidence; adopt only if final planner quality matches the Sol
+  baseline, unsafe non-escalation is strictly controlled, and total measured cost is materially lower.
 - 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces
   with safe usage/cost/error metadata, redaction, and retention controls once the E2E exists.
 - 💡 **Performance/index optimization:** optimize only from measurements.
