@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import platform
 import statistics
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -219,6 +220,17 @@ def query_cases(data: dict[str, Any], *, scale_size: int = 0) -> tuple[QueryCase
     return tuple(cases)
 
 
+def required_evidence_pairs(case: QueryCase) -> frozenset[tuple[str, str]]:
+    """Return identity-aware required evidence pairs for an unambiguous case oracle."""
+    if not case.expected_facts:
+        return frozenset()
+    if len(case.expected_entities) == 1:
+        return frozenset((case.expected_entities[0], fact) for fact in case.expected_facts)
+    if len(case.expected_entities) == len(case.expected_facts):
+        return frozenset(zip(case.expected_entities, case.expected_facts, strict=True))
+    raise ValueError(f"case {case.id} cannot map expected facts to entities unambiguously")
+
+
 def validate_scale_oracles(corpus: tuple[CorpusNote, ...], cases: tuple[QueryCase, ...]) -> None:
     """Prove each generated scale query matches exactly one fixture entity by all attributes."""
     scale_cases = [case for case in cases if case.category == "scale-contextual"]
@@ -334,14 +346,15 @@ def _metric_table(
                     entities.append(entity)
                 if len(entities) == top:
                     break
-            facts = {fact for _, fact in units}
+            evidence = set(units)
+            required = required_evidence_pairs(case)
             unit_hits += bool(set(case.expected_entities) & {entity for entity, _ in units})
             entity_hits += set(case.expected_entities).issubset(entities)
             if case.expected_facts:
-                matched = len(set(case.expected_facts) & facts)
+                matched = len(required & evidence)
                 any_fact_hits += matched > 0
                 all_fact_hits += matched == len(set(case.expected_facts))
-                coverage.append(matched / len(set(case.expected_facts)))
+                coverage.append(matched / len(required))
         count = len(cases)
         output["unit"][str(top)] = unit_hits / count
         output["entity"][str(top)] = entity_hits / count
@@ -435,8 +448,8 @@ def _fact_width_stats(
             unique_entity_scans.append(_scanned if unique else 0)
             unique_entity_hits += set(case.expected_entities).issubset(unique)
             if case.expected_facts:
-                expected = set(case.expected_facts)
-                matched = expected & {fact for _, fact in raw}
+                expected = required_evidence_pairs(case)
+                matched = expected & set(raw)
                 exact_fact_hits += matched == expected
                 any_fact_hits += bool(matched)
                 coverage.append(len(matched) / len(expected))
@@ -487,12 +500,12 @@ def _fact_width_stats(
             fact: next(
                 (
                     index
-                    for index, (_, ranked_fact) in enumerate(ranking, start=1)
-                    if ranked_fact == fact
+                    for index, (ranked_entity, ranked_fact) in enumerate(ranking, start=1)
+                    if (ranked_entity, ranked_fact) == (entity, fact)
                 ),
                 None,
             )
-            for fact in case.expected_facts
+            for entity, fact in required_evidence_pairs(case)
         }
         present_ranks = [rank for rank in required_ranks.values() if rank is not None]
         result["ranks"].append(
@@ -653,6 +666,7 @@ def run(
     *,
     scale_size: int = 0,
     skip_controls: bool = False,
+    strategies: tuple[str, ...] = ("whole_note", "fact_level", "combined"),
 ) -> dict[str, Any]:
     """Run all three arms with one corpus, query set, model, and runtime."""
     corpus = build_corpus(data, schema, scale_size=scale_size)
@@ -665,11 +679,11 @@ def run(
         },
         "cases": len(cases),
         "notes": len(corpus),
-        "strategies": [
-            run_strategy(corpus, cases, embedder, name)
-            for name in ("whole_note", "fact_level", "combined")
-        ],
+        "strategies": [],
     }
+    for name in strategies:
+        print(f"running strategy={name} notes={len(corpus)} cases={len(cases)}", file=sys.stderr)
+        result["strategies"].append(run_strategy(corpus, cases, embedder, name))
     if scale_size and not skip_controls:
         result["controlled_note_length"] = run_note_length_controls(corpus, embedder)
         result["controlled_fact_length"] = run_fact_length_controls(corpus, embedder)
@@ -688,13 +702,26 @@ def main() -> None:
     parser.add_argument("--cache-dir", type=Path)
     parser.add_argument("--scale-size", type=int, default=1000)
     parser.add_argument("--skip-controls", action="store_true")
+    parser.add_argument(
+        "--strategy",
+        choices=("whole_note", "fact_level", "combined", "all"),
+        default="all",
+        help="Run one retrieval arm, or all historical arms.",
+    )
     args = parser.parse_args()
     data = load_cases(args.cases)
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     started = time.perf_counter()
     embedder = FastEmbedTextEmbedder(cache_dir=args.cache_dir, local_files_only=True)
     result = run(
-        data, schema, embedder, scale_size=args.scale_size, skip_controls=args.skip_controls
+        data,
+        schema,
+        embedder,
+        scale_size=args.scale_size,
+        skip_controls=args.skip_controls,
+        strategies=("whole_note", "fact_level", "combined")
+        if args.strategy == "all"
+        else (args.strategy,),
     )
     result["runtime"]["model_load_seconds"] = round(time.perf_counter() - started, 6)
     print(json.dumps(result, ensure_ascii=False, indent=2))
