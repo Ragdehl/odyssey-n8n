@@ -18,6 +18,27 @@ from benchmarks.phase17e_retrieval.benchmark import (
 MODEL = "gpt-5.6-luna"
 REASONING = "none"
 REASONING_EFFORTS = ("none", "low", "medium", "high")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def repository_path(path: Path) -> Path:
+    """Return a resolved benchmark path constrained to the repository tree.
+
+    Parameters:
+        path: CLI-provided or default path to use for benchmark input or output.
+
+    Returns:
+        The resolved path when it remains inside the repository.
+
+    Raises:
+        ValueError: If the path escapes the repository, including through a symlink.
+    """
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(REPOSITORY_ROOT)
+    except ValueError as exc:
+        raise ValueError("benchmark paths must remain inside the repository") from exc
+    return resolved
 
 
 def selector_schema() -> dict[str, Any]:
@@ -224,15 +245,19 @@ def main() -> None:
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
     )
     args = parser.parse_args()
+    artifact = repository_path(args.artifact)
+    cases = repository_path(args.cases)
+    schema = repository_path(args.schema)
+    output = repository_path(args.output)
     result = run_live(
-        args.artifact,
-        args.cases,
-        args.schema,
+        artifact,
+        cases,
+        schema,
         args.scale_size,
         reasoning=args.reasoning,
         case_ids=tuple(args.case_ids),
     )
-    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     rows = result["rows"]
     print(
         json.dumps(

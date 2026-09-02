@@ -17,7 +17,11 @@ from benchmarks.phase17e_retrieval.benchmark import (
     query_cases,
     required_evidence_pairs,
 )
-from benchmarks.phase17e_retrieval.reduction import grounded_candidates, select_cases
+from benchmarks.phase17e_retrieval.reduction import (
+    grounded_candidates,
+    repository_path,
+    select_cases,
+)
 
 MODEL = "gpt-5.6-sol"
 REASONING = "low"
@@ -318,15 +322,20 @@ def main() -> None:
         "--schema", type=Path, default=Path(__file__).parents[2] / "config/note-schema.json"
     )
     args = parser.parse_args()
-    args.output.write_text(
+    luna_artifact = repository_path(args.luna_artifact)
+    ranking_artifact = repository_path(args.ranking_artifact)
+    cases = repository_path(args.cases)
+    schema = repository_path(args.schema)
+    output = repository_path(args.output)
+    output.write_text(
         json.dumps(
             run_live(
-                args.luna_artifact,
-                args.ranking_artifact,
-                args.cases,
-                args.schema,
+                luna_artifact,
+                ranking_artifact,
+                cases,
+                schema,
                 args.scale_size,
-                args.output,
+                output,
                 args.reasoning,
                 tuple(args.case_ids),
                 args.escalate_presentation,

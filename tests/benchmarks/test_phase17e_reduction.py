@@ -7,6 +7,7 @@ import pytest
 from benchmarks.phase17e_retrieval.benchmark import QueryCase, required_evidence_pairs
 from benchmarks.phase17e_retrieval.reduction import (
     REASONING_EFFORTS,
+    repository_path,
     select_cases,
     selector_schema,
     validate_selection,
@@ -95,8 +96,9 @@ def test_checkpoint_round_trip_and_incompatible_inputs_fail_closed(tmp_path) -> 
     write_checkpoint(output, identity, [row], "CHECKPOINT")
     assert load_checkpoint(output, identity) == {"q1": row}
     ranking.write_text("changed", encoding="utf-8")
+    incompatible_identity = checkpoint_identity(luna, ranking)
     with pytest.raises(ValueError, match="incompatible"):
-        load_checkpoint(output, checkpoint_identity(luna, ranking))
+        load_checkpoint(output, incompatible_identity)
 
 
 def test_checkpoint_identity_includes_reasoning_and_cases(tmp_path) -> None:
@@ -166,13 +168,20 @@ def test_case_filter_defaults_to_full_suite() -> None:
 
 def test_case_filter_rejects_unknown_id() -> None:
     """A typo cannot silently produce an empty or partial live run."""
+    cases = (SimpleNamespace(id="q1"),)
     with pytest.raises(ValueError, match="unknown benchmark case ids"):
-        select_cases((SimpleNamespace(id="q1"),), ("missing",))
+        select_cases(cases, ("missing",))
 
 
 def test_reasoning_efforts_are_staged() -> None:
     """The CLI exposes the staged benchmark configurations without production changes."""
     assert REASONING_EFFORTS == ("none", "low", "medium", "high")
+
+
+def test_repository_path_rejects_paths_outside_repository(tmp_path) -> None:
+    """Benchmark CLI paths cannot read or write outside the repository tree."""
+    with pytest.raises(ValueError, match="inside the repository"):
+        repository_path(tmp_path / "outside.json")
 
 
 def test_selector_schema_is_closed() -> None:
