@@ -1,0 +1,226 @@
+# Phase 17E retrieval reduction and answer-path evidence
+
+Status: **evidence checkpoint complete; production Combined remains deferred**
+
+## Objective
+
+Close the remaining evidence gap between the adopted **Combined Top-500 candidate retrieval** and the
+grounded relevant evidence that a higher layer may choose to provide to a strong model.
+
+The adoption benchmark proved candidate recall, not safe semantic reduction. A relevant required fact can
+occur beyond Combined Top-500 in the frozen scale fixture. Therefore retrieval must not silently
+turn the Top-500 candidate pool into an arbitrary fixed Top-N final context and thereby destroy the recall
+that motivated Top-500.
+
+This subphase must determine whether irrelevant candidates can be removed safely and economically before
+production `ContextIndex` / `get_context` behavior changes. It does **not** own the caller's final context
+budget. Any final context/token budget remains a higher-layer input or policy and must not be invented by
+retrieval.
+
+```text
+query
+  |
+  v
+Combined Top-500 candidates
+  |
+  +--> fused-rank-only baseline (diagnostic, not production policy)
+  |
+  `--> Luna high-recall relevance selector
+            |
+            +--> supplied relevant fact locators
+            `--> explicit ESCALATE when unsafe to reduce
+  |
+  v
+authoritative Markdown re-grounding
+  |
+  v
+grounded relevant evidence
+  |
+  v
+higher layer decides its context budget / use
+  |
+  v
+focused Sol answer-path evidence
+```
+
+## Acceptance criteria
+
+1. Reuse the frozen Phase 17E retrieval corpus and existing required-entity / required-fact oracles.
+   Do not replace difficult cases merely to obtain cleaner results.
+2. Recover or regenerate the **smallest required real MiniLM Combined evidence**. Prefer any preserved
+   runtime ranking artifact if one exists. If regeneration is required, run Combined only where possible,
+   persist the complete ranking output for reuse, and add progress visibility rather than repeatedly
+   rerunning a silent full three-arm benchmark.
+3. Establish a fused-rank-only **diagnostic baseline** showing how required-fact retention changes when a
+   downstream consumer naively takes progressively smaller prefixes of the Top-500 ranking. These widths
+   are benchmark observations only, not a production retrieval contract. The known deep-rank cases must
+   remain visible as a sentinel.
+4. Benchmark `gpt-5.6-luna` as a **bounded high-recall relevance selector over supplied Combined fact
+   candidates**. Luna may return only supplied fact locators or an explicit escalation outcome; it must
+   not answer the user, summarize facts, invent knowledge, resolve write identity, mutate anything, or be
+   forced to return a predetermined number of facts.
+5. Start with the cheapest Luna reasoning configuration that is realistically supported by the existing
+   provider boundary. Escalate the benchmark configuration only if the cheaper configuration fails the
+   recall/safety gate; do not select a more expensive Luna configuration without evidence.
+6. Measure selector safety primarily by **required-fact retention**. Dropping a required fact is the
+   critical failure. Retaining extra distractors is acceptable; report how much evidence remains so cost
+   can be evaluated without imposing an arbitrary selector width.
+7. Include an explicit fail-safe path for selector uncertainty. Benchmark whether an `ESCALATE` outcome
+   can preserve correctness by retaining the broader grounded candidate evidence for the higher/stronger
+   path instead of guessing a narrow subset.
+8. Run a focused live **retrieval -> grounded evidence -> `gpt-5.6-sol` answer** check on a compact set of
+   representative and difficult cases, including multi-fact questions and the deep-rank sentinel. For
+   this benchmark, the answer-path harness may apply an explicit experiment input/budget where needed,
+   but that budget belongs to the harness/caller and must not become a retrieval-owned constant. This is
+   benchmark evidence only; it does not add a production answer-generation service before Phase 18.
+9. Compare at least:
+   - required-fact retention after relevance reduction;
+   - number and token size of evidence units retained by Luna without forcing a target width;
+   - final answer correctness on the focused Sol set;
+   - Luna input/output/reasoning tokens;
+   - Sol input/output/reasoning tokens;
+   - total estimated/real provider cost where usage data supports it;
+   - latency;
+   - selector escalation rate;
+   - unsafe non-escalation / dropped-required-fact cases.
+10. Preserve Markdown as source of truth and re-ground every selected locator against the current parsed,
+    validated note before it can become answer context. Derived ranking or Luna output remains evidence
+    only.
+11. End with one explicit recommendation for the subsequent production implementation:
+    - deterministic relevance reduction is sufficient;
+    - Luna selector + strong-model/higher-layer fallback;
+    - no semantic reducer is justified and the higher layer should consume the broader grounded evidence
+      according to its own budget; or
+    - defer Combined production adoption if no path preserves quality economically.
+12. Update the Phase 17E adoption contract and Functional Roadmap if evidence changes the final-context
+    policy adopted in PR #73. Preserve the ownership rule that retrieval returns grounded evidence while
+    the caller/higher layer owns any final context budget.
+
+## Architecture challenge
+
+Result: **RECONSIDER**
+
+Material concern:
+The PR #73 adoption contract separates Top-500 candidate breadth from final context, but treating the
+existing caller `context_limit` as a retrieval-owned truncation rule would discard required evidence that
+the benchmark only recovers at deep ranks. Production implementation could therefore erase the very
+recall advantage that justified Top-500.
+
+Simpler alternative:
+Do not invent a production context assembler, fixed final fact count, or retrieval-owned context budget.
+First run one focused reduction benchmark using the existing Combined evidence boundary. Compare a naive
+fused-rank prefix only as a diagnostic baseline against a bounded Luna relevance selector with explicit
+escalation, then validate the resulting grounded evidence with a small Sol answer set. Let the higher
+layer continue to own its own context budget.
+
+Trade-offs:
+This adds one evidence subphase and potentially one cheap model call to the eventual read path, but avoids
+shipping a reducer known to be capable of dropping deep relevant facts. Luna must earn its extra cost and
+latency with measured net savings and preserved recall; otherwise it is not adopted. Allowing the selector
+to retain a variable number of relevant facts may yield larger payloads for genuinely broad questions,
+which is appropriate; a higher layer can apply its own explicit budget when necessary.
+
+Recommendation:
+Run the focused relevance-reduction and answer-path evidence before production Combined implementation.
+Keep the current whole-note production behavior unchanged until the reduction contract is closed. Do not
+freeze a retrieval-owned final context size.
+
+Human decision required: **NO**. The user has clarified that final context sizing belongs above retrieval,
+and Odyssey's established evidence-before-model-change rule requires validating the relevance-reduction
+boundary before production adoption.
+
+## Out of scope
+
+- production `ContextIndex` / `get_context` Combined implementation;
+- defining a fixed production number of facts/notes that retrieval must return to the caller;
+- changing the canonical schema, atomic-fact format, planner prompt, writer, or identity authority;
+- Phase 18 / n8n integration;
+- a new vector database, graph retrieval, learned reranker, or new service;
+- replacing MiniLM;
+- changing the production planner from Sol to Luna; the separate future Luna -> Sol planner-routing
+  experiment remains deferred;
+- general answer-generation architecture or a permanent answer-model contract before the first E2E.
+
+## Open decisions
+
+The benchmark must close these before implementation:
+
+- whether a Luna selector is safe enough to remove irrelevant material from Top-500 while preserving
+  required facts;
+- the selected Luna reasoning configuration, if any;
+- the observed evidence-size/token reduction and escalation behavior justified by evidence, without
+  imposing a fixed selector output width;
+- whether rare escalation may economically retain broader grounded evidence for the higher/stronger path;
+- whether the resulting total cost/latency is better than the simplest direct alternative without losing
+  answer quality.
+
+The final caller context budget is **not** an open retrieval decision; it remains owned by the higher
+layer/caller.
+
+## Revised selector evidence checkpoint
+
+The complete Combined ranking artifact was recovered from the frozen 1,000-entity corpus using the
+existing MiniLM artifact and persisted outside the repository for reuse. The run took approximately
+217 seconds to load the model, 201 seconds to build Combined vectors, and 8.7 seconds to query the
+22-case suite. Identity-aware auditing found the two Top-500 misses are `scale-100` and `scale-700`.
+
+## Corrected identity-aware retrieval evidence
+
+The earlier required-fact metrics discarded entity identity and overstated recall. Corrected Combined
+ALL-required recall is 16/22 (72.7%) at Top-100, 18/22 (81.8%) at Top-200, 19/22 (86.4%) at Top-300,
+20/22 (90.9%) at Top-400, and 20/22 (90.9%) at Top-500. Target fact ranks are:
+
+| Case | Whole-note rank | Raw fact ranks (Works / Studies / Enjoys) | Combined ranks (Works / Studies / Enjoys) |
+|---|---:|---:|---:|
+| scale-100 | 270 | 477 / 3479 / 1215 | 1049 / 1753 / 1466 |
+| scale-700 | 373 | 142 / 3932 / 1358 | 565 / 2407 / 1951 |
+
+Successful scale whole-note ranks were 23 (`scale-250`), 11 (`scale-400`), 28 (`scale-550`), 42
+(`scale-850`), and 2 (`scale-999`). The regenerated local MiniLM benchmark reproduced the persisted
+Combined ranks. Combined independently adds whole/entity RRF and each fact's RRF; it has no entity-level
+aggregation term rewarding several facts from one entity jointly satisfying a conjunctive query. This
+demonstrates a limitation, but does not select a replacement algorithm.
+
+The diagnostic fused-prefix baseline retained all required facts for 63.2% of cases at Top-5, Top-10,
+and Top-20; 94.7% at Top-200, Top-300, and Top-400; and an earlier, identity-unaware 100% at Top-500.
+Those earlier observations are superseded by the corrected identity-aware metrics above.
+
+The benchmark-only selector implementation is in `benchmarks/phase17e_retrieval/reduction.py`. Its
+closed output is `SELECT` with supplied locators or `ESCALATE` with no locators. It rejects unknown
+and duplicate locators, re-grounds selected facts from validated current benchmark notes, and never
+owns a context budget or answer authority.
+
+The revised `gpt-5.6-luna` selector v2 with reasoning `none` passed the current 22-case safety gate:
+19 `SELECT`, 3 safe `ESCALATE` (`q6`, `scale-100`, and `scale-700`), and no provider errors. All 19
+SELECT decisions retained every required benchmark fact. SELECT retained 1.7% of candidate fact
+evidence on average (selected facts: average 2.3, median 2, minimum 1, maximum 5). Targeted reasoning
+`low` and `medium` each reproduced all three escalations and did not convert any of them, so extra
+Luna reasoning stages are not justified by current evidence. `high` was intentionally not run: Luna
+does not need to resolve every query; ESCALATE is the safe refusal to reduce when recall cannot be
+preserved.
+
+The answer-path harness is `benchmarks/phase17e_retrieval/run_answer_path.py`. It consumes persisted
+Luna and Combined artifacts, validates and re-grounds SELECT locators, and re-grounds the full Top-500
+for ESCALATE before sending evidence to Sol/low. The broad escalation payload is benchmark evidence,
+not a production context limit; final budgeting remains with the caller/higher layer. The existing
+oracle evaluates answers locally and is never shown to Sol. Codex makes no provider calls.
+
+The prior original-prompt runs remain historical evidence, not validation of the revised prompt. Codex
+cannot access the provider; live runs are performed manually from the Raspberry shell.
+
+## Decision
+
+**D. Production Combined should remain deferred.** The revised Luna/none selector passed the current
+safety gate, but this remains benchmark-only evidence. The intended path is Combined Top-500 ->
+Luna/none -> SELECT or ESCALATE -> authoritative re-grounding -> Sol/low. A direct broad-Sol path is
+the conceptual comparison; token counts must remain separate from model prices. Production retrieval,
+planner behavior, and caller-owned context budgeting remain unchanged.
+
+Benchmark-quality observation: q6 (`Quel est le métier de Claire Martin ?`) expects `Travaille chez
+Thales.`, which describes an employer rather than a profession. Keep the frozen benchmark unchanged;
+review this oracle later.
+
+The identity-aware persisted Sol audit is 19/19 supported for SELECT, 1/3 for ESCALATE, and 20/22
+overall. The two failed ESCALATE scale cases did not contain the target entity's required evidence in
+Top-500, so they are retrieval-coverage failures, not Sol reasoning failures. The previous Combined
+Top-500 adoption assumption requires reconsideration before production implementation.

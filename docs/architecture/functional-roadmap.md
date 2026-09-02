@@ -57,7 +57,7 @@ Canonical detail for these completed phases lives in:
 - [Phase 17B durable pending work](phase-17b-durable-pending-work.md)
 - [Phase 17C local Git vault history](phase-17-git-vault-history.md)
 
-## Completed phase
+## Completed pre-E2E phases
 
 ✅ **Phase 17D — append-first atomic facts + correction/removal semantics**
 
@@ -94,66 +94,52 @@ problem statement and evidence that motivated this refinement; implementation sh
 contract with the simpler append-first model rather than continuing free-form temporal rewriting by
 default.
 
+✅ **Phase 17E — pre-E2E schema utility + retrieval validation checkpoint**
+
+The schema utility/metadata review, retrieval benchmark, planner semantic-atomicity refinement, and
+retrieval reduction/answer-path evidence are complete enough to enter the first real E2E without making
+an unevidenced production retrieval change.
+
+The schema review removed/deferred complexity that did not yet earn direct user value. Planner
+semantic-atomicity was revalidated. Retrieval experiments established useful evidence but also exposed a
+limitation in the previously assumed Combined Top-500 strategy.
+
+The earlier adoption decision in PR #73 used an identity-unaware required-fact oracle and therefore
+overstated Combined recall. The corrected identity-aware audit found Combined ALL-required recall of
+72.7% / 81.8% / 86.4% / 90.9% / 90.9% at Top-100 / 200 / 300 / 400 / 500, with `scale-100` and
+`scale-700` still missing required target-entity facts beyond Top-500. Production Combined is therefore
+**not adopted at this checkpoint**; current whole-note retrieval remains production behavior.
+
+Luna/none remains promising as a bounded relevance reducer when the required evidence is present in its
+candidate set, but the remaining problem is upstream conjunctive/multi-fact candidate retrieval rather
+than a reason to keep testing stronger-model combinations before E2E.
+
+No further synthetic retrieval-strategy search is required before Phase 18. In particular, Odyssey will
+not spend more pre-E2E benchmark effort on an entity-agnostic / "without entity" variant. A near-term
+post-E2E hypothesis is preserved instead: decompose a search request into meaningful retrieval elements,
+retrieve facts for each element, then reward canonical entities whose facts jointly cover more distinct
+parts of the request. See [Future query-decomposed multi-fact retrieval](future-query-decomposed-retrieval.md).
+
+Detailed Phase 17E evidence and decisions remain in:
+
+- [Schema utility review](phase-17e-schema-utility-review.md)
+- [Common metadata review](phase-17e-metadata-review.md)
+- [Planner semantic-atomicity contract](phase-17e-planner-atomicity.md)
+- [Retrieval adoption decision](phase-17e-retrieval-adoption.md) — historical decision superseded where
+  the corrected identity-aware evidence invalidates its Top-500 recall premise
+- [Retrieval reduction and answer-path evidence](phase-17e-retrieval-reduction-evidence.md)
+
 ## Current phase
 
-➡️ **Phase 17E — pre-E2E schema utility + retrieval validation**
+➡️ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
 
-Before n8n/E2E integration, challenge the initial schema and retrieval assumptions against the product
-model established in 17D.
-
-### ✅ Phase 17E schema utility and metadata review — completed
-
-The type/property and common-metadata reviews are complete. Their detailed decisions remain in the
-[schema utility review](phase-17e-schema-utility-review.md) and [common metadata review](phase-17e-metadata-review.md).
-
-### ✅ Phase 17E retrieval benchmark — evidence completed
-
-Review every current canonical type and property and classify it as `KEEP`, `DEFER`, or `REMOVE` based
-primarily on **direct user value**, not internal token savings. A type/property earns its complexity when
-it unlocks a recurring user-visible view, action, filter, comparison, calculation, automation, or domain
-behavior that ordinary facts cannot provide as well.
-
-Preserve the future emergent-schema direction without implementing a generic schema engine yet:
-Odyssey may later detect repeated knowledge patterns and propose a useful new type/property in ordinary
-product language, but schema mutation requires explicit user approval. A later approved promotion must
-be able to backfill existing knowledge and safely relink historical mentions to newly canonical entities
-using normal identity/reference safety; ambiguous mentions remain unresolved/pending rather than being
-blindly rewritten.
-
-Benchmark the existing whole-note MiniLM strategy against fact-level and combined entity+fact retrieval.
-This is a retrieval experiment only. Previous fragment-level evidence showed that smaller fragments can
-increase semantic similarity but are **not safe autonomous write authority**; do not forget or overextend
-that result.
-
-Measure recall, practical Top-K behavior, long-note dilution, Spanish/French/contextual cases, stronger-
-model input-token reduction, latency, and local resource cost before changing production retrieval.
-Do not replace the current local MiniLM model merely because another model might be stronger; first test
-whether the better retrieval unit itself solves the observed dilution problem.
-
-See [Odyssey knowledge-model direction](knowledge-model-direction.md) for the canonical rationale and
-migration/relinking constraints.
-
-### ✅ Phase 17E planner semantic-atomicity refinement — completed
-
-The retrieval benchmark is complete as evidence. Its leading Combined candidate remains unadopted;
-whole-note retrieval remains production behavior. The focused current subphase validates whether the
-production Sol/low planner preserves semantic atomicity: independently meaningful facts should split,
-while coherent explanations, reflections, and decisions with dependent reasons should remain unified.
-See the [planner semantic-atomicity contract](phase-17e-planner-atomicity.md). Planner revalidation
-succeeded; the remaining retrieval adoption decision is separate and does not authorize production
-retrieval changes by itself.
-
-### ➡️ Phase 17E retrieval adoption decision — next focused subphase
-
-Use the completed retrieval evidence and planner revalidation to decide whether any retrieval-unit
-change is warranted. Combined remains the leading candidate but is not adopted; whole-note retrieval
-remains production behavior until an explicit evidence-backed decision.
-
-⬜ **Phase 18 — n8n integration and first real end-to-end Odyssey use case — next after Phase 17E is settled**
-
-Expose the stable application boundary through n8n and prove one real bounded E2E use case **after** the
+Expose the stable application boundary through n8n and prove one real bounded E2E use case now that the
 17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains responsible
 for external triggers/integrations while domain behavior stays in `odyssey_core`.
+
+Before implementation begins, run the repository's architecture challenge for Phase 18 and define the
+smallest E2E contract under the Development Pipeline. The deferred retrieval hypothesis above must not
+silently expand Phase 18; keep current whole-note retrieval unless the real E2E exposes a concrete blocker.
 
 ⬜ **Phase 19 — end-to-end hardening, tracing, manual-edit ingestion, and evidence-driven refinements**
 
@@ -175,6 +161,10 @@ proposal to add canonical `type=user_request` is deferred. Do not add that type 
 knowledge resolution/retrieval before E2E evidence justifies the representation. Any future history
 representation reuses `request_id` and never stores hidden model reasoning. See
 [Future semantic request history](phase-17-request-records.md).
+
+As an **early evidence-driven Phase 19 refinement**, revisit the query-decomposed multi-fact retrieval
+hypothesis once the first real E2E supplies realistic retrieval cases. Test the smallest distinct-element
+coverage rule before broader retrieval optimization or new infrastructure.
 
 ## Committed post-E2E product work
 
@@ -226,7 +216,9 @@ The detailed cross-phase direction is centralized in
   semantic body-organization need.
 - 💡 **Generic tags:** Core stores and filters explicitly requested free-form tags; vocabulary and meaning remain user/app-owned, with no inference or registry.
 - 💡 **Large-vault retrieval reduction:** retain high-recall local candidate retrieval and benchmark any
-  selector before reducing strong-model context.
+  selector before reducing strong-model context. The next preserved retrieval experiment is the
+  [query-decomposed multi-fact retrieval hypothesis](future-query-decomposed-retrieval.md), not another
+  pre-E2E search over arbitrary note/entity combinations.
 - 💡 **Cost-aware request planning:** after the first real E2E exposes planner cost, benchmark Luna as a
   first-pass `PLAN | ESCALATE` planner with the current Sol/low planner as fallback. Reuse historical Luna
   failure cases as mandatory escalation evidence; adopt only if final planner quality matches the Sol
