@@ -41,24 +41,6 @@ def repository_path(path: Path) -> Path:
     return resolved
 
 
-def _validated_output(path: Path) -> Path:
-    """Return a writable repository-contained output path for a benchmark artifact.
-
-    Parameters:
-        path: Requested benchmark output path.
-
-    Returns:
-        A path using only the requested filename beneath the repository root.
-
-    Raises:
-        ValueError: If the output path escapes the repository tree.
-    """
-    name = path.name
-    if not name or name in {".", ".."}:
-        raise ValueError("benchmark output must have a filename")
-    return REPOSITORY_ROOT / name
-
-
 def selector_schema() -> dict[str, Any]:
     """Return the closed schema for high-recall supplied-locator selection."""
     return {
@@ -266,7 +248,7 @@ def main() -> None:
     artifact = repository_path(args.artifact)
     cases = repository_path(args.cases)
     schema = repository_path(args.schema)
-    output = _validated_output(args.output)
+    output = REPOSITORY_ROOT / args.output.name
     result = run_live(
         artifact,
         cases,
