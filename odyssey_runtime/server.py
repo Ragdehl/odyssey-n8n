@@ -63,7 +63,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     raise ValueError("request must be a non-empty string")
                 result = runtime.execute(request)
                 self._write_json(HTTPStatus.OK, application_result_to_response(result))
-            except (TypeError, ValueError, json.JSONDecodeError):
+            except (TypeError, ValueError):
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
             except Exception:
                 self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "runtime failure"})
