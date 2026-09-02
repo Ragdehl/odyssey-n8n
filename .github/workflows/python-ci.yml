@@ -29,13 +29,13 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
 
       - name: Lint
-        run: ruff check odyssey_core scripts tests
+        run: ruff check odyssey_core odyssey_runtime scripts tests
 
       - name: Check formatting
-        run: ruff format --check odyssey_core scripts tests
+        run: ruff format --check odyssey_core odyssey_runtime scripts tests
 
       - name: Run tests
-        run: pytest --cov=odyssey_core --cov-report=xml:coverage.xml
+        run: pytest --cov=odyssey_core --cov=odyssey_runtime --cov-report=xml:coverage.xml
 
       - name: Validate canonical note schema
         run: python scripts/validate_note_schema.py
