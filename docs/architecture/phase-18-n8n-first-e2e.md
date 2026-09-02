@@ -130,6 +130,56 @@ Whichever transport is selected:
 - it must not make HTTP/server deployment mandatory for future Core use;
 - it must expose a small stable request/result contract suitable for later clients.
 
+### Phase 18.1 runtime decision
+
+The Raspberry environment resolves the local transport as a persistent host-side HTTP adapter.
+n8n runs in Docker without Python or the Odyssey checkout mounted, while the host .venv already
+contains OpenAI, FastEmbed, SQLite, and the Core package. The container can reach the Docker host
+gateway (172.18.0.1), so a host process avoids both a new Docker service and repeated MiniLM
+startup. The adapter defaults to loopback; deployment binds it to the Docker bridge interface and
+sets ODYSSEY_RUNTIME_URL for the development workflow.
+
+    n8n HTTP Request node
+            |
+            | POST /execute {"request": "..."}
+            v
+    persistent host odyssey_runtime process
+            |
+            v
+    odyssey_core.execute_request()
+            |
+            +--> host .venv: Sol/low and existing Luna boundaries
+            +--> /data/odyssey/vault: authoritative Markdown
+            +--> /data/odyssey/runtime: MiniLM-derived SQLite indexes
+            +--> /data/odyssey/runtime/phase11a-benchmark/embedding-cache: FastEmbed model cache
+            +--> /data/odyssey/state/pending: durable incomplete-work records
+
+The composition root is odyssey_runtime.composition. It reads paths, actor, timezone, and port
+configuration from the environment, constructs the existing Core adapters once at process startup,
+and calls execute_request() for each request. After a result with affected note IDs, it rebuilds
+the derived context and semantic indexes from Markdown. odyssey_runtime.serialization exposes
+only bounded application evidence: request ID, status, action/retrieval evidence, affected IDs,
+pending-work status, and Git history. It never returns prompts, provider payloads, raw exceptions,
+or hidden model reasoning.
+
+The development workflow source is workflows/odyssey-runtime.ts. It accepts one workflow input
+named request and delegates to the adapter with an HTTP Request node. The adapter is a process
+boundary, not a Core dependency; a future local or mobile caller can compose the same Core
+contract directly.
+
+For the Raspberry deployment, the process lifecycle is intentionally foreground-oriented so an
+existing supervisor can restart it without Core changes. The deployment supplies
+ODYSSEY_RUNTIME_HOST=172.18.0.1, ODYSSEY_RUNTIME_PORT=8765, and
+ODYSSEY_RUNTIME_URL=http://172.18.0.1:8765/execute through its environment, then starts
+/home/ragdehl/projects/odyssey/.venv/bin/python -m odyssey_runtime. No credential or secret is
+stored in the repository. Process supervision, restart policy, and final workflow activation remain
+part of the 18.2 deployment/E2E step.
+
+Phase 18.1 does not activate Combined retrieval, Top-500 retrieval, Luna retrieval reduction,
+query decomposition, Luna-first planning, MCP, authentication, or any new Docker service.
+Installation and lifecycle supervision of the host process are deployment work for the real E2E,
+not hidden side effects of Core.
+
 ## Index freshness
 
 Markdown remains authoritative. SQLite/embedding indexes remain derived and rebuildable.
