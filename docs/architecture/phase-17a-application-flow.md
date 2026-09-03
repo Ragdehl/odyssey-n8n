@@ -94,10 +94,13 @@ reported as `CYCLIC_CREATE_DEPENDENCY`; every non-cycle descendant is still retu
 with `DEPENDENCY_FAILED` when its prerequisite cannot succeed.
 
 Single-cardinality `WriteAction` values preflight and render references exactly once. The executor
-uses only those immutable results: it orders same-request CREATE prerequisites ahead of sources that
-reference them, defers ambiguous references and failed prerequisites, and fails closed for CREATE
-cycles. Existing referenced notes are already linkable and therefore do not gain a dependency on an
-unrelated mutation of that note. Independent units continue after a failure. Mixed single/bulk action
+uses only those immutable results. An unresolved or ambiguous reference is rendered as its original
+plain mention and preserved as pending evidence; it does not create a target, invent a type, or block
+an independently safe source mutation. An authorized same-request CREATE target is different: the
+source depends on successful target materialization so a failed target never leaves a broken
+wikilink. CREATE cycles still fail closed. Existing referenced notes are already linkable and
+therefore do not gain a dependency on an unrelated mutation of that note. Independent units continue
+after a failure. Mixed single/bulk action
 composition and multi-unit bulk are explicitly deferred in this initial boundary rather than
 duplicating the Phase 16.5 single-identity contract.
 
@@ -142,15 +145,24 @@ preflight every unit
       |
       +--> safe existing or authorized CREATE target
       |
-      `--> ambiguous / unresolved
+      `--> ambiguous / unresolved reference
+               -> plain mention + durable pending evidence
+               -> independently safe source may execute
+
+authorized same-request CREATE target
+      -> source waits for target materialization
 
 safe dependencies
       -> execute in an order that preserves valid bound links
 
-unsafe dependency
-      -> preserve typed deferred evidence
+unresolved reference
+      -> preserve typed pending evidence
       -> do not create an invalid wikilink
-      -> do not reinterpret identity later
+      -> do not reinterpret identity during this request
+
+failed same-request CREATE prerequisite
+      -> preserve typed deferred evidence
+      -> withhold the dependent source mutation
 ```
 
 When an independent unit can safely succeed despite another independent unit failing, it may remain successful. Phase 17A does not introduce global rollback.

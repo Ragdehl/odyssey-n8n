@@ -133,13 +133,25 @@ Detailed Phase 17E evidence and decisions remain in:
 
 ➡️ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
 
-Expose the stable application boundary through n8n and prove one real bounded E2E use case now that the
-17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains responsible
-for external triggers/integrations while domain behavior stays in `odyssey_core`.
+Expose the stable application boundary through n8n and prove one real bounded write-then-read E2E now
+that the 17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains
+responsible for external triggers/integrations while domain behavior stays in `odyssey_core`.
 
-Before implementation begins, run the repository's architecture challenge for Phase 18 and define the
-smallest E2E contract under the Development Pipeline. The deferred retrieval hypothesis above must not
-silently expand Phase 18; keep current whole-note retrieval unless the real E2E exposes a concrete blocker.
+The canonical [Phase 18 contract](phase-18-n8n-first-e2e.md) explicitly means **connect the already
+adopted production path**, not promote every successful benchmark arm. Sol/low planning, current
+whole-note MiniLM/context retrieval, existing bounded Luna write/fact-selection boundaries when their
+approved contracts require them, Markdown persistence, pending work, and Git history are wired through
+the real flow. Combined retrieval, a fixed Top-500 fact contract, the Luna retrieval reducer, query
+decomposition, and Luna-first planner routing remain deferred.
+
+The first E2E must also make derived-index freshness explicit: after a successful authoritative Markdown
+mutation, refresh/rebuild the required local indexes so a second request through the same n8n boundary
+can retrieve the newly written knowledge.
+
+Phase 18.4 is the grounded consumer response contract: the runtime exposes bounded retrieval evidence
+(stable identity, canonical type, provenance, and full human-readable content) for ChatGPT to formulate
+the conversational response. Odyssey does not add a second answer-model call; standalone answer
+generation remains future work in [Future extension points](future-extension-points.md).
 
 ⬜ **Phase 19 — end-to-end hardening, tracing, manual-edit ingestion, and evidence-driven refinements**
 
@@ -197,11 +209,27 @@ The detailed cross-phase direction is centralized in
   Markdown remains user/workspace-owned and storage-location agnostic rather than being required to live
   in a centrally hosted server. Domain applications/extensions, SDKs, deployment modes, and permissions
   remain later contracts after real E2E evidence. See [Odyssey platform direction](odyssey-platform-direction.md).
+- 💡 **Local-first mobile runtime / standalone app:** preserve a future optional Android/iOS/client phase
+  where canonical knowledge, derived SQLite indexes, deterministic analytics, and local MiniLM-style
+  retrieval can execute on-device without making Odyssey Cloud mandatory. Server-backed sync/sharing and
+  managed AI remain optional services. Evaluate secure account-connect/credential-broker patterns rather
+  than embedding raw provider master keys in mobile apps. See
+  [Future local-first mobile runtime](future-local-first-mobile-runtime.md).
 - 💡 **Emergent schema coach:** after real usage justifies it, observe recurring knowledge patterns and
-  propose types/properties in terms of the user capability they unlock; require explicit approval and
-  safe backfill/relinking rather than silent ontology growth.
+  propose types/properties in terms of the user capability they unlock. A future advisory
+  `semantic_type_hint` for unresolved references may support deterministic counts of **distinct pending
+  entity candidates** only after the hint has a stable normalization/validation contract; it is never a
+  canonical type or creation authority. Require explicit approval and safe backfill/relinking rather than
+  silent ontology growth. See [Future pending-reference evolution](future-pending-reference-evolution.md).
 - 💡 **Human-in-the-loop:** build on Phase 17B durable pending work when ambiguity, dependency failure,
   partial success, or explicit user control requires clarification/approval.
+- 💡 **Pending-reference relinking and recurrence:** preserve two separate signals: repeated occurrences
+  of the same unresolved entity may justify proposing that entity, while many distinct unresolved
+  entities sharing one normalized semantic type hint may justify proposing a new type/capability. Future
+  relinking should address the exact source note + atomic fact + reference occurrence and re-render it
+  deterministically; do not ask an LLM to search/replace arbitrary Markdown. Exact canonical name/alias
+  evidence may authorize a relink; zero/multiple candidates remain pending/HITL. See
+  [Future pending-reference evolution](future-pending-reference-evolution.md).
 - 💡 **Mention-to-alias promotion:** keep current reference binding deterministic; add semantic alias
   promotion only under a separate evidenced contract.
 - 💡 **Derived identity/link graph index:** extend the rebuildable index with aliases and

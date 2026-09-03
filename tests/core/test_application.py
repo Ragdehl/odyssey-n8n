@@ -148,8 +148,10 @@ def test_create_dependency_runs_target_first_with_preflighted_identity(
     ]
 
 
-def test_pending_reference_defers_source_without_writing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Retain candidate evidence and withhold a source whose reference is ambiguous."""
+def test_pending_reference_allows_safe_source_and_defers_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persist a safe source with a plain unresolved mention while deferring its target."""
     action = WriteAction(
         (unit("Laura", references=(KnowledgeReference(1, "friend", "Marta"),)), unit("Marta"))
     )
@@ -171,16 +173,25 @@ def test_pending_reference_defers_source_without_writing(monkeypatch: pytest.Mon
             (PendingReference(0, 0, 1, "friend", "Marta", "ambiguous", ("m1", "m2")),),
         ),
     )
-    monkeypatch.setattr(
-        application, "materialize_create", lambda *args, **kwargs: pytest.fail("must not write")
-    )
+    writes: list[int] = []
+
+    def create(*args: Any, unit_index: int, **kwargs: Any) -> EntityPersistenceResult:
+        writes.append(unit_index)
+        item = preflight[unit_index]
+        return EntityPersistenceResult(
+            PersistenceOperation.CREATED, item.stable_id or "", item.path or "", 1
+        )
+
+    monkeypatch.setattr(application, "materialize_create", create)
 
     result = run(RequestPlan((action,), ()), monkeypatch)
 
     source, target = result.action_results[0].unit_results
-    assert source.status is UnitStatus.DEFERRED
-    assert source.candidates == ("m1", "m2")
+    assert source.status is UnitStatus.SUCCEEDED
+    assert source.stable_note_id == "laura-id"
     assert target.status is UnitStatus.DEFERRED
+    assert target.candidates == ("m1", "m2")
+    assert writes == [0]
 
 
 def test_failed_create_defers_dependent_but_runs_independent(
@@ -449,10 +460,10 @@ def test_cycle_descendant_gets_dependency_failure_and_independent_unit_succeeds(
     assert writes == [3]
 
 
-def test_multiple_pending_references_remain_typed_and_block_source_write(
+def test_multiple_pending_references_remain_typed_without_blocking_source_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Preserve every unresolved reference from one source unit for future pending work."""
+    """Preserve every unresolved reference while allowing the independently safe source to write."""
     source = unit(
         "Laura",
         references=(
@@ -481,22 +492,36 @@ def test_multiple_pending_references_remain_typed_and_block_source_write(
         PendingReference(0, 0, 1, "friend", "Marta", "ambiguous Marta", ("marta-1", "marta-2")),
         PendingReference(0, 1, 2, "employer", "Airbus", "ambiguous Airbus", ("airbus-1",)),
     )
+    rendered: list[tuple[str, ...]] = []
+
+    def render(*args: Any) -> ReferenceRenderingResult:
+        """Capture plain rendered facts while returning all unresolved reference evidence."""
+        rendering = ReferenceRenderingResult((("Marta and Airbus",), (), ()), pending)
+        rendered.extend(rendering.rendered_facts)
+        return rendering
+
     monkeypatch.setattr(
         application,
         "render_reference_facts",
-        lambda *args: ReferenceRenderingResult((("Marta and Airbus",), (), ()), pending),
+        render,
     )
-    monkeypatch.setattr(
-        application, "materialize_create", lambda *args, **kwargs: pytest.fail("must not write")
-    )
+    writes: list[int] = []
+
+    def create(*args: Any, unit_index: int, **kwargs: Any) -> EntityPersistenceResult:
+        writes.append(unit_index)
+        item = preflight[unit_index]
+        return EntityPersistenceResult(
+            PersistenceOperation.CREATED, item.stable_id or "", item.path or "", 1
+        )
+
+    monkeypatch.setattr(application, "materialize_create", create)
 
     result = run(RequestPlan((action,), ()), monkeypatch)
 
     source_result = result.action_results[0].unit_results[0]
-    assert source_result.status is UnitStatus.DEFERRED
-    assert source_result.reason == "REFERENCE_DEPENDENCY_UNRESOLVED"
-    assert source_result.dependencies == (
-        application.DependencyEvidence(0, 1, "ambiguous Marta", ("marta-1", "marta-2")),
-        application.DependencyEvidence(0, 2, "ambiguous Airbus", ("airbus-1",)),
-    )
-    assert source_result.candidates == ("marta-1", "marta-2", "airbus-1")
+    assert source_result.status is UnitStatus.SUCCEEDED
+    assert source_result.stable_note_id == "laura-id"
+    assert result.action_results[0].unit_results[1].status is UnitStatus.DEFERRED
+    assert result.action_results[0].unit_results[2].status is UnitStatus.DEFERRED
+    assert writes == [0]
+    assert rendered[0] == ("Marta and Airbus",)

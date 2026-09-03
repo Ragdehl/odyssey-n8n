@@ -45,6 +45,8 @@ The long-term shape should keep separate responsibilities rather than turning Od
 
 `*` Future capability, not current implementation.
 
+This diagram describes one hosted/self-hosted deployment shape, not a requirement that every Odyssey client must use a server. A future local/mobile runtime may host the same Core contracts directly on-device.
+
 ### Odyssey Core
 
 Core owns generic knowledge behavior such as:
@@ -89,7 +91,7 @@ project         recipe          client            client
 
 An application should decide what its domain means and how users interact with it. Odyssey should provide generic identity, storage, retrieval, mutation, history, and later permissions.
 
-A normal Android/web/desktop application would usually call an HTTP/SDK boundary. An AI assistant would usually use MCP. Both should reach the same underlying knowledge and safety rules.
+A web/desktop client may call an HTTP/SDK boundary. A future local Android/iOS client may instead host portable Core contracts on-device and use a local adapter. An AI assistant would usually use MCP. These deployment differences must not change the underlying knowledge and safety rules.
 
 ## Zero-configuration first, explicit structure when wanted
 
@@ -200,6 +202,12 @@ self-hosted
   Odyssey on Raspberry Pi / home server
   vault on local disk, mounted disk, NAS, or supported synced storage
 
+future standalone mobile
+  local app runtime
+  + local canonical knowledge
+  + local derived indexes/retrieval
+  + external AI only where required
+
 managed service (future)
   hosted Odyssey Server
   + explicitly chosen managed or user-controlled storage model
@@ -208,6 +216,22 @@ managed service (future)
 The current source-of-truth rule remains unchanged: **canonical knowledge is Markdown**, while indexes/embeddings/runtime data are derived and rebuildable.
 
 The server may be physically colocated with the notes, but that is a deployment choice rather than a semantic requirement.
+
+### Local-first client/runtime portability
+
+The future product direction is that the basic single-user knowledge system can remain useful without an Odyssey subscription or Odyssey-managed server.
+
+The architecture should preserve the ability to run locally:
+
+- canonical knowledge storage;
+- rebuildable SQLite/index state;
+- deterministic filtering and structured analytics;
+- MiniLM-style local semantic retrieval;
+- Core identity/validation/mutation semantics.
+
+The current Python/FastEmbed implementation is not itself a mobile compatibility promise. A future Android/iOS phase may use native/mobile storage and ONNX-compatible inference adapters while preserving the same canonical data and safety contracts.
+
+External LLM calls remain a replaceable provider boundary. Do not solve mobile packaging now by embedding raw provider master keys in client code. The detailed credential direction, including possible OAuth/account-connect gateways, is preserved in [Future local-first mobile runtime](future-local-first-mobile-runtime.md).
 
 ### Important consequence for permissions
 
@@ -280,29 +304,32 @@ Build these only from demonstrated requirements after the first real E2E proves 
 
 ## Near-term relationship to the roadmap
 
-The implementation sequence remains:
+The implementation sequence is now:
 
 ```text
 ✅ 17A  executable request flow
 ✅ 17B  durable pending work
-➡️ 17C  local Git history per request_id
-⬜ 18   n8n + first real E2E
-⬜ 19   hardening / tracing
+✅ 17C  local Git history per request_id
+✅ 17D  append-first atomic facts
+✅ 17E  pre-E2E schema/retrieval checkpoint
+➡️ 18   n8n + first real E2E
+⬜ 19   hardening / tracing / evidence-driven refinements
 ```
 
-Phase 18 is the first place where an external server/interface boundary becomes concrete. Keep that first E2E deliberately small. After real usage, reassess which platform capabilities are justified.
+Phase 18 is the first place where a concrete external runtime/interface boundary is exercised. Keep that first E2E deliberately small and keep the adapter separate from Core so a future mobile/local runtime is not forced to depend on the Raspberry/server transport. After real usage, reassess which platform capabilities are justified.
 
 ## Questions to resolve from E2E evidence
 
 After Odyssey is being used end-to-end, revisit at least:
 
-1. what the minimal HTTP/MCP server contract actually needs to expose;
+1. what the minimal HTTP/other runtime contract actually needs to expose;
 2. whether the existing local filesystem vault abstraction is sufficient or needs a storage interface;
-3. which deployment modes matter first: local, self-hosted, or managed;
+3. which deployment modes matter first: local, self-hosted, managed, or standalone mobile;
 4. what real application should become the first reusable domain extension;
 5. how domain schema extensions can remain safe and reversible for both applications and explicit user-defined structure;
 6. when authentication and authorization become necessary;
 7. how Obsidian/direct-file access should coexist with future fine-grained permissions;
-8. whether third-party SDK/app support has enough demonstrated demand to justify a public extension contract.
+8. whether third-party SDK/app support has enough demonstrated demand to justify a public extension contract;
+9. whether a consumer-friendly credential broker/account-connect flow is preferable to an Odyssey-managed AI relay for standalone clients.
 
 Until then, preserve the simple rule: **Core owns safe knowledge semantics; interfaces and applications sit above it; the user owns the canonical knowledge.**

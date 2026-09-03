@@ -1,5 +1,41 @@
 # Future extension points
 
+## Future pending-reference relinking
+
+Pending references are durable evidence tied to the original request and `WriteAction`; they are not
+workflow metadata embedded in the source note and must never silently create canonical notes or schema
+types. A future retry/relink capability may react to canonical identity creation or identity-relevant
+evidence changes as follows:
+
+```text
+canonical identity/evidence changes
+        |
+        v
+inspect compatible OPEN PendingReferences
+        |
+        +--> 0 safe candidates       -> leave open
+        +--> exactly 1 identity      -> future relink with normal safeguards
+        `--> multiple candidates     -> leave open / future HITL
+```
+
+Exact canonical name or alias evidence is the cheapest first signal. A known type may restrict
+candidates but is not required; bounded, evidenced context/semantic resolution may be added later.
+The eventual relink must use normal revision, validation, `request_id`, Git, and persistence guards.
+It must not silently replay pending work, grow the ontology, add schema types, or replace a plain
+mention until exactly one compatible canonical identity is safely established. Automatic scanning,
+retry, and relinking are future work, not Phase 18.2 behavior.
+
+## Future standalone answer generation
+
+The current ChatGPT-based product consumes Odyssey's bounded grounded retrieval evidence and formulates
+the conversational answer outside Odyssey. A future standalone Odyssey application will need its own
+answer-generation strategy when no ChatGPT consumer is present.
+
+That future phase should compare the simplest suitable option for each request class: deterministic
+rendering for trivial structured cases, an inexpensive hosted model, a local model, or escalation to a
+stronger model only when complexity and evidence justify it. Do not assume `gpt-5.6-sol` is the default
+answer model, and do not add this strategy to Phase 18.4.
+
 ## Purpose
 
 This document is the canonical home for **cross-phase product directions that are intentionally not
