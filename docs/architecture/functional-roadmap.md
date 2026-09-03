@@ -139,24 +139,22 @@ references as durable pending work, committed request-correlated Git history, an
 indexes. A later independent READ through the same boundary recovered `Marta trabaja en Thales.` without
 mutating canonical knowledge.
 
-The grounded consumer contract is also settled for the current product shape: Odyssey returns stable
-identity/type/provenance plus full retrieved content, and ChatGPT formulates the conversational answer.
-Odyssey does not add a redundant answer-generation model call. See the canonical
-[Phase 18 contract](phase-18-n8n-first-e2e.md).
+The grounded consumer contract is settled independently of any specific frontend: Odyssey returns stable
+identity/type/provenance plus full retrieved content, and an external consumer may formulate the
+conversational response without another answer call inside Core. Phase 20 will add the first standalone
+Odyssey consumer. See the canonical [Phase 18 contract](phase-18-n8n-first-e2e.md).
 
 ## Current phase
 
-➡️ **Phase 19 — end-to-end hardening and evidence-driven refinement**
+➡️ **Phase 19 — end-to-end hardening**
 
-The canonical [Phase 19 contract](phase-19-e2e-hardening.md) deliberately hardens the proven Phase 18
-path before adding new product surfaces or retrieval architecture.
+The canonical [Phase 19 contract](phase-19-e2e-hardening.md) hardens the proven Phase 18 path before the
+first standalone web product surface.
 
 ```text
-19.0  contract + hardening matrix                         ➡️ current
-19.1  retry / duplicate / failure-path safety             ⬜
+19.0  contract + hardening matrix                         ✅ complete on merge
+19.1  retry / duplicate / failure-path safety             ➡️ next
 19.2  bounded tracing + timing + usage/cost                ⬜
-19.3  direct Markdown / Obsidian edit ingestion            ⬜
-19.4  retrieval refinement from realistic E2E misses       ⬜
 ```
 
 The immediate reliability question is narrower than semantic duplicate suppression: one logical
@@ -165,19 +163,44 @@ genuine second user request must remain meaningful. Phase 19.1 will inspect actu
 behavior before choosing an idempotency mechanism or changing `request_id` ownership.
 
 Operational tracing stays low-invasive and `request_id` remains the default correlation key. Add a
-separate `trace_id` only if real retries/subtraces prove it necessary. Manual filesystem/Obsidian edits
-remain a later ingestion boundary, and query-decomposed multi-fact retrieval remains an experiment that
-must beat the current whole-note baseline on realistic misses before adoption.
+separate `trace_id` only if real retries/subtraces prove it necessary.
 
 Reassess semantic request history during Phase 19 rather than automatically creating a canonical
 `type=user_request`. Any future representation reuses `request_id` and never stores hidden model
 reasoning. See [Future semantic request history](phase-17-request-records.md).
 
+## Next product phase
+
+⬜ **Phase 20 — Odyssey Online MVP: standalone answerer + mobile web**
+
+After 19.1/19.2 make the existing path dependable and diagnosable, build the smallest useful standalone
+Odyssey consumer for a phone browser. See the canonical [Phase 20 contract](phase-20-odyssey-online-mvp.md).
+
+```text
+20.0  consumer contract + architecture challenge             ⬜
+20.1  grounded answerer benchmark                            ⬜
+20.2  minimal mobile web frontend                            ⬜
+20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
+```
+
+The answerer benchmark starts with Luna as the preferred inexpensive candidate but must adopt a model
+only from grounded quality/cost evidence. Sol remains a quality reference rather than the automatic
+production answerer. Deterministic write acknowledgements should avoid an unnecessary model call when
+existing result fields are sufficient.
+
+The MVP is a normal mobile web page with a text field, submit behavior, loading/error state, and rendered
+response. Android voice input is supplied by ordinary Gboard dictation through that text field; Odyssey
+does not add microphone recording or a speech-to-text service for the MVP.
+
+The Internet-facing surface must be protected before it can reach personal knowledge. The planned shape
+uses the existing Raspberry/Cloudflare deployment with a separate Odyssey hostname and a narrow access
+policy. Actual Cloudflare/security changes and real-vault activation remain explicit human-approved
+deployment actions.
+
 ## Committed post-E2E product work
 
-The following directions are **planned product work**, not optional ideas. Their exact phase numbers and
-implementation order should be assigned after the first real E2E and Phase 19 hardening expose the right
-boundaries; do not implement speculative infrastructure before then.
+The following directions are **planned product work**, not optional ideas. Their exact later phase numbers
+should be assigned from real Odyssey Online usage rather than speculative infrastructure work.
 
 - ⬜ **Composable applications / capability dependencies:** Odyssey applications should be able to reuse
   lower-level capabilities or applications instead of reimplementing them independently. A target shape
@@ -199,17 +222,20 @@ boundaries; do not implement speculative infrastructure before then.
 The detailed cross-phase direction is centralized in
 [Future extension points](future-extension-points.md). Important preserved directions include:
 
+- 💡 **Direct Markdown / Obsidian edit ingestion:** detect external user edits without self-trigger loops,
+  preserve safe user wording, normalize only what canonical contracts require, refresh derived state, and
+  audit accepted changes through the normal request/Git safeguards. Real Odyssey Online usage now takes
+  priority so this ingestion boundary can be designed from actual editing needs.
 - 💡 **Odyssey platform boundary:** evolve toward a persistent knowledge layer used by humans,
   ordinary applications, and AI agents through Core + server interfaces such as HTTP and MCP. Canonical
   Markdown remains user/workspace-owned and storage-location agnostic rather than being required to live
   in a centrally hosted server. Domain applications/extensions, SDKs, deployment modes, and permissions
   remain later contracts after real E2E evidence. See [Odyssey platform direction](odyssey-platform-direction.md).
-- 💡 **Local-first mobile runtime / standalone app:** preserve a future optional Android/iOS/client phase
-  where canonical knowledge, derived SQLite indexes, deterministic analytics, and local MiniLM-style
-  retrieval can execute on-device without making Odyssey Cloud mandatory. Server-backed sync/sharing and
-  managed AI remain optional services. Evaluate secure account-connect/credential-broker patterns rather
-  than embedding raw provider master keys in mobile apps. See
-  [Future local-first mobile runtime](future-local-first-mobile-runtime.md).
+- 💡 **Local-first mobile runtime / native standalone app:** Phase 20 is a server-backed mobile web MVP,
+  not the future optional Android/iOS local runtime. Preserve the later direction where canonical
+  knowledge, derived SQLite indexes, deterministic analytics, and local MiniLM-style retrieval can execute
+  on-device without making Odyssey Cloud mandatory. Server-backed sync/sharing and managed AI remain
+  optional services. See [Future local-first mobile runtime](future-local-first-mobile-runtime.md).
 - 💡 **Emergent schema coach:** after real usage justifies it, observe recurring knowledge patterns and
   propose types/properties in terms of the user capability they unlock. A future advisory
   `semantic_type_hint` for unresolved references may support deterministic counts of **distinct pending
@@ -240,14 +266,12 @@ The detailed cross-phase direction is centralized in
 - 💡 **Generic tags:** Core stores and filters explicitly requested free-form tags; vocabulary and meaning remain user/app-owned, with no inference or registry.
 - 💡 **Large-vault retrieval reduction:** retain high-recall local candidate retrieval and benchmark any
   selector before reducing strong-model context. The next preserved retrieval experiment is the
-  [query-decomposed multi-fact retrieval hypothesis](future-query-decomposed-retrieval.md), not another
-  pre-E2E search over arbitrary note/entity combinations.
+  [query-decomposed multi-fact retrieval hypothesis](future-query-decomposed-retrieval.md), now intentionally
+  scheduled after realistic Odyssey Online usage exposes concrete misses.
 - 💡 **Cost-aware request planning:** after the first real E2E exposes planner cost, benchmark Luna as a
   first-pass `PLAN | ESCALATE` planner with the current Sol/low planner as fallback. Reuse historical Luna
   failure cases as mandatory escalation evidence; adopt only if final planner quality matches the Sol
   baseline, unsafe non-escalation is strictly controlled, and total measured cost is materially lower.
-- 💡 **Operational observability:** reconstruct planner/retrieval/resolution/persistence/n8n/LLM traces
-  with safe usage/cost/error metadata, redaction, and retention controls once the E2E exists.
 - 💡 **Performance/index optimization:** optimize only from measurements.
 - 💡 **Proactive Memory/Context Layer:** non-disruptive resurfacing only after the direct E2E flow proves
   useful.
