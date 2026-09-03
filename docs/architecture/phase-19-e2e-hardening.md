@@ -109,8 +109,25 @@ Core. The checked-in workflow uses the n8n execution ID when the caller does not
 of the same execution therefore preserve identity, while separate executions receive different IDs.
 An upstream caller retrying by starting a new execution must provide the original ID if it needs the
 same logical-delivery identity. Core's existing exact duplicate/idempotent structured materialization
-guards remain responsible for safe repeated semantic operations; identical user text is never used as
-a blanket deduplication key.
+guards remain responsible for safe repeated semantic operations. Request-marked atomic facts are also
+replay-protected by their durable `(request_id, ordinal)` locator: a planner wording variation for an
+already materialized logical fact does not append a second fact. Identical user text is never used as a
+blanket deduplication key.
+
+The replay probes then established the following bounded result:
+
+| Replay case | Observed result |
+| --- | --- |
+| Completed WRITE, same plan and ID | Second unit is `NO_CHANGE`; Markdown and revision remain unchanged; Git is `NO_CHANGES`; no pending record is required. The runtime may still perform the ordinary affected-ID index refresh. |
+| Completed WRITE, planner wording variation and same ID | The durable request/ordinal guard returns `NO_CHANGE`; no second fact or Git commit is created. The first canonical wording remains authoritative. |
+| PARTIAL request with same pending ID and identical plan | The existing pending projection is recognized as the same payload and reports `persisted=true`; a conflicting payload under that ID still fails closed. |
+| Retry after index-refresh failure | Markdown remains intact; the retry is `NO_CHANGE`; a successful second refresh rebuilds derived state. |
+| Retry after Git-history failure | Markdown remains intact; the retry is `NO_CHANGE`; the dirty affected path yields explicit `SKIPPED_UNSAFE` history evidence rather than a silent new commit. |
+
+These results show that stable `request_id` propagation plus existing canonical replay locators are
+sufficient for the currently implemented mutation families without a persistent idempotency ledger.
+This is bounded replay protection, not blanket semantic deduplication: separate delivery IDs remain
+separate logical requests, and a same-ID plan conflict is not silently accepted by the pending store.
 
 The deterministic evidence matrix for this correction is:
 
@@ -118,7 +135,7 @@ The deterministic evidence matrix for this correction is:
 | --- | --- |
 | Normal WRITE/READ | Existing Core/application and runtime boundary tests cover one request ID, mutation/index refresh, and non-mutating retrieval. |
 | Same text, intentional duplicate | Boundary regression sends two different delivery IDs; both reach Core and remain distinguishable. |
-| Same delivery retry | Boundary regression sends the same delivery ID twice; both attempts preserve that identity for Core, without semantic text deduplication. |
+| Same delivery retry | Boundary regression sends the same delivery ID twice; both attempts preserve that identity for Core, while durable atomic request/ordinal locators prevent replayed facts from being applied twice. |
 | Invalid/runtime failure | HTTP validation returns 400 without Core; Core/runtime and serialization failures return bounded 500. |
 | Planner/provider failure | Application tests return failed evidence before mutation and do not record pending work. |
 | Markdown then Git failure | Existing history tests show Markdown remains and history reports `FAILED`; Git is not authority. |
@@ -216,7 +233,7 @@ Those directions remain in their roadmap/future-extension contracts. Phase 20 ha
 
 ## Open decisions
 
-1. **Retry identity / idempotency key:** determine in 19.1 from actual n8n/runtime retry behavior. Do not assume `request_id` should move outside Core.
+1. **Retry identity / idempotency key:** Phase 19.1 evidence uses a delivery-owned `request_id` propagated through n8n/runtime and durable atomic fact locators for bounded replay protection. A persistent idempotency ledger is not justified by the current evidence; reconsider only if later retry cases escape these canonical guards.
 2. **Observability persistence:** choose the smallest safe representation in 19.2 after identifying which evidence is not already available from application results, Git, n8n executions, and provider responses.
 3. **Separate `trace_id`:** default is **no**; reconsider only if one logical request requires multiple distinguishable operational attempts.
 

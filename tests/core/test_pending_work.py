@@ -125,6 +125,22 @@ def test_record_round_trip_preserves_whole_action_and_all_dependencies(tmp_path:
     ]
 
 
+def test_same_pending_request_replay_is_an_idempotent_success(tmp_path: Path) -> None:
+    """Recognize an identical existing pending projection without reporting lost durability."""
+    action = write_action()
+    repository = PendingWorkRepository(tmp_path)
+    kwargs = {
+        "user_request": "Remember Laura's employer.",
+        "plan": RequestPlan((action,), ("requires clarification",)),
+        "result": incomplete_result(action),
+        "created_at": "2026-08-28T12:00:00Z",
+    }
+
+    assert repository.record(**kwargs) == "request-17b"
+    assert repository.record(**kwargs) == "request-17b"
+    assert repository.list_ids() == ("request-17b",)
+
+
 def test_pending_record_keeps_successful_source_identity_and_unresolved_link_intent(
     tmp_path: Path,
 ) -> None:
@@ -253,11 +269,16 @@ def test_bulk_evidence_and_delegate_are_projected_without_execution(tmp_path: Pa
 
 
 @pytest.mark.parametrize("request_id", ("", "../x", "/absolute", "a/b", "a\\b"))
-def test_unsafe_ids_and_duplicate_creation_fail_closed(tmp_path: Path, request_id: str) -> None:
-    """Reject unsafe paths and never replace an existing pending record."""
+def test_unsafe_pending_ids_fail_closed(tmp_path: Path, request_id: str) -> None:
+    """Reject unsafe pending paths before reading or writing them."""
     repository = PendingWorkRepository(tmp_path)
     with pytest.raises(PendingWorkError):
         repository.read(request_id)
+
+
+def test_conflicting_pending_replay_fails_closed(tmp_path: Path) -> None:
+    """Reject a different pending projection that attempts to reuse one request identity."""
+    repository = PendingWorkRepository(tmp_path)
 
     action = write_action()
     args: dict[str, Any] = {
@@ -268,8 +289,9 @@ def test_unsafe_ids_and_duplicate_creation_fail_closed(tmp_path: Path, request_i
     }
     repository.record(**args)
     original = (tmp_path / "request-17b.json").read_text(encoding="utf-8")
+    conflicting = {**args, "user_request": "different work"}
     with pytest.raises(PendingWorkError, match="already exists"):
-        repository.record(**args)
+        repository.record(**conflicting)
     assert (tmp_path / "request-17b.json").read_text(encoding="utf-8") == original
 
 

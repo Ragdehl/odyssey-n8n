@@ -83,7 +83,15 @@ class PendingWorkRepository:
             # final record, while the final name appears only after the complete temp write.
             os.link(temporary, target)
         except FileExistsError as error:
-            raise PendingWorkError("pending record already exists") from error
+            try:
+                existing = self.read(request_id)
+            except PendingWorkError:
+                raise PendingWorkError("pending record already exists") from error
+            if existing != payload:
+                raise PendingWorkError(
+                    "pending record already exists for different work"
+                ) from error
+            return request_id
         except OSError as error:
             raise PendingWorkError("pending record could not be created") from error
         finally:
