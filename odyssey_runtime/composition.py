@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from odyssey_core.application import ApplicationResult, execute_request
+from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
 from odyssey_core.context import ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
@@ -26,19 +26,20 @@ from odyssey_core.storage import VaultRepository
 class RuntimeComposition:
     """Own one long-lived assembly of providers, repositories, indexes, and Core execution."""
 
-    core_execute: Callable[[str], ApplicationResult]
+    core_execute: Callable[[str, str | None], ApplicationResult]
     refresh_indexes: Callable[[], None]
 
-    def execute(self, user_request: str) -> ApplicationResult:
+    def execute(self, user_request: str, request_id: str | None = None) -> ApplicationResult:
         """Execute one request and refresh derived indexes after affected mutations.
 
         Args:
             user_request: Raw request accepted by the Core application boundary.
+            request_id: Optional identity supplied by the delivery boundary and reused by retries.
 
         Returns:
             The typed Core ApplicationResult after any required derived-index refresh.
         """
-        result = self.core_execute(user_request)
+        result = self.core_execute(user_request, request_id)
         if result.affected_stable_note_ids:
             self.refresh_indexes()
         return result
@@ -83,11 +84,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
 
-    def core_execute(user_request: str) -> ApplicationResult:
+    def core_execute(user_request: str, request_id: str | None = None) -> ApplicationResult:
         """Execute one request with fresh planner and persistence clock context."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
+        request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
         return execute_request(
             user_request,
             planner=planner,
@@ -104,6 +106,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             fact_selector=fact_selector,
             pending_recorder=pending_recorder,
             history_recorder=history_recorder,
+            request_id_factory=request_id_factory,
         )
 
     def refresh_indexes() -> None:

@@ -70,6 +70,7 @@ def test_persistent_runtime_refreshes_planner_clock_for_each_request(
         ]
     )
     persistence_times: list[str] = []
+    request_ids: list[str] = []
 
     monkeypatch.setattr(composition, "VaultRepository", lambda root: ("repository", root))
     monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **kwargs: kwargs)
@@ -85,16 +86,18 @@ def test_persistent_runtime_refreshes_planner_clock_for_each_request(
 
     def fake_execute_request(request, **kwargs):
         persistence_times.append(kwargs["now"])
+        request_ids.append(kwargs["request_id_factory"]())
         return _result()
 
     monkeypatch.setattr(composition, "execute_request", fake_execute_request)
 
     runtime = composition.build_runtime_from_environment()
-    runtime.execute("¿Qué pasa hoy?")
-    runtime.execute("¿Qué pasa hoy?")
+    runtime.execute("¿Qué pasa hoy?", "delivery-1")
+    runtime.execute("¿Qué pasa hoy?", "delivery-2")
 
     assert [context["date"] for context in planner_contexts] == ["2026-09-02", "2026-09-03"]
     assert persistence_times == ["2026-09-02T23:59:59+02:00", "2026-09-03T00:00:01+02:00"]
+    assert request_ids == ["delivery-1", "delivery-2"]
 
 
 def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
@@ -119,7 +122,7 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
 
     monkeypatch.setattr(runtime_server, "HTTPServer", FakeHTTPServer)
     runtime = RuntimeComposition(
-        core_execute=lambda request: _result(), refresh_indexes=lambda: None
+        core_execute=lambda request, request_id: _result(), refresh_indexes=lambda: None
     )
 
     runtime_server.serve(runtime, host="127.0.0.1", port=18765)

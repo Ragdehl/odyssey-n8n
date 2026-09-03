@@ -78,7 +78,57 @@ At minimum investigate and classify:
 - pending-work persistence failure after partial execution;
 - process restart between independent requests.
 
-The desired invariant is not “every repeated sentence is ignored.” A legitimate repeated user statement may be meaningful. The goal is narrower: **one logical delivery must not accidentally become two semantic mutations merely because infrastructure retried it.** The implementation contract for distinguishing a retry from a genuine second request remains an open decision for 19.1 and must be based on the real n8n/runtime delivery boundary.
+The desired invariant is not “every repeated sentence is ignored.” A legitimate repeated user statement may be meaningful. The goal is narrower: **one logical delivery must not accidentally become two semantic mutations merely because infrastructure retried it.** Phase 19.1 resolves the delivery-boundary contract from the observed n8n/runtime behavior below without introducing blanket semantic deduplication.
+
+#### Phase 19.1 baseline and bounded identity correction
+
+The current development workflow was inspected before changing the delivery contract. Its HTTP
+Request node has a 120-second timeout and does not configure `retryOnFail`; the compose-level n8n
+container restart policy is `unless-stopped`, not a per-request retry policy. Therefore n8n does not
+currently retry this node automatically from the checked-in workflow configuration. A caller can
+still retry after a timeout or lost response, so that transport case remains material.
+
+Before the correction, `/execute` accepted only `{ "request": "..." }`, and Core generated a new
+UUID inside `execute_request()` for every call. Repeating the same payload therefore produced a new
+logical `request_id`, even when the caller was retrying one uncertain delivery. The same text submitted
+by a genuinely new n8n execution was indistinguishable from that retry at the Core boundary.
+
+The smallest adopted correction reuses the existing request identity rather than adding a deduplication
+store:
+
+```text
+n8n execution
+    |
+    +--> request_id = supplied stable ID, or n8n-<execution.id>
+    |
+    `--> {request, request_id} -> runtime -> execute_request(request_id_factory=...)
+```
+
+The runtime accepts an optional bounded `request_id` and rejects unsafe path/control characters before
+Core. The checked-in workflow uses the n8n execution ID when the caller does not supply one; retries
+of the same execution therefore preserve identity, while separate executions receive different IDs.
+An upstream caller retrying by starting a new execution must provide the original ID if it needs the
+same logical-delivery identity. Core's existing exact duplicate/idempotent structured materialization
+guards remain responsible for safe repeated semantic operations; identical user text is never used as
+a blanket deduplication key.
+
+The deterministic evidence matrix for this correction is:
+
+| Surface | Evidence and current outcome |
+| --- | --- |
+| Normal WRITE/READ | Existing Core/application and runtime boundary tests cover one request ID, mutation/index refresh, and non-mutating retrieval. |
+| Same text, intentional duplicate | Boundary regression sends two different delivery IDs; both reach Core and remain distinguishable. |
+| Same delivery retry | Boundary regression sends the same delivery ID twice; both attempts preserve that identity for Core, without semantic text deduplication. |
+| Invalid/runtime failure | HTTP validation returns 400 without Core; Core/runtime and serialization failures return bounded 500. |
+| Planner/provider failure | Application tests return failed evidence before mutation and do not record pending work. |
+| Markdown then Git failure | Existing history tests show Markdown remains and history reports `FAILED`; Git is not authority. |
+| Markdown then index failure | Runtime composition refresh occurs after Core; a refresh exception remains an explicit runtime failure while Markdown remains authoritative/rebuildable. |
+| Partial/pending failure | Existing pending tests preserve partial application evidence and report pending durability failure separately. |
+| Restart | Existing persistent-runtime tests rebuild disposable derived indexes from the configured repository; canonical Markdown is not process state. |
+
+No live provider call was needed: the identity and failure behavior are boundary contracts covered by
+deterministic injected providers. Docker API inspection confirmed the development n8n container is
+running, but no workflow execution or real vault operation was performed for this evidence-first step.
 
 ### 19.2 — bounded operational tracing, timing, and usage/cost
 

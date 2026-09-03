@@ -8,7 +8,12 @@ const input = trigger({
     name: 'odyssey_runtime Input',
     parameters: {
       inputSource: 'workflowInputs',
-      workflowInputs: { values: [{ name: 'request', type: 'string' }] },
+      workflowInputs: {
+        values: [
+          { name: 'request', type: 'string' },
+          { name: 'request_id', type: 'string' },
+        ],
+      },
     },
     position: [0, 0],
   },
@@ -25,7 +30,9 @@ const execute = node({
       url: expr("{{ $env.ODYSSEY_RUNTIME_URL || 'http://172.18.0.1:8765/execute' }}"),
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr("={{ JSON.stringify({ request: $json.request }) }}"),
+      jsonBody: expr(
+        "={{ JSON.stringify({ request: $json.request, request_id: $json.request_id || 'n8n-' + $execution.id }) }}"
+      ),
       options: { timeout: 120000 },
     },
     position: [420, 0],
