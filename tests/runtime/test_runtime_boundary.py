@@ -8,6 +8,8 @@ from http.client import HTTPConnection
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from odyssey_core.application import (
     ActionResult,
     ActionStatus,
@@ -262,6 +264,28 @@ def test_http_boundary_returns_safe_500_for_core_failure() -> None:
     server = _test_server(
         RuntimeComposition(
             core_execute=lambda request: (_ for _ in ()).throw(RuntimeError("secret detail")),
+            refresh_indexes=lambda: None,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/execute", body=json.dumps({"request": "hello"}))
+        response = connection.getresponse()
+        assert response.status == 500
+        assert json.loads(response.read()) == {"error": "runtime failure"}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize("failure", (ValueError("internal value"), TypeError("internal type")))
+def test_http_boundary_classifies_internal_value_and_type_errors_as_500(
+    failure: Exception,
+) -> None:
+    """Do not misclassify validated Core/runtime failures as client input errors."""
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request: (_ for _ in ()).throw(failure),
             refresh_indexes=lambda: None,
         )
     )
