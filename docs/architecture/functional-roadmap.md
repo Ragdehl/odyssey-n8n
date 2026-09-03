@@ -148,6 +148,11 @@ The first E2E must also make derived-index freshness explicit: after a successfu
 mutation, refresh/rebuild the required local indexes so a second request through the same n8n boundary
 can retrieve the newly written knowledge.
 
+Phase 18.4 is the grounded consumer response contract: the runtime exposes bounded retrieval evidence
+(stable identity, canonical type, provenance, and full human-readable content) for ChatGPT to formulate
+the conversational response. Odyssey does not add a second answer-model call; standalone answer
+generation remains future work in [Future extension points](future-extension-points.md).
+
 ⬜ **Phase 19 — end-to-end hardening, tracing, manual-edit ingestion, and evidence-driven refinements**
 
 Harden the proven flow with repeatable integration/failure-path evidence, idempotency, operational

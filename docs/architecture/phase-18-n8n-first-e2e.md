@@ -1,6 +1,6 @@
 # Phase 18 — n8n integration and first real Odyssey E2E
 
-Status: **current phase contract; Phase 18.3 READ proof complete; Phase 18.4 pending**
+Status: **current phase contract; Phase 18.4 grounded consumer contract complete; Phase 18.5 pending**
 
 ## Objective
 
@@ -102,9 +102,35 @@ Example request:
 
 The request must pass through the same n8n/runtime/Core boundary and the **current production retrieval path** must recover the newly written note after index refresh.
 
-The first read proof may expose the grounded `ContextPackage` directly. A user-facing natural-language answer may then be added as a thin bounded answer boundary in Phase 18 once the transport/retrieval proof is green. If that introduces or changes a production model-facing prompt or structured-output contract, `AGENTS.md` requires focused live evidence plus proportional regression sentinels before it is considered validated.
+The first read proof exposes the grounded `ContextPackage` directly. For the current ChatGPT-based
+workflow, ChatGPT remains responsible for conversational wording; Odyssey does not add an answer model
+or a second provider call.
 
-This sequencing prevents an answer-rendering issue from hiding a more fundamental integration/index-refresh failure.
+This keeps conversational formulation outside the current Odyssey runtime while making the grounded
+evidence sufficient for a consumer to answer safely.
+
+### Phase 18.4 — grounded consumer response contract
+
+The external runtime response is the consumer boundary. A successful retrieval exposes `request_id`,
+overall `status`, retrieval action/query, and each grounded ContextPackage item with stable `id`,
+canonical `type`, human-readable `content`, and vault-relative `path` provenance. Empty retrieval is
+represented by a completed retrieval action with `items: []`. The consumer does not need SQLite,
+filesystem, Git, pending-work parsing, prompts, provider payloads, secrets, or hidden reasoning.
+
+```text
+ChatGPT -> Odyssey request -> Sol/low plan + whole-note retrieval
+                                  |
+                                  v
+                 bounded grounded identity/content/provenance
+                                  |
+                                  v
+                         ChatGPT formulates answer
+```
+
+The returned content is retrieved evidence, not an Odyssey-generated summary. Writes remain explicit
+through their write action/status fields and retrieval results are non-mutating. The Phase 17E Sol
+answer path remains benchmark evidence only. No internal answer-generation model, Sol answer call, or
+Luna answerer is part of Phase 18.4.
 
 ## Runtime / transport boundary
 
@@ -349,7 +375,8 @@ If a user-facing Sol answer boundary is added before Phase 18 closes, it must be
 ## Open decisions
 
 1. **Local transport:** **resolved in Phase 18.1** as the persistent host HTTP adapter; do not reopen this decision.
-2. **Read response surface:** first prove grounded retrieval end-to-end; then decide whether the same Phase 18 closes with a thin user-facing Sol answer adapter or whether that is split into the final Phase 18 substep.
+2. **Read response surface:** **resolved in Phase 18.4** as a bounded grounded evidence response for
+   the current ChatGPT consumer; Odyssey does not generate the conversational answer internally.
 3. **Index refresh granularity:** use the simplest safe existing rebuild first; optimize incrementally only if real measurements justify it.
 
 No retrieval-strategy decision is open in Phase 18: current whole-note retrieval remains authoritative for this phase.
@@ -361,7 +388,7 @@ No retrieval-strategy decision is open in Phase 18: current whole-note retrieval
 18.1  runtime dependency assembly + thin local adapter          ✅
 18.2  n8n -> Core real WRITE E2E                               ✅ retry passed; partial unresolved work is durable
 18.3  post-write index freshness + n8n -> Core READ E2E         ✅ execution 107 recovered Marta
-18.4  grounded user-facing answer surface, if kept in Phase 18  ⬜
+18.4  grounded consumer response contract                         ✅ ChatGPT formulates the answer
 18.5  final evidence / deterministic verification / PR review   ⬜
 ```
 

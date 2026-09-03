@@ -110,6 +110,73 @@ def test_application_result_serialization_maps_action_evidence() -> None:
     assert response["actions"][0]["delegated_request"] == "follow-up"
 
 
+def test_retrieval_serialization_preserves_grounded_identity_and_all_content() -> None:
+    """Expose enough whole-note evidence for ChatGPT without generating an answer in Core."""
+    item = ContextItem(
+        id="marta-id",
+        path="Marta - marta-id.md",
+        primary_name="Marta",
+        type="person",
+        tags=(),
+        metadata={"name": "Marta"},
+        content="Marta trabaja en Thales.\nMarta vive en Lyon.",
+        similarity=0.5,
+    )
+    response = application_result_to_response(
+        ApplicationResult(
+            request_id="read-marta",
+            status=ApplicationStatus.COMPLETED,
+            action_results=(
+                ActionResult(
+                    0,
+                    "retrieve",
+                    ActionStatus.COMPLETED,
+                    retrieval=ContextPackage(query="Dónde trabaja Marta", items=(item,)),
+                ),
+            ),
+            affected_stable_note_ids=(),
+        )
+    )
+
+    serialized_item = response["actions"][0]["retrieval"]["items"][0]
+    assert response["request_id"] == "read-marta"
+    assert response["status"] == "completed"
+    assert serialized_item["id"] == "marta-id"
+    assert serialized_item["path"] == "Marta - marta-id.md"
+    assert serialized_item["type"] == "person"
+    assert serialized_item["content"] == "Marta trabaja en Thales.\nMarta vive en Lyon."
+    assert response["affected_stable_note_ids"] == []
+    encoded = json.dumps(response)
+    assert "prompt" not in encoded
+    assert "reasoning" not in encoded
+    assert "provider" not in encoded
+
+
+def test_empty_retrieval_serializes_as_completed_evidence_without_items() -> None:
+    """Keep a successful no-evidence retrieval distinct from a retrieval containing notes."""
+    response = application_result_to_response(
+        ApplicationResult(
+            request_id="read-empty",
+            status=ApplicationStatus.COMPLETED,
+            action_results=(
+                ActionResult(
+                    0,
+                    "retrieve",
+                    ActionStatus.COMPLETED,
+                    retrieval=ContextPackage(query="unknown", items=()),
+                ),
+            ),
+            affected_stable_note_ids=(),
+        )
+    )
+
+    retrieval = response["actions"][0]["retrieval"]
+    assert response["request_id"] == "read-empty"
+    assert response["status"] == "completed"
+    assert retrieval == {"query": "unknown", "items": []}
+    assert response["affected_stable_note_ids"] == []
+
+
 def test_application_result_serialization_rejects_non_result() -> None:
     """The adapter rejects an incorrectly wired Core executor safely."""
     try:
