@@ -211,14 +211,20 @@ The detailed cross-phase direction is centralized in
   than embedding raw provider master keys in mobile apps. See
   [Future local-first mobile runtime](future-local-first-mobile-runtime.md).
 - 💡 **Emergent schema coach:** after real usage justifies it, observe recurring knowledge patterns and
-  propose types/properties in terms of the user capability they unlock; require explicit approval and
-  safe backfill/relinking rather than silent ontology growth.
+  propose types/properties in terms of the user capability they unlock. A future advisory
+  `semantic_type_hint` for unresolved references may support deterministic counts of **distinct pending
+  entity candidates** only after the hint has a stable normalization/validation contract; it is never a
+  canonical type or creation authority. Require explicit approval and safe backfill/relinking rather than
+  silent ontology growth. See [Future pending-reference evolution](future-pending-reference-evolution.md).
 - 💡 **Human-in-the-loop:** build on Phase 17B durable pending work when ambiguity, dependency failure,
   partial success, or explicit user control requires clarification/approval.
-- 💡 **Pending-reference relinking:** when canonical identity evidence later changes, inspect compatible
-  open pending references and replace a plain mention only when exactly one canonical identity is safely
-  resolved; leave zero or multiple candidates open for future HITL. See [Future pending-reference
-  relinking](future-extension-points.md#future-pending-reference-relinking).
+- 💡 **Pending-reference relinking and recurrence:** preserve two separate signals: repeated occurrences
+  of the same unresolved entity may justify proposing that entity, while many distinct unresolved
+  entities sharing one normalized semantic type hint may justify proposing a new type/capability. Future
+  relinking should address the exact source note + atomic fact + reference occurrence and re-render it
+  deterministically; do not ask an LLM to search/replace arbitrary Markdown. Exact canonical name/alias
+  evidence may authorize a relink; zero/multiple candidates remain pending/HITL. See
+  [Future pending-reference evolution](future-pending-reference-evolution.md).
 - 💡 **Mention-to-alias promotion:** keep current reference binding deterministic; add semantic alias
   promotion only under a separate evidenced contract.
 - 💡 **Derived identity/link graph index:** extend the rebuildable index with aliases and
