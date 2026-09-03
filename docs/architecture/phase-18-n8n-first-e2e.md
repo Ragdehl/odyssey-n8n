@@ -1,6 +1,6 @@
 # Phase 18 — n8n integration and first real Odyssey E2E
 
-Status: **current phase contract; Phase 18.2 write proof complete; Phase 18.3 pending**
+Status: **current phase contract; Phase 18.3 READ proof complete; Phase 18.4 pending**
 
 ## Objective
 
@@ -178,8 +178,8 @@ part of the 18.2 deployment/E2E step.
 Phase 18.1 does not activate Combined retrieval, Top-500 retrieval, Luna retrieval reduction,
 query decomposition, Luna-first planning, MCP, authentication, or any new Docker service.
 Installation and lifecycle supervision of the host process are deployment work for the real E2E,
-not hidden side effects of Core. Phase 18.1 is complete; the Phase 18.2 write checkpoint remains
-incomplete until provider access is restored.
+not hidden side effects of Core. Phase 18.1 and Phase 18.2 are complete under the approved
+partial-success contract.
 
 ## Index freshness
 
@@ -284,6 +284,37 @@ evidence. The later Git commit is `d56d9acbe05b4003985e1be0a758e691b0d0453e` and
 and contain the new Marta note. The real vault was not touched. Provider token usage and cost were
 not available from the runtime/n8n evidence.
 
+## Phase 18.3 READ evidence
+
+Phase 18.3 reused the exact successful Phase 18.2 workspace discovered by its required identity
+evidence:
+
+```text
+/data/odyssey/e2e/phase18/20260903T090000Z-phase18-write-correction/
+```
+
+The pre-READ vault contained only Marta (`3adee083-84ed-4bc3-8f6b-cd0fd72c7d8c`), with both durable
+facts, and remained at Odyssey commit `d56d9acbe05b4003985e1be0a758e691b0d0453e` after the READ. The
+open pending record remained present and both derived indexes contained Marta.
+
+Exactly one READ request was sent through the existing n8n development workflow and host runtime:
+
+```text
+¿Dónde trabaja Marta?
+```
+
+n8n execution `107` returned request ID `45b199fe-26be-4dd7-a506-51d8cab3d2bd` and
+`ApplicationStatus=completed`. Sol/low produced a validated retrieval action with query
+`Dónde trabaja Marta` and Marta as the sensible entity selection. The returned whole-note
+`ContextPackage` contained Marta's stable ID and path, type `person`, and content including
+`Marta trabaja en Thales.` and `Marta vive en Lyon.`; the reported similarity was `0.5068015225335478`.
+
+The READ was non-mutating: `affected_stable_note_ids` was empty, pending work was not required,
+Git history returned `NO_CHANGES`, the Markdown and pending JSON remained unchanged, and no new
+canonical notes or revision/Git mutation appeared. Luna was not called; the only production model
+boundary used was `gpt-5.6-sol` with reasoning `low`. Provider usage and cost were unavailable.
+No answer-generation model was invoked; Phase 18.4 remains pending.
+
 ## Acceptance criteria
 
 Phase 18 is complete when observable evidence proves all of the following:
@@ -329,7 +360,7 @@ No retrieval-strategy decision is open in Phase 18: current whole-note retrieval
 18.0  contract + architecture challenge                         ✅ documented here
 18.1  runtime dependency assembly + thin local adapter          ✅
 18.2  n8n -> Core real WRITE E2E                               ✅ retry passed; partial unresolved work is durable
-18.3  post-write index freshness + n8n -> Core READ E2E         ⬜
+18.3  post-write index freshness + n8n -> Core READ E2E         ✅ execution 107 recovered Marta
 18.4  grounded user-facing answer surface, if kept in Phase 18  ⬜
 18.5  final evidence / deterministic verification / PR review   ⬜
 ```
