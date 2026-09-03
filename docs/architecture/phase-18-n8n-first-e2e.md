@@ -1,6 +1,6 @@
 # Phase 18 — n8n integration and first real Odyssey E2E
 
-Status: **current phase contract; Phase 18.4 grounded consumer contract complete; Phase 18.5 pending**
+Status: **complete and merged; Phase 18.4 grounded consumer contract settled and Phase 18.5 final verification complete**
 
 ## Objective
 
@@ -102,12 +102,13 @@ Example request:
 
 The request must pass through the same n8n/runtime/Core boundary and the **current production retrieval path** must recover the newly written note after index refresh.
 
-The first read proof exposes the grounded `ContextPackage` directly. For the current ChatGPT-based
-workflow, ChatGPT remains responsible for conversational wording; Odyssey does not add an answer model
-or a second provider call.
+The first read proof exposes the grounded `ContextPackage` directly. Conversational wording remains the
+responsibility of an external consumer; Odyssey does not add an answer model or a second provider call in
+this phase.
 
 This keeps conversational formulation outside the current Odyssey runtime while making the grounded
-evidence sufficient for a consumer to answer safely.
+evidence sufficient for a consumer to answer safely. Phase 20 later owns the first standalone Odyssey
+answerer/frontend.
 
 ### Phase 18.4 — grounded consumer response contract
 
@@ -118,13 +119,13 @@ represented by a completed retrieval action with `items: []`. The consumer does 
 filesystem, Git, pending-work parsing, prompts, provider payloads, secrets, or hidden reasoning.
 
 ```text
-ChatGPT -> Odyssey request -> Sol/low plan + whole-note retrieval
-                                  |
-                                  v
-                 bounded grounded identity/content/provenance
-                                  |
-                                  v
-                         ChatGPT formulates answer
+consumer -> Odyssey request -> Sol/low plan + whole-note retrieval
+                                 |
+                                 v
+                bounded grounded identity/content/provenance
+                                 |
+                                 v
+                      consumer formulates answer
 ```
 
 The returned content is retrieved evidence, not an Odyssey-generated summary. Writes remain explicit
@@ -339,7 +340,8 @@ The READ was non-mutating: `affected_stable_note_ids` was empty, pending work wa
 Git history returned `NO_CHANGES`, the Markdown and pending JSON remained unchanged, and no new
 canonical notes or revision/Git mutation appeared. Luna was not called; the only production model
 boundary used was `gpt-5.6-sol` with reasoning `low`. Provider usage and cost were unavailable.
-No answer-generation model was invoked; Phase 18.4 remains pending.
+No answer-generation model was invoked; Phase 18.4 subsequently defined the external grounded-consumer
+contract without adding an internal answer model.
 
 ## Acceptance criteria
 
@@ -357,7 +359,8 @@ Phase 18 is complete when observable evidence proves all of the following:
 10. one bounded real E2E run on the Raspberry records enough evidence to inspect request, plan/result, Markdown, index state, and Git result without exposing secrets or hidden model reasoning;
 11. the full repository verification and server-side CI remain green.
 
-If a user-facing Sol answer boundary is added before Phase 18 closes, it must be grounded only in supplied retrieval evidence, fail safely on insufficient evidence, and have the focused live evidence required by `AGENTS.md`.
+No user-facing answer-generation boundary was added inside Odyssey during Phase 18. The standalone
+answer-generation benchmark and product surface are owned by the planned Phase 20 contract.
 
 ## Out of scope
 
@@ -375,8 +378,8 @@ If a user-facing Sol answer boundary is added before Phase 18 closes, it must be
 ## Open decisions
 
 1. **Local transport:** **resolved in Phase 18.1** as the persistent host HTTP adapter; do not reopen this decision.
-2. **Read response surface:** **resolved in Phase 18.4** as a bounded grounded evidence response for
-   the current ChatGPT consumer; Odyssey does not generate the conversational answer internally.
+2. **Read response surface:** **resolved in Phase 18.4** as a bounded grounded evidence response for an
+   external consumer; Odyssey does not generate the conversational answer internally in this phase.
 3. **Index refresh granularity:** use the simplest safe existing rebuild first; optimize incrementally only if real measurements justify it.
 
 No retrieval-strategy decision is open in Phase 18: current whole-note retrieval remains authoritative for this phase.
@@ -388,8 +391,8 @@ No retrieval-strategy decision is open in Phase 18: current whole-note retrieval
 18.1  runtime dependency assembly + thin local adapter          ✅
 18.2  n8n -> Core real WRITE E2E                               ✅ retry passed; partial unresolved work is durable
 18.3  post-write index freshness + n8n -> Core READ E2E         ✅ execution 107 recovered Marta
-18.4  grounded consumer response contract                         ✅ ChatGPT formulates the answer
-18.5  final evidence / deterministic verification / PR review   ⬜
+18.4  grounded consumer response contract                       ✅ external consumer contract settled
+18.5  final evidence / deterministic verification / PR review   ✅ merged
 ```
 
 ## Architecture challenge
