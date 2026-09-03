@@ -129,54 +129,49 @@ Detailed Phase 17E evidence and decisions remain in:
   the corrected identity-aware evidence invalidates its Top-500 recall premise
 - [Retrieval reduction and answer-path evidence](phase-17e-retrieval-reduction-evidence.md)
 
+## Completed E2E phase
+
+✅ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
+
+Phase 18 is merged. The production path was connected through n8n and the thin persistent runtime to
+`odyssey_core.execute_request()`. A real disposable WRITE created Marta, preserved unresolved Thales/Lyon
+references as durable pending work, committed request-correlated Git history, and refreshed derived
+indexes. A later independent READ through the same boundary recovered `Marta trabaja en Thales.` without
+mutating canonical knowledge.
+
+The grounded consumer contract is also settled for the current product shape: Odyssey returns stable
+identity/type/provenance plus full retrieved content, and ChatGPT formulates the conversational answer.
+Odyssey does not add a redundant answer-generation model call. See the canonical
+[Phase 18 contract](phase-18-n8n-first-e2e.md).
+
 ## Current phase
 
-➡️ **Phase 18 — n8n integration and first real end-to-end Odyssey use case**
+➡️ **Phase 19 — end-to-end hardening and evidence-driven refinement**
 
-Expose the stable application boundary through n8n and prove one real bounded write-then-read E2E now
-that the 17D knowledge representation and 17E schema/retrieval checkpoint are settled. n8n remains
-responsible for external triggers/integrations while domain behavior stays in `odyssey_core`.
+The canonical [Phase 19 contract](phase-19-e2e-hardening.md) deliberately hardens the proven Phase 18
+path before adding new product surfaces or retrieval architecture.
 
-The canonical [Phase 18 contract](phase-18-n8n-first-e2e.md) explicitly means **connect the already
-adopted production path**, not promote every successful benchmark arm. Sol/low planning, current
-whole-note MiniLM/context retrieval, existing bounded Luna write/fact-selection boundaries when their
-approved contracts require them, Markdown persistence, pending work, and Git history are wired through
-the real flow. Combined retrieval, a fixed Top-500 fact contract, the Luna retrieval reducer, query
-decomposition, and Luna-first planner routing remain deferred.
+```text
+19.0  contract + hardening matrix                         ➡️ current
+19.1  retry / duplicate / failure-path safety             ⬜
+19.2  bounded tracing + timing + usage/cost                ⬜
+19.3  direct Markdown / Obsidian edit ingestion            ⬜
+19.4  retrieval refinement from realistic E2E misses       ⬜
+```
 
-The first E2E must also make derived-index freshness explicit: after a successful authoritative Markdown
-mutation, refresh/rebuild the required local indexes so a second request through the same n8n boundary
-can retrieve the newly written knowledge.
+The immediate reliability question is narrower than semantic duplicate suppression: one logical
+delivery must not accidentally become two mutations merely because infrastructure retried it, while a
+genuine second user request must remain meaningful. Phase 19.1 will inspect actual n8n/runtime retry
+behavior before choosing an idempotency mechanism or changing `request_id` ownership.
 
-Phase 18.4 is the grounded consumer response contract: the runtime exposes bounded retrieval evidence
-(stable identity, canonical type, provenance, and full human-readable content) for ChatGPT to formulate
-the conversational response. Odyssey does not add a second answer-model call; standalone answer
-generation remains future work in [Future extension points](future-extension-points.md).
+Operational tracing stays low-invasive and `request_id` remains the default correlation key. Add a
+separate `trace_id` only if real retries/subtraces prove it necessary. Manual filesystem/Obsidian edits
+remain a later ingestion boundary, and query-decomposed multi-fact retrieval remains an experiment that
+must beat the current whole-note baseline on realistic misses before adoption.
 
-⬜ **Phase 19 — end-to-end hardening, tracing, manual-edit ingestion, and evidence-driven refinements**
-
-Harden the proven flow with repeatable integration/failure-path evidence, idempotency, operational
-behavior, and measured performance. Add low-invasive operational tracing around real LLM,
-persistence, and external boundaries rather than manual logging in every domain function.
-
-Phase 17A already propagates `request_id`. Introduce a separate `trace_id` only if real retries or
-subtraces prove that one logical request needs multiple operational traces.
-
-Define direct user/Obsidian filesystem edits as a later ingestion boundary: detect external changes
-without self-trigger loops, inspect/ingest the diff, preserve user wording where possible, normalize only
-what is required, rebuild derived state, and audit through the normal request/Git boundary. Git remains
-history/diff infrastructure rather than the always-on filesystem trigger.
-
-Reassess semantic request history after the first real E2E. The product goal remains to answer questions
-such as “what did I ask yesterday?” and “what changed when I told you Marta moved?”, but the earlier
-proposal to add canonical `type=user_request` is deferred. Do not add that type or contaminate ordinary
-knowledge resolution/retrieval before E2E evidence justifies the representation. Any future history
-representation reuses `request_id` and never stores hidden model reasoning. See
-[Future semantic request history](phase-17-request-records.md).
-
-As an **early evidence-driven Phase 19 refinement**, revisit the query-decomposed multi-fact retrieval
-hypothesis once the first real E2E supplies realistic retrieval cases. Test the smallest distinct-element
-coverage rule before broader retrieval optimization or new infrastructure.
+Reassess semantic request history during Phase 19 rather than automatically creating a canonical
+`type=user_request`. Any future representation reuses `request_id` and never stores hidden model
+reasoning. See [Future semantic request history](phase-17-request-records.md).
 
 ## Committed post-E2E product work
 
