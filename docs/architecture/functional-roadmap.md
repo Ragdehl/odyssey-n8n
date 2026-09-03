@@ -215,6 +215,10 @@ The detailed cross-phase direction is centralized in
   safe backfill/relinking rather than silent ontology growth.
 - 💡 **Human-in-the-loop:** build on Phase 17B durable pending work when ambiguity, dependency failure,
   partial success, or explicit user control requires clarification/approval.
+- 💡 **Pending-reference relinking:** when canonical identity evidence later changes, inspect compatible
+  open pending references and replace a plain mention only when exactly one canonical identity is safely
+  resolved; leave zero or multiple candidates open for future HITL. See [Future pending-reference
+  relinking](future-extension-points.md#future-pending-reference-relinking).
 - 💡 **Mention-to-alias promotion:** keep current reference binding deterministic; add semantic alias
   promotion only under a separate evidenced contract.
 - 💡 **Derived identity/link graph index:** extend the rebuildable index with aliases and

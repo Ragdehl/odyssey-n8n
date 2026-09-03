@@ -1,6 +1,6 @@
 # Phase 18 — n8n integration and first real Odyssey E2E
 
-Status: **current phase contract; Phase 18.2 checkpoint blocked by provider quota**
+Status: **current phase contract; Phase 18.2 write proof in progress**
 
 ## Objective
 
@@ -208,7 +208,7 @@ The first real WRITE attempt was run on 2026-09-02 against a disposable workspac
 
 ```text
 /data/odyssey/e2e/phase18/20260902T211826Z-phase18-write/
-    vault/      local Git repository, initially empty
+    vault/      local Git repository with a clean baseline commit before the request
     runtime/    derived context.sqlite3 and semantic.sqlite3
     pending/    durable pending-work root
 ```
@@ -233,6 +233,56 @@ and token usage are unavailable for this failed/quota-rejected request.
 This is an environment/provider-quota failure at the planner boundary, not evidence of semantic
 write correctness. The run stopped before Phase 18.3, and no request was sent to the real personal
 vault at `/data/odyssey/vault`.
+
+### Execution 105 integration finding and approved correction
+
+The next real n8n execution (`105`) reached the production Sol/low planner and produced a validated
+plan for the same request. Marta was safely typed as `person`, while Thales and Lyon were reference
+target units without canonical types. Core correctly refused to create those untyped targets, but the
+application then also deferred Marta because the rendered unresolved references were treated as source
+dependencies. This contradicted the Phase 16 reference-binding contract: safe knowledge may retain an
+unresolved mention as plain text plus explicit pending evidence.
+
+Phase 18.2 applies the smallest deterministic correction:
+
+```text
+unresolved/ambiguous target
+  -> no target note, invented type, or fake wikilink
+  -> original mention remains plain text
+  -> pending evidence is durable
+  -> independently safe source mutation proceeds
+
+authorized same-request CREATE target
+  -> source still waits for successful target materialization
+```
+
+The correction does not modify the Sol planner prompt, schema, or model configuration, and does not
+weaken CREATE dependency protection.
+
+### Successful retry
+
+Before the retry, a new disposable workspace was created at:
+
+```text
+/data/odyssey/e2e/phase18/20260903T090000Z-phase18-write-correction/
+    vault/      Git repository with clean baseline 8de0d5e
+    runtime/    derived context.sqlite3 and semantic.sqlite3
+    pending/    one durable pending-work record
+```
+
+The sequence was `git init`, empty baseline commit, one Odyssey request, then the request-correlated
+Odyssey commit. The existing development workflow `Odyssey — runtime bridge (Phase 18 E2E)` entered
+the request through n8n execution `106`. The request ID was
+`69f822da-1682-4342-8b69-8c488689cca5`; ApplicationStatus was `partial`.
+
+The only canonical note written was Marta, type `person`, with both facts retained as plain mentions:
+`Marta trabaja en Thales.` and `Marta vive en Lyon.`. No Thales or Lyon note was created and no fake
+wikilink was emitted. One open pending record with the same request ID preserves the validated
+three-unit WriteAction, source stable ID, target units, mentions, roles, and unresolved target
+evidence. The later Git commit is `d56d9acbe05b4003985e1be0a758e691b0d0453e` and contains
+`Odyssey-Request: 69f822da-1682-4342-8b69-8c488689cca5`. Both derived SQLite indexes were rebuilt
+and contain the new Marta note. The real vault was not touched. Provider token usage and cost were
+not available from the runtime/n8n evidence.
 
 ## Acceptance criteria
 
@@ -278,7 +328,7 @@ No retrieval-strategy decision is open in Phase 18: current whole-note retrieval
 ```text
 18.0  contract + architecture challenge                         ✅ documented here
 18.1  runtime dependency assembly + thin local adapter          ✅
-18.2  n8n -> Core real WRITE E2E                               current / blocked by provider quota
+18.2  n8n -> Core real WRITE E2E                               ✅ retry passed; partial unresolved work is durable
 18.3  post-write index freshness + n8n -> Core READ E2E         ⬜
 18.4  grounded user-facing answer surface, if kept in Phase 18  ⬜
 18.5  final evidence / deterministic verification / PR review   ⬜

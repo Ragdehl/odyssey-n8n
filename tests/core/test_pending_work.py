@@ -125,6 +125,59 @@ def test_record_round_trip_preserves_whole_action_and_all_dependencies(tmp_path:
     ]
 
 
+def test_pending_record_keeps_successful_source_identity_and_unresolved_link_intent(
+    tmp_path: Path,
+) -> None:
+    """Keep source identity, target units, mentions, roles, and unresolved evidence together."""
+    action = write_action()
+    result = ApplicationResult(
+        "request-safe-source",
+        ApplicationStatus.PARTIAL,
+        (
+            ActionResult(
+                0,
+                action.kind,
+                ActionStatus.DEFERRED,
+                unit_results=(
+                    UnitResult(0, UnitStatus.SUCCEEDED, stable_note_id="laura-id"),
+                    UnitResult(
+                        1,
+                        UnitStatus.DEFERRED,
+                        reason="untyped target",
+                        candidates=(),
+                    ),
+                    UnitResult(
+                        2,
+                        UnitStatus.DEFERRED,
+                        reason="ambiguous target",
+                        candidates=("airbus-1", "airbus-2"),
+                    ),
+                ),
+            ),
+        ),
+        ("laura-id",),
+    )
+
+    PendingWorkRepository(tmp_path).record(
+        user_request="Laura knows Marta and works at Airbus.",
+        plan=RequestPlan((action,), ()),
+        result=result,
+        created_at="now",
+    )
+    saved = PendingWorkRepository(tmp_path).read("request-safe-source")["incomplete_actions"][0]
+    units = saved["planned_action"]["units"]
+    assert saved["execution_result"]["unit_results"][0]["stable_note_id"] == "laura-id"
+    assert units[0]["references"] == [
+        {"target_index": 1, "role": "friend", "mention": "Marta"},
+        {"target_index": 2, "role": "employer", "mention": "Airbus"},
+    ]
+    assert saved["execution_result"]["unit_results"][1]["reason"] == "untyped target"
+    assert saved["execution_result"]["unit_results"][2]["candidates"] == [
+        "airbus-1",
+        "airbus-2",
+    ]
+
+
 def test_bulk_evidence_and_delegate_are_projected_without_execution(tmp_path: Path) -> None:
     """Keep frozen bulk outcomes and delegated intent as open pending evidence."""
     bulk = ActionResult(

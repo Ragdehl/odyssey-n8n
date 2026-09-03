@@ -304,9 +304,11 @@ Resolution, dismissal, reopening, replacement of temporary source links, interac
 retry execution belong to a later HITL contract. Do not invent those workflows merely because the file
 format could support them.
 
-In particular, Phase 17B does **not** modify a source note to point at a pending artifact. Phase 17A now
-withholds unsafe dependent mutations entirely, so introducing temporary graph proxies would add a second
-behavior without a demonstrated need.
+In particular, Phase 17B does **not** modify a source note to point at a pending artifact. Phase 17A
+renders unresolved or ambiguous references as plain mentions, so independently safe source mutations
+may proceed while the original reference intent remains in this record. Authorized same-request CREATE
+dependencies remain true prerequisites: a failed target still withholds its dependent source mutation.
+Introducing temporary graph proxies would add a second behavior without a demonstrated need.
 
 ## Failure and crash semantics
 

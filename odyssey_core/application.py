@@ -512,9 +512,6 @@ def _execute_single_units(
     fact_selector: AtomicFactSelector | None,
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
-    pending_by_source: dict[int, list[PendingReference]] = {}
-    for item in pending:
-        pending_by_source.setdefault(item.source_unit_index, []).append(item)
     dependencies = _create_dependencies(action, preflight)
     results: dict[int, UnitResult] = {}
     for index, target in enumerate(preflight):
@@ -524,25 +521,6 @@ def _execute_single_units(
                 UnitStatus.DEFERRED,
                 reason=target.reason,
                 candidates=target.candidate_note_ids,
-            )
-        elif index in pending_by_source:
-            items = pending_by_source[index]
-            results[index] = UnitResult(
-                index,
-                UnitStatus.DEFERRED,
-                reason="REFERENCE_DEPENDENCY_UNRESOLVED",
-                candidates=tuple(
-                    candidate for item in items for candidate in item.candidate_stable_ids
-                ),
-                dependencies=tuple(
-                    DependencyEvidence(
-                        index,
-                        item.target_unit_index,
-                        item.reason,
-                        item.candidate_stable_ids,
-                    )
-                    for item in items
-                ),
             )
     for cycle_index in _cyclic_nodes(dependencies):
         if cycle_index not in results:
