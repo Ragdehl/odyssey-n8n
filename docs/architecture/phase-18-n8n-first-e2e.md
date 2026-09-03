@@ -1,6 +1,6 @@
 # Phase 18 — n8n integration and first real Odyssey E2E
 
-Status: **current phase contract; Phase 18.2 write proof in progress**
+Status: **current phase contract; Phase 18.2 write proof complete; Phase 18.3 pending**
 
 ## Objective
 
