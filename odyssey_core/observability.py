@@ -19,6 +19,19 @@ class OperationalOutcome(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderCallEvidence:
+    """Expose safe metadata for one provider call within an operational stage."""
+
+    name: str
+    outcome: OperationalOutcome
+    duration_ms: float | None = None
+    model: str | None = None
+    reasoning_effort: str | None = None
+    usage: dict[str, int] | None = None
+    error_category: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class OperationalStage:
     """Expose safe metadata for one meaningful request boundary."""
 
@@ -30,6 +43,7 @@ class OperationalStage:
     usage: dict[str, int] | None = None
     estimated_cost_usd: float | None = None
     error_category: str | None = None
+    provider_calls: tuple[ProviderCallEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

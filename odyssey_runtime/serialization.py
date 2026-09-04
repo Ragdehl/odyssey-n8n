@@ -52,6 +52,18 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
                     "usage": stage.usage,
                     "estimated_cost_usd": stage.estimated_cost_usd,
                     "error_category": stage.error_category,
+                    "provider_calls": [
+                        {
+                            "name": call.name,
+                            "outcome": call.outcome.value,
+                            "duration_ms": call.duration_ms,
+                            "model": call.model,
+                            "reasoning_effort": call.reasoning_effort,
+                            "usage": call.usage,
+                            "error_category": call.error_category,
+                        }
+                        for call in stage.provider_calls
+                    ],
                 }
                 for stage in result.operational.stages
             ],

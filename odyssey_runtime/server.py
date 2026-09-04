@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from http import HTTPStatus
@@ -85,7 +86,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
             except Exception:
                 payload: dict[str, Any] = {"error": "runtime failure"}
                 if request_id is not None:
-                    payload["request_id"] = request_id
+                    payload["request_id"] = html.escape(request_id, quote=True)
                     payload["stage"] = "runtime"
                 self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
 

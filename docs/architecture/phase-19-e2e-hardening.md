@@ -157,8 +157,11 @@ planner, ordered semantic actions, Git, pending work, and (at the runtime bounda
 Each stage exposes only a stable name, outcome (`completed`, `failed`, `skipped`, `not_called`, or
 `unavailable`), duration in milliseconds when measured, safe model/reasoning configuration when the
 boundary exposes it, normalized token counters when the Responses API supplies them, and a safe error
-category. Estimated cost is explicitly unavailable because production has no verified versioned pricing
-snapshot; no price is inferred from benchmark files.
+category. Provider-bearing stages additionally contain one bounded record per provider call, retaining
+the call boundary, safe model configuration, duration, and supplied counters. This preserves both
+multiple calls to one provider and calls across providers without pretending absent usage is zero.
+Estimated cost is explicitly unavailable because production has no verified versioned pricing snapshot;
+no price is inferred from benchmark files.
 
 ```text
 ApplicationResult
@@ -166,7 +169,7 @@ ApplicationResult
     `--> operational { total_duration_ms, stages[] }
           |
           +--> planner (Sol/low + usage when supplied)
-          +--> action.* (retrieval/write/delegate, plus provider metadata when supplied)
+          +--> action.* (retrieval/write/delegate, plus provider_calls[] when supplied)
           +--> git / pending
           `--> index_refresh (runtime)
 ```
@@ -182,9 +185,10 @@ responses, credentials, unrestricted exception text, and a separate `trace_id` a
 If Core fails before it can return an `ApplicationResult`, the HTTP adapter retains only a caller-supplied
 safe `request_id` and the bounded `runtime` failure stage in its generic error response.
 
-Phase 19.2 deterministic acceptance evidence: the complete local suite passes with `536 passed, 79
-skipped, 52 subtests`; focused operational/runtime coverage passes with `72 passed, 1 skipped`. No
-provider call was needed because no prompt or model-facing behavior changed.
+Phase 19.2 deterministic acceptance evidence after the review correction is `539 passed, 79 skipped,
+52 subtests` for the complete suite and `37 passed` for the focused operational/provider/runtime
+coverage. No live provider call is required for this observability-only correction because no prompt
+or model-facing behavior changed.
 
 Preferred trace shape:
 

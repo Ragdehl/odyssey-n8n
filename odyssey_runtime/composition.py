@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
@@ -58,12 +59,15 @@ class RuntimeComposition:
                         error_category=type(error).__name__,
                     )
                 )
-                return replace(
-                    result,
-                    operational=replace(
-                        result.operational,
-                        total_duration_ms=max(0.0, (self.monotonic() - started) * 1000),
-                        stages=tuple(stages),
+                return cast(
+                    ApplicationResult,
+                    replace(
+                        result,
+                        operational=replace(
+                            result.operational,
+                            total_duration_ms=max(0.0, (self.monotonic() - started) * 1000),
+                            stages=tuple(stages),
+                        ),
                     ),
                 )
             stages.append(
@@ -73,12 +77,15 @@ class RuntimeComposition:
                     max(0.0, (self.monotonic() - refresh_started) * 1000),
                 )
             )
-        return replace(
-            result,
-            operational=replace(
-                result.operational,
-                total_duration_ms=max(0.0, (self.monotonic() - started) * 1000),
-                stages=tuple(stages),
+        return cast(
+            ApplicationResult,
+            replace(
+                result,
+                operational=replace(
+                    result.operational,
+                    total_duration_ms=max(0.0, (self.monotonic() - started) * 1000),
+                    stages=tuple(stages),
+                ),
             ),
         )
 

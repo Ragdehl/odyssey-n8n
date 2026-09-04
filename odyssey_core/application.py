@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
@@ -28,6 +28,7 @@ from .observability import (
     OperationalEvidence,
     OperationalOutcome,
     OperationalStage,
+    ProviderCallEvidence,
     normalize_provider_usage,
 )
 from .reference_binding import PendingReference, render_reference_facts
@@ -220,8 +221,9 @@ def execute_request(
     if not isinstance(request_id, str) or not request_id.strip():
         raise ValueError("request_id_factory must return a non-empty string")
     planner_started = monotonic()
+    provider_recorder = _ProviderCallRecorder(monotonic)
     try:
-        plan = planner.plan(user_request)
+        plan = provider_recorder.invoke("planner", planner, planner.plan, user_request)
     except Exception as error:
         stages.append(
             OperationalStage(
@@ -232,6 +234,7 @@ def execute_request(
                 reasoning_effort=getattr(planner, "reasoning_effort", None),
                 usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
                 error_category=type(error).__name__,
+                provider_calls=provider_recorder.calls,
             )
         )
         return _with_operational(
@@ -266,21 +269,28 @@ def execute_request(
             stages.append(
                 _stage("git", OperationalOutcome.FAILED, history_started, monotonic, error)
             )
-        else:
-            stages.append(
-                OperationalStage(
-                    "git.prepare",
-                    OperationalOutcome.NOT_CALLED,
-                    _elapsed_ms(history_started, monotonic()),
-                )
-            )
 
     actions: list[ActionResult] = []
     affected: list[str] = []
     next_fact_ordinal = 0
     for action_index, action in enumerate(plan.actions):
-        _reset_provider_calls(contextual_reasoner, writer, fact_selector)
+        provider_start = len(provider_recorder.calls)
         action_started = monotonic()
+        measured_contextual_reasoner = (
+            _MeasuredContextualReasoner(contextual_reasoner, provider_recorder)
+            if callable(getattr(contextual_reasoner, "resolve", None))
+            else contextual_reasoner
+        )
+        measured_writer = (
+            _MeasuredWriter(writer, provider_recorder)
+            if callable(getattr(writer, "write", None))
+            else writer
+        )
+        measured_fact_selector = (
+            _MeasuredFactSelector(fact_selector, provider_recorder)
+            if callable(getattr(fact_selector, "select", None))
+            else fact_selector
+        )
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
                 action_index, action, repository, schema, context_index, embedder, context_limit
@@ -298,15 +308,15 @@ def execute_request(
                 schema,
                 semantic_index,
                 embedder,
-                contextual_reasoner,
+                measured_contextual_reasoner,
                 actor,
                 now,
-                writer,
+                measured_writer,
                 semantic_limit,
                 preflight_id_allocator,
                 request_id,
                 unit_ordinals,
-                fact_selector,
+                measured_fact_selector,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -326,9 +336,7 @@ def execute_request(
                 f"action.{action.kind}",
                 _action_operational_outcome(result.status),
                 _elapsed_ms(action_started, monotonic()),
-                model=_provider_details(contextual_reasoner, writer, fact_selector)[0],
-                reasoning_effort=_provider_details(contextual_reasoner, writer, fact_selector)[1],
-                usage=_provider_details(contextual_reasoner, writer, fact_selector)[2],
+                provider_calls=tuple(provider_recorder.calls[provider_start:]),
             )
         )
     planner_stage = OperationalStage(
@@ -338,6 +346,7 @@ def execute_request(
         model=getattr(planner, "model", None),
         reasoning_effort=getattr(planner, "reasoning_effort", None),
         usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+        provider_calls=provider_recorder.calls[:1],
     )
     stages.insert(0, planner_stage)
     result = ApplicationResult(
@@ -855,30 +864,92 @@ def _with_operational(
     monotonic: Callable[[], float],
 ) -> ApplicationResult:
     """Attach bounded stage and total timing evidence without changing request semantics."""
-    return replace(
-        result,
-        operational=OperationalEvidence(
-            total_duration_ms=_elapsed_ms(started, monotonic()), stages=tuple(stages)
+    return cast(
+        ApplicationResult,
+        replace(
+            result,
+            operational=OperationalEvidence(
+                total_duration_ms=_elapsed_ms(started, monotonic()), stages=tuple(stages)
+            ),
         ),
     )
 
 
-def _reset_provider_calls(*providers: Any) -> None:
-    """Reset per-action provider call markers before measuring the next semantic action."""
-    for provider in providers:
-        if hasattr(provider, "last_call"):
-            provider.last_call = False
+@dataclass
+class _ProviderCallRecorder:
+    """Collect bounded evidence for provider calls made during one Core request."""
 
+    monotonic: Callable[[], float]
+    calls: tuple[ProviderCallEvidence, ...] = ()
 
-def _provider_details(
-    *providers: Any,
-) -> tuple[str | None, str | None, dict[str, int] | None]:
-    """Return safe model, effort, and usage metadata only for a provider called this action."""
-    for provider in providers:
-        if getattr(provider, "last_call", False):
-            return (
-                getattr(provider, "model", None),
-                getattr(provider, "reasoning_effort", None),
-                normalize_provider_usage(getattr(provider, "last_usage", None)),
+    def invoke(self, name: str, provider: Any, operation: Callable[..., Any], *args: Any) -> Any:
+        """Invoke one provider operation and retain only safe boundary metadata."""
+        started = self.monotonic()
+        try:
+            result = operation(*args)
+        except Exception as error:
+            self.calls += (
+                self._evidence(provider, name, OperationalOutcome.FAILED, started, error),
             )
-    return None, None, None
+            raise
+        self.calls += (self._evidence(provider, name, OperationalOutcome.COMPLETED, started),)
+        return result
+
+    def _evidence(
+        self,
+        provider: Any,
+        name: str,
+        outcome: OperationalOutcome,
+        started: float,
+        error: Exception | None = None,
+    ) -> ProviderCallEvidence:
+        """Build one provider record without retaining request, prompt, or response data."""
+        return ProviderCallEvidence(
+            name=name,
+            outcome=outcome,
+            duration_ms=_elapsed_ms(started, self.monotonic()),
+            model=getattr(provider, "model", None),
+            reasoning_effort=getattr(provider, "reasoning_effort", None),
+            usage=normalize_provider_usage(getattr(provider, "last_usage", None)),
+            error_category=type(error).__name__ if error is not None else None,
+        )
+
+
+class _MeasuredContextualReasoner:
+    """Measure calls through an injected contextual-resolution provider."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def resolve(self, request: Any) -> Any:
+        """Resolve one target through the provider and record its bounded evidence."""
+        return self._recorder.invoke(
+            "contextual_resolution", self._provider, self._provider.resolve, request
+        )
+
+
+class _MeasuredWriter:
+    """Measure calls through an injected bounded note writer."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def write(self, request: Any) -> Any:
+        """Write one bounded note operation and record its provider evidence."""
+        return self._recorder.invoke("writer", self._provider, self._provider.write, request)
+
+
+class _MeasuredFactSelector:
+    """Measure calls through an injected atomic-fact selector."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def select(self, *args: Any, **kwargs: Any) -> Any:
+        """Select one bounded fact locator and record its provider evidence."""
+        return self._recorder.invoke(
+            "fact_selector", self._provider, self._provider.select, *args, **kwargs
+        )

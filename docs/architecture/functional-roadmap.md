@@ -168,8 +168,8 @@ Operational tracing stays low-invasive and `request_id` remains the default corr
 separate `trace_id` only if real retries/subtraces prove it necessary.
 
 Phase 19.2 is complete. It keeps bounded operational evidence in the existing typed application/runtime result retained
-by n8n: ordered safe stage outcomes, monotonic durations, public model configuration, and provider token
-counters when supplied. Production estimated cost remains unavailable without a verified pricing
+by n8n: ordered safe stage outcomes, monotonic durations, public model configuration, and one bounded
+record per provider call when supplied. Production estimated cost remains unavailable without a verified pricing
 snapshot; prompts, hidden reasoning, credentials, raw provider responses, and a separate trace store are
 not collected. See the detailed [Phase 19 contract](phase-19-e2e-hardening.md).
 

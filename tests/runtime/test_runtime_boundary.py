@@ -96,6 +96,7 @@ def test_application_result_serialization_exposes_bounded_operational_evidence()
                 "usage": {"input_tokens": 10, "output_tokens": 2},
                 "estimated_cost_usd": None,
                 "error_category": None,
+                "provider_calls": [],
             }
         ],
     }
