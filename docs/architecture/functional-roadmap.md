@@ -165,6 +165,10 @@ per provider call when supplied. Production estimated cost remains unavailable w
 snapshot. No idempotency database, tracing service, separate `trace_id`, queue, or new authority was
 introduced.
 
+Semantic request history remains deferred rather than becoming a canonical `type=user_request` by default.
+Any future representation should reuse `request_id` and must never store hidden model reasoning. See
+[Future semantic request history](phase-17-request-records.md).
+
 ## Current phase
 
 ➡️ **Phase 20 — Odyssey Online MVP: standalone answerer + mobile web**
