@@ -120,7 +120,7 @@ The replay probes then established the following bounded result:
 | --- | --- |
 | Completed WRITE, same plan and ID | Second unit is `NO_CHANGE`; Markdown and revision remain unchanged; Git is `NO_CHANGES`; no pending record is required. The runtime may still perform the ordinary affected-ID index refresh. |
 | Completed WRITE, planner wording variation and same ID | The durable request/ordinal guard returns `NO_CHANGE`; no second fact or Git commit is created. The first canonical wording remains authoritative. |
-| PARTIAL request with same pending ID and identical plan | The existing pending projection is recognized as the same payload and reports `persisted=true`; a conflicting payload under that ID still fails closed. |
+| PARTIAL request with same pending ID and identical plan | The existing pending projection is recognized as the same durable work while ignoring only the replay attempt's `created_at`; it reports `persisted=true` and keeps the original timestamp. A conflicting request, plan, or execution projection under that ID still fails closed. |
 | Retry after index-refresh failure | Markdown remains intact; the retry is `NO_CHANGE`; a successful second refresh rebuilds derived state. |
 | Retry after Git-history failure | Markdown remains intact; the retry is `NO_CHANGE`; the dirty affected path yields explicit `SKIPPED_UNSAFE` history evidence rather than a silent new commit. |
 

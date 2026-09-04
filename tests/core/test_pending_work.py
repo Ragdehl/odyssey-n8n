@@ -126,7 +126,7 @@ def test_record_round_trip_preserves_whole_action_and_all_dependencies(tmp_path:
 
 
 def test_same_pending_request_replay_is_an_idempotent_success(tmp_path: Path) -> None:
-    """Recognize an identical existing pending projection without reporting lost durability."""
+    """Recognize a replay with a new attempt time without rewriting the durable record."""
     action = write_action()
     repository = PendingWorkRepository(tmp_path)
     kwargs = {
@@ -137,8 +137,11 @@ def test_same_pending_request_replay_is_an_idempotent_success(tmp_path: Path) ->
     }
 
     assert repository.record(**kwargs) == "request-17b"
+    kwargs["created_at"] = "2026-08-28T12:01:00Z"
     assert repository.record(**kwargs) == "request-17b"
     assert repository.list_ids() == ("request-17b",)
+    saved = repository.read("request-17b")
+    assert saved["created_at"] == "2026-08-28T12:00:00Z"
 
 
 def test_pending_record_keeps_successful_source_identity_and_unresolved_link_intent(

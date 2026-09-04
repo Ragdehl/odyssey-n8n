@@ -87,7 +87,7 @@ class PendingWorkRepository:
                 existing = self.read(request_id)
             except PendingWorkError:
                 raise PendingWorkError("pending record already exists") from error
-            if existing != payload:
+            if not _same_pending_projection(existing, payload):
                 raise PendingWorkError(
                     "pending record already exists for different work"
                 ) from error
@@ -193,6 +193,22 @@ def project_pending_work(
         "planner_limitations": list(plan.limitations),
         "affected_stable_note_ids": list(result.affected_stable_note_ids),
         "incomplete_actions": incomplete,
+    }
+
+
+def _same_pending_projection(existing: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:
+    """Compare pending work while preserving the original creation timestamp.
+
+    Args:
+        existing: Durable pending projection already published for a request ID.
+        candidate: Newly projected pending evidence from a replay attempt.
+
+    Returns:
+        ``True`` when all durable request, plan, and execution evidence matches, ignoring only
+        ``created_at``, which is generated at the time each attempt is recorded.
+    """
+    return {key: value for key, value in existing.items() if key != "created_at"} == {
+        key: value for key, value in candidate.items() if key != "created_at"
     }
 
 
