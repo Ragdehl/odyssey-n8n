@@ -9,6 +9,8 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
+from .observability import normalize_provider_usage
+
 FACT_SELECTOR_MODEL = "gpt-5.6-luna"
 FACT_SELECTOR_REASONING_EFFORT = "medium"
 
@@ -45,6 +47,13 @@ class AtomicFactSelector(Protocol):
 class OpenAILunaFactSelector:
     """Call Luna only to choose one supplied atomic-fact locator."""
 
+    def __init__(self) -> None:
+        """Initialize bounded provider identity and empty request usage evidence."""
+        self.model = FACT_SELECTOR_MODEL
+        self.reasoning_effort = FACT_SELECTOR_REASONING_EFFORT
+        self.last_usage: dict[str, int] | None = None
+        self.last_call = False
+
     def select(
         self, note_id: str, description: str, candidates: tuple[FactCandidate, ...]
     ) -> object:
@@ -52,6 +61,8 @@ class OpenAILunaFactSelector:
         key = os.environ.get("OPENAI_API_KEY")
         if not key:
             raise FactSelectionError("OPENAI_API_KEY is required for fact selection")
+        self.last_call = True
+        self.last_usage = None
         payload = {
             "model": FACT_SELECTOR_MODEL,
             "store": False,
@@ -91,6 +102,7 @@ class OpenAILunaFactSelector:
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
                 body = json.loads(response.read().decode())
+            self.last_usage = normalize_provider_usage(body)
             text = next(
                 content["text"]
                 for item in body["output"]

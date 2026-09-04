@@ -20,6 +20,7 @@ from odyssey_core.atomic_facts import (
 )
 from odyssey_core.fact_selection import AtomicFactSelector, FactCandidate, validate_fact_selection
 from odyssey_core.notes import Note, parse_note, validate_note
+from odyssey_core.observability import normalize_provider_usage
 from odyssey_core.persistence import (
     EntityPersistenceResult,
     PersistenceOperation,
@@ -259,6 +260,10 @@ class OpenAILunaWriter:
             timeout_seconds: Maximum time to wait for one Responses API call.
         """
         self.timeout_seconds = timeout_seconds
+        self.model = WRITER_MODEL
+        self.reasoning_effort = WRITER_REASONING_EFFORT
+        self.last_usage: dict[str, int] | None = None
+        self.last_call = False
 
     def write(self, request: WriterRequest) -> object:
         """Call Luna with full authoritative context and return unvalidated JSON.
@@ -272,6 +277,8 @@ class OpenAILunaWriter:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise WriterProviderError("OPENAI_API_KEY is required for the bounded writer")
+        self.last_call = True
+        self.last_usage = None
         http_request = urllib.request.Request(
             "https://api.openai.com/v1/responses",
             data=json.dumps(build_openai_writer_payload(request), ensure_ascii=False).encode(
@@ -289,6 +296,7 @@ class OpenAILunaWriter:
             raise WriterProviderError("OpenAI bounded writer response was not an object")
         if response_body.get("status") != "completed":
             raise WriterProviderError("OpenAI bounded writer response did not complete")
+        self.last_usage = normalize_provider_usage(response_body)
         try:
             output = json.loads(_response_output_text(response_body))
         except (TypeError, json.JSONDecodeError) as error:

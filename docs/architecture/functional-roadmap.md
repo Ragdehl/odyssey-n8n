@@ -153,8 +153,8 @@ first standalone web product surface.
 
 ```text
 19.0  contract + hardening matrix                         ✅ complete on merge
-19.1  retry / duplicate / failure-path safety             ➡️ next
-19.2  bounded tracing + timing + usage/cost                ⬜
+19.1  retry / duplicate / failure-path safety             ✅ complete on merge
+19.2  bounded tracing + timing + usage/cost                ✅ complete
 ```
 
 The immediate reliability question is narrower than semantic duplicate suppression: one logical
@@ -166,6 +166,12 @@ add persistent idempotency infrastructure. See the [Phase 19 contract](phase-19-
 
 Operational tracing stays low-invasive and `request_id` remains the default correlation key. Add a
 separate `trace_id` only if real retries/subtraces prove it necessary.
+
+Phase 19.2 is complete. It keeps bounded operational evidence in the existing typed application/runtime result retained
+by n8n: ordered safe stage outcomes, monotonic durations, public model configuration, and provider token
+counters when supplied. Production estimated cost remains unavailable without a verified pricing
+snapshot; prompts, hidden reasoning, credentials, raw provider responses, and a separate trace store are
+not collected. See the detailed [Phase 19 contract](phase-19-e2e-hardening.md).
 
 Reassess semantic request history during Phase 19 rather than automatically creating a canonical
 `type=user_request`. Any future representation reuses `request_id` and never stores hidden model

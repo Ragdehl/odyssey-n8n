@@ -7,8 +7,9 @@ materialization, and bulk membership remain in their existing Phase 13--16 bound
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from time import perf_counter
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -22,6 +23,12 @@ from .materialization import (
     materialize_delete,
     materialize_type_migration,
     materialize_update,
+)
+from .observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    normalize_provider_usage,
 )
 from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import UnitTargetPreflight, preflight_write_action
@@ -147,6 +154,7 @@ class ApplicationResult:
     planning_error: str | None = None
     pending_work: PendingWorkStatus = PendingWorkStatus()
     history: GitHistoryResult = GitHistoryResult.disabled()
+    operational: OperationalEvidence = OperationalEvidence()
 
 
 def allocate_request_id() -> str:
@@ -174,6 +182,7 @@ def execute_request(
     semantic_limit: int = 10,
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
+    monotonic: Callable[[], float] = perf_counter,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -203,41 +212,75 @@ def execute_request(
         ValueError: If boundary inputs are structurally invalid.
         TypeError: If the planner returns a value other than RequestPlan.
     """
+    started = monotonic()
+    stages: list[OperationalStage] = []
     if not isinstance(user_request, str) or not user_request.strip():
         raise ValueError("user_request must be a non-empty string")
     request_id = request_id_factory()
     if not isinstance(request_id, str) or not request_id.strip():
         raise ValueError("request_id_factory must return a non-empty string")
+    planner_started = monotonic()
     try:
         plan = planner.plan(user_request)
     except Exception as error:
-        return ApplicationResult(
-            request_id,
-            ApplicationStatus.FAILED,
-            (),
-            (),
-            _safe_reason(error),
-            history=(
-                GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="planning failed")
-                if history_recorder is not None
-                else GitHistoryResult.disabled()
+        stages.append(
+            OperationalStage(
+                "planner",
+                OperationalOutcome.FAILED,
+                _elapsed_ms(planner_started, monotonic()),
+                model=getattr(planner, "model", None),
+                reasoning_effort=getattr(planner, "reasoning_effort", None),
+                usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+                error_category=type(error).__name__,
+            )
+        )
+        return _with_operational(
+            ApplicationResult(
+                request_id,
+                ApplicationStatus.FAILED,
+                (),
+                (),
+                _safe_reason(error),
+                history=(
+                    GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="planning failed")
+                    if history_recorder is not None
+                    else GitHistoryResult.disabled()
+                ),
             ),
+            stages,
+            started,
+            monotonic,
         )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a RequestPlan")
+    planner_duration_ms = _elapsed_ms(planner_started, monotonic())
 
     history_snapshot: GitHistorySnapshot | None = None
     history_error: str | None = None
     if history_recorder is not None:
+        history_started = monotonic()
         try:
             history_snapshot = history_recorder.begin(request_id)
         except Exception as error:
             history_error = _safe_reason(error)
+            stages.append(
+                _stage("git", OperationalOutcome.FAILED, history_started, monotonic, error)
+            )
+        else:
+            stages.append(
+                OperationalStage(
+                    "git.prepare",
+                    OperationalOutcome.NOT_CALLED,
+                    _elapsed_ms(history_started, monotonic()),
+                )
+            )
 
     actions: list[ActionResult] = []
     affected: list[str] = []
     next_fact_ordinal = 0
     for action_index, action in enumerate(plan.actions):
+        _reset_provider_calls(contextual_reasoner, writer, fact_selector)
+        action_started = monotonic()
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
                 action_index, action, repository, schema, context_index, embedder, context_limit
@@ -278,6 +321,25 @@ def execute_request(
             raise TypeError("RequestPlan contains an unsupported action type")
         actions.append(result)
         affected.extend(_affected_ids(result))
+        stages.append(
+            OperationalStage(
+                f"action.{action.kind}",
+                _action_operational_outcome(result.status),
+                _elapsed_ms(action_started, monotonic()),
+                model=_provider_details(contextual_reasoner, writer, fact_selector)[0],
+                reasoning_effort=_provider_details(contextual_reasoner, writer, fact_selector)[1],
+                usage=_provider_details(contextual_reasoner, writer, fact_selector)[2],
+            )
+        )
+    planner_stage = OperationalStage(
+        "planner",
+        OperationalOutcome.COMPLETED,
+        planner_duration_ms,
+        model=getattr(planner, "model", None),
+        reasoning_effort=getattr(planner, "reasoning_effort", None),
+        usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+    )
+    stages.insert(0, planner_stage)
     result = ApplicationResult(
         request_id,
         _overall_status(actions),
@@ -290,6 +352,7 @@ def execute_request(
         ),
     )
     if history_recorder is not None and history_error is None and history_snapshot is not None:
+        history_started = monotonic()
         try:
             history = history_recorder.record(
                 request_id=request_id,
@@ -300,6 +363,23 @@ def execute_request(
             )
         except Exception as error:
             history = GitHistoryResult(HistoryStatus.FAILED, reason=_safe_reason(error))
+            history_outcome = OperationalOutcome.FAILED
+            history_error_category = type(error).__name__
+        else:
+            history_outcome = (
+                OperationalOutcome.COMPLETED
+                if history.status in {HistoryStatus.COMMITTED, HistoryStatus.NO_CHANGES}
+                else OperationalOutcome.SKIPPED
+            )
+            history_error_category = None
+        stages.append(
+            OperationalStage(
+                "git",
+                history_outcome,
+                _elapsed_ms(history_started, monotonic()),
+                error_category=history_error_category,
+            )
+        )
         result = ApplicationResult(
             result.request_id,
             result.status,
@@ -308,38 +388,64 @@ def execute_request(
             history=history,
         )
     if not any(action.status is not ActionStatus.COMPLETED for action in actions):
-        return result
+        stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
+        return _with_operational(result, stages, started, monotonic)
     if pending_recorder is None:
-        return ApplicationResult(
-            result.request_id,
-            result.status,
-            result.action_results,
-            result.affected_stable_note_ids,
-            history=result.history,
-            pending_work=PendingWorkStatus(
-                required=True, error="pending recorder is not configured"
+        stages.append(OperationalStage("pending", OperationalOutcome.UNAVAILABLE))
+        return _with_operational(
+            ApplicationResult(
+                result.request_id,
+                result.status,
+                result.action_results,
+                result.affected_stable_note_ids,
+                history=result.history,
+                pending_work=PendingWorkStatus(
+                    required=True, error="pending recorder is not configured"
+                ),
             ),
+            stages,
+            started,
+            monotonic,
         )
+    pending_started = monotonic()
     try:
         record_id = pending_recorder.record(
             user_request=user_request, plan=plan, result=result, created_at=now
         )
     except Exception as error:
-        return ApplicationResult(
+        stages.append(
+            _stage("pending", OperationalOutcome.FAILED, pending_started, monotonic, error)
+        )
+        return _with_operational(
+            ApplicationResult(
+                result.request_id,
+                result.status,
+                result.action_results,
+                result.affected_stable_note_ids,
+                history=result.history,
+                pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
+            ),
+            stages,
+            started,
+            monotonic,
+        )
+    stages.append(
+        OperationalStage(
+            "pending", OperationalOutcome.COMPLETED, _elapsed_ms(pending_started, monotonic())
+        )
+    )
+    return _with_operational(
+        ApplicationResult(
             result.request_id,
             result.status,
             result.action_results,
             result.affected_stable_note_ids,
             history=result.history,
-            pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
-        )
-    return ApplicationResult(
-        result.request_id,
-        result.status,
-        result.action_results,
-        result.affected_stable_note_ids,
-        history=result.history,
-        pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
+            pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
+        ),
+        stages,
+        started,
+        monotonic,
     )
 
 
@@ -710,3 +816,69 @@ def _safe_reason(error: Exception) -> str:
     """Return a bounded exception summary suitable for a future adapter result."""
     reason = str(error).strip()
     return (reason or type(error).__name__)[:300]
+
+
+def _elapsed_ms(started: float, finished: float) -> float:
+    """Convert one monotonic interval into a non-negative millisecond duration."""
+    return max(0.0, (finished - started) * 1000)
+
+
+def _stage(
+    name: str,
+    outcome: OperationalOutcome,
+    started: float,
+    monotonic: Callable[[], float],
+    error: Exception | None = None,
+) -> OperationalStage:
+    """Build one bounded failure-aware stage measurement without exception details."""
+    return OperationalStage(
+        name,
+        outcome,
+        _elapsed_ms(started, monotonic()),
+        error_category=type(error).__name__ if error is not None else None,
+    )
+
+
+def _action_operational_outcome(status: ActionStatus) -> OperationalOutcome:
+    """Map typed action status into the public operational outcome vocabulary."""
+    return {
+        ActionStatus.COMPLETED: OperationalOutcome.COMPLETED,
+        ActionStatus.DEFERRED: OperationalOutcome.SKIPPED,
+        ActionStatus.FAILED: OperationalOutcome.FAILED,
+    }[status]
+
+
+def _with_operational(
+    result: ApplicationResult,
+    stages: list[OperationalStage],
+    started: float,
+    monotonic: Callable[[], float],
+) -> ApplicationResult:
+    """Attach bounded stage and total timing evidence without changing request semantics."""
+    return replace(
+        result,
+        operational=OperationalEvidence(
+            total_duration_ms=_elapsed_ms(started, monotonic()), stages=tuple(stages)
+        ),
+    )
+
+
+def _reset_provider_calls(*providers: Any) -> None:
+    """Reset per-action provider call markers before measuring the next semantic action."""
+    for provider in providers:
+        if hasattr(provider, "last_call"):
+            provider.last_call = False
+
+
+def _provider_details(
+    *providers: Any,
+) -> tuple[str | None, str | None, dict[str, int] | None]:
+    """Return safe model, effort, and usage metadata only for a provider called this action."""
+    for provider in providers:
+        if getattr(provider, "last_call", False):
+            return (
+                getattr(provider, "model", None),
+                getattr(provider, "reasoning_effort", None),
+                normalize_provider_usage(getattr(provider, "last_usage", None)),
+            )
+    return None, None, None

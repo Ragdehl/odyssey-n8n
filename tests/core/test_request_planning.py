@@ -606,12 +606,16 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
 
     def create(**kwargs: object) -> SimpleNamespace:
         calls.append(kwargs)
-        return SimpleNamespace(output_text=json.dumps(output(retrieve("Odyssey"))))
+        return SimpleNamespace(
+            output_text=json.dumps(output(retrieve("Odyssey"))),
+            usage=SimpleNamespace(input_tokens=11, output_tokens=3),
+        )
 
     planner = OpenAIRequestPlanner(
         SimpleNamespace(responses=SimpleNamespace(create=create)), schema, CONTEXT
     )
     assert planner.plan("¿Qué tengo apuntado sobre Odyssey?").actions
+    assert planner.last_usage == {"input_tokens": 11, "output_tokens": 3}
     assert calls[0]["model"] == PLANNER_MODEL
     assert calls[0]["reasoning"] == {"effort": PLANNER_REASONING_EFFORT}
     assert calls[0]["store"] is False

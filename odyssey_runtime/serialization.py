@@ -40,6 +40,22 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
             "commit_sha": result.history.commit_sha,
             "reason": result.history.reason,
         },
+        "operational": {
+            "total_duration_ms": result.operational.total_duration_ms,
+            "stages": [
+                {
+                    "name": stage.name,
+                    "outcome": stage.outcome.value,
+                    "duration_ms": stage.duration_ms,
+                    "model": stage.model,
+                    "reasoning_effort": stage.reasoning_effort,
+                    "usage": stage.usage,
+                    "estimated_cost_usd": stage.estimated_cost_usd,
+                    "error_category": stage.error_category,
+                }
+                for stage in result.operational.stages
+            ],
+        },
     }
 
 

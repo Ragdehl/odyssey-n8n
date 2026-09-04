@@ -1,6 +1,6 @@
 # Phase 19 — E2E hardening
 
-Status: **Phase 19.0 contract complete on merge; Phase 19.1 is next**
+Status: **Phase 19 complete on merge; Phase 19.2 bounded operational evidence complete**
 
 ## Objective
 
@@ -52,8 +52,8 @@ Do not solve hypothetical distributed-system problems before the single-user loc
 
 ```text
 19.0  contract + hardening matrix                         ✅ complete on merge
-19.1  retry / duplicate / failure-path safety             ➡️ next
-19.2  bounded tracing + timing + usage/cost                ⬜
+19.1  retry / duplicate / failure-path safety             ✅ complete on merge
+19.2  bounded tracing + timing + usage/cost                ✅ complete
 ```
 
 ### 19.0 — contract and hardening matrix
@@ -150,6 +150,41 @@ running, but no workflow execution or real vault operation was performed for thi
 ### 19.2 — bounded operational tracing, timing, and usage/cost
 
 Add enough low-invasive evidence to reconstruct what happened at important external/expensive boundaries without logging every domain function.
+
+The adopted representation extends the existing typed `ApplicationResult` with `operational` evidence:
+one monotonic `total_duration_ms` and an ordered bounded list of stages. Current stages include the
+planner, ordered semantic actions, Git, pending work, and (at the runtime boundary) index refresh.
+Each stage exposes only a stable name, outcome (`completed`, `failed`, `skipped`, `not_called`, or
+`unavailable`), duration in milliseconds when measured, safe model/reasoning configuration when the
+boundary exposes it, normalized token counters when the Responses API supplies them, and a safe error
+category. Estimated cost is explicitly unavailable because production has no verified versioned pricing
+snapshot; no price is inferred from benchmark files.
+
+```text
+ApplicationResult
+    |
+    `--> operational { total_duration_ms, stages[] }
+          |
+          +--> planner (Sol/low + usage when supplied)
+          +--> action.* (retrieval/write/delegate, plus provider metadata when supplied)
+          +--> git / pending
+          `--> index_refresh (runtime)
+```
+
+The evidence remains in the normal Core result and its runtime serialization, which n8n already retains
+with its execution data. Git and pending records continue to own their existing operational facts; no
+duplicate trace store is added. The runtime returns a successful Core mutation together with an explicit
+failed `index_refresh` stage when derived-index refresh fails, preserving Markdown authority and making
+the post-mutation failure visible without retrying or corrupting the request. Provider usage is an
+allowlisted set of counters only: absent counters remain absent rather than becoming zero. Prompts,
+user requests, note contents outside the existing retrieval result, hidden reasoning, raw provider
+responses, credentials, unrestricted exception text, and a separate `trace_id` are not operational data.
+If Core fails before it can return an `ApplicationResult`, the HTTP adapter retains only a caller-supplied
+safe `request_id` and the bounded `runtime` failure stage in its generic error response.
+
+Phase 19.2 deterministic acceptance evidence: the complete local suite passes with `536 passed, 79
+skipped, 52 subtests`; focused operational/runtime coverage passes with `72 passed, 1 skipped`. No
+provider call was needed because no prompt or model-facing behavior changed.
 
 Preferred trace shape:
 

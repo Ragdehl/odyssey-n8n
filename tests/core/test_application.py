@@ -89,6 +89,47 @@ def test_retrieve_uses_existing_context_and_propagates_one_request_id(
     assert calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
 
 
+def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expose planner metadata and monotonic durations without retaining request internals."""
+    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
+    planner = FakePlanner(
+        RequestPlan((RetrieveAction(SelectionCriteria(None, "Marta", None, (), None)),), ())
+    )
+    planner.model = "gpt-5.6-sol"
+    planner.reasoning_effort = "low"
+    planner.last_usage = {"input_tokens": 7, "output_tokens": 2}
+    clock = iter(float(index) / 1000 for index in range(10))
+    result = application.execute_request(
+        "Where is Marta?",
+        planner=planner,
+        repository=object(),
+        schema={},
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="test",
+        now="now",
+        context_limit=5,
+        request_id_factory=lambda: "request-observed",
+        monotonic=lambda: next(clock),
+    )
+
+    assert result.operational.total_duration_ms == pytest.approx(5.0)
+    planner_stage = result.operational.stages[0]
+    assert planner_stage.name == "planner"
+    assert planner_stage.outcome.value == "completed"
+    assert planner_stage.duration_ms == pytest.approx(1.0)
+    assert planner_stage.model == "gpt-5.6-sol"
+    assert planner_stage.reasoning_effort == "low"
+    assert planner_stage.usage == {"input_tokens": 7, "output_tokens": 2}
+    assert all(
+        stage.duration_ms is None or stage.duration_ms >= 0 for stage in result.operational.stages
+    )
+
+
 def test_create_dependency_runs_target_first_with_preflighted_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

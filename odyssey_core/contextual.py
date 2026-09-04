@@ -9,6 +9,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .observability import normalize_provider_usage
+
 OUTCOMES = frozenset({"RESOLVED", "AMBIGUOUS", "UNRESOLVED"})
 SOL_FEW_SHOT_PROMPT_CACHE_KEY = "odyssey:contextual-resolution:sol-few-shot-v1"
 
@@ -255,6 +257,8 @@ class OpenAIContextualReasoner:
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = timeout_seconds
         self.examples = examples
+        self.last_usage: dict[str, Any] | None = None
+        self.last_call = False
 
     def resolve(
         self, request: ContextualResolutionRequest
@@ -279,6 +283,8 @@ class OpenAIContextualReasoner:
             reasoning_effort=self.reasoning_effort,
             examples=self.examples,
         )
+        self.last_call = True
+        self.last_usage = None
         http_request = urllib.request.Request(
             "https://api.openai.com/v1/responses",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -299,7 +305,8 @@ class OpenAIContextualReasoner:
             raise ContextualResolutionError("OpenAI response output was not valid JSON") from error
         if not isinstance(output, dict):
             raise ContextualResolutionError("OpenAI response output was not a JSON object")
-        return output, _usage_metadata(body)
+        self.last_usage = _usage_metadata(body)
+        return output, self.last_usage
 
 
 def _response_output_text(response: dict[str, Any]) -> str:
@@ -318,14 +325,8 @@ def _response_output_text(response: dict[str, Any]) -> str:
 
 def _usage_metadata(response: dict[str, Any]) -> dict[str, Any]:
     """Normalize available Responses API token counters without retaining response content."""
-    usage = response.get("usage") or {}
-    input_details = usage.get("input_tokens_details") or {}
-    output_details = usage.get("output_tokens_details") or {}
-    return {
-        "response_id": response.get("id"),
-        "input_tokens": int(usage.get("input_tokens", 0)),
-        "cached_input_tokens": int(input_details.get("cached_tokens", 0)),
-        "cache_write_tokens": int(input_details.get("cache_write_tokens", 0)),
-        "output_tokens": int(usage.get("output_tokens", 0)),
-        "reasoning_tokens": int(output_details.get("reasoning_tokens", 0)),
-    }
+    usage = normalize_provider_usage(response) or {}
+    response_id = response.get("id")
+    if isinstance(response_id, str) and response_id:
+        usage["response_id"] = response_id
+    return usage
