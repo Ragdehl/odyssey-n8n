@@ -153,6 +153,41 @@ def test_exact_normalized_duplicate_skips_writer_and_persistence(
     assert repository.read_text("people/bea.md") == before
 
 
+def test_same_request_fact_ordinal_skips_planner_variation_on_replay(
+    repository: VaultRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reuse the durable request/ordinal locator when a retry's planner wording changes."""
+    calls = count_persistence(monkeypatch, repository)
+    first = materialize_update(
+        unit(facts=("Bea works at Thales.",)),
+        decision(),
+        repository=repository,
+        schema=SCHEMA,
+        actor="test",
+        now=NOW,
+        request_id="delivery-replay",
+        fact_ordinals=(0,),
+    )
+    writer = FakeWriter({"operations": [{"op": "APPEND", "text": "must not run"}]})
+    second = materialize_update(
+        unit(facts=("Bea works for Thales.",)),
+        decision(),
+        repository=repository,
+        schema=SCHEMA,
+        actor="test",
+        now=NOW,
+        writer=writer,
+        request_id="delivery-replay",
+        fact_ordinals=(0,),
+    )
+
+    assert first.operation is PersistenceOperation.UPDATED
+    assert second.operation is PersistenceOperation.NO_CHANGE
+    assert writer.requests == []
+    assert calls == [1]
+    assert repository.read_text("people/bea.md").count("Bea works at Thales.") == 1
+
+
 def test_production_writer_payload_is_luna_medium_full_note_and_no_storage() -> None:
     """The runtime writer policy remains the selected single Phase 16.3 policy."""
     payload = build_openai_writer_payload(

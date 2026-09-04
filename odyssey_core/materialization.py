@@ -454,18 +454,22 @@ def materialize_update(
         if fact_ordinals is None or len(fact_ordinals) != len(prepared_facts):
             raise MaterializationError("Atomic UPDATE requires one deterministic ordinal per fact")
         try:
-            known = {
-                normalize_atomic_fact(item.text) for item in parse_atomic_facts(existing.content)
+            existing_atomic = parse_atomic_facts(existing.content)
+            known = {normalize_atomic_fact(item.text) for item in existing_atomic}
+            replayed_ordinals = {
+                item.ordinal for item in existing_atomic if item.request_id == request_id
             }
         except ValueError as error:
             raise MaterializationError("Existing atomic facts are malformed") from error
         additions = tuple(
-            fact for fact in prepared_facts if normalize_atomic_fact(fact) not in known
+            fact
+            for fact, ordinal in zip(prepared_facts, fact_ordinals, strict=True)
+            if ordinal not in replayed_ordinals and normalize_atomic_fact(fact) not in known
         )
         addition_ordinals = tuple(
             ordinal
             for fact, ordinal in zip(prepared_facts, fact_ordinals, strict=True)
-            if normalize_atomic_fact(fact) not in known
+            if ordinal not in replayed_ordinals and normalize_atomic_fact(fact) not in known
         )
         if additions:
             content = append_atomic_facts(

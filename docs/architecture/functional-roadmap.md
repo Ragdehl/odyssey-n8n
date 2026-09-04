@@ -160,7 +160,9 @@ first standalone web product surface.
 The immediate reliability question is narrower than semantic duplicate suppression: one logical
 delivery must not accidentally become two mutations merely because infrastructure retried it, while a
 genuine second user request must remain meaningful. Phase 19.1 will inspect actual n8n/runtime retry
-behavior before choosing an idempotency mechanism or changing `request_id` ownership.
+behavior before choosing an idempotency mechanism. The first evidence correction preserves an optional
+delivery-owned `request_id` through n8n and the runtime into Core; it does not deduplicate by text or
+add persistent idempotency infrastructure. See the [Phase 19 contract](phase-19-e2e-hardening.md).
 
 Operational tracing stays low-invasive and `request_id` remains the default correlation key. Add a
 separate `trace_id` only if real retries/subtraces prove it necessary.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
@@ -11,6 +12,7 @@ from .composition import RuntimeComposition
 from .serialization import application_result_to_response
 
 MAX_REQUEST_BYTES = 1_048_576
+_REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
 
 
 def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765) -> None:
@@ -60,16 +62,25 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 if length < 0 or length > MAX_REQUEST_BYTES:
                     raise ValueError("request body is too large")
                 payload = json.loads(self.rfile.read(length))
-                if not isinstance(payload, dict) or set(payload) != {"request"}:
-                    raise ValueError("request payload must contain only request")
+                if not isinstance(payload, dict) or set(payload) not in (
+                    {"request"},
+                    {"request", "request_id"},
+                ):
+                    raise ValueError("request payload has unsupported fields")
                 request = payload["request"]
                 if not isinstance(request, str) or not request.strip():
                     raise ValueError("request must be a non-empty string")
+                request_id = payload.get("request_id")
+                if request_id is not None and (
+                    not isinstance(request_id, str)
+                    or _REQUEST_ID_PATTERN.fullmatch(request_id) is None
+                ):
+                    raise ValueError("request_id must be a safe non-empty identifier")
             except (TypeError, ValueError):
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
                 return
             try:
-                result = runtime.execute(request)
+                result = runtime.execute(request, request_id)
                 self._write_json(HTTPStatus.OK, application_result_to_response(result))
             except Exception:
                 self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "runtime failure"})

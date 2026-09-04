@@ -192,7 +192,9 @@ def test_application_result_serialization_rejects_non_result() -> None:
 def test_http_boundary_rejects_invalid_input_without_calling_core() -> None:
     """Malformed payloads return a stable 400 response and never reach Core."""
     calls: list[str] = []
-    runtime = RuntimeComposition(core_execute=calls.append, refresh_indexes=lambda: None)
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: calls.append(request), refresh_indexes=lambda: None
+    )
     server = _test_server(runtime)
     try:
         connection = HTTPConnection("127.0.0.1", server.server_port)
@@ -210,9 +212,9 @@ def test_http_boundary_returns_serialized_application_result() -> None:
     """A valid request invokes Core once and returns its public ApplicationResult mapping."""
     calls: list[str] = []
 
-    def execute(request: str) -> ApplicationResult:
+    def execute(request: str, request_id: str | None) -> ApplicationResult:
         """Record the request and return deterministic application evidence."""
-        calls.append(request)
+        calls.append(f"{request}:{request_id}")
         return _result()
 
     server = _test_server(RuntimeComposition(core_execute=execute, refresh_indexes=lambda: None))
@@ -227,7 +229,7 @@ def test_http_boundary_returns_serialized_application_result() -> None:
         response = connection.getresponse()
         assert response.status == 200
         assert json.loads(response.read())["request_id"] == "request-test"
-        assert calls == ["remember this"]
+        assert calls == ["remember this:None"]
     finally:
         server.shutdown()
         server.server_close()
@@ -236,7 +238,9 @@ def test_http_boundary_returns_serialized_application_result() -> None:
 def test_http_boundary_supports_health_and_rejects_unknown_paths() -> None:
     """Only the documented health and execute paths are exposed."""
     server = _test_server(
-        RuntimeComposition(core_execute=lambda request: _result(), refresh_indexes=lambda: None)
+        RuntimeComposition(
+            core_execute=lambda request, request_id: _result(), refresh_indexes=lambda: None
+        )
     )
     try:
         connection = HTTPConnection("127.0.0.1", server.server_port)
@@ -263,7 +267,9 @@ def test_http_boundary_returns_safe_500_for_core_failure() -> None:
     """Unexpected Core failures become a generic response without exception details."""
     server = _test_server(
         RuntimeComposition(
-            core_execute=lambda request: (_ for _ in ()).throw(RuntimeError("secret detail")),
+            core_execute=lambda request, request_id: (_ for _ in ()).throw(
+                RuntimeError("secret detail")
+            ),
             refresh_indexes=lambda: None,
         )
     )
@@ -285,7 +291,7 @@ def test_http_boundary_classifies_internal_value_and_type_errors_as_500(
     """Do not misclassify validated Core/runtime failures as client input errors."""
     server = _test_server(
         RuntimeComposition(
-            core_execute=lambda request: (_ for _ in ()).throw(failure),
+            core_execute=lambda request, request_id: (_ for _ in ()).throw(failure),
             refresh_indexes=lambda: None,
         )
     )
@@ -304,12 +310,90 @@ def test_runtime_refreshes_indexes_after_core_reports_a_mutation() -> None:
     """A successful mutation refreshes derived indexes exactly once."""
     refreshed: list[bool] = []
     runtime = RuntimeComposition(
-        core_execute=lambda request: _result(),
+        core_execute=lambda request, request_id: _result(),
         refresh_indexes=lambda: refreshed.append(True),
     )
 
     assert runtime.execute("remember this").request_id == "request-test"
     assert refreshed == [True]
+
+
+def test_runtime_exposes_index_refresh_failure_after_core_mutation() -> None:
+    """Leave post-Core refresh failure explicit while preserving Core's mutation result boundary."""
+    calls: list[tuple[str, str | None]] = []
+
+    def refresh() -> None:
+        """Simulate an unavailable derived-index rebuild."""
+        raise RuntimeError("index unavailable")
+
+    def execute(request: str, request_id: str | None) -> ApplicationResult:
+        """Return mutation evidence before the derived refresh fails."""
+        calls.append((request, request_id))
+        return _result()
+
+    runtime = RuntimeComposition(core_execute=execute, refresh_indexes=refresh)
+
+    with pytest.raises(RuntimeError, match="index unavailable"):
+        runtime.execute("remember this", "delivery-1")
+    assert calls == [("remember this", "delivery-1")]
+
+
+def test_http_boundary_preserves_delivery_identity_for_retries_and_distinguishes_duplicates() -> (
+    None
+):
+    """Forward one stable delivery ID while keeping intentional executions distinguishable."""
+    calls: list[tuple[str, str | None]] = []
+
+    def execute(request: str, request_id: str | None) -> ApplicationResult:
+        """Capture request identity at the Core boundary without executing semantic work."""
+        calls.append((request, request_id))
+        return _result()
+
+    server = _test_server(RuntimeComposition(core_execute=execute, refresh_indexes=lambda: None))
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        for request_id in ("n8n-123", "n8n-123", "n8n-124"):
+            connection.request(
+                "POST",
+                "/execute",
+                body=json.dumps({"request": "remember this", "request_id": request_id}),
+            )
+            response = connection.getresponse()
+            assert response.status == 200
+            response.read()
+        assert calls == [
+            ("remember this", "n8n-123"),
+            ("remember this", "n8n-123"),
+            ("remember this", "n8n-124"),
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_rejects_unsafe_delivery_identity_without_calling_core() -> None:
+    """Reject path/control characters before an externally supplied identity reaches Core."""
+    calls: list[tuple[str, str | None]] = []
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request, request_id: calls.append((request, request_id)),
+            refresh_indexes=lambda: None,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps({"request": "hello", "request_id": "../unsafe"}),
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid request"}
+        assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path) -> None:
