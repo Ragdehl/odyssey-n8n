@@ -141,64 +141,60 @@ mutating canonical knowledge.
 
 The grounded consumer contract is settled independently of any specific frontend: Odyssey returns stable
 identity/type/provenance plus full retrieved content, and an external consumer may formulate the
-conversational response without another answer call inside Core. Phase 20 will add the first standalone
+conversational response without another answer call inside Core. Phase 20 adds the first standalone
 Odyssey consumer. See the canonical [Phase 18 contract](phase-18-n8n-first-e2e.md).
 
-## Current phase
+## Completed hardening phase
 
-➡️ **Phase 19 — end-to-end hardening**
+✅ **Phase 19 — end-to-end hardening**
 
-The canonical [Phase 19 contract](phase-19-e2e-hardening.md) hardens the proven Phase 18 path before the
+The canonical [Phase 19 contract](phase-19-e2e-hardening.md) hardened the proven Phase 18 path before the
 first standalone web product surface.
 
 ```text
-19.0  contract + hardening matrix                         ✅ complete on merge
-19.1  retry / duplicate / failure-path safety             ✅ complete on merge
+19.0  contract + hardening matrix                         ✅ complete
+19.1  retry / duplicate / failure-path safety             ✅ complete
 19.2  bounded tracing + timing + usage/cost                ✅ complete
 ```
 
-The immediate reliability question is narrower than semantic duplicate suppression: one logical
-delivery must not accidentally become two mutations merely because infrastructure retried it, while a
-genuine second user request must remain meaningful. Phase 19.1 will inspect actual n8n/runtime retry
-behavior before choosing an idempotency mechanism. The first evidence correction preserves an optional
-delivery-owned `request_id` through n8n and the runtime into Core; it does not deduplicate by text or
-add persistent idempotency infrastructure. See the [Phase 19 contract](phase-19-e2e-hardening.md).
+Phase 19 preserves a delivery-owned `request_id` through n8n/runtime/Core, prevents one logical retry from
+silently replaying canonical facts, keeps pending replay fail-closed for conflicting work, and preserves
+Markdown authority across Git/index failures. Operational evidence stays bounded under the same
+`request_id`: useful stage outcomes, monotonic duration, public model configuration, and one safe record
+per provider call when supplied. Production estimated cost remains unavailable without a verified pricing
+snapshot. No idempotency database, tracing service, separate `trace_id`, queue, or new authority was
+introduced.
 
-Operational tracing stays low-invasive and `request_id` remains the default correlation key. Add a
-separate `trace_id` only if real retries/subtraces prove it necessary.
+## Current phase
 
-Phase 19.2 is complete. It keeps bounded operational evidence in the existing typed application/runtime result retained
-by n8n: ordered safe stage outcomes, monotonic durations, public model configuration, and one bounded
-record per provider call when supplied. Production estimated cost remains unavailable without a verified pricing
-snapshot; prompts, hidden reasoning, credentials, raw provider responses, and a separate trace store are
-not collected. See the detailed [Phase 19 contract](phase-19-e2e-hardening.md).
+➡️ **Phase 20 — Odyssey Online MVP: standalone answerer + mobile web**
 
-Reassess semantic request history during Phase 19 rather than automatically creating a canonical
-`type=user_request`. Any future representation reuses `request_id` and never stores hidden model
-reasoning. See [Future semantic request history](phase-17-request-records.md).
-
-## Next product phase
-
-⬜ **Phase 20 — Odyssey Online MVP: standalone answerer + mobile web**
-
-After 19.1/19.2 make the existing path dependable and diagnosable, build the smallest useful standalone
-Odyssey consumer for a phone browser. See the canonical [Phase 20 contract](phase-20-odyssey-online-mvp.md).
+Build the smallest useful standalone Odyssey consumer for a phone browser while keeping n8n, the internal
+runtime, and Core in their established roles. See the canonical
+[Phase 20 contract](phase-20-odyssey-online-mvp.md).
 
 ```text
-20.0  consumer contract + architecture challenge             ⬜
-20.1  grounded answerer benchmark                            ⬜
+20.0  consumer contract + architecture challenge             ✅ complete on merge
+20.1  grounded answerer benchmark                            ➡️ next
 20.2  minimal mobile web frontend                            ⬜
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
-The answerer benchmark starts with Luna as the preferred inexpensive candidate but must adopt a model
-only from grounded quality/cost evidence. Sol remains a quality reference rather than the automatic
-production answerer. Deterministic write acknowledgements should avoid an unnecessary model call when
-existing result fields are sufficient.
+Phase 20.0 adopts n8n as the trusted browser/orchestration boundary while keeping the Python runtime
+internal. The browser sends ordinary request text plus a stable delivery `request_id`; n8n returns a
+narrow product response and only invokes a bounded answerer when grounded retrieval evidence needs
+conversational synthesis. Write-only results, empty retrievals, and ordinary failures use deterministic
+UI outcomes instead of an unnecessary answer-model call. Frontend source remains isolated under
+`odyssey_web/` and the MVP adds no second long-lived application server by default.
 
-The MVP is a normal mobile web page with a text field, submit behavior, loading/error state, and rendered
-response. Android voice input is supplied by ordinary Gboard dictation through that text field; Odyssey
-does not add microphone recording or a speech-to-text service for the MVP.
+The answerer benchmark starts with Luna as the preferred inexpensive candidate but adopts a production
+model only from grounded quality/cost evidence. Sol remains a quality reference rather than the automatic
+production answerer. The benchmark harness can be prepared without the Raspberry; model adoption waits
+for exact live candidate evidence.
+
+The MVP is a normal mobile web page with a text field, submit/retry behavior, loading/error state, and
+rendered response. Android voice input is supplied by ordinary Gboard dictation through that text field;
+Odyssey does not add microphone recording or a speech-to-text service for the MVP.
 
 The Internet-facing surface must be protected before it can reach personal knowledge. The planned shape
 uses the existing Raspberry/Cloudflare deployment with a separate Odyssey hostname and a narrow access
