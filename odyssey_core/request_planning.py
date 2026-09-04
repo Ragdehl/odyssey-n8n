@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
 from odyssey_core.notes.validation import NoteValidationError, validate_field_value
+from odyssey_core.observability import normalize_provider_usage
 from odyssey_core.planner_capabilities import (
     LIMITATIONS,
     build_planner_capabilities,
@@ -433,6 +434,10 @@ class OpenAIRequestPlanner:
         self._client = client
         self._schema = schema
         self._current_context = dict(current_context)
+        self.model = PLANNER_MODEL
+        self.reasoning_effort = PLANNER_REASONING_EFFORT
+        self.last_usage: dict[str, int] | None = None
+        self.last_call = False
 
     @classmethod
     def from_environment(
@@ -473,6 +478,9 @@ class OpenAIRequestPlanner:
         """
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
+        self.last_call = False
+        self.last_usage = None
+        self.last_call = True
         try:
             response = self._client.responses.create(
                 model=PLANNER_MODEL,
@@ -498,6 +506,7 @@ class OpenAIRequestPlanner:
             )
         except Exception as error:
             raise RequestPlanningError("Request planner provider call failed") from error
+        self.last_usage = normalize_provider_usage(response)
         try:
             payload = json.loads(response.output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:

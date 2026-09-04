@@ -22,6 +22,7 @@ from odyssey_core.application import (
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
 from odyssey_core.git_history import GitHistoryResult
+from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
 from odyssey_runtime import __main__ as runtime_main
 from odyssey_runtime import composition
 from odyssey_runtime.composition import RuntimeComposition
@@ -53,9 +54,56 @@ def test_application_result_serialization_exposes_only_public_evidence() -> None
         "actions": [],
         "pending_work": {"required": False, "persisted": False, "record_id": None, "error": None},
         "history": {"status": "DISABLED", "commit_sha": None, "reason": None},
+        "operational": {"total_duration_ms": None, "stages": []},
     }
     assert "reasoning" not in json.dumps(response)
     assert "prompt" not in json.dumps(response)
+
+
+def test_application_result_serialization_exposes_bounded_operational_evidence() -> None:
+    """Serialize stage timing and counters while excluding provider payload details."""
+    result = ApplicationResult(
+        request_id="request-observed",
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=(),
+        operational=OperationalEvidence(
+            total_duration_ms=12.5,
+            stages=(
+                OperationalStage(
+                    "planner",
+                    OperationalOutcome.COMPLETED,
+                    duration_ms=4.0,
+                    model="gpt-5.6-sol",
+                    reasoning_effort="low",
+                    usage={"input_tokens": 10, "output_tokens": 2},
+                ),
+            ),
+        ),
+    )
+
+    response = application_result_to_response(result)
+
+    assert response["operational"] == {
+        "total_duration_ms": 12.5,
+        "stages": [
+            {
+                "name": "planner",
+                "outcome": "completed",
+                "duration_ms": 4.0,
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "low",
+                "usage": {"input_tokens": 10, "output_tokens": 2},
+                "estimated_cost_usd": None,
+                "error_category": None,
+                "provider_calls": [],
+            }
+        ],
+    }
+    encoded = json.dumps(response)
+    assert "prompt" not in encoded
+    assert "provider_payload" not in encoded
+    assert "reasoning" in encoded  # only the safe configuration field is present
 
 
 def test_application_result_serialization_maps_action_evidence() -> None:
@@ -306,6 +354,33 @@ def test_http_boundary_classifies_internal_value_and_type_errors_as_500(
         server.server_close()
 
 
+def test_http_runtime_failure_retains_safe_delivery_correlation() -> None:
+    """Expose only the supplied correlation and runtime stage when Core fails before a result."""
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request, request_id: (_ for _ in ()).throw(RuntimeError("secret")),
+            refresh_indexes=lambda: None,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps({"request": "hello", "request_id": "delivery-1"}),
+        )
+        response = connection.getresponse()
+        assert response.status == 500
+        assert json.loads(response.read()) == {
+            "error": "runtime failure",
+            "request_id": "delivery-1",
+            "stage": "runtime",
+        }
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_runtime_refreshes_indexes_after_core_reports_a_mutation() -> None:
     """A successful mutation refreshes derived indexes exactly once."""
     refreshed: list[bool] = []
@@ -333,8 +408,11 @@ def test_runtime_exposes_index_refresh_failure_after_core_mutation() -> None:
 
     runtime = RuntimeComposition(core_execute=execute, refresh_indexes=refresh)
 
-    with pytest.raises(RuntimeError, match="index unavailable"):
-        runtime.execute("remember this", "delivery-1")
+    result = runtime.execute("remember this", "delivery-1")
+    assert result.request_id == "request-test"
+    assert result.operational.stages[-1].name == "index_refresh"
+    assert result.operational.stages[-1].outcome.value == "failed"
+    assert result.operational.stages[-1].error_category == "RuntimeError"
     assert calls == [("remember this", "delivery-1")]
 
 

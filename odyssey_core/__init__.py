@@ -65,6 +65,12 @@ from .materialization import (
     validate_writer_output,
     writer_output_json_schema,
 )
+from .observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    ProviderCallEvidence,
+)
 from .pending_work import PendingWorkError, PendingWorkRepository, project_pending_work
 from .persistence import (
     EntityAlreadyExistsError,
@@ -147,6 +153,10 @@ __all__ = [
     "PendingWorkError",
     "PendingWorkRepository",
     "project_pending_work",
+    "OperationalEvidence",
+    "OperationalOutcome",
+    "OperationalStage",
+    "ProviderCallEvidence",
     "RequestPlanner",
     "UnitResult",
     "UnitStatus",

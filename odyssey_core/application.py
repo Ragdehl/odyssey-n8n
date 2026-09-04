@@ -7,9 +7,10 @@ materialization, and bulk membership remain in their existing Phase 13--16 bound
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import Any, Protocol
+from time import perf_counter
+from typing import Any, Protocol, cast
 from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
@@ -22,6 +23,13 @@ from .materialization import (
     materialize_delete,
     materialize_type_migration,
     materialize_update,
+)
+from .observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    ProviderCallEvidence,
+    normalize_provider_usage,
 )
 from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import UnitTargetPreflight, preflight_write_action
@@ -147,6 +155,7 @@ class ApplicationResult:
     planning_error: str | None = None
     pending_work: PendingWorkStatus = PendingWorkStatus()
     history: GitHistoryResult = GitHistoryResult.disabled()
+    operational: OperationalEvidence = OperationalEvidence()
 
 
 def allocate_request_id() -> str:
@@ -174,6 +183,7 @@ def execute_request(
     semantic_limit: int = 10,
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
+    monotonic: Callable[[], float] = perf_counter,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -203,41 +213,84 @@ def execute_request(
         ValueError: If boundary inputs are structurally invalid.
         TypeError: If the planner returns a value other than RequestPlan.
     """
+    started = monotonic()
+    stages: list[OperationalStage] = []
     if not isinstance(user_request, str) or not user_request.strip():
         raise ValueError("user_request must be a non-empty string")
     request_id = request_id_factory()
     if not isinstance(request_id, str) or not request_id.strip():
         raise ValueError("request_id_factory must return a non-empty string")
+    planner_started = monotonic()
+    provider_recorder = _ProviderCallRecorder(monotonic)
     try:
-        plan = planner.plan(user_request)
+        plan = provider_recorder.invoke("planner", planner, planner.plan, user_request)
     except Exception as error:
-        return ApplicationResult(
-            request_id,
-            ApplicationStatus.FAILED,
-            (),
-            (),
-            _safe_reason(error),
-            history=(
-                GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="planning failed")
-                if history_recorder is not None
-                else GitHistoryResult.disabled()
+        stages.append(
+            OperationalStage(
+                "planner",
+                OperationalOutcome.FAILED,
+                _elapsed_ms(planner_started, monotonic()),
+                model=getattr(planner, "model", None),
+                reasoning_effort=getattr(planner, "reasoning_effort", None),
+                usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+                error_category=type(error).__name__,
+                provider_calls=provider_recorder.calls,
+            )
+        )
+        return _with_operational(
+            ApplicationResult(
+                request_id,
+                ApplicationStatus.FAILED,
+                (),
+                (),
+                _safe_reason(error),
+                history=(
+                    GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="planning failed")
+                    if history_recorder is not None
+                    else GitHistoryResult.disabled()
+                ),
             ),
+            stages,
+            started,
+            monotonic,
         )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a RequestPlan")
+    planner_duration_ms = _elapsed_ms(planner_started, monotonic())
 
     history_snapshot: GitHistorySnapshot | None = None
     history_error: str | None = None
     if history_recorder is not None:
+        history_started = monotonic()
         try:
             history_snapshot = history_recorder.begin(request_id)
         except Exception as error:
             history_error = _safe_reason(error)
+            stages.append(
+                _stage("git", OperationalOutcome.FAILED, history_started, monotonic, error)
+            )
 
     actions: list[ActionResult] = []
     affected: list[str] = []
     next_fact_ordinal = 0
     for action_index, action in enumerate(plan.actions):
+        provider_start = len(provider_recorder.calls)
+        action_started = monotonic()
+        measured_contextual_reasoner = (
+            _MeasuredContextualReasoner(contextual_reasoner, provider_recorder)
+            if callable(getattr(contextual_reasoner, "resolve", None))
+            else contextual_reasoner
+        )
+        measured_writer = (
+            _MeasuredWriter(writer, provider_recorder)
+            if callable(getattr(writer, "write", None))
+            else writer
+        )
+        measured_fact_selector = (
+            _MeasuredFactSelector(fact_selector, provider_recorder)
+            if callable(getattr(fact_selector, "select", None))
+            else fact_selector
+        )
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
                 action_index, action, repository, schema, context_index, embedder, context_limit
@@ -255,15 +308,15 @@ def execute_request(
                 schema,
                 semantic_index,
                 embedder,
-                contextual_reasoner,
+                measured_contextual_reasoner,
                 actor,
                 now,
-                writer,
+                measured_writer,
                 semantic_limit,
                 preflight_id_allocator,
                 request_id,
                 unit_ordinals,
-                fact_selector,
+                measured_fact_selector,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -278,6 +331,24 @@ def execute_request(
             raise TypeError("RequestPlan contains an unsupported action type")
         actions.append(result)
         affected.extend(_affected_ids(result))
+        stages.append(
+            OperationalStage(
+                f"action.{action.kind}",
+                _action_operational_outcome(result.status),
+                _elapsed_ms(action_started, monotonic()),
+                provider_calls=tuple(provider_recorder.calls[provider_start:]),
+            )
+        )
+    planner_stage = OperationalStage(
+        "planner",
+        OperationalOutcome.COMPLETED,
+        planner_duration_ms,
+        model=getattr(planner, "model", None),
+        reasoning_effort=getattr(planner, "reasoning_effort", None),
+        usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+        provider_calls=provider_recorder.calls[:1],
+    )
+    stages.insert(0, planner_stage)
     result = ApplicationResult(
         request_id,
         _overall_status(actions),
@@ -290,6 +361,7 @@ def execute_request(
         ),
     )
     if history_recorder is not None and history_error is None and history_snapshot is not None:
+        history_started = monotonic()
         try:
             history = history_recorder.record(
                 request_id=request_id,
@@ -300,6 +372,23 @@ def execute_request(
             )
         except Exception as error:
             history = GitHistoryResult(HistoryStatus.FAILED, reason=_safe_reason(error))
+            history_outcome = OperationalOutcome.FAILED
+            history_error_category = type(error).__name__
+        else:
+            history_outcome = (
+                OperationalOutcome.COMPLETED
+                if history.status in {HistoryStatus.COMMITTED, HistoryStatus.NO_CHANGES}
+                else OperationalOutcome.SKIPPED
+            )
+            history_error_category = None
+        stages.append(
+            OperationalStage(
+                "git",
+                history_outcome,
+                _elapsed_ms(history_started, monotonic()),
+                error_category=history_error_category,
+            )
+        )
         result = ApplicationResult(
             result.request_id,
             result.status,
@@ -308,38 +397,64 @@ def execute_request(
             history=history,
         )
     if not any(action.status is not ActionStatus.COMPLETED for action in actions):
-        return result
+        stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
+        return _with_operational(result, stages, started, monotonic)
     if pending_recorder is None:
-        return ApplicationResult(
-            result.request_id,
-            result.status,
-            result.action_results,
-            result.affected_stable_note_ids,
-            history=result.history,
-            pending_work=PendingWorkStatus(
-                required=True, error="pending recorder is not configured"
+        stages.append(OperationalStage("pending", OperationalOutcome.UNAVAILABLE))
+        return _with_operational(
+            ApplicationResult(
+                result.request_id,
+                result.status,
+                result.action_results,
+                result.affected_stable_note_ids,
+                history=result.history,
+                pending_work=PendingWorkStatus(
+                    required=True, error="pending recorder is not configured"
+                ),
             ),
+            stages,
+            started,
+            monotonic,
         )
+    pending_started = monotonic()
     try:
         record_id = pending_recorder.record(
             user_request=user_request, plan=plan, result=result, created_at=now
         )
     except Exception as error:
-        return ApplicationResult(
+        stages.append(
+            _stage("pending", OperationalOutcome.FAILED, pending_started, monotonic, error)
+        )
+        return _with_operational(
+            ApplicationResult(
+                result.request_id,
+                result.status,
+                result.action_results,
+                result.affected_stable_note_ids,
+                history=result.history,
+                pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
+            ),
+            stages,
+            started,
+            monotonic,
+        )
+    stages.append(
+        OperationalStage(
+            "pending", OperationalOutcome.COMPLETED, _elapsed_ms(pending_started, monotonic())
+        )
+    )
+    return _with_operational(
+        ApplicationResult(
             result.request_id,
             result.status,
             result.action_results,
             result.affected_stable_note_ids,
             history=result.history,
-            pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
-        )
-    return ApplicationResult(
-        result.request_id,
-        result.status,
-        result.action_results,
-        result.affected_stable_note_ids,
-        history=result.history,
-        pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
+            pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
+        ),
+        stages,
+        started,
+        monotonic,
     )
 
 
@@ -710,3 +825,131 @@ def _safe_reason(error: Exception) -> str:
     """Return a bounded exception summary suitable for a future adapter result."""
     reason = str(error).strip()
     return (reason or type(error).__name__)[:300]
+
+
+def _elapsed_ms(started: float, finished: float) -> float:
+    """Convert one monotonic interval into a non-negative millisecond duration."""
+    return max(0.0, (finished - started) * 1000)
+
+
+def _stage(
+    name: str,
+    outcome: OperationalOutcome,
+    started: float,
+    monotonic: Callable[[], float],
+    error: Exception | None = None,
+) -> OperationalStage:
+    """Build one bounded failure-aware stage measurement without exception details."""
+    return OperationalStage(
+        name,
+        outcome,
+        _elapsed_ms(started, monotonic()),
+        error_category=type(error).__name__ if error is not None else None,
+    )
+
+
+def _action_operational_outcome(status: ActionStatus) -> OperationalOutcome:
+    """Map typed action status into the public operational outcome vocabulary."""
+    return {
+        ActionStatus.COMPLETED: OperationalOutcome.COMPLETED,
+        ActionStatus.DEFERRED: OperationalOutcome.SKIPPED,
+        ActionStatus.FAILED: OperationalOutcome.FAILED,
+    }[status]
+
+
+def _with_operational(
+    result: ApplicationResult,
+    stages: list[OperationalStage],
+    started: float,
+    monotonic: Callable[[], float],
+) -> ApplicationResult:
+    """Attach bounded stage and total timing evidence without changing request semantics."""
+    return cast(
+        ApplicationResult,
+        replace(
+            result,
+            operational=OperationalEvidence(
+                total_duration_ms=_elapsed_ms(started, monotonic()), stages=tuple(stages)
+            ),
+        ),
+    )
+
+
+@dataclass
+class _ProviderCallRecorder:
+    """Collect bounded evidence for provider calls made during one Core request."""
+
+    monotonic: Callable[[], float]
+    calls: tuple[ProviderCallEvidence, ...] = ()
+
+    def invoke(self, name: str, provider: Any, operation: Callable[..., Any], *args: Any) -> Any:
+        """Invoke one provider operation and retain only safe boundary metadata."""
+        started = self.monotonic()
+        try:
+            result = operation(*args)
+        except Exception as error:
+            self.calls += (
+                self._evidence(provider, name, OperationalOutcome.FAILED, started, error),
+            )
+            raise
+        self.calls += (self._evidence(provider, name, OperationalOutcome.COMPLETED, started),)
+        return result
+
+    def _evidence(
+        self,
+        provider: Any,
+        name: str,
+        outcome: OperationalOutcome,
+        started: float,
+        error: Exception | None = None,
+    ) -> ProviderCallEvidence:
+        """Build one provider record without retaining request, prompt, or response data."""
+        return ProviderCallEvidence(
+            name=name,
+            outcome=outcome,
+            duration_ms=_elapsed_ms(started, self.monotonic()),
+            model=getattr(provider, "model", None),
+            reasoning_effort=getattr(provider, "reasoning_effort", None),
+            usage=normalize_provider_usage(getattr(provider, "last_usage", None)),
+            error_category=type(error).__name__ if error is not None else None,
+        )
+
+
+class _MeasuredContextualReasoner:
+    """Measure calls through an injected contextual-resolution provider."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def resolve(self, request: Any) -> Any:
+        """Resolve one target through the provider and record its bounded evidence."""
+        return self._recorder.invoke(
+            "contextual_resolution", self._provider, self._provider.resolve, request
+        )
+
+
+class _MeasuredWriter:
+    """Measure calls through an injected bounded note writer."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def write(self, request: Any) -> Any:
+        """Write one bounded note operation and record its provider evidence."""
+        return self._recorder.invoke("writer", self._provider, self._provider.write, request)
+
+
+class _MeasuredFactSelector:
+    """Measure calls through an injected atomic-fact selector."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def select(self, *args: Any, **kwargs: Any) -> Any:
+        """Select one bounded fact locator and record its provider evidence."""
+        return self._recorder.invoke(
+            "fact_selector", self._provider, self._provider.select, *args, **kwargs
+        )

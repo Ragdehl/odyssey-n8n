@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from http import HTTPStatus
@@ -83,7 +84,11 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 result = runtime.execute(request, request_id)
                 self._write_json(HTTPStatus.OK, application_result_to_response(result))
             except Exception:
-                self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "runtime failure"})
+                payload: dict[str, Any] = {"error": "runtime failure"}
+                if request_id is not None:
+                    payload["request_id"] = html.escape(request_id, quote=True)
+                    payload["stage"] = "runtime"
+                self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
 
         def log_message(self, format: str, *args: Any) -> None:
             """Avoid logging request bodies or other potentially sensitive input."""

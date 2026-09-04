@@ -50,20 +50,23 @@ def unit(name: str, *, references: tuple[KnowledgeReference, ...] = ()) -> Knowl
 
 def run(plan: RequestPlan, monkeypatch: pytest.MonkeyPatch, **kwargs: Any):
     """Run an application request with inert injected Core dependencies."""
+    dependencies: dict[str, Any] = {
+        "planner": FakePlanner(plan),
+        "repository": object(),
+        "schema": {},
+        "context_index": object(),
+        "semantic_index": object(),
+        "embedder": object(),
+        "contextual_reasoner": object(),
+        "actor": "test",
+        "now": "2026-08-28T12:00:00Z",
+        "context_limit": 5,
+        "request_id_factory": lambda: "request-17a",
+    }
+    dependencies.update(kwargs)
     return application.execute_request(
         "request",
-        planner=FakePlanner(plan),
-        repository=object(),
-        schema={},
-        context_index=object(),
-        semantic_index=object(),
-        embedder=object(),
-        contextual_reasoner=object(),
-        actor="test",
-        now="2026-08-28T12:00:00Z",
-        context_limit=5,
-        request_id_factory=lambda: "request-17a",
-        **kwargs,
+        **dependencies,
     )
 
 
@@ -86,7 +89,160 @@ def test_retrieve_uses_existing_context_and_propagates_one_request_id(
     assert result.request_id == "request-17a"
     assert result.status is ApplicationStatus.COMPLETED
     assert result.action_results[0].retrieval is retrieved
+    assert result.operational.stages[1].provider_calls == ()
     assert calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
+
+
+def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expose planner metadata and monotonic durations without retaining request internals."""
+    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
+    planner = FakePlanner(
+        RequestPlan((RetrieveAction(SelectionCriteria(None, "Marta", None, (), None)),), ())
+    )
+    planner.model = "gpt-5.6-sol"
+    planner.reasoning_effort = "low"
+    planner.last_usage = {"input_tokens": 7, "output_tokens": 2}
+    clock = iter(float(index) / 1000 for index in range(10))
+    result = application.execute_request(
+        "Where is Marta?",
+        planner=planner,
+        repository=object(),
+        schema={},
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="test",
+        now="now",
+        context_limit=5,
+        request_id_factory=lambda: "request-observed",
+        monotonic=lambda: next(clock),
+    )
+
+    assert result.operational.total_duration_ms == pytest.approx(7.0)
+    planner_stage = result.operational.stages[0]
+    assert planner_stage.name == "planner"
+    assert planner_stage.outcome.value == "completed"
+    assert planner_stage.duration_ms == pytest.approx(3.0)
+    assert planner_stage.model == "gpt-5.6-sol"
+    assert planner_stage.reasoning_effort == "low"
+    assert planner_stage.usage == {"input_tokens": 7, "output_tokens": 2}
+    assert all(
+        stage.duration_ms is None or stage.duration_ms >= 0 for stage in result.operational.stages
+    )
+
+
+def test_operational_action_preserves_every_provider_call() -> None:
+    """Retain contextual and writer usage instead of reducing an action to one provider."""
+    target_unit = unit("Marta")
+    action = WriteAction((target_unit,))
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.UPDATE, "marta-id", "Marta", "Marta.md"),
+    )
+
+    class Provider:
+        """Expose deterministic provider metadata for action instrumentation."""
+
+        model = "provider-model"
+        reasoning_effort = "low"
+        last_usage = {"input_tokens": 500, "output_tokens": 40}
+
+        def resolve(self, request: object) -> tuple[dict[str, str], dict[str, int]]:
+            """Return one safe contextual decision."""
+            del request
+            return ({"outcome": "UNRESOLVED"}, self.last_usage)
+
+        def write(self, request: object) -> dict[str, str]:
+            """Return one deterministic bounded writer result."""
+            del request
+            self.last_usage = {"input_tokens": 900, "output_tokens": 60}
+            return {"operations": []}
+
+    provider = Provider()
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(
+            application,
+            "preflight_write_action",
+            lambda action, **kwargs: (kwargs["contextual_reasoner"].resolve(object()), preflight)[
+                1
+            ],
+        )
+        monkeypatch.setattr(
+            application,
+            "render_reference_facts",
+            lambda *args: ReferenceRenderingResult(((),), ()),
+        )
+
+        def update(*args: Any, **kwargs: Any) -> EntityPersistenceResult:
+            """Invoke the writer boundary before returning deterministic persistence evidence."""
+            kwargs["writer"].write(object())
+            return EntityPersistenceResult(PersistenceOperation.UPDATED, "marta-id", "Marta.md", 1)
+
+        monkeypatch.setattr(application, "materialize_update", update)
+        result = run(
+            RequestPlan((action,), ()), monkeypatch, contextual_reasoner=provider, writer=provider
+        )
+    finally:
+        monkeypatch.undo()
+
+    calls = result.operational.stages[1].provider_calls
+    assert [call.name for call in calls] == ["contextual_resolution", "writer"]
+    assert [call.usage for call in calls] == [
+        {"input_tokens": 500, "output_tokens": 40},
+        {"input_tokens": 900, "output_tokens": 60},
+    ]
+
+
+def test_operational_action_preserves_multiple_calls_to_one_provider() -> None:
+    """Retain each call when one provider is invoked more than once in an action."""
+    provider = type(
+        "Provider",
+        (),
+        {
+            "model": "resolver",
+            "reasoning_effort": "medium",
+            "last_usage": {"input_tokens": 1},
+            "resolve": lambda self, request: ({"outcome": "UNRESOLVED"}, self.last_usage),
+        },
+    )()
+    target_unit = unit("Marta")
+    action = WriteAction((target_unit,))
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.UPDATE, "marta-id", "Marta", "Marta.md"),
+    )
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+
+        def preflight_twice(action: WriteAction, **kwargs: Any) -> tuple[UnitTargetPreflight, ...]:
+            """Make two deterministic calls through the supplied resolver."""
+            kwargs["contextual_reasoner"].resolve(object())
+            provider.last_usage = {"input_tokens": 2}
+            kwargs["contextual_reasoner"].resolve(object())
+            return preflight
+
+        monkeypatch.setattr(application, "preflight_write_action", preflight_twice)
+        monkeypatch.setattr(
+            application,
+            "render_reference_facts",
+            lambda *args: ReferenceRenderingResult(((),), ()),
+        )
+        monkeypatch.setattr(
+            application,
+            "materialize_update",
+            lambda *args, **kwargs: EntityPersistenceResult(
+                PersistenceOperation.UPDATED, "marta-id", "Marta.md", 1
+            ),
+        )
+        result = run(RequestPlan((action,), ()), monkeypatch, contextual_reasoner=provider)
+    finally:
+        monkeypatch.undo()
+
+    calls = result.operational.stages[1].provider_calls
+    assert [call.name for call in calls] == ["contextual_resolution", "contextual_resolution"]
+    assert [call.usage for call in calls] == [{"input_tokens": 1}, {"input_tokens": 2}]
 
 
 def test_create_dependency_runs_target_first_with_preflighted_identity(

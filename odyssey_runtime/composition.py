@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
+from typing import cast
 from zoneinfo import ZoneInfo
 
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
@@ -16,6 +18,7 @@ from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.materialization import OpenAILunaWriter
+from odyssey_core.observability import OperationalOutcome, OperationalStage
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.request_planning import OpenAIRequestPlanner
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
@@ -28,6 +31,7 @@ class RuntimeComposition:
 
     core_execute: Callable[[str, str | None], ApplicationResult]
     refresh_indexes: Callable[[], None]
+    monotonic: Callable[[], float] = perf_counter
 
     def execute(self, user_request: str, request_id: str | None = None) -> ApplicationResult:
         """Execute one request and refresh derived indexes after affected mutations.
@@ -39,10 +43,51 @@ class RuntimeComposition:
         Returns:
             The typed Core ApplicationResult after any required derived-index refresh.
         """
+        started = self.monotonic()
         result = self.core_execute(user_request, request_id)
+        stages = list(result.operational.stages)
         if result.affected_stable_note_ids:
-            self.refresh_indexes()
-        return result
+            refresh_started = self.monotonic()
+            try:
+                self.refresh_indexes()
+            except Exception as error:
+                stages.append(
+                    OperationalStage(
+                        "index_refresh",
+                        OperationalOutcome.FAILED,
+                        max(0.0, (self.monotonic() - refresh_started) * 1000),
+                        error_category=type(error).__name__,
+                    )
+                )
+                return cast(
+                    ApplicationResult,
+                    replace(
+                        result,
+                        operational=replace(
+                            result.operational,
+                            total_duration_ms=max(0.0, (self.monotonic() - started) * 1000),
+                            stages=tuple(stages),
+                        ),
+                    ),
+                )
+            stages.append(
+                OperationalStage(
+                    "index_refresh",
+                    OperationalOutcome.COMPLETED,
+                    max(0.0, (self.monotonic() - refresh_started) * 1000),
+                )
+            )
+        return cast(
+            ApplicationResult,
+            replace(
+                result,
+                operational=replace(
+                    result.operational,
+                    total_duration_ms=max(0.0, (self.monotonic() - started) * 1000),
+                    stages=tuple(stages),
+                ),
+            ),
+        )
 
 
 def build_runtime_from_environment() -> RuntimeComposition:
