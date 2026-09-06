@@ -1,86 +1,143 @@
-# Odyssey
-
-Odyssey is a personal knowledge system.
+# Odyssey agent instructions
 
 ## Goal
 
-The system receives unstructured information and transforms it into atomic Markdown notes.
+Odyssey turns unstructured personal information into durable, reusable knowledge. Canonical personal knowledge remains human-readable Markdown; automation should make capture and retrieval easier without replacing the user's files with a second authority.
 
-Each note should represent one entity, concept, idea, person, place, project, or other item with its own identity.
-
-Notes can link to other notes.
-
-A single input may result in:
-- creating one note
-- creating several related notes
-- updating existing notes
-- creating links between notes
+A single request may retrieve knowledge, create or update several notes, resolve references, or combine reads and writes. Preserve stable identity and fail closed when identity or mutation authority is ambiguous.
 
 ## Current architecture
 
-For now:
-- n8n handles orchestration and workflows
-- `odyssey_core/` is the Python application/domain core
-- Markdown files are the source of truth
-- LLM APIs may be used for extraction, classification, reasoning, and note generation
-- external interfaces and input channels will be decided later
+```text
+external client
+     |
+     v
+n8n integration/orchestration
+     |
+     v
+thin Odyssey runtime
+     |
+     v
+odyssey_core/
+     |
+     +--> canonical Markdown in /data/odyssey/vault
+     +--> durable non-knowledge state in /data/odyssey/state
+     `--> rebuildable runtime/index state in /data/odyssey/runtime
+```
 
-Do not introduce LangGraph, databases, vector databases, additional services, or new infrastructure unless they solve a concrete problem that cannot be handled simply with the current architecture.
+The current standalone consumer is the Phase 20 mobile web MVP under `odyssey_web/`. ChatGPT or other clients may also consume Odyssey, but no client owns the knowledge semantics.
+
+- `odyssey_core/` owns domain, note, identity, planning, retrieval, validation, and mutation behavior.
+- `workflows/` owns n8n integration/orchestration definitions.
+- Markdown is authoritative personal knowledge.
+- SQLite/indexes/embeddings/caches are derived and rebuildable.
+- `config/note-schema.json` is the machine-readable canonical schema.
+- n8n, browser code, and model providers must not become alternate semantic authorities.
+
+Do not introduce LangGraph, a vector service, graph database, queue, additional application server, or other infrastructure unless a concrete requirement cannot be handled cleanly by the current boundaries.
 
 ## Development principles
 
-- Prefer the simplest working solution.
-- Understand the real requirement before increasing architectural complexity, and propose a simpler alternative when appropriate.
-- Ask the user when a material requirement is ambiguous rather than guessing.
-- Do not add infrastructure without a clear need.
-- Do not introduce infrastructure merely because it may be useful someday.
-- Explain important architectural trade-offs before making large changes.
-- Document significant architecture decisions when they are made.
-- When documenting workflows, architecture, decision flows, or component interactions, include a concise text/ASCII diagram when it materially improves understanding or recall. Prefer simple structural or flow diagrams; omit decorative or redundant diagrams when prose is clearer.
-- Keep components modular so they can be replaced later.
-- Prefer reusable subworkflows with clear input and output contracts.
-- Prefer native n8n nodes when they solve the problem cleanly.
-- Use custom code only when it provides a clear advantage over native n8n functionality.
-- Put new Odyssey domain and note logic in `odyssey_core/` by default; use `workflows/` for n8n integration and orchestration behavior.
-- Avoid modifying unrelated files or workflows.
-- Prefer small, testable changes.
-- All functions and methods must have functional docstrings that describe their domain responsibility, parameters, returned values when applicable, and relevant errors. Explain what the function does rather than narrating implementation details.
-- Write production Python for a human reader: add concise concrete examples to non-trivial functions when they materially clarify inputs, outputs, or transformations, but omit them from trivial accessors and tests where they add noise.
-- Add production-code comments when security reasoning, parsing state, or a transformation is not obvious. Comments should explain purpose or intent rather than restating the syntax.
-- Use Ruff for Python linting and formatting, and pytest as the official Python test runner. New tests should normally use native pytest style; preserve existing unittest tests and migrate them only when functional work already requires modification.
-- Use Git branches, commits, Pull Request state, tests, and architecture documentation as the source of project-development state.
-- Verify every workflow before declaring it complete or ready. Verification must pass for completion or readiness, but a safe checkpoint commit may be made after a failure when it is clearly marked as such.
-- Whenever a production LLM prompt, model-facing instruction, or structured-output contract changes materially, rerun focused live evidence with the same production model and reasoning configuration before treating the new behavior as validated. Deterministic tests remain required for schema and fail-closed behavior but are not a substitute for checking that the actual model follows the revised prompt. Keep the live benchmark proportional to the change rather than rerunning model selection unnecessarily; if provider access is unavailable, report the missing live-evidence step explicitly instead of silently treating the prompt change as validated.
-- That focused live evidence must also include a compact regression-sentinel set for prior behaviors that the prompt or structured-output change could reasonably disturb. Reuse frozen existing cases and oracles when possible; new-capability cases alone are not sufficient when older behavior is at risk. Keep the sentinel set proportional rather than rerunning every historical benchmark or model-selection experiment. If a sentinel fails, first determine whether the oracle is over-constrained or the model genuinely regressed before changing the production prompt.
-- Never silently change the ontology schema; schema changes require an explicit proposal and normally human approval.
-- Do not expose, print, commit, or store secrets or credentials in project files.
-- Before making potentially destructive changes, explain what will be changed and why.
-- Never delete an unmerged branch or a branch whose merge status or relationship to the completed work is uncertain.
+- Prefer the simplest working solution and challenge unnecessary complexity.
+- Understand the user-visible requirement before optimizing implementation details.
+- Keep changes small, reviewable, and testable; avoid unrelated edits.
+- Put Odyssey knowledge/domain logic in `odyssey_core/` by default and integration/orchestration in `workflows/`.
+- Prefer native n8n behavior when it solves an integration problem cleanly; use custom code when it gives a clear contract or safety advantage.
+- Keep components replaceable behind explicit contracts.
+- Never silently change the ontology/schema. Material schema changes require an explicit proposal, compatibility/migration review, deterministic validation, and normally human approval.
+- Never expose, print, commit, or persist credentials/secrets in project files or documentation.
+- Explain material architecture/security/data trade-offs before changing those boundaries.
+- Do not delete or overwrite real personal knowledge as part of development evidence.
+
+Production Python is for human readers. Functions and methods must have useful functional docstrings describing domain responsibility, parameters, returns when relevant, and meaningful errors. Add concise comments/examples only where behavior or safety reasoning is not obvious; do not narrate syntax.
+
+Ruff is the Python lint/format authority and pytest is the Python test runner. Preserve existing unittest tests unless functional work already makes migration useful.
+
+## Model-facing changes
+
+A deterministic test cannot prove that a production model follows a changed prompt or structured-output instruction.
+
+Whenever a production LLM prompt, model-facing instruction, or structured-output contract changes materially:
+
+1. keep deterministic schema/fail-closed tests;
+2. run focused live evidence with the same production model and reasoning configuration;
+3. include a compact regression-sentinel set for prior behavior the change could disturb;
+4. reuse frozen cases/oracles where possible rather than rerunning unrelated model selection;
+5. if provider access is unavailable, report the missing live-evidence gate explicitly instead of treating the change as validated.
+
+Before changing a prompt because a sentinel failed, determine whether the model regressed or the oracle is over-constrained.
 
 ## Development autonomy and confirmation
 
-On a feature branch, proceed autonomously with routine, reversible actions that are in scope for the approved task. This includes repository edits and tests; repeated test or validator iterations; development/test n8n workflow creation, execution, inspection, restart, and straightforward review fixes; isolated disposable fixtures and non-destructive probes; routine retries; commits and pushes to the current feature branch; and creating or updating a Draft Pull Request. Multiple n8n executions, probes, fixtures, or test iterations do not by themselves require confirmation, and an explicitly in-scope Odyssey development workflow is not sensitive merely because it is live.
+On a feature branch, proceed autonomously with routine, reversible, in-scope work: repository edits, tests, validators, isolated disposable fixtures, development/test n8n executions, review fixes, commits/pushes, and Draft PR creation/update.
 
-Ask before actions with material data, security, architecture, or irreversibility risk: modifying or deleting real personal data in `/data/odyssey/vault`; destructive migrations with unclear rollback; deleting Docker volumes or resetting databases; destructive changes to important live workflows; credential, secret, OAuth-scope, permission, filesystem, network, or other security-boundary changes; new services or significant infrastructure; material architecture changes outside the approved scope; force-pushes or destructive Git history rewrites; direct pushes to `main`; merging a Pull Request; or material product/contract ambiguity that cannot be inferred safely.
+Ask before actions with material data, security, architecture, or irreversibility risk, including:
 
-Routine implementation risk means proceed autonomously; material data, security, architecture, or irreversibility risk means ask. A failed final verification means the work is not ready or complete, not that it should be discarded. Preserve coherent, reviewable implementation on the feature branch and record failed checks or blockers in a commit or Draft Pull Request when useful. Remove only disposable fixtures or probes, generated junk, secrets, unsafe changes, and clearly abandoned experiments.
+- modifying/deleting real personal data in `/data/odyssey/vault`;
+- destructive migrations, database/volume resets, or important live-workflow deletion;
+- credential, OAuth-scope, permission, filesystem, network, Cloudflare, or other security-boundary changes;
+- new services or material architecture outside the approved scope;
+- force pushes/destructive Git history rewrites;
+- direct pushes to `main`;
+- merging a Pull Request;
+- material product/contract ambiguity that cannot be inferred safely.
 
-## Significant functional-phase checklist
+Routine implementation risk means proceed; material authority/security/data risk means ask. A failed final verification means the branch is not ready, not that coherent work should be discarded.
 
-For a significant functional phase, read the canonical [Functional Roadmap](docs/architecture/functional-roadmap.md) rather than reconstructing phase state from chat or agent memory. Read the relevant architecture documents and ADRs before changing a contract, define the phase contract under the [Development Pipeline](docs/architecture/development-pipeline.md), and run the architecture challenge before implementation.
+## Significant functional phases
 
-Whenever discussion introduces a new intended functional phase/subphase, deferred requirement, or future product/architecture direction, update the Functional Roadmap in the same coherent documentation change so it remains discoverable from the canonical plan. Put detailed contracts in the appropriate canonical architecture document (or [Future extension points](docs/architecture/future-extension-points.md) for cross-phase future directions) and link/summarize them from the roadmap rather than duplicating them. Do not leave planned Odyssey work only in chat, an issue, a branch, a PR description, or agent memory.
+For a significant functional phase:
 
-Before automatically delegating implementation to Codex, apply the canonical implementation-routing rule in the [Development Pipeline](docs/architecture/development-pipeline.md): a GitHub-capable agent should implement genuinely bounded, well-understood changes when it can do so safely and rely on deterministic CI; use Codex when local repository execution, iterative debugging/testing, broader multi-file changes, benchmark work, or environment access materially improves reliability. Regardless of the author, preserve semantic review, deterministic CI, and human merge as separate gates.
+1. read the canonical [Functional Roadmap](docs/architecture/functional-roadmap.md);
+2. read the relevant current architecture contracts and ADRs;
+3. define objective, acceptance criteria, out-of-scope work, and open decisions under the [Development Pipeline](docs/architecture/development-pipeline.md);
+4. run the repository `odyssey-architecture-challenge` skill before implementation;
+5. implement code and tests together;
+6. run focused checks during iteration and `odyssey-verify-change` before declaring readiness;
+7. create/maintain a Draft PR until deterministic CI and semantic review are clean;
+8. human merge only;
+9. after merge, use `odyssey-post-merge` for safe synchronization/branch cleanup when the local environment is available.
 
-Prefer the simplest architecture and challenge unnecessary complexity. Keep one canonical source for each project fact or contract; link to it elsewhere instead of duplicating it. Implement code and tests together, review both code and documentation for correctness and stale information, and update roadmap or ADR status only when actual project state changes. Readiness requires deterministic verification and CI, followed by PR, semantic/human review, and human merge.
+When discussion creates a real future requirement or functional direction, preserve it in the roadmap or the appropriate canonical future-direction document. Do not leave project direction only in chat, an issue, a PR description, or agent memory.
+
+## Implementation routing
+
+Use the smallest executor that can validate the work reliably:
+
+- a GitHub-capable agent is appropriate for bounded documentation/status changes, PR review, and small well-understood code changes whose validation can rely on deterministic CI;
+- use Codex when local repository execution, iterative debugging/testing, broad multi-file implementation, benchmark work, Raspberry/Docker/filesystem access, or environment interaction materially improves reliability.
+
+The author never gains merge authority. Deterministic CI, semantic review, and human merge remain separate gates.
+
+## Documentation ownership
+
+Odyssey deliberately keeps few **canonical owners** and links to them instead of copying their content.
+
+```text
+README / product vision        -> product entry point and durable promise
+overview                       -> current architecture
+functional-roadmap             -> current phase/status and intended order
+knowledge-model-direction      -> current knowledge representation
+note-schema + JSON             -> schema interpretation + exact machine schema
+storage                        -> data authority/storage ownership
+future-* / platform directions -> intentionally deferred contracts
+phase docs / ADRs / benchmarks -> historical contract/evidence
+```
+
+Rules:
+
+- Current status belongs in `functional-roadmap.md`, not repeated across historical phase documents.
+- Current system shape belongs in `overview.md`; phase documents may preserve checkpoint-local wording for historical evidence.
+- Exact schema fields/types live in `config/note-schema.json`; prose explains principles and boundaries rather than copying the registry.
+- One future capability should have one detailed owner. `future-extension-points.md` is primarily an index plus cross-cutting directions that do not have their own document.
+- Do not create a separate Markdown document for every function, workflow, benchmark, or subphase when source code, tests, an ADR, or an existing canonical document already owns the durable contract.
+- When a document becomes historical, keep it only if it preserves evidence/decisions not captured elsewhere; otherwise consolidate safely and update links.
+- Documentation cleanup must not erase why a safety or architecture decision was made. Git/PR history is not a substitute for a still-needed durable contract, but it is sufficient for routine transient implementation detail.
 
 ## GitHub review workflow
 
-Before beginning each significant new functional Odyssey phase, use the repository's `odyssey-architecture-challenge` skill as a reasoning checkpoint before implementation. It is not required for tiny bug fixes, straightforward review feedback, formatting, documentation typo fixes, routine test corrections, or post-merge cleanup.
+Before continuing implementation on a branch with an open PR, use `odyssey-pr-feedback` to inspect review feedback. If comments conflict with each other or with an approved material contract, ask rather than guessing.
 
-Before continuing implementation on a branch that has an open Pull Request, use the repository's `odyssey-pr-feedback` skill to inspect and process review feedback.
+Use `odyssey-verify-change` before declaring a PR complete/ready. Verification is required for readiness; a safe checkpoint commit may still record an incomplete or blocked state explicitly.
 
-If a review comment conflicts with another comment, the approved architecture, or a material requirement, ask the user rather than guessing.
-
-Use `odyssey-verify-change` before declaring implementation complete or ready for review. After the user merges a Pull Request, use `odyssey-post-merge` for safe synchronization and branch cleanup. Do not require the user to copy GitHub review comments back into the terminal.
+Never delete an unmerged branch or a branch whose merge relationship is uncertain. Human approval is required for merge/deployment/security/destructive/credential/network/real-vault changes.

@@ -1,69 +1,62 @@
 # Product Vision
 
-Odyssey turns unstructured personal information into durable, reusable knowledge without making a
-second system authoritative over the user's Markdown. The product should help a person capture,
-connect, retrieve, and revise knowledge while keeping every stored result inspectable and portable.
+Odyssey turns fragments accumulated through life and work into durable, connected knowledge that the user, applications, and AI agents can safely return to and use.
 
-Its enduring product promise is: **Capture without friction, organize automatically, and retrieve the
-right information when it becomes useful.**
+Its enduring promise is:
 
-## Product promise
+> **Capture without friction, organize automatically, and retrieve the right information when it becomes useful.**
 
-- Accept information expressed naturally, including messages that mention several distinct things.
-- Preserve one durable identity per entity, concept, person, place, project, or other knowledge item
-  when the evidence supports that identity.
-- Keep atomic or near-atomic Markdown notes as the source of truth and ordinary wikilinks as the
-  default relationship representation.
-- Prefer an explicit ambiguous or unresolved result over silently attaching facts to the wrong note.
-- Keep automated reasoning behind deterministic contracts that can be tested, replaced, and audited.
+## Product principles
+
+### Capture first
+
+A user should be able to write naturally without choosing a folder, form, note type, property set, or ontology first. One message may mention several subjects or combine a question with new knowledge.
+
+Odyssey interprets that input behind explicit contracts and preserves the resulting knowledge in human-readable form.
+
+### Preserve identity
+
+Knowledge about the same person, project, concept, product, document, or other entity should accumulate around one stable logical identity when the evidence supports it.
 
 ```text
-unstructured input
-       |
-       v
-interpret and decompose
-       |
-       +--> new knowledge --------------------+
-       |                                      |
-       +--> references --> identity evidence -+--> validated Markdown
-                              |
-                        abstain when unsafe
+new statement
+     |
+     v
+resolve existing identity
+     |
+     +--> safe match ----> enrich existing knowledge
+     +--> ambiguous -----> stop / clarify / preserve pending evidence
+     `--> genuinely new -> create new identity
 ```
 
-## Responsibility boundaries
+Similarity alone is never proof of identity. When evidence is insufficient, an explicit ambiguous or unresolved result is better than silent corruption.
 
-ChatGPT or another reasoning client may conduct the conversation. n8n owns integration and
-workflow orchestration. `odyssey_core/` owns reusable domain, note, validation, identity, and
-storage behavior. Markdown remains authoritative; derived indexes and local model artifacts remain
-replaceable and rebuildable.
+### Human-readable knowledge stays authoritative
 
-Odyssey should earn additional complexity through measured need. It does not need a general agent
-framework, graph database, vector service, or new source of truth merely to anticipate future
-scale. Local LLMs and other classifiers are implementation options, not product commitments.
+Canonical personal knowledge is Markdown owned by the user/workspace. SQLite indexes, embeddings, caches, model outputs, Git audit information, and application views may help Odyssey operate, but they do not replace the canonical knowledge.
 
-## Identity-resolution safety
+The user should remain able to inspect, back up, synchronize, and use the Markdown independently of Odyssey.
 
-Incorrectly resolving a reference can corrupt otherwise valid personal knowledge. Resolution is
-therefore layered: exact stored identity evidence first, candidate retrieval second, and contextual
-decision-making only when measured evidence supports it. Candidate rank or similarity is never an
-identity guarantee. A production contextual resolver must preserve three meaningful outcomes:
-`RESOLVED`, `AMBIGUOUS`, and `UNRESOLVED`.
+### Structure must earn its complexity
 
-Phase 11A evaluated possible contextual decision technologies but did not implement the production
-resolver. See [ADR 0002](decisions/0002-phase-11a-contextual-resolution-benchmark.md).
+Odyssey does not maximize schema. A type or property is useful when it enables a repeatable capability such as filtering, comparison, calculation, reminders, analytics, or application behavior.
 
-## Later product direction: proactive resurfacing
+Ordinary facts stay ordinary facts when no such capability requires structure. Future applications may contribute validated domain structure without turning Core into one large business ontology.
 
-Odyssey may later resurface old knowledge when it becomes relevant because of context, time, an active
-project, a new entry, or related incoming information. This is a future capability, not part of the
-current roadmap or Phase 11 implementation. It should remain low-friction and non-disruptive.
+### Safe automation behind bounded contracts
 
-Related future possibilities include derived, recomputable identity/disambiguation health for notes
-that lack distinctive evidence relative to nearby notes, and proactive opportunities to enrich such
-notes. Odyssey does not add a canonical `incomplete` boolean now: a stored flag could become stale and
-would silently change the note schema.
+Models may interpret language and perform bounded semantic judgments, but deterministic code retains authority for schema validity, candidate identity, mutation scope, persistence, security boundaries, and fail-closed behavior.
 
-Human clarification may remain an exceptional fallback when automatic resolution cannot proceed safely,
-but it is not the normal interaction model. Automatic, low-friction resolution remains the preferred UX.
-Future resolution evidence may also include recent conversation or entities, the active project, recent
-notes, and existing links or relationships. These signals are possibilities rather than current contracts.
+Additional model stages and infrastructure are optimizations to justify with evidence, not product goals.
+
+## Product surface
+
+Odyssey is not tied to one chat product. A mobile/web client, ChatGPT, another assistant, or a domain application may consume the same Core knowledge through trusted integration boundaries.
+
+The current product work is a minimal mobile web MVP so real usage can reveal which improvements are valuable before adding richer interfaces, collaboration, applications, or local/mobile runtimes.
+
+## Longer-term direction
+
+Odyssey may become a persistent knowledge layer shared by multiple applications and authorized users while preserving private/local ownership where possible. Expected later capabilities include application composition, structured analytics, collaboration, bounded conversation context, product help, usage/cost observability, capture provenance, and proactive resurfacing.
+
+Those directions should be implemented only from concrete use cases and security/data contracts. The [Functional Roadmap](architecture/functional-roadmap.md) owns implementation order; [Future Extension Points](architecture/future-extension-points.md) indexes intentionally deferred directions.
