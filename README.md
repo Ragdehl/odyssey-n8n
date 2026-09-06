@@ -46,18 +46,9 @@ See [Odyssey Knowledge Model](docs/architecture/knowledge-model-direction.md) an
 
 ## Current product stage
 
-Odyssey has completed the first real n8n/Core end-to-end path and its reliability hardening. The current phase is **Phase 20 — Odyssey Online MVP**:
+Odyssey has completed the first real n8n/Core end-to-end path and its reliability hardening. Current work is **Phase 20 — Odyssey Online MVP**, aimed at making the smallest standalone mobile experience usable before real-user feedback drives further product work.
 
-```text
-20.0  consumer contract                                  ✅
-20.1A grounded-answerer benchmark preparation            ✅
-20.1B focused live answerer evidence                     ➡️ next
-20.2A mobile web source + offline checks                 ✅
-20.2B real n8n serving + Chrome Android validation       ⬜
-20.3  protected Raspberry/Cloudflare deployment + E2E    ⬜
-```
-
-The canonical current status and later work live in the [Functional Roadmap](docs/architecture/functional-roadmap.md).
+The [Functional Roadmap](docs/architecture/functional-roadmap.md) is the single canonical source for the exact current subphase, completed checkpoints, and next gate.
 
 ## Repository and data boundaries
 
