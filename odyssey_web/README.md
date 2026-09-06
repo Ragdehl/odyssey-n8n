@@ -33,6 +33,15 @@ The HTML points to `/api/request` through the `odyssey-api-endpoint` meta value.
 Phase 20.2 continuation may adapt that same-origin path when the real n8n surface is available, without
 widening the browser contract.
 
+## Verification
+
+The repository keeps the frontend dependency-free. CI uses Node's built-in test runner and coverage
+support for `client.js`, with an 80% line-coverage gate, plus syntax checks for both JavaScript modules.
+Python tests verify the static page contract and guard against external assets, browser persistence, and
+`innerHTML` rendering. SonarCloud still analyzes the frontend for code-quality/security findings, while
+frontend coverage is excluded from Sonar because the repository does not add an LCOV toolchain solely for
+this small framework-free surface.
+
 ## Deliberately deferred
 
 This offline checkpoint does not add or validate:
