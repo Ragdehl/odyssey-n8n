@@ -65,4 +65,4 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert "sessionStorage" not in combined
     assert "innerHTML" not in combined
     assert "request_id" in client
-    assert "credentials: \"same-origin\"" in client
+    assert 'credentials: "same-origin"' in client
