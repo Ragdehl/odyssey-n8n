@@ -20,7 +20,7 @@ const errorCard = document.querySelector("#transport-error");
 const errorMessage = document.querySelector("#transport-error-message");
 const retryButton = document.querySelector("#retry-button");
 
-const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.content || "/api/request";
+const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.content ?? "/api/request";
 let retrySubmission = null;
 
 function setBusy(isBusy) {
@@ -61,7 +61,7 @@ function showResult(result) {
     empty: "Sin resultados",
     error: "No completado",
   };
-  resultLabel.textContent = labels[result.kind] || "Odyssey";
+  resultLabel.textContent = labels[result.kind] ?? "Odyssey";
 
   if (result.status === "partial") {
     statusBadge.textContent = "Parcial";
