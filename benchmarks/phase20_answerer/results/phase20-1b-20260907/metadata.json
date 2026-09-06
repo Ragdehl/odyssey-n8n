@@ -1,0 +1,67 @@
+{
+  "cases_path": "benchmarks/phase20_answerer/cases.json",
+  "identity": {
+    "cases": [
+      "simple-single-note-es",
+      "distractors-es",
+      "split-evidence-es",
+      "empty-retrieval-es",
+      "nonempty-insufficient-es",
+      "partial-usable-es",
+      "french-simple",
+      "exact-domain-term-fr",
+      "missing-fact-no-invention-es",
+      "conjunctive-person-es",
+      "misleading-date-distractor-es",
+      "partial-insufficient-fr"
+    ],
+    "profiles": [
+      {
+        "cases": "simple-single-note-es,distractors-es,split-evidence-es,empty-retrieval-es,nonempty-insufficient-es,partial-usable-es,french-simple,exact-domain-term-fr,missing-fact-no-invention-es,conjunctive-person-es,misleading-date-distractor-es,partial-insufficient-fr",
+        "cases_sha256": "0480a402d0b7a2521a46d3ada207b2d843ed12a2e92eed473f87ed825ec15c9c",
+        "contract_sha256": "1f0fd9e8b86ea9b4146c06b3695d93f73278202d054f31c6f5d854e209405ffe",
+        "model": "gpt-5.6-luna",
+        "reasoning": "none"
+      },
+      {
+        "cases": "simple-single-note-es,distractors-es,split-evidence-es,empty-retrieval-es,nonempty-insufficient-es,partial-usable-es,french-simple,exact-domain-term-fr,missing-fact-no-invention-es,conjunctive-person-es,misleading-date-distractor-es,partial-insufficient-fr",
+        "cases_sha256": "0480a402d0b7a2521a46d3ada207b2d843ed12a2e92eed473f87ed825ec15c9c",
+        "contract_sha256": "1f0fd9e8b86ea9b4146c06b3695d93f73278202d054f31c6f5d854e209405ffe",
+        "model": "gpt-5-nano",
+        "reasoning": "default"
+      },
+      {
+        "cases": "simple-single-note-es,distractors-es,split-evidence-es,empty-retrieval-es,nonempty-insufficient-es,partial-usable-es,french-simple,exact-domain-term-fr,missing-fact-no-invention-es,conjunctive-person-es,misleading-date-distractor-es,partial-insufficient-fr",
+        "cases_sha256": "0480a402d0b7a2521a46d3ada207b2d843ed12a2e92eed473f87ed825ec15c9c",
+        "contract_sha256": "1f0fd9e8b86ea9b4146c06b3695d93f73278202d054f31c6f5d854e209405ffe",
+        "model": "gpt-5.6-sol",
+        "reasoning": "none"
+      }
+    ],
+    "smoke": false
+  },
+  "pricing": {
+    "as_of": "2026-09-07",
+    "models": {
+      "gpt-5-nano": {
+        "cached_input_per_million": 0.005,
+        "input_per_million": 0.05,
+        "output_per_million": 0.4
+      },
+      "gpt-5.6-luna": {
+        "cached_input_per_million": 0.02,
+        "input_per_million": 0.2,
+        "output_per_million": 1.2
+      },
+      "gpt-5.6-sol": {
+        "cached_input_per_million": 0.4,
+        "input_per_million": 4.0,
+        "output_per_million": 20.0
+      }
+    },
+    "source": "Official OpenAI model pages: https://developers.openai.com/api/docs/models/gpt-5.6-luna, https://developers.openai.com/api/docs/models/gpt-5-nano, https://developers.openai.com/api/docs/models/gpt-5.6-sol"
+  },
+  "run_id": "phase20-1b-20260907",
+  "smoke": false,
+  "started_at": "2026-09-06T22:17:58.418219+00:00"
+}

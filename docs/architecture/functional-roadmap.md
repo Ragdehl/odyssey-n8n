@@ -33,7 +33,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
 20.1A offline grounded-answerer benchmark preparation        ✅ complete
-20.1B focused live answerer model evidence                    ➡️ next
+20.1B focused live answerer model evidence                    ➡️ next (evidence checkpoint prepared; human review/merge pending)
 20.2A mobile web source + offline deterministic checks        ✅ complete
 20.2B real n8n serving + Chrome Android validation            ⬜
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜

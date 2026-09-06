@@ -1,0 +1,15 @@
+{
+  "review_scope": "Every deterministic-passing row in the focused 36-call matrix was inspected for unsupported claims, evidence loss, and useful-answer quality.",
+  "unsupported_or_hallucinated_claims": [],
+  "malformed_or_contract_invalid_rows": [],
+  "quality_concerns": [
+    {
+      "profile": "nano-default",
+      "case": "conjunctive-person-es",
+      "observed_output": "Marta.",
+      "finding": "The response identifies the correct supported person but omits the requested grounded conditions (works at Thales and lives in Lyon). The frozen deterministic oracle passes because it requires only the name fragment and support ID; this is a human-quality/evidence-loss concern, not an oracle change.",
+      "severity": "material_for_answerer_adoption"
+    }
+  ],
+  "accepted_rows": "Luna and Sol preserved the requested conjunctive facts; all candidates avoided unsupported claims in the other inspected rows."
+}

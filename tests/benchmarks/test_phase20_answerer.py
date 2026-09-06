@@ -25,6 +25,7 @@ from benchmarks.phase20_answerer.benchmark import (
     select_cases,
     validate_answer,
 )
+from benchmarks.phase20_answerer.run_live import PROFILES, _request
 
 CASES_PATH = Path("benchmarks/phase20_answerer/cases.json")
 
@@ -327,3 +328,28 @@ def test_aggregates_keep_missing_usage_and_cost_as_none() -> None:
     assert aggregate["average_latency_seconds"] == 2.0
     assert aggregate["total_input_tokens"] is None
     assert aggregate["total_estimated_cost_usd"] is None
+
+
+def test_live_profiles_are_allowlisted_and_preserve_frozen_request() -> None:
+    """The live adapter exposes only contract-defined profiles and does not alter the prompt."""
+    assert [(profile.model, profile.reasoning) for profile in PROFILES] == [
+        ("gpt-5.6-luna", "none"),
+        ("gpt-5-nano", "default"),
+        ("gpt-5.6-sol", "none"),
+    ]
+    case = next(case for case in load_cases(CASES_PATH) if case.id == "simple-single-note-es")
+    request = _request(PROFILES[0], case)
+    frozen = provider_request(case)
+    assert request["input"] == frozen["input"]
+    assert request["text"] == frozen["text"]
+    assert request["store"] is False
+    assert request["model"] == "gpt-5.6-luna"
+    assert request["reasoning"] == {"effort": "none"}
+
+
+def test_nano_profile_omits_unsupported_reasoning_field() -> None:
+    """The older nano profile records provider default reasoning without sending a rejected field."""
+    case = next(case for case in load_cases(CASES_PATH) if case.id == "simple-single-note-es")
+    request = _request(PROFILES[1], case)
+    assert request["model"] == "gpt-5-nano"
+    assert "reasoning" not in request

@@ -211,3 +211,28 @@ Production adoption additionally requires:
 - whether the materially cheaper alternative passes the grounding/quality gate;
 - final production model/configuration;
 - final dated pricing snapshot used for the live cost comparison.
+
+## 20.1B evidence checkpoint — 2026-09-07
+
+The focused live matrix was executed on the frozen 20.1A cases and contract. It used the
+Responses API with `store: false`, one case per request, and only the three contract-defined
+profiles:
+
+| Profile | Model | Reasoning configuration | Cases | Passed | Mean latency | Input / output / reasoning tokens | Estimated cost |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Luna | `gpt-5.6-luna` | `none` | 12 | 12 (100%) | 1.764 s | 3,663 / 542 / 0 | $0.001383 |
+| cheaper alternative | `gpt-5-nano` | provider default; no reasoning field | 12 | 12 (100%) | 4.763 s | 3,663 / 10,083 / 9,216 | $0.00421635 |
+| Sol reference | `gpt-5.6-sol` | `none` | 12 | 12 (100%) | 1.617 s | 3,663 / 553 / 0 | $0.025712 |
+
+All 36 provider calls succeeded, produced contract-valid structured answers, and passed the
+deterministic oracle. Human inspection found no unsupported or hallucinated factual claims. The
+cheaper alternative produced one material useful-answer quality concern that the compact oracle
+does not detect: on `conjunctive-person-es` it answered only `Marta.` and omitted the two supplied
+conditions requested by the user. Luna and Sol preserved both conditions. The complete per-case
+rows and this semantic review are preserved under
+`benchmarks/phase20_answerer/results/phase20-1b-20260907/`.
+
+The evidence recommendation is `gpt-5.6-luna` with reasoning `none`: it passes every frozen and
+human-reviewed sentinel, is materially cheaper than Sol, and was faster and less token-intensive
+than the cheaper model in this run. No production workflow or answerer wiring is changed by this
+checkpoint; adoption wiring remains a later product integration step.
