@@ -1,6 +1,6 @@
 # Phase 20 — Odyssey Online MVP
 
-Status: **Phase 20.0 consumer contract and architecture challenge complete on merge; Phase 20.1 next**
+Status: **Phase 20.0 complete; Phase 20.1A complete; Phase 20.1B next; Phase 20.2 offline frontend checkpoint merged, with real n8n/Chrome integration still pending**
 
 ## Objective
 
@@ -46,11 +46,18 @@ This is a thin consumer/product surface, not a second knowledge system. Markdown
 ## Phase sequence
 
 ```text
-20.0  consumer contract + architecture challenge             ✅ complete on merge
-20.1  grounded answerer benchmark                            ➡️ next
-20.2  minimal mobile web frontend                            ⬜
+20.0  consumer contract + architecture challenge             ✅ complete
+20.1A offline grounded-answerer benchmark preparation        ✅ complete
+20.1B focused live answerer model evidence                    ➡️ next
+20.2A mobile web source + offline deterministic checks        ✅ complete
+20.2B real n8n serving + Chrome Android validation            ⬜
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
+
+Phase 20.2A records the merged offline checkpoint from PR #84. It proves the browser-side contract and
+minimal mobile interaction without claiming environment-backed integration. Phase 20.2 remains incomplete
+until the checked-in web surface is served through the adopted n8n boundary and exercised in Chrome on
+Android against the real product endpoint.
 
 ## 20.0 — consumer contract and architecture challenge
 
@@ -285,6 +292,11 @@ The benchmark harness and deterministic fixtures can be prepared without the Ras
 
 ## 20.2 — minimal mobile web frontend
 
+PR #84 completed the offline/browser half of this phase: the checked-in `odyssey_web/` client now provides
+the minimal mobile UI, safe per-submission `request_id`, explicit same-ID retry behavior, narrow response
+validation, loading/error/partial states, dependency-free JavaScript tests, and a deterministic line
+coverage gate. It deliberately does not claim the n8n serving path or real Android integration.
+
 Build only the user surface needed to exercise Odyssey naturally from a phone:
 
 ```text
@@ -311,6 +323,10 @@ Minimum behavior:
 Gboard dictation is treated as normal keyboard input. Phase 20 does not implement microphone recording, browser speech APIs, transcription APIs, or stored audio.
 
 Do not add accounts, chat-history synchronization, attachments, push notifications, PWA/offline behavior, rich Markdown editing, or native mobile packaging merely to call the MVP complete.
+
+Remaining Phase 20.2 evidence is environment-backed: serve the checked-in page through the adopted n8n
+product surface, connect the same-origin `/api/request` endpoint, and verify the interaction in Chrome on
+Android. Those checks wait for Raspberry/n8n access.
 
 ## 20.3 — protected deployment and real E2E
 
