@@ -202,3 +202,7 @@ Decide from real Odyssey Online usage:
 7. how persistent semantic request history later reconnects with session conversations without contaminating canonical knowledge retrieval.
 
 Do not introduce a new database, chat-history service, separate vector store, or second general-purpose agent until real usage demonstrates that the simpler scoped-retrieval + bounded-session-context design is insufficient.
+
+## Related product observability direction
+
+The help/conversation surface should remain separate from product telemetry concerns. Odyssey's future simple-vs-advanced usage, token, cost, diagnostic, graph, and month-end projection direction is preserved in [Future Odyssey product usage observability](future-product-usage-observability.md).
