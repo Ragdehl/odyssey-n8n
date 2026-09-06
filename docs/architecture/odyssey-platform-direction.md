@@ -107,6 +107,8 @@ External model providers remain replaceable boundaries. Do not embed raw provide
 
 A future local/mobile product should use an explicitly designed safe provider-authentication/credential-relay pattern when external AI is needed—for example a user-authorized broker/gateway or another mechanism that keeps long-lived secrets out of distributable client code. Choose a concrete provider/pattern only when implementation begins; avoid freezing vendor availability/pricing claims into durable architecture documentation.
 
+A historical exploration on 2026-09-02 identified an OAuth/PKCE account-connect plus BYOK/credential-broker pattern as promising; OpenRouter was then a concrete candidate for evaluating that UX. This is preserved as prior exploration, **not** an Odyssey dependency or current provider claim. Re-check provider security, availability, pricing, and capabilities from current sources before any future adoption decision.
+
 ## Permissions consequence
 
 Fine-grained private/shared authorization must occur before underlying note access and before retrieval/model exposure. If every device already receives every Markdown file, an API filter cannot provide real confidentiality over those files.

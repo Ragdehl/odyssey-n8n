@@ -6,7 +6,7 @@ The product principle is simple: **capture freely, preserve identity, add struct
 
 ## Current architecture
 
-Odyssey Core is independent from any one conversational client. The current standalone MVP uses a mobile web surface; ChatGPT or another reasoning client may also consume Odyssey through an integration boundary.
+Odyssey Core is independent from any one conversational client. The current standalone MVP is being built as a mobile web surface; ChatGPT or another reasoning client may also consume Odyssey through an integration boundary.
 
 ```text
 mobile browser / reasoning client

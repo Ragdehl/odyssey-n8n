@@ -4,12 +4,14 @@ The reviewable source of permanent credential-free n8n workflows lives under the
 
 ## Current versioned workflows
 
-| Workflow source | Role |
-| --- | --- |
-| `workflows/odyssey-runtime.ts` | Development/test bridge from n8n to the internal host Odyssey runtime. Not a public product endpoint. |
-| `workflows/storage-read.ts` | Low-level contained Markdown read utility. |
-| `workflows/storage-write.ts` | Low-level create-only Markdown write utility. |
-| `workflows/storage-list.ts` | Low-level contained Markdown path-list utility. |
+| Workflow source | Last recorded live n8n ID | Role |
+| --- | --- | --- |
+| `workflows/odyssey-runtime.ts` | — | Development/test bridge from n8n to the internal host Odyssey runtime. Not a public product endpoint. |
+| `workflows/storage-read.ts` | `4lkNuXTmbqzuO3th` | Low-level contained Markdown read utility. |
+| `workflows/storage-write.ts` | `yIg02EH2IotEHOkS` | Low-level create-only Markdown write utility. |
+| `workflows/storage-list.ts` | `kdjF8Oq5NxK26fwq` | Low-level contained Markdown path-list utility. |
+
+Live n8n IDs are operational identifiers recorded from the deployed environment, not semantic/API identity; re-verify them before relying on them after workflow recreation/import.
 
 The three storage utilities predate the current Core application flow and remain useful for development/reference/administrative use. They do not own production semantic mutation; Core owns identity, validation, revision, atomic facts, references, bulk/delete/type-migration behavior.
 
