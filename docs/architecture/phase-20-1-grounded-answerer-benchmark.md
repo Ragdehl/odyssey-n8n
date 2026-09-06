@@ -1,6 +1,6 @@
 # Phase 20.1 — Grounded answerer benchmark
 
-Status: **20.1A offline contract/harness complete on merge; 20.1B live provider evidence pending**
+Status: **20.1A complete; 20.1B live evidence/adoption checkpoint complete; 20.2B integration next**
 
 ## Objective
 
@@ -214,7 +214,8 @@ Production adoption additionally requires:
 
 ## 20.1B evidence checkpoint — 2026-09-07
 
-The focused live matrix was executed on the frozen 20.1A cases and contract. It used the
+Frozen run ID: `phase20-1b-20260907`. A single Luna smoke call was completed first, then the
+focused live matrix was executed on the frozen 20.1A cases and contract. It used the
 Responses API with `store: false`, one case per request, and only the three contract-defined
 profiles:
 
@@ -226,13 +227,16 @@ profiles:
 
 All 36 provider calls succeeded, produced contract-valid structured answers, and passed the
 deterministic oracle. Human inspection found no unsupported or hallucinated factual claims. The
-cheaper alternative produced one material useful-answer quality concern that the compact oracle
-does not detect: on `conjunctive-person-es` it answered only `Marta.` and omitted the two supplied
-conditions requested by the user. Luna and Sol preserved both conditions. The complete per-case
-rows and this semantic review are preserved under
+cheaper alternative failed the adoption gate despite its deterministic 12/12 result: it produced
+one material useful-answer quality concern that the compact oracle does not detect. On
+`conjunctive-person-es` it answered only `Marta.` and omitted the two supplied conditions requested
+by the user. Luna and Sol preserved both conditions. The complete per-case rows and this semantic
+review are preserved under
 `benchmarks/phase20_answerer/results/phase20-1b-20260907/`.
 
-The evidence recommendation is `gpt-5.6-luna` with reasoning `none`: it passes every frozen and
-human-reviewed sentinel, is materially cheaper than Sol, and was faster and less token-intensive
-than the cheaper model in this run. No production workflow or answerer wiring is changed by this
-checkpoint; adoption wiring remains a later product integration step.
+The adopted evidence recommendation is `gpt-5.6-luna` with reasoning `none`: Luna passes every
+frozen and human-reviewed sentinel, is materially cheaper than Sol, and was faster and less
+token-intensive than the cheaper model in this run. The dated pricing basis is preserved in
+`benchmarks/phase20_answerer/pricing_snapshot.json`; token usage and latency are recorded per row.
+No production workflow or answerer wiring is changed by this checkpoint. Wiring the adopted
+answerer remains deferred to Phase 20.2B.

@@ -181,8 +181,10 @@ def _validate_case(raw: object) -> AnswerCase:
 def load_cases(path: Path = CASES_PATH) -> tuple[AnswerCase, ...]:
     """Load and validate the frozen benchmark suite from an internal repository file."""
     payload = json.loads(repository_path(path).read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or set(payload) != {"cases"} or not isinstance(
-        payload["cases"], list
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"cases"}
+        or not isinstance(payload["cases"], list)
     ):
         raise ValueError("answerer cases file has an invalid shape")
     cases = tuple(_validate_case(raw) for raw in payload["cases"])
@@ -260,7 +262,11 @@ def evaluate_case(case: AnswerCase, response: dict[str, Any]) -> dict[str, Any]:
 def contract_identity() -> str:
     """Hash the exact prompt and schema for live-evidence compatibility in 20.1B."""
     payload = json.dumps(
-        {"prompt_version": PROMPT_VERSION, "prompt": answer_system_prompt(), "schema": answer_schema()},
+        {
+            "prompt_version": PROMPT_VERSION,
+            "prompt": answer_system_prompt(),
+            "schema": answer_schema(),
+        },
         ensure_ascii=False,
         sort_keys=True,
     ).encode()
