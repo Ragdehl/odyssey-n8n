@@ -1,25 +1,19 @@
-"""Run the isolated Phase 20.1 grounded-answerer benchmark."""
+"""Deterministic Phase 20.1 grounded-answerer benchmark contract and evaluation."""
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
-import os
-import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 OUTCOMES = ("ANSWER", "INSUFFICIENT_EVIDENCE")
 LIMITATIONS = ("PARTIAL_RESULT",)
-REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high")
 PROMPT_VERSION = "phase20.1-v1"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = Path(__file__).with_name("cases.json")
 PRICING_PATH = Path(__file__).with_name("pricing_snapshot.json")
-LIVE_RESULTS_DIR = REPOSITORY_ROOT / "benchmarks" / ".live-results"
 
 
 @dataclass(frozen=True)
@@ -64,6 +58,25 @@ def answer_system_prompt() -> str:
     )
 
 
+def provider_request(case: AnswerCase) -> dict[str, Any]:
+    """Build the provider-neutral request payload that 20.1B will send unchanged per case."""
+    return {
+        "store": False,
+        "input": [
+            {"role": "system", "content": answer_system_prompt()},
+            {"role": "user", "content": json.dumps(case.input, ensure_ascii=False)},
+        ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "odyssey_grounded_answer",
+                "strict": True,
+                "schema": answer_schema(),
+            }
+        },
+    }
+
+
 def repository_path(path: Path) -> Path:
     """Resolve an internal test/input path while refusing access outside this repository."""
     candidate = path.resolve() if path.is_absolute() else (REPOSITORY_ROOT / path).resolve()
@@ -106,14 +119,18 @@ def _validate_case(raw: object) -> AnswerCase:
         raise ValueError(f"case {raw['id']} items must be a list")
 
     item_ids: list[str] = []
+    paths: list[str] = []
     for item in input_value["items"]:
         if not isinstance(item, dict) or set(item) != {"id", "type", "path", "content"}:
             raise ValueError(f"case {raw['id']} contains an invalid evidence item")
         if any(not isinstance(item[field], str) or not item[field].strip() for field in item):
             raise ValueError(f"case {raw['id']} evidence fields must be non-empty strings")
         item_ids.append(item["id"])
+        paths.append(item["path"])
     if len(item_ids) != len(set(item_ids)):
         raise ValueError(f"case {raw['id']} contains duplicate evidence item ids")
+    if len(paths) != len(set(paths)):
+        raise ValueError(f"case {raw['id']} contains duplicate canonical note paths")
 
     oracle = raw["oracle"]
     expected_oracle_keys = {
@@ -241,7 +258,7 @@ def evaluate_case(case: AnswerCase, response: dict[str, Any]) -> dict[str, Any]:
 
 
 def contract_identity() -> str:
-    """Hash the exact prompt and schema so incompatible paid checkpoints cannot mix."""
+    """Hash the exact prompt and schema for live-evidence compatibility in 20.1B."""
     payload = json.dumps(
         {"prompt_version": PROMPT_VERSION, "prompt": answer_system_prompt(), "schema": answer_schema()},
         ensure_ascii=False,
@@ -250,13 +267,13 @@ def contract_identity() -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def checkpoint_identity(
+def run_identity(
     model: str,
     reasoning: str,
     case_ids: tuple[str, ...] = (),
     cases_path: Path = CASES_PATH,
 ) -> dict[str, str]:
-    """Return stable identities for the exact paid benchmark inputs and configuration."""
+    """Return stable identities for an exact future live configuration without performing I/O."""
     cases_file = repository_path(cases_path)
     return {
         "model": model,
@@ -267,51 +284,8 @@ def checkpoint_identity(
     }
 
 
-def artifact_path(identity: dict[str, str]) -> Path:
-    """Derive a fixed safe result path from benchmark identity, never from a user-supplied path."""
-    digest = hashlib.sha256(
-        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()[:20]
-    return LIVE_RESULTS_DIR / f"phase20-answerer-{digest}.json"
-
-
-def write_checkpoint(
-    output: Path,
-    identity: dict[str, str],
-    rows: list[dict[str, Any]],
-    status: str,
-) -> None:
-    """Atomically persist paid rows to the fixed live-results area."""
-    output_file = repository_path(output)
-    if LIVE_RESULTS_DIR.resolve() not in output_file.parents:
-        raise ValueError("answerer checkpoints must stay inside benchmarks/.live-results")
-    LIVE_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {"phase_status": status, "checkpoint_identity": identity, "rows": rows}
-    temporary = output_file.with_name(f".{output_file.name}.tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temporary, output_file)
-
-
-def load_checkpoint(output: Path, identity: dict[str, str]) -> dict[str, dict[str, Any]]:
-    """Load compatible paid rows and fail closed if model, prompt, or cases changed."""
-    output_file = repository_path(output)
-    if LIVE_RESULTS_DIR.resolve() not in output_file.parents:
-        raise ValueError("answerer checkpoints must stay inside benchmarks/.live-results")
-    if not output_file.exists():
-        return {}
-    payload = json.loads(output_file.read_text(encoding="utf-8"))
-    if payload.get("checkpoint_identity") != identity or not isinstance(payload.get("rows"), list):
-        raise ValueError("answerer checkpoint is incompatible with current inputs")
-    rows = payload["rows"]
-    if any(not isinstance(row, dict) or not isinstance(row.get("case"), str) for row in rows):
-        raise ValueError("answerer checkpoint contains invalid rows")
-    if len({row["case"] for row in rows}) != len(rows):
-        raise ValueError("answerer checkpoint contains duplicate cases")
-    return {row["case"]: row for row in rows}
-
-
 def normalize_usage(usage: object) -> dict[str, int | None] | None:
-    """Extract only the bounded token counters needed for benchmark cost comparison."""
+    """Extract only bounded token counters supplied by a later provider call."""
     if usage is None:
         return None
     input_tokens = getattr(usage, "input_tokens", None)
@@ -332,7 +306,7 @@ def normalize_usage(usage: object) -> dict[str, int | None] | None:
 
 
 def load_pricing_snapshot(path: Path | None = None) -> dict[str, Any] | None:
-    """Load the one frozen pricing snapshot used consistently for a live benchmark run."""
+    """Load an optional dated pricing snapshot for later deterministic cost evaluation."""
     pricing_file = PRICING_PATH if path is None else repository_path(path)
     if not pricing_file.exists():
         return None
@@ -364,7 +338,7 @@ def estimate_cost_usd(
     pricing: dict[str, Any] | None,
     model: str,
 ) -> float | None:
-    """Estimate standard token cost only when complete usage and matching rates exist."""
+    """Estimate token cost only when complete usage and matching snapshot rates exist."""
     if usage is None or pricing is None or model not in pricing["models"]:
         return None
     input_tokens = usage["input_tokens"]
@@ -416,100 +390,3 @@ def aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_reasoning_tokens": _sum_optional(usage_values("reasoning_tokens")),
         "total_estimated_cost_usd": _sum_optional(costs),
     }
-
-
-def run_live(
-    model: str,
-    reasoning: str,
-    case_ids: tuple[str, ...] = (),
-) -> dict[str, Any]:
-    """Call one exact model configuration over frozen cases and persist resumable evidence."""
-    from openai import OpenAI
-
-    if not model.strip():
-        raise ValueError("model must be non-empty")
-    if reasoning not in REASONING_EFFORTS:
-        raise ValueError(f"unsupported benchmark reasoning effort: {reasoning}")
-
-    all_cases = load_cases()
-    cases = select_cases(all_cases, case_ids)
-    identity = checkpoint_identity(model, reasoning, case_ids)
-    output = artifact_path(identity)
-    completed = load_checkpoint(output, identity)
-    pricing = load_pricing_snapshot()
-    client = OpenAI(max_retries=0)
-    rows = [completed[case.id] for case in cases if case.id in completed]
-
-    for index, case in enumerate(cases, 1):
-        if case.id in completed:
-            print(f"[{index}/{len(cases)}] {case.id} (resumed)", file=sys.stderr)
-            continue
-        print(f"[{index}/{len(cases)}] {case.id}", file=sys.stderr)
-        started = time.perf_counter()
-        try:
-            response = client.responses.create(
-                model=model,
-                reasoning={"effort": reasoning},
-                store=False,
-                input=[
-                    {"role": "system", "content": answer_system_prompt()},
-                    {"role": "user", "content": json.dumps(case.input, ensure_ascii=False)},
-                ],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "odyssey_grounded_answer",
-                        "strict": True,
-                        "schema": answer_schema(),
-                    }
-                },
-            )
-        except Exception:
-            write_checkpoint(output, identity, rows, "PROVIDER_ERROR")
-            raise
-
-        supplied_ids = {item["id"] for item in case.input["items"]}
-        response_value = validate_answer(json.loads(response.output_text), supplied_ids)
-        usage = normalize_usage(response.usage)
-        rows.append(
-            {
-                "case": case.id,
-                "response": response_value,
-                "evaluation": evaluate_case(case, response_value),
-                "latency_seconds": round(time.perf_counter() - started, 3),
-                "usage": usage,
-                "estimated_cost_usd": estimate_cost_usd(usage, pricing, model),
-            }
-        )
-        write_checkpoint(output, identity, rows, "CHECKPOINT")
-
-    result = {
-        "phase_status": "LIVE_EVIDENCE_OBTAINED",
-        "model": model,
-        "reasoning": reasoning,
-        "prompt_version": PROMPT_VERSION,
-        "checkpoint_identity": identity,
-        "pricing": (
-            {"as_of": pricing["as_of"], "source": pricing["source"]} if pricing is not None else None
-        ),
-        "artifact": str(output.relative_to(REPOSITORY_ROOT)),
-        "rows": rows,
-        "aggregates": aggregate_rows(rows),
-    }
-    write_checkpoint(output, identity, rows, result["phase_status"])
-    return result
-
-
-def main() -> None:
-    """Parse safe live benchmark selectors; all filesystem locations remain fixed internally."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", required=True)
-    parser.add_argument("--reasoning", required=True, choices=REASONING_EFFORTS)
-    parser.add_argument("--case", dest="case_ids", action="append", default=[])
-    args = parser.parse_args()
-    result = run_live(args.model, args.reasoning, tuple(args.case_ids))
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-if __name__ == "__main__":
-    main()
