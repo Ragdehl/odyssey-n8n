@@ -17,6 +17,14 @@ The three storage utilities predate the current Core application flow and remain
 
 Cross-workflow storage authority is documented in [Local Storage Boundary](../architecture/storage.md). The current n8n/Core product integration contract lives in the relevant phase architecture documents, especially [Phase 18](../architecture/phase-18-n8n-first-e2e.md) and [Phase 20](../architecture/phase-20-odyssey-online-mvp.md).
 
+## Preserved low-level storage constraints
+
+- `storage_read` and `storage_write` accept only contained literal vault-relative POSIX `.md` paths; their legacy serialization handling intentionally supports a constrained flat metadata subset and remains independent from canonical schema validation.
+- `storage_write` is create-only. Its native existence preflight followed by the write is **not** an atomic compare-and-create; concurrent creates for the same path are outside its supported contract, and ambiguous filesystem outcomes fail closed.
+- `storage_list` uses a fixed recursive Markdown selector and returns deterministic sorted vault-relative paths. The available native n8n reader materializes matched files before Odyssey discards binary content; that accepted administrative cost does not justify another service, database, or index solely for metadata-only listing.
+
+Exact public inputs/outputs/error codes remain in the workflow source and tests, which are the executable contract.
+
 ## When a separate workflow document is justified
 
 Do **not** create one Markdown file automatically for every workflow. Add a dedicated document only when a workflow has a durable operational/public contract, deployment procedure, or cross-system behavior that is not adequately represented by:

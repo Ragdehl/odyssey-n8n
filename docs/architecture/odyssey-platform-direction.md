@@ -97,15 +97,28 @@ Single-user capabilities that do not inherently require shared coordination shou
 - local semantic retrieval using a mobile-compatible inference implementation;
 - identity/validation/mutation semantics.
 
+The basic single-user knowledge system should remain useful without an Odyssey subscription or Odyssey-managed server. Hosted synchronization/collaboration, managed backup, and managed AI/credential relay may be optional services without making the user's basic knowledge dependent on Odyssey Cloud.
+
 A server is justified when the feature requires a trusted shared coordination point: real private/shared authorization, group membership, synchronized shared identity, conflict handling, cross-device events, managed hosting, or a managed AI credential relay.
 
 Phase 20 is intentionally a **server-backed mobile web MVP**, not a decision against future local-first clients.
+
+Before adopting a future native/local-mobile runtime, validate at least:
+
+1. the minimum portable Core contract independent of n8n/server transport;
+2. mobile filesystem/storage behavior plus SQLite/index rebuild and migration behavior;
+3. on-device semantic retrieval latency, memory, battery use, and package footprint;
+4. secure device credential storage/account-connect behavior for external AI;
+5. offline/degraded behavior when external AI is unavailable;
+6. compatibility with the same canonical knowledge used by self-hosted/desktop Odyssey.
 
 ## External AI and client credentials
 
 External model providers remain replaceable boundaries. Do not embed raw provider master keys in browser/mobile application code.
 
 A future local/mobile product should use an explicitly designed safe provider-authentication/credential-relay pattern when external AI is needed—for example a user-authorized broker/gateway or another mechanism that keeps long-lived secrets out of distributable client code. Choose a concrete provider/pattern only when implementation begins; avoid freezing vendor availability/pricing claims into durable architecture documentation.
+
+Any broker/gateway evaluation should re-check privacy/data routing, required provider/model feature parity (for example structured outputs and reasoning controls), pricing/billing ownership, vendor availability/dependency, credential expiry/revocation/scoping/limits, and whether direct-provider OAuth or a better standard is available.
 
 A historical exploration on 2026-09-02 identified an OAuth/PKCE account-connect plus BYOK/credential-broker pattern as promising; OpenRouter was then a concrete candidate for evaluating that UX. This is preserved as prior exploration, **not** an Odyssey dependency or current provider claim. Re-check provider security, availability, pricing, and capabilities from current sources before any future adoption decision.
 

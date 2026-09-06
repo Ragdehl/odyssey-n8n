@@ -75,7 +75,7 @@ A failed gate means the branch is not ready. It does not require discarding cohe
 - Human merge only.
 - After human merge, `odyssey-post-merge` may synchronize the local clone and clean only branches whose merge is confirmed.
 
-Repository branch protection currently requires the stable `Python CI / Python deterministic checks` status on `main`. Protection/visibility/security settings are operational GitHub boundaries and must not be changed implicitly by repository code.
+The stable deterministic CI check name is `Python CI / Python deterministic checks`. Whether branch protection currently requires it is a GitHub repository setting and should be verified before relying on that enforcement. Protection/visibility/security settings are operational GitHub boundaries and must not be changed implicitly by repository code.
 
 ## Documentation lifecycle
 

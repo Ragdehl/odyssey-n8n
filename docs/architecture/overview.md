@@ -68,6 +68,10 @@ validated RequestPlan
 
 The planner interprets the request but does not open notes, decide identity, or persist files. Retrieval returns grounded knowledge evidence. Write execution separately resolves identity and validates mutation authority before persistence.
 
+A `KnowledgeUnit` is semantic knowledge, not automatically a new canonical entity. Only references that actually need an identity decision pass through entity resolution; ordinary facts remain attached to the knowledge unit that owns them.
+
+Independent read-only reference resolutions may be processed in parallel. Dependency-sensitive work and mutations targeting the same stable entity must be ordered/coalesced so separate branches cannot race to write the same note. This rule does not justify a DAG engine or additional orchestrator by itself.
+
 ## Identity resolution
 
 Identity uses layered evidence and preserves uncertainty:

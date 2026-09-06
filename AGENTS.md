@@ -25,7 +25,7 @@ odyssey_core/
      `--> rebuildable runtime/index state in /data/odyssey/runtime
 ```
 
-The current standalone consumer is the Phase 20 mobile web MVP under `odyssey_web/`. ChatGPT or other clients may also consume Odyssey, but no client owns the knowledge semantics.
+The current standalone consumer source lives under `odyssey_web/` as part of Phase 20. ChatGPT or other clients may also consume Odyssey, but no client owns the knowledge semantics.
 
 - `odyssey_core/` owns domain, note, identity, planning, retrieval, validation, and mutation behavior.
 - `workflows/` owns n8n integration/orchestration definitions.
@@ -43,6 +43,8 @@ Do not introduce LangGraph, a vector service, graph database, queue, additional 
 - Keep changes small, reviewable, and testable; avoid unrelated edits.
 - Put Odyssey knowledge/domain logic in `odyssey_core/` by default and integration/orchestration in `workflows/`.
 - Prefer native n8n behavior when it solves an integration problem cleanly; use custom code when it gives a clear contract or safety advantage.
+- Reusable workflows/subworkflows should expose narrow, explicit input/output contracts and hide implementation details from callers.
+- When architecture, workflow, or component interactions are easier to understand visually, use a concise text/ASCII diagram; omit decorative or redundant diagrams.
 - Keep components replaceable behind explicit contracts.
 - Never silently change the ontology/schema. Material schema changes require an explicit proposal, compatibility/migration review, deterministic validation, and normally human approval.
 - Never expose, print, commit, or persist credentials/secrets in project files or documentation.

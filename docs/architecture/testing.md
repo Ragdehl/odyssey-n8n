@@ -43,7 +43,7 @@ Versioned n8n Workflow SDK source under `workflows/` is validated through its re
 
 ## CI and review
 
-GitHub CI independently validates pull requests and `main`. The stable required deterministic check is `Python CI / Python deterministic checks`; SonarQube Cloud adds code-quality/security analysis.
+GitHub CI independently validates pull requests and `main`. The stable deterministic check name is `Python CI / Python deterministic checks`; SonarQube Cloud adds code-quality/security analysis. Whether branch protection currently requires that check is a GitHub repository setting and should be verified before relying on it.
 
 ```text
 implementation

@@ -40,7 +40,7 @@ Marta covers E1 + E2 + E3
 Distractor strongly covers only E1
 ```
 
-A future benchmark should decide how elements are produced, how semantic strength and coverage combine, how optional/contradictory clauses are represented, and whether this improves real recall/cost/latency.
+A future benchmark should decide how elements are produced, how semantic strength and coverage combine, how optional/contradictory clauses are represented, and whether this improves real recall/cost/latency. Start with the smallest scoring rule that rewards **distinct element coverage** before testing learned rerankers, graph retrieval, another embedding model, or new infrastructure.
 
 ### 2. High-recall candidate reduction if candidate volume becomes costly
 
@@ -80,7 +80,9 @@ Atomic-fact retrieval is another rebuildable projection hypothesis; success woul
 - Keep canonical entity identity attached to every fact/evidence item.
 - Re-ground selected evidence against current authoritative Markdown before model use when required by the active contract.
 - Preserve difficult historical synthetic cases, but add failures observed through real Odyssey Online use rather than optimizing only the old corpus.
+- If the historical large-vault fixture is extended for selector/fact tests, include short (~1–5 factual units), medium (~10–20), long (~40–60), and very long (~1,500–3,000 words) heterogeneous notes; place identity-bearing evidence deliberately at the beginning/middle/end of different notes, include distractors sharing names/organizations/places/vocabulary, and report recall by length bucket.
 - Measure whole-note/fact/query-element behavior separately enough to identify where recall is lost.
+- Do not revive an entity-agnostic / “without entity” variant unless real evidence shows that canonical entity grouping itself is causing the miss.
 - Do not add a vector database, graph database, local LLM service, or new long-lived component merely to run the experiment.
 - Retrieval relevance never authorizes mutation.
 

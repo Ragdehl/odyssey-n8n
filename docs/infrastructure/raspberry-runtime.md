@@ -36,13 +36,13 @@ The canonical application schema remains in the Git repository at `config/note-s
 
 Docker maps `/data/odyssey` on the host to `/odyssey` in the n8n container. n8n therefore sees `/odyssey/vault`, `/odyssey/state`, `/odyssey/runtime`, and `/odyssey/config` when its explicit permissions/boundaries allow them.
 
-The host user `ragdehl` and n8n container user `node` use compatible UID/GID ownership so authorized components can work without broad world-writable permissions.
+The host user `ragdehl` and n8n container user `node` both use UID/GID `1000:1000`. `/data/odyssey` and its durable/runtime child directories normally use ownership `1000:1000` and mode `0755` unless a later security review narrows it; do not use `777` to work around permissions.
 
 See [Local Storage Boundary](../architecture/storage.md) for semantic authority and file-access rules.
 
 ## Codex
 
-Codex is started from `/home/ragdehl/projects/odyssey` so it loads `AGENTS.md`. Development sessions may receive additional approved writable paths such as `/data/odyssey` and `/home/ragdehl/docker/n8n` when the task requires them.
+The host shell command `odyssey` is the convenience entry point: it changes to `/home/ragdehl/projects/odyssey`, starts Codex from the repository so `AGENTS.md` is loaded, and grants the approved writable paths `/data/odyssey` and `/home/ragdehl/docker/n8n` used by environment-sensitive work.
 
 The n8n MCP connection allows authorized workflow inspection/change/testing under restricted OAuth scopes. Credentials remain in their proper stores and must not be committed.
 
