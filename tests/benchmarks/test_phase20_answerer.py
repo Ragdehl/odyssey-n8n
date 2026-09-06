@@ -8,11 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 from benchmarks.phase20_answerer.benchmark import (
+    LIVE_RESULTS_DIR,
     PROMPT_VERSION,
     REPOSITORY_ROOT,
     aggregate_rows,
     answer_schema,
     answer_system_prompt,
+    artifact_path,
     checkpoint_identity,
     contract_identity,
     estimate_cost_usd,
@@ -210,21 +212,27 @@ def test_loader_rejects_oracle_support_that_was_not_supplied() -> None:
             load_cases(path)
 
 
-def test_checkpoint_round_trip_fails_closed_on_config_change() -> None:
-    """Paid rows resume only for the same cases, prompt contract, model, and reasoning."""
-    with TemporaryDirectory(dir=REPOSITORY_ROOT) as directory:
-        root = Path(directory)
-        cases = root / "cases.json"
-        output = root / "answers.json"
-        cases.write_text('{"cases": []}', encoding="utf-8")
-        identity = checkpoint_identity(cases, "gpt-test", "low", ("q1",))
-        row = {"case": "q1", "evaluation": {"passed": True}}
+def test_checkpoint_round_trip_uses_fixed_live_results_and_fails_closed() -> None:
+    """Paid rows resume only for the same model/config and only in the fixed result directory."""
+    identity = checkpoint_identity("gpt-test", "low", ("simple-single-note-es",))
+    output = artifact_path(identity)
+    row = {"case": "simple-single-note-es", "evaluation": {"passed": True}}
+    output.unlink(missing_ok=True)
+    try:
         write_checkpoint(output, identity, [row], "CHECKPOINT")
-        assert load_checkpoint(output, identity) == {"q1": row}
+        assert output.parent == LIVE_RESULTS_DIR
+        assert load_checkpoint(output, identity) == {"simple-single-note-es": row}
 
-        other_model = checkpoint_identity(cases, "other-model", "low", ("q1",))
+        other_model = checkpoint_identity("other-model", "low", ("simple-single-note-es",))
         with pytest.raises(ValueError, match="incompatible"):
             load_checkpoint(output, other_model)
+    finally:
+        output.unlink(missing_ok=True)
+
+    with TemporaryDirectory(dir=REPOSITORY_ROOT) as directory:
+        outside_live_results = Path(directory) / "answers.json"
+        with pytest.raises(ValueError, match="live-results"):
+            write_checkpoint(outside_live_results, identity, [row], "CHECKPOINT")
 
 
 def test_contract_identity_is_stable_sha256() -> None:
@@ -267,7 +275,7 @@ def test_usage_and_cost_keep_unavailable_values_explicit() -> None:
 
 
 def test_pricing_snapshot_and_repository_path_fail_closed() -> None:
-    """Pricing is a dated repository input and benchmark paths cannot escape the repository."""
+    """Pricing is a dated repository input and internal test paths cannot escape the repository."""
     with TemporaryDirectory(dir=REPOSITORY_ROOT) as directory:
         path = Path(directory) / "pricing.json"
         path.write_text(
