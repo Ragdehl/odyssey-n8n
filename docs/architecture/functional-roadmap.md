@@ -178,8 +178,9 @@ runtime, and Core in their established roles. See the canonical
 [Phase 20 contract](phase-20-odyssey-online-mvp.md).
 
 ```text
-20.0  consumer contract + architecture challenge             ✅ complete on merge
-20.1  grounded answerer benchmark                            ➡️ next
+20.0  consumer contract + architecture challenge             ✅ complete
+20.1A offline grounded-answerer benchmark preparation        ✅ complete
+20.1B focused live answerer model evidence                    ➡️ next
 20.2  minimal mobile web frontend                            ⬜
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
@@ -191,10 +192,11 @@ conversational synthesis. Write-only results, empty retrievals, and ordinary fai
 UI outcomes instead of an unnecessary answer-model call. Frontend source remains isolated under
 `odyssey_web/` and the MVP adds no second long-lived application server by default.
 
-The answerer benchmark starts with Luna as the preferred inexpensive candidate but adopts a production
-model only from grounded quality/cost evidence. Sol remains a quality reference rather than the automatic
-production answerer. The benchmark harness can be prepared without the Raspberry; model adoption waits
-for exact live candidate evidence.
+Phase 20.1A froze the grounded-answerer prompt/schema, a compact 12-case suite, deterministic validation,
+and provider-free metric helpers without making a paid model call. Phase 20.1B remains the adoption gate:
+run the exact live candidate configurations when provider/Raspberry access is available, starting with
+Luna as the preferred inexpensive candidate, comparing a materially cheaper alternative, and retaining
+Sol only as a quality reference unless cheaper candidates fail material grounding/quality requirements.
 
 The MVP is a normal mobile web page with a text field, submit/retry behavior, loading/error state, and
 rendered response. Android voice input is supplied by ordinary Gboard dictation through that text field;
@@ -244,6 +246,12 @@ The detailed cross-phase direction is centralized in
   knowledge, derived SQLite indexes, deterministic analytics, and local MiniLM-style retrieval can execute
   on-device without making Odyssey Cloud mandatory. Server-backed sync/sharing and managed AI remain
   optional services. See [Future local-first mobile runtime](future-local-first-mobile-runtime.md).
+- 💡 **Odyssey self-help + bounded conversation context:** later route questions about how Odyssey works
+  to a logically isolated user-facing product-help corpus, then reuse the same grounded answerer path.
+  Preserve recent conversation turns only as bounded ephemeral session context for follow-ups; ordinary
+  chat must not silently become durable Odyssey memory or contaminate personal retrieval. Persistent
+  semantic request history remains a separate capability. See
+  [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 - 💡 **Emergent schema coach:** after real usage justifies it, observe recurring knowledge patterns and
   propose types/properties in terms of the user capability they unlock. A future advisory
   `semantic_type_hint` for unresolved references may support deterministic counts of **distinct pending
