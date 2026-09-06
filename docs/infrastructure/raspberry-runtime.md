@@ -80,6 +80,20 @@ From Android the normal workflow is:
 
 Tailscale → Termius → SSH → `odyssey`
 
+## Live benchmark calls from Codex
+
+Historical Phase 17E evidence found an environment-specific limitation: direct Raspberry shell calls to `api.openai.com` and the project OpenAI SDK worked, while the same live benchmark calls executed from inside the Codex sandbox failed with `APIConnectionError`.
+
+This is tooling-only and must not block Odyssey development. Until a concrete need appears, focused live model evidence may be run directly from the Raspberry shell while keeping Codex sandbox protections unchanged.
+
+If direct Codex outbound access becomes useful later, use the smallest safe change:
+
+- keep sandboxing enabled;
+- allow only the minimum OpenAI API domains/endpoints required rather than unrestricted Internet access;
+- verify first with one non-generative SDK smoke call and one bounded benchmark smoke call;
+- do not weaken unrelated filesystem, credential, or process protections;
+- document any Odyssey-specific local configuration that is actually adopted.
+
 ## Security
 
 - Codex uses approval-based permissions rather than Full Access.
