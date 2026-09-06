@@ -1,0 +1,327 @@
+{
+  "cases": [
+    {
+      "id": "simple-single-note-es",
+      "description": "Simple Spanish answer from one grounded note.",
+      "input": {
+        "request": "¿Dónde trabaja Marta?",
+        "status": "completed",
+        "retrieval_query": "Dónde trabaja Marta",
+        "items": [
+          {
+            "id": "marta",
+            "type": "person",
+            "path": "people/Marta.md",
+            "content": "Marta trabaja en Thales. Marta vive en Lyon."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["marta"],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": ["Thales"],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "distractors-es",
+      "description": "Answer from one relevant note while ignoring plausible distractors.",
+      "input": {
+        "request": "¿Qué estudia Sofía y dónde?",
+        "status": "completed",
+        "retrieval_query": "Qué estudia Sofía dónde",
+        "items": [
+          {
+            "id": "sofia",
+            "type": "person",
+            "path": "people/Sofia.md",
+            "content": "Sofía estudia Medicina en Toulouse."
+          },
+          {
+            "id": "marco",
+            "type": "person",
+            "path": "people/Marco.md",
+            "content": "Marco estudia Arquitectura en Barcelona."
+          },
+          {
+            "id": "toulouse",
+            "type": "place",
+            "path": "places/Toulouse.md",
+            "content": "Toulouse es una ciudad del sur de Francia."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["sofia"],
+        "forbidden_supporting_item_ids": ["marco"],
+        "required_answer_fragments": ["Medicina", "Toulouse"],
+        "forbidden_answer_fragments": ["Arquitectura", "Barcelona"],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "split-evidence-es",
+      "description": "Answer combines two distinct grounded notes with stable identities.",
+      "input": {
+        "request": "¿Dónde vive Marta y dónde está la sede de Thales?",
+        "status": "completed",
+        "retrieval_query": "Dónde vive Marta sede Thales",
+        "items": [
+          {
+            "id": "marta",
+            "type": "person",
+            "path": "people/Marta.md",
+            "content": "Marta vive en Lyon."
+          },
+          {
+            "id": "thales",
+            "type": "organization",
+            "path": "organizations/Thales.md",
+            "content": "La sede de Thales está en París."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["marta", "thales"],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": ["Lyon", "París"],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "empty-retrieval-es",
+      "description": "Empty evidence must not produce an invented factual answer.",
+      "input": {
+        "request": "¿Cuál es el animal favorito de Alice?",
+        "status": "completed",
+        "retrieval_query": "animal favorito Alice",
+        "items": []
+      },
+      "oracle": {
+        "expected_outcome": "INSUFFICIENT_EVIDENCE",
+        "required_supporting_item_ids": [],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": [],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "nonempty-insufficient-es",
+      "description": "Relevant entity evidence exists but does not contain the requested fact.",
+      "input": {
+        "request": "¿Qué edad tiene Marta?",
+        "status": "completed",
+        "retrieval_query": "edad Marta",
+        "items": [
+          {
+            "id": "marta",
+            "type": "person",
+            "path": "people/Marta.md",
+            "content": "Marta vive en Lyon y trabaja en Thales."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "INSUFFICIENT_EVIDENCE",
+        "required_supporting_item_ids": [],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": [],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "partial-usable-es",
+      "description": "Usable evidence from a partial Odyssey result must retain the partial limitation.",
+      "input": {
+        "request": "¿Dónde trabaja Marta?",
+        "status": "partial",
+        "retrieval_query": "Dónde trabaja Marta",
+        "items": [
+          {
+            "id": "marta",
+            "type": "person",
+            "path": "people/Marta.md",
+            "content": "Marta trabaja en Thales."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["marta"],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": ["Thales"],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": true
+      }
+    },
+    {
+      "id": "french-simple",
+      "description": "French answer preserves the grounded place name.",
+      "input": {
+        "request": "Où habite Claire Martin ?",
+        "status": "completed",
+        "retrieval_query": "Où habite Claire Martin",
+        "items": [
+          {
+            "id": "claire-martin",
+            "type": "person",
+            "path": "people/Claire-Martin.md",
+            "content": "Claire Martin habite à Bordeaux."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["claire-martin"],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": ["Bordeaux"],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "exact-domain-term-fr",
+      "description": "Exact model/domain term from evidence must survive answer formulation.",
+      "input": {
+        "request": "Quel est le modèle du lave-linge ?",
+        "status": "completed",
+        "retrieval_query": "modèle lave-linge",
+        "items": [
+          {
+            "id": "washing-machine",
+            "type": "appliance",
+            "path": "home/Washing-Machine.md",
+            "content": "Le lave-linge est un Bosch WAN28258FR."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["washing-machine"],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": ["Bosch WAN28258FR"],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "missing-fact-no-invention-es",
+      "description": "Model memory must not fill a missing salary fact.",
+      "input": {
+        "request": "¿Cuál es el salario de Alice?",
+        "status": "completed",
+        "retrieval_query": "salario Alice",
+        "items": [
+          {
+            "id": "alice",
+            "type": "person",
+            "path": "people/Alice.md",
+            "content": "Alice trabaja en Airbus."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "INSUFFICIENT_EVIDENCE",
+        "required_supporting_item_ids": [],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": [],
+        "forbidden_answer_fragments": ["€", "euros"],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "conjunctive-person-es",
+      "description": "All requested conditions must be satisfied by the same grounded person.",
+      "input": {
+        "request": "¿Quién trabaja en Thales y vive en Lyon?",
+        "status": "completed",
+        "retrieval_query": "trabaja Thales vive Lyon",
+        "items": [
+          {
+            "id": "marta",
+            "type": "person",
+            "path": "people/Marta.md",
+            "content": "Marta trabaja en Thales y vive en Lyon."
+          },
+          {
+            "id": "alice",
+            "type": "person",
+            "path": "people/Alice.md",
+            "content": "Alice trabaja en Thales y vive en París."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["marta"],
+        "forbidden_supporting_item_ids": ["alice"],
+        "required_answer_fragments": ["Marta"],
+        "forbidden_answer_fragments": ["Alice"],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "misleading-date-distractor-es",
+      "description": "Plausible travel date distractor must not replace the booking date/time.",
+      "input": {
+        "request": "¿Cuándo es la reserva del restaurante?",
+        "status": "completed",
+        "retrieval_query": "cuándo reserva restaurante",
+        "items": [
+          {
+            "id": "restaurant-booking",
+            "type": "reservation",
+            "path": "plans/Restaurant-Booking.md",
+            "content": "La reserva del restaurante es el 12 de septiembre a las 20:00."
+          },
+          {
+            "id": "flight",
+            "type": "travel",
+            "path": "plans/Flight.md",
+            "content": "El vuelo sale el 11 de septiembre a las 18:30."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "ANSWER",
+        "required_supporting_item_ids": ["restaurant-booking"],
+        "forbidden_supporting_item_ids": ["flight"],
+        "required_answer_fragments": ["12 de septiembre", "20:00"],
+        "forbidden_answer_fragments": ["11 de septiembre", "18:30"],
+        "require_partial_limitation": false
+      }
+    },
+    {
+      "id": "partial-insufficient-fr",
+      "description": "Partial result with unrelated evidence remains explicitly insufficient and partial.",
+      "input": {
+        "request": "Quel est le numéro de téléphone de Claire Martin ?",
+        "status": "partial",
+        "retrieval_query": "numéro téléphone Claire Martin",
+        "items": [
+          {
+            "id": "claire-martin",
+            "type": "person",
+            "path": "people/Claire-Martin.md",
+            "content": "Claire Martin habite à Bordeaux."
+          }
+        ]
+      },
+      "oracle": {
+        "expected_outcome": "INSUFFICIENT_EVIDENCE",
+        "required_supporting_item_ids": [],
+        "forbidden_supporting_item_ids": [],
+        "required_answer_fragments": [],
+        "forbidden_answer_fragments": [],
+        "require_partial_limitation": true
+      }
+    }
+  ]
+}
