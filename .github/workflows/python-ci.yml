@@ -37,6 +37,12 @@ jobs:
       - name: Run tests
         run: pytest --cov=odyssey_core --cov=odyssey_runtime --cov-report=xml:coverage.xml
 
+      - name: Check Odyssey web JavaScript
+        run: |
+          node --check odyssey_web/client.js
+          node --check odyssey_web/app.js
+          node --test tests/odyssey_web_client.test.mjs
+
       - name: Validate canonical note schema
         run: python scripts/validate_note_schema.py
 
