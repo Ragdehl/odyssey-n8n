@@ -8,25 +8,22 @@ from types import SimpleNamespace
 import pytest
 
 from benchmarks.phase20_answerer.benchmark import (
-    LIVE_RESULTS_DIR,
     PROMPT_VERSION,
     REPOSITORY_ROOT,
     aggregate_rows,
     answer_schema,
     answer_system_prompt,
-    artifact_path,
-    checkpoint_identity,
     contract_identity,
     estimate_cost_usd,
     evaluate_case,
     load_cases,
-    load_checkpoint,
     load_pricing_snapshot,
     normalize_usage,
+    provider_request,
     repository_path,
+    run_identity,
     select_cases,
     validate_answer,
-    write_checkpoint,
 )
 
 CASES_PATH = Path("benchmarks/phase20_answerer/cases.json")
@@ -66,6 +63,17 @@ def test_answer_schema_and_prompt_are_closed_and_grounded() -> None:
     assert "never use outside knowledge" in prompt
     assert "PARTIAL_RESULT" in prompt
     assert PROMPT_VERSION == "phase20.1-v1"
+
+
+def test_provider_request_is_provider_neutral_and_never_stores() -> None:
+    """20.1A freezes the exact request payload without calling a provider."""
+    case = next(case for case in load_cases(CASES_PATH) if case.id == "simple-single-note-es")
+    payload = provider_request(case)
+    assert payload["store"] is False
+    assert payload["input"][0] == {"role": "system", "content": answer_system_prompt()}
+    assert json.loads(payload["input"][1]["content"]) == case.input
+    assert payload["text"]["format"]["strict"] is True
+    assert payload["text"]["format"]["schema"] == answer_schema()
 
 
 def test_answer_validation_requires_known_unique_support() -> None:
@@ -173,7 +181,7 @@ def test_empty_evidence_passes_only_as_explicit_insufficient() -> None:
 
 
 def test_case_filter_preserves_order_and_rejects_unknown_ids() -> None:
-    """Focused paid runs cannot silently reorder cases or accept a typo."""
+    """Focused live runs cannot silently reorder cases or accept a typo."""
     cases = load_cases(CASES_PATH)
     selected = select_cases(cases, ("french-simple", "simple-single-note-es"))
     assert [case.id for case in selected] == ["simple-single-note-es", "french-simple"]
@@ -181,62 +189,54 @@ def test_case_filter_preserves_order_and_rejects_unknown_ids() -> None:
         select_cases(cases, ("missing",))
 
 
-def test_loader_rejects_oracle_support_that_was_not_supplied() -> None:
-    """A fixture typo cannot make invented evidence look like a valid oracle."""
-    payload = {
-        "cases": [
-            {
-                "id": "bad",
-                "description": "bad oracle",
-                "input": {
-                    "request": "x",
-                    "status": "completed",
-                    "retrieval_query": "x",
-                    "items": [],
-                },
-                "oracle": {
-                    "expected_outcome": "ANSWER",
-                    "required_supporting_item_ids": ["missing"],
-                    "forbidden_supporting_item_ids": [],
-                    "required_answer_fragments": ["x"],
-                    "forbidden_answer_fragments": [],
-                    "require_partial_limitation": False,
-                },
-            }
-        ]
+def test_loader_rejects_oracle_support_and_duplicate_paths() -> None:
+    """Fixture mistakes cannot violate stable note identity or invent benchmark evidence."""
+    base = {
+        "id": "bad",
+        "description": "bad oracle",
+        "input": {
+            "request": "x",
+            "status": "completed",
+            "retrieval_query": "x",
+            "items": [],
+        },
+        "oracle": {
+            "expected_outcome": "ANSWER",
+            "required_supporting_item_ids": ["missing"],
+            "forbidden_supporting_item_ids": [],
+            "required_answer_fragments": ["x"],
+            "forbidden_answer_fragments": [],
+            "require_partial_limitation": False,
+        },
     }
     with TemporaryDirectory(dir=REPOSITORY_ROOT) as directory:
         path = Path(directory) / "bad-cases.json"
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        path.write_text(json.dumps({"cases": [base]}), encoding="utf-8")
         with pytest.raises(ValueError, match="unknown evidence ids"):
             load_cases(path)
 
+        duplicate_path = json.loads(json.dumps(base))
+        duplicate_path["input"]["items"] = [
+            {"id": "a", "type": "person", "path": "people/A.md", "content": "A."},
+            {"id": "b", "type": "person", "path": "people/A.md", "content": "B."},
+        ]
+        duplicate_path["oracle"]["required_supporting_item_ids"] = ["a"]
+        path.write_text(json.dumps({"cases": [duplicate_path]}), encoding="utf-8")
+        with pytest.raises(ValueError, match="duplicate canonical note paths"):
+            load_cases(path)
 
-def test_checkpoint_round_trip_uses_fixed_live_results_and_fails_closed() -> None:
-    """Paid rows resume only for the same model/config and only in the fixed result directory."""
-    identity = checkpoint_identity("gpt-test", "low", ("simple-single-note-es",))
-    output = artifact_path(identity)
-    row = {"case": "simple-single-note-es", "evaluation": {"passed": True}}
-    output.unlink(missing_ok=True)
-    try:
-        write_checkpoint(output, identity, [row], "CHECKPOINT")
-        assert output.parent == LIVE_RESULTS_DIR
-        assert load_checkpoint(output, identity) == {"simple-single-note-es": row}
 
-        other_model = checkpoint_identity("other-model", "low", ("simple-single-note-es",))
-        with pytest.raises(ValueError, match="incompatible"):
-            load_checkpoint(output, other_model)
-    finally:
-        output.unlink(missing_ok=True)
-
-    with TemporaryDirectory(dir=REPOSITORY_ROOT) as directory:
-        outside_live_results = Path(directory) / "answers.json"
-        with pytest.raises(ValueError, match="live-results"):
-            write_checkpoint(outside_live_results, identity, [row], "CHECKPOINT")
+def test_run_identity_changes_with_model_config_and_contract() -> None:
+    """20.1B can key paid evidence to exact cases, model, reasoning, and prompt/schema."""
+    first = run_identity("gpt-test", "low", ("simple-single-note-es",))
+    assert first["contract_sha256"] == contract_identity()
+    assert len(first["cases_sha256"]) == 64
+    assert first != run_identity("other-model", "low", ("simple-single-note-es",))
+    assert first != run_identity("gpt-test", "medium", ("simple-single-note-es",))
 
 
 def test_contract_identity_is_stable_sha256() -> None:
-    """Prompt/schema identity is stable and suitable for paid-checkpoint compatibility."""
+    """Prompt/schema identity is stable and suitable for live-evidence compatibility."""
     identity = contract_identity()
     assert len(identity) == 64
     assert identity == contract_identity()
@@ -275,7 +275,7 @@ def test_usage_and_cost_keep_unavailable_values_explicit() -> None:
 
 
 def test_pricing_snapshot_and_repository_path_fail_closed() -> None:
-    """Pricing is a dated repository input and internal test paths cannot escape the repository."""
+    """Pricing is dated benchmark input and internal test paths cannot escape the repository."""
     with TemporaryDirectory(dir=REPOSITORY_ROOT) as directory:
         path = Path(directory) / "pricing.json"
         path.write_text(
