@@ -1,0 +1,13 @@
+{
+  "luna-none": {
+    "average_latency_seconds": 4.247,
+    "case_count": 1,
+    "pass_rate": 1.0,
+    "passed": 1,
+    "total_cached_input_tokens": 0,
+    "total_estimated_cost_usd": null,
+    "total_input_tokens": 289,
+    "total_output_tokens": 38,
+    "total_reasoning_tokens": 0
+  }
+}

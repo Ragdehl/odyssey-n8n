@@ -1,0 +1,35 @@
+{
+  "luna-none": {
+    "average_latency_seconds": 1.764,
+    "case_count": 12,
+    "pass_rate": 1.0,
+    "passed": 12,
+    "total_cached_input_tokens": 0,
+    "total_estimated_cost_usd": 0.0013830000000000001,
+    "total_input_tokens": 3663,
+    "total_output_tokens": 542,
+    "total_reasoning_tokens": 0
+  },
+  "nano-default": {
+    "average_latency_seconds": 4.763,
+    "case_count": 12,
+    "pass_rate": 1.0,
+    "passed": 12,
+    "total_cached_input_tokens": 0,
+    "total_estimated_cost_usd": 0.00421635,
+    "total_input_tokens": 3663,
+    "total_output_tokens": 10083,
+    "total_reasoning_tokens": 9216
+  },
+  "sol-none": {
+    "average_latency_seconds": 1.617,
+    "case_count": 12,
+    "pass_rate": 1.0,
+    "passed": 12,
+    "total_cached_input_tokens": 0,
+    "total_estimated_cost_usd": 0.025712,
+    "total_input_tokens": 3663,
+    "total_output_tokens": 553,
+    "total_reasoning_tokens": 0
+  }
+}

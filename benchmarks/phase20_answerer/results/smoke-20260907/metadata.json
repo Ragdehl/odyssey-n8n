@@ -1,0 +1,22 @@
+{
+  "cases_path": "benchmarks/phase20_answerer/cases.json",
+  "identity": {
+    "cases": [
+      "simple-single-note-es"
+    ],
+    "profiles": [
+      {
+        "cases": "simple-single-note-es",
+        "cases_sha256": "0480a402d0b7a2521a46d3ada207b2d843ed12a2e92eed473f87ed825ec15c9c",
+        "contract_sha256": "1f0fd9e8b86ea9b4146c06b3695d93f73278202d054f31c6f5d854e209405ffe",
+        "model": "gpt-5.6-luna",
+        "reasoning": "none"
+      }
+    ],
+    "smoke": true
+  },
+  "pricing": null,
+  "run_id": "smoke-20260907",
+  "smoke": true,
+  "started_at": "2026-09-06T22:16:48.118006+00:00"
+}
