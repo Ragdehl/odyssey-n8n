@@ -1,129 +1,107 @@
 # Development Pipeline
 
-Odyssey evolves its development process only when the next step solves an observed problem. Git
-history, pull requests, and test results remain the source of development state; this roadmap is
-architectural direction, not a manually synchronized status tracker.
+Odyssey evolves its development process only when a concrete problem justifies more machinery. GitHub, deterministic tests, bounded model evidence, and human review are the normal workflow; n8n is not the development CI orchestrator.
 
 ## Significant phase contract
 
-Before implementation, a significant functional phase specification contains at least:
+Before implementing a significant functional phase, define at least:
 
-- **Objective:** the outcome and problem the phase addresses.
-- **Acceptance criteria:** observable evidence that the phase is complete.
-- **Out of scope:** nearby work intentionally excluded.
-- **Open decisions:** unresolved choices, or `None` when there are none.
+- **Objective** — the user/system outcome and problem being solved;
+- **Acceptance criteria** — observable evidence required for completion;
+- **Out of scope** — nearby work intentionally excluded;
+- **Open decisions** — unresolved choices, or `None`.
 
-Context and constraints may be included when they materially affect the work. This is a
-human/agent-readable convention, not a schema, parser, database, state machine, or orchestration
-contract. Codex runs `odyssey-architecture-challenge` against the phase and relevant repository
-context before implementation begins.
+Then run `odyssey-architecture-challenge` against the contract and relevant repository context. This is a reasoning checkpoint, not a new state machine or project-management service.
 
-## Responsibility boundaries
+## Execution path
 
 ```text
-phase contract
-    |
-    v
-architecture challenge (agent judgment)
-    |
-    v
-choose the smallest reliable execution path
-    |                         |
-    |                         |
-    v                         v
-GitHub-capable agent       Codex local implementation
-bounded change             + local iteration/debugging
-    |                         |
-    +------------+------------+
-                 |
-                 v
-GitHub PR + deterministic server-side CI
-                 |
-                 v
-semantic/human review and human merge
+phase/change contract
+       |
+       v
+architecture challenge when significant
+       |
+       v
+choose smallest reliable executor
+       |
+   +---+----------------+
+   |                    |
+   v                    v
+GitHub-capable agent   Codex/local environment
+bounded direct work   iterative/debug/environment work
+   |                    |
+   +---------+----------+
+             |
+             v
+      Draft Pull Request
+             |
+             v
+ deterministic CI + Sonar
+             |
+             v
+       semantic review
+             |
+             v
+         human merge
 ```
 
-- GitHub owns branches, pull-request state, server-side checks, and any future merge protection or
-  auto-merge policy.
-- The GitHub-capable agent may implement bounded, well-understood changes directly when the contract
-  is clear and reliable validation does not require an iterative local environment.
-- Codex owns implementation that materially benefits from repository-local execution: iterative
-  testing and debugging, broader multi-file changes, refactors, benchmark/harness work, environment
-  interaction, and other tasks where local feedback is part of reaching a correct result.
-- Choosing Codex is not automatic merely because code changes are required. Before delegation,
-  prefer the smallest execution path that can complete the work safely and reviewably.
-- Regardless of who writes the change, deterministic validation and semantic review remain separate
-  gates. The author does not gain authority to merge its own work.
-- Agents and LLMs provide judgment; they do not replace deterministic validation.
-- Pre-commit provides fast local feedback when Codex is working locally, while GitHub CI
-  independently validates commits and pull requests.
-- n8n remains responsible for integrations, notifications, external orchestration, and eventual
-  human-in-the-loop flows when a concrete need justifies them. It is not part of development CI.
+### Default routing
 
-### Implementation routing
-
-Use this table as the default routing rule, not as a rigid prohibition. Escalate to Codex whenever a
-nominally small change becomes difficult to validate safely through the GitHub path.
-
-| Work | Default executor | Why |
+| Work | Default executor | Reason |
 | --- | --- | --- |
-| Architecture/roadmap/ADR/status documentation | GitHub-capable agent | Direct reviewable edits; no local execution normally required. |
-| Pull-request review, stale-doc review, architecture challenge | GitHub-capable agent | Requires cross-file judgment and independent review rather than repository-local iteration. |
-| Small focused code change with an already-clear contract | GitHub-capable agent | Efficient when the change is bounded and CI can provide sufficient deterministic validation. |
-| Simple data-model/schema-plumbing change with obvious tests | GitHub-capable agent when genuinely bounded | Keep it direct unless failures require iterative local debugging. |
-| Multi-layer or broad multi-file implementation | Codex | Local repository exploration and repeated test feedback materially improve reliability. |
-| Refactor or non-trivial debugging | Codex | Requires iterative execution, inspection, and correction. |
-| Benchmark/harness implementation or repeated local experiments | Codex | Needs controlled local execution and evidence collection. |
-| Raspberry Pi, filesystem, Docker, local n8n, or environment-sensitive work | Codex | Requires access to the actual local development/runtime environment. |
-| Final semantic review of either implementation path | GitHub-capable agent + human as needed | Preserve independent review before human merge. |
+| Architecture/roadmap/status documentation | GitHub-capable agent | Direct, reviewable, normally no local execution needed |
+| PR review / documentation coherence / architecture challenge | GitHub-capable agent | Cross-file judgment and independent review |
+| Small well-understood code change | GitHub-capable agent when CI gives sufficient validation | Avoid unnecessary delegation overhead |
+| Broad multi-layer implementation/refactor/debugging | Codex | Local iteration materially improves reliability |
+| Benchmark/harness or repeated experiments | Codex | Controlled execution/evidence collection required |
+| Raspberry/Docker/filesystem/local-n8n work | Codex | Requires the actual environment |
+| Final semantic review | GitHub-capable agent + human as needed | Independent gate before merge |
 
-The intended recurring workflow is therefore:
+If a nominally small change becomes difficult to validate safely without local feedback, move it to Codex rather than stretching the GitHub path.
+
+## Verification
+
+During implementation, run focused tests/checks. Before readiness, run `odyssey-verify-change` (or equivalent complete evidence when the local environment is unavailable) and require server-side CI.
+
+For production model-facing changes, deterministic checks are necessary but not sufficient; use the focused live evidence policy in `AGENTS.md` and [Testing Strategy](testing.md).
+
+A failed gate means the branch is not ready. It does not require discarding coherent work; record a safe checkpoint when useful and continue/fix the blocker.
+
+## Pull Request lifecycle
+
+- Significant work normally starts/continues as a Draft PR.
+- Before additional work on an open PR, inspect review feedback through `odyssey-pr-feedback`.
+- Resolve deterministic and semantic blockers before marking Ready.
+- Human merge only.
+- After human merge, `odyssey-post-merge` may synchronize the local clone and clean only branches whose merge is confirmed.
+
+Repository branch protection currently requires the stable `Python CI / Python deterministic checks` status on `main`. Protection/visibility/security settings are operational GitHub boundaries and must not be changed implicitly by repository code.
+
+## Documentation lifecycle
+
+The documentation structure intentionally separates current truth from historical evidence:
 
 ```text
-need a change
-    |
-    v
-Can the GitHub-capable agent implement it as a small, safe, reviewable change
-without needing iterative local execution?
-    |
-    +-- yes --> implement on feature branch --> CI --> semantic review
-    |
-    `-- no  --> delegate to Codex --> local iteration --> PR/CI --> semantic review
-
-Either path --> human merge
+README + product vision       product entry/durable promise
+overview                      current architecture
+functional-roadmap            current phase/status/order
+thematic architecture docs    current durable contracts
+future direction docs         intentionally deferred contracts
+phase docs / ADRs / benchmarks historical contract/evidence
 ```
 
-This routing decision is itself part of project process and should survive chat/session memory. If a
-future agent is uncertain which route applies, prefer Codex when local feedback is necessary and the
-GitHub-capable path when the work is genuinely bounded; do not create a second process document for
-this distinction.
+Rules:
 
-## Evolution points
+1. One project fact/contract has one canonical current owner; other docs link rather than copy.
+2. A phase document can preserve the wording/status of its checkpoint after completion. Do not keep manually updating every historical file to say what phase is now current.
+3. The roadmap must not become a second copy of completed phase contracts; summarize and link.
+4. Exact schema registry data lives in `config/note-schema.json`; prose explains semantics/ownership.
+5. A future capability with a dedicated document should be indexed, not duplicated, in `future-extension-points.md`.
+6. Do not create one Markdown document per workflow/function/benchmark when source/tests already carry the exact contract and a higher-level doc owns durable semantics.
+7. Consolidation may remove obsolete/duplicated docs only after any still-useful rationale is preserved in a canonical contract, ADR, phase record, test, or benchmark.
 
-- **D0 — manual stable workflow:** phase specification, bounded agent/Codex implementation as
-  appropriate, verification, Draft PR, semantic review, and human merge.
-- **D1 — Architecture Challenge + GitHub CI:** add a pre-implementation reasoning checkpoint and
-  independent deterministic Python validation.
-- **D1.1 — public readiness + verification efficiency:** remove unnecessary operational identifiers
-  from public-facing content and avoid redundant local verification while preserving the complete
-  deterministic gate.
-- **D2 — independent Codex reviewer experiment:** evaluate only as a bounded later experiment.
-- **D3 — semantic-review gate + GitHub auto-merge:** consider only after review evidence is reliable;
-  GitHub continues to own merge policy.
-- **D4 — automatic correction loop:** consider only if review and correction behavior proves safe.
-- **D5 — automatic phase progression:** consider only after earlier gates are trustworthy.
-- **D6 — `HUMAN_REQUIRED` + n8n/Telegram:** consider only for demonstrated notification and
-  human-in-the-loop needs.
-- **D7 — dedicated orchestrator:** consider only if GitHub plus Codex demonstrably cannot coordinate
-  the required workflow.
+This keeps documentation compact without throwing away the evidence needed to understand safety and architecture choices.
 
-D2 through D7 are hypotheses and evaluation points, not committed implementation requirements.
-They do not authorize speculative infrastructure.
+## Process evolution
 
-## Required-check follow-up
-
-The stable GitHub status-check name is `Python CI / Python deterministic checks`. After the
-public-readiness change is merged, synchronize `main`, change repository visibility through GitHub,
-verify repository and Actions access, then configure `main` protection to require that exact check
-and prevent merging when it fails. Repository visibility and protection are GitHub settings and
-must not be changed implicitly by repository code.
+Do not automate more of this pipeline until repeated manual friction demonstrates the need. Possible later experiments—independent automated reviewer, auto-merge policy, correction loops, automatic phase progression, notification/HITL routing, or a dedicated orchestrator—remain hypotheses, not commitments.
