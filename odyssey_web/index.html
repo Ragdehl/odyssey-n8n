@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="odyssey-api-endpoint" content="/api/request">
+  <title>Odyssey</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="brand" aria-label="Odyssey">
+      <div class="brand-mark" aria-hidden="true">O</div>
+      <div>
+        <h1>Odyssey</h1>
+        <p>Tu memoria, cuando la necesitas.</p>
+      </div>
+    </header>
+
+    <section class="workspace" aria-labelledby="composer-title">
+      <h2 id="composer-title" class="sr-only">Enviar una solicitud a Odyssey</h2>
+
+      <form id="odyssey-form" novalidate>
+        <label class="sr-only" for="request-input">Pregunta o dile algo a Odyssey</label>
+        <textarea
+          id="request-input"
+          name="request"
+          rows="5"
+          placeholder="Pregunta o dile algo a Odyssey…"
+          autocomplete="off"
+          autocapitalize="sentences"
+          enterkeyhint="send"
+          required
+        ></textarea>
+        <div class="composer-actions">
+          <p id="input-hint" class="hint">Enter para enviar · Mayús+Enter para nueva línea</p>
+          <button id="send-button" type="submit">Enviar</button>
+        </div>
+      </form>
+
+      <section id="interaction" class="interaction" hidden aria-live="polite" aria-atomic="false">
+        <article id="request-card" class="request-card" hidden>
+          <p class="eyebrow">Tú</p>
+          <p id="request-text" class="request-text"></p>
+        </article>
+
+        <article id="result-card" class="result-card" hidden>
+          <div class="result-heading">
+            <p id="result-label" class="eyebrow">Odyssey</p>
+            <span id="status-badge" class="status-badge" hidden></span>
+          </div>
+          <p id="result-message" class="result-message"></p>
+          <p id="partial-notice" class="partial-notice" hidden>La respuesta puede ser incompleta porque parte de la solicitud no pudo terminarse.</p>
+        </article>
+
+        <output id="loading-card" class="loading-card" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span>Procesando…</span>
+        </output>
+
+        <div id="transport-error" class="error-card" hidden role="alert">
+          <p id="transport-error-message">No se ha podido completar la solicitud.</p>
+          <button id="retry-button" type="button" hidden>Reintentar</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
