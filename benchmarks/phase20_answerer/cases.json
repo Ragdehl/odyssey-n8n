@@ -64,31 +64,31 @@
     },
     {
       "id": "split-evidence-es",
-      "description": "Answer requires two separate grounded items.",
+      "description": "Answer combines two distinct grounded notes with stable identities.",
       "input": {
-        "request": "¿Dónde vive Marta y dónde trabaja?",
+        "request": "¿Dónde vive Marta y dónde está la sede de Thales?",
         "status": "completed",
-        "retrieval_query": "Dónde vive Marta dónde trabaja",
+        "retrieval_query": "Dónde vive Marta sede Thales",
         "items": [
           {
-            "id": "marta-residence",
+            "id": "marta",
             "type": "person",
             "path": "people/Marta.md",
             "content": "Marta vive en Lyon."
           },
           {
-            "id": "marta-work",
-            "type": "person",
-            "path": "people/Marta.md",
-            "content": "Marta trabaja en Thales."
+            "id": "thales",
+            "type": "organization",
+            "path": "organizations/Thales.md",
+            "content": "La sede de Thales está en París."
           }
         ]
       },
       "oracle": {
         "expected_outcome": "ANSWER",
-        "required_supporting_item_ids": ["marta-residence", "marta-work"],
+        "required_supporting_item_ids": ["marta", "thales"],
         "forbidden_supporting_item_ids": [],
-        "required_answer_fragments": ["Lyon", "Thales"],
+        "required_answer_fragments": ["Lyon", "París"],
         "forbidden_answer_fragments": [],
         "require_partial_limitation": false
       }
