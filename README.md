@@ -1,67 +1,85 @@
 # Odyssey
 
-## What it is
+Odyssey is a personal knowledge system and a reusable knowledge foundation for applications and AI agents. It turns natural-language input into durable, inspectable Markdown knowledge while keeping the user's files authoritative.
 
-Odyssey is a personal knowledge system and a reusable foundation for future applications. It transforms unstructured information into reusable, human-readable knowledge while keeping personal Markdown files authoritative.
+The product principle is simple: **capture freely, preserve identity, add structure only when it unlocks useful behavior, and retrieve grounded knowledge when it matters.**
 
-The system is intentionally simple. Additional structure and infrastructure should appear only when concrete use cases justify them.
+## Current architecture
 
-## Core principles
-
-- Markdown is the source of truth for personal knowledge.
-- Notes are atomic or near-atomic, with stable identity and controlled note types providing the minimum useful structure.
-- Ordinary Obsidian `[[wikilinks]]` are the default relationship mechanism.
-- Structured properties are added only when deterministic processing requires them.
-- Derived indexes, caches, and databases must remain rebuildable rather than authoritative.
-- Prefer the simplest working architecture.
-
-See [Ontology Principles](docs/architecture/ontology.md) for the authoritative knowledge-model guidance.
-See [Product Vision](docs/product-vision.md) for the product promise and safety priorities.
-
-## High-level architecture
+Odyssey Core is independent from any one conversational client. The current standalone MVP is being built as a mobile web surface; ChatGPT or another reasoning client may also consume Odyssey through an integration boundary.
 
 ```text
-User
-  ↓
-ChatGPT
-  ↓
-stable Custom GPT Action
-  ↓
-n8n webhook
-  ↓
-integration and orchestration
-  ↓
-Odyssey Core (Python)
-  ↓
-Markdown on Raspberry Pi
-  ↓
-Obsidian
+mobile browser / reasoning client
+              |
+              v
+      trusted integration layer
+              |
+             n8n
+              |
+              v
+     thin Odyssey runtime
+              |
+              v
+        odyssey_core/
+   planning / retrieval / writes
+              |
+       +------+-------+
+       |              |
+       v              v
+canonical Markdown   derived state
+/data/odyssey/vault  SQLite/indexes/cache
 ```
 
-ChatGPT provides the conversational and reasoning layer. n8n and Odyssey provide deterministic orchestration, tools, and storage boundaries. See the [Architecture Overview](docs/architecture/overview.md) for responsibilities and intended component boundaries.
+For Odyssey Online, the browser talks to n8n; the internal Python runtime is not exposed directly to the Internet. n8n owns external integration/orchestration, while `odyssey_core/` owns reusable knowledge, identity, validation, retrieval, and mutation behavior.
+
+## Knowledge model
+
+- Markdown is the source of truth for personal knowledge.
+- One logical entity normally has one stable note identity.
+- Ordinary knowledge accumulates as append-first atomic facts inside that note.
+- Ordinary Obsidian `[[wikilinks]]` are the default relationship representation.
+- Types and structured properties exist only when they enable repeatable user-facing behavior such as filtering, comparison, calculation, reminders, or application logic.
+- SQLite indexes, embeddings, caches, and other runtime projections are derived and rebuildable.
+- Ambiguity fails closed rather than silently attaching knowledge to the wrong identity.
+
+See [Odyssey Knowledge Model](docs/architecture/knowledge-model-direction.md) and [Canonical Note Schema](docs/architecture/note-schema.md).
+
+## Current product stage
+
+Odyssey has completed the first real n8n/Core end-to-end path and its reliability hardening. Current work is **Phase 20 — Odyssey Online MVP**, aimed at making the smallest standalone mobile experience usable before real-user feedback drives further product work.
+
+The [Functional Roadmap](docs/architecture/functional-roadmap.md) is the single canonical source for the exact current subphase, completed checkpoints, and next gate.
 
 ## Repository and data boundaries
 
-This Git repository contains code, application configuration and schema, tests, Codex skills, architecture documentation, and version-controlled workflows. `workflows/` contains n8n integration/orchestration workflows; `odyssey_core/` contains the Python application/domain core.
+The Git repository contains code, tests, versioned workflow definitions, schema/configuration, development skills, and project documentation.
 
-`/data/odyssey` is separate from Git. It contains authoritative personal Markdown knowledge and rebuildable runtime data. See [Local Storage Boundary](docs/architecture/storage.md) for the precise ownership and path model.
+- `odyssey_core/` — Python application/domain core.
+- `workflows/` — reviewable n8n Workflow SDK definitions.
+- `odyssey_web/` — minimal mobile web client source.
+- `config/note-schema.json` — machine-readable canonical note schema.
+- `benchmarks/` — frozen model/retrieval evidence and evaluation harnesses.
+- `docs/` — durable product, architecture, infrastructure, and decision documentation.
 
-## Repository guide
+Personal and operational data remain outside Git under `/data/odyssey`; see [Local Storage Boundary](docs/architecture/storage.md).
 
-- [AGENTS.md](AGENTS.md) — project rules for agents and contributors.
-- [Architecture Overview](docs/architecture/overview.md) — high-level system architecture.
-- [Functional Roadmap](docs/architecture/functional-roadmap.md) — canonical intended functional phase sequence and current phase.
-- [Phase 15 Planning Contract](docs/architecture/phase-15-write-planning.md) — canonical request-planning contract across Phase 15, 15.1 and 15.2.
-- [Future Extension Points](docs/architecture/future-extension-points.md) — cross-phase direction for apps, writer profiles, tags, users and other later capabilities.
-- [Product Vision](docs/product-vision.md) — durable product outcomes and responsibility boundaries.
-- [Architecture decision history](docs/decisions/README.md) — measured significant decisions and proposals.
-- [Ontology Principles](docs/architecture/ontology.md) — knowledge-model principles.
-- [Canonical Note Schema](docs/architecture/note-schema.md) — how the note schema works.
-- [Development Pipeline](docs/architecture/development-pipeline.md) — phase contracts and the evidence-led development-process roadmap.
-- [Machine-readable note schema](config/note-schema.json) — canonical schema definitions.
-- [Local Storage Boundary](docs/architecture/storage.md) — repository, personal-data, and runtime boundaries.
-- [`odyssey_core/`](odyssey_core/) — Python application/domain core.
-- [`workflows/`](workflows/) — n8n integration and orchestration workflows.
-- [Codex project skills](.codex/skills/) — reusable development workflows.
+## Documentation map
 
-Project-development state is represented by Git branches and commits, Pull Requests, CI/test results, and the Functional Roadmap. Architecture documentation records durable contracts and decisions rather than transient checkpoint status. Historical benchmark evidence remains in its dedicated benchmark directories.
+Use a small set of documents as the entry points:
+
+- [AGENTS.md](AGENTS.md) — project and agent-development rules.
+- [Product Vision](docs/product-vision.md) — durable product promise and safety principles.
+- [Architecture Overview](docs/architecture/overview.md) — current system boundaries and request flow.
+- [Functional Roadmap](docs/architecture/functional-roadmap.md) — canonical implementation status and next work.
+- [Odyssey Knowledge Model](docs/architecture/knowledge-model-direction.md) — current knowledge representation principles.
+- [Canonical Note Schema](docs/architecture/note-schema.md) — interpretation of `config/note-schema.json`.
+- [Local Storage Boundary](docs/architecture/storage.md) — authority and filesystem/runtime ownership.
+- [Development Pipeline](docs/architecture/development-pipeline.md) — how significant changes are specified, implemented, verified, and reviewed.
+- [Future Extension Points](docs/architecture/future-extension-points.md) — index of intentionally deferred product/architecture directions.
+- [Architecture Decisions](docs/decisions/README.md) — accepted historical ADRs and measured decisions.
+
+Phase documents, ADRs, and benchmark records preserve **historical contracts and evidence**. They may describe the project as it existed at that checkpoint; they are not the source of current phase status unless the roadmap links them as the active contract.
+
+## Development philosophy
+
+Prefer the smallest working architecture. Do not add a service, database, framework, model stage, schema field, or workflow merely because it may be useful later. New complexity should solve a demonstrated problem and preserve the authority boundaries above.

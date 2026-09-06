@@ -1,177 +1,114 @@
 # Testing Strategy
 
-## Principle
+Odyssey separates deterministic correctness from live model evidence. A change is ready only when the checks appropriate to its behavior have passed.
 
-Every primitive and workflow must have a repeatable contract and be verified before it is considered complete:
+## Deterministic testing
 
-```text
-known input
-    |
-    v
-workflow
-    |
-    v
-expected output and state
-    |
-    v
- PASS / FAIL
-```
+Use the narrowest useful test during iteration, then the complete deterministic gate before readiness.
 
-Tests are not implemented in Phase 0. This document defines the strategy that later phases must apply.
+Python tests live under `tests/`; pytest is the official runner. Existing unittest tests may remain and are discovered by pytest.
 
-## Deterministic primitives
-
-Storage and ontology primitives should be tested with controlled fixtures and explicit preconditions. At minimum, cover:
-
-- the normal case;
-- entity or data not found;
-- duplicate and idempotency behavior where applicable;
-- malformed input;
-- an invalid operation where applicable.
-
-Tests must assert both the returned contract and the resulting Markdown state. Where a primitive can be retried, the test should demonstrate that a repeated identical request does not create unintended duplicates or changes.
-
-## Subworkflow contract testing
-
-Each reusable n8n subworkflow should have documented input and output schemas, structured error behavior, and test cases independent of its callers. Tests should use known input and isolated fixture data where possible.
-
-Contract tests should verify validation, mapping, branch behavior, error propagation, and output shape. Native n8n workflow validation is useful but does not replace behavioral assertions against expected output and state.
-
-## Python core testing
-
-Python tests live under `tests/`. Pytest is the official runner and discovers the existing
-`unittest` suite without requiring a mass migration. New tests should normally use native pytest
-style, including fixtures and parametrization when they improve clarity. Existing unittest tests
-may be migrated incrementally when functional work already modifies them.
-
-From the repository root, create an isolated development environment and install the pinned tools:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-```
-
-The first command creates the repository-local virtual environment, the second activates it for the
-current shell, and the final command installs the exact development-tool versions recorded in
-`requirements-dev.txt`; pip's `-r` flag tells it to read package requirements from that file. This
-is development setup only; Odyssey remains an unpackaged application with no added runtime
-dependencies.
-
-During implementation, run the narrowest useful tests for the behavior being changed. Concise output
-keeps the feedback loop readable; `--tb=short` is useful when a failure traceback would otherwise be
-noisy. For example:
+Typical focused iteration:
 
 ```bash
 pytest tests/core/test_notes.py -q --tb=short
 ```
 
-Repeat focused tests until the implementation is stable. Run the complete Python suite directly
-when the change is broad or when diagnosing the pytest pre-commit hook:
+Complete Python suite:
 
 ```bash
 pytest
 ```
 
-Pytest reads `testpaths` from `pyproject.toml`, so this runs every Python test beneath `tests/`.
-The suite includes structural package checks, temporary-directory `VaultRepository` contract tests,
-and isolated note codec, note validation, and schema tests.
-
-Run Ruff's defect and consistency checks across all tracked Python locations:
+Python lint/format authority:
 
 ```bash
 ruff check odyssey_core scripts tests
-```
-
-Format those locations in place:
-
-```bash
-ruff format odyssey_core scripts tests
-```
-
-To verify formatting without changing files, add `--check`:
-
-```bash
 ruff format --check odyssey_core scripts tests
 ```
 
-Install the Git pre-commit hook once per clone:
+Canonical schema validation:
 
 ```bash
-pre-commit install
+python3 scripts/validate_note_schema.py
 ```
 
-This writes the local Git hook that runs Ruff linting, Ruff's format check, the complete pytest
-suite, and the canonical schema validator before each ordinary commit. Run the same gates manually
-against every tracked file with:
+The repository pre-commit configuration groups the complete local deterministic checks; `pre-commit run --all-files` is the normal final local gate when working through Codex.
 
-```bash
-pre-commit run --all-files
-```
+## Browser/workflow checks
 
-`--all-files` checks the repository rather than only changes staged for the next commit. It is the
-final complete local deterministic gate and covers Ruff lint, Ruff's format check, the complete
-pytest suite, and the canonical schema validator. The pytest and schema hooks deliberately ignore
-filenames supplied by pre-commit so each always runs its full intended suite. Do not immediately
-duplicate these four checks with separate commands when this gate has passed against the unchanged
-tree; use an individual command to diagnose a failed hook when needed.
+The minimal `odyssey_web/` client has deterministic JavaScript tests in addition to Python static/contract coverage. GitHub CI runs the checked-in web JavaScript gate together with the Python/schema checks.
 
-Pre-commit and GitHub CI have complementary responsibilities:
+Versioned n8n Workflow SDK source under `workflows/` is validated through its repository tests/checks. Live n8n execution is required only when behavior depends on the actual n8n/runtime environment rather than static workflow structure.
+
+## CI and review
+
+GitHub CI independently validates pull requests and `main`. The stable deterministic check name is `Python CI / Python deterministic checks`; SonarQube Cloud adds code-quality/security analysis. Whether branch protection currently requires that check is a GitHub repository setting and should be verified before relying on it.
 
 ```text
-pre-commit = fast local feedback before a commit
-GitHub CI  = independent server-side validation attached to commits and pull requests
+implementation
+     |
+focused tests / local iteration
+     |
+complete deterministic gate
+     |
+odyssey-verify-change
+     |
+push / Draft PR
+     |
+GitHub CI + Sonar
+     |
+semantic review
+     |
+human merge
 ```
 
-Neither replaces the other. The `Python CI` workflow runs the deterministic Python checks on every
-pull request targeting `main` and every push to `main`, without requiring credentials, live vault
-access, Docker, or n8n.
+Do not duplicate identical expensive local checks immediately when an unchanged tree already has fresh successful evidence; rerun the affected gate after any relevant change.
 
-The normal verification loop is:
+## Contract testing principles
 
-```text
-implementation iteration
-    |
-    v
-focused tests until stable
-    |
-    v
-pre-commit run --all-files
-    |
-    v
-odyssey-verify-change (remaining scope and evidence review)
-    |
-    v
-push
-    |
-    v
-GitHub CI independently reruns deterministic gates
-```
+For deterministic primitives and reusable boundaries, cover the applicable cases:
 
-`odyssey-verify-change` may reuse a fresh successful gate from the same unchanged tree, then performs
-its distinct diff, scope, secret, protected-area, documentation, and working-tree checks. Any
-relevant file change makes earlier evidence stale and requires the affected gate to run again.
-Deterministic validation is retained; the workflow avoids repeating identical local work without
-new evidence value.
+- normal success;
+- not found / empty result;
+- malformed or invalid input;
+- ambiguity/conflict/fail-closed behavior;
+- retry/idempotency behavior when applicable;
+- revision/stale-state behavior for writes;
+- returned contract **and** resulting canonical/durable state;
+- no unintended mutation on failure.
 
-## Integration testing
+Use isolated temporary/disposable fixtures. Tests must not modify real personal notes or require production credentials.
 
-Integration tests verify composition across boundaries, such as:
+## Model-facing evaluations
 
-- domain workflow to ontology primitives;
-- ontology primitives to the storage layer;
-- Raspberry Pi host paths to the `/odyssey` n8n container mount;
-- webhook request to a stable response contract;
-- Markdown output remaining usable by Obsidian.
+Changes to production model prompts, model-facing instructions, or structured-output contracts require more than deterministic schema tests.
 
-Use dedicated fixtures or a clearly isolated test area. Tests must not overwrite production notes or require exposing credentials. Destructive cleanup should be narrowly scoped and recoverable when practical.
+Use a versioned/frozen multi-case evaluation set and compare the exact production model/reasoning configuration. Include ordinary cases, difficult historical failures, ambiguity, malformed/invalid outputs, and regression sentinels for behavior that could be disturbed.
 
-## Future AI evaluations
+A production-model change is not validated merely because:
 
-AI-dependent extraction, classification, resolution, and reasoning require multi-case evaluation datasets rather than one successful example. Evaluation cases should include ordinary inputs, ambiguity, conflicting facts, aliases, near-duplicates, malformed input, and domain-specific edge cases.
+- one example worked;
+- a different model followed the prompt;
+- deterministic JSON validation passed;
+- a synthetic oracle demands wording that the real contract does not require.
 
-Expected results may combine exact assertions for structured fields with bounded qualitative criteria for generated content. Model or prompt changes should be compared against the same versioned dataset. Deterministic validation remains responsible for enforcing contracts after AI output.
+When provider access is unavailable, record the live-evidence gate as pending. Do not silently lower the standard or substitute unequivalent evidence.
+
+Live calls should remain focused and cost-aware. Reuse existing benchmark evidence and frozen cases rather than rerunning broad model selection without a concrete reason.
+
+## Integration and E2E evidence
+
+Integration tests cover composition across real boundaries when needed, including:
+
+- n8n -> internal runtime -> Core;
+- request/result contract and stable `request_id` retry behavior;
+- canonical Markdown mutation plus pending/Git/index outcomes;
+- browser -> n8n Odyssey Online response;
+- Raspberry/Cloudflare access boundaries when deployment work reaches them.
+
+Initial live integration uses disposable data. Real vault activation, security changes, credentials, and destructive cleanup remain explicit human-controlled actions.
 
 ## Completion evidence
 
-A workflow is complete only after its applicable validation and tests pass. Its behavior documentation should record repeatable verification commands and any durable limitation. Git branches, commits, Pull Requests, and test results track development state.
+A PR is not ready while an applicable deterministic, live-model, environment, or semantic-review gate is unresolved. Branches/PRs/tests preserve development evidence; current functional status belongs in the [Functional Roadmap](functional-roadmap.md).

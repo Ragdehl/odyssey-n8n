@@ -1,23 +1,37 @@
 # Workflow Documentation
 
-This directory will contain one Markdown document per implemented workflow or reusable subworkflow. Use stable, descriptive filenames that match the workflow's role. Group documents into subdirectories only when the number of workflows makes that clearer.
+The reviewable source of permanent credential-free n8n workflows lives under the repository's top-level `workflows/` directory using the n8n Workflow SDK. Source and tests own exact node/error behavior; this directory documents only durable cross-workflow roles that are not clearer in code.
 
-Each workflow document should contain:
+## Current versioned workflows
 
-- purpose;
-- input contract;
-- output contract;
-- a readable node diagram;
-- a node-by-node explanation;
-- errors and edge cases;
-- dependencies, including called subworkflows and storage paths;
-- repeatable tests and their expected results;
-- workflows that consume it.
+| Workflow source | Last recorded live n8n ID | Role |
+| --- | --- | --- |
+| `workflows/odyssey-runtime.ts` | — | Development/test bridge from n8n to the internal host Odyssey runtime. Not a public product endpoint. |
+| `workflows/storage-read.ts` | `4lkNuXTmbqzuO3th` | Low-level contained Markdown read utility. |
+| `workflows/storage-write.ts` | `yIg02EH2IotEHOkS` | Low-level create-only Markdown write utility. |
+| `workflows/storage-list.ts` | `kdjF8Oq5NxK26fwq` | Low-level contained Markdown path-list utility. |
 
-Documentation should distinguish a planned contract from an implemented and verified one. Record the n8n workflow name and stable identifier when one exists, but do not include credentials, tokens, sensitive payloads, or exported secrets.
+Live n8n IDs are operational identifiers recorded from the deployed environment, not semantic/API identity; re-verify them before relying on them after workflow recreation/import.
 
-Implementation changes are normally reviewed through GitHub Pull Requests before they are merged into `main`.
+The three storage utilities predate the current Core application flow and remain useful for development/reference/administrative use. They do not own production semantic mutation; Core owns identity, validation, revision, atomic facts, references, bulk/delete/type-migration behavior.
 
-Permanent credential-free workflows are represented under the repository's top-level `workflows/` directory with the n8n Workflow SDK. Each representation is the reviewable source used to validate and reconstruct its corresponding live workflow.
+Cross-workflow storage authority is documented in [Local Storage Boundary](../architecture/storage.md). The current n8n/Core product integration contract lives in the relevant phase architecture documents, especially [Phase 18](../architecture/phase-18-n8n-first-e2e.md) and [Phase 20](../architecture/phase-20-odyssey-online-mvp.md).
 
-Reusable subworkflows should expose a narrow contract and hide implementation details from their callers. Update the workflow document whenever behavior or a public contract changes.
+## Preserved low-level storage constraints
+
+- `storage_read` and `storage_write` accept only contained literal vault-relative POSIX `.md` paths; their legacy serialization handling intentionally supports a constrained flat metadata subset and remains independent from canonical schema validation.
+- `storage_write` is create-only. Its native existence preflight followed by the write is **not** an atomic compare-and-create; concurrent creates for the same path are outside its supported contract, and ambiguous filesystem outcomes fail closed.
+- `storage_list` uses a fixed recursive Markdown selector and returns deterministic sorted vault-relative paths. The available native n8n reader materializes matched files before Odyssey discards binary content; that accepted administrative cost does not justify another service, database, or index solely for metadata-only listing.
+
+Exact public inputs/outputs/error codes remain in the workflow source and tests, which are the executable contract.
+
+## When a separate workflow document is justified
+
+Do **not** create one Markdown file automatically for every workflow. Add a dedicated document only when a workflow has a durable operational/public contract, deployment procedure, or cross-system behavior that is not adequately represented by:
+
+- the Workflow SDK source;
+- tests;
+- a higher-level architecture contract;
+- an ADR/phase document when the behavior is historical or decision-specific.
+
+When a dedicated workflow doc is justified, keep it contract-focused and avoid copying node-by-node source that will drift.

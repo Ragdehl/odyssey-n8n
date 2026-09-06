@@ -1,70 +1,85 @@
 # Local Storage Boundary
 
-## Purpose
+## Authority model
 
-Odyssey initially uses Markdown and local files as its source of truth. This keeps personal knowledge readable without Odyssey, directly usable by Obsidian and ordinary file tools, easy to back up, and independent of a database or other service that is not yet needed.
-
-The Git repository and personal data are intentionally separate. `/home/ragdehl/projects/odyssey` contains code and documentation; `/data/odyssey` contains persistent personal and operational data and is not part of the repository.
-
-## Host and container paths
-
-Docker bind-mounts the approved host data directory at a stable path inside n8n:
+Odyssey separates authoritative personal knowledge, durable non-knowledge state, and rebuildable runtime data.
 
 ```text
-Raspberry Pi host                n8n container
+Git repository
+  config/note-schema.json   -> authoritative application schema/config
 
-/data/odyssey        <------>    /odyssey
-├── vault/                       ├── vault/
-├── config/                      ├── config/
-├── state/                       ├── state/
-└── runtime/                     └── runtime/
+/data/odyssey
+  vault/                    -> authoritative personal Markdown
+  state/                    -> durable Odyssey app/workflow state
+  runtime/                  -> rebuildable indexes/cache/projections
+  config/                   -> deployment/runtime config only when explicitly needed
 ```
 
-The directories have distinct responsibilities:
+The Git repository and personal data are intentionally separate. `/home/ragdehl/projects/odyssey` contains code and documentation; `/data/odyssey` contains persistent personal/operational data and is not committed.
 
-- `vault/` holds the authoritative Markdown knowledge that Obsidian will eventually use.
-- `config/` is reserved for runtime or deployment configuration if a demonstrated need emerges. The canonical application schema is version-controlled in the Git repository at `config/note-schema.json` and is not copied here in Phase 2.
-- `state/` holds durable Odyssey application/workflow state that must survive process restarts but is not canonical user knowledge. Phase 17B first uses `state/pending/` for incomplete validated requests. State here is non-rebuildable unless the corresponding workflow explicitly says otherwise.
-- `runtime/` holds derived indexes, caches, and other disposable runtime state. Everything here must be rebuildable from the authoritative files and configuration.
+## Host/container mapping
 
-Workflows use `/odyssey` and never the Raspberry Pi host path. This storage boundary keeps ontology logic independent of deployment-specific paths and allows the physical storage implementation to change without rewriting ontology workflows.
-
-n8n's native file nodes must be restricted at runtime with `N8N_RESTRICT_FILE_ACCESS_TO=/odyssey/vault`. This is the deployment security boundary for ordinary note-file access: it permits vault reads while rejecting resolved paths under `/odyssey/config`, `/odyssey/state`, `/odyssey/runtime`, other container locations, and symlink escapes from the vault. Workflow path validation remains a separate defense and must accept only safe vault-relative targets. Phase 17B Core pending-state access therefore does not implicitly authorize n8n native file nodes to browse or mutate application state; the Phase 18 integration must expose only the explicit Core boundary it actually needs.
-
-The initial write boundary is deliberately create-only. `storage_write` checks that a target is absent and refuses readable existing notes rather than overwriting them. This simple contract prevents ordinary accidental replacement while leaving revisions and controlled updates to a later explicit primitive. The native existence preflight is not an atomic compare-and-create guarantee, so concurrent creates for the same path are outside the supported contract.
-
-`storage_read`, `storage_write`, and `storage_list` complete the current low-level n8n storage layer. The list primitive uses n8n's fixed native recursive Markdown glob, returns only sorted vault-relative paths, and exposes neither file content nor domain semantics. Because the installed native node materializes matches while enumerating them, this V1 implementation may read files internally before discarding their binary data; avoiding that cost does not justify new infrastructure for an administrative/reference primitive.
-
-Odyssey Core uses a separate, small Python filesystem boundary:
+The Raspberry deployment exposes the approved data root to n8n at `/odyssey`:
 
 ```text
-domain/search logic              (later phases)
-            |
-            v
-Note + validation                (Phase 8)
-            |
-            v
-Markdown codec                  (Phase 8)
-            |
-            v
-VaultRepository                  (Phase 7)
-            |
-            v
-filesystem
+Raspberry host                 n8n container
+/data/odyssey      <------>    /odyssey
+  vault/                         vault/
+  state/                         state/
+  runtime/                       runtime/
+  config/                        config/
 ```
 
-`VaultRepository` receives its vault root when constructed and provides contained UTF-8 reads, exclusive create-only writes, and deterministic recursive Markdown path listing. A read-only root remains usable for listing and reading; create attempts still fail through the normal storage error contract. Paths are literal vault-relative POSIX paths rather than n8n glob selectors. The repository returns and stores raw Markdown text unchanged; it does not parse frontmatter, validate schemas, serialize notes, or apply domain semantics. Parent directories must already exist when creating a note. Its filesystem-containment query lets derived-storage components reject locations inside the authoritative vault without moving semantic behavior into storage.
+Workflows use container paths; Core/runtime on the host use configured host paths. Deployment paths must not leak into knowledge semantics.
 
-The Phase 8 Markdown codec is the separate serialization boundary immediately above the repository. It converts constrained YAML-frontmatter Markdown to and from a generic `Note(metadata, content)` without knowing which ontology fields are valid. Canonical note-instance validation is another separate layer above the codec and receives the parsed canonical schema explicitly. The generic note has no filesystem path: metadata such as `id` represents logical identity while vault placement remains a storage concern.
+## Canonical vault
 
-Phase 17B adds a separate, deliberately narrow pending-work repository rooted at `state/pending/`. It stores deterministic JSON workflow evidence and does not reuse `VaultRepository`, the Markdown codec, or the canonical note schema. This separation is intentional: pending work must survive restarts, but it must never appear in ordinary knowledge scans, embeddings, identity resolution, or bulk selection. The pending root is configured explicitly and is not created or populated with real personal state merely by importing Core code or running unit tests.
+`vault/` contains the user's Markdown source of truth. Canonical notes are parsed/validated/mutated through Core contracts; filenames are storage labels, not semantic identity.
 
-The source-of-truth distinction is explicit: application schema lives in Git, personal knowledge lives in `/data/odyssey/vault`, durable application/workflow state lives in `/data/odyssey/state`, and rebuildable runtime data lives in `/data/odyssey/runtime`. How n8n obtains the canonical schema or invokes the pending-state boundary will be decided when a workflow needs it; the storage layout does not itself widen native file-node permissions.
+`VaultRepository` is the narrow Python filesystem boundary for contained UTF-8 Markdown access. It does not infer ontology, resolve identity, or make domain decisions. Note parsing/serialization and schema validation remain separate layers above it.
 
-`~/odyssey-data` is only a convenience symlink to `/data/odyssey` for interactive host use. It is not a second data location and workflows must not depend on it.
+Production semantic writes flow through Core materialization/persistence rather than through generic n8n file nodes. This keeps revision, stable-ID, atomic-fact, reference-binding, soft-delete, bulk, and type-migration safety in one authority.
 
-Cloud synchronization, including services such as OneDrive, is external to the Odyssey core. Synchronization policy and tooling will be designed separately so they do not complicate the initial storage contract.
+## Durable application state
 
-## Permissions
+`state/` holds data that must survive process restarts but is **not personal knowledge** and must not appear in ordinary note scans/embeddings/retrieval.
 
-The host user `ragdehl` and the n8n container user `node` both use UID/GID `1000:1000`. The storage root and its durable/runtime child directories should use ownership `1000:1000` and mode `0755` unless a later security review narrows specific state permissions. This lets approved Core/runtime code read the tree and create or update owner-writable files without world-writable permissions or an additional permission mechanism.
+Phase 17B established `state/pending/` for durable incomplete work. Pending records preserve actionable evidence without becoming Markdown notes or a second knowledge source.
+
+Future durable workflow state should use this boundary only when it cannot be rebuilt and when the semantics are clearly non-canonical.
+
+## Rebuildable runtime state
+
+`runtime/` contains derived state such as SQLite indexes, embeddings/projections, caches, and other artifacts that can be rebuilt from canonical Markdown plus versioned application configuration.
+
+A derived database may improve retrieval or analytics but must never become the only copy of user knowledge.
+
+## Git history
+
+The vault may use local Git history for request-correlated audit/recovery of canonical mutations. Git is not an alternate knowledge model and Git SHAs are not embedded into every fact. `request_id` provides the normal correlation bridge.
+
+## n8n low-level file utilities
+
+Versioned `workflows/storage-read.ts`, `storage-write.ts`, and `storage-list.ts` preserve early low-level n8n storage utilities. They remain useful for development/reference/administrative scenarios, but they are **not the production semantic write authority**.
+
+Their exact node/error contracts live with the workflow source and tests. Do not create another Markdown contract that can drift from those files; cross-workflow storage semantics belong here.
+
+The native n8n file-node restriction `N8N_RESTRICT_FILE_ACCESS_TO=/odyssey/vault` is the deployment containment boundary for those ordinary vault-file operations. Core pending/runtime access does not implicitly widen native n8n file permissions.
+
+## Permissions and security
+
+The current Raspberry host user and n8n container user use compatible UID/GID ownership so authorized components can access the mounted tree without world-writable permissions.
+
+- Never use broad `777` permissions merely to make a workflow pass.
+- Personal vault access and durable state access are separate authorities.
+- Path validation and filesystem containment are independent defenses.
+- Credentials belong in environment/credential stores, never Markdown docs or the vault.
+- Real-vault mutation is a human-controlled deployment/development boundary.
+
+## Synchronization
+
+Cloud/file synchronization (for example OneDrive or another user-selected mechanism) is outside Core semantics. Sync may transport canonical Markdown, but it must not change which copy is authoritative or bypass future conflict/authorization rules.
+
+Fine-grained multi-user confidentiality cannot be implemented by hiding notes in an API after every client already possesses every file. See [Multi-user Collaboration Direction](multi-user-collaboration-direction.md) for that future boundary.
+
+`~/odyssey-data` may be used as a host convenience symlink to `/data/odyssey`; it is not another canonical data location.

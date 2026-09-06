@@ -2,100 +2,73 @@
 
 ## Purpose
 
-Use the Raspberry Pi as an always-on environment for n8n and Codex without requiring a PC to remain powered on.
+The Raspberry Pi is the current always-on self-hosted environment for n8n, the Odyssey runtime, and Codex-assisted development without requiring a PC to remain powered on.
 
 ## Main components
 
-- Debian 13 ARM64
-- Docker and Docker Compose
-- n8n running in Docker
-- cloudflared running in Docker
-- Codex CLI installed directly on the Raspberry Pi
-- Codex connected to n8n through the n8n MCP server using OAuth
-- Tailscale for private remote SSH access
+- Debian 13 ARM64;
+- Docker / Docker Compose;
+- n8n in Docker;
+- cloudflared in Docker;
+- Codex CLI on the Raspberry Pi;
+- n8n MCP access through OAuth;
+- Tailscale for private administrative SSH access.
 
 ## Important paths
 
-Project and Codex context:
+```text
+/home/ragdehl/projects/odyssey
+  -> Git repository, AGENTS.md, code, docs, tests
 
-`/home/ragdehl/projects/odyssey`
+/data/odyssey
+  vault/    -> authoritative Markdown
+  state/    -> durable non-knowledge Odyssey state
+  runtime/  -> rebuildable indexes/cache
+  config/   -> deployment/runtime config only when needed
 
-Contains Git, `AGENTS.md`, documentation and future project code.
+/home/ragdehl/docker/n8n
+  -> n8n compose/environment configuration
+```
 
-Persistent Odyssey data:
-
-`/data/odyssey`
-
-Contains:
-
-- `vault/`
-- `config/`
-- `runtime/`
-
-n8n Docker configuration:
-
-`/home/ragdehl/docker/n8n`
-
-Contains `compose.yaml` and `.env`.
+The canonical application schema remains in the Git repository at `config/note-schema.json`; `/data/odyssey/config` is not a second schema authority.
 
 ## n8n storage mount
 
-Docker maps:
+Docker maps `/data/odyssey` on the host to `/odyssey` in the n8n container. n8n therefore sees `/odyssey/vault`, `/odyssey/state`, `/odyssey/runtime`, and `/odyssey/config` when its explicit permissions/boundaries allow them.
 
-`/data/odyssey` on the Raspberry → `/odyssey` inside the n8n container.
+The host user `ragdehl` and n8n container user `node` both use UID/GID `1000:1000`. `/data/odyssey` and its durable/runtime child directories normally use ownership `1000:1000` and mode `0755` unless a later security review narrows it; do not use `777` to work around permissions.
 
-Therefore n8n uses paths such as:
-
-- `/odyssey/vault`
-- `/odyssey/config`
-- `/odyssey/runtime`
-
-while the same files exist on the Raspberry under `/data/odyssey`.
-
-Both the Raspberry user `ragdehl` and the n8n container user `node` use UID/GID `1000:1000`, allowing both to work with these files without broad permissions such as `777`.
+See [Local Storage Boundary](../architecture/storage.md) for semantic authority and file-access rules.
 
 ## Codex
 
-Codex is started from `/home/ragdehl/projects/odyssey` so that it loads `AGENTS.md`.
+The host shell command `odyssey` is the convenience entry point: it changes to `/home/ragdehl/projects/odyssey`, starts Codex from the repository so `AGENTS.md` is loaded, and grants the approved writable paths `/data/odyssey` and `/home/ragdehl/docker/n8n` used by environment-sensitive work.
 
-Additional writable directories are:
+The n8n MCP connection allows authorized workflow inspection/change/testing under restricted OAuth scopes. Credentials remain in their proper stores and must not be committed.
 
-- `/data/odyssey`
-- `/home/ragdehl/docker/n8n`
+From Android the normal administrative path is:
 
-The n8n MCP connection lets Codex read, create, modify, validate and test authorized n8n workflows.
-
-MCP access uses OAuth and restricted scopes. Credentials and n8n Data Tables were not granted.
-
-## Starting the environment
-
-The shell command `odyssey`:
-
-- changes to `/home/ragdehl/projects/odyssey`
-- starts Codex
-- grants access to `/data/odyssey`
-- grants access to `/home/ragdehl/docker/n8n`
-
-From Android the normal workflow is:
-
-Tailscale → Termius → SSH → `odyssey`
+```text
+Tailscale -> Termius -> SSH -> Raspberry -> odyssey/Codex
+```
 
 ## Live benchmark calls from Codex
 
 Historical Phase 17E evidence found an environment-specific limitation: direct Raspberry shell calls to `api.openai.com` and the project OpenAI SDK worked, while the same live benchmark calls executed from inside the Codex sandbox failed with `APIConnectionError`.
 
-This is tooling-only and must not block Odyssey development. Until a concrete need appears, focused live model evidence may be run directly from the Raspberry shell while keeping Codex sandbox protections unchanged.
+This is tooling-only and must not block Odyssey development. Focused live model evidence may be run directly from the Raspberry shell while preserving Codex sandbox protections.
 
 If direct Codex outbound access becomes useful later, use the smallest safe change:
 
 - keep sandboxing enabled;
-- allow only the minimum OpenAI API domains/endpoints required rather than unrestricted Internet access;
-- verify first with one non-generative SDK smoke call and one bounded benchmark smoke call;
+- allow only the minimum provider endpoints required rather than unrestricted Internet access;
+- verify with a non-generative SDK smoke call and one bounded benchmark smoke call;
 - do not weaken unrelated filesystem, credential, or process protections;
-- document any Odyssey-specific local configuration that is actually adopted.
+- document only Odyssey-specific configuration that is actually adopted.
 
 ## Security
 
-- Codex uses approval-based permissions rather than Full Access.
+- Codex uses approval-based permissions rather than unrestricted Full Access.
 - n8n workflows must be explicitly exposed to MCP.
-- Secrets remain in `.env` or their appropriate credential stores and must not be committed to Git.
+- Secrets stay in `.env`/credential stores, never documentation or Git.
+- Real-vault, network, credential, Cloudflare, and other security-sensitive changes require explicit human approval.
