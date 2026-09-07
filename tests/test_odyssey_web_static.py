@@ -29,8 +29,8 @@ class _IndexParser(HTMLParser):
             self.api_endpoint = values.get("content")
 
 
-def test_static_frontend_has_required_mobile_contract_elements() -> None:
-    """The checked-in page exposes the minimum composer, result, retry, and API seams."""
+def test_static_frontend_has_transcript_and_composer_contract_elements() -> None:
+    """The checked-in page exposes a session transcript and narrow product composer seams."""
 
     parser = _IndexParser()
     parser.feed((WEB_ROOT / "index.html").read_text(encoding="utf-8"))
@@ -43,12 +43,13 @@ def test_static_frontend_has_required_mobile_contract_elements() -> None:
         "request-input",
         "send-button",
         "interaction",
-        "result-card",
-        "result-message",
-        "loading-card",
-        "transport-error",
-        "retry-button",
     } <= parser.ids
+
+    app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    assert "conversation.append(article)" in app
+    assert "conversation.scrollTop = conversation.scrollHeight" in app
+    assert "if (event.shiftKey) return;" in app
+    assert 'event.key !== "Enter" || event.isComposing' in app
 
 
 def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:

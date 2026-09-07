@@ -1,6 +1,6 @@
 # Phase 20 — Odyssey Online MVP
 
-Status: **Phase 20.0 complete; Phase 20.1A complete; Phase 20.1B next; Phase 20.2 offline frontend checkpoint merged, with real n8n/Chrome integration still pending**
+Status: **Phase 20.0, 20.1A, 20.1B, and Raspberry-backed 20.2B integration are complete; revised Android UI validation remains pending**
 
 ## Objective
 
@@ -317,10 +317,11 @@ Minimum behavior:
 - generate one stable request ID per new submission and reuse it for an explicit retry;
 - loading/error state;
 - render the final conversational response or deterministic acknowledgement/empty/error state;
-- retain only the current interaction state needed by the page; no synchronized chat history;
+- retain a scrollable visual transcript for the currently loaded page/session only; a reload may clear it;
+- keep durable/persisted conversation history and conversation-context retrieval explicitly deferred;
 - usable in Chrome on Android at phone width.
 
-Gboard dictation is treated as normal keyboard input. Phase 20 does not implement microphone recording, browser speech APIs, transcription APIs, or stored audio.
+Gboard dictation is treated as normal keyboard input. Phase 20 does not implement microphone recording, browser speech APIs, transcription APIs, or stored audio. Physical Android evidence established the compact-header, scrollable-session-transcript, bottom-composer presentation as the MVP interaction shape; it does not add durable chat semantics.
 
 Do not add accounts, chat-history synchronization, attachments, push notifications, PWA/offline behavior, rich Markdown editing, or native mobile packaging merely to call the MVP complete.
 
