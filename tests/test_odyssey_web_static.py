@@ -55,6 +55,12 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'enterkeyhint="enter"' in index
 
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto;" in styles
+    assert ".conversation { display: flex; flex-direction: column;" in styles
+    assert "overflow-y: auto" in styles
+    assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
+
 
 def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:
     """The offline checkpoint stays self-contained and creates no durable browser history."""
