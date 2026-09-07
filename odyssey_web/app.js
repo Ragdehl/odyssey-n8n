@@ -93,6 +93,7 @@ form.addEventListener("submit", (event) => {
 });
 
 input.addEventListener("keydown", (event) => {
+  if (globalThis.matchMedia?.("(pointer: coarse)").matches) return;
   if (event.key !== "Enter" || event.isComposing) return;
   if (event.shiftKey) return;
   event.preventDefault();

@@ -48,8 +48,12 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     assert "conversation.append(article)" in app
     assert "conversation.scrollTop = conversation.scrollHeight" in app
+    assert 'globalThis.matchMedia?.("(pointer: coarse)").matches' in app
     assert "if (event.shiftKey) return;" in app
     assert 'event.key !== "Enter" || event.isComposing' in app
+
+    index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'enterkeyhint="enter"' in index
 
 
 def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:

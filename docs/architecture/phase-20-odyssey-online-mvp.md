@@ -313,7 +313,9 @@ Build only the user surface needed to exercise Odyssey naturally from a phone:
 Minimum behavior:
 
 - one normal text input/textarea;
-- submit button and sensible Enter behavior;
+- submit button and platform-appropriate composer behavior: on coarse-pointer/mobile keyboards Return
+  inserts a newline and the visible button sends; on fine-pointer devices Enter sends and Shift+Enter
+  inserts a newline;
 - generate one stable request ID per new submission and reuse it for an explicit retry;
 - loading/error state;
 - render the final conversational response or deterministic acknowledgement/empty/error state;
