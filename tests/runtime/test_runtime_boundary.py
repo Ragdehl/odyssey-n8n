@@ -22,7 +22,12 @@ from odyssey_core.application import (
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
 from odyssey_core.git_history import GitHistoryResult
-from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
+from odyssey_core.observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    ProviderCallEvidence,
+)
 from odyssey_runtime import __main__ as runtime_main
 from odyssey_runtime import composition
 from odyssey_runtime.composition import RuntimeComposition
@@ -50,6 +55,7 @@ def test_application_result_serialization_exposes_only_public_evidence() -> None
         "request_id": "request-test",
         "status": "completed",
         "planning_error": None,
+        "clarification_code": None,
         "affected_stable_note_ids": ["note-test"],
         "actions": [],
         "pending_work": {"required": False, "persisted": False, "record_id": None, "error": None},
@@ -104,6 +110,67 @@ def test_application_result_serialization_exposes_bounded_operational_evidence()
     assert "prompt" not in encoded
     assert "provider_payload" not in encoded
     assert "reasoning" in encoded  # only the safe configuration field is present
+
+
+def test_clarification_and_provider_diagnostics_serialize_without_raw_output() -> None:
+    """Expose a deterministic clarification and bounded attempt evidence only."""
+    result = ApplicationResult(
+        request_id="request-bdbd-sentinel",
+        status=ApplicationStatus.NEEDS_ATTENTION,
+        action_results=(),
+        affected_stable_note_ids=(),
+        clarification_code="UNRECOGNIZED_REQUEST",
+        operational=OperationalEvidence(
+            stages=(
+                OperationalStage(
+                    "planner",
+                    OperationalOutcome.COMPLETED,
+                    provider_calls=(
+                        ProviderCallEvidence(
+                            "planner",
+                            OperationalOutcome.COMPLETED,
+                            attempt_count=1,
+                            response_id="resp_safe",
+                            provider_status="completed",
+                            output_text_chars=91,
+                            output_text_bytes=91,
+                            parse_status="succeeded",
+                            result_kind="clarify",
+                            result_counts={"actions": 0, "units": 0},
+                        ),
+                    ),
+                ),
+            )
+        ),
+    )
+
+    response = application_result_to_response(result)
+
+    assert response["clarification_code"] == "UNRECOGNIZED_REQUEST"
+    assert response["actions"] == []
+    provider = response["operational"]["stages"][0]["provider_calls"][0]
+    assert provider == {
+        "name": "planner",
+        "outcome": "completed",
+        "duration_ms": None,
+        "model": None,
+        "reasoning_effort": None,
+        "usage": None,
+        "error_category": None,
+        "attempt_count": 1,
+        "response_id": "resp_safe",
+        "provider_status": "completed",
+        "incomplete_reason": None,
+        "output_text_chars": 91,
+        "output_text_bytes": 91,
+        "parse_status": "succeeded",
+        "result_kind": "clarify",
+        "result_counts": {"actions": 0, "units": 0},
+    }
+    encoded = json.dumps(response)
+    assert '"output_text":' not in encoded
+    assert "Bdbd" not in encoded
+    assert "provider_payload" not in encoded
 
 
 def test_application_result_serialization_maps_action_evidence() -> None:

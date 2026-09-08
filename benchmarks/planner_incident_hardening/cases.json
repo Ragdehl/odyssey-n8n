@@ -1,0 +1,8 @@
+[
+  {"id": "incident_bdbd", "request": "Bdbd", "expect": "clarify"},
+  {"id": "nonsense_letters", "request": "asdfgh", "expect": "clarify"},
+  {"id": "nonsense_punctuation", "request": "???", "expect": "clarify"},
+  {"id": "normal_retrieval", "request": "Where does Marta work?", "expect": "retrieve"},
+  {"id": "normal_write", "request": "Remember that Marta works at Thales.", "expect": "write"},
+  {"id": "legitimate_delegation", "request": "Translate my note about Marta into French.", "expect": "delegate"}
+]

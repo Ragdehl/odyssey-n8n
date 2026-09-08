@@ -53,6 +53,14 @@ def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:
     assert ".add(runtime.onError(route))" in source
 
 
+def test_planner_clarification_bypasses_answerer_with_deterministic_text() -> None:
+    """Map only Core's allowlisted clarification to the direct product response."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "r.clarification_code === 'UNRECOGNIZED_REQUEST'" in source
+    assert "kind: 'clarification'" in source
+    assert "Reformúlala con más detalle." in source
+
+
 def test_frozen_answerer_keeps_the_language_instruction_for_live_sentinels() -> None:
     """Retain the frozen user-language instruction after the English live regression."""
     source = SOURCE.read_text(encoding="utf-8")

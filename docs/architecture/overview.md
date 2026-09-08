@@ -41,24 +41,28 @@ One natural-language request can contain retrieval, writes, or both.
 request + request_id
        |
        v
-validated RequestPlan
+validated PlannerResult
        |
-       +-------------------------+
-       |                         |
-       v                         v
- RetrieveAction(s)           WriteAction(s)
-       |                         |
-       v                         v
- get_context              target/reference resolution
-       |                         |
-       |                  create/update/delete decision
-       |                         |
-       |                  bounded materialization
-       |                         |
-       +-------------+-----------+
-                     |
-                     v
-             ApplicationResult
+       +--> CLARIFY -> deterministic non-mutating response
+       |
+       `--> PLAN -> validated RequestPlan
+                       |
+                       +-------------------------+
+                       |                         |
+                       v                         v
+                RetrieveAction(s)           WriteAction(s)
+                       |                         |
+                       v                         v
+                 get_context            target/reference resolution
+                       |                         |
+                       |                  create/update/delete decision
+                       |                         |
+                       |                  bounded materialization
+                       |                         |
+                       +-------------+-----------+
+                                     |
+                                     v
+                             ApplicationResult
                      |
          +-----------+-----------+
          |                       |

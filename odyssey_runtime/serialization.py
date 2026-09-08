@@ -27,6 +27,7 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
         "request_id": result.request_id,
         "status": result.status.value,
         "planning_error": result.planning_error,
+        "clarification_code": result.clarification_code,
         "affected_stable_note_ids": list(result.affected_stable_note_ids),
         "actions": [_serialize_action(action) for action in result.action_results],
         "pending_work": {
@@ -61,6 +62,15 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
                             "reasoning_effort": call.reasoning_effort,
                             "usage": call.usage,
                             "error_category": call.error_category,
+                            "attempt_count": call.attempt_count,
+                            "response_id": call.response_id,
+                            "provider_status": call.provider_status,
+                            "incomplete_reason": call.incomplete_reason,
+                            "output_text_chars": call.output_text_chars,
+                            "output_text_bytes": call.output_text_bytes,
+                            "parse_status": call.parse_status,
+                            "result_kind": call.result_kind,
+                            "result_counts": call.result_counts,
                         }
                         for call in stage.provider_calls
                     ],

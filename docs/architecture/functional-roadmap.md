@@ -36,6 +36,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.1B focused live answerer model evidence                    ✅ complete
 20.2A mobile web source + offline deterministic checks        ✅ complete
 20.2B real n8n serving + Chrome Android validation            ➡️ next
+20.2C planner incident hardening + focused live gate          ➡️ next
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -48,6 +49,11 @@ See [Phase 20.1 grounded-answerer benchmark](phase-20-1-grounded-answerer-benchm
 ### 20.2B — real browser integration
 
 Serve the checked-in `odyssey_web/` surface through the adopted n8n-facing product boundary and validate the real request/response flow in Chrome on Android. The merged 20.2A checkpoint already proves browser-side request identity, retry, validation, and UI behavior offline; 20.2 is not complete until the environment-backed integration works.
+
+### 20.2C — planner incident hardening
+
+Before production adoption, complete the bounded deterministic planner hardening and explicitly
+authorize its focused Sol/low live evidence gate. See [Planner incident hardening](planner-incident-hardening.md).
 
 ### 20.3 — protected deployment
 

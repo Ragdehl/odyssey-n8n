@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,17 +11,23 @@ from types import SimpleNamespace
 import pytest
 
 from odyssey_core.request_planning import (
+    PLANNER_AUTOMATIC_RETRIES,
+    PLANNER_CLARIFICATION_CODES,
+    PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_MODEL,
     PLANNER_REASONING_EFFORT,
     WRITE_INTENTS,
     KnowledgeUnit,
     OpenAIRequestPlanner,
+    PlannerClarification,
     PropertyChange,
     RequestPlanningError,
     RetrieveAction,
     WriteAction,
+    planner_result_json_schema,
     render_request_planner_prompt,
     request_plan_json_schema,
+    validate_planner_result,
     validate_request_plan,
 )
 
@@ -62,6 +69,16 @@ def retrieve(
 def output(*actions: dict, limitations: list[str] | None = None) -> dict:
     """Build one complete raw RequestPlan fixture."""
     return {"actions": list(actions), "limitations": limitations or []}
+
+
+def planner_output(*actions: dict, limitations: list[str] | None = None) -> dict:
+    """Wrap one existing RequestPlan fixture in the production PlannerResult envelope."""
+    return {
+        "outcome": "PLAN",
+        "actions": list(actions),
+        "limitations": limitations or [],
+        "clarification_code": None,
+    }
 
 
 def unit(
@@ -607,7 +624,10 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     def create(**kwargs: object) -> SimpleNamespace:
         calls.append(kwargs)
         return SimpleNamespace(
-            output_text=json.dumps(output(retrieve("Odyssey"))),
+            id="resp_test",
+            status="completed",
+            incomplete_details=None,
+            output_text=json.dumps(planner_output(retrieve("Odyssey"))),
             usage=SimpleNamespace(input_tokens=11, output_tokens=3),
         )
 
@@ -619,10 +639,11 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     assert calls[0]["model"] == PLANNER_MODEL
     assert calls[0]["reasoning"] == {"effort": PLANNER_REASONING_EFFORT}
     assert calls[0]["store"] is False
+    assert calls[0]["max_output_tokens"] == PLANNER_MAX_OUTPUT_TOKENS == 4096
     assert calls[0]["text"]["format"]["strict"] is True  # type: ignore[index]
-    write_schema = calls[0]["text"]["format"]["schema"]["properties"]["actions"]["items"][  # type: ignore[index]
-        "anyOf"
-    ][1]
+    result_schema = calls[0]["text"]["format"]["schema"]  # type: ignore[index]
+    actions_schema = result_schema["properties"]["actions"]["anyOf"][1]
+    write_schema = actions_schema["items"]["anyOf"][1]
     unit_schema = write_schema["properties"]["units"]["items"]
     assert write_schema["properties"]["kind"] == {"type": "string", "enum": ["write"]}
     assert set(unit_schema["required"]) == {
@@ -636,6 +657,213 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
         "references",
     }
     assert "subject" not in unit_schema["properties"]
+    assert planner.last_attempt_count == 1
+    assert planner.last_response_id == "resp_test"
+    assert planner.last_provider_status == "completed"
+    assert planner.last_parse_status == "succeeded"
+    assert planner.last_result_kind == "plan"
+    assert planner.last_result_counts["actions"] == 1  # type: ignore[index]
+
+
+@pytest.mark.parametrize("input_text", ["Bdbd", "asdfgh", "???"])
+def test_planner_result_supports_closed_nonsense_clarification(
+    input_text: str, schema: dict
+) -> None:
+    """Keep incident-correlated and ordinary nonsense inputs on a non-executing outcome."""
+    payload = {
+        "outcome": "CLARIFY",
+        "actions": None,
+        "limitations": None,
+        "clarification_code": "UNRECOGNIZED_REQUEST",
+    }
+
+    result = validate_planner_result(payload, schema)
+
+    assert isinstance(result, PlannerClarification)
+    assert result.code == "UNRECOGNIZED_REQUEST"
+    assert PLANNER_CLARIFICATION_CODES == ("UNRECOGNIZED_REQUEST",)
+    assert input_text  # The model-choice behavior remains a future live-evidence gate.
+
+
+def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None:
+    """Expose PLAN and CLARIFY without allowing an ambiguous empty RequestPlan convention."""
+    result_schema = planner_result_json_schema(schema)
+
+    assert result_schema["additionalProperties"] is False
+    assert result_schema["properties"]["outcome"] == {
+        "type": "string",
+        "enum": ["PLAN", "CLARIFY"],
+    }
+    assert result_schema["properties"]["clarification_code"]["anyOf"][1]["enum"] == [
+        "UNRECOGNIZED_REQUEST"
+    ]
+    with pytest.raises(RequestPlanningError, match="PLAN must"):
+        validate_planner_result(
+            {
+                "outcome": "PLAN",
+                "actions": None,
+                "limitations": [],
+                "clarification_code": "UNRECOGNIZED_REQUEST",
+            },
+            schema,
+        )
+    with pytest.raises(RequestPlanningError, match="CLARIFY must"):
+        validate_planner_result(
+            {
+                "outcome": "CLARIFY",
+                "actions": [retrieve("Odyssey")],
+                "limitations": [],
+                "clarification_code": "UNRECOGNIZED_REQUEST",
+            },
+            schema,
+        )
+
+
+@pytest.mark.parametrize(
+    ("action", "kind"),
+    [
+        (retrieve("Marta"), "retrieve"),
+        (write(unit("Marta", facts=["Marta works at Thales."])), "write"),
+        (
+            {"kind": "delegate", "request": "Translate my Marta note.", "selection": None},
+            "delegate",
+        ),
+    ],
+)
+def test_planner_result_preserves_existing_action_kinds(
+    action: dict, kind: str, schema: dict
+) -> None:
+    """Keep normal retrieval, write, and delegation distinct from clarification."""
+    result = validate_planner_result(planner_output(action), schema)
+
+    assert result.actions[0].kind == kind  # type: ignore[union-attr]
+
+
+def test_incomplete_output_limit_fails_before_partial_json_parsing(schema: dict) -> None:
+    """Retain bounded limit evidence while rejecting every incomplete provider response."""
+    calls: list[dict] = []
+    partial_output = '{"outcome":"PLAN","actions":'
+
+    def create(**kwargs: object) -> SimpleNamespace:
+        calls.append(kwargs)
+        return SimpleNamespace(
+            id="resp_limited",
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+            output_text=partial_output,
+            usage=SimpleNamespace(
+                input_tokens=100,
+                output_tokens=PLANNER_MAX_OUTPUT_TOKENS,
+                output_tokens_details=SimpleNamespace(reasoning_tokens=4000),
+            ),
+        )
+
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(responses=SimpleNamespace(create=create)), schema, CONTEXT
+    )
+
+    with pytest.raises(RequestPlanningError, match="was not completed"):
+        planner.plan("Bdbd")
+
+    assert len(calls) == planner.last_attempt_count == 1
+    assert planner.last_response_id == "resp_limited"
+    assert planner.last_provider_status == "incomplete"
+    assert planner.last_incomplete_reason == "max_output_tokens"
+    assert planner.last_error_category == "IncompleteProviderResponse"
+    assert planner.last_usage == {
+        "input_tokens": 100,
+        "output_tokens": 4096,
+        "reasoning_tokens": 4000,
+    }
+    assert planner.last_output_text_chars == len(partial_output)
+    assert planner.last_parse_status is None
+
+
+def test_openai_boundary_returns_clarification_without_raw_text_retention(schema: dict) -> None:
+    """Parse the closed clarification envelope and retain only safe result metadata."""
+    raw = json.dumps(
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+        }
+    )
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(
+            responses=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    id="resp_clarify",
+                    status="completed",
+                    incomplete_details=None,
+                    output_text=raw,
+                    usage=SimpleNamespace(input_tokens=20, output_tokens=10),
+                )
+            )
+        ),
+        schema,
+        CONTEXT,
+    )
+
+    result = planner.plan("Bdbd")
+
+    assert result == PlannerClarification("UNRECOGNIZED_REQUEST")
+    assert planner.last_result_kind == "clarify"
+    assert planner.last_result_counts == {
+        "actions": 0,
+        "units": 0,
+        "properties": 0,
+        "tag_changes": 0,
+        "facts": 0,
+        "references": 0,
+        "filters": 0,
+        "limitations": 0,
+    }
+    assert planner.last_output_text_chars == len(raw)
+    assert not hasattr(planner, "last_output_text")
+
+
+def test_production_planner_client_disables_sdk_automatic_retries(
+    schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Construct the production planner with one explicit no-automatic-retry policy."""
+    client = SimpleNamespace(responses=SimpleNamespace(create=lambda **kwargs: None))
+    constructor_calls: list[dict] = []
+
+    def openai(**kwargs: object) -> SimpleNamespace:
+        constructor_calls.append(kwargs)
+        return client
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only-not-a-provider-call")
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=openai))
+
+    planner = OpenAIRequestPlanner.from_environment(schema, CONTEXT)
+
+    assert planner._client is client
+    assert constructor_calls == [{"max_retries": PLANNER_AUTOMATIC_RETRIES}]
+    assert PLANNER_AUTOMATIC_RETRIES == 0
+
+
+def test_transport_failure_is_one_bounded_planner_attempt(schema: dict) -> None:
+    """Expose one failed attempt without an application retry loop or response payload."""
+    calls = 0
+
+    def create(**_kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("synthetic transport failure")
+
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(responses=SimpleNamespace(create=create)), schema, CONTEXT
+    )
+
+    with pytest.raises(RequestPlanningError, match="provider call failed"):
+        planner.plan("Where does Marta work?")
+
+    assert calls == planner.last_attempt_count == 1
+    assert planner.last_response_id is None
+    assert planner.last_usage is None
+    assert planner.last_error_category == "TimeoutError"
 
 
 def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) -> None:

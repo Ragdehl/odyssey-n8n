@@ -1,5 +1,5 @@
-const ALLOWED_STATUSES = new Set(["completed", "partial", "failed"]);
-const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "empty", "error"]);
+const ALLOWED_STATUSES = new Set(["completed", "partial", "needs_attention", "failed"]);
+const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "empty", "error"]);
 // The private runtime has a 120-second n8n deadline. Leave five seconds for
 // n8n to shape its bounded response before treating delivery as uncertain.
 export const PRODUCT_REQUEST_TIMEOUT_MS = 125_000;
