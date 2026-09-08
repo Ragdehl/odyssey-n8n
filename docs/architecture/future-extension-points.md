@@ -102,6 +102,23 @@ Luna first pass
 
 The critical metric is **unsafe non-escalation**: a materially wrong accepted Luna plan that should have escalated. Reuse historical Luna failure cases as mandatory evidence. Adopt only if final end-to-end quality matches the established baseline and measured total cost improves materially. Do not add a third model/heuristic router first.
 
+Do not rely only on Luna to recognize its own uncertainty. Historical benchmark failures may define narrow, deterministic **evidenced escalation guards** when Luna has previously produced a confidently wrong plan for a recognizable semantic pattern. A primary sentinel is event/fact time being incorrectly mapped to note metadata such as `created_at` or `updated_at`: for example, “purchases made in July” must not become “notes created in July” unless the user explicitly asks about note creation/update time. If Luna still proposes that unsafe mapping after prompt improvement, the request must escalate to the established strong planner even if Luna emitted `PLAN` rather than `ESCALATE`.
+
+Such guards must come from reproducible benchmark evidence, not speculative complexity rules. Keep them few and removable: if later frozen evidence shows Luna handles a guarded pattern safely, the guard may be retired. The intended boundary is therefore:
+
+```text
+request
+  |
+  v
+Luna -> PLAN / ESCALATE
+  |          |
+  |          `--------------------------> strong planner
+  v
+known evidenced unsafe pattern?
+  +--> yes -----------------------------> strong planner
+  `--> no -> Core validates -> execute
+```
+
 ## Direct Markdown edit ingestion
 
 Direct Obsidian/filesystem editing is expected long term. A later boundary should:
