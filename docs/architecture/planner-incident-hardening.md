@@ -76,12 +76,17 @@ requires an explicit live-confirmation flag, and records bounded validated resul
 provider responses.
 
 The first authorized run completed exactly once with eight planner calls, no automatic retries, and
-no action execution or vault mutation. The retained bounded evidence includes successful
-clarification, retrieval, and event-date cases; four cases reached completed JSON parsing but were
+no action execution or vault mutation. The retained bounded evidence includes the three successful
+clarification cases and the event-date case; four cases reached completed JSON parsing but were
 rejected by local validation (`normal_retrieval`, `normal_write`, `legitimate_delegation`, and
 `legitimate_mixed`). Their raw provider payloads were not retained, so the exact historical
-validation cause is unknown. Further live calls are **NOT YET AUTHORIZED** pending review of this
-bounded diagnostic improvement.
+validation cause is unknown.
+
+The local planner now retains only allowlisted validation stage/code diagnostics for that boundary.
+A separate fixed four-case follow-up runner reuses the four unresolved IDs from the frozen registry,
+writes only to its own exclusive gitignored evidence path, and cannot select the four previously
+passed cases. Further live calls are **NOT YET AUTHORIZED** pending human review and separate
+authorization of that follow-up gate.
 
 ## Out of scope
 
