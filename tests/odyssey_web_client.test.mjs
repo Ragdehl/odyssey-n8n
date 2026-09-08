@@ -34,6 +34,18 @@ test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
 });
 
+test("closed planner clarification is a normal bounded product result", () => {
+  const result = validateProductResponse({
+    request_id: "web-clarify",
+    status: "needs_attention",
+    kind: "clarification",
+    message: "No he podido interpretar la solicitud.",
+  });
+
+  assert.equal(result.status, "needs_attention");
+  assert.equal(result.kind, "clarification");
+});
+
 test("product response validation accepts only the narrow browser contract", () => {
   const valid = {
     request_id: "web-1",

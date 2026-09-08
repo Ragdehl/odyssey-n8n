@@ -20,6 +20,9 @@ from odyssey_core.planner_capabilities import (
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
+PLANNER_MAX_OUTPUT_TOKENS = 4096
+PLANNER_AUTOMATIC_RETRIES = 0
+PLANNER_CLARIFICATION_CODES = ("UNRECOGNIZED_REQUEST",)
 WRITE_INTENTS = ("record", "amend", "remove", "delete")
 _PROPERTY_OPS = ("set", "remove")
 _TAG_CHANGE_OPS = ("add", "remove")
@@ -28,7 +31,9 @@ _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
-_PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestPlan. Use the supplied current date, time, and timezone.
+_PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerResult. Use the supplied current date, time, and timezone.
+
+Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, and link_scope. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
@@ -186,6 +191,16 @@ class RequestPlan:
 
     actions: tuple[RequestAction, ...]
     limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PlannerClarification:
+    """Represent a closed non-executing request for user clarification."""
+
+    code: str
+
+
+PlannerResult = RequestPlan | PlannerClarification
 
 
 def plan_fact_ordinals(plan: RequestPlan) -> tuple[tuple[int, ...], ...]:
@@ -380,6 +395,77 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the closed production result envelope around a plan or clarification.
+
+    Args:
+        schema: Parsed canonical Odyssey schema used by the nested RequestPlan contract.
+
+    Returns:
+        A strict object schema whose discriminator and nullable payloads are validated locally.
+    """
+    plan_schema = request_plan_json_schema(schema)
+    return {
+        "type": "object",
+        "properties": {
+            "outcome": {"type": "string", "enum": ["PLAN", "CLARIFY"]},
+            "actions": {"anyOf": [{"type": "null"}, plan_schema["properties"]["actions"]]},
+            "limitations": {"anyOf": [{"type": "null"}, plan_schema["properties"]["limitations"]]},
+            "clarification_code": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "string", "enum": list(PLANNER_CLARIFICATION_CODES)},
+                ]
+            },
+        },
+        "required": ["outcome", "actions", "limitations", "clarification_code"],
+        "additionalProperties": False,
+    }
+
+
+def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerResult:
+    """Validate the production planner envelope without executing either outcome.
+
+    Args:
+        payload: Untrusted decoded provider output.
+        schema: Active canonical schema used to validate a nested RequestPlan.
+
+    Returns:
+        A validated RequestPlan or a closed non-executing clarification.
+
+    Raises:
+        RequestPlanningError: If the discriminator, payload combination, or nested plan is invalid.
+    """
+    if not isinstance(payload, dict) or set(payload) != {
+        "outcome",
+        "actions",
+        "limitations",
+        "clarification_code",
+    }:
+        raise RequestPlanningError("PlannerResult must contain only its required fields")
+    outcome = payload["outcome"]
+    if outcome == "PLAN":
+        if (
+            payload["clarification_code"] is not None
+            or not isinstance(payload["actions"], list)
+            or not isinstance(payload["limitations"], list)
+        ):
+            raise RequestPlanningError("PLAN must contain actions and limitations only")
+        return validate_request_plan(
+            {"actions": payload["actions"], "limitations": payload["limitations"]}, schema
+        )
+    if outcome == "CLARIFY":
+        code = payload["clarification_code"]
+        if (
+            payload["actions"] is not None
+            or payload["limitations"] is not None
+            or code not in PLANNER_CLARIFICATION_CODES
+        ):
+            raise RequestPlanningError("CLARIFY must contain one supported code and no actions")
+        return PlannerClarification(code)
+    raise RequestPlanningError("PlannerResult outcome is unsupported")
+
+
 def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPlan:
     """Validate untrusted model output and return an immutable non-executing plan.
 
@@ -438,6 +524,16 @@ class OpenAIRequestPlanner:
         self.reasoning_effort = PLANNER_REASONING_EFFORT
         self.last_usage: dict[str, int] | None = None
         self.last_call = False
+        self.last_attempt_count = 0
+        self.last_response_id: str | None = None
+        self.last_provider_status: str | None = None
+        self.last_incomplete_reason: str | None = None
+        self.last_output_text_chars: int | None = None
+        self.last_output_text_bytes: int | None = None
+        self.last_parse_status: str | None = None
+        self.last_result_kind: str | None = None
+        self.last_result_counts: dict[str, int] | None = None
+        self.last_error_category: str | None = None
 
     @classmethod
     def from_environment(
@@ -461,16 +557,16 @@ class OpenAIRequestPlanner:
             from openai import OpenAI
         except ImportError as error:
             raise RequestPlanningError("Install the OpenAI SDK for request planning") from error
-        return cls(OpenAI(), schema, current_context)
+        return cls(OpenAI(max_retries=PLANNER_AUTOMATIC_RETRIES), schema, current_context)
 
-    def plan(self, request: str) -> RequestPlan:
+    def plan(self, request: str) -> PlannerResult:
         """Interpret one non-empty user request and fail closed on invalid model output.
 
         Args:
             request: User request to interpret as one ordered RequestPlan.
 
         Returns:
-            A locally validated RequestPlan that has not been executed.
+            A locally validated RequestPlan or non-executing clarification outcome.
 
         Raises:
             RequestPlanningError: If the request, provider call, JSON response, or plan is invalid.
@@ -480,12 +576,24 @@ class OpenAIRequestPlanner:
             raise RequestPlanningError("Request text must be non-empty")
         self.last_call = False
         self.last_usage = None
+        self.last_attempt_count = 0
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_incomplete_reason = None
+        self.last_output_text_chars = None
+        self.last_output_text_bytes = None
+        self.last_parse_status = None
+        self.last_result_kind = None
+        self.last_result_counts = None
+        self.last_error_category = None
         self.last_call = True
+        self.last_attempt_count = 1
         try:
             response = self._client.responses.create(
                 model=PLANNER_MODEL,
                 reasoning={"effort": PLANNER_REASONING_EFFORT},
                 store=False,
+                max_output_tokens=PLANNER_MAX_OUTPUT_TOKENS,
                 input=[
                     {
                         "role": "system",
@@ -498,20 +606,91 @@ class OpenAIRequestPlanner:
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "odyssey_request_plan",
+                        "name": "odyssey_planner_result",
                         "strict": True,
-                        "schema": request_plan_json_schema(self._schema),
+                        "schema": planner_result_json_schema(self._schema),
                     }
                 },
             )
         except Exception as error:
+            self.last_error_category = _bounded_provider_metadata(type(error).__name__)
             raise RequestPlanningError("Request planner provider call failed") from error
         self.last_usage = normalize_provider_usage(response)
+        self.last_response_id = _bounded_provider_metadata(getattr(response, "id", None))
+        self.last_provider_status = _bounded_provider_metadata(getattr(response, "status", None))
+        incomplete_details = getattr(response, "incomplete_details", None)
+        incomplete_reason = (
+            incomplete_details.get("reason")
+            if isinstance(incomplete_details, Mapping)
+            else getattr(incomplete_details, "reason", None)
+        )
+        self.last_incomplete_reason = _bounded_provider_metadata(incomplete_reason)
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str):
+            self.last_output_text_chars = len(output_text)
+            self.last_output_text_bytes = len(output_text.encode("utf-8"))
+        if self.last_provider_status != "completed":
+            self.last_error_category = "IncompleteProviderResponse"
+            raise RequestPlanningError("Request planner provider response was not completed")
         try:
-            payload = json.loads(response.output_text)
+            payload = json.loads(output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:
+            self.last_parse_status = "failed"
+            self.last_error_category = "MalformedPlannerJSON"
             raise RequestPlanningError("Request planner returned malformed JSON") from error
-        return validate_request_plan(payload, self._schema)
+        self.last_parse_status = "succeeded"
+        result = validate_planner_result(payload, self._schema)
+        self.last_result_kind = "clarify" if isinstance(result, PlannerClarification) else "plan"
+        self.last_result_counts = _planner_result_counts(result)
+        return result
+
+
+def _bounded_provider_metadata(value: Any) -> str | None:
+    """Keep one short provider identifier/status value without response content."""
+    if not isinstance(value, str) or not value or len(value) > 128:
+        return None
+    if re.fullmatch(r"[A-Za-z0-9_.:-]+", value) is None:
+        return None
+    return value
+
+
+def _planner_result_counts(result: PlannerResult) -> dict[str, int]:
+    """Count only bounded structural categories from one validated planner result."""
+    counts = {
+        "actions": 0,
+        "units": 0,
+        "properties": 0,
+        "tag_changes": 0,
+        "facts": 0,
+        "references": 0,
+        "filters": 0,
+        "limitations": 0,
+    }
+    if isinstance(result, PlannerClarification):
+        return counts
+    counts["actions"] = len(result.actions)
+    counts["limitations"] = len(result.limitations)
+    for action in result.actions:
+        selection = None
+        if isinstance(action, RetrieveAction):
+            selection = action.plan
+        elif isinstance(action, WriteAction):
+            counts["units"] += len(action.units)
+            for unit in action.units:
+                counts["properties"] += len(unit.properties)
+                counts["tag_changes"] += len(unit.tag_changes)
+                counts["facts"] += len(unit.facts)
+                counts["references"] += len(unit.references)
+                counts["filters"] += len(unit.target.filters)
+                if unit.target.link_scope is not None:
+                    counts["filters"] += len(unit.target.link_scope.anchor.filters)
+        elif isinstance(action, DelegateAction):
+            selection = action.selection
+        if selection is not None:
+            counts["filters"] += len(selection.filters)
+            if selection.link_scope is not None:
+                counts["filters"] += len(selection.link_scope.anchor.filters)
+    return counts
 
 
 def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
