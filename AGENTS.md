@@ -111,6 +111,15 @@ Use the smallest executor that can validate the work reliably:
 
 The author never gains merge authority. Deterministic CI, semantic review, and human merge remain separate gates.
 
+## User-facing agent prompts
+
+When preparing a prompt for Codex or another development agent for the user:
+
+- write the reusable prompt in English unless the user explicitly asks for another language;
+- always accompany it with a concise Spanish summary explaining the objective, what the agent is expected to do, and the important safety/cost constraints;
+- include the recommended model and reasoning effort, with a short cost/capability rationale when model choice is relevant;
+- do not omit the summary just because the prompt itself is long.
+
 ## Documentation ownership
 
 Odyssey deliberately keeps few **canonical owners** and links to them instead of copying their content.
