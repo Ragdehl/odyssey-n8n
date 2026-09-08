@@ -111,6 +111,15 @@ Use the smallest executor that can validate the work reliably:
 
 The author never gains merge authority. Deterministic CI, semantic review, and human merge remain separate gates.
 
+## User-facing agent prompts
+
+When preparing a prompt for Codex or another development agent for the user:
+
+- write the reusable prompt in English unless the user explicitly asks for another language;
+- always accompany it with a concise Spanish summary explaining the objective, what the agent is expected to do, and the important safety/cost constraints;
+- include the recommended model and reasoning effort, with a short cost/capability rationale when model choice is relevant;
+- do not omit the summary just because the prompt itself is long.
+
 ## Documentation ownership
 
 Odyssey deliberately keeps few **canonical owners** and links to them instead of copying their content.
@@ -137,6 +146,8 @@ Rules:
 - Documentation cleanup must not erase why a safety or architecture decision was made. Git/PR history is not a substitute for a still-needed durable contract, but it is sufficient for routine transient implementation detail.
 
 ## GitHub review workflow
+
+Default to **one active PR at a time**. Do not open Draft PRs merely to remember future ideas or deferred product directions; preserve those in the canonical roadmap or appropriate future-direction owner instead. Multiple open PRs are appropriate only when a real dependency, review, or sequencing reason makes parallel/stacked work useful, and that dependency must be explicit. Before opening another PR, inspect the existing open PR set and merge, close, or consolidate obsolete/documentation-only work so deferred decisions do not become forgotten backlog.
 
 Before continuing implementation on a branch with an open PR, use `odyssey-pr-feedback` to inspect review feedback. If comments conflict with each other or with an approved material contract, ask rather than guessing.
 

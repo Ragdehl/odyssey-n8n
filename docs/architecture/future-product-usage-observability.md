@@ -66,6 +66,12 @@ Exact fields should be chosen from real usage. The default screen should not req
 
 The normal product may offer a compact optional drill-down, but advanced diagnostics should not crowd the primary interaction surface.
 
+### Per-message cost cue
+
+The conversational Odyssey surface may later show a small, optional estimated-cost cue directly on each Odyssey response bubble when request-level usage evidence and a valid dated pricing snapshot are available. A suitable presentation is a visually secondary value such as `€0.003` in a corner of the Odyssey message, without adding token/model detail to the normal chat view.
+
+The displayed amount should represent the estimated cost attributable to the whole logical Odyssey request that produced that response, not just the final answerer call, so planner, resolver, answerer, fallback, and provider-retry costs are not silently omitted or double-counted. If cost cannot be calculated reliably, the cue should be absent or explicitly unavailable rather than shown as zero. Advanced drill-down may expose the per-stage/provider breakdown separately.
+
 ## Advanced / admin / developer view
 
 A protected advanced surface should expose the maximum **useful and safe** detail already available from Odyssey's bounded contracts rather than an unlimited dump of internals.
@@ -152,6 +158,7 @@ Before adopting the product surface, validate at least:
 - an ordinary user can understand current spend without seeing distracting technical internals;
 - an advanced user can inspect one request and reconstruct the bounded model/stage/usage path;
 - multiple provider calls within one request remain distinguishable;
+- a per-message cost cue, when enabled, represents the full logical request cost without double counting provider retries or omitting upstream planner/fallback cost;
 - missing provider counters stay unavailable rather than becoming zero;
 - cost is unavailable without a valid pricing snapshot;
 - a historical calculation identifies the pricing snapshot used;
@@ -165,11 +172,12 @@ Before adopting the product surface, validate at least:
 Decide from real Odyssey Online usage:
 
 1. which metrics belong on the default user surface;
-2. the exact advanced/admin/developer presentation and access mechanism;
-3. whether the existing n8n-retained operational results are sufficient for the desired history window or whether a small derived analytics store later earns its complexity;
-4. the canonical attribution field for applications/capabilities once that execution boundary exists;
-5. the billing/calendar period used for forecasts;
-6. the simplest month-end projection that is useful without creating false precision;
-7. whether provider invoice/billing data should ever be reconciled with Odyssey's request-level estimates.
+2. whether the per-message estimated-cost cue should be always visible, optional, or available only in an advanced mode;
+3. the exact advanced/admin/developer presentation and access mechanism;
+4. whether the existing n8n-retained operational results are sufficient for the desired history window or whether a small derived analytics store later earns its complexity;
+5. the canonical attribution field for applications/capabilities once that execution boundary exists;
+6. the billing/calendar period used for forecasts;
+7. the simplest month-end projection that is useful without creating false precision;
+8. whether provider invoice/billing data should ever be reconciled with Odyssey's request-level estimates.
 
 Do not introduce a new observability service, analytics database, telemetry vendor, or billing subsystem until the existing bounded request evidence is shown to be insufficient for an actual product requirement.
