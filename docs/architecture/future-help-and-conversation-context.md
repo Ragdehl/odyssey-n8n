@@ -17,6 +17,12 @@ The user should be able to ask these questions through the same conversational s
 
 This does not require a new application architecture by default. The smallest useful direction is a **help/product-knowledge scope** routed through the same general retrieval + bounded answerer pattern.
 
+Real Odyssey Online use also established a later **general conversational** scope for ordinary requests
+such as “Hola, ¿qué tal?”. It should be evaluated as another capability of the same conversational
+surface, not assumed to require a separate app. Ordinary conversation is not durable Odyssey memory,
+must not fabricate personal knowledge, and may later use the same bounded session context described
+below. Personal knowledge answers remain grounded in authorized retrieved evidence.
+
 ## Help as a knowledge scope, not a second personal vault
 
 User-facing Odyssey documentation can be represented as ordinary human-readable Markdown knowledge, but it should remain logically separated from the user's personal knowledge so product documentation cannot contaminate ordinary personal retrieval.

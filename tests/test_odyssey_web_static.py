@@ -29,8 +29,8 @@ class _IndexParser(HTMLParser):
             self.api_endpoint = values.get("content")
 
 
-def test_static_frontend_has_required_mobile_contract_elements() -> None:
-    """The checked-in page exposes the minimum composer, result, retry, and API seams."""
+def test_static_frontend_has_transcript_and_composer_contract_elements() -> None:
+    """The checked-in page exposes a session transcript and narrow product composer seams."""
 
     parser = _IndexParser()
     parser.feed((WEB_ROOT / "index.html").read_text(encoding="utf-8"))
@@ -43,12 +43,25 @@ def test_static_frontend_has_required_mobile_contract_elements() -> None:
         "request-input",
         "send-button",
         "interaction",
-        "result-card",
-        "result-message",
-        "loading-card",
-        "transport-error",
-        "retry-button",
     } <= parser.ids
+
+    app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    assert "conversation.append(article)" in app
+    assert "conversation.scrollTop = conversation.scrollHeight" in app
+    assert 'globalThis.matchMedia?.("(pointer: coarse)").matches' in app
+    assert "if (event.shiftKey) return;" in app
+    assert 'event.key !== "Enter" || event.isComposing' in app
+    assert "appendRetryControl(retrySubmission)" in app
+    assert "void sendSubmission(submission, true)" in app
+
+    index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'enterkeyhint="enter"' in index
+
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto;" in styles
+    assert ".conversation { display: flex; flex-direction: column;" in styles
+    assert "overflow-y: auto" in styles
+    assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
 
 
 def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:
@@ -66,3 +79,5 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert "innerHTML" not in combined
     assert "request_id" in client
     assert 'credentials: "same-origin"' in client
+    assert "PRODUCT_REQUEST_TIMEOUT_MS = 125_000" in client
+    assert "signal: controller.signal" in client

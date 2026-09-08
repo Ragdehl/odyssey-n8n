@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   ProductRequestError,
+  PRODUCT_REQUEST_TIMEOUT_MS,
   createRequestId,
   createSubmission,
   requestProductResult,
@@ -93,6 +94,43 @@ test("network failure is retryable so caller can reuse the same submission id", 
     (error) => error instanceof ProductRequestError && error.retryable === true,
   );
   assert.equal(submission.requestId, "web-retry");
+});
+
+test("transport timeout aborts the same delivery and leaves it retryable", async () => {
+  const submission = {request: "Hola", requestId: "web-timeout"};
+  let timeoutCallback;
+  let aborted = false;
+  class FakeAbortController {
+    constructor() {
+      this.signal = {};
+    }
+    abort() {
+      aborted = true;
+    }
+  }
+  const fetchImpl = async (_endpoint, options) => {
+    timeoutCallback();
+    assert.equal(options.signal instanceof Object, true);
+    throw new Error("aborted");
+  };
+
+  await assert.rejects(
+    requestProductResult({
+      endpoint: "/api/request",
+      submission,
+      fetchImpl,
+      AbortControllerImpl: FakeAbortController,
+      setTimeoutImpl: (callback, delay) => {
+        assert.equal(delay, PRODUCT_REQUEST_TIMEOUT_MS);
+        timeoutCallback = callback;
+        return "timer";
+      },
+      clearTimeoutImpl: (timer) => assert.equal(timer, "timer"),
+    }),
+    (error) => error instanceof ProductRequestError && error.retryable === true,
+  );
+  assert.equal(aborted, true);
+  assert.equal(submission.requestId, "web-timeout");
 });
 
 test("client fails closed if server returns a different request id", async () => {

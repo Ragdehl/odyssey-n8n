@@ -7,99 +7,95 @@ import {
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
 const sendButton = document.querySelector("#send-button");
-const interaction = document.querySelector("#interaction");
-const requestCard = document.querySelector("#request-card");
-const requestText = document.querySelector("#request-text");
-const resultCard = document.querySelector("#result-card");
-const resultLabel = document.querySelector("#result-label");
-const resultMessage = document.querySelector("#result-message");
-const statusBadge = document.querySelector("#status-badge");
-const partialNotice = document.querySelector("#partial-notice");
-const loadingCard = document.querySelector("#loading-card");
-const errorCard = document.querySelector("#transport-error");
-const errorMessage = document.querySelector("#transport-error-message");
-const retryButton = document.querySelector("#retry-button");
-
+const conversation = document.querySelector("#interaction");
 const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.content ?? "/api/request";
 let retrySubmission = null;
 
 function setBusy(isBusy) {
   input.disabled = isBusy;
   sendButton.disabled = isBusy;
-  retryButton.disabled = isBusy;
   sendButton.textContent = isBusy ? "Enviando…" : "Enviar";
 }
 
-function showRequest(submission) {
-  interaction.hidden = false;
-  requestCard.hidden = false;
-  requestText.textContent = submission.request;
+function appendMessage(role, message, status = "") {
+  const article = document.createElement("article");
+  article.className = "message message-" + role;
+  const label = document.createElement("p");
+  label.className = "eyebrow";
+  label.textContent = role === "user" ? "Tú" : "Odyssey";
+  const body = document.createElement("p");
+  body.className = "message-text";
+  body.textContent = message;
+  article.append(label, body);
+  if (status === "partial") {
+    const notice = document.createElement("p");
+    notice.className = "partial-notice";
+    notice.textContent = "La respuesta puede ser incompleta.";
+    article.append(notice);
+  }
+  conversation.append(article);
+  conversation.scrollTop = conversation.scrollHeight;
+  return article;
 }
 
-function resetOutcome() {
-  resultCard.hidden = true;
-  loadingCard.hidden = true;
-  errorCard.hidden = true;
-  retryButton.hidden = true;
-  partialNotice.hidden = true;
-  statusBadge.hidden = true;
+function appendLoading() {
+  const loading = appendMessage("odyssey", "Procesando…");
+  loading.classList.add("message-loading");
+  return loading;
 }
 
-function showLoading() {
-  resetOutcome();
-  loadingCard.hidden = false;
+function appendRetryControl(submission) {
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "retry-button";
+  retry.textContent = "Reintentar";
+  retry.addEventListener("click", () => {
+    if (retrySubmission !== submission) return;
+    retrySubmission = null;
+    retry.remove();
+    void sendSubmission(submission, true);
+  });
+  conversation.append(retry);
+  conversation.scrollTop = conversation.scrollHeight;
 }
 
-function showResult(result) {
-  resetOutcome();
-  resultCard.hidden = false;
-  resultMessage.textContent = result.message;
-
-  const labels = {
-    answer: "Odyssey",
+function resultLabel(result) {
+  return {
     acknowledgement: "Hecho",
     empty: "Sin resultados",
     error: "No completado",
-  };
-  resultLabel.textContent = labels[result.kind] ?? "Odyssey";
-
-  if (result.status === "partial") {
-    statusBadge.textContent = "Parcial";
-    statusBadge.hidden = false;
-    partialNotice.hidden = false;
-  }
+  }[result.kind] ?? "Odyssey";
 }
 
-function showTransportError(error) {
-  resetOutcome();
-  errorCard.hidden = false;
-  const retryable = error instanceof ProductRequestError && error.retryable;
-  errorMessage.textContent = retryable
-    ? "No se ha podido confirmar si Odyssey recibió la solicitud. Puedes reintentar la misma entrega."
-    : "Odyssey no ha podido procesar esta solicitud.";
-  retryButton.hidden = !retryable;
-}
-
-async function sendSubmission(submission) {
-  showRequest(submission);
-  showLoading();
+async function sendSubmission(submission, isRetry = false) {
+  if (!isRetry) appendMessage("user", submission.request);
+  const loading = appendLoading();
   setBusy(true);
-
   try {
     const result = await requestProductResult({endpoint, submission});
     retrySubmission = null;
-    showResult(result);
+    loading.remove();
+    const message = appendMessage("odyssey", result.message, result.status);
+    message.querySelector(".eyebrow").textContent = resultLabel(result);
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;
-    showTransportError(error);
+    loading.remove();
+    const message = appendMessage(
+      "odyssey",
+      retrySubmission
+        ? "No se ha podido confirmar la solicitud. Puedes reintentar la misma entrega."
+        : "Odyssey no ha podido procesar esta solicitud.",
+    );
+    message.classList.add("message-error");
+    if (retrySubmission) appendRetryControl(retrySubmission);
   } finally {
     setBusy(false);
+    input.focus();
   }
 }
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-
   let submission;
   try {
     submission = createSubmission(input.value);
@@ -107,20 +103,15 @@ form.addEventListener("submit", (event) => {
     input.focus();
     return;
   }
-
+  input.value = "";
   retrySubmission = null;
   void sendSubmission(submission);
 });
 
 input.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-    event.preventDefault();
-    form.requestSubmit();
-  }
-});
-
-retryButton.addEventListener("click", () => {
-  if (retrySubmission) {
-    void sendSubmission(retrySubmission);
-  }
+  if (globalThis.matchMedia?.("(pointer: coarse)").matches) return;
+  if (event.key !== "Enter" || event.isComposing) return;
+  if (event.shiftKey) return;
+  event.preventDefault();
+  form.requestSubmit();
 });

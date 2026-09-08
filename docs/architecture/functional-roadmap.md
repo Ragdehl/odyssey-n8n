@@ -35,7 +35,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.1A offline grounded-answerer benchmark preparation        ✅ complete
 20.1B focused live answerer model evidence                    ✅ complete
 20.2A mobile web source + offline deterministic checks        ✅ complete
-20.2B real n8n serving + Chrome Android validation            ➡️ next
+20.2B real n8n serving + Chrome Android validation            ✅ complete
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -47,7 +47,15 @@ See [Phase 20.1 grounded-answerer benchmark](phase-20-1-grounded-answerer-benchm
 
 ### 20.2B — real browser integration
 
-Serve the checked-in `odyssey_web/` surface through the adopted n8n-facing product boundary and validate the real request/response flow in Chrome on Android. The merged 20.2A checkpoint already proves browser-side request identity, retry, validation, and UI behavior offline; 20.2 is not complete until the environment-backed integration works.
+Complete. The checked-in `odyssey_web/` surface is served through the private n8n-facing product
+boundary. Raspberry-backed integration evidence covers the narrow request/response routes, and the
+physical Chrome/Android checkpoint covers the mobile UI, bounded delivery failure, restored controls,
+and explicit same-`request_id` Retry behavior. The detailed retained evidence belongs to the linked
+Phase 20 document rather than being duplicated here.
+
+After PR #89 is merged by a human, the stacked planner incident hardening in PR #92 follows it. PR #92
+must return to normal CI and review before any separately authorized provider-backed Android gate;
+Phase 20.3 remains a distinct planned security/deployment boundary.
 
 ### 20.3 — protected deployment
 

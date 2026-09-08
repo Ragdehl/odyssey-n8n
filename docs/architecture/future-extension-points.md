@@ -17,6 +17,16 @@ Use these documents as the detailed owners:
 - [Future pending-reference evolution](future-pending-reference-evolution.md) — safe relinking, recurrence signals, and advisory schema-evolution evidence.
 - [Future retrieval refinements](future-query-decomposed-retrieval.md) — query decomposition/entity coverage first, then measured candidate reduction/compact evidence if needed.
 
+Real Odyssey Online use also preserves these deferred interface directions:
+
+- **Write acknowledgement and note access:** present a human-safe summary of what was created or updated and,
+  when a future consumer need is evidenced, offer access to that canonical note without exposing raw mutation,
+  provider, or runtime payloads.
+- **Knowledge/note browsing:** add browse/search/read interfaces over the same Core/Markdown authority rather
+  than a second note store or alternate semantic layer.
+- **Visual theming:** iterate on presentation only after product usage warrants it; it is not an architecture
+  requirement.
+
 When one of those capabilities becomes active work, update its owner and the roadmap rather than copying its detailed design here.
 
 ## Application routing and composition
