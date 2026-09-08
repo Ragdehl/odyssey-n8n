@@ -175,6 +175,49 @@ def test_clarification_and_provider_diagnostics_serialize_without_raw_output() -
     assert "provider_payload" not in encoded
 
 
+def test_validation_diagnostics_serialize_only_allowlisted_values() -> None:
+    """Never project rejected planner/request values through operational evidence."""
+    sentinels = (
+        "SECRET_ENTITY_SENTINEL",
+        "SECRET_QUERY_SENTINEL",
+        "SECRET_FACT_SENTINEL",
+        "SECRET_FILTER_VALUE_SENTINEL",
+        "SECRET_REQUEST_SENTINEL",
+    )
+    result = ApplicationResult(
+        request_id="request-safe",
+        status=ApplicationStatus.FAILED,
+        action_results=(),
+        affected_stable_note_ids=(),
+        planning_error="RequestPlanningError",
+        operational=OperationalEvidence(
+            stages=(
+                OperationalStage(
+                    "planner",
+                    OperationalOutcome.FAILED,
+                    provider_calls=(
+                        ProviderCallEvidence(
+                            "planner",
+                            OperationalOutcome.FAILED,
+                            error_category="LocalPlannerValidationError",
+                            validation_stage="SELECTION",
+                            validation_code="EMPTY_QUERY",
+                            parse_status="succeeded",
+                        ),
+                    ),
+                ),
+            )
+        ),
+    )
+
+    encoded = json.dumps(application_result_to_response(result))
+
+    assert "LocalPlannerValidationError" in encoded
+    assert "SELECTION" in encoded
+    assert "EMPTY_QUERY" in encoded
+    assert all(sentinel not in encoded for sentinel in sentinels)
+
+
 def test_application_result_serialization_maps_action_evidence() -> None:
     """Serialization preserves bounded retrieval, unit, bulk, and delegation evidence."""
     item = ContextItem(

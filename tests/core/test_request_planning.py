@@ -893,6 +893,14 @@ def test_malformed_planner_json_fails_closed_with_bounded_parse_evidence(schema:
             PlannerValidationCode.INVALID_CARDINALITY,
         ),
         (
+            planner_output(
+                retrieve("Where does Marta work?"),
+                write(unit("", facts=["Marta works at Thales."])),
+            ),
+            PlannerValidationStage.SELECTION,
+            PlannerValidationCode.EMPTY_QUERY,
+        ),
+        (
             {
                 "outcome": "PLAN",
                 "actions": [{"kind": "delegate", "request": "", "selection": None}],
@@ -951,6 +959,63 @@ def test_local_validation_failure_retains_only_bounded_stage_and_code(
     assert planner.last_response_id == "resp_invalid"
     assert "Marta" not in repr((planner.last_validation_stage, planner.last_validation_code))
     assert not hasattr(planner, "last_output_text")
+
+
+def test_local_validation_diagnostics_never_retain_payload_or_request_sentinels(
+    schema: dict,
+) -> None:
+    """Keep rejected planner content out of every bounded planner diagnostic field."""
+    sentinels = (
+        "SECRET_ENTITY_SENTINEL",
+        "SECRET_QUERY_SENTINEL",
+        "SECRET_FACT_SENTINEL",
+        "SECRET_FILTER_VALUE_SENTINEL",
+    )
+    payload = planner_output(
+        write(
+            unit(
+                sentinels[1],
+                entity=sentinels[0],
+                note_type="person",
+                filters=[{"field": "tags", "op": "contains", "value": sentinels[3]}],
+                facts=[sentinels[2], sentinels[2]],
+            )
+        )
+    )
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(
+            responses=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    id="resp_invalid",
+                    status="completed",
+                    incomplete_details=None,
+                    output_text=json.dumps(payload),
+                    usage=SimpleNamespace(input_tokens=20, output_tokens=10),
+                )
+            )
+        ),
+        schema,
+        CONTEXT,
+    )
+
+    with pytest.raises(RequestPlanningError):
+        planner.plan("SECRET_REQUEST_SENTINEL")
+
+    assert planner.last_validation_stage == PlannerValidationStage.KNOWLEDGE_UNIT.value
+    assert planner.last_validation_code == PlannerValidationCode.INVALID_FIELDS.value
+    diagnostics = repr(
+        (
+            planner.last_error_category,
+            planner.last_validation_stage,
+            planner.last_validation_code,
+            planner.last_response_id,
+            planner.last_provider_status,
+            planner.last_parse_status,
+            planner.last_result_kind,
+            planner.last_result_counts,
+        )
+    )
+    assert all(sentinel not in diagnostics for sentinel in (*sentinels, "SECRET_REQUEST_SENTINEL"))
 
 
 def test_openai_boundary_returns_clarification_without_raw_text_retention(schema: dict) -> None:
