@@ -7,6 +7,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -23,6 +24,7 @@ from odyssey_core.request_planning import (
     PlannerValidationCode,
     PlannerValidationStage,
     PropertyChange,
+    RequestPlan,
     RequestPlanningError,
     RetrieveAction,
     WriteAction,
@@ -111,6 +113,47 @@ def unit(
 def write(*units: dict) -> dict:
     """Build one raw non-executing write-action fixture."""
     return {"kind": "write", "units": list(units)}
+
+
+def schema_unit(*args: Any, **kwargs: Any) -> dict:
+    """Build a write unit containing every provider-required field for schema tests."""
+    result = unit(*args, **kwargs)
+    result["destination_type"] = None
+    return result
+
+
+def schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
+    """Evaluate the conservative Structured Outputs subset used by PlannerResult tests."""
+    variants = schema.get("anyOf")
+    if variants is not None and not any(schema_accepts(instance, variant) for variant in variants):
+        return False
+    expected_type = schema.get("type")
+    if expected_type == "null" and instance is not None:
+        return False
+    if expected_type == "string" and not isinstance(instance, str):
+        return False
+    if expected_type == "array" and not isinstance(instance, list):
+        return False
+    is_object = expected_type == "object" or "properties" in schema
+    if is_object and not isinstance(instance, dict):
+        return False
+    if "enum" in schema and instance not in schema["enum"]:
+        return False
+    if expected_type == "array":
+        return all(schema_accepts(item, schema["items"]) for item in instance)
+    if not is_object:
+        return True
+    required = schema.get("required", [])
+    if any(field not in instance for field in required):
+        return False
+    properties = schema.get("properties", {})
+    if schema.get("additionalProperties") is False and set(instance) - set(properties):
+        return False
+    return all(
+        field not in instance or schema_accepts(value, properties[field])
+        for field, value in instance.items()
+        if field in properties
+    )
 
 
 def prop(field: str, value: object, *, op: str = "set") -> dict:
@@ -743,6 +786,7 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     assert result_schema["properties"]["clarification_code"]["anyOf"][1]["enum"] == [
         "UNRECOGNIZED_REQUEST"
     ]
+    assert len(result_schema["anyOf"]) == 2
     invalid_plan = {
         "outcome": "PLAN",
         "actions": None,
@@ -760,6 +804,107 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     }
     with pytest.raises(RequestPlanningError, match="CLARIFY must"):
         validate_planner_result(invalid_clarification, schema)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "outcome": "PLAN",
+            "actions": [retrieve("Marta")],
+            "limitations": [],
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+        },
+        {"outcome": "PLAN", "actions": None, "limitations": [], "clarification_code": None},
+        {
+            "outcome": "PLAN",
+            "actions": [retrieve("Marta")],
+            "limitations": None,
+            "clarification_code": None,
+        },
+        {
+            "outcome": "CLARIFY",
+            "actions": [retrieve("Marta")],
+            "limitations": None,
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+        },
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": [],
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+        },
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+        },
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": "UNSUPPORTED_CODE",
+        },
+    ],
+)
+def test_planner_result_schema_rejects_local_invalid_envelope_states(
+    schema: dict, payload: dict
+) -> None:
+    """Make every locally invalid PLAN/CLARIFY field combination provider-schema invalid too."""
+    result_schema = planner_result_json_schema(schema)
+    legacy_independent_schema = deepcopy(result_schema)
+    del legacy_independent_schema["anyOf"]
+
+    assert not schema_accepts(payload, result_schema)
+    with pytest.raises(RequestPlanningError):
+        validate_planner_result(payload, schema)
+    if payload["clarification_code"] != "UNSUPPORTED_CODE":
+        assert schema_accepts(payload, legacy_independent_schema)
+    else:
+        assert not schema_accepts(payload, legacy_independent_schema)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        planner_output(retrieve("Marta")),
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+        },
+    ],
+)
+def test_planner_result_schema_and_local_validator_accept_closed_outcomes(
+    schema: dict, payload: dict
+) -> None:
+    """Keep representative PLAN and CLARIFY envelopes aligned across both boundaries."""
+    assert schema_accepts(payload, planner_result_json_schema(schema))
+    assert validate_planner_result(payload, schema)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        planner_output(retrieve("Marta")),
+        planner_output(write(schema_unit("Marta", facts=["Marta works at Thales."]))),
+        planner_output(
+            {"kind": "delegate", "request": "Translate my Marta note.", "selection": None}
+        ),
+        planner_output(
+            retrieve("Marta"),
+            write(schema_unit("Marta", facts=["Marta works at Thales."])),
+        ),
+    ],
+)
+def test_planner_result_schema_preserves_valid_nested_action_contracts(
+    schema: dict, payload: dict
+) -> None:
+    """Leave retrieval, write, delegation, and mixed action schemas beneath PLAN unchanged."""
+    assert schema_accepts(payload, planner_result_json_schema(schema))
+    assert isinstance(validate_planner_result(payload, schema), RequestPlan)
 
 
 @pytest.mark.parametrize(

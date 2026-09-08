@@ -83,10 +83,14 @@ rejected by local validation (`normal_retrieval`, `normal_write`, `legitimate_de
 validation cause is unknown.
 
 The local planner now retains only allowlisted validation stage/code diagnostics for that boundary.
-A separate fixed four-case follow-up runner reuses the four unresolved IDs from the frozen registry,
-writes only to its own exclusive gitignored evidence path, and cannot select the four previously
-passed cases. Further live calls are **NOT YET AUTHORIZED** pending human review and separate
-authorization of that follow-up gate.
+The separate fixed four-case follow-up ran once without retries or execution, preserved the original
+JSONL, and showed all four unresolved cases reaching the `PLANNER_RESULT_ENVELOPE` /
+`INVALID_FIELDS` local boundary after completed JSON parsing. That code does not reveal the exact
+historical field combination, which remains unknown.
+
+The provider Structured Outputs envelope now mirrors the existing local PLAN/CLARIFY cross-field
+invariant, while local validation remains fail-closed as defense in depth. No live evidence has run
+after that schema alignment; additional provider calls are **NOT YET AUTHORIZED**.
 
 ## Out of scope
 

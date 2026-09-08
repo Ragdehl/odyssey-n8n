@@ -472,9 +472,10 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         schema: Parsed canonical Odyssey schema used by the nested RequestPlan contract.
 
     Returns:
-        A strict object schema whose discriminator and nullable payloads are validated locally.
+        A strict object schema whose PLAN/CLARIFY alternatives mirror local envelope invariants.
     """
     plan_schema = request_plan_json_schema(schema)
+    required = ["outcome", "actions", "limitations", "clarification_code"]
     return {
         "type": "object",
         "properties": {
@@ -488,8 +489,31 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                 ]
             },
         },
-        "required": ["outcome", "actions", "limitations", "clarification_code"],
+        "required": required,
         "additionalProperties": False,
+        "anyOf": [
+            {
+                "properties": {
+                    "outcome": {"type": "string", "enum": ["PLAN"]},
+                    "actions": plan_schema["properties"]["actions"],
+                    "limitations": plan_schema["properties"]["limitations"],
+                    "clarification_code": {"type": "null"},
+                },
+                "required": required,
+            },
+            {
+                "properties": {
+                    "outcome": {"type": "string", "enum": ["CLARIFY"]},
+                    "actions": {"type": "null"},
+                    "limitations": {"type": "null"},
+                    "clarification_code": {
+                        "type": "string",
+                        "enum": list(PLANNER_CLARIFICATION_CODES),
+                    },
+                },
+                "required": required,
+            },
+        ],
     }
 
 

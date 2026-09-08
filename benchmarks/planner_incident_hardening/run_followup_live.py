@@ -6,23 +6,22 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from benchmarks.planner_incident_hardening.run_live import evaluate  # noqa: E402
+from benchmarks.planner_incident_hardening.runner_support import (  # noqa: E402
+    Planner,
+    run_cases,
+    write_rows,
+)
 from odyssey_core.request_planning import (  # noqa: E402
     PLANNER_AUTOMATIC_RETRIES,
     PLANNER_MAX_OUTPUT_TOKENS,
-    PLANNER_MODEL,
-    PLANNER_REASONING_EFFORT,
     OpenAIRequestPlanner,
-    PlannerClarification,
-    RequestPlan,
 )
 
 CASES = Path(__file__).with_name("cases.json")
@@ -39,25 +38,6 @@ _FOLLOW_UP_EXPECTATIONS = {
     "legitimate_delegation": "delegate",
     "legitimate_mixed": "mixed_retrieve_write",
 }
-
-
-class Planner(Protocol):
-    """Describe the bounded planner state retained by the follow-up evidence runner."""
-
-    last_response_id: str | None
-    last_provider_status: str | None
-    last_usage: dict[str, int] | None
-    last_parse_status: str | None
-    last_validation_stage: str | None
-    last_validation_code: str | None
-    last_result_counts: dict[str, int] | None
-    last_error_category: str | None
-    last_incomplete_reason: str | None
-    last_output_text_chars: int | None
-    last_output_text_bytes: int | None
-
-    def plan(self, request: str) -> RequestPlan | PlannerClarification:
-        """Return a planner-only result without executing any action."""
 
 
 def validate_followup_configuration() -> None:
@@ -125,48 +105,7 @@ def run_followup_cases(planner: Planner, cases: Sequence[dict[str, str]]) -> lis
     if [case.get("id") for case in cases] != list(FOLLOW_UP_IDS):
         raise ValueError("follow-up cases must use the fixed unresolved ID order")
 
-    rows: list[dict[str, Any]] = []
-    for case in cases:
-        try:
-            result = planner.plan(case["request"])
-            rows.append(
-                {
-                    "id": case["id"],
-                    "model": PLANNER_MODEL,
-                    "reasoning_effort": PLANNER_REASONING_EFFORT,
-                    "expected": case["expect"],
-                    "passed": evaluate(result, case["expect"]),
-                    "result": asdict(result),
-                    "response_id": planner.last_response_id,
-                    "provider_status": planner.last_provider_status,
-                    "usage": planner.last_usage,
-                    "parse_status": planner.last_parse_status,
-                    "validation_stage": planner.last_validation_stage,
-                    "validation_code": planner.last_validation_code,
-                    "result_counts": planner.last_result_counts,
-                }
-            )
-        except Exception as error:
-            rows.append(
-                {
-                    "id": case["id"],
-                    "model": PLANNER_MODEL,
-                    "reasoning_effort": PLANNER_REASONING_EFFORT,
-                    "expected": case["expect"],
-                    "passed": False,
-                    "error_category": planner.last_error_category or type(error).__name__,
-                    "provider_status": planner.last_provider_status,
-                    "incomplete_reason": planner.last_incomplete_reason,
-                    "usage": planner.last_usage,
-                    "response_id": planner.last_response_id,
-                    "parse_status": planner.last_parse_status,
-                    "output_text_chars": planner.last_output_text_chars,
-                    "output_text_bytes": planner.last_output_text_bytes,
-                    "validation_stage": planner.last_validation_stage,
-                    "validation_code": planner.last_validation_code,
-                }
-            )
-    return rows
+    return run_cases(planner, cases)
 
 
 def write_followup_rows(rows: Sequence[dict[str, Any]], output_path: Path = OUTPUT) -> None:
@@ -179,9 +118,7 @@ def write_followup_rows(rows: Sequence[dict[str, Any]], output_path: Path = OUTP
     Raises:
         FileExistsError: If follow-up evidence already exists.
     """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("x", encoding="utf-8") as output_file:
-        output_file.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+    write_rows(rows, output_path)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
