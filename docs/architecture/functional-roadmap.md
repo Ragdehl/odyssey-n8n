@@ -85,7 +85,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 💡 **Cost-aware planning:** benchmark Luna `PLAN | ESCALATE` to the existing strong planner only if real planner cost distribution makes the optimization worthwhile.
+- 💡 **Cost-aware planning:** real provider evidence now shows planner cost can be material. After the current Online MVP path is stable and runaway-output protection is in place, benchmark Luna `PLAN | ESCALATE` against the existing strong planner. Reuse historical Luna failure cases and permit narrow deterministic escalation guards for benchmark-proven unsafe patterns, especially unjustified mapping of event/fact dates to note `created_at`/`updated_at`. Adoption still requires zero unsafe non-escalations on critical sentinels and materially lower measured end-to-end cost. See [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
