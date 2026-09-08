@@ -675,22 +675,31 @@ def _planner_result_counts(result: PlannerResult) -> dict[str, int]:
         if isinstance(action, RetrieveAction):
             selection = action.plan
         elif isinstance(action, WriteAction):
-            counts["units"] += len(action.units)
-            for unit in action.units:
-                counts["properties"] += len(unit.properties)
-                counts["tag_changes"] += len(unit.tag_changes)
-                counts["facts"] += len(unit.facts)
-                counts["references"] += len(unit.references)
-                counts["filters"] += len(unit.target.filters)
-                if unit.target.link_scope is not None:
-                    counts["filters"] += len(unit.target.link_scope.anchor.filters)
+            _count_write_action_structure(counts, action)
         elif isinstance(action, DelegateAction):
             selection = action.selection
         if selection is not None:
-            counts["filters"] += len(selection.filters)
-            if selection.link_scope is not None:
-                counts["filters"] += len(selection.link_scope.anchor.filters)
+            counts["filters"] += _selection_filter_count(selection)
     return counts
+
+
+def _count_write_action_structure(counts: dict[str, int], action: WriteAction) -> None:
+    """Add bounded structural counts for one validated write action."""
+    counts["units"] += len(action.units)
+    for unit in action.units:
+        counts["properties"] += len(unit.properties)
+        counts["tag_changes"] += len(unit.tag_changes)
+        counts["facts"] += len(unit.facts)
+        counts["references"] += len(unit.references)
+        counts["filters"] += _selection_filter_count(unit.target)
+
+
+def _selection_filter_count(selection: SelectionCriteria) -> int:
+    """Count direct and link-anchor filters without retaining their values."""
+    anchor_count = (
+        len(selection.link_scope.anchor.filters) if selection.link_scope is not None else 0
+    )
+    return len(selection.filters) + anchor_count
 
 
 def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:

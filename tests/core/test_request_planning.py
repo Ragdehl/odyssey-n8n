@@ -675,6 +675,40 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     assert planner.last_result_counts["actions"] == 1  # type: ignore[index]
 
 
+def test_openai_boundary_reports_bounded_write_structure(schema: dict) -> None:
+    """Count validated write structure without retaining its knowledge content."""
+
+    def create(**_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            id="resp_write_counts",
+            status="completed",
+            incomplete_details=None,
+            output_text=json.dumps(
+                planner_output(
+                    write(unit("Marta", facts=["Marta works at Thales."])),
+                    {"kind": "delegate", "request": "Translate this fact.", "selection": None},
+                )
+            ),
+            usage=None,
+        )
+
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(responses=SimpleNamespace(create=create)), schema, CONTEXT
+    )
+
+    assert planner.plan("Remember that Marta works at Thales and translate it.").actions
+    assert planner.last_result_counts == {
+        "actions": 2,
+        "units": 1,
+        "properties": 0,
+        "tag_changes": 0,
+        "facts": 1,
+        "references": 0,
+        "filters": 0,
+        "limitations": 0,
+    }
+
+
 @pytest.mark.parametrize("input_text", ["Bdbd", "asdfgh", "???"])
 def test_planner_result_supports_closed_nonsense_clarification(
     input_text: str, schema: dict
@@ -707,26 +741,23 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     assert result_schema["properties"]["clarification_code"]["anyOf"][1]["enum"] == [
         "UNRECOGNIZED_REQUEST"
     ]
+    invalid_plan = {
+        "outcome": "PLAN",
+        "actions": None,
+        "limitations": [],
+        "clarification_code": "UNRECOGNIZED_REQUEST",
+    }
     with pytest.raises(RequestPlanningError, match="PLAN must"):
-        validate_planner_result(
-            {
-                "outcome": "PLAN",
-                "actions": None,
-                "limitations": [],
-                "clarification_code": "UNRECOGNIZED_REQUEST",
-            },
-            schema,
-        )
+        validate_planner_result(invalid_plan, schema)
+
+    invalid_clarification = {
+        "outcome": "CLARIFY",
+        "actions": [retrieve("Odyssey")],
+        "limitations": [],
+        "clarification_code": "UNRECOGNIZED_REQUEST",
+    }
     with pytest.raises(RequestPlanningError, match="CLARIFY must"):
-        validate_planner_result(
-            {
-                "outcome": "CLARIFY",
-                "actions": [retrieve("Odyssey")],
-                "limitations": [],
-                "clarification_code": "UNRECOGNIZED_REQUEST",
-            },
-            schema,
-        )
+        validate_planner_result(invalid_clarification, schema)
 
 
 @pytest.mark.parametrize(

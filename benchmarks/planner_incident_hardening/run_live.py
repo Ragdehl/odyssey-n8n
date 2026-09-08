@@ -25,6 +25,7 @@ from odyssey_core.request_planning import (  # noqa: E402
 )
 
 CASES = Path(__file__).with_name("cases.json")
+OUTPUT = ROOT / "benchmarks" / ".live-results" / "planner-incident-hardening.jsonl"
 
 
 def evaluate(result: RequestPlan | PlannerClarification, expected: str) -> bool:
@@ -61,12 +62,11 @@ def main() -> int:
     so the mixed request's write action cannot mutate a vault.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
     args = parser.parse_args()
     if not args.confirm_live_provider_calls:
         parser.error("live provider calls require --confirm-live-provider-calls")
-    if args.output.exists():
+    if OUTPUT.exists():
         parser.error("output path already exists")
 
     schema = json.loads((ROOT / "config" / "note-schema.json").read_text(encoding="utf-8"))
@@ -105,7 +105,8 @@ def main() -> int:
                     "usage": planner.last_usage,
                 }
             )
-    args.output.write_text(
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(
         "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
     )
     return 0 if all(row["passed"] for row in rows) else 1
