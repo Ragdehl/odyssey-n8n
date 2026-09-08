@@ -138,6 +138,8 @@ new user submission
 
 `request_id` is correlation/idempotency identity only. It is not authentication or authorization. A browser implementation may keep a pending ID only long enough to make an explicit retry safe; Phase 20 does not require durable browser history.
 
+The browser bounds one product delivery at 125 seconds: the private runtime has a 120-second n8n deadline, leaving five seconds for n8n to produce its narrow response. If that deadline passes, the browser aborts the transport, restores its controls, and offers an explicit retry using the same `request_id`; it does not expose the underlying timeout detail.
+
 Do not add automatic retries that generate a fresh ID for the same uncertain delivery.
 
 ### Browser request contract
@@ -325,11 +327,13 @@ Minimum behavior:
 
 Gboard dictation is treated as normal keyboard input. Phase 20 does not implement microphone recording, browser speech APIs, transcription APIs, or stored audio. Physical Android evidence established the compact-header, scrollable-session-transcript, bottom-composer presentation as the MVP interaction shape; it does not add durable chat semantics.
 
+A focused private integration trace preserved the malformed English request `Do yo know Sophia?` unchanged through the browser, runtime, and bounded route payload; Luna/none then returned a Spanish structured answer. Because `yo` is also Spanish and the well-formed English sentinel was blocked before Luna by a private planner-provider failure, this is recorded as a language regression sentinel rather than a reason to alter the frozen answerer prompt. The workflow and deterministic tests keep the frozen user-language instruction and explicit route-payload wiring intact. The same planner-provider failure previously left one request pending until n8n's 120-second private-runtime timeout; its error output now reaches the narrow deterministic product response, while the browser's 125-second abort is the independent recovery backstop.
+
 Do not add accounts, chat-history synchronization, attachments, push notifications, PWA/offline behavior, rich Markdown editing, or native mobile packaging merely to call the MVP complete.
 
-Remaining Phase 20.2 evidence is environment-backed: serve the checked-in page through the adopted n8n
-product surface, connect the same-origin `/api/request` endpoint, and verify the interaction in Chrome on
-Android. Those checks wait for Raspberry/n8n access.
+The Raspberry-backed private product surface serves the checked-in page through n8n at same-origin
+`/api/request`; it remains an implementation checkpoint, not Phase 20.3 public deployment. Completion
+continues to require the documented deterministic checks and relevant physical Android evidence.
 
 ## 20.3 — protected deployment and real E2E
 

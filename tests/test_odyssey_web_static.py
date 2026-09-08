@@ -51,6 +51,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'globalThis.matchMedia?.("(pointer: coarse)").matches' in app
     assert "if (event.shiftKey) return;" in app
     assert 'event.key !== "Enter" || event.isComposing' in app
+    assert "appendRetryControl(retrySubmission)" in app
+    assert "void sendSubmission(submission, true)" in app
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'enterkeyhint="enter"' in index
@@ -77,3 +79,5 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert "innerHTML" not in combined
     assert "request_id" in client
     assert 'credentials: "same-origin"' in client
+    assert "PRODUCT_REQUEST_TIMEOUT_MS = 125_000" in client
+    assert "signal: controller.signal" in client

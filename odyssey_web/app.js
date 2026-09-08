@@ -44,6 +44,21 @@ function appendLoading() {
   return loading;
 }
 
+function appendRetryControl(submission) {
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "retry-button";
+  retry.textContent = "Reintentar";
+  retry.addEventListener("click", () => {
+    if (retrySubmission !== submission) return;
+    retrySubmission = null;
+    retry.remove();
+    void sendSubmission(submission, true);
+  });
+  conversation.append(retry);
+  conversation.scrollTop = conversation.scrollHeight;
+}
+
 function resultLabel(result) {
   return {
     acknowledgement: "Hecho",
@@ -52,8 +67,8 @@ function resultLabel(result) {
   }[result.kind] ?? "Odyssey";
 }
 
-async function sendSubmission(submission) {
-  appendMessage("user", submission.request);
+async function sendSubmission(submission, isRetry = false) {
+  if (!isRetry) appendMessage("user", submission.request);
   const loading = appendLoading();
   setBusy(true);
   try {
@@ -72,6 +87,7 @@ async function sendSubmission(submission) {
         : "Odyssey no ha podido procesar esta solicitud.",
     );
     message.classList.add("message-error");
+    if (retrySubmission) appendRetryControl(retrySubmission);
   } finally {
     setBusy(false);
     input.focus();

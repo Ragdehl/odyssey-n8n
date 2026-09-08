@@ -1,5 +1,8 @@
 const ALLOWED_STATUSES = new Set(["completed", "partial", "failed"]);
 const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "empty", "error"]);
+// The private runtime has a 120-second n8n deadline. Leave five seconds for
+// n8n to shape its bounded response before treating delivery as uncertain.
+export const PRODUCT_REQUEST_TIMEOUT_MS = 125_000;
 
 /**
  * Represents a browser-side request failure without exposing server internals.
@@ -84,10 +87,24 @@ export function validateProductResponse(value) {
  * @param {string} options.endpoint Same-origin endpoint selected by the page.
  * @param {{request: string, requestId: string}} options.submission Logical submission to send.
  * @param {typeof fetch} options.fetchImpl Fetch-compatible transport implementation.
+ * @param {number} options.timeoutMs Maximum time to wait for a bounded product response.
+ * @param {typeof AbortController} options.AbortControllerImpl Abort controller implementation.
+ * @param {typeof setTimeout} options.setTimeoutImpl Timer implementation for the deadline.
+ * @param {typeof clearTimeout} options.clearTimeoutImpl Timer cleanup implementation.
  * @returns {Promise<{request_id: string, status: string, kind: string, message: string}>} Valid result.
  * @throws {ProductRequestError} On transport, HTTP, JSON, or product-contract failure.
  */
-export async function requestProductResult({endpoint, submission, fetchImpl = globalThis.fetch}) {
+export async function requestProductResult({
+  endpoint,
+  submission,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = PRODUCT_REQUEST_TIMEOUT_MS,
+  AbortControllerImpl = globalThis.AbortController,
+  setTimeoutImpl = globalThis.setTimeout,
+  clearTimeoutImpl = globalThis.clearTimeout,
+}) {
+  const controller = new AbortControllerImpl();
+  const timeout = setTimeoutImpl(() => controller.abort(), timeoutMs);
   let response;
   try {
     response = await fetchImpl(endpoint, {
@@ -102,9 +119,12 @@ export async function requestProductResult({endpoint, submission, fetchImpl = gl
         request: submission.request,
         request_id: submission.requestId,
       }),
+      signal: controller.signal,
     });
   } catch {
     throw new ProductRequestError("The request outcome is unknown because the network failed.", true);
+  } finally {
+    clearTimeoutImpl(timeout);
   }
 
   if (!response.ok) {

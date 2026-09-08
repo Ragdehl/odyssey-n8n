@@ -43,3 +43,17 @@ def test_invalid_browser_request_bypasses_runtime_and_answerer() -> None:
     assert "Validate browser request" in source
     assert "La solicitud no es válida." in source
     assert "valid.output(1).to(direct).to(respond)" in source
+
+
+def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:
+    """Keep private-runtime transport failures inside the deterministic product boundary."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "options: { timeout: 120000 }" in source
+    assert "onError: 'continueErrorOutput'" in source
+    assert ".add(runtime.onError(route))" in source
+
+
+def test_frozen_answerer_keeps_the_language_instruction_for_live_sentinels() -> None:
+    """Retain the frozen user-language instruction after the English live regression."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "Reply in the user's language unless the request explicitly asks otherwise." in source
