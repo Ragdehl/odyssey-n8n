@@ -1,6 +1,9 @@
 # Phase 20 — Odyssey Online MVP
 
-Status: **Phase 20.0, 20.1A, 20.1B, and Raspberry-backed 20.2B integration are complete; revised Android UI validation remains pending**
+Checkpoint evidence: **Phase 20.0, 20.1A, 20.1B, and 20.2B are complete; Phase 20.3 remains planned**
+
+Current implementation status and sequencing are owned by the
+[Functional Roadmap](functional-roadmap.md).
 
 ## Objective
 
@@ -48,9 +51,9 @@ This is a thin consumer/product surface, not a second knowledge system. Markdown
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
 20.1A offline grounded-answerer benchmark preparation        ✅ complete
-20.1B focused live answerer model evidence                    ➡️ next
+20.1B focused live answerer model evidence                    ✅ complete
 20.2A mobile web source + offline deterministic checks        ✅ complete
-20.2B real n8n serving + Chrome Android validation            ⬜
+20.2B real n8n serving + Chrome Android validation            ✅ complete
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -332,8 +335,46 @@ A focused private integration trace preserved the malformed English request `Do 
 Do not add accounts, chat-history synchronization, attachments, push notifications, PWA/offline behavior, rich Markdown editing, or native mobile packaging merely to call the MVP complete.
 
 The Raspberry-backed private product surface serves the checked-in page through n8n at same-origin
-`/api/request`; it remains an implementation checkpoint, not Phase 20.3 public deployment. Completion
-continues to require the documented deterministic checks and relevant physical Android evidence.
+`/api/request`; it remains an implementation checkpoint, not Phase 20.3 public deployment.
+
+### Phase 20.2B physical Android checkpoint
+
+The final physical re-check used Chrome on Android against the private Tailscale-served product URL.
+The checked-in UI loaded and accepted a mobile submission. When the delivery/runtime path failed, the
+loading state ended, controls returned, the UI showed its bounded uncertain-delivery message, and an
+explicit `Reintentar` control appeared. The human pressed that control; the application did not
+intentionally request an automatic retry.
+
+Retained n8n SQLite execution evidence, queried in place with output restricted to correlation metadata,
+identifies the final same-request pair immediately before restoration:
+
+- original execution `192`: `2026-09-08 18:57:30.199Z` to `18:57:30.229Z`;
+- explicit Retry execution `193`: `2026-09-08 18:57:32.858Z` to `18:57:32.889Z`;
+- both carry `request_id` `web-3ed6d5c7-ec3e-457d-ba0d-62ded52d1d00`, the same hashed request-body
+  fingerprint, and the Android Chrome user agent;
+- the executions are consecutive, with no browser, n8n product, or provider attempt between them.
+
+The retained database also contains an earlier distinct Android same-ID trial (`190`/`191`); it is not
+silently conflated with the final checkpoint pair. Static asset executions `194`-`196` and a later
+bounded product execution `197` belong to restoration/re-check activity after the correlated pair.
+Restoration made no provider call. This latest Android UX checkpoint does not repeat or replace the
+earlier Raspberry-backed provider-grounded Marta answer evidence.
+
+### Phase 20.2B Sonar review disposition
+
+The current PR #89 Sonar analysis reports one open issue: TypeScript rule `S5332` flags
+`http://172.18.0.1:8765/execute`. That address is the private Docker-to-host runtime hop on the
+Raspberry: n8n is itself bound to host loopback and the user-facing product path is private Tailscale
+HTTPS. The Python runtime is not an Internet-facing application endpoint. Internal TLS would add
+certificate lifecycle complexity without crossing a new trust boundary, so the finding is accepted for
+this reviewed private deployment boundary; Phase 20.3 still requires explicit protection before any
+Internet-facing personal/provider use.
+
+Sonar also reports 0% coverage on 19 new lines because its Python XML report does not ingest the
+dependency-free JavaScript coverage. The repository's actual browser gate uses Node's built-in test
+runner and enforces at least 80% line coverage for `client.js`; Python contract tests additionally cover
+the checked-in HTML/static and workflow source. This analyzer/reporting mismatch is documented rather
+than introducing a separate LCOV/configuration project solely to change the badge.
 
 ## 20.3 — protected deployment and real E2E
 
