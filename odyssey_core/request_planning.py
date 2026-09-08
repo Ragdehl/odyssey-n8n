@@ -476,44 +476,38 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """
     plan_schema = request_plan_json_schema(schema)
     required = ["outcome", "actions", "limitations", "clarification_code"]
-    return {
+    plan_branch = {
         "type": "object",
         "properties": {
-            "outcome": {"type": "string", "enum": ["PLAN", "CLARIFY"]},
-            "actions": {"anyOf": [{"type": "null"}, plan_schema["properties"]["actions"]]},
-            "limitations": {"anyOf": [{"type": "null"}, plan_schema["properties"]["limitations"]]},
+            "outcome": {"type": "string", "enum": ["PLAN"]},
+            "actions": plan_schema["properties"]["actions"],
+            "limitations": plan_schema["properties"]["limitations"],
+            "clarification_code": {"type": "null"},
+        },
+        "required": required,
+        "additionalProperties": False,
+    }
+    clarify_branch = {
+        "type": "object",
+        "properties": {
+            "outcome": {"type": "string", "enum": ["CLARIFY"]},
+            "actions": {"type": "null"},
+            "limitations": {"type": "null"},
             "clarification_code": {
-                "anyOf": [
-                    {"type": "null"},
-                    {"type": "string", "enum": list(PLANNER_CLARIFICATION_CODES)},
-                ]
+                "type": "string",
+                "enum": list(PLANNER_CLARIFICATION_CODES),
             },
         },
         "required": required,
         "additionalProperties": False,
-        "anyOf": [
-            {
-                "properties": {
-                    "outcome": {"type": "string", "enum": ["PLAN"]},
-                    "actions": plan_schema["properties"]["actions"],
-                    "limitations": plan_schema["properties"]["limitations"],
-                    "clarification_code": {"type": "null"},
-                },
-                "required": required,
-            },
-            {
-                "properties": {
-                    "outcome": {"type": "string", "enum": ["CLARIFY"]},
-                    "actions": {"type": "null"},
-                    "limitations": {"type": "null"},
-                    "clarification_code": {
-                        "type": "string",
-                        "enum": list(PLANNER_CLARIFICATION_CODES),
-                    },
-                },
-                "required": required,
-            },
-        ],
+    }
+    # Structured Outputs rejects a root-level anyOf; keep the root closed and
+    # place the discriminated union beneath the required result property.
+    return {
+        "type": "object",
+        "properties": {"result": {"anyOf": [plan_branch, clarify_branch]}},
+        "required": ["result"],
+        "additionalProperties": False,
     }
 
 
@@ -743,8 +737,21 @@ class OpenAIRequestPlanner:
             self.last_error_category = "MalformedPlannerJSON"
             raise RequestPlanningError("Request planner returned malformed JSON") from error
         self.last_parse_status = "succeeded"
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"result"}
+            or not isinstance(payload["result"], dict)
+        ):
+            self.last_error_category = "LocalPlannerValidationError"
+            self.last_validation_stage = PlannerValidationStage.PLANNER_RESULT_ENVELOPE.value
+            self.last_validation_code = PlannerValidationCode.INVALID_FIELDS.value
+            raise RequestPlanningError(
+                "Request planner result wrapper is invalid",
+                stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+                code=PlannerValidationCode.INVALID_FIELDS,
+            )
         try:
-            result = validate_planner_result(payload, self._schema)
+            result = validate_planner_result(payload["result"], self._schema)
         except RequestPlanningError as error:
             self.last_error_category = "LocalPlannerValidationError"
             self.last_validation_stage = (

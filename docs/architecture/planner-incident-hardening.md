@@ -32,9 +32,9 @@ PlannerResult
    `--> CLARIFY -> UNRECOGNIZED_REQUEST, with no plan
 ```
 
-The wire shape keeps the discriminator beside nullable `actions`, `limitations`, and
-`clarification_code` fields rather than adding another deeply nested schema level. `CLARIFY` is not
-an empty plan and is not delegation. Core returns it as non-mutating
+The provider wire shape is a closed object containing a nested PLAN/CLARIFY union; the inner
+PlannerResult keeps the discriminator beside `actions`, `limitations`, and `clarification_code`.
+`CLARIFY` is not an empty plan and is not delegation. Core returns it as non-mutating
 `needs_attention` evidence before retrieval, history, pending-work, or write execution. The product
 boundary maps the allowlisted code to deterministic clarification text; model-generated prose never
 becomes an instruction or user-facing response.

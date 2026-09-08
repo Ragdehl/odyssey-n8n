@@ -85,6 +85,11 @@ def planner_output(*actions: dict, limitations: list[str] | None = None) -> dict
     }
 
 
+def provider_output(payload: dict) -> dict:
+    """Wrap an inner PlannerResult as the provider Structured Outputs envelope."""
+    return {"result": payload}
+
+
 def unit(
     query: str,
     *,
@@ -682,7 +687,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
             id="resp_test",
             status="completed",
             incomplete_details=None,
-            output_text=json.dumps(planner_output(retrieve("Odyssey"))),
+            output_text=json.dumps(provider_output(planner_output(retrieve("Odyssey")))),
             usage=SimpleNamespace(input_tokens=11, output_tokens=3),
         )
 
@@ -697,7 +702,8 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     assert calls[0]["max_output_tokens"] == PLANNER_MAX_OUTPUT_TOKENS == 4096
     assert calls[0]["text"]["format"]["strict"] is True  # type: ignore[index]
     result_schema = calls[0]["text"]["format"]["schema"]  # type: ignore[index]
-    actions_schema = result_schema["properties"]["actions"]["anyOf"][1]
+    result_union = result_schema["properties"]["result"]["anyOf"]
+    actions_schema = result_union[0]["properties"]["actions"]
     write_schema = actions_schema["items"]["anyOf"][1]
     unit_schema = write_schema["properties"]["units"]["items"]
     assert write_schema["properties"]["kind"] == {"type": "string", "enum": ["write"]}
@@ -729,9 +735,11 @@ def test_openai_boundary_reports_bounded_write_structure(schema: dict) -> None:
             status="completed",
             incomplete_details=None,
             output_text=json.dumps(
-                planner_output(
-                    write(unit("Marta", facts=["Marta works at Thales."])),
-                    {"kind": "delegate", "request": "Translate this fact.", "selection": None},
+                provider_output(
+                    planner_output(
+                        write(unit("Marta", facts=["Marta works at Thales."])),
+                        {"kind": "delegate", "request": "Translate this fact.", "selection": None},
+                    )
                 )
             ),
             usage=None,
@@ -778,15 +786,16 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     """Expose PLAN and CLARIFY without allowing an ambiguous empty RequestPlan convention."""
     result_schema = planner_result_json_schema(schema)
 
+    assert result_schema["type"] == "object"
+    assert "anyOf" not in result_schema  # OpenAI Structured Outputs forbids root-level anyOf.
     assert result_schema["additionalProperties"] is False
-    assert result_schema["properties"]["outcome"] == {
-        "type": "string",
-        "enum": ["PLAN", "CLARIFY"],
-    }
-    assert result_schema["properties"]["clarification_code"]["anyOf"][1]["enum"] == [
-        "UNRECOGNIZED_REQUEST"
-    ]
-    assert len(result_schema["anyOf"]) == 2
+    assert result_schema["required"] == ["result"]
+    result_union = result_schema["properties"]["result"]
+    assert len(result_union["anyOf"]) == 2
+    for branch in result_union["anyOf"]:
+        assert branch["type"] == "object"
+        assert branch["additionalProperties"] is False
+        assert branch["required"] == ["outcome", "actions", "limitations", "clarification_code"]
     invalid_plan = {
         "outcome": "PLAN",
         "actions": None,
@@ -853,16 +862,9 @@ def test_planner_result_schema_rejects_local_invalid_envelope_states(
 ) -> None:
     """Make every locally invalid PLAN/CLARIFY field combination provider-schema invalid too."""
     result_schema = planner_result_json_schema(schema)
-    legacy_independent_schema = deepcopy(result_schema)
-    del legacy_independent_schema["anyOf"]
-
-    assert not schema_accepts(payload, result_schema)
+    assert not schema_accepts(provider_output(payload), result_schema)
     with pytest.raises(RequestPlanningError):
         validate_planner_result(payload, schema)
-    if payload["clarification_code"] != "UNSUPPORTED_CODE":
-        assert schema_accepts(payload, legacy_independent_schema)
-    else:
-        assert not schema_accepts(payload, legacy_independent_schema)
 
 
 @pytest.mark.parametrize(
@@ -881,7 +883,7 @@ def test_planner_result_schema_and_local_validator_accept_closed_outcomes(
     schema: dict, payload: dict
 ) -> None:
     """Keep representative PLAN and CLARIFY envelopes aligned across both boundaries."""
-    assert schema_accepts(payload, planner_result_json_schema(schema))
+    assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
     assert validate_planner_result(payload, schema)
 
 
@@ -903,7 +905,7 @@ def test_planner_result_schema_preserves_valid_nested_action_contracts(
     schema: dict, payload: dict
 ) -> None:
     """Leave retrieval, write, delegation, and mixed action schemas beneath PLAN unchanged."""
-    assert schema_accepts(payload, planner_result_json_schema(schema))
+    assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
     assert isinstance(validate_planner_result(payload, schema), RequestPlan)
 
 
@@ -1077,7 +1079,7 @@ def test_local_validation_failure_retains_only_bounded_stage_and_code(
     code: PlannerValidationCode,
 ) -> None:
     """Attribute decoded invalid output without retaining payload or request content."""
-    raw = json.dumps(payload)
+    raw = json.dumps(provider_output(payload))
     planner = OpenAIRequestPlanner(
         SimpleNamespace(
             responses=SimpleNamespace(
@@ -1134,7 +1136,7 @@ def test_local_validation_diagnostics_never_retain_payload_or_request_sentinels(
                     id="resp_invalid",
                     status="completed",
                     incomplete_details=None,
-                    output_text=json.dumps(payload),
+                    output_text=json.dumps(provider_output(payload)),
                     usage=SimpleNamespace(input_tokens=20, output_tokens=10),
                 )
             )
@@ -1180,7 +1182,16 @@ def test_openai_boundary_returns_clarification_without_raw_text_retention(schema
                     id="resp_clarify",
                     status="completed",
                     incomplete_details=None,
-                    output_text=raw,
+                    output_text=json.dumps(
+                        provider_output(
+                            {
+                                "outcome": "CLARIFY",
+                                "actions": None,
+                                "limitations": None,
+                                "clarification_code": "UNRECOGNIZED_REQUEST",
+                            }
+                        )
+                    ),
                     usage=SimpleNamespace(input_tokens=20, output_tokens=10),
                 )
             )
@@ -1206,7 +1217,7 @@ def test_openai_boundary_returns_clarification_without_raw_text_retention(schema
         "filters": 0,
         "limitations": 0,
     }
-    assert planner.last_output_text_chars == len(raw)
+    assert planner.last_output_text_chars == len(json.dumps(provider_output(json.loads(raw))))
     assert not hasattr(planner, "last_output_text")
 
 
