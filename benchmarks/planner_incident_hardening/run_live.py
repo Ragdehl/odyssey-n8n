@@ -106,9 +106,8 @@ def main() -> int:
                 }
             )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(
-        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
-    )
+    with OUTPUT.open("x", encoding="utf-8") as output_file:
+        output_file.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
     return 0 if all(row["passed"] for row in rows) else 1
 
 
