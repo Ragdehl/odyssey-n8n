@@ -36,7 +36,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.1B focused live answerer model evidence                    ✅ complete
 20.2A mobile web source + offline deterministic checks        ✅ complete
 20.2B real n8n serving + Chrome Android validation            ✅ complete
-20.2C planner incident hardening + focused live gate          ➡️ next
+20.2C planner incident hardening + focused live gate          🔄 in review
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -61,8 +61,9 @@ security/deployment boundary.
 
 ### 20.2C — planner incident hardening
 
-Complete the bounded deterministic planner hardening, normal CI, and review before separately
-authorizing its focused Sol/low live evidence gate. See
+The first focused Sol/low live evidence gate has completed once. Deterministic hardening and bounded
+post-parse validation diagnostics remain under review; follow-up live calls require separate human
+authorization. See
 [Planner incident hardening](planner-incident-hardening.md).
 
 ### 20.3 — protected deployment

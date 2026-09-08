@@ -7,6 +7,8 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
+from functools import wraps
 from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
@@ -73,8 +75,76 @@ Planner writable type/property capabilities (derived dynamically from the same c
 {{WRITE_CAPABILITIES}}"""
 
 
+class PlannerValidationStage(StrEnum):
+    """Allowlisted local boundary that rejected decoded planner output."""
+
+    PLANNER_RESULT_ENVELOPE = "PLANNER_RESULT_ENVELOPE"
+    REQUEST_PLAN = "REQUEST_PLAN"
+    RETRIEVE_ACTION = "RETRIEVE_ACTION"
+    WRITE_ACTION = "WRITE_ACTION"
+    KNOWLEDGE_UNIT = "KNOWLEDGE_UNIT"
+    DELEGATE_ACTION = "DELEGATE_ACTION"
+    SELECTION = "SELECTION"
+    LINK_SCOPE = "LINK_SCOPE"
+    NOTE_SELECTOR = "NOTE_SELECTOR"
+    FILTER = "FILTER"
+    PROPERTY_CHANGE = "PROPERTY_CHANGE"
+    TAG_CHANGE = "TAG_CHANGE"
+    REFERENCE = "REFERENCE"
+
+
+class PlannerValidationCode(StrEnum):
+    """Small stable vocabulary for bounded local validation diagnostics."""
+
+    INVALID_FIELDS = "INVALID_FIELDS"
+    EMPTY_QUERY = "EMPTY_QUERY"
+    INVALID_TYPE = "INVALID_TYPE"
+    INVALID_FILTER = "INVALID_FILTER"
+    INVALID_REFERENCE = "INVALID_REFERENCE"
+    INVALID_CARDINALITY = "INVALID_CARDINALITY"
+    INVALID_MUTATION = "INVALID_MUTATION"
+    INVALID_LIMITATIONS = "INVALID_LIMITATIONS"
+    EMPTY_REQUEST = "EMPTY_REQUEST"
+
+
 class RequestPlanningError(ValueError):
-    """Indicate malformed, unsupported, or unsafe RequestPlan model output."""
+    """Indicate malformed, unsupported, or unsafe RequestPlan model output.
+
+    ``validation_stage`` and ``validation_code`` are bounded, optional metadata.  The
+    exception message remains compatible with existing callers and is never used as telemetry.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stage: PlannerValidationStage | None = None,
+        code: PlannerValidationCode | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.validation_stage = stage
+        self.validation_code = code
+
+
+def _validation_boundary(
+    stage: PlannerValidationStage,
+    code: PlannerValidationCode = PlannerValidationCode.INVALID_FIELDS,
+):
+    """Attach stable boundary metadata without inspecting exception text or payloads."""
+
+    def decorate(function):
+        @wraps(function)
+        def wrapped(*args, **kwargs):
+            try:
+                return function(*args, **kwargs)
+            except RequestPlanningError as error:
+                if error.validation_stage is not None:
+                    raise
+                raise RequestPlanningError(str(error), stage=stage, code=code) from error
+
+        return wrapped
+
+    return decorate
 
 
 class ResponsesClient(Protocol):
@@ -423,6 +493,7 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+@_validation_boundary(PlannerValidationStage.PLANNER_RESULT_ENVELOPE)
 def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerResult:
     """Validate the production planner envelope without executing either outcome.
 
@@ -466,6 +537,7 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
     raise RequestPlanningError("PlannerResult outcome is unsupported")
 
 
+@_validation_boundary(PlannerValidationStage.REQUEST_PLAN)
 def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPlan:
     """Validate untrusted model output and return an immutable non-executing plan.
 
@@ -492,7 +564,11 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
         or len(limitations) != len(set(limitations))
         or not all(isinstance(item, str) and item in LIMITATIONS for item in limitations)
     ):
-        raise RequestPlanningError("RequestPlan limitations are invalid")
+        raise RequestPlanningError(
+            "RequestPlan limitations are invalid",
+            stage=PlannerValidationStage.REQUEST_PLAN,
+            code=PlannerValidationCode.INVALID_LIMITATIONS,
+        )
     actions = tuple(
         _validate_action(action, schema, retrieval_capabilities, write_capabilities)
         for action in raw_actions
@@ -534,6 +610,8 @@ class OpenAIRequestPlanner:
         self.last_result_kind: str | None = None
         self.last_result_counts: dict[str, int] | None = None
         self.last_error_category: str | None = None
+        self.last_validation_stage: str | None = None
+        self.last_validation_code: str | None = None
 
     @classmethod
     def from_environment(
@@ -586,6 +664,8 @@ class OpenAIRequestPlanner:
         self.last_result_kind = None
         self.last_result_counts = None
         self.last_error_category = None
+        self.last_validation_stage = None
+        self.last_validation_code = None
         self.last_call = True
         self.last_attempt_count = 1
         try:
@@ -639,7 +719,17 @@ class OpenAIRequestPlanner:
             self.last_error_category = "MalformedPlannerJSON"
             raise RequestPlanningError("Request planner returned malformed JSON") from error
         self.last_parse_status = "succeeded"
-        result = validate_planner_result(payload, self._schema)
+        try:
+            result = validate_planner_result(payload, self._schema)
+        except RequestPlanningError as error:
+            self.last_error_category = "LocalPlannerValidationError"
+            self.last_validation_stage = (
+                error.validation_stage.value if error.validation_stage is not None else None
+            )
+            self.last_validation_code = (
+                error.validation_code.value if error.validation_code is not None else None
+            )
+            raise
         self.last_result_kind = "clarify" if isinstance(result, PlannerClarification) else "plan"
         self.last_result_counts = _planner_result_counts(result)
         return result
@@ -906,12 +996,19 @@ def _validate_action(
         return _validate_delegate_action(action, schema, retrieval_capabilities)
     if action.get("kind") != "retrieve" or set(action) != {"kind", "plan"}:
         raise RequestPlanningError("RequestPlan action kind is invalid")
-    plan = _validate_selection(
-        action["plan"], schema, retrieval_capabilities, label="RetrievalPlan"
-    )
+    return _validate_retrieve_action(action, schema, retrieval_capabilities)
+
+
+@_validation_boundary(PlannerValidationStage.RETRIEVE_ACTION)
+def _validate_retrieve_action(
+    action: Mapping[str, Any], schema: Mapping[str, Any], capabilities: Mapping[str, Any]
+) -> RetrieveAction:
+    """Validate one retrieval action and its shared selection criteria."""
+    plan = _validate_selection(action["plan"], schema, capabilities, label="RetrievalPlan")
     return RetrieveAction(plan=plan)
 
 
+@_validation_boundary(PlannerValidationStage.DELEGATE_ACTION)
 def _validate_delegate_action(
     action: Mapping[str, Any], schema: Mapping[str, Any], capabilities: Mapping[str, Any]
 ) -> DelegateAction:
@@ -933,7 +1030,11 @@ def _validate_delegate_action(
         raise RequestPlanningError("DelegateAction fields are invalid")
     request, raw_selection = action["request"], action["selection"]
     if not isinstance(request, str) or not request.strip():
-        raise RequestPlanningError("DelegateAction request must be non-empty")
+        raise RequestPlanningError(
+            "DelegateAction request must be non-empty",
+            stage=PlannerValidationStage.DELEGATE_ACTION,
+            code=PlannerValidationCode.EMPTY_REQUEST,
+        )
     selection = (
         None
         if raw_selection is None
@@ -944,6 +1045,7 @@ def _validate_delegate_action(
     return DelegateAction(request=request.strip(), selection=selection)
 
 
+@_validation_boundary(PlannerValidationStage.SELECTION)
 def _validate_selection(
     raw: Any,
     schema: Mapping[str, Any],
@@ -978,16 +1080,28 @@ def _validate_selection(
     if entity is not None and (not isinstance(entity, str) or not entity.strip()):
         raise RequestPlanningError(f"{label} entity must be null or non-empty")
     if not isinstance(query, str) or not query.strip():
-        raise RequestPlanningError(f"{label} query must be non-empty")
+        raise RequestPlanningError(
+            f"{label} query must be non-empty",
+            stage=PlannerValidationStage.SELECTION,
+            code=PlannerValidationCode.EMPTY_QUERY,
+        )
     if note_type is not None and note_type not in capabilities["types"]:
-        raise RequestPlanningError(f"{label} type is invalid")
+        raise RequestPlanningError(
+            f"{label} type is invalid",
+            stage=PlannerValidationStage.SELECTION,
+            code=PlannerValidationCode.INVALID_TYPE,
+        )
     if not isinstance(raw_filters, list):
         raise RequestPlanningError(f"{label} filters must be a list")
     _validate_planner_filters(raw_filters, note_type, capabilities)
     try:
         validate_context_filters(dict(schema), raw_filters, note_type=note_type)
     except ValueError as error:
-        raise RequestPlanningError(f"{label} filters are invalid") from error
+        raise RequestPlanningError(
+            f"{label} filters are invalid",
+            stage=PlannerValidationStage.FILTER,
+            code=PlannerValidationCode.INVALID_FILTER,
+        ) from error
     link_scope = _validate_link_scope(raw.get("link_scope"), schema, capabilities, label=label)
     return SelectionCriteria(
         entity=entity.strip() if isinstance(entity, str) else None,
@@ -1000,6 +1114,7 @@ def _validate_selection(
     )
 
 
+@_validation_boundary(PlannerValidationStage.NOTE_SELECTOR)
 def _validate_note_selector(
     raw: Any, schema: Mapping[str, Any], capabilities: Mapping[str, Any], *, label: str
 ) -> NoteSelector:
@@ -1016,16 +1131,28 @@ def _validate_note_selector(
     if entity is not None and (not isinstance(entity, str) or not entity.strip()):
         raise RequestPlanningError(f"{label} entity must be null or non-empty")
     if not isinstance(query, str) or not query.strip():
-        raise RequestPlanningError(f"{label} query must be non-empty")
+        raise RequestPlanningError(
+            f"{label} query must be non-empty",
+            stage=PlannerValidationStage.NOTE_SELECTOR,
+            code=PlannerValidationCode.EMPTY_QUERY,
+        )
     if note_type is not None and note_type not in capabilities["types"]:
-        raise RequestPlanningError(f"{label} type is invalid")
+        raise RequestPlanningError(
+            f"{label} type is invalid",
+            stage=PlannerValidationStage.NOTE_SELECTOR,
+            code=PlannerValidationCode.INVALID_TYPE,
+        )
     if not isinstance(raw_filters, list):
         raise RequestPlanningError(f"{label} filters must be a list")
     _validate_planner_filters(raw_filters, note_type, capabilities)
     try:
         validate_context_filters(dict(schema), raw_filters, note_type=note_type)
     except ValueError as error:
-        raise RequestPlanningError(f"{label} filters are invalid") from error
+        raise RequestPlanningError(
+            f"{label} filters are invalid",
+            stage=PlannerValidationStage.FILTER,
+            code=PlannerValidationCode.INVALID_FILTER,
+        ) from error
     return NoteSelector(
         entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
@@ -1036,6 +1163,7 @@ def _validate_note_selector(
     )
 
 
+@_validation_boundary(PlannerValidationStage.LINK_SCOPE)
 def _validate_link_scope(
     raw: Any, schema: Mapping[str, Any], capabilities: Mapping[str, Any], *, label: str
 ) -> LinkScope | None:
@@ -1058,6 +1186,7 @@ def _validate_link_scope(
     )
 
 
+@_validation_boundary(PlannerValidationStage.WRITE_ACTION)
 def _validate_write_action(
     action: Mapping[str, Any],
     schema: Mapping[str, Any],
@@ -1112,6 +1241,7 @@ def _validate_write_action(
     return WriteAction(units=units)
 
 
+@_validation_boundary(PlannerValidationStage.KNOWLEDGE_UNIT)
 def _validate_knowledge_unit(
     unit: Any,
     schema: Mapping[str, Any],
@@ -1151,7 +1281,11 @@ def _validate_knowledge_unit(
     )
     cardinality = unit.get("cardinality", "one")
     if cardinality not in {"one", "all_matching"}:
-        raise RequestPlanningError("KnowledgeUnit cardinality is invalid")
+        raise RequestPlanningError(
+            "KnowledgeUnit cardinality is invalid",
+            stage=PlannerValidationStage.KNOWLEDGE_UNIT,
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     if cardinality == "all_matching" and target.entity is not None:
         raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
     intent = unit["intent"]
@@ -1230,6 +1364,7 @@ def _validate_knowledge_unit(
     )
 
 
+@_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)
 def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int) -> set[int]:
     """Validate internal reference markers and return their local reference indexes.
 
@@ -1263,6 +1398,7 @@ def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int)
     return indexes
 
 
+@_validation_boundary(PlannerValidationStage.PROPERTY_CHANGE)
 def _validate_property_changes(
     raw_properties: Sequence[Any],
     note_type: str | None,
@@ -1328,6 +1464,7 @@ def _validate_property_changes(
     return tuple(changes)
 
 
+@_validation_boundary(PlannerValidationStage.TAG_CHANGE)
 def _validate_tag_changes(raw_tag_changes: Any, intent: str) -> tuple[TagChange, ...]:
     """Validate explicit free-form tag mutations for one knowledge unit.
 
@@ -1371,6 +1508,7 @@ def _validate_tag_changes(raw_tag_changes: Any, intent: str) -> tuple[TagChange,
     return tuple(result)
 
 
+@_validation_boundary(PlannerValidationStage.FILTER, PlannerValidationCode.INVALID_FILTER)
 def _validate_planner_filters(
     filters: Sequence[Any], note_type: str | None, capabilities: Mapping[str, Any]
 ) -> None:

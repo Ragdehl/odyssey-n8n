@@ -1,6 +1,6 @@
 # Planner incident hardening
 
-Status: **deterministic implementation prepared; focused Sol/low live evidence pending**
+Status: **deterministic hardening under review; first focused Sol/low live gate completed with bounded validation failures**
 
 Phase 20.2B and PR #89 are complete. The original stacked PR #92 closed automatically when its
 merged base branch was removed; the fresh PR from current `main` supersedes #92 implementation-wise
@@ -47,9 +47,9 @@ cannot reach Core execution.
 
 The existing operational evidence adds only bounded metadata: attempt count, response ID, provider
 status, incomplete reason, normalized usage including reasoning tokens when supplied, output text
-character/byte lengths, parse status, result kind, and structural counts from a successfully
-validated result. It stores no prompt, raw output, output prefix/suffix, exception body, or hidden
-reasoning.
+character/byte lengths, parse status, result kind, structural counts from a successfully validated
+result, and an allowlisted local validation stage/code when post-parse validation rejects a result.
+It stores no prompt, raw output, output prefix/suffix, exception body, or hidden reasoning.
 
 ## Acceptance criteria
 
@@ -75,9 +75,13 @@ request. The runner invokes only the planner, evaluates the returned plan withou
 requires an explicit live-confirmation flag, and records bounded validated results rather than raw
 provider responses.
 
-**NOT RUN — awaiting human authorization.** Deterministic tests prove only that the schema,
-validation, application, runtime, and product layers can handle the new outcome safely; they cannot
-prove that Sol chooses `CLARIFY` for the sentinel inputs.
+The first authorized run completed exactly once with eight planner calls, no automatic retries, and
+no action execution or vault mutation. The retained bounded evidence includes successful
+clarification, retrieval, and event-date cases; four cases reached completed JSON parsing but were
+rejected by local validation (`normal_retrieval`, `normal_write`, `legitimate_delegation`, and
+`legitimate_mixed`). Their raw provider payloads were not retained, so the exact historical
+validation cause is unknown. Further live calls are **NOT YET AUTHORIZED** pending review of this
+bounded diagnostic improvement.
 
 ## Out of scope
 

@@ -157,6 +157,8 @@ def test_clarification_and_provider_diagnostics_serialize_without_raw_output() -
         "reasoning_effort": None,
         "usage": None,
         "error_category": None,
+        "validation_stage": None,
+        "validation_code": None,
         "attempt_count": 1,
         "response_id": "resp_safe",
         "provider_status": "completed",

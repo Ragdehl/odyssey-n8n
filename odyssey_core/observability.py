@@ -29,6 +29,8 @@ class ProviderCallEvidence:
     reasoning_effort: str | None = None
     usage: dict[str, int] | None = None
     error_category: str | None = None
+    validation_stage: str | None = None
+    validation_code: str | None = None
     attempt_count: int | None = None
     response_id: str | None = None
     provider_status: str | None = None

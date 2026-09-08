@@ -94,6 +94,9 @@ def main() -> int:
                     "response_id": planner.last_response_id,
                     "provider_status": planner.last_provider_status,
                     "usage": planner.last_usage,
+                    "parse_status": planner.last_parse_status,
+                    "validation_stage": planner.last_validation_stage,
+                    "validation_code": planner.last_validation_code,
                     "result_counts": planner.last_result_counts,
                 }
             )
@@ -109,6 +112,12 @@ def main() -> int:
                     "provider_status": planner.last_provider_status,
                     "incomplete_reason": planner.last_incomplete_reason,
                     "usage": planner.last_usage,
+                    "response_id": planner.last_response_id,
+                    "parse_status": planner.last_parse_status,
+                    "output_text_chars": planner.last_output_text_chars,
+                    "output_text_bytes": planner.last_output_text_bytes,
+                    "validation_stage": planner.last_validation_stage,
+                    "validation_code": planner.last_validation_code,
                 }
             )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)

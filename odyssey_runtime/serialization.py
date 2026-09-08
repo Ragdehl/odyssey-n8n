@@ -62,6 +62,8 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
                             "reasoning_effort": call.reasoning_effort,
                             "usage": call.usage,
                             "error_category": call.error_category,
+                            "validation_stage": call.validation_stage,
+                            "validation_code": call.validation_code,
                             "attempt_count": call.attempt_count,
                             "response_id": call.response_id,
                             "provider_status": call.provider_status,

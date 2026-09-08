@@ -948,6 +948,12 @@ class _ProviderCallRecorder:
                 _bounded_evidence_string(getattr(provider, "last_error_category", None))
                 or (type(error).__name__ if error is not None else None)
             ),
+            validation_stage=_bounded_evidence_string(
+                getattr(provider, "last_validation_stage", None)
+            ),
+            validation_code=_bounded_evidence_string(
+                getattr(provider, "last_validation_code", None)
+            ),
             attempt_count=_bounded_non_negative_int(getattr(provider, "last_attempt_count", None)),
             response_id=_bounded_evidence_string(getattr(provider, "last_response_id", None)),
             provider_status=_bounded_evidence_string(

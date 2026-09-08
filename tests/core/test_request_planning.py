@@ -20,6 +20,8 @@ from odyssey_core.request_planning import (
     KnowledgeUnit,
     OpenAIRequestPlanner,
     PlannerClarification,
+    PlannerValidationCode,
+    PlannerValidationStage,
     PropertyChange,
     RequestPlanningError,
     RetrieveAction,
@@ -847,6 +849,108 @@ def test_malformed_planner_json_fails_closed_with_bounded_parse_evidence(schema:
     assert planner.last_error_category == "MalformedPlannerJSON"
     assert planner.last_output_text_chars == len(raw)
     assert not hasattr(planner, "last_output_text")
+    assert planner.last_validation_stage is None
+    assert planner.last_validation_code is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "stage", "code"),
+    [
+        (
+            {"outcome": "PLAN", "actions": None, "limitations": [], "clarification_code": "x"},
+            PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+            PlannerValidationCode.INVALID_FIELDS,
+        ),
+        (
+            planner_output(retrieve("")),
+            PlannerValidationStage.SELECTION,
+            PlannerValidationCode.EMPTY_QUERY,
+        ),
+        (
+            planner_output(
+                {
+                    "kind": "delegate",
+                    "request": "Translate this note",
+                    "selection": selection(""),
+                }
+            ),
+            PlannerValidationStage.SELECTION,
+            PlannerValidationCode.EMPTY_QUERY,
+        ),
+        (
+            {
+                "outcome": "PLAN",
+                "actions": [{"kind": "write", "units": []}],
+                "limitations": [],
+                "clarification_code": None,
+            },
+            PlannerValidationStage.WRITE_ACTION,
+            PlannerValidationCode.INVALID_FIELDS,
+        ),
+        (
+            planner_output(write(unit("Marta", cardinality="many"))),
+            PlannerValidationStage.KNOWLEDGE_UNIT,
+            PlannerValidationCode.INVALID_CARDINALITY,
+        ),
+        (
+            {
+                "outcome": "PLAN",
+                "actions": [{"kind": "delegate", "request": "", "selection": None}],
+                "limitations": [],
+                "clarification_code": None,
+            },
+            PlannerValidationStage.DELEGATE_ACTION,
+            PlannerValidationCode.EMPTY_REQUEST,
+        ),
+        (
+            planner_output(
+                write(
+                    unit(
+                        "Marta",
+                        facts=["Marta {{ref:x}} works with Airbus."],
+                        references=[{"target_index": 1, "role": "employer", "mention": "Airbus"}],
+                    )
+                )
+            ),
+            PlannerValidationStage.REFERENCE,
+            PlannerValidationCode.INVALID_REFERENCE,
+        ),
+    ],
+)
+def test_local_validation_failure_retains_only_bounded_stage_and_code(
+    schema: dict,
+    payload: dict,
+    stage: PlannerValidationStage,
+    code: PlannerValidationCode,
+) -> None:
+    """Attribute decoded invalid output without retaining payload or request content."""
+    raw = json.dumps(payload)
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(
+            responses=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    id="resp_invalid",
+                    status="completed",
+                    incomplete_details=None,
+                    output_text=raw,
+                    usage=SimpleNamespace(input_tokens=20, output_tokens=10),
+                )
+            )
+        ),
+        schema,
+        CONTEXT,
+    )
+
+    with pytest.raises(RequestPlanningError):
+        planner.plan("secret Marta request")
+
+    assert planner.last_parse_status == "succeeded"
+    assert planner.last_error_category == "LocalPlannerValidationError"
+    assert planner.last_validation_stage == stage.value
+    assert planner.last_validation_code == code.value
+    assert planner.last_response_id == "resp_invalid"
+    assert "Marta" not in repr((planner.last_validation_stage, planner.last_validation_code))
+    assert not hasattr(planner, "last_output_text")
 
 
 def test_openai_boundary_returns_clarification_without_raw_text_retention(schema: dict) -> None:
@@ -878,6 +982,9 @@ def test_openai_boundary_returns_clarification_without_raw_text_retention(schema
     result = planner.plan("Bdbd")
 
     assert result == PlannerClarification("UNRECOGNIZED_REQUEST")
+    assert planner.last_error_category is None
+    assert planner.last_validation_stage is None
+    assert planner.last_validation_code is None
     assert planner.last_result_kind == "clarify"
     assert planner.last_result_counts == {
         "actions": 0,
