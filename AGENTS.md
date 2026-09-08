@@ -147,6 +147,8 @@ Rules:
 
 ## GitHub review workflow
 
+Default to **one active PR at a time**. Do not open Draft PRs merely to remember future ideas or deferred product directions; preserve those in the canonical roadmap or appropriate future-direction owner instead. Multiple open PRs are appropriate only when a real dependency, review, or sequencing reason makes parallel/stacked work useful, and that dependency must be explicit. Before opening another PR, inspect the existing open PR set and merge, close, or consolidate obsolete/documentation-only work so deferred decisions do not become forgotten backlog.
+
 Before continuing implementation on a branch with an open PR, use `odyssey-pr-feedback` to inspect review feedback. If comments conflict with each other or with an approved material contract, ask rather than guessing.
 
 Use `odyssey-verify-change` before declaring a PR complete/ready. Verification is required for readiness; a safe checkpoint commit may still record an incomplete or blocked state explicitly.
