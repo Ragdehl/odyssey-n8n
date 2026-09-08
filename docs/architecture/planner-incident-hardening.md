@@ -55,8 +55,9 @@ reasoning.
 
 - `Bdbd`, `asdfgh`, and `???` are schema-valid as `CLARIFY` and execute no Odyssey action.
 - Existing retrieval, write, delegation, and mixed retrieval/write plans remain valid under `PLAN`.
-- A real-world event month such as purchases in July does not become note-lifecycle `created_at` or
-  `updated_at` filtering.
+- A real-world event month such as purchases in July remains in the semantic query for the canonical
+  `purchase` candidate type, does not become note-lifecycle `created_at` or `updated_at` filtering,
+  and reports `unsupported_domain_date` because purchases have no deterministic domain-date field.
 - Every production planner request carries the 4,096-token cap.
 - The production planner client performs no automatic SDK retry and Core adds no retry loop.
 - Incomplete/output-limit and transport failures return bounded failed evidence with no retrieval,

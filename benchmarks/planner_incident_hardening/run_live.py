@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -26,6 +27,7 @@ from odyssey_core.request_planning import (  # noqa: E402
 
 CASES = Path(__file__).with_name("cases.json")
 OUTPUT = ROOT / "benchmarks" / ".live-results" / "planner-incident-hardening.jsonl"
+_EVENT_DATE_QUERY_PATTERN = re.compile(r"\b(?:july|julio|2026-07)\b", re.IGNORECASE)
 
 
 def evaluate(result: RequestPlan | PlannerClarification, expected: str) -> bool:
@@ -38,6 +40,10 @@ def evaluate(result: RequestPlan | PlannerClarification, expected: str) -> bool:
         if len(result.actions) != 1 or not isinstance(result.actions[0], RetrieveAction):
             return False
         selection = result.actions[0].plan
+        if selection.type != "purchase" or not _EVENT_DATE_QUERY_PATTERN.search(selection.query):
+            return False
+        if "unsupported_domain_date" not in result.limitations:
+            return False
         filters = list(selection.filters)
         if selection.link_scope is not None:
             filters.extend(selection.link_scope.anchor.filters)

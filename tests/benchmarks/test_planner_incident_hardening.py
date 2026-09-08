@@ -69,29 +69,46 @@ def test_live_evaluator_distinguishes_clarification_from_every_action_kind() -> 
     assert not evaluate(delegate, "clarify")
 
 
+def event_date_plan(
+    *,
+    query: str = "purchases in July",
+    note_type: str | None = "purchase",
+    filters: tuple[ContextFilter, ...] = (),
+    limitations: tuple[str, ...] = ("unsupported_domain_date",),
+) -> RequestPlan:
+    """Build the narrow U02/A01-compatible purchase-month regression result."""
+    return RequestPlan(
+        (RetrieveAction(SelectionCriteria(None, query, note_type, filters, None)),), limitations
+    )
+
+
+@pytest.mark.parametrize("query", ("purchases in July", "compras de julio", "purchases 2026-07"))
+def test_event_date_evaluator_preserves_domain_month_in_semantic_query(query: str) -> None:
+    """Accept the stable U02/A01 month equivalents without requiring exact prose."""
+    assert evaluate(event_date_plan(query=query), "event_date_retrieve")
+
+
+def test_event_date_evaluator_rejects_date_dropped_entirely() -> None:
+    """Prevent a purchase-only retrieval from silently discarding the requested month."""
+    assert not evaluate(event_date_plan(query="purchases"), "event_date_retrieve")
+
+
 @pytest.mark.parametrize("field", ("created_at", "updated_at"))
 def test_event_date_evaluator_rejects_note_lifecycle_filters(field: str) -> None:
     """Keep a real-world purchase month distinct from note creation or update time."""
-    semantic = RequestPlan(
-        (RetrieveAction(SelectionCriteria(None, "purchases in July", "purchase", (), None)),), ()
-    )
-    lifecycle = RequestPlan(
-        (
-            RetrieveAction(
-                SelectionCriteria(
-                    None,
-                    "purchases in July",
-                    "purchase",
-                    (ContextFilter(field, "gte", "2026-07-01T00:00:00+02:00"),),
-                    None,
-                )
-            ),
-        ),
-        (),
-    )
+    lifecycle = event_date_plan(filters=(ContextFilter(field, "gte", "2026-07-01T00:00:00+02:00"),))
 
-    assert evaluate(semantic, "event_date_retrieve")
     assert not evaluate(lifecycle, "event_date_retrieve")
+
+
+def test_event_date_evaluator_requires_current_domain_date_limitation() -> None:
+    """Require the canonical signal that purchase dates have no deterministic field."""
+    assert not evaluate(event_date_plan(limitations=()), "event_date_retrieve")
+
+
+def test_event_date_evaluator_requires_canonical_purchase_type() -> None:
+    """Keep the event-date candidate set constrained to the current purchase type."""
+    assert not evaluate(event_date_plan(note_type=None), "event_date_retrieve")
     assert not evaluate(PlannerClarification("UNRECOGNIZED_REQUEST"), "event_date_retrieve")
 
 
