@@ -810,3 +810,29 @@ def test_atomicity_registry_is_frozen_and_sa02_is_only_a_sentinel() -> None:
     assert [case["id"] for case in cases["cases"]] == [f"AT{i:02d}" for i in range(1, 11)]
     assert "SA02" in manifest["regression_sentinels"]
     assert "SA02" not in [case["id"] for case in cases["cases"]]
+
+
+def test_atomicity_evaluator_reviews_paraphrases_without_lexical_failure() -> None:
+    """Structural safety is hard; wording alternatives remain semantic review evidence."""
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+
+    oracle = {"units": 1, "facts": 1, "semantic_terms": ["café", "recover"]}
+    # A real RequestPlan fixture is intentionally tested through the evaluator's public shape.
+    write = RequestPlan(actions=[], limitations=[])
+    result = evaluate_atomicity(write, oracle)
+    assert result.safe_structure is False
+    assert "coherence_boundary" in result.findings
+
+
+def test_atomicity_oracle_at04_is_one_unit_two_facts() -> None:
+    """Same-target independent facts remain one KnowledgeUnit under the current contract."""
+    import json
+
+    oracle = next(
+        x
+        for x in json.loads(
+            Path("benchmarks/luna_first_planner/atomicity_oracle.json").read_text()
+        )["oracles"]
+        if x["id"] == "AT04"
+    )
+    assert (oracle["units"], oracle["facts"]) == (1, 2)

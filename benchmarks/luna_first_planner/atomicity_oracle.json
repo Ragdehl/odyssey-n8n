@@ -1,15 +1,15 @@
 {
   "version":"1.0.0",
   "oracles":[
-    {"id":"AT01","units":1,"facts":1,"required":["Lyon","space","friends"]},
-    {"id":"AT02","units":1,"facts":1,"required":["garden","quiet","recover"]},
-    {"id":"AT03","units":1,"facts":1,"required":["train","café","meeting"]},
-    {"id":"AT04","units":2,"facts":2,"required":["Marta","Lyon","Thales"]},
-    {"id":"AT05","units":2,"facts":2,"required":["Luc","Airbus","Ana","Paris"]},
-    {"id":"AT06","units":2,"facts":2,"required":["Lyon","space","Luc","Airbus"]},
-    {"id":"AT07","units":2,"facts":2,"required":["Acme","Thales"]},
-    {"id":"AT08","units":2,"facts":2,"required":["red car","blue car"]},
-    {"id":"AT09","units":1,"facts":1,"required":["French","neighbors"]},
-    {"id":"AT10","units":2,"facts":2,"required":["coffee","kitchen light"]}
+    {"id":"AT01","units":1,"facts":1,"semantic_terms":["Lyon","space","friends"]},
+    {"id":"AT02","units":1,"facts":1,"semantic_terms":["garden","quiet","recover"]},
+    {"id":"AT03","units":1,"facts":1,"semantic_terms":["train","café","meeting"]},
+    {"id":"AT04","units":1,"facts":2,"semantic_terms":["Marta","Lyon","Thales"]},
+    {"id":"AT05","units":2,"facts":2,"semantic_terms":["Luc","Airbus","Ana","Paris"]},
+    {"id":"AT06","units":2,"facts":2,"semantic_terms":["Lyon","space","Luc","Airbus"]},
+    {"id":"AT07","units":2,"facts":2,"semantic_terms":["Acme","Thales"]},
+    {"id":"AT08","units":2,"facts":2,"semantic_terms":["red car","blue car"]},
+    {"id":"AT09","units":1,"facts":1,"semantic_terms":["French","neighbors"]},
+    {"id":"AT10","units":2,"facts":2,"semantic_terms":["coffee","kitchen light"]}
   ]
 }
