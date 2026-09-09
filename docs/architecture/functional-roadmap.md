@@ -40,7 +40,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2D Luna-first planner experiment preparation               ✅ complete
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
-20.2G contextual reasoner Luna replacement gate               ⚠️ gate failed; review required
+20.2G contextual reasoner Luna replacement                    ➡️ adoption staged; merge/deploy next
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -92,14 +92,15 @@ telemetry preserves the real Luna/Sol usage split. The merged runtime was deploy
 smoke confirmed Luna-first planning active. See
 [Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
 
-### 20.2G — contextual reasoner Luna replacement gate
+### 20.2G — contextual reasoner Luna replacement
 
-Current cost-reduction gate. The remaining normal Sol/medium use is contextual entity resolution.
-Test Luna/medium first while preserving the established few-shot prompt, candidate evidence, output
-contract, and reasoning effort. The bounded eight-case gate includes the historical A19 false
-resolution as a mandatory safety sentinel. No production contextual-model change occurs until the
-live gate passes and is reviewed. See
-[Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
+The full frozen 90-case Luna/medium benchmark completed with 88/90 frozen-label accuracy, 35/35
+correct `RESOLVED` decisions, zero clear false `RESOLVED`, and zero invalid outputs. One miss was the
+historically disputed E13 label; the only non-disputed miss was a conservative
+`AMBIGUOUS -> UNRESOLVED` abstention. The prompt/configuration is now canonical and shared by runtime
+and benchmark. PR #102 stages the production contextual default change from Sol/medium to Luna/medium
+while preserving the ten-example few-shot prefix and environment override. This adoption is not yet
+merged or deployed. See [Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
 
 ### 20.3 — protected deployment
 
@@ -137,7 +138,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 🔄 **Cost-aware model routing:** Luna-first production planning is complete. Phase 20.2G now tests whether the remaining contextual Sol/medium reasoner can also move to Luna without repeating the full historical model-selection benchmark. See [Phase 20.2G](phase-20-2g-contextual-luna-gate.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 🔄 **Cost-aware model routing:** Luna-first production planning is complete, and Phase 20.2G stages Luna/medium as the contextual reasoner default after full 90-case evidence with zero clear false resolutions. Deployment remains a separate human-controlled step. See [Phase 20.2G](phase-20-2g-contextual-luna-gate.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
