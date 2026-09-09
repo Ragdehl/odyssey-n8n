@@ -23,6 +23,31 @@ Raspberry / Codex
 
 SSH should not be exposed directly to the public Internet. Android currently uses Termius as the SSH client; client choice is not an Odyssey semantic dependency.
 
+### Raspberry DNS ownership
+
+The Raspberry currently keeps Tailscale connectivity while declining Tailscale-managed system DNS:
+
+```text
+tailscale --accept-dns=false
+```
+
+System DNS is instead owned by NetworkManager. `/etc/resolv.conf` should resolve through NetworkManager's generated resolver file:
+
+```text
+/etc/resolv.conf -> /run/NetworkManager/resolv.conf
+```
+
+This state was adopted after a Phase 20.3 Codex session lost API connectivity while ordinary Internet-by-IP connectivity still worked. Tailscale had previously generated `/etc/resolv.conf`; after `accept-dns` was disabled, that path remained a regular file with no nameserver entries even though NetworkManager still had a valid DHCP-provided DNS server. The result was successful IP connectivity but failed hostname resolution, including `api.openai.com`.
+
+The recovery was deliberately small and reversible:
+
+1. disable Tailscale DNS management on this Raspberry with `sudo tailscale set --accept-dns=false`;
+2. preserve the old `/etc/resolv.conf` as a backup;
+3. restore `/etc/resolv.conf` as a symlink to `/run/NetworkManager/resolv.conf`;
+4. verify DNS resolution with `getent hosts <hostname>` and HTTPS reachability separately.
+
+Do not edit `/run/NetworkManager/resolv.conf` manually. If Tailscale-managed DNS is re-enabled later, review MagicDNS/global DNS behavior first rather than toggling it during an unrelated Odyssey deployment.
+
 ## Cloudflare Tunnel
 
 `cloudflared` runs in Docker and creates an outbound tunnel from the Raspberry to Cloudflare. This allows approved HTTP services such as n8n or the future Odyssey Online hostname to be routed without opening inbound ports on the home router.
