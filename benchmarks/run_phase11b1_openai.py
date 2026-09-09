@@ -13,13 +13,13 @@ from typing import Any
 from odyssey_core.contextual import (
     ContextualCandidate,
     ContextualProviderError,
-    ContextualResolutionDecision,
     ContextualResolutionError,
     ContextualResolutionExample,
     ContextualResolutionRequest,
     OpenAIContextualReasoner,
     validate_contextual_decision,
 )
+from odyssey_core.contextual_calibration import load_contextual_calibration_examples
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PHASE11A_CASES = REPOSITORY_ROOT / "benchmarks/phase11a_contextual_resolution_cases.json"
@@ -102,7 +102,7 @@ def load_blocking_cases(cache_dir: Path) -> list[dict[str, Any]]:
 
 
 def load_calibration_examples(cache_dir: Path) -> tuple[ContextualResolutionExample, ...]:
-    """Load the ten pre-existing Phase 11A examples as compact labelled prompt turns.
+    """Load the canonical ten calibration examples shared with production.
 
     Args:
         cache_dir: Existing local Phase 10 embedding-model cache.
@@ -110,29 +110,11 @@ def load_calibration_examples(cache_dir: Path) -> tuple[ContextualResolutionExam
     Returns:
         Ten examples in their frozen dataset order, with no case IDs or scoring metadata.
 
-    Raises:
-        ValueError: If the frozen source no longer contains exactly ten valid examples.
+    The cache argument remains for benchmark-runner compatibility; the canonical examples already
+    contain their frozen candidate evidence and do not require local embedding work.
     """
-    from benchmarks.run_phase11a_contextual_resolution import build_phase10_candidates
-
-    base = json.loads(PHASE11A_CASES.read_text(encoding="utf-8"))
-    calibration = [case for case in base["cases"] if case["split"] == "calibration"]
-    if len(calibration) != 10:
-        raise ValueError("Phase 11B.1b requires exactly ten frozen calibration examples")
-    ranked = build_phase10_candidates(
-        {"notes": base["notes"], "cases": calibration}, cache_dir=cache_dir
-    )
-    examples = []
-    for case in ranked:
-        identity = case.get("expected_id") if case["expected"] == "RESOLVED" else None
-        request = blind_request(case)
-        decision = ContextualResolutionDecision(outcome=case["expected"], id=identity)
-        validate_contextual_decision(
-            {"outcome": decision.outcome, "id": decision.id},
-            {candidate.id for candidate in request.candidates},
-        )
-        examples.append(ContextualResolutionExample(request=request, decision=decision))
-    return tuple(examples)
+    del cache_dir
+    return load_contextual_calibration_examples()
 
 
 def blind_request(case: dict[str, Any]) -> ContextualResolutionRequest:
@@ -239,7 +221,7 @@ def summarize(model: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "output_tokens",
         "reasoning_tokens",
     )
-    totals = Counter({field: sum(row[field] for row in rows) for field in token_fields})
+    totals = Counter({field: sum(row.get(field, 0) or 0 for row in rows) for field in token_fields})
     correct = sum(row["correct"] for row in rows)
     resolved_returned = returned_counts["RESOLVED"]
     correct_resolved = correct_counts["RESOLVED"]

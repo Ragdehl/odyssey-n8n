@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 from odyssey_core.contextual import build_openai_payload
 
@@ -57,40 +55,43 @@ def test_blind_projection_excludes_every_frozen_answer_field() -> None:
 
 
 def test_frozen_calibration_source_is_exactly_ten_predating_examples(monkeypatch) -> None:
-    """Load every and only calibration row without deriving examples from evaluation failures."""
+    """Load every and only canonical calibration example in frozen order."""
     runner = load_runner()
-    captured = {}
-
-    def fake_candidates(data, cache_dir):
-        captured["ids"] = [case["id"] for case in data["cases"]]
-        notes = data["notes"]
-        return [
-            {
-                **case,
-                "candidates": [
-                    {**note, "score": 1.0} for note in notes if note["type"] == case["type"]
-                ],
-            }
-            for case in data["cases"]
-        ]
-
-    monkeypatch.setitem(
-        sys.modules,
-        "benchmarks.run_phase11a_contextual_resolution",
-        SimpleNamespace(build_phase10_candidates=fake_candidates),
-    )
     examples = runner.load_calibration_examples(Path("unused"))
 
     assert len(examples) == 10
-    assert captured["ids"] == [
-        "cal-en-wife",
-        "cal-es-xavi-wife",
-        "cal-fr-usual-store",
-        "cal-en-atlas-colleague",
-        "cal-es-beatriz",
-        "cal-fr-xavi",
-        "cal-en-unknown-doctor",
-        "cal-fr-unknown-project",
-        "cal-es-odyssey",
-        "cal-en-carrefour",
+    assert [example.request.reference for example in examples] == [
+        "my spouse",
+        "la pareja de Xavi",
+        "mon supermarché habituel",
+        "my Atlas colleague",
+        "Beatriz",
+        "Xavi",
+        "my cardiologist",
+        "le projet Apollo",
+        "mi sistema de conocimiento",
+        "Carrefour",
     ]
+    assert examples[-1].decision.outcome == "AMBIGUOUS"
+    assert examples[-1].decision.id is None
+
+
+def test_summary_tolerates_provider_usage_without_cache_write_counter() -> None:
+    """Aggregate completed evidence when the provider omits optional cache-write usage."""
+    runner = load_runner()
+    row = {
+        "schema_valid": True,
+        "outcome": "UNRESOLVED",
+        "correct": True,
+        "false_resolved": False,
+        "label_disputed": False,
+        "latency_seconds": 0.1,
+        "input_tokens": 10,
+        "cached_input_tokens": 0,
+        "output_tokens": 2,
+        "reasoning_tokens": 1,
+    }
+
+    summary = runner.summarize("gpt-5.6-luna", [row])
+
+    assert summary["token_usage"]["cache_write_tokens"] == 0

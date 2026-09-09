@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
 from odyssey_core.context import ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
+from odyssey_core.contextual_calibration import load_contextual_calibration_examples
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
@@ -127,10 +128,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     embedder = FastEmbedTextEmbedder(cache_dir=embedding_cache, local_files_only=True)
     context_index = ContextIndex(runtime_root / "context.sqlite3")
     semantic_index = SemanticEntityIndex(runtime_root / "semantic.sqlite3")
-    contextual_reasoner = OpenAIContextualReasoner(
-        os.environ.get("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-sol"),
-        reasoning_effort="medium",
-    )
+    contextual_reasoner = _build_contextual_reasoner()
     writer = OpenAILunaWriter()
     fact_selector = OpenAILunaFactSelector()
     pending_recorder = PendingWorkRepository(pending_root)
@@ -196,6 +194,15 @@ def _path_env(name: str, default: str) -> Path:
     if not value:
         raise ValueError(f"{name} must not be empty")
     return Path(value).expanduser()
+
+
+def _build_contextual_reasoner() -> OpenAIContextualReasoner:
+    """Build the production contextual reasoner with the canonical few-shot prefix."""
+    return OpenAIContextualReasoner(
+        os.environ.get("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-luna"),
+        reasoning_effort="medium",
+        examples=load_contextual_calibration_examples(),
+    )
 
 
 def _positive_int_env(name: str, default: int) -> int:
