@@ -8,6 +8,14 @@ from pathlib import Path
 import pytest
 
 from benchmarks.planner_incident_hardening.run_live import evaluate
+from benchmarks.planner_incident_hardening.run_post_envelope_live import (
+    OUTPUT as POST_ENVELOPE_OUTPUT,
+)
+from benchmarks.planner_incident_hardening.run_post_envelope_live import (
+    POST_ENVELOPE_IDS,
+    load_post_envelope_cases,
+    run_post_envelope_cases,
+)
 from odyssey_core.context import ContextFilter
 from odyssey_core.request_planning import (
     DelegateAction,
@@ -20,6 +28,44 @@ from odyssey_core.request_planning import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_post_envelope_runner_selects_only_the_six_approved_cases() -> None:
+    """Keep the post-envelope gate closed to passed-only or unrelated frozen cases."""
+    cases = load_post_envelope_cases()
+    assert [case["id"] for case in cases] == list(POST_ENVELOPE_IDS)
+    assert "nonsense_letters" not in {case["id"] for case in cases}
+    assert "nonsense_punctuation" not in {case["id"] for case in cases}
+    assert POST_ENVELOPE_OUTPUT.name == "planner-incident-hardening-post-envelope.jsonl"
+
+
+def test_post_envelope_runner_stops_after_early_provider_failure() -> None:
+    """Stop before extra calls when the first schema-smoke case cannot complete."""
+
+    class FakePlanner:
+        last_response_id = None
+        last_provider_status = None
+        last_usage = None
+        last_parse_status = None
+        last_validation_stage = None
+        last_validation_code = None
+        last_result_counts = None
+        last_error_category = "ProviderFailure"
+        last_incomplete_reason = None
+        last_output_text_chars = None
+        last_output_text_bytes = None
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan(self, request: str) -> RequestPlan:
+            self.calls += 1
+            raise RuntimeError("provider unavailable")
+
+    planner = FakePlanner()
+    rows = run_post_envelope_cases(planner, load_post_envelope_cases())
+    assert planner.calls == 1
+    assert len(rows) == 1
 
 
 def test_frozen_cases_cover_incident_and_normal_regressions() -> None:
