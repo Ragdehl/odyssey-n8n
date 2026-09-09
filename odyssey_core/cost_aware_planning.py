@@ -1,7 +1,7 @@
 """Cost-aware production request planning with a validated Luna first pass.
 
 The first pass deliberately reuses the exact Luna prompt/schema boundary validated in Phase 20.2E.
-A locally invalid/incomplete Luna result may fall back once to the established Sol planner.  A safe
+A locally invalid/incomplete Luna result may fall back once to the established Sol planner. A safe
 Luna ESCALATE does not authorize stronger-model guessing: it becomes a normal user clarification.
 """
 
@@ -14,7 +14,11 @@ from odyssey_core.experimental_luna_planning import (
     OpenAILunaExperimentalPlanner,
     PlannerEscalation,
 )
-from odyssey_core.observability import OperationalOutcome, ProviderCallEvidence, normalize_provider_usage
+from odyssey_core.observability import (
+    OperationalOutcome,
+    ProviderCallEvidence,
+    normalize_provider_usage,
+)
 from odyssey_core.request_planning import (
     OpenAIRequestPlanner,
     PlannerClarification,
@@ -23,19 +27,16 @@ from odyssey_core.request_planning import (
     RequestPlanningError,
 )
 
-LUNA_FIRST_MODEL = "gpt-5.6-luna"
 LUNA_FIRST_REASONING_EFFORT = "low"
-SOL_FALLBACK_MODEL = "gpt-5.6-sol"
-SOL_FALLBACK_REASONING_EFFORT = "low"
 
 
 class LunaFirstRequestPlanner:
     """Plan with Luna first and use Sol only after a fail-closed Luna result.
 
-    Safe PLAN and CLARIFY results from Luna are returned directly.  Luna ESCALATE is converted to the
+    Safe PLAN and CLARIFY results from Luna are returned directly. Luna ESCALATE is converted to the
     existing non-executing clarification result so missing user authority is never guessed by Sol.
     Only a bounded ``RequestPlanningError`` from the validated Luna provider boundary triggers one Sol
-    attempt.  Generic provider/network exceptions propagate without a second call.
+    attempt. Generic provider/network exceptions propagate without a second call.
     """
 
     def __init__(self, luna: Any, sol: Any) -> None:
@@ -50,7 +51,9 @@ class LunaFirstRequestPlanner:
         self.last_provider_calls: tuple[ProviderCallEvidence, ...] = ()
 
     @classmethod
-    def from_environment(cls, schema: dict[str, Any], current_context: dict[str, str]) -> "LunaFirstRequestPlanner":
+    def from_environment(
+        cls, schema: dict[str, Any], current_context: dict[str, str]
+    ) -> "LunaFirstRequestPlanner":
         """Build the validated Luna first pass and established Sol fallback from environment."""
         return cls(
             OpenAILunaExperimentalPlanner.from_environment(schema, current_context),
@@ -67,12 +70,26 @@ class LunaFirstRequestPlanner:
         try:
             result = self._luna.plan(request)
         except RequestPlanningError as error:
-            self._append_call("planner.luna", self._luna, OperationalOutcome.FAILED, luna_started, error)
+            self._append_call(
+                "planner.luna",
+                self._luna,
+                OperationalOutcome.FAILED,
+                luna_started,
+                error,
+            )
             return self._plan_with_sol(request)
         except Exception as error:
-            self._append_call("planner.luna", self._luna, OperationalOutcome.FAILED, luna_started, error)
+            self._append_call(
+                "planner.luna",
+                self._luna,
+                OperationalOutcome.FAILED,
+                luna_started,
+                error,
+            )
             raise
-        self._append_call("planner.luna", self._luna, OperationalOutcome.COMPLETED, luna_started)
+        self._append_call(
+            "planner.luna", self._luna, OperationalOutcome.COMPLETED, luna_started
+        )
 
         if isinstance(result, PlannerEscalation):
             self._sync_final_metadata(self._luna)
@@ -88,10 +105,21 @@ class LunaFirstRequestPlanner:
         try:
             result = self._sol.plan(request)
         except Exception as error:
-            self._append_call("planner.sol_fallback", self._sol, OperationalOutcome.FAILED, sol_started, error)
+            self._append_call(
+                "planner.sol_fallback",
+                self._sol,
+                OperationalOutcome.FAILED,
+                sol_started,
+                error,
+            )
             self._sync_final_metadata(self._sol)
             raise
-        self._append_call("planner.sol_fallback", self._sol, OperationalOutcome.COMPLETED, sol_started)
+        self._append_call(
+            "planner.sol_fallback",
+            self._sol,
+            OperationalOutcome.COMPLETED,
+            sol_started,
+        )
         self._sync_final_metadata(self._sol)
         if not isinstance(result, (RequestPlan, PlannerClarification)):
             raise TypeError("Sol fallback returned an unsupported planner result")
@@ -130,7 +158,7 @@ class LunaFirstRequestPlanner:
         self.last_attempt_count = len(self.last_provider_calls)
 
     def _sync_final_metadata(self, provider: Any) -> None:
-        """Expose final-attempt metadata while per-model usage stays in ``last_provider_calls``."""
+        """Expose final-attempt metadata while per-model usage stays in provider-call evidence."""
         self.last_usage = None
         self.last_response_id = getattr(provider, "last_response_id", None)
         self.last_provider_status = getattr(provider, "last_provider_status", None)
