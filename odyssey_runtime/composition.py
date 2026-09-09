@@ -138,9 +138,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         planner = LunaFirstRequestPlanner.from_environment(schema, planner_context)
-        request_id_factory = (
-            (lambda: request_id) if request_id is not None else allocate_request_id
-        )
+        request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
         result = execute_request(
             user_request,
             planner=planner,
