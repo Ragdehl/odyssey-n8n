@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "fixed_context": {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"},
+  "cases": [
+    {"id": "HD01", "request": "Which groceries did I buy at Lidl during August?", "family": "domain_date"},
+    {"id": "HD02", "request": "What decisions about the kitchen renovation did we make last September?", "family": "domain_date"},
+    {"id": "HD03", "request": "Show journal entries describing trips I took in May.", "family": "domain_date"},
+    {"id": "HL01", "request": "Which Odyssey notes did I record in August 2026?", "family": "lifecycle_date"},
+    {"id": "HL02", "request": "What journal entries did I write yesterday?", "family": "lifecycle_date"},
+    {"id": "HO01", "request": "Show projects I created on Monday OR tasks I updated on Tuesday.", "family": "independent_or"},
+    {"id": "HO02", "request": "Find garden notes added last week or garden notes changed today.", "family": "independent_or"},
+    {"id": "HB01", "request": "Show people born in 1990 or projects about Toulouse.", "family": "independent_branches"},
+    {"id": "SP01", "request": "What do I know about Odyssey?", "family": "ordinary_retrieve"},
+    {"id": "SP02", "request": "Show my notes directly linked from Marta.", "family": "link_scope"},
+    {"id": "SW01", "request": "Remember that Carlos lives in Madrid and studies Japanese.", "family": "ordinary_write"},
+    {"id": "SW02", "request": "Correct Marta's employer: remove the claim that she works at Acme and record that she works at Thales.", "family": "correction_write"},
+    {"id": "SW03", "request": "Delete the one project note for Apollo.", "family": "delete_write"},
+    {"id": "SD01", "request": "How many purchase notes mention coffee?", "family": "delegation"},
+    {"id": "SD02", "request": "Translate my note about the Balma house into French.", "family": "delegation"},
+    {"id": "SD03", "request": "Compare what I spent at Lidl and Carrefour.", "family": "delegation"},
+    {"id": "SM01", "request": "Tell me what I know about n8n, then remember that I should review its backup plan.", "family": "mixed"},
+    {"id": "SM02", "request": "Remember that Ana moved to Paris and tell me what I previously recorded about her work.", "family": "mixed"},
+    {"id": "SC01", "request": "zxqv zxqv", "family": "clarify"},
+    {"id": "SC02", "request": "...???...", "family": "clarify"},
+    {"id": "SE01", "request": "Rewrite whichever family notes seem outdated and make the facts consistent without asking me which facts are true.", "family": "must_escalate"},
+    {"id": "SE02", "request": "Remove the incorrect relationship from Alex, whichever Alex and relationship I meant.", "family": "must_escalate"},
+    {"id": "SA01", "request": "Remember that the Markdown source stays inspectable because it preserves context, and that Luc works at Airbus.", "family": "atomic_mixed_write"},
+    {"id": "SA02", "request": "Remember that I want to move to Lyon because we would have more space and be closer to friends.", "family": "coherent_write"}
+  ]
+}

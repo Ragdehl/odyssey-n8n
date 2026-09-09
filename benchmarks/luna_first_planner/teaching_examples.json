@@ -1,0 +1,168 @@
+{
+  "version": "1.0.0",
+  "examples": [
+    {
+      "id": "teach-domain-date",
+      "request": "What purchases did I make in July?",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "retrieve",
+            "plan": {
+              "entity": null,
+              "query": "purchases I made in July",
+              "type": "purchase",
+              "filters": [],
+              "link_scope": null
+            }
+          }
+        ],
+        "limitations": ["unsupported_domain_date"],
+        "clarification_code": null
+      },
+      "lesson": "July is purchase event time, not note creation time; preserve it semantically and never approximate it with created_at."
+    },
+    {
+      "id": "teach-lifecycle-date",
+      "request": "Which notes did I create in July 2026?",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "retrieve",
+            "plan": {
+              "entity": null,
+              "query": "notes I created in July 2026",
+              "type": null,
+              "filters": [
+                {"field": "created_at", "op": "gte", "value": "2026-07-01T00:00:00+02:00"},
+                {"field": "created_at", "op": "lt", "value": "2026-08-01T00:00:00+02:00"}
+              ],
+              "link_scope": null
+            }
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null
+      },
+      "lesson": "The user explicitly asks about Odyssey note creation, so created_at is correct."
+    },
+    {
+      "id": "teach-independent-or",
+      "request": "Show Odyssey notes I created on September 8, 2026 OR n8n notes I modified on September 9, 2026.",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "retrieve",
+            "plan": {
+              "entity": null,
+              "query": "Odyssey notes created on September 8, 2026",
+              "type": null,
+              "filters": [
+                {"field": "created_at", "op": "gte", "value": "2026-09-08T00:00:00+02:00"},
+                {"field": "created_at", "op": "lt", "value": "2026-09-09T00:00:00+02:00"}
+              ],
+              "link_scope": null
+            }
+          },
+          {
+            "kind": "retrieve",
+            "plan": {
+              "entity": null,
+              "query": "n8n notes modified on September 9, 2026",
+              "type": null,
+              "filters": [
+                {"field": "updated_at", "op": "gte", "value": "2026-09-09T00:00:00+02:00"},
+                {"field": "updated_at", "op": "lt", "value": "2026-09-10T00:00:00+02:00"}
+              ],
+              "link_scope": null
+            }
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null
+      },
+      "lesson": "Each OR branch has its own candidate set and lifecycle filter; putting both filters on one selection would mean AND and lose results."
+    },
+    {
+      "id": "teach-clarify",
+      "request": "qzxqzx",
+      "result": {
+        "outcome": "CLARIFY",
+        "actions": null,
+        "limitations": null,
+        "clarification_code": "UNRECOGNIZED_REQUEST"
+      },
+      "lesson": "Meaningless input has no safe action and is not delegated."
+    },
+    {
+      "id": "teach-escalate",
+      "request": "Correct whichever of my old project notes are probably inconsistent, but do not ask me which ones.",
+      "result": {
+        "outcome": "ESCALATE",
+        "actions": null,
+        "limitations": null,
+        "clarification_code": null
+      },
+      "lesson": "An understandable mutation with unresolved scope and truth must escalate instead of inventing targets or corrections."
+    },
+    {
+      "id": "teach-delegation-selection",
+      "request": "Calculate how much I spent at Carrefour this year.",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "delegate",
+            "request": "calculate total spent at Carrefour this year",
+            "selection": {
+              "entity": null,
+              "query": "purchases at Carrefour this year",
+              "type": "purchase",
+              "filters": [],
+              "link_scope": null
+            }
+          }
+        ],
+        "limitations": ["unsupported_domain_date"],
+        "clarification_code": null
+      },
+      "lesson": "The aggregate operation is delegated while its Odyssey candidate selection remains explicit; the planner does not calculate or execute it."
+    },
+    {
+      "id": "teach-write-target",
+      "request": "Remember that Marta lives in Lyon and works at Thales.",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "write",
+            "units": [
+              {
+                "target": {
+                  "entity": "Marta",
+                  "query": "Marta",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null
+                },
+                "cardinality": "one",
+                "destination_type": null,
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": ["Lives in Lyon.", "Works at Thales."],
+                "references": []
+              }
+            ]
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null
+      },
+      "lesson": "One target keeps independent durable facts separate, and target resolution does not add a retrieval action."
+    }
+  ]
+}

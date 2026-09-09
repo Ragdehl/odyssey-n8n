@@ -89,6 +89,11 @@ Lifecycle/security/domain state belongs in structured contracts when needed, not
 
 ## Cost-aware request planning
 
+Deterministic preparation is now active under
+[Phase 20.2D](phase-20-2d-luna-first-planner-experiment.md). That document owns the frozen experiment,
+historical evidence review, teaching/held-out split, and first live gate. This section retains the
+longer-term adoption boundary; production remains on the established strong planner.
+
 Current planning keeps its established strong-model baseline. If real Odyssey Online usage shows planner cost is material, benchmark the simplest two-level optimization:
 
 ```text
@@ -110,7 +115,7 @@ Such guards must come from reproducible benchmark evidence, not speculative comp
 request
   |
   v
-Luna -> PLAN / ESCALATE
+Luna -> PLAN / CLARIFY / ESCALATE
   |          |
   |          `--------------------------> strong planner
   v

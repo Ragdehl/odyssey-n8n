@@ -31,6 +31,25 @@ Conceptually:
 
 The exact parser/renderer contract lives in `odyssey_core/atomic_facts.py`. Do not invent another unrelated fact UUID unless a demonstrated requirement cannot use the existing identity.
 
+## Conservative semantic decomposition — review point
+
+A user request is not automatically one fact: one capture can mention several logical identities, request incompatible actions, or contain knowledge that later needs to be updated independently. Odyssey must still be able to separate those cases safely.
+
+At the same time, Odyssey should not maximize atomization merely because clauses can be separated grammatically. The working direction to review after the Luna prompt-parity experiment is:
+
+```text
+one user request
+      |
+      +--> split when needed for different logical identities
+      +--> split when needed for incompatible actions/mutation intents
+      +--> split when independently addressable updates/removals require it
+      `--> otherwise preserve related ideas together by default
+```
+
+Within one logical target and compatible action, explanations, reflections, decisions, causal reasons, hypotheses, and other semantically dependent clauses should normally remain together when separating them would weaken or change their meaning. The burden of proof is on splitting, not on preserving coherence.
+
+This does **not** yet replace the current semantic-atomicity contract. It is an explicit design review point: after Luna is given prompt parity with the established Sol atomicity instructions, revisit whether same-target independent statements such as `Marta vive en Lyon y trabaja en Thales` deliver enough concrete retrieval/update value when split to justify the extra decomposition complexity. Compare that with a simpler model closer to “one coherent fact per target/action unless separation is necessary”. Do not lock in either direction from a single benchmark example.
+
 ## Append-first accumulation
 
 Ordinary new true knowledge normally appends instead of rewriting previous knowledge simply because both facts concern the same subject.

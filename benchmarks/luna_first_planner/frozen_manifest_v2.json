@@ -1,0 +1,10 @@
+{
+  "version": "2.0.0",
+  "frozen_before_provider_calls": true,
+  "sha256": {
+    "benchmarks/luna_first_planner/cases.json": "a568d78a21d828d567d7166fe0b0b6b36baec3a1fac0916940deb02b90e90765",
+    "benchmarks/luna_first_planner/teaching_examples.json": "78b1060ca01a7a0b9f97c276596f446c7f8eda3484234dff82c1f0ed0e57a811",
+    "benchmarks/luna_first_planner/oracle_v2.json": "fe800d586b1fa9eb8fb9dfc98b9cbddc93488b712f71c342405a1622a64aa1e2",
+    "benchmarks/phase20_answerer/pricing_snapshot.json": "dff97e01cf8a6e3b03192c4c8e8bf08c1df2cad3d0e1510a8a61b7687b724f79"
+  }
+}
