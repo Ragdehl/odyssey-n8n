@@ -55,7 +55,7 @@ def test_production_and_benchmark_load_the_same_calibration_source() -> None:
 
 
 def test_production_contextual_default_and_override_keep_medium_reasoning(monkeypatch) -> None:
-    """Production defaults to Sol/medium while retaining the environment model override."""
+    """Production defaults to Luna/medium while retaining the environment model override."""
     captured: list[tuple[str, str, int]] = []
 
     class FakeReasoner:
@@ -65,10 +65,10 @@ def test_production_contextual_default_and_override_keep_medium_reasoning(monkey
     monkeypatch.setattr(composition, "OpenAIContextualReasoner", FakeReasoner)
     monkeypatch.delenv("ODYSSEY_CONTEXTUAL_MODEL", raising=False)
     composition._build_contextual_reasoner()
-    monkeypatch.setenv("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-luna")
+    monkeypatch.setenv("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-sol")
     composition._build_contextual_reasoner()
 
-    assert captured == [("gpt-5.6-sol", "medium", 10), ("gpt-5.6-luna", "medium", 10)]
+    assert captured == [("gpt-5.6-luna", "medium", 10), ("gpt-5.6-sol", "medium", 10)]
 
 
 def test_shared_examples_preserve_historical_provider_payload_controls() -> None:
