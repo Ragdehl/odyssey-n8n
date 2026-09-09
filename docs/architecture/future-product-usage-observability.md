@@ -151,6 +151,32 @@ The exact permission model is intentionally deferred. The first single-user Odys
 
 A user must never gain visibility into another user's private request evidence simply because a detailed observability view exists.
 
+## Reference-first request trace
+
+Odyssey should eventually be able to reconstruct one logical request from receipt through planning, semantic execution, canonical mutation, Git, derived-index refresh, and response using the existing `request_id` as the correlation key. This trace is diagnostic/history state, not a second copy of canonical knowledge.
+
+The preferred design is **reference-first**. Do not duplicate note bodies, facts, or other canonical knowledge into a request-trace record merely to make inspection convenient. Where durable identifiers already exist, retain those identifiers and resolve the authoritative data on demand:
+
+```text
+request_id
+   |
+   +--> planner outcome / validated plan
+   +--> action + unit outcomes
+   +--> stable_note_id ----------> canonical Markdown
+   +--> Git commit/request marker -> exact canonical diff/history
+   +--> pending record ID --------> durable pending state
+   +--> n8n execution reference --> integration execution details
+   `--> operational evidence -----> stages / timing / usage / cost
+```
+
+A compact trace/index may therefore retain correlation and execution evidence such as timestamps, provider/model configuration, normalized usage/cost, stable stage/error codes, action kinds, operation outcomes, affected `stable_note_id` values, Git/request correlation, and references to other durable evidence. It should prefer links/identifiers over copied payloads whenever the referenced source is expected to remain available.
+
+The **validated planner result** is an intentional exception to the no-duplication preference when no other durable authority already preserves it. It is valuable audit evidence because it captures the semantic boundary Odyssey actually accepted before acting. This is especially useful when diagnosing planner/schema failures. Persist only the validated planner result or a deterministic equivalent rendering; do not persist hidden reasoning, chain-of-thought, raw provider output, or rejected provider payloads merely for completeness. If planning fails before a validated result exists, bounded fields such as provider status, parse status, validation stage/code, attempt count, response ID, usage, and safe error category are sufficient diagnostic evidence.
+
+This direction does **not** require an immediate new tracing database or one large file that copies everything. First determine which useful pieces are already durable in ApplicationResult, Git, pending state, n8n execution data, and existing operational evidence, then add only the smallest missing reference/index representation needed for convenient reconstruction and product drill-down.
+
+This work is also **not a sequencing blocker** for continued Odyssey Online development. After the current planner hardening is complete, product progress, real-app use, and the already-preserved cost-aware Luna-first planner experiment may proceed before implementing a consolidated request-trace representation. Real usage should help determine which missing trace links are actually worth persisting.
+
 ## Validation scenarios for the future
 
 Before adopting the product surface, validate at least:
