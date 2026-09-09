@@ -2,7 +2,8 @@
 
 Status: **completed**. The next bounded gate is Phase 20.2E prompt-parity and atomicity validation.
 
-Status: **deterministic preparation under review; no provider calls authorized or made**
+This document preserves the completed Phase 20.2D preparation and its historical evidence. The
+separate Phase 20.2E prompt-parity/atomicity live gate is recorded below.
 
 ## Objective
 
@@ -160,7 +161,7 @@ No prior case was rerun, no Sol fallback was called, and no action was executed.
 artifact is separate and immutable evidence for those five calls; the formal result requires human
 review before any further live gate or production-routing discussion.
 
-## Final human adjudication
+## Phase 20.2D final human adjudication
 
 All 24 held-out cases were attempted exactly once: nine in the first gate, ten in the preserved v2
 attempt, and five in the continuation. Human adjudication treats SD01 as a lexical-oracle false
@@ -178,6 +179,23 @@ PLAN that fragments one coherent causal/decision statement into independently du
 eligible for deterministic fallback to Sol. Do not implement this guard here and do not reduce it to
 a keyword router such as `because` or `porque`; the next phase should identify the smallest
 inspectable signal without weakening the existing planner contract.
+
+### Phase 20.2E prompt-parity and atomicity gate
+
+Phase 20.2E is a separate 17-case Luna/low live gate using the inherited production semantic
+instructions. The 17 cases were attempted exactly once: eight AT cases, seven regression sentinels,
+and the final SE01/SA02 continuation. The older Phase 20.2D SA02 evidence above remains unchanged:
+it fragmented the coherent Lyon decision and required fallback. In contrast, Phase 20.2E SA02
+returned one `record` unit with one fact preserving the decision and both dependent reasons, so it is
+`SAFE_PLAN` and does not require fallback.
+
+The Phase 20.2E semantic-review markers on AT01–AT07, AT09, and AT10 are bounded human-review
+evidence for meaning terms, not lexical safety failures. Offline adjudication found each plan to
+preserve its material intent, identity/unit boundaries, mutation semantics, and conditional or
+causal relationships. AT08 remains a historical oracle over-constraint (`remove + record` corrected
+to canonical `remove + amend`), and SC02 remains a historical wrapper classification corrected
+offline to `SAFE_CLARIFY`; neither is a Luna model failure. The final Phase 20.2E result is zero
+genuine unsafe non-escalations and zero genuine fail-closed results.
 
 ## Deterministic guards and evaluation
 

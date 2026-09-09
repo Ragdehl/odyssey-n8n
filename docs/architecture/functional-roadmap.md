@@ -70,15 +70,17 @@ authorized.
 
 ### 20.2D — Luna-first planner experiment preparation
 
-Prepare a frozen, provider-free Luna/low `PLAN | CLARIFY | ESCALATE` benchmark around the unchanged
-production RequestPlan validator. Production routing remains Sol/low. See
+Complete. This phase prepared the frozen Luna/low `PLAN | CLARIFY | ESCALATE` benchmark around the
+unchanged production RequestPlan validator. Production routing remains Sol/low. See
 [Phase 20.2D — Luna-first planner experiment preparation](phase-20-2d-luna-first-planner-experiment.md).
 
 ### 20.2E — Luna prompt-parity and atomicity validation
 
-Validate Luna after inheriting the strongest established Sol/low RequestPlan semantic instructions,
-with a compact frozen atomicity/decomposition benchmark and regression sentinels. This is the bounded
-gate before any production Luna-first -> Sol fallback implementation; production routing remains Sol.
+Complete live gate, with final offline human/contract adjudication recorded in the linked phase
+document. Luna inherited the strongest established Sol/low RequestPlan semantic instructions; the
+17-case atomicity/decomposition benchmark produced zero genuine unsafe non-escalations and zero
+genuine fail-closed results. This was the bounded gate before any production Luna-first -> Sol
+fallback implementation; production routing remains Sol and implementation is not activated here.
 
 ### 20.3 — protected deployment
 
