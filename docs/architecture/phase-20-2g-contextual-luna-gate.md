@@ -1,6 +1,6 @@
 # Phase 20.2G — contextual reasoner Luna replacement gate
 
-Status: **benchmark preparation; live evidence not yet run**.
+Status: **live gate completed; adoption blocked pending review**.
 
 ## Objective
 
@@ -43,6 +43,30 @@ Run exactly eight synthetic cases using the unchanged frozen ten-example few-sho
 | A34 | UNRESOLVED | absent person, Spanish |
 
 The runner is `benchmarks/run_contextual_luna_mini_gate.py`.
+
+## Live gate result
+
+The authorized eight-case Luna/medium gate completed exactly once per case. It made 8 provider
+calls, with zero retries and zero invalid outputs. The bounded evidence is retained in the
+gitignored `benchmarks/.live-results/contextual-luna-mini-gate-20.2g.json` artifact; it contains
+only normalized decisions, response IDs, usage counters, and scoring metadata.
+
+| Case | Result | Expected | Review |
+| --- | --- | --- | --- |
+| A02 | `RESOLVED`, `xavi-pujol` | `RESOLVED`, `xavi-pujol` | correct |
+| A09 | `RESOLVED`, `delta` | `RESOLVED`, `delta` | correct |
+| A11 | `RESOLVED`, `carrefour-balma` | `RESOLVED`, `carrefour-balma` | correct |
+| A19 | `AMBIGUOUS`, `null` | `AMBIGUOUS`, `null` | historical false-resolution sentinel passed |
+| A22 | `UNRESOLVED`, `null` | `AMBIGUOUS`, `null` | conservative abstention; adoption blocked |
+| A28 | `AMBIGUOUS`, `null` | `AMBIGUOUS`, `null` | correct |
+| A31 | `UNRESOLVED`, `null` | `UNRESOLVED`, `null` | correct |
+| A34 | `UNRESOLVED`, `null` | `UNRESOLVED`, `null` | correct |
+
+Aggregate usage was 22,142 input tokens, 0 cached input tokens, 612 output tokens, and 412
+reasoning tokens. The runner estimated `$0.005163` using the dated repository pricing snapshot.
+The gate scored 7/8: clear false `RESOLVED` = 0, invalid = 0, and A19 safe, but A22's
+`UNRESOLVED` versus frozen `AMBIGUOUS` label is a conservative distinction that must not be
+silently relaxed. Production remains `gpt-5.6-sol` / medium; no adoption change was made.
 
 ## Acceptance criteria
 

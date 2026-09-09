@@ -40,7 +40,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2D Luna-first planner experiment preparation               ✅ complete
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
-20.2G contextual reasoner Luna replacement gate               ➡️ next
+20.2G contextual reasoner Luna replacement gate               ⚠️ gate failed; review required
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 

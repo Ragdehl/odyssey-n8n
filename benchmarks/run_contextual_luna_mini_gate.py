@@ -53,10 +53,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     correct = sum(bool(row["correct"]) for row in rows)
     a19 = next((row for row in rows if row["case_id"] == "A19"), None)
     a19_safe = bool(
-        a19
-        and a19["schema_valid"]
-        and a19["outcome"] == "AMBIGUOUS"
-        and a19["id"] is None
+        a19 and a19["schema_valid"] and a19["outcome"] == "AMBIGUOUS" and a19["id"] is None
     )
     totals: Counter[str] = Counter()
     for row in rows:
@@ -115,9 +112,7 @@ def run_benchmark(output: Path, cache_dir: Path) -> None:
             write_json_atomic(output, result)
             raise
         result["attempts"] += 1
-        result["cases"].append(
-            score_case(case, output_data, time.perf_counter() - started, usage)
-        )
+        result["cases"].append(score_case(case, output_data, time.perf_counter() - started, usage))
         write_json_atomic(output, result)
         print(f"{index}/{MAX_REQUESTS} {case['id']}", flush=True)
     result["summary"] = summarize(result["cases"])
