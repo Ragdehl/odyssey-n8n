@@ -175,10 +175,10 @@ Teaching examples (not evaluation cases):
 """
 
 
-def load_teaching_examples(path: Path = _TEACHING_EXAMPLES_PATH) -> list[dict[str, Any]]:
+def load_teaching_examples() -> list[dict[str, Any]]:
     """Load the frozen prompt-teaching registry from the repository."""
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(_TEACHING_EXAMPLES_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise RequestPlanningError("Luna teaching examples are unavailable or malformed") from error
     if not isinstance(payload, dict) or set(payload) != {"version", "examples"}:

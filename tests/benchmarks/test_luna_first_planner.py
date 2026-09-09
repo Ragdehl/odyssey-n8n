@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+import odyssey_core.experimental_luna_planning as luna_module
 from benchmarks.luna_first_planner.cost import (
     UsageTotals,
     compare_routing_costs,
@@ -42,8 +43,10 @@ from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_REASONING_EFFORT,
     OpenAILunaExperimentalPlanner,
     PlannerEscalation,
+    embedded_request_plan_contract,
     load_teaching_examples,
     luna_experimental_result_json_schema,
+    production_result_contract_unchanged,
     render_luna_experimental_prompt,
     validate_luna_experimental_result,
 )
@@ -122,8 +125,9 @@ def test_plan_reuses_existing_local_validation(schema: dict[str, Any]) -> None:
     result = validate_luna_experimental_result(plan_payload(retrieve("Odyssey")), schema)
     assert isinstance(result, RequestPlan)
     assert isinstance(result.actions[0], RetrieveAction)
+    invalid = plan_payload(retrieve(""))
     with pytest.raises(RequestPlanningError, match="query"):
-        validate_luna_experimental_result(plan_payload(retrieve("")), schema)
+        validate_luna_experimental_result(invalid, schema)
 
 
 def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
@@ -272,6 +276,72 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
+
+
+def test_prompt_and_teaching_registry_fail_closed_on_malformed_inputs(
+    schema: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject untrusted context, empty examples, and malformed frozen teaching JSON."""
+    with pytest.raises(RequestPlanningError, match="Current context"):
+        render_luna_experimental_prompt(schema, {"date": "2026-09-09"})
+    with pytest.raises(RequestPlanningError, match="must not be empty"):
+        render_luna_experimental_prompt(schema, CONTEXT, teaching_examples=[])
+    malformed = tmp_path / "teaching.json"
+    malformed.write_text("not-json", encoding="utf-8")
+    monkeypatch.setattr(luna_module, "_TEACHING_EXAMPLES_PATH", malformed)
+    with pytest.raises(RequestPlanningError, match="unavailable or malformed"):
+        load_teaching_examples()
+
+
+def test_experimental_schema_helpers_reuse_production_contract(
+    schema: dict[str, Any],
+) -> None:
+    """Expose identical nested production schemas without defining another planner language."""
+    production = production_result_contract_unchanged(schema)
+    experimental = luna_experimental_result_json_schema(schema)
+    assert (
+        experimental["properties"]["result"]["anyOf"][:2]
+        == production["properties"]["result"]["anyOf"]
+    )
+    plan_branch = production["properties"]["result"]["anyOf"][0]
+    request_plan = embedded_request_plan_contract(schema)
+    assert plan_branch["properties"]["actions"] == request_plan["properties"]["actions"]
+    assert plan_branch["properties"]["limitations"] == request_plan["properties"]["limitations"]
+
+
+def test_environment_and_provider_failures_remain_closed(
+    schema: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject missing credentials, empty requests, incomplete results, and malformed JSON."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(RequestPlanningError, match="OPENAI_API_KEY"):
+        OpenAILunaExperimentalPlanner.from_environment(schema, CONTEXT)
+
+    calls: list[dict[str, Any]] = []
+
+    def response(status: str, output_text: str) -> SimpleNamespace:
+        return SimpleNamespace(status=status, id="test", output_text=output_text, usage=None)
+
+    responses = iter(
+        [
+            response("incomplete", "{}"),
+            response("completed", "not-json"),
+            response("completed", json.dumps({"unexpected": {}})),
+        ]
+    )
+    client = SimpleNamespace(
+        responses=SimpleNamespace(create=lambda **kwargs: calls.append(kwargs) or next(responses))
+    )
+    planner = OpenAILunaExperimentalPlanner(client, schema, CONTEXT)
+    with pytest.raises(RequestPlanningError, match="non-empty"):
+        planner.plan(" ")
+    with pytest.raises(RequestPlanningError, match="not completed"):
+        planner.plan("one")
+    with pytest.raises(RequestPlanningError, match="malformed JSON"):
+        planner.plan("two")
+    with pytest.raises(RequestPlanningError, match="wrapper"):
+        planner.plan("three")
+    assert len(calls) == 3
 
 
 def test_evaluator_forces_escalation_for_historical_domain_date_pattern(
@@ -428,7 +498,8 @@ def test_cost_accounting_keeps_counters_separate_and_missing_usage_unavailable()
         {},
         {"gpt-5.6-luna": rates},
     )
-    assert unavailable.sol_always_usd is None and unavailable.luna_first_usd is None
+    assert unavailable.sol_always_usd is None
+    assert unavailable.luna_first_usd is None
 
 
 def _assert_provider_objects_closed(node: Any) -> None:

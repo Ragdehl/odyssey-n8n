@@ -19,7 +19,6 @@ from odyssey_core.request_planning import (
     DelegateAction,
     PlannerClarification,
     RequestPlan,
-    RequestPlanningError,
     RetrieveAction,
     SelectionCriteria,
     WriteAction,
@@ -134,7 +133,7 @@ def evaluate_payload(
     """Validate an untrusted inner payload, then evaluate semantics without execution."""
     try:
         result = validate_luna_experimental_result(payload, schema)
-    except (RequestPlanningError, ValueError, TypeError):
+    except (ValueError, TypeError):
         return Evaluation(case_id, Classification.INVALID_FAIL_CLOSED, ("invalid_result",))
     return evaluate_result(case_id, result, oracle)
 
