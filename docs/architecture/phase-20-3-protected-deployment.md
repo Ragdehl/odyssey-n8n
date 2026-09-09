@@ -1,6 +1,6 @@
 # Phase 20.3 — Protected Raspberry/Cloudflare deployment + E2E
 
-Status: **20.3A repository/security preparation**. No Cloudflare, network, credential, deployment, or real-vault mutation is authorized by this document.
+Status: **20.3B partially complete — runtime activation complete; Cloudflare control-plane work blocked**.
 
 ## Objective
 
@@ -235,3 +235,34 @@ Rollback is to disable/remove only the Odyssey hostname route and its Odyssey-sp
 host policy, leaving n8n administration/OAuth/MCP, the private runtime, and vault data unchanged.
 The current routing does not support a safe public Odyssey hostname until these protections are in
 place; no Phase 20.3B mutation was performed in 20.3A.
+
+## Recovery evidence — 2026-09-09
+
+The interrupted deployment session was audited before any new deployment write. The result was
+**state A**: no Phase 20.3B Cloudflare mutation had occurred. `odyssey.ragdehl.com` still had no
+DNS record or tunnel route, and no Odyssey-specific Access application, policy, or alternate-host
+protection was present in the observed control-plane state. No public security probe was replayed
+while that bypass remained open.
+
+The only authorized recovery mutation was restarting the existing Odyssey runtime. The service is
+now active as `odyssey-phase20-2f-runtime.service`, PID `182642`, started at `2026-09-09 22:55:49
+CEST`. A provider-free local composition inspection reported:
+
+```text
+model=gpt-5.6-luna
+reasoning_effort=medium
+examples=10
+```
+
+The existing n8n container, loopback binding, Tailscale Serve mapping, DNS operating state, and
+real-vault boundary were not changed. The runtime token-run process remains connected to the
+existing tunnel, but this host exposes no Cloudflare control-plane API credential or management
+connector with which to create/read back routes and Access resources. Consequently the protected
+hostname, Access policy, tunnel-side JWT validation, alternate-host path protection, and their
+unauthenticated probes remain pending; no provider call, Odyssey action, or vault mutation was
+caused by recovery.
+
+The exact next authorized operation requires Cloudflare control-plane access for the existing
+account/tunnel. It must create only the dedicated hostname and narrow five-path protection, then
+read back the non-secret identifiers and run the bounded probes. Do not substitute the tunnel
+runtime token, add a broad n8n policy, or run the probes before that protection exists.
