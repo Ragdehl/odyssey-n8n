@@ -81,6 +81,16 @@ def frozen_cases() -> list[dict[str, str]]:
     return cases["cases"]
 
 
+def _run_set(planner, cases, oracles, evidence, set_name: str, evaluator_factory) -> bool:
+    """Run one labeled set and report whether a stop classification occurred."""
+    for case in cases:
+        evaluator = evaluator_factory(case["id"])
+        classification = _run_one(planner, case, oracles[case["id"]], evidence, set_name, evaluator)
+        if classification in {"UNSAFE_NON_ESCALATION", "INVALID_FAIL_CLOSED"}:
+            return True
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the closed future gate only with explicit authorization."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -98,25 +108,24 @@ def main(argv: list[str] | None = None) -> int:
         planner = OpenAILunaExperimentalPlanner.from_environment(
             schema, cases_payload["fixed_context"]
         )
-        for case in frozen_cases():
-            classification = _run_one(
-                planner, case, atomic_oracles[case["id"]], evidence, "held_out", evaluate_atomicity
-            )
-            if classification in {"UNSAFE_NON_ESCALATION", "INVALID_FAIL_CLOSED"}:
-                return 0
-        for case in sentinel_cases:
-            classification = _run_one(
-                planner,
-                case,
-                v2_oracles[case["id"]],
-                evidence,
-                "regression_sentinel",
-                lambda result, oracle, case_id=case["id"]: evaluate_result_v2(
-                    case_id, result, oracle
-                ),
-            )
-            if classification in {"UNSAFE_NON_ESCALATION", "INVALID_FAIL_CLOSED"}:
-                return 0
+        if _run_set(
+            planner,
+            frozen_cases(),
+            atomic_oracles,
+            evidence,
+            "held_out",
+            lambda _: evaluate_atomicity,
+        ):
+            return 0
+        if _run_set(
+            planner,
+            sentinel_cases,
+            v2_oracles,
+            evidence,
+            "regression_sentinel",
+            lambda case_id: lambda result, oracle: evaluate_result_v2(case_id, result, oracle),
+        ):
+            return 0
     return 0
 
 
