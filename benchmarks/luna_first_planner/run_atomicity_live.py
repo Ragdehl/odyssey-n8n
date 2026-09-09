@@ -31,11 +31,12 @@ def _run_one(planner, case, oracle, evidence, set_name: str, evaluate):
         result = planner.plan(case["request"])
         if set_name == "held_out" and hasattr(result, "actions"):
             outcome = evaluate(result, oracle)
-            classification = (
-                "SEMANTIC_REVIEW"
-                if outcome.safe_structure and outcome.semantic_review
-                else ("SAFE_PLAN" if outcome.safe_structure else "UNSAFE_NON_ESCALATION")
-            )
+            if not outcome.safe_structure:
+                classification = "UNSAFE_NON_ESCALATION"
+            elif outcome.semantic_review:
+                classification = "SEMANTIC_REVIEW"
+            else:
+                classification = "SAFE_PLAN"
             row = {
                 "findings": outcome.findings,
                 "semantic_review": outcome.semantic_review,
