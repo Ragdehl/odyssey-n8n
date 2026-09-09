@@ -37,6 +37,9 @@ from benchmarks.luna_first_planner.evaluate_v2 import (
 from benchmarks.luna_first_planner.evaluate_v2 import (
     Classification as ClassificationV2,
 )
+from benchmarks.luna_first_planner.run_atomicity_final_continuation import (
+    FINAL_CONTINUATION_IDS,
+)
 from benchmarks.luna_first_planner.run_atomicity_live import _run_one, _run_set
 from benchmarks.luna_first_planner.run_continuation import (
     CONTINUATION_CASE_IDS,
@@ -669,6 +672,11 @@ def test_atomicity_runner_does_not_stop_for_safe_non_plan_results() -> None:
     )
     assert stopped is False
     assert planner.calls == 2
+
+
+def test_final_atomicity_continuation_is_closed_to_unattempted_cases() -> None:
+    """The final runner cannot accidentally reattempt an earlier live case."""
+    assert FINAL_CONTINUATION_IDS == ("SE01", "SA02")
 
 
 def test_v2_exclusive_reservation_prevents_provider_calls(
