@@ -185,7 +185,9 @@ def _replace_planner_provider_calls(
         replace(stage, provider_calls=calls) if stage.name == "planner" else stage
         for stage in result.operational.stages
     )
-    return replace(result, operational=replace(result.operational, stages=stages))
+    return cast(
+        ApplicationResult, replace(result, operational=replace(result.operational, stages=stages))
+    )
 
 
 def _path_env(name: str, default: str) -> Path:

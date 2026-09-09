@@ -641,6 +641,29 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     assert runtime.execute("hello").request_id == "request-test"
 
 
+def test_composition_replaces_only_planner_provider_evidence() -> None:
+    """Exact Luna/Sol call evidence replaces only the synthetic planner stage."""
+    calls = (ProviderCallEvidence("planner.luna", OperationalOutcome.COMPLETED),)
+    result = ApplicationResult(
+        request_id="request-evidence",
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=(),
+        operational=OperationalEvidence(
+            stages=(
+                OperationalStage("planner", OperationalOutcome.COMPLETED),
+                OperationalStage("writer", OperationalOutcome.SKIPPED),
+            )
+        ),
+    )
+
+    replaced = composition._replace_planner_provider_calls(result, calls)
+
+    assert replaced.operational.stages[0].provider_calls == calls
+    assert replaced.operational.stages[1].provider_calls == ()
+    assert composition._replace_planner_provider_calls(result, ()) is result
+
+
 def test_runtime_entrypoint_passes_environment_transport_settings(monkeypatch) -> None:
     """The process entrypoint passes explicit host and port settings to the adapter."""
     calls: list[tuple[str, int]] = []

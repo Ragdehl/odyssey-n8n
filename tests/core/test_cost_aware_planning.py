@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from odyssey_core import cost_aware_planning
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.experimental_luna_planning import PlannerEscalation
 from odyssey_core.request_planning import (
@@ -153,3 +154,48 @@ def test_empty_request_makes_no_provider_call() -> None:
 
     assert luna.calls == 0
     assert sol.calls == 0
+
+
+def test_from_environment_builds_both_provider_boundaries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Production construction wires one Luna first pass and one Sol fallback."""
+    luna = object()
+    sol = object()
+    monkeypatch.setattr(
+        cost_aware_planning.OpenAILunaExperimentalPlanner,
+        "from_environment",
+        classmethod(lambda cls, schema, context: luna),
+    )
+    monkeypatch.setattr(
+        cost_aware_planning.OpenAIRequestPlanner,
+        "from_environment",
+        classmethod(lambda cls, schema, context: sol),
+    )
+
+    planner = LunaFirstRequestPlanner.from_environment({}, {"timezone": "Europe/Paris"})
+
+    assert planner._luna is luna
+    assert planner._sol is sol
+
+
+def test_unsupported_luna_result_fails_closed_without_sol() -> None:
+    """A validated boundary must not let an unknown Luna result through."""
+    luna = _FakePlanner(object())
+    sol = _FakePlanner(RequestPlan(actions=(), limitations=()))
+
+    with pytest.raises(TypeError, match="unsupported planner result"):
+        _planner(luna, sol).plan("What do I know about Odyssey?")
+
+    assert luna.calls == 1
+    assert sol.calls == 0
+
+
+def test_unsupported_sol_fallback_result_fails_closed() -> None:
+    """A fallback result outside the production contract remains rejected."""
+    luna = _FakePlanner(error=RequestPlanningError("invalid Luna result"))
+    sol = _FakePlanner(object())
+
+    with pytest.raises(TypeError, match="unsupported planner result"):
+        _planner(luna, sol).plan("What do I know about Odyssey?")
+
+    assert luna.calls == 1
+    assert sol.calls == 1

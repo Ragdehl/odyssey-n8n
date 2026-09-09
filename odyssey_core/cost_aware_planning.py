@@ -28,6 +28,7 @@ from odyssey_core.request_planning import (
 )
 
 LUNA_FIRST_REASONING_EFFORT = "low"
+LUNA_PROVIDER_STAGE = "planner.luna"
 
 
 class LunaFirstRequestPlanner:
@@ -71,7 +72,7 @@ class LunaFirstRequestPlanner:
             result = self._luna.plan(request)
         except RequestPlanningError as error:
             self._append_call(
-                "planner.luna",
+                LUNA_PROVIDER_STAGE,
                 self._luna,
                 OperationalOutcome.FAILED,
                 luna_started,
@@ -80,14 +81,16 @@ class LunaFirstRequestPlanner:
             return self._plan_with_sol(request)
         except Exception as error:
             self._append_call(
-                "planner.luna",
+                LUNA_PROVIDER_STAGE,
                 self._luna,
                 OperationalOutcome.FAILED,
                 luna_started,
                 error,
             )
             raise
-        self._append_call("planner.luna", self._luna, OperationalOutcome.COMPLETED, luna_started)
+        self._append_call(
+            LUNA_PROVIDER_STAGE, self._luna, OperationalOutcome.COMPLETED, luna_started
+        )
 
         if isinstance(result, PlannerEscalation):
             self._sync_final_metadata(self._luna)
