@@ -53,7 +53,7 @@ class LunaFirstRequestPlanner:
     @classmethod
     def from_environment(
         cls, schema: dict[str, Any], current_context: dict[str, str]
-    ) -> "LunaFirstRequestPlanner":
+    ) -> LunaFirstRequestPlanner:
         """Build the validated Luna first pass and established Sol fallback from environment."""
         return cls(
             OpenAILunaExperimentalPlanner.from_environment(schema, current_context),
