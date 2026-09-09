@@ -39,7 +39,8 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2C planner incident hardening + focused live gate          ✅ complete
 20.2D Luna-first planner experiment preparation               ✅ complete
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
-20.2F Luna-first production planning + bounded Sol fallback   ➡️ next
+20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
+20.2G contextual reasoner Luna replacement gate               ➡️ next
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -80,16 +81,25 @@ unchanged production RequestPlan validator. Production routing remains Sol/low. 
 Complete live gate, with final offline human/contract adjudication recorded in the linked phase
 document. Luna inherited the strongest established Sol/low RequestPlan semantic instructions; the
 17-case atomicity/decomposition benchmark produced zero genuine unsafe non-escalations and zero
-genuine fail-closed results. This was the bounded gate before any production Luna-first -> Sol
-fallback implementation; production routing remains Sol and implementation is not activated here.
+genuine fail-closed results. This was the bounded gate before production Luna-first routing.
 
 ### 20.2F — Luna-first production planning
 
-Current adoption gate. Reuse the exact Phase 20.2E Luna/low provider boundary as the production first
-pass. Safe Luna PLAN results execute directly; CLARIFY and ESCALATE remain non-executing and ask the
-user rather than granting a stronger model authority to guess missing truth. A bounded fail-closed
-Luna structured-result error may make one Sol/low fallback call. Per-model provider usage must remain
-separately observable. See [Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
+Complete. Production planning now uses the validated Luna/low provider boundary first, returns safe
+PLAN/CLARIFY results directly, converts Luna ESCALATE into non-executing user clarification, and
+retains one Sol/low fallback only for bounded structured fail-closed errors. Separate provider-call
+telemetry preserves the real Luna/Sol usage split. The merged runtime was deployed and a production
+smoke confirmed Luna-first planning active. See
+[Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
+
+### 20.2G — contextual reasoner Luna replacement gate
+
+Current cost-reduction gate. The remaining normal Sol/medium use is contextual entity resolution.
+Test Luna/medium first while preserving the established few-shot prompt, candidate evidence, output
+contract, and reasoning effort. The bounded eight-case gate includes the historical A19 false
+resolution as a mandatory safety sentinel. No production contextual-model change occurs until the
+live gate passes and is reviewed. See
+[Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
 
 ### 20.3 — protected deployment
 
@@ -127,7 +137,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 🔄 **Cost-aware planning:** Phase 20.2F is the active production-adoption gate following the successful 20.2E Luna prompt-parity evidence. The first cut routes safe Luna results directly, asks the user on Luna abstention, and retains Sol/low only as a single fail-closed structured-result fallback. See [Phase 20.2F](phase-20-2f-luna-first-production.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 🔄 **Cost-aware model routing:** Luna-first production planning is complete. Phase 20.2G now tests whether the remaining contextual Sol/medium reasoner can also move to Luna without repeating the full historical model-selection benchmark. See [Phase 20.2G](phase-20-2g-contextual-luna-gate.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
