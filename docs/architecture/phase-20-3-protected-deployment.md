@@ -37,8 +37,8 @@ Phase 20.3 is complete only when retained evidence shows all of the following:
 1. `odyssey.ragdehl.com` (or the explicitly approved equivalent product hostname) is a distinct product hostname from the n8n administration hostname.
 2. An unauthenticated request to the Odyssey hostname is rejected by Cloudflare Access before n8n, the runtime, any provider, or the vault is reached.
 3. The Cloudflare Tunnel ingress for the Odyssey hostname validates the Access application JWT before proxying traffic to n8n (`Protect with Access` / equivalent origin validation).
-4. The Odyssey product boundary rejects requests that arrive through a non-product hostname, so the same n8n webhook paths cannot be used through `n8n.ragdehl.com` to bypass the Odyssey Access policy.
-5. The existing `n8n.ragdehl.com` administration/OAuth/MCP behavior is not broadened or silently placed behind the Odyssey product policy.
+4. Every alternate public hostname/path that can reach the same Odyssey product webhooks is also covered by Access or an explicit deny rule. In particular, direct product-webhook requests through `n8n.ragdehl.com` must be blocked before the workflow executes.
+5. The existing `n8n.ragdehl.com` administration/OAuth/MCP behavior is not broadly placed behind the Odyssey product policy; only the Odyssey product paths are covered there when needed to close the bypass.
 6. The browser page and `/api/request` remain same-origin; no permissive CORS or browser-held provider secret is introduced.
 7. First public-path E2E evidence uses disposable/non-personal knowledge and demonstrates:
    - protected page load in Chrome on Android;
@@ -72,9 +72,11 @@ The existing system already has the correct semantic and execution boundaries:
 browser -> n8n product workflow -> private runtime -> Core
 ```
 
-The missing responsibility is Internet access control, not another application layer. Cloudflare Access can authenticate the browser before the request reaches n8n, while `cloudflared` can validate the Access JWT at the tunnel/origin boundary. The product workflow then needs only a narrow expected-host check to prevent an alternate public hostname on the same n8n instance from becoming a bypass path.
+The missing responsibility is Internet access control, not another application layer. Cloudflare Access can authenticate the browser before the request reaches n8n, while `cloudflared` can validate the Access JWT at the tunnel/origin boundary.
 
-This keeps authentication outside Odyssey Core, leaves provider credentials server-side, and preserves the existing same-origin browser contract.
+Because the same n8n instance also has an administration hostname, Phase 20.3 must additionally protect or deny the exact Odyssey product webhook paths on that alternate public hostname. Cloudflare Access supports path-scoped applications/policies, so this anti-bypass rule can remain at the edge instead of adding hostname/authentication logic to Odyssey or n8n workflow code.
+
+This keeps authentication outside Odyssey Core, leaves provider credentials server-side, preserves the existing same-origin browser contract, and avoids breaking the already-working private/Tailscale product path.
 
 ### Defense in depth
 
@@ -83,14 +85,14 @@ The required public-path security boundary is:
 ```text
 request
   |
-  +-- wrong / unauthenticated Odyssey session
+  +-- unauthenticated Odyssey hostname
   |      -> Cloudflare Access blocks
   |
-  +-- Access token invalid or missing at tunnel ingress
+  +-- Access token invalid/missing at Odyssey tunnel ingress
   |      -> cloudflared blocks
   |
-  +-- request reaches Odyssey workflow through wrong public hostname
-  |      -> product boundary rejects before runtime/provider
+  +-- direct n8n admin-host request to an Odyssey product path
+  |      -> path-scoped Access / explicit deny blocks
   |
   `-- authorized product request
          -> existing validated Odyssey flow
@@ -106,19 +108,19 @@ These are the intended defaults but the actual security/network mutation still r
 - Access model: one self-hosted Cloudflare Access application, deny by default, with an Allow policy only for the approved user identity.
 - Tunnel origin validation: enable Cloudflare Tunnel `Protect with Access` for the Odyssey public-hostname ingress using the Access application audience tag.
 - Origin: existing n8n service; do not expose the Python Odyssey runtime publicly.
-- Product-host anti-bypass: validate the expected product hostname at the n8n product boundary before calling runtime/provider-backed nodes.
-- n8n administration hostname: remain logically separate and unchanged by the Odyssey product Access policy.
+- Alternate-host anti-bypass: cover the exact Odyssey product webhook/static paths under `n8n.ragdehl.com` with path-scoped Access or an explicit deny policy; do not protect unrelated n8n admin/OAuth/MCP paths.
+- n8n administration hostname: remain logically separate and otherwise unchanged by the Odyssey product policy.
 
 ## Implementation sequence
 
-### 20.3A — repository preparation
+### 20.3A — repository/security preparation
 
 Safe/reversible work before security mutation:
 
-- add deterministic product-host validation to the Odyssey Online static and request boundaries;
-- test correct-host acceptance and wrong-host rejection;
-- keep rejection deterministic and before runtime/provider execution;
-- document the exact deploy/rollback evidence checklist.
+- preserve the existing browser/workflow behavior unchanged unless deployment evidence demonstrates a code change is necessary;
+- inventory the exact Odyssey product webhook/static paths that must be covered on every public hostname;
+- define unauthenticated, alternate-host, authenticated, and rollback checks;
+- document the exact deploy/evidence checklist.
 
 ### 20.3B — protected Cloudflare route
 
@@ -127,7 +129,8 @@ Requires explicit human approval before execution:
 - create/confirm the Odyssey public hostname and tunnel ingress;
 - create the Access self-hosted application and one-user Allow policy;
 - enable tunnel-side Access JWT validation;
-- confirm unauthenticated and wrong-host requests are blocked without downstream execution.
+- add path-scoped Access/deny coverage for the same Odyssey product paths on `n8n.ragdehl.com`;
+- confirm unauthenticated and alternate-host requests are blocked without downstream execution.
 
 ### 20.3C — disposable-data E2E
 
@@ -147,8 +150,9 @@ Requires separate explicit human approval after the disposable E2E passes. No re
 Rollback must be simpler than activation:
 
 1. disable/remove the Odyssey public hostname route or Access application association;
-2. leave `n8n.ragdehl.com`, OAuth/MCP, the private runtime, and the real vault unchanged;
-3. keep repository code and evidence for review rather than deleting history.
+2. remove only the Odyssey-specific path policy on `n8n.ragdehl.com` if rollback requires it;
+3. leave the rest of `n8n.ragdehl.com`, OAuth/MCP, the private runtime, and the real vault unchanged;
+4. keep repository code and evidence for review rather than deleting history.
 
 A failed public-path test means the product route stays disabled; it does not justify weakening Access or exposing the runtime directly.
 
@@ -158,6 +162,7 @@ Only deployment-time values remain open:
 
 - approved Access identity / identity provider;
 - confirmation of `odyssey.ragdehl.com` as the final product hostname;
-- exact Cloudflare dashboard/API mechanics available on the current account.
+- exact Cloudflare dashboard/API mechanics available on the current account;
+- exact production webhook URL prefixes generated by the deployed n8n workflows, to scope the alternate-host path policy without affecting unrelated n8n routes.
 
 None of these require a change to Odyssey's semantic architecture.
