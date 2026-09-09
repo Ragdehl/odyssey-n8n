@@ -1,6 +1,6 @@
 # Phase 20.2F — Luna-first production planning
 
-Status: **implementation / adoption gate**.
+Status: **implementation complete; planner-only live gate passed; deployment remains separate**.
 
 ## Objective
 
@@ -67,3 +67,24 @@ planner can still provide a valid plan without changing user authority.
 
 None for the initial adoption gate. A future evidence-backed escalation reason may distinguish
 "stronger model useful" from "user input required"; the current safe default is to ask the user.
+
+## Planner-only live gate
+
+The authorized production-shape gate completed with exactly two Luna API calls and one Sol API
+call, all with zero automatic retries. Case A (`What do I know about Odyssey?`) returned a validated
+direct Luna `RequestPlan` with one retrieve action and no Sol call. Case B used the exact missing-
+authority sentinel and returned Luna `CLARIFY` as a non-executing user clarification with no Sol
+call. Case C injected a synthetic local Luna `RequestPlanningError` (zero provider calls for the
+synthetic first pass) and made exactly one real `gpt-5.6-sol` / low fallback call, which returned a
+validated `RequestPlan` with one retrieve action.
+
+The bounded evidence is retained in the gitignored
+`benchmarks/.live-results/luna-first-production-20.2f-live.jsonl`. It contains only case IDs, route
+and result-kind metadata, bounded provider status/model/reasoning/attempt/usage fields, and the
+synthetic-failure marker; it contains no raw payloads, prompts, or hidden reasoning. The supplied
+usage counters imply an estimated **$0.04541422** under the dated repository pricing snapshot;
+cache-write counters were not supplied, so this is an estimate rather than an invoice total.
+
+No Odyssey actions executed, no vault or pending-work state changed, and no deployment or production
+routing change occurred. Raspberry deployment and any production activation remain separate human
+review and authorization gates.
