@@ -19,7 +19,11 @@ from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.materialization import OpenAILunaWriter
-from odyssey_core.observability import OperationalOutcome, OperationalStage, ProviderCallEvidence
+from odyssey_core.observability import (
+    OperationalOutcome,
+    OperationalStage,
+    ProviderCallEvidence,
+)
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
@@ -134,7 +138,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         planner = LunaFirstRequestPlanner.from_environment(schema, planner_context)
-        request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
+        request_id_factory = (
+            (lambda: request_id) if request_id is not None else allocate_request_id
+        )
         result = execute_request(
             user_request,
             planner=planner,
