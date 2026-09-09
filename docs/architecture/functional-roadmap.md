@@ -36,6 +36,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.1B focused live answerer model evidence                    ✅ complete
 20.2A mobile web source + offline deterministic checks        ✅ complete
 20.2B real n8n serving + Chrome Android validation            ✅ complete
+20.2C planner incident hardening + focused live gate          🔄 in review
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -53,9 +54,17 @@ physical Chrome/Android checkpoint covers the mobile UI, bounded delivery failur
 and explicit same-`request_id` Retry behavior. The detailed retained evidence belongs to the linked
 Phase 20 document rather than being duplicated here.
 
-After PR #89 is merged by a human, the stacked planner incident hardening in PR #92 follows it. PR #92
-must return to normal CI and review before any separately authorized provider-backed Android gate;
-Phase 20.3 remains a distinct planned security/deployment boundary.
+PR #89 is merged. Its former stacked follow-up, PR #92, closed automatically when the merged feature
+branch was removed; the fresh 20.2C branch and pull request supersede that implementation without
+rewriting or deleting the historical branch. Phase 20.3 remains a distinct planned
+security/deployment boundary.
+
+### 20.2C — planner incident hardening
+
+The first focused Sol/low live evidence gate has completed once. Deterministic hardening and bounded
+post-parse validation diagnostics remain under review; follow-up live calls require separate human
+authorization. See
+[Planner incident hardening](planner-incident-hardening.md).
 
 ### 20.3 — protected deployment
 

@@ -7,6 +7,8 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
+from functools import wraps
 from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
@@ -20,6 +22,9 @@ from odyssey_core.planner_capabilities import (
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
+PLANNER_MAX_OUTPUT_TOKENS = 4096
+PLANNER_AUTOMATIC_RETRIES = 0
+PLANNER_CLARIFICATION_CODES = ("UNRECOGNIZED_REQUEST",)
 WRITE_INTENTS = ("record", "amend", "remove", "delete")
 _PROPERTY_OPS = ("set", "remove")
 _TAG_CHANGE_OPS = ("add", "remove")
@@ -28,7 +33,9 @@ _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
-_PROMPT_TEMPLATE = """You convert one user request into one strict JSON RequestPlan. Use the supplied current date, time, and timezone.
+_PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerResult. Use the supplied current date, time, and timezone.
+
+Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, and link_scope. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
@@ -68,8 +75,76 @@ Planner writable type/property capabilities (derived dynamically from the same c
 {{WRITE_CAPABILITIES}}"""
 
 
+class PlannerValidationStage(StrEnum):
+    """Allowlisted local boundary that rejected decoded planner output."""
+
+    PLANNER_RESULT_ENVELOPE = "PLANNER_RESULT_ENVELOPE"
+    REQUEST_PLAN = "REQUEST_PLAN"
+    RETRIEVE_ACTION = "RETRIEVE_ACTION"
+    WRITE_ACTION = "WRITE_ACTION"
+    KNOWLEDGE_UNIT = "KNOWLEDGE_UNIT"
+    DELEGATE_ACTION = "DELEGATE_ACTION"
+    SELECTION = "SELECTION"
+    LINK_SCOPE = "LINK_SCOPE"
+    NOTE_SELECTOR = "NOTE_SELECTOR"
+    FILTER = "FILTER"
+    PROPERTY_CHANGE = "PROPERTY_CHANGE"
+    TAG_CHANGE = "TAG_CHANGE"
+    REFERENCE = "REFERENCE"
+
+
+class PlannerValidationCode(StrEnum):
+    """Small stable vocabulary for bounded local validation diagnostics."""
+
+    INVALID_FIELDS = "INVALID_FIELDS"
+    EMPTY_QUERY = "EMPTY_QUERY"
+    INVALID_TYPE = "INVALID_TYPE"
+    INVALID_FILTER = "INVALID_FILTER"
+    INVALID_REFERENCE = "INVALID_REFERENCE"
+    INVALID_CARDINALITY = "INVALID_CARDINALITY"
+    INVALID_MUTATION = "INVALID_MUTATION"
+    INVALID_LIMITATIONS = "INVALID_LIMITATIONS"
+    EMPTY_REQUEST = "EMPTY_REQUEST"
+
+
 class RequestPlanningError(ValueError):
-    """Indicate malformed, unsupported, or unsafe RequestPlan model output."""
+    """Indicate malformed, unsupported, or unsafe RequestPlan model output.
+
+    ``validation_stage`` and ``validation_code`` are bounded, optional metadata.  The
+    exception message remains compatible with existing callers and is never used as telemetry.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stage: PlannerValidationStage | None = None,
+        code: PlannerValidationCode | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.validation_stage = stage
+        self.validation_code = code
+
+
+def _validation_boundary(
+    stage: PlannerValidationStage,
+    code: PlannerValidationCode = PlannerValidationCode.INVALID_FIELDS,
+):
+    """Attach stable boundary metadata without inspecting exception text or payloads."""
+
+    def decorate(function):
+        @wraps(function)
+        def wrapped(*args, **kwargs):
+            try:
+                return function(*args, **kwargs)
+            except RequestPlanningError as error:
+                if error.validation_stage is not None:
+                    raise
+                raise RequestPlanningError(str(error), stage=stage, code=code) from error
+
+        return wrapped
+
+    return decorate
 
 
 class ResponsesClient(Protocol):
@@ -186,6 +261,16 @@ class RequestPlan:
 
     actions: tuple[RequestAction, ...]
     limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PlannerClarification:
+    """Represent a closed non-executing request for user clarification."""
+
+    code: str
+
+
+PlannerResult = RequestPlan | PlannerClarification
 
 
 def plan_fact_ordinals(plan: RequestPlan) -> tuple[tuple[int, ...], ...]:
@@ -380,6 +465,97 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the closed production result envelope around a plan or clarification.
+
+    Args:
+        schema: Parsed canonical Odyssey schema used by the nested RequestPlan contract.
+
+    Returns:
+        A strict object schema whose PLAN/CLARIFY alternatives mirror local envelope invariants.
+    """
+    plan_schema = request_plan_json_schema(schema)
+    required = ["outcome", "actions", "limitations", "clarification_code"]
+    plan_branch = {
+        "type": "object",
+        "properties": {
+            "outcome": {"type": "string", "enum": ["PLAN"]},
+            "actions": plan_schema["properties"]["actions"],
+            "limitations": plan_schema["properties"]["limitations"],
+            "clarification_code": {"type": "null"},
+        },
+        "required": required,
+        "additionalProperties": False,
+    }
+    clarify_branch = {
+        "type": "object",
+        "properties": {
+            "outcome": {"type": "string", "enum": ["CLARIFY"]},
+            "actions": {"type": "null"},
+            "limitations": {"type": "null"},
+            "clarification_code": {
+                "type": "string",
+                "enum": list(PLANNER_CLARIFICATION_CODES),
+            },
+        },
+        "required": required,
+        "additionalProperties": False,
+    }
+    # Structured Outputs rejects a root-level anyOf; keep the root closed and
+    # place the discriminated union beneath the required result property.
+    return {
+        "type": "object",
+        "properties": {"result": {"anyOf": [plan_branch, clarify_branch]}},
+        "required": ["result"],
+        "additionalProperties": False,
+    }
+
+
+@_validation_boundary(PlannerValidationStage.PLANNER_RESULT_ENVELOPE)
+def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerResult:
+    """Validate the production planner envelope without executing either outcome.
+
+    Args:
+        payload: Untrusted decoded provider output.
+        schema: Active canonical schema used to validate a nested RequestPlan.
+
+    Returns:
+        A validated RequestPlan or a closed non-executing clarification.
+
+    Raises:
+        RequestPlanningError: If the discriminator, payload combination, or nested plan is invalid.
+    """
+    if not isinstance(payload, dict) or set(payload) != {
+        "outcome",
+        "actions",
+        "limitations",
+        "clarification_code",
+    }:
+        raise RequestPlanningError("PlannerResult must contain only its required fields")
+    outcome = payload["outcome"]
+    if outcome == "PLAN":
+        if (
+            payload["clarification_code"] is not None
+            or not isinstance(payload["actions"], list)
+            or not isinstance(payload["limitations"], list)
+        ):
+            raise RequestPlanningError("PLAN must contain actions and limitations only")
+        return validate_request_plan(
+            {"actions": payload["actions"], "limitations": payload["limitations"]}, schema
+        )
+    if outcome == "CLARIFY":
+        code = payload["clarification_code"]
+        if (
+            payload["actions"] is not None
+            or payload["limitations"] is not None
+            or code not in PLANNER_CLARIFICATION_CODES
+        ):
+            raise RequestPlanningError("CLARIFY must contain one supported code and no actions")
+        return PlannerClarification(code)
+    raise RequestPlanningError("PlannerResult outcome is unsupported")
+
+
+@_validation_boundary(PlannerValidationStage.REQUEST_PLAN)
 def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPlan:
     """Validate untrusted model output and return an immutable non-executing plan.
 
@@ -406,7 +582,11 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
         or len(limitations) != len(set(limitations))
         or not all(isinstance(item, str) and item in LIMITATIONS for item in limitations)
     ):
-        raise RequestPlanningError("RequestPlan limitations are invalid")
+        raise RequestPlanningError(
+            "RequestPlan limitations are invalid",
+            stage=PlannerValidationStage.REQUEST_PLAN,
+            code=PlannerValidationCode.INVALID_LIMITATIONS,
+        )
     actions = tuple(
         _validate_action(action, schema, retrieval_capabilities, write_capabilities)
         for action in raw_actions
@@ -438,6 +618,18 @@ class OpenAIRequestPlanner:
         self.reasoning_effort = PLANNER_REASONING_EFFORT
         self.last_usage: dict[str, int] | None = None
         self.last_call = False
+        self.last_attempt_count = 0
+        self.last_response_id: str | None = None
+        self.last_provider_status: str | None = None
+        self.last_incomplete_reason: str | None = None
+        self.last_output_text_chars: int | None = None
+        self.last_output_text_bytes: int | None = None
+        self.last_parse_status: str | None = None
+        self.last_result_kind: str | None = None
+        self.last_result_counts: dict[str, int] | None = None
+        self.last_error_category: str | None = None
+        self.last_validation_stage: str | None = None
+        self.last_validation_code: str | None = None
 
     @classmethod
     def from_environment(
@@ -461,16 +653,16 @@ class OpenAIRequestPlanner:
             from openai import OpenAI
         except ImportError as error:
             raise RequestPlanningError("Install the OpenAI SDK for request planning") from error
-        return cls(OpenAI(), schema, current_context)
+        return cls(OpenAI(max_retries=PLANNER_AUTOMATIC_RETRIES), schema, current_context)
 
-    def plan(self, request: str) -> RequestPlan:
+    def plan(self, request: str) -> PlannerResult:
         """Interpret one non-empty user request and fail closed on invalid model output.
 
         Args:
             request: User request to interpret as one ordered RequestPlan.
 
         Returns:
-            A locally validated RequestPlan that has not been executed.
+            A locally validated RequestPlan or non-executing clarification outcome.
 
         Raises:
             RequestPlanningError: If the request, provider call, JSON response, or plan is invalid.
@@ -480,12 +672,26 @@ class OpenAIRequestPlanner:
             raise RequestPlanningError("Request text must be non-empty")
         self.last_call = False
         self.last_usage = None
+        self.last_attempt_count = 0
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_incomplete_reason = None
+        self.last_output_text_chars = None
+        self.last_output_text_bytes = None
+        self.last_parse_status = None
+        self.last_result_kind = None
+        self.last_result_counts = None
+        self.last_error_category = None
+        self.last_validation_stage = None
+        self.last_validation_code = None
         self.last_call = True
+        self.last_attempt_count = 1
         try:
             response = self._client.responses.create(
                 model=PLANNER_MODEL,
                 reasoning={"effort": PLANNER_REASONING_EFFORT},
                 store=False,
+                max_output_tokens=PLANNER_MAX_OUTPUT_TOKENS,
                 input=[
                     {
                         "role": "system",
@@ -498,20 +704,123 @@ class OpenAIRequestPlanner:
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "odyssey_request_plan",
+                        "name": "odyssey_planner_result",
                         "strict": True,
-                        "schema": request_plan_json_schema(self._schema),
+                        "schema": planner_result_json_schema(self._schema),
                     }
                 },
             )
         except Exception as error:
+            self.last_error_category = _bounded_provider_metadata(type(error).__name__)
             raise RequestPlanningError("Request planner provider call failed") from error
         self.last_usage = normalize_provider_usage(response)
+        self.last_response_id = _bounded_provider_metadata(getattr(response, "id", None))
+        self.last_provider_status = _bounded_provider_metadata(getattr(response, "status", None))
+        incomplete_details = getattr(response, "incomplete_details", None)
+        incomplete_reason = (
+            incomplete_details.get("reason")
+            if isinstance(incomplete_details, Mapping)
+            else getattr(incomplete_details, "reason", None)
+        )
+        self.last_incomplete_reason = _bounded_provider_metadata(incomplete_reason)
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str):
+            self.last_output_text_chars = len(output_text)
+            self.last_output_text_bytes = len(output_text.encode("utf-8"))
+        if self.last_provider_status != "completed":
+            self.last_error_category = "IncompleteProviderResponse"
+            raise RequestPlanningError("Request planner provider response was not completed")
         try:
-            payload = json.loads(response.output_text)
+            payload = json.loads(output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:
+            self.last_parse_status = "failed"
+            self.last_error_category = "MalformedPlannerJSON"
             raise RequestPlanningError("Request planner returned malformed JSON") from error
-        return validate_request_plan(payload, self._schema)
+        self.last_parse_status = "succeeded"
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"result"}
+            or not isinstance(payload["result"], dict)
+        ):
+            self.last_error_category = "LocalPlannerValidationError"
+            self.last_validation_stage = PlannerValidationStage.PLANNER_RESULT_ENVELOPE.value
+            self.last_validation_code = PlannerValidationCode.INVALID_FIELDS.value
+            raise RequestPlanningError(
+                "Request planner result wrapper is invalid",
+                stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+                code=PlannerValidationCode.INVALID_FIELDS,
+            )
+        try:
+            result = validate_planner_result(payload["result"], self._schema)
+        except RequestPlanningError as error:
+            self.last_error_category = "LocalPlannerValidationError"
+            self.last_validation_stage = (
+                error.validation_stage.value if error.validation_stage is not None else None
+            )
+            self.last_validation_code = (
+                error.validation_code.value if error.validation_code is not None else None
+            )
+            raise
+        self.last_result_kind = "clarify" if isinstance(result, PlannerClarification) else "plan"
+        self.last_result_counts = _planner_result_counts(result)
+        return result
+
+
+def _bounded_provider_metadata(value: Any) -> str | None:
+    """Keep one short provider identifier/status value without response content."""
+    if not isinstance(value, str) or not value or len(value) > 128:
+        return None
+    if re.fullmatch(r"[A-Za-z0-9_.:-]+", value) is None:
+        return None
+    return value
+
+
+def _planner_result_counts(result: PlannerResult) -> dict[str, int]:
+    """Count only bounded structural categories from one validated planner result."""
+    counts = {
+        "actions": 0,
+        "units": 0,
+        "properties": 0,
+        "tag_changes": 0,
+        "facts": 0,
+        "references": 0,
+        "filters": 0,
+        "limitations": 0,
+    }
+    if isinstance(result, PlannerClarification):
+        return counts
+    counts["actions"] = len(result.actions)
+    counts["limitations"] = len(result.limitations)
+    for action in result.actions:
+        selection = None
+        if isinstance(action, RetrieveAction):
+            selection = action.plan
+        elif isinstance(action, WriteAction):
+            _count_write_action_structure(counts, action)
+        elif isinstance(action, DelegateAction):
+            selection = action.selection
+        if selection is not None:
+            counts["filters"] += _selection_filter_count(selection)
+    return counts
+
+
+def _count_write_action_structure(counts: dict[str, int], action: WriteAction) -> None:
+    """Add bounded structural counts for one validated write action."""
+    counts["units"] += len(action.units)
+    for unit in action.units:
+        counts["properties"] += len(unit.properties)
+        counts["tag_changes"] += len(unit.tag_changes)
+        counts["facts"] += len(unit.facts)
+        counts["references"] += len(unit.references)
+        counts["filters"] += _selection_filter_count(unit.target)
+
+
+def _selection_filter_count(selection: SelectionCriteria) -> int:
+    """Count direct and link-anchor filters without retaining their values."""
+    anchor_count = (
+        len(selection.link_scope.anchor.filters) if selection.link_scope is not None else 0
+    )
+    return len(selection.filters) + anchor_count
 
 
 def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
@@ -718,12 +1027,19 @@ def _validate_action(
         return _validate_delegate_action(action, schema, retrieval_capabilities)
     if action.get("kind") != "retrieve" or set(action) != {"kind", "plan"}:
         raise RequestPlanningError("RequestPlan action kind is invalid")
-    plan = _validate_selection(
-        action["plan"], schema, retrieval_capabilities, label="RetrievalPlan"
-    )
+    return _validate_retrieve_action(action, schema, retrieval_capabilities)
+
+
+@_validation_boundary(PlannerValidationStage.RETRIEVE_ACTION)
+def _validate_retrieve_action(
+    action: Mapping[str, Any], schema: Mapping[str, Any], capabilities: Mapping[str, Any]
+) -> RetrieveAction:
+    """Validate one retrieval action and its shared selection criteria."""
+    plan = _validate_selection(action["plan"], schema, capabilities, label="RetrievalPlan")
     return RetrieveAction(plan=plan)
 
 
+@_validation_boundary(PlannerValidationStage.DELEGATE_ACTION)
 def _validate_delegate_action(
     action: Mapping[str, Any], schema: Mapping[str, Any], capabilities: Mapping[str, Any]
 ) -> DelegateAction:
@@ -745,7 +1061,11 @@ def _validate_delegate_action(
         raise RequestPlanningError("DelegateAction fields are invalid")
     request, raw_selection = action["request"], action["selection"]
     if not isinstance(request, str) or not request.strip():
-        raise RequestPlanningError("DelegateAction request must be non-empty")
+        raise RequestPlanningError(
+            "DelegateAction request must be non-empty",
+            stage=PlannerValidationStage.DELEGATE_ACTION,
+            code=PlannerValidationCode.EMPTY_REQUEST,
+        )
     selection = (
         None
         if raw_selection is None
@@ -756,6 +1076,7 @@ def _validate_delegate_action(
     return DelegateAction(request=request.strip(), selection=selection)
 
 
+@_validation_boundary(PlannerValidationStage.SELECTION)
 def _validate_selection(
     raw: Any,
     schema: Mapping[str, Any],
@@ -790,16 +1111,28 @@ def _validate_selection(
     if entity is not None and (not isinstance(entity, str) or not entity.strip()):
         raise RequestPlanningError(f"{label} entity must be null or non-empty")
     if not isinstance(query, str) or not query.strip():
-        raise RequestPlanningError(f"{label} query must be non-empty")
+        raise RequestPlanningError(
+            f"{label} query must be non-empty",
+            stage=PlannerValidationStage.SELECTION,
+            code=PlannerValidationCode.EMPTY_QUERY,
+        )
     if note_type is not None and note_type not in capabilities["types"]:
-        raise RequestPlanningError(f"{label} type is invalid")
+        raise RequestPlanningError(
+            f"{label} type is invalid",
+            stage=PlannerValidationStage.SELECTION,
+            code=PlannerValidationCode.INVALID_TYPE,
+        )
     if not isinstance(raw_filters, list):
         raise RequestPlanningError(f"{label} filters must be a list")
     _validate_planner_filters(raw_filters, note_type, capabilities)
     try:
         validate_context_filters(dict(schema), raw_filters, note_type=note_type)
     except ValueError as error:
-        raise RequestPlanningError(f"{label} filters are invalid") from error
+        raise RequestPlanningError(
+            f"{label} filters are invalid",
+            stage=PlannerValidationStage.FILTER,
+            code=PlannerValidationCode.INVALID_FILTER,
+        ) from error
     link_scope = _validate_link_scope(raw.get("link_scope"), schema, capabilities, label=label)
     return SelectionCriteria(
         entity=entity.strip() if isinstance(entity, str) else None,
@@ -812,6 +1145,7 @@ def _validate_selection(
     )
 
 
+@_validation_boundary(PlannerValidationStage.NOTE_SELECTOR)
 def _validate_note_selector(
     raw: Any, schema: Mapping[str, Any], capabilities: Mapping[str, Any], *, label: str
 ) -> NoteSelector:
@@ -828,16 +1162,28 @@ def _validate_note_selector(
     if entity is not None and (not isinstance(entity, str) or not entity.strip()):
         raise RequestPlanningError(f"{label} entity must be null or non-empty")
     if not isinstance(query, str) or not query.strip():
-        raise RequestPlanningError(f"{label} query must be non-empty")
+        raise RequestPlanningError(
+            f"{label} query must be non-empty",
+            stage=PlannerValidationStage.NOTE_SELECTOR,
+            code=PlannerValidationCode.EMPTY_QUERY,
+        )
     if note_type is not None and note_type not in capabilities["types"]:
-        raise RequestPlanningError(f"{label} type is invalid")
+        raise RequestPlanningError(
+            f"{label} type is invalid",
+            stage=PlannerValidationStage.NOTE_SELECTOR,
+            code=PlannerValidationCode.INVALID_TYPE,
+        )
     if not isinstance(raw_filters, list):
         raise RequestPlanningError(f"{label} filters must be a list")
     _validate_planner_filters(raw_filters, note_type, capabilities)
     try:
         validate_context_filters(dict(schema), raw_filters, note_type=note_type)
     except ValueError as error:
-        raise RequestPlanningError(f"{label} filters are invalid") from error
+        raise RequestPlanningError(
+            f"{label} filters are invalid",
+            stage=PlannerValidationStage.FILTER,
+            code=PlannerValidationCode.INVALID_FILTER,
+        ) from error
     return NoteSelector(
         entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
@@ -848,6 +1194,7 @@ def _validate_note_selector(
     )
 
 
+@_validation_boundary(PlannerValidationStage.LINK_SCOPE)
 def _validate_link_scope(
     raw: Any, schema: Mapping[str, Any], capabilities: Mapping[str, Any], *, label: str
 ) -> LinkScope | None:
@@ -870,6 +1217,7 @@ def _validate_link_scope(
     )
 
 
+@_validation_boundary(PlannerValidationStage.WRITE_ACTION)
 def _validate_write_action(
     action: Mapping[str, Any],
     schema: Mapping[str, Any],
@@ -924,6 +1272,7 @@ def _validate_write_action(
     return WriteAction(units=units)
 
 
+@_validation_boundary(PlannerValidationStage.KNOWLEDGE_UNIT)
 def _validate_knowledge_unit(
     unit: Any,
     schema: Mapping[str, Any],
@@ -963,7 +1312,11 @@ def _validate_knowledge_unit(
     )
     cardinality = unit.get("cardinality", "one")
     if cardinality not in {"one", "all_matching"}:
-        raise RequestPlanningError("KnowledgeUnit cardinality is invalid")
+        raise RequestPlanningError(
+            "KnowledgeUnit cardinality is invalid",
+            stage=PlannerValidationStage.KNOWLEDGE_UNIT,
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     if cardinality == "all_matching" and target.entity is not None:
         raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
     intent = unit["intent"]
@@ -1042,6 +1395,7 @@ def _validate_knowledge_unit(
     )
 
 
+@_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)
 def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int) -> set[int]:
     """Validate internal reference markers and return their local reference indexes.
 
@@ -1075,6 +1429,7 @@ def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int)
     return indexes
 
 
+@_validation_boundary(PlannerValidationStage.PROPERTY_CHANGE)
 def _validate_property_changes(
     raw_properties: Sequence[Any],
     note_type: str | None,
@@ -1140,6 +1495,7 @@ def _validate_property_changes(
     return tuple(changes)
 
 
+@_validation_boundary(PlannerValidationStage.TAG_CHANGE)
 def _validate_tag_changes(raw_tag_changes: Any, intent: str) -> tuple[TagChange, ...]:
     """Validate explicit free-form tag mutations for one knowledge unit.
 
@@ -1183,6 +1539,7 @@ def _validate_tag_changes(raw_tag_changes: Any, intent: str) -> tuple[TagChange,
     return tuple(result)
 
 
+@_validation_boundary(PlannerValidationStage.FILTER, PlannerValidationCode.INVALID_FILTER)
 def _validate_planner_filters(
     filters: Sequence[Any], note_type: str | None, capabilities: Mapping[str, Any]
 ) -> None:

@@ -29,6 +29,17 @@ class ProviderCallEvidence:
     reasoning_effort: str | None = None
     usage: dict[str, int] | None = None
     error_category: str | None = None
+    validation_stage: str | None = None
+    validation_code: str | None = None
+    attempt_count: int | None = None
+    response_id: str | None = None
+    provider_status: str | None = None
+    incomplete_reason: str | None = None
+    output_text_chars: int | None = None
+    output_text_bytes: int | None = None
+    parse_status: str | None = None
+    result_kind: str | None = None
+    result_counts: dict[str, int] | None = None
 
 
 @dataclass(frozen=True, slots=True)

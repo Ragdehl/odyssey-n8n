@@ -36,6 +36,8 @@ from .reference_preflight import UnitTargetPreflight, preflight_write_action
 from .request_planning import (
     DelegateAction,
     KnowledgeUnit,
+    PlannerClarification,
+    PlannerResult,
     RequestPlan,
     RetrieveAction,
     WriteAction,
@@ -47,8 +49,8 @@ from .write_target import WriteTargetDecision, WriteTargetOutcome
 class RequestPlanner(Protocol):
     """Describe the validated planning boundary used by an application request."""
 
-    def plan(self, request: str) -> RequestPlan:
-        """Return one validated plan for a raw non-empty user request."""
+    def plan(self, request: str) -> PlannerResult:
+        """Return one validated plan or closed clarification for a raw request."""
 
 
 class ApplicationStatus(StrEnum):
@@ -153,6 +155,7 @@ class ApplicationResult:
     action_results: tuple[ActionResult, ...]
     affected_stable_note_ids: tuple[str, ...]
     planning_error: str | None = None
+    clarification_code: str | None = None
     pending_work: PendingWorkStatus = PendingWorkStatus()
     history: GitHistoryResult = GitHistoryResult.disabled()
     operational: OperationalEvidence = OperationalEvidence()
@@ -189,7 +192,7 @@ def execute_request(
 
     Args:
         user_request: Raw non-empty request passed unchanged to the injected planner.
-        planner: Validated RequestPlan producer; it is the only planning boundary called here.
+        planner: Validated PlannerResult producer; it is the only planning boundary called here.
         repository: Authoritative Markdown vault.
         schema: Active canonical schema.
         context_index: Existing rebuildable retrieval index.
@@ -207,11 +210,11 @@ def execute_request(
         history_recorder: Optional request-level local Git history recorder.
 
     Returns:
-        One stable request result. Planning failures return no action results and perform no writes.
+        One stable request result. Clarifications and planning failures perform no actions or writes.
 
     Raises:
         ValueError: If boundary inputs are structurally invalid.
-        TypeError: If the planner returns a value other than RequestPlan.
+        TypeError: If the planner returns a value other than PlannerResult.
     """
     started = monotonic()
     stages: list[OperationalStage] = []
@@ -254,9 +257,39 @@ def execute_request(
             started,
             monotonic,
         )
-    if not isinstance(plan, RequestPlan):
-        raise TypeError("planner must return a RequestPlan")
     planner_duration_ms = _elapsed_ms(planner_started, monotonic())
+    if isinstance(plan, PlannerClarification):
+        stages.append(
+            OperationalStage(
+                "planner",
+                OperationalOutcome.COMPLETED,
+                planner_duration_ms,
+                model=getattr(planner, "model", None),
+                reasoning_effort=getattr(planner, "reasoning_effort", None),
+                usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+                provider_calls=provider_recorder.calls,
+            )
+        )
+        stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
+        return _with_operational(
+            ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                clarification_code=plan.code,
+                history=(
+                    GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="clarification requested")
+                    if history_recorder is not None
+                    else GitHistoryResult.disabled()
+                ),
+            ),
+            stages,
+            started,
+            monotonic,
+        )
+    if not isinstance(plan, RequestPlan):
+        raise TypeError("planner must return a PlannerResult")
 
     history_snapshot: GitHistorySnapshot | None = None
     history_error: str | None = None
@@ -911,8 +944,61 @@ class _ProviderCallRecorder:
             model=getattr(provider, "model", None),
             reasoning_effort=getattr(provider, "reasoning_effort", None),
             usage=normalize_provider_usage(getattr(provider, "last_usage", None)),
-            error_category=type(error).__name__ if error is not None else None,
+            error_category=(
+                _bounded_evidence_string(getattr(provider, "last_error_category", None))
+                or (type(error).__name__ if error is not None else None)
+            ),
+            validation_stage=_bounded_evidence_string(
+                getattr(provider, "last_validation_stage", None)
+            ),
+            validation_code=_bounded_evidence_string(
+                getattr(provider, "last_validation_code", None)
+            ),
+            attempt_count=_bounded_non_negative_int(getattr(provider, "last_attempt_count", None)),
+            response_id=_bounded_evidence_string(getattr(provider, "last_response_id", None)),
+            provider_status=_bounded_evidence_string(
+                getattr(provider, "last_provider_status", None)
+            ),
+            incomplete_reason=_bounded_evidence_string(
+                getattr(provider, "last_incomplete_reason", None)
+            ),
+            output_text_chars=_bounded_non_negative_int(
+                getattr(provider, "last_output_text_chars", None)
+            ),
+            output_text_bytes=_bounded_non_negative_int(
+                getattr(provider, "last_output_text_bytes", None)
+            ),
+            parse_status=_bounded_evidence_string(getattr(provider, "last_parse_status", None)),
+            result_kind=_bounded_evidence_string(getattr(provider, "last_result_kind", None)),
+            result_counts=_bounded_result_counts(getattr(provider, "last_result_counts", None)),
         )
+
+
+def _bounded_non_negative_int(value: Any) -> int | None:
+    """Retain one bounded non-negative operational counter."""
+    return value if isinstance(value, int) and 0 <= value <= 1_000_000_000 else None
+
+
+def _bounded_evidence_string(value: Any) -> str | None:
+    """Retain one short metadata value without arbitrary provider prose."""
+    if not isinstance(value, str) or not value or len(value) > 128:
+        return None
+    return value
+
+
+def _bounded_result_counts(value: Any) -> dict[str, int] | None:
+    """Retain only a small mapping of structural planner-result counters."""
+    if not isinstance(value, dict) or len(value) > 16:
+        return None
+    counts: dict[str, int] = {}
+    for key, count in value.items():
+        if not isinstance(key, str) or not key or len(key) > 32:
+            return None
+        bounded = _bounded_non_negative_int(count)
+        if bounded is None:
+            return None
+        counts[key] = bounded
+    return counts
 
 
 class _MeasuredContextualReasoner:

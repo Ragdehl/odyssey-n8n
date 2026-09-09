@@ -62,6 +62,7 @@ function appendRetryControl(submission) {
 function resultLabel(result) {
   return {
     acknowledgement: "Hecho",
+    clarification: "Aclara tu solicitud",
     empty: "Sin resultados",
     error: "No completado",
   }[result.kind] ?? "Odyssey";

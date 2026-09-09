@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,6 +17,9 @@ from odyssey_core import (
     DelegateAction,
     KnowledgeReference,
     KnowledgeUnit,
+    OpenAIRequestPlanner,
+    PlannerClarification,
+    PlannerResult,
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
@@ -30,11 +36,11 @@ from odyssey_core.reference_preflight import UnitTargetPreflight
 class FakePlanner:
     """Return one frozen plan without contacting a model provider."""
 
-    value: RequestPlan | Exception
+    value: PlannerResult | Exception
     calls: int = 0
 
-    def plan(self, request: str) -> RequestPlan:
-        """Return the configured plan or raise its configured planning failure."""
+    def plan(self, request: str) -> PlannerResult:
+        """Return the configured planner result or its configured planning failure."""
         self.calls += 1
         if isinstance(self.value, Exception):
             raise self.value
@@ -104,6 +110,15 @@ def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
     planner.model = "gpt-5.6-sol"
     planner.reasoning_effort = "low"
     planner.last_usage = {"input_tokens": 7, "output_tokens": 2}
+    planner.last_attempt_count = 1
+    planner.last_response_id = "resp_observed"
+    planner.last_provider_status = "completed"
+    planner.last_incomplete_reason = None
+    planner.last_output_text_chars = 240
+    planner.last_output_text_bytes = 242
+    planner.last_parse_status = "succeeded"
+    planner.last_result_kind = "plan"
+    planner.last_result_counts = {"actions": 1, "units": 0}
     clock = iter(float(index) / 1000 for index in range(10))
     result = application.execute_request(
         "Where is Marta?",
@@ -129,6 +144,14 @@ def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
     assert planner_stage.model == "gpt-5.6-sol"
     assert planner_stage.reasoning_effort == "low"
     assert planner_stage.usage == {"input_tokens": 7, "output_tokens": 2}
+    assert planner_stage.provider_calls[0].attempt_count == 1
+    assert planner_stage.provider_calls[0].response_id == "resp_observed"
+    assert planner_stage.provider_calls[0].provider_status == "completed"
+    assert planner_stage.provider_calls[0].output_text_chars == 240
+    assert planner_stage.provider_calls[0].output_text_bytes == 242
+    assert planner_stage.provider_calls[0].parse_status == "succeeded"
+    assert planner_stage.provider_calls[0].result_kind == "plan"
+    assert planner_stage.provider_calls[0].result_counts == {"actions": 1, "units": 0}
     assert all(
         stage.duration_ms is None or stage.duration_ms >= 0 for stage in result.operational.stages
     )
@@ -477,6 +500,110 @@ def test_delegate_and_planning_failure_are_typed_without_mutation(
     )
     assert failed.status is ApplicationStatus.FAILED
     assert failed.action_results == ()
+
+
+def test_planner_clarification_returns_before_all_execution_and_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Turn an explicit planner abstention into deterministic non-mutating application evidence."""
+    calls: list[str] = []
+
+    class FailIfCalled:
+        """Record any forbidden post-clarification dependency use."""
+
+        def __getattr__(self, name: str):
+            calls.append(name)
+            raise AssertionError(f"clarification called {name}")
+
+    result = application.execute_request(
+        "Bdbd",
+        planner=FakePlanner(PlannerClarification("UNRECOGNIZED_REQUEST")),
+        repository=FailIfCalled(),
+        schema={},
+        context_index=FailIfCalled(),
+        semantic_index=FailIfCalled(),
+        embedder=FailIfCalled(),
+        contextual_reasoner=FailIfCalled(),
+        actor="test",
+        now="2026-09-08T12:00:00Z",
+        context_limit=5,
+        writer=FailIfCalled(),
+        pending_recorder=FailIfCalled(),
+        history_recorder=FailIfCalled(),
+        request_id_factory=lambda: "request-bdbd-sentinel",
+    )
+
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "UNRECOGNIZED_REQUEST"
+    assert result.action_results == ()
+    assert result.affected_stable_note_ids == ()
+    assert result.planning_error is None
+    assert result.history.status.name == "NOT_ATTEMPTED"
+    assert [stage.name for stage in result.operational.stages] == ["planner", "pending"]
+    assert calls == []
+
+
+def test_output_limit_failure_retains_evidence_without_executing_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail closed at the provider boundary without parsing or touching Odyssey state."""
+    schema = json.loads(
+        (Path(__file__).parents[2] / "config" / "note-schema.json").read_text(encoding="utf-8")
+    )
+    create_calls = 0
+
+    def create(**_kwargs: object) -> SimpleNamespace:
+        nonlocal create_calls
+        create_calls += 1
+        return SimpleNamespace(
+            id="resp_application_limited",
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+            output_text='{"outcome":"PLAN"',
+            usage=SimpleNamespace(input_tokens=30, output_tokens=4096),
+        )
+
+    planner = OpenAIRequestPlanner(
+        SimpleNamespace(responses=SimpleNamespace(create=create)),
+        schema,
+        {"date": "2026-09-08", "time": "12:00", "timezone": "Europe/Paris"},
+    )
+    forbidden_calls: list[str] = []
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        forbidden_calls.append("execution")
+        raise AssertionError("partial planner output reached execution")
+
+    monkeypatch.setattr(application, "get_context", forbidden)
+    monkeypatch.setattr(application, "preflight_write_action", forbidden)
+    result = application.execute_request(
+        "Bdbd",
+        planner=planner,
+        repository=object(),
+        schema=schema,
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="test",
+        now="2026-09-08T12:00:00Z",
+        context_limit=5,
+        request_id_factory=lambda: "request-output-limit",
+    )
+
+    assert create_calls == 1
+    assert forbidden_calls == []
+    assert result.status is ApplicationStatus.FAILED
+    assert result.action_results == ()
+    assert result.affected_stable_note_ids == ()
+    call = result.operational.stages[0].provider_calls[0]
+    assert call.attempt_count == 1
+    assert call.response_id == "resp_application_limited"
+    assert call.provider_status == "incomplete"
+    assert call.incomplete_reason == "max_output_tokens"
+    assert call.error_category == "IncompleteProviderResponse"
+    assert call.usage == {"input_tokens": 30, "output_tokens": 4096}
+    assert call.parse_status is None
 
 
 @pytest.mark.parametrize(
