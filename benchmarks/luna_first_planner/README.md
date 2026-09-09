@@ -12,6 +12,9 @@ recorded, never followed, and no returned action is executable here.
 - `oracle.json` contains one deterministic oracle per held-out case.
 - `frozen_manifest.json` locks those inputs and the dated pricing evidence by SHA-256.
 - `evaluate.py` classifies validated results without an LLM judge.
+- `evaluate_v2.py`, `oracle_v2.json`, and `frozen_manifest_v2.json` are the corrected future
+  evaluation contract. They preserve v1 unchanged and treat harmless delegate wording differences
+  as semantic review evidence rather than critical lexical failures.
 - `cost.py` keeps input, cached-input, cache-write, output, and reasoning counters separate. It
   returns cost as unavailable rather than inventing missing usage or pricing.
 
@@ -35,3 +38,14 @@ Sol or execution integration.
 ```
 
 Do not run that command without separate human authorization for the exact live subset.
+
+The corrected second-gate runner uses a separate output artifact and the same explicit authorization:
+
+```bash
+.venv/bin/python -m benchmarks.luna_first_planner.run_live_v2 \
+  --confirm-live-provider-calls \
+  --case-id HD03 --case-id HL02 --case-id HO02 --case-id HB01 \
+  --case-id SP02 --case-id SW02 --case-id SW03 --case-id SD02 \
+  --case-id SD03 --case-id SM01 --case-id SM02 --case-id SC02 \
+  --case-id SE02 --case-id SA01 --case-id SA02
+```

@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "oracles": [
+    {"id":"HD01","allowed_outcomes":["PLAN","ESCALATE"],"guards":["domain_date_lifecycle"],"plan":{"action_kinds":["retrieve"],"required_limitations":["unsupported_domain_date"],"forbidden_filter_fields":["created_at","updated_at"],"retrievals":[{"type":"purchase","query_all":["lidl","august"]}]}},
+    {"id":"HD02","allowed_outcomes":["PLAN","ESCALATE"],"guards":["domain_date_lifecycle"],"plan":{"action_kinds":["retrieve"],"required_limitations":["unsupported_domain_date"],"forbidden_filter_fields":["created_at","updated_at"],"retrievals":[{"query_all":["kitchen","september"]}]}},
+    {"id":"HD03","allowed_outcomes":["PLAN","ESCALATE"],"guards":["domain_date_lifecycle"],"plan":{"action_kinds":["retrieve"],"required_limitations":["unsupported_domain_date"],"forbidden_filter_fields":["created_at","updated_at","entry_date"],"retrievals":[{"type":"journal_entry","query_all":["trips","may"]}]}},
+    {"id":"HL01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve"],"retrievals":[{"query_all":["odyssey","august"],"required_filters":[{"field":"created_at","op":"gte","value":"2026-08-01T00:00:00+02:00"},{"field":"created_at","op":"lt","value":"2026-09-01T00:00:00+02:00"}]}]}},
+    {"id":"HL02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve"],"retrievals":[{"type":"journal_entry","query_all":["journal"],"required_filters":[{"field":"created_at","op":"gte","value":"2026-09-08T00:00:00+02:00"},{"field":"created_at","op":"lt","value":"2026-09-09T00:00:00+02:00"}]}]}},
+    {"id":"HO01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve","retrieve"],"forbid_global_and_field_sets":[["created_at","updated_at"]],"retrievals":[{"type":"project","query_all":["projects","monday"],"required_filter_fields":["created_at"]},{"type":"task","query_all":["tasks","tuesday"],"required_filter_fields":["updated_at"]}]}},
+    {"id":"HO02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve","retrieve"],"forbid_global_and_field_sets":[["created_at","updated_at"]],"retrievals":[{"query_all":["garden","last week"],"required_filter_fields":["created_at"]},{"query_all":["garden","today"],"required_filter_fields":["updated_at"]}]}},
+    {"id":"HB01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve","retrieve"],"retrievals":[{"type":"person","query_all":["1990"]},{"type":"project","query_all":["toulouse"]}]}},
+    {"id":"SP01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve"],"retrievals":[{"query_all":["odyssey"]}]}},
+    {"id":"SP02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve"],"retrievals":[{"query_all":["marta"],"link_scope":{"direction":"outgoing","max_depth":1,"anchor_query_all":["marta"]}}]}},
+    {"id":"SW01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["write"],"write_units":[{"intent":"record","target_query_all":["carlos"],"minimum_facts":2,"facts_all":["madrid","japanese"]}]}},
+    {"id":"SW02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["write"],"write_units":[{"intent":"remove","target_query_all":["marta"],"facts_all":["acme"]},{"intent":"amend","target_query_all":["marta"],"facts_all":["thales"]}]}},
+    {"id":"SW03","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["write"],"write_units":[{"intent":"delete","type":"project","cardinality":"one","target_query_all":["apollo"],"maximum_facts":0}]}},
+    {"id":"SD01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["delegate"],"delegates":[{"operation_markers":["count","how many"],"forbidden_request_terms":["delete","remove","write"],"selection_type":"purchase","selection_query_all":["coffee"]}]}},
+    {"id":"SD02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["delegate"],"delegates":[{"operation_markers":["translate"],"forbidden_request_terms":["delete","remove","count"],"selection_query_all":["balma"]}]}},
+    {"id":"SD03","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["delegate"],"delegates":[{"operation_markers":["compare"],"forbidden_request_terms":["delete","remove","translate"],"selection_type":"purchase","selection_query_all":["lidl","carrefour"]}]}},
+    {"id":"SM01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["retrieve","write"],"retrievals":[{"query_all":["n8n"]}],"write_units":[{"intent":"record","target_query_all":["n8n"],"facts_all":["backup","review"]}]}},
+    {"id":"SM02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["write","retrieve"],"retrievals":[{"query_all":["ana","work"]}],"write_units":[{"intent":"record","target_query_all":["ana"],"facts_all":["paris"]}]}},
+    {"id":"SC01","allowed_outcomes":["CLARIFY"]},
+    {"id":"SC02","allowed_outcomes":["CLARIFY"]},
+    {"id":"SE01","allowed_outcomes":["ESCALATE"]},
+    {"id":"SE02","allowed_outcomes":["ESCALATE"]},
+    {"id":"SA01","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["write"],"write_units":[{"intent":"record","target_query_all":["markdown"],"facts_all":["inspectable","context"]},{"intent":"record","target_query_all":["luc"],"facts_all":["airbus"]}]}},
+    {"id":"SA02","allowed_outcomes":["PLAN","ESCALATE"],"plan":{"action_kinds":["write"],"write_units":[{"intent":"record","target_query_all":["lyon"],"minimum_facts":1,"maximum_facts":1,"facts_all":["space","friends"]}]}}
+  ]
+}
