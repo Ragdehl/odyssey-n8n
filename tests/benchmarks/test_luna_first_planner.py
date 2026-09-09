@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
 from dataclasses import asdict
@@ -30,11 +31,13 @@ from benchmarks.luna_first_planner.evaluate import (
 from benchmarks.luna_first_planner.evaluate_v2 import (
     EVALUATOR_VERSION,
     evaluate_payload_v2,
+    evaluate_result_v2,
     load_frozen_registry_v2,
 )
 from benchmarks.luna_first_planner.evaluate_v2 import (
     Classification as ClassificationV2,
 )
+from benchmarks.luna_first_planner.run_atomicity_live import _run_one, _run_set
 from benchmarks.luna_first_planner.run_continuation import (
     CONTINUATION_CASE_IDS,
     reserve_evidence_path_at,
@@ -559,6 +562,113 @@ def test_v2_runner_uses_only_remaining_cases_and_never_executes(
     assert [row["case_id"] for row in rows] == remaining
     assert all(row["evaluator_version"] == EVALUATOR_VERSION for row in rows)
     assert all(row["classification"] == "SAFE_ESCALATE" for row in rows)
+
+
+def test_atomicity_runner_evaluates_clarify_and_escalate_non_plan_results() -> None:
+    """Route every validated sentinel outcome through the canonical evaluator."""
+    _, oracles = load_frozen_registry_v2()
+
+    class FakePlanner:
+        last_usage = {"input_tokens": 1, "output_tokens": 1}
+        last_response_id = "test"
+        last_provider_status = "completed"
+
+        def __init__(self, result: object) -> None:
+            self.result = result
+
+        def plan(self, request: str) -> object:
+            return self.result
+
+    clarify = PlannerClarification(code="UNRECOGNIZED_REQUEST")
+    clarify_planner = FakePlanner(clarify)
+    clarify_row = io.StringIO()
+    clarify_classification = _run_one(
+        clarify_planner,
+        {"id": "SC02", "request": "nonsense", "family": "clarify"},
+        oracles["SC02"],
+        clarify_row,
+        "regression_sentinel",
+        lambda result, oracle: evaluate_result_v2("SC02", result, oracle),
+    )
+    assert clarify_classification == "SAFE_CLARIFY"
+    assert json.loads(clarify_row.getvalue())["result"] == asdict(clarify)
+
+    escalation = PlannerEscalation()
+    escalation_planner = FakePlanner(escalation)
+    escalation_row = io.StringIO()
+    assert (
+        _run_one(
+            escalation_planner,
+            {"id": "SE01", "request": "unsafe", "family": "escalate"},
+            oracles["SE01"],
+            escalation_row,
+            "regression_sentinel",
+            lambda result, oracle: evaluate_result_v2("SE01", result, oracle),
+        )
+        == "SAFE_ESCALATE"
+    )
+
+
+def test_atomicity_runner_invalid_non_plan_fails_closed() -> None:
+    """Unknown planner result objects remain fail-closed rather than executable."""
+    _, oracles = load_frozen_registry_v2()
+
+    class FakePlanner:
+        last_usage = None
+        last_response_id = None
+        last_provider_status = "completed"
+
+        def plan(self, request: str) -> object:
+            return object()
+
+    evidence = io.StringIO()
+    assert (
+        _run_one(
+            FakePlanner(),
+            {"id": "SC02", "request": "nonsense", "family": "clarify"},
+            oracles["SC02"],
+            evidence,
+            "regression_sentinel",
+            lambda result, oracle: evaluate_result_v2("SC02", result, oracle),
+        )
+        == "INVALID_FAIL_CLOSED"
+    )
+
+
+def test_atomicity_runner_does_not_stop_for_safe_non_plan_results() -> None:
+    """Continuation iteration proceeds past safe CLARIFY and ESCALATE outcomes."""
+    _, oracles = load_frozen_registry_v2()
+
+    class FakePlanner:
+        last_usage = None
+        last_response_id = "test"
+        last_provider_status = "completed"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan(self, request: str) -> PlannerClarification | PlannerEscalation:
+            self.calls += 1
+            return (
+                PlannerClarification(code="UNRECOGNIZED_REQUEST")
+                if self.calls == 1
+                else PlannerEscalation()
+            )
+
+    planner = FakePlanner()
+    stopped = _run_set(
+        planner,
+        [
+            {"id": "SC02", "request": "nonsense", "family": "clarify"},
+            {"id": "SE01", "request": "unsafe", "family": "escalate"},
+        ],
+        oracles,
+        io.StringIO(),
+        "regression_sentinel",
+        lambda case_id: lambda result, oracle: evaluate_result_v2(case_id, result, oracle),
+    )
+    assert stopped is False
+    assert planner.calls == 2
 
 
 def test_v2_exclusive_reservation_prevents_provider_calls(

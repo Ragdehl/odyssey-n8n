@@ -42,7 +42,10 @@ def _run_one(planner, case, oracle, evidence, set_name: str, evaluate):
                 "semantic_review": outcome.semantic_review,
                 "result": asdict(result),
             }
-        elif hasattr(result, "actions"):
+        elif set_name == "regression_sentinel":
+            # All non-atomicity outcomes, including CLARIFY, are classified by
+            # the canonical versioned evaluator.  Do not reduce valid
+            # non-PLAN results to an ESCALATE/invalid binary here.
             outcome = evaluate(result, oracle)
             classification = outcome.classification.value
             row = {
