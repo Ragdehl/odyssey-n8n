@@ -38,8 +38,8 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2B real n8n serving + Chrome Android validation            ✅ complete
 20.2C planner incident hardening + focused live gate          ✅ complete
 20.2D Luna-first planner experiment preparation               ✅ complete
-20.2E Luna prompt-parity + atomicity validation               ➡️ next
-20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
+20.2E Luna prompt-parity + atomicity validation               ✅ complete
+20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ next
 ```
 
 ### 20.1B — answerer adoption gate
@@ -118,7 +118,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 🔄 **Cost-aware planning:** prompt-parity and atomicity validation is active in Phase 20.2E. Production remains Sol/low, and live Luna calls require separate human authorization. Adoption still requires zero unsafe non-escalations on critical sentinels and materially lower measured end-to-end cost. See [Phase 20.2D](phase-20-2d-luna-first-planner-experiment.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 💡 **Cost-aware planning:** Phase 20.2E prompt-parity and atomicity validation is complete, with zero genuine unsafe non-escalations and zero genuine fail-closed results after adjudication. Production remains Sol/low; any Luna-first -> Sol fallback implementation/adoption is still deferred and requires its own bounded implementation and production-evidence gate. See [Phase 20.2D](phase-20-2d-luna-first-planner-experiment.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
