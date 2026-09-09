@@ -87,9 +87,7 @@ class LunaFirstRequestPlanner:
                 error,
             )
             raise
-        self._append_call(
-            "planner.luna", self._luna, OperationalOutcome.COMPLETED, luna_started
-        )
+        self._append_call("planner.luna", self._luna, OperationalOutcome.COMPLETED, luna_started)
 
         if isinstance(result, PlannerEscalation):
             self._sync_final_metadata(self._luna)
