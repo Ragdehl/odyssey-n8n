@@ -14,15 +14,12 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from odyssey_core.observability import normalize_provider_usage
-from odyssey_core.planner_capabilities import (
-    build_planner_capabilities,
-    build_write_capabilities,
-)
 from odyssey_core.request_planning import (
     PlannerClarification,
     RequestPlan,
     RequestPlanningError,
     planner_result_json_schema,
+    render_request_planner_prompt,
     request_plan_json_schema,
     validate_planner_result,
 )
@@ -140,34 +137,21 @@ def render_luna_experimental_prompt(
     _validate_teaching_examples(examples)
     for item in examples:
         validate_luna_experimental_result(item["result"], schema)
-    retrieval = build_planner_capabilities(schema, current_context=current_context)
-    writable = build_write_capabilities(schema)
     rendered_examples = "\n\n".join(
         f"User: {item['request']}\nSafe result: "
         f"{json.dumps(item['result'], ensure_ascii=False, separators=(',', ':'))}\n"
         f"Lesson: {item['lesson']}"
         for item in examples
     )
-    return f"""You are Odyssey's inexpensive first-pass request planner. Return exactly one strict JSON result. You never execute actions.
+    semantic_prompt = render_request_planner_prompt(schema, current_context)
+    return f"""{semantic_prompt}
 
 Choose the outcome before drafting fields:
-1. PLAN only when you can preserve every material user intent in the supplied current RequestPlan contract without unsafe approximation.
-2. CLARIFY only for input with no safely interpretable or actionable Odyssey intent. Use only clarification_code UNRECOGNIZED_REQUEST.
-3. ESCALATE whenever the request is understandable but you are uncertain about its safe representation, candidate-set scope, identity, mutation meaning, branch structure, or supported semantics. ESCALATE is correct safety behavior. Never force a PLAN to appear helpful.
-4. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except that CLARIFY uses UNRECOGNIZED_REQUEST. They carry no prose or user knowledge.
-
-When choosing PLAN, obey these rules in order:
-1. Reuse the RequestPlan contract exactly. Identify each Odyssey candidate set first (entity, query, type, filters, link_scope), then choose retrieve, write, or delegate. Never invent IDs, existence, fields, tags, links, actions, facts, or authority.
-2. Hard filters remove candidates. Use one only for an explicit, exact mapping in the capabilities. If meaning is semantic or mapping is uncertain, preserve it in query and ESCALATE when the remaining plan would be materially ambiguous.
-3. Never approximate a fact, event, decision, purchase, travel, employment, or other domain date with note lifecycle created_at/updated_at. Those fields are allowed only when the user explicitly asks when Odyssey notes/items were created, written, recorded, modified, or updated. Preserve unsupported domain time in query and use unsupported_domain_date when required.
-4. Filters within one selection are global AND. For genuinely independent OR candidate sets, emit separate actions so each branch has only its own restrictions. Do not combine both sides' filters in one action. Ordinary semantic alternatives that need no distinct hard restrictions may remain in one query.
-5. For writes, keep a non-empty identity query, preserve independently meaningful facts, separate incompatible intents, and use references only for real semantic relationships. Never turn write-target resolution into an extra retrieval.
-6. Delegate only a requested specialized operation such as count, sum, comparison, translation, or external-artifact analysis. Preserve any safe Odyssey selection separately. Delegation does not choose an application or execute work.
-7. Preserve mixed action order and all material constraints. If a safe exact PLAN depends on guessing, return ESCALATE.
-
-Current context: {json.dumps(dict(current_context), ensure_ascii=False, separators=(",", ":"))}
-Retrieval/selection capabilities: {json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))}
-Writable capabilities: {json.dumps(writable, ensure_ascii=False, separators=(",", ":"))}
+1. PLAN only when every material intent is preserved by the inherited RequestPlan semantics without unsafe approximation.
+2. CLARIFY only for unintelligible input; use only UNRECOGNIZED_REQUEST.
+3. ESCALATE whenever the request is understandable but its safe representation, identity, mutation meaning, branch structure, or supported semantics is uncertain. Never force a PLAN.
+4. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except CLARIFY's UNRECOGNIZED_REQUEST.
+Never approximate a fact, event, decision, purchase, or other domain date with note lifecycle fields; preserve uncertain meaning and ESCALATE rather than guessing.
 
 Teaching examples (not evaluation cases):
 

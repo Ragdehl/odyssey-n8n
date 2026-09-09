@@ -778,3 +778,35 @@ def _assert_provider_objects_closed(node: Any) -> None:
     elif isinstance(node, list):
         for value in node:
             _assert_provider_objects_closed(value)
+
+
+def test_luna_prompt_inherits_production_semantic_instructions(schema: dict[str, Any]) -> None:
+    """Keep Luna aligned with the validated Sol semantic and atomicity contract."""
+    from odyssey_core.request_planning import render_request_planner_prompt
+
+    production = render_request_planner_prompt(
+        schema, {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"}
+    )
+    luna = render_luna_experimental_prompt(
+        schema, {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"}
+    )
+    for lesson in (
+        "Atomicity is semantic, not punctuation-based",
+        "dependent reasons",
+        "created_at",
+        "independent candidate-set branches",
+    ):
+        assert lesson in production
+        assert lesson in luna
+
+
+def test_atomicity_registry_is_frozen_and_sa02_is_only_a_sentinel() -> None:
+    """New atomicity cases are separate from the prior SA02 evidence."""
+    import json
+
+    cases = json.loads(Path("benchmarks/luna_first_planner/atomicity_cases.json").read_text())
+    manifest = json.loads(Path("benchmarks/luna_first_planner/atomicity_manifest.json").read_text())
+    assert len(cases["cases"]) == 10
+    assert [case["id"] for case in cases["cases"]] == [f"AT{i:02d}" for i in range(1, 11)]
+    assert "SA02" in manifest["regression_sentinels"]
+    assert "SA02" not in [case["id"] for case in cases["cases"]]

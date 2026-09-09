@@ -1,0 +1,1 @@
+{"version":"1.0.0","frozen_before_provider_calls":true,"cases":"benchmarks/luna_first_planner/atomicity_cases.json","oracle":"benchmarks/luna_first_planner/atomicity_oracle.json","regression_sentinels":["HD03","HO02","SW01","SD02","SC02","SE01","SA02"]}

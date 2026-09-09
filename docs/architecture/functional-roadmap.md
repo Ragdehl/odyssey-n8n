@@ -37,7 +37,8 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2A mobile web source + offline deterministic checks        ✅ complete
 20.2B real n8n serving + Chrome Android validation            ✅ complete
 20.2C planner incident hardening + focused live gate          ✅ complete
-20.2D Luna-first planner experiment preparation               🔄 in review
+20.2D Luna-first planner experiment preparation               ✅ complete
+20.2E Luna prompt-parity + atomicity validation               ➡️ next
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -72,6 +73,12 @@ authorized.
 Prepare a frozen, provider-free Luna/low `PLAN | CLARIFY | ESCALATE` benchmark around the unchanged
 production RequestPlan validator. Production routing remains Sol/low. See
 [Phase 20.2D — Luna-first planner experiment preparation](phase-20-2d-luna-first-planner-experiment.md).
+
+### 20.2E — Luna prompt-parity and atomicity validation
+
+Validate Luna after inheriting the strongest established Sol/low RequestPlan semantic instructions,
+with a compact frozen atomicity/decomposition benchmark and regression sentinels. This is the bounded
+gate before any production Luna-first -> Sol fallback implementation; production routing remains Sol.
 
 ### 20.3 — protected deployment
 

@@ -1,5 +1,7 @@
 # Phase 20.2D — Luna-first planner experiment preparation
 
+Status: **completed**. The next bounded gate is Phase 20.2E prompt-parity and atomicity validation.
+
 Status: **deterministic preparation under review; no provider calls authorized or made**
 
 ## Objective
