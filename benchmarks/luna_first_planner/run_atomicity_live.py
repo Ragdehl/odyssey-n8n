@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity, load_registry
@@ -16,6 +17,60 @@ ROOT = Path(__file__).resolve().parents[2]
 CASE_IDS = tuple(f"AT{index:02d}" for index in range(1, 11))
 SENTINEL_IDS = ("HD03", "HO02", "SW01", "SD02", "SC02", "SE01", "SA02")
 OUTPUT_PATH = ROOT / "benchmarks/.live-results/luna-atomicity-v1.jsonl"
+
+
+def _write_row(evidence, row: dict) -> None:
+    """Persist one bounded row before another provider attempt."""
+    evidence.write(json.dumps(row, ensure_ascii=False) + "\n")
+    evidence.flush()
+
+
+def _run_one(planner, case, oracle, evidence, set_name: str, evaluate):
+    """Run one case fail-closed and retain validated result evidence only."""
+    try:
+        result = planner.plan(case["request"])
+        if set_name == "held_out" and hasattr(result, "actions"):
+            outcome = evaluate(result, oracle)
+            classification = (
+                "SEMANTIC_REVIEW"
+                if outcome.safe_structure and outcome.semantic_review
+                else ("SAFE_PLAN" if outcome.safe_structure else "UNSAFE_NON_ESCALATION")
+            )
+            row = {
+                "findings": outcome.findings,
+                "semantic_review": outcome.semantic_review,
+                "result": asdict(result),
+            }
+        elif hasattr(result, "actions"):
+            outcome = evaluate(result, oracle)
+            classification = outcome.classification.value
+            row = {
+                "findings": outcome.findings,
+                "semantic_review": outcome.semantic_review,
+                "result": asdict(result),
+            }
+        else:
+            classification = (
+                "SAFE_ESCALATE"
+                if getattr(result, "outcome", None) == "ESCALATE"
+                else "INVALID_FAIL_CLOSED"
+            )
+            row = {"findings": (), "semantic_review": (), "result": asdict(result)}
+    except Exception as error:
+        classification = "INVALID_FAIL_CLOSED"
+        row = {"error_category": type(error).__name__[:120]}
+    row.update(
+        {
+            "case_id": case["id"],
+            "set": set_name,
+            "classification": classification,
+            "provider_status": planner.last_provider_status,
+            "response_id": planner.last_response_id,
+            "usage": planner.last_usage,
+        }
+    )
+    _write_row(evidence, row)
+    return classification
 
 
 def frozen_cases() -> list[dict[str, str]]:
@@ -44,53 +99,23 @@ def main(argv: list[str] | None = None) -> int:
             schema, cases_payload["fixed_context"]
         )
         for case in frozen_cases():
-            result = planner.plan(case["request"])
-            if hasattr(result, "actions"):
-                evaluation = evaluate_atomicity(result, atomic_oracles[case["id"]])
-                classification = (
-                    "SAFE_PLAN" if evaluation.safe_structure else "UNSAFE_NON_ESCALATION"
-                )
-                row = {
-                    "findings": evaluation.findings,
-                    "semantic_review": evaluation.semantic_review,
-                }
-            else:
-                classification = (
-                    "SAFE_ESCALATE"
-                    if getattr(result, "outcome", None) == "ESCALATE"
-                    else "INVALID_FAIL_CLOSED"
-                )
-                row = {"findings": (), "semantic_review": ()}
-            row.update(
-                {
-                    "case_id": case["id"],
-                    "set": "held_out",
-                    "classification": classification,
-                    "provider_status": planner.last_provider_status,
-                    "response_id": planner.last_response_id,
-                    "usage": planner.last_usage,
-                }
+            classification = _run_one(
+                planner, case, atomic_oracles[case["id"]], evidence, "held_out", evaluate_atomicity
             )
-            evidence.write(json.dumps(row, ensure_ascii=False) + "\n")
-            evidence.flush()
             if classification in {"UNSAFE_NON_ESCALATION", "INVALID_FAIL_CLOSED"}:
                 return 0
         for case in sentinel_cases:
-            result = planner.plan(case["request"])
-            evaluation = evaluate_result_v2(case["id"], result, v2_oracles[case["id"]])
-            row = {
-                "case_id": case["id"],
-                "set": "regression_sentinel",
-                "classification": evaluation.classification.value,
-                "findings": evaluation.findings,
-                "semantic_review": evaluation.semantic_review,
-                "provider_status": planner.last_provider_status,
-                "response_id": planner.last_response_id,
-                "usage": planner.last_usage,
-            }
-            evidence.write(json.dumps(row, ensure_ascii=False) + "\n")
-            evidence.flush()
-            if evaluation.classification.value in {"UNSAFE_NON_ESCALATION", "INVALID_FAIL_CLOSED"}:
+            classification = _run_one(
+                planner,
+                case,
+                v2_oracles[case["id"]],
+                evidence,
+                "regression_sentinel",
+                lambda result, oracle, case_id=case["id"]: evaluate_result_v2(
+                    case_id, result, oracle
+                ),
+            )
+            if classification in {"UNSAFE_NON_ESCALATION", "INVALID_FAIL_CLOSED"}:
                 return 0
     return 0
 

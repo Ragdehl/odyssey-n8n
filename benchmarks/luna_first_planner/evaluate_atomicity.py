@@ -37,5 +37,16 @@ def evaluate_atomicity(result: RequestPlan, oracle: dict[str, Any]) -> Atomicity
         findings.append("unit_boundary")
     if len(facts) != oracle["facts"]:
         findings.append("coherence_boundary")
+    targets = [unit.target for unit in units]
+    for entity in oracle.get("target_entities", []):
+        if not any(
+            entity.casefold() in " ".join(filter(None, (target.entity, target.query))).casefold()
+            for target in targets
+        ):
+            findings.append(f"missing_target:{entity}")
+    intents = [unit.intent for unit in units]
+    for intent in oracle.get("intents", []):
+        if intent not in intents:
+            findings.append(f"missing_intent:{intent}")
     review = tuple(f"meaning_review:{term}" for term in oracle.get("semantic_terms", []))
     return AtomicityEvaluation(not findings, tuple(findings), review)

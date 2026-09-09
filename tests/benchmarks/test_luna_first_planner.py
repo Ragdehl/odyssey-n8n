@@ -815,13 +815,67 @@ def test_atomicity_registry_is_frozen_and_sa02_is_only_a_sentinel() -> None:
 def test_atomicity_evaluator_reviews_paraphrases_without_lexical_failure() -> None:
     """Structural safety is hard; wording alternatives remain semantic review evidence."""
     from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
 
-    oracle = {"units": 1, "facts": 1, "semantic_terms": ["café", "recover"]}
-    # A real RequestPlan fixture is intentionally tested through the evaluator's public shape.
-    write = RequestPlan(actions=[], limitations=[])
-    result = evaluate_atomicity(write, oracle)
-    assert result.safe_structure is False
-    assert "coherence_boundary" in result.findings
+    target = SelectionCriteria(None, "Marta", None, (), None)
+    unit = KnowledgeUnit(
+        target, "record", (), (), ("I decided to visit the coffee shop.",), (), "one"
+    )
+    result = RequestPlan(actions=[WriteAction((unit,))], limitations=[])
+    outcome = evaluate_atomicity(result, {"units": 1, "facts": 1, "semantic_terms": ["café"]})
+    assert outcome.safe_structure is True
+    assert outcome.semantic_review == ("meaning_review:café",)
+
+
+def test_atomicity_split_and_merged_identity_fail_structurally() -> None:
+    """Dependent splitting and distinct-identity merging remain hard failures."""
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    def unit(query: str, facts: tuple[str, ...]) -> KnowledgeUnit:
+        return KnowledgeUnit(
+            SelectionCriteria(None, query, None, (), None), "record", (), (), facts, (), "one"
+        )
+
+    split = RequestPlan(
+        actions=[WriteAction((unit("Lyon", ("I want to move to Lyon.", "It gives us space.")),))],
+        limitations=[],
+    )
+    assert "coherence_boundary" in evaluate_atomicity(split, {"units": 1, "facts": 1}).findings
+    merged = RequestPlan(
+        actions=[
+            WriteAction((unit("Luc and Ana", ("Luc works at Airbus; Ana moved to Paris.",)),))
+        ],
+        limitations=[],
+    )
+    assert "unit_boundary" in evaluate_atomicity(merged, {"units": 2, "facts": 2}).findings
+
+
+def test_atomicity_intent_and_target_structure_failures_are_hard() -> None:
+    """Wrong correction intents and missing explicit targets are deterministic failures."""
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    unit = KnowledgeUnit(
+        SelectionCriteria(None, "Marta", None, (), None),
+        "record",
+        (),
+        (),
+        ("Works at Thales.",),
+        (),
+        "one",
+    )
+    result = RequestPlan(actions=[WriteAction((unit,))], limitations=[])
+    outcome = evaluate_atomicity(
+        result,
+        {"units": 2, "facts": 2, "target_entities": ["Marta"], "intents": ["remove", "amend"]},
+    )
+    assert {
+        "unit_boundary",
+        "coherence_boundary",
+        "missing_intent:remove",
+        "missing_intent:amend",
+    }.issubset(outcome.findings)
 
 
 def test_atomicity_oracle_at04_is_one_unit_two_facts() -> None:
