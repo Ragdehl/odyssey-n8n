@@ -55,7 +55,9 @@ def test_safe_luna_plan_skips_sol() -> None:
 
 def test_luna_clarification_skips_sol() -> None:
     """A Luna clarification goes directly to the user rather than spending a Sol call."""
-    luna = _FakePlanner(PlannerClarification("UNRECOGNIZED_REQUEST"), model="gpt-5.6-luna")
+    luna = _FakePlanner(
+        PlannerClarification("UNRECOGNIZED_REQUEST"), model="gpt-5.6-luna"
+    )
     sol = _FakePlanner(RequestPlan(actions=(), limitations=()), model="gpt-5.6-sol")
 
     result = _planner(luna, sol).plan("...???...")
@@ -65,7 +67,7 @@ def test_luna_clarification_skips_sol() -> None:
 
 
 def test_luna_escalation_becomes_user_clarification_without_sol() -> None:
-    """Missing authority/semantic certainty remains non-executing and does not invite Sol guessing."""
+    """Missing authority remains non-executing and does not invite Sol guessing."""
     luna = _FakePlanner(PlannerEscalation(), model="gpt-5.6-luna")
     sol = _FakePlanner(RequestPlan(actions=(), limitations=()), model="gpt-5.6-sol")
 
@@ -102,13 +104,21 @@ def test_fail_closed_luna_result_falls_back_once_to_sol() -> None:
         "planner.luna",
         "planner.sol_fallback",
     ]
-    assert planner.last_provider_calls[0].usage == {"input_tokens": 11, "output_tokens": 2}
-    assert planner.last_provider_calls[1].usage == {"input_tokens": 13, "output_tokens": 3}
+    assert planner.last_provider_calls[0].usage == {
+        "input_tokens": 11,
+        "output_tokens": 2,
+    }
+    assert planner.last_provider_calls[1].usage == {
+        "input_tokens": 13,
+        "output_tokens": 3,
+    }
 
 
 def test_generic_luna_provider_error_does_not_double_call_same_provider() -> None:
-    """Network/provider exceptions propagate instead of triggering a likely-useless Sol retry."""
-    luna = _FakePlanner(error=RuntimeError("provider unavailable"), model="gpt-5.6-luna")
+    """Network/provider exceptions propagate instead of triggering a Sol retry."""
+    luna = _FakePlanner(
+        error=RuntimeError("provider unavailable"), model="gpt-5.6-luna"
+    )
     sol = _FakePlanner(RequestPlan(actions=(), limitations=()), model="gpt-5.6-sol")
     planner = _planner(luna, sol)
 
@@ -123,8 +133,12 @@ def test_generic_luna_provider_error_does_not_double_call_same_provider() -> Non
 
 def test_sol_failure_after_luna_fail_closed_is_not_retried() -> None:
     """The fallback chain remains bounded to one Luna and one Sol attempt."""
-    luna = _FakePlanner(error=RequestPlanningError("invalid Luna result"), model="gpt-5.6-luna")
-    sol = _FakePlanner(error=RequestPlanningError("invalid Sol result"), model="gpt-5.6-sol")
+    luna = _FakePlanner(
+        error=RequestPlanningError("invalid Luna result"), model="gpt-5.6-luna"
+    )
+    sol = _FakePlanner(
+        error=RequestPlanningError("invalid Sol result"), model="gpt-5.6-sol"
+    )
     planner = _planner(luna, sol)
 
     with pytest.raises(RequestPlanningError, match="invalid Sol result"):
