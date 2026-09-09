@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "fixed_context": {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"},
+  "cases": [
+    {"id":"AT01","request":"He decidido mudarme a Lyon: allí tendríamos más espacio y estaríamos cerca de nuestros amigos.","family":"decision_reasons"},
+    {"id":"AT02","request":"Sigo pensando en el jardín; su ambiente tranquilo me ayuda a recuperarme después de días difíciles.","family":"reflection_explanation"},
+    {"id":"AT03","request":"Si se retrasa el tren, podría trabajar desde una cafetería y aun así llegar a la reunión de la tarde.","family":"conditional"},
+    {"id":"AT04","request":"Marta lives in Lyon and works at Thales.","family":"independent_same_target"},
+    {"id":"AT05","request":"Luc trabaja en Airbus y Ana se mudó a París.","family":"different_identities"},
+    {"id":"AT06","request":"I may move to Lyon because the apartment would give us more space, while Luc works at Airbus.","family":"identity_plus_dependent"},
+    {"id":"AT07","request":"Correct Marta's employer from Acme to Thales.","family":"incompatible_intents"},
+    {"id":"AT08","request":"Remove the claim that Alex owns the red car, then record that Alex owns the blue car.","family":"correction_units"},
+    {"id":"AT09","request":"The decision to study French remains important. It would help me speak with my neighbors.","family":"multi_sentence_coherent"},
+    {"id":"AT10","request":"I bought coffee yesterday. The kitchen light is broken.","family":"multi_sentence_distinct"}
+  ]
+}

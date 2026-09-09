@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
 from dataclasses import asdict
@@ -30,11 +31,16 @@ from benchmarks.luna_first_planner.evaluate import (
 from benchmarks.luna_first_planner.evaluate_v2 import (
     EVALUATOR_VERSION,
     evaluate_payload_v2,
+    evaluate_result_v2,
     load_frozen_registry_v2,
 )
 from benchmarks.luna_first_planner.evaluate_v2 import (
     Classification as ClassificationV2,
 )
+from benchmarks.luna_first_planner.run_atomicity_final_continuation import (
+    FINAL_CONTINUATION_IDS,
+)
+from benchmarks.luna_first_planner.run_atomicity_live import _run_one, _run_set
 from benchmarks.luna_first_planner.run_continuation import (
     CONTINUATION_CASE_IDS,
     reserve_evidence_path_at,
@@ -561,6 +567,118 @@ def test_v2_runner_uses_only_remaining_cases_and_never_executes(
     assert all(row["classification"] == "SAFE_ESCALATE" for row in rows)
 
 
+def test_atomicity_runner_evaluates_clarify_and_escalate_non_plan_results() -> None:
+    """Route every validated sentinel outcome through the canonical evaluator."""
+    _, oracles = load_frozen_registry_v2()
+
+    class FakePlanner:
+        last_usage = {"input_tokens": 1, "output_tokens": 1}
+        last_response_id = "test"
+        last_provider_status = "completed"
+
+        def __init__(self, result: object) -> None:
+            self.result = result
+
+        def plan(self, request: str) -> object:
+            return self.result
+
+    clarify = PlannerClarification(code="UNRECOGNIZED_REQUEST")
+    clarify_planner = FakePlanner(clarify)
+    clarify_row = io.StringIO()
+    clarify_classification = _run_one(
+        clarify_planner,
+        {"id": "SC02", "request": "nonsense", "family": "clarify"},
+        oracles["SC02"],
+        clarify_row,
+        "regression_sentinel",
+        lambda result, oracle: evaluate_result_v2("SC02", result, oracle),
+    )
+    assert clarify_classification == "SAFE_CLARIFY"
+    assert json.loads(clarify_row.getvalue())["result"] == asdict(clarify)
+
+    escalation = PlannerEscalation()
+    escalation_planner = FakePlanner(escalation)
+    escalation_row = io.StringIO()
+    assert (
+        _run_one(
+            escalation_planner,
+            {"id": "SE01", "request": "unsafe", "family": "escalate"},
+            oracles["SE01"],
+            escalation_row,
+            "regression_sentinel",
+            lambda result, oracle: evaluate_result_v2("SE01", result, oracle),
+        )
+        == "SAFE_ESCALATE"
+    )
+
+
+def test_atomicity_runner_invalid_non_plan_fails_closed() -> None:
+    """Unknown planner result objects remain fail-closed rather than executable."""
+    _, oracles = load_frozen_registry_v2()
+
+    class FakePlanner:
+        last_usage = None
+        last_response_id = None
+        last_provider_status = "completed"
+
+        def plan(self, request: str) -> object:
+            return object()
+
+    evidence = io.StringIO()
+    assert (
+        _run_one(
+            FakePlanner(),
+            {"id": "SC02", "request": "nonsense", "family": "clarify"},
+            oracles["SC02"],
+            evidence,
+            "regression_sentinel",
+            lambda result, oracle: evaluate_result_v2("SC02", result, oracle),
+        )
+        == "INVALID_FAIL_CLOSED"
+    )
+
+
+def test_atomicity_runner_does_not_stop_for_safe_non_plan_results() -> None:
+    """Continuation iteration proceeds past safe CLARIFY and ESCALATE outcomes."""
+    _, oracles = load_frozen_registry_v2()
+
+    class FakePlanner:
+        last_usage = None
+        last_response_id = "test"
+        last_provider_status = "completed"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan(self, request: str) -> PlannerClarification | PlannerEscalation:
+            self.calls += 1
+            return (
+                PlannerClarification(code="UNRECOGNIZED_REQUEST")
+                if self.calls == 1
+                else PlannerEscalation()
+            )
+
+    planner = FakePlanner()
+    stopped = _run_set(
+        planner,
+        [
+            {"id": "SC02", "request": "nonsense", "family": "clarify"},
+            {"id": "SE01", "request": "unsafe", "family": "escalate"},
+        ],
+        oracles,
+        io.StringIO(),
+        "regression_sentinel",
+        lambda case_id: lambda result, oracle: evaluate_result_v2(case_id, result, oracle),
+    )
+    assert stopped is False
+    assert planner.calls == 2
+
+
+def test_final_atomicity_continuation_is_closed_to_unattempted_cases() -> None:
+    """The final runner cannot accidentally reattempt an earlier live case."""
+    assert FINAL_CONTINUATION_IDS == ("SE01", "SA02")
+
+
 def test_v2_exclusive_reservation_prevents_provider_calls(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -778,3 +896,161 @@ def _assert_provider_objects_closed(node: Any) -> None:
     elif isinstance(node, list):
         for value in node:
             _assert_provider_objects_closed(value)
+
+
+def test_luna_prompt_inherits_production_semantic_instructions(schema: dict[str, Any]) -> None:
+    """Keep Luna aligned with the validated Sol semantic and atomicity contract."""
+    from odyssey_core.request_planning import render_request_planner_prompt
+
+    production = render_request_planner_prompt(
+        schema, {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"}
+    )
+    luna = render_luna_experimental_prompt(
+        schema, {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"}
+    )
+    for lesson in (
+        "Atomicity is semantic, not punctuation-based",
+        "dependent reasons",
+        "created_at",
+        "independent candidate-set branches",
+    ):
+        assert lesson in production
+        assert lesson in luna
+
+
+def test_atomicity_registry_is_frozen_and_sa02_is_only_a_sentinel() -> None:
+    """New atomicity cases are separate from the prior SA02 evidence."""
+    import json
+
+    cases = json.loads(Path("benchmarks/luna_first_planner/atomicity_cases.json").read_text())
+    manifest = json.loads(Path("benchmarks/luna_first_planner/atomicity_manifest.json").read_text())
+    assert len(cases["cases"]) == 10
+    assert [case["id"] for case in cases["cases"]] == [f"AT{i:02d}" for i in range(1, 11)]
+    assert "SA02" in manifest["regression_sentinels"]
+    assert "SA02" not in [case["id"] for case in cases["cases"]]
+
+
+def test_atomicity_evaluator_reviews_paraphrases_without_lexical_failure() -> None:
+    """Structural safety is hard; wording alternatives remain semantic review evidence."""
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    target = SelectionCriteria(None, "Marta", None, (), None)
+    unit = KnowledgeUnit(
+        target, "record", (), (), ("I decided to visit the coffee shop.",), (), "one"
+    )
+    result = RequestPlan(actions=[WriteAction((unit,))], limitations=[])
+    outcome = evaluate_atomicity(result, {"units": 1, "facts": 1, "semantic_terms": ["café"]})
+    assert outcome.safe_structure is True
+    assert outcome.semantic_review == ("meaning_review:café",)
+
+
+def test_atomicity_split_and_merged_identity_fail_structurally() -> None:
+    """Dependent splitting and distinct-identity merging remain hard failures."""
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    def unit(query: str, facts: tuple[str, ...]) -> KnowledgeUnit:
+        return KnowledgeUnit(
+            SelectionCriteria(None, query, None, (), None), "record", (), (), facts, (), "one"
+        )
+
+    split = RequestPlan(
+        actions=[WriteAction((unit("Lyon", ("I want to move to Lyon.", "It gives us space.")),))],
+        limitations=[],
+    )
+    assert "coherence_boundary" in evaluate_atomicity(split, {"units": 1, "facts": 1}).findings
+    merged = RequestPlan(
+        actions=[
+            WriteAction((unit("Luc and Ana", ("Luc works at Airbus; Ana moved to Paris.",)),))
+        ],
+        limitations=[],
+    )
+    assert "unit_boundary" in evaluate_atomicity(merged, {"units": 2, "facts": 2}).findings
+
+
+def test_atomicity_intent_and_target_structure_failures_are_hard() -> None:
+    """Wrong correction intents and missing explicit targets are deterministic failures."""
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    unit = KnowledgeUnit(
+        SelectionCriteria(None, "Marta", None, (), None),
+        "record",
+        (),
+        (),
+        ("Works at Thales.",),
+        (),
+        "one",
+    )
+    result = RequestPlan(actions=[WriteAction((unit,))], limitations=[])
+    outcome = evaluate_atomicity(
+        result,
+        {"units": 2, "facts": 2, "target_entities": ["Marta"], "intents": ["remove", "amend"]},
+    )
+    assert {
+        "unit_boundary",
+        "coherence_boundary",
+        "missing_intent:remove",
+        "missing_intent:amend",
+    }.issubset(outcome.findings)
+
+
+def test_atomicity_oracle_at04_is_one_unit_two_facts() -> None:
+    """Same-target independent facts remain one KnowledgeUnit under the current contract."""
+    import json
+
+    oracle = next(
+        x
+        for x in json.loads(
+            Path("benchmarks/luna_first_planner/atomicity_oracle.json").read_text()
+        )["oracles"]
+        if x["id"] == "AT04"
+    )
+    assert (oracle["units"], oracle["facts"]) == (1, 2)
+
+
+def test_at08_adjudicated_oracle_requires_canonical_amend() -> None:
+    """An explicit correction is remove plus amend, never surface-word record."""
+    import json
+
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    oracle = next(
+        item
+        for item in json.loads(
+            Path("benchmarks/luna_first_planner/atomicity_oracle.json").read_text()
+        )["oracles"]
+        if item["id"] == "AT08"
+    )
+    target = SelectionCriteria("Alex", "Alex", "person", (), None)
+    units = (
+        KnowledgeUnit(target, "remove", (), (), ("Alex owns the red car.",), (), "one"),
+        KnowledgeUnit(target, "amend", (), (), ("Alex owns the blue car.",), (), "one"),
+    )
+    valid = evaluate_atomicity(RequestPlan(actions=[WriteAction(units)], limitations=[]), oracle)
+    assert valid.safe_structure is True
+    assert oracle["intents"] == ["remove", "amend"]
+    wrong = (
+        units[0],
+        KnowledgeUnit(target, "record", (), (), ("Alex owns the blue car.",), (), "one"),
+    )
+    wrong_result = evaluate_atomicity(
+        RequestPlan(actions=[WriteAction(wrong)], limitations=[]), oracle
+    )
+    assert "missing_intent:amend" in wrong_result.findings
+
+
+def test_at08_adjudication_metadata_preserves_historical_classification() -> None:
+    """CI verifies the durable adjudication contract, not a machine-local live artifact."""
+    manifest = json.loads(Path("benchmarks/luna_first_planner/atomicity_manifest.json").read_text())
+    adjudication = manifest["post_live_adjudication"]
+    assert adjudication == {
+        "case_id": "AT08",
+        "original_intents": ["remove", "record"],
+        "original_classification": "UNSAFE_NON_ESCALATION",
+        "runner_stopped": True,
+        "corrected_intents": ["remove", "amend"],
+        "historical_evidence_preserved": True,
+    }
