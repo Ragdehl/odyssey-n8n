@@ -15,12 +15,12 @@ from zoneinfo import ZoneInfo
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
 from odyssey_core.context import ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
+from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.materialization import OpenAILunaWriter
-from odyssey_core.observability import OperationalOutcome, OperationalStage
+from odyssey_core.observability import OperationalOutcome, OperationalStage, ProviderCallEvidence
 from odyssey_core.pending_work import PendingWorkRepository
-from odyssey_core.request_planning import OpenAIRequestPlanner
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
@@ -130,12 +130,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
 
     def core_execute(user_request: str, request_id: str | None = None) -> ApplicationResult:
-        """Execute one request with fresh planner and persistence clock context."""
+        """Execute one request with fresh Luna-first planning and persistence clock context."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
-        planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
+        planner = LunaFirstRequestPlanner.from_environment(schema, planner_context)
         request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
-        return execute_request(
+        result = execute_request(
             user_request,
             planner=planner,
             repository=repository,
@@ -153,6 +153,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             history_recorder=history_recorder,
             request_id_factory=request_id_factory,
         )
+        return _replace_planner_provider_calls(result, planner.last_provider_calls)
 
     def refresh_indexes() -> None:
         """Rebuild both derived indexes from authoritative Markdown after a mutation."""
@@ -162,6 +163,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
     refresh_indexes()
     return RuntimeComposition(core_execute=core_execute, refresh_indexes=refresh_indexes)
+
+
+def _replace_planner_provider_calls(
+    result: ApplicationResult, calls: tuple[ProviderCallEvidence, ...]
+) -> ApplicationResult:
+    """Replace the synthetic wrapper call with exact Luna/Sol planner-call evidence."""
+    if not calls:
+        return result
+    stages = tuple(
+        replace(stage, provider_calls=calls) if stage.name == "planner" else stage
+        for stage in result.operational.stages
+    )
+    return replace(result, operational=replace(result.operational, stages=stages))
 
 
 def _path_env(name: str, default: str) -> Path:
