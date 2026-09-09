@@ -28,6 +28,11 @@ from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
+# Preserve the existing runtime composition injection seam while changing its production target.
+# Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
+# the validated Luna-first planner rather than the former Sol-only planner.
+OpenAIRequestPlanner = LunaFirstRequestPlanner
+
 
 @dataclass(slots=True)
 class RuntimeComposition:
@@ -137,7 +142,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         """Execute one request with fresh Luna-first planning and persistence clock context."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
-        planner = LunaFirstRequestPlanner.from_environment(schema, planner_context)
+        planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
         request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
         result = execute_request(
             user_request,
@@ -157,7 +162,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
             history_recorder=history_recorder,
             request_id_factory=request_id_factory,
         )
-        return _replace_planner_provider_calls(result, planner.last_provider_calls)
+        calls = getattr(planner, "last_provider_calls", ())
+        return _replace_planner_provider_calls(result, calls)
 
     def refresh_indexes() -> None:
         """Rebuild both derived indexes from authoritative Markdown after a mutation."""
