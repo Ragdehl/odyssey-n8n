@@ -181,9 +181,10 @@ def test_unsupported_luna_result_fails_closed_without_sol() -> None:
     """A validated boundary must not let an unknown Luna result through."""
     luna = _FakePlanner(object())
     sol = _FakePlanner(RequestPlan(actions=(), limitations=()))
+    planner = _planner(luna, sol)
 
     with pytest.raises(TypeError, match="unsupported planner result"):
-        _planner(luna, sol).plan("What do I know about Odyssey?")
+        planner.plan("What do I know about Odyssey?")
 
     assert luna.calls == 1
     assert sol.calls == 0
@@ -193,9 +194,10 @@ def test_unsupported_sol_fallback_result_fails_closed() -> None:
     """A fallback result outside the production contract remains rejected."""
     luna = _FakePlanner(error=RequestPlanningError("invalid Luna result"))
     sol = _FakePlanner(object())
+    planner = _planner(luna, sol)
 
     with pytest.raises(TypeError, match="unsupported planner result"):
-        _planner(luna, sol).plan("What do I know about Odyssey?")
+        planner.plan("What do I know about Odyssey?")
 
     assert luna.calls == 1
     assert sol.calls == 1
