@@ -35,6 +35,10 @@ from benchmarks.luna_first_planner.evaluate_v2 import (
 from benchmarks.luna_first_planner.evaluate_v2 import (
     Classification as ClassificationV2,
 )
+from benchmarks.luna_first_planner.run_continuation import (
+    CONTINUATION_CASE_IDS,
+    reserve_evidence_path_at,
+)
 from benchmarks.luna_first_planner.run_live import (
     OUTPUT_PATH,
     run_cases,
@@ -637,6 +641,16 @@ def test_v2_unsafe_stop_flushes_rows_and_skips_following_case(
     assert planner.calls == 2
     assert [row["case_id"] for row in rows] == ["HD03", "SE01"]
     assert len(path.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_continuation_case_set_is_closed_and_exclusive(tmp_path: Path) -> None:
+    """Continuation evidence reserves a new path and names only five untouched cases."""
+    assert CONTINUATION_CASE_IDS == ("SM02", "SC02", "SE02", "SA01", "SA02")
+    path = tmp_path / "continuation.jsonl"
+    with reserve_evidence_path_at(path) as stream:
+        assert not stream.closed
+    with pytest.raises(FileExistsError):
+        reserve_evidence_path_at(path)
 
 
 def test_runner_only_calls_planner_and_refuses_output_overwrite(
