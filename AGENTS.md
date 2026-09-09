@@ -57,6 +57,8 @@ Ruff is the Python lint/format authority and pytest is the Python test runner. P
 
 ## Model-facing changes
 
+Prompt evolution is inheritance-first. When introducing a model-specific, cheaper-model, experimental, or revised prompt for an existing capability/contract, start from the strongest existing validated prompt for that same behavior. Preserve established safety, semantic, and edge-case instructions by default; improve or adapt them rather than silently recreating the prompt from scratch. Any deliberate omission or simplification must be explicitly diffed, justified, and covered by regression sentinels before live evaluation. Model-specific wording may be shortened or reorganized, but previously validated behavior must not be dropped accidentally.
+
 A deterministic test cannot prove that a production model follows a changed prompt or structured-output instruction.
 
 Whenever a production LLM prompt, model-facing instruction, or structured-output contract changes materially:
