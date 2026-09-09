@@ -92,6 +92,28 @@ follow-up preparation. At the previous gate's observed token envelope, the conse
 planning estimate is approximately `$0.004` for five calls; production adoption remains blocked
 until this separate gate is explicitly authorized and passes.
 
+## Authorized five-case follow-up
+
+The separately authorized five-case Luna/medium follow-up completed exactly once per case using
+the canonical ten-example configuration. It made 5 Luna calls, 0 retries, 0 Sol calls, and produced
+0 invalid outputs or clear false `RESOLVED` decisions. The bounded evidence is retained in the
+gitignored `benchmarks/.live-results/contextual-luna-followup-20.2g.json` artifact.
+
+| Case | Result | Frozen expected | Review |
+| --- | --- | --- | --- |
+| A22 | `UNRESOLVED`, `null` | `AMBIGUOUS`, `null` | same conservative collision abstention as the first gate |
+| A19 | `AMBIGUOUS`, `null` | `AMBIGUOUS`, `null` | historical false-resolution sentinel passed |
+| A28 | `AMBIGUOUS`, `null` | `AMBIGUOUS`, `null` | correct |
+| A31 | `UNRESOLVED`, `null` | `UNRESOLVED`, `null` | correct |
+| A02 | `RESOLVED`, `xavi-pujol` | `RESOLVED`, `xavi-pujol` | correct |
+
+The follow-up scored 4/5 solely because A22 again returned `UNRESOLVED` instead of its frozen
+`AMBIGUOUS` label. The result is not a false resolution or invalid output, but the repeated
+distinction remains a material unresolved contextual-model behavior and the production default
+therefore remains `gpt-5.6-sol` / medium. Aggregate measured usage was 13,819 input tokens,
+0 cached input tokens, 530 output tokens, and 402 reasoning tokens; the runner estimated `$0.0034`
+using the dated repository pricing snapshot. No adoption change was made.
+
 ## Acceptance criteria
 
 1. Exactly 8 Luna provider calls, one per frozen case.
