@@ -114,6 +114,40 @@ therefore remains `gpt-5.6-sol` / medium. Aggregate measured usage was 13,819 in
 0 cached input tokens, 530 output tokens, and 402 reasoning tokens; the runner estimated `$0.0034`
 using the dated repository pricing snapshot. No adoption change was made.
 
+## Full 90-case Luna/medium benchmark
+
+The complete frozen 90-case benchmark then made exactly 90 Luna/medium provider calls, with zero
+retries, zero invalid outputs, and no Sol fallback. Every case row was atomically retained. The
+runner's final aggregation initially encountered an omitted optional `cache_write_tokens` field
+after the last provider response; this was corrected deterministically to treat that optional
+counter as zero without changing any retained evidence.
+
+| Expected outcome | Correct | Total | Accuracy |
+| --- | ---: | ---: | ---: |
+| `RESOLVED` | 35 | 35 | 100.00% |
+| `AMBIGUOUS` | 27 | 29 | 93.10% |
+| `UNRESOLVED` | 26 | 26 | 100.00% |
+| **Overall** | **88** | **90** | **97.78%** |
+
+There were no clear false `RESOLVED` decisions and no invalid/malformed outputs. The two frozen
+label misses were:
+
+- `en-project-generic`: conservative `AMBIGUOUS` → `UNRESOLVED`;
+- `en-toulouse-supermarket` (E13): `RESOLVED` to `carrefour-market-capitole`, retained as the
+  historically disputed label rather than a clear safety failure.
+
+Mandatory sentinels were safe: A19 returned `AMBIGUOUS / null`, and A22 returned
+`AMBIGUOUS / null` in this full run, resolving the repeated mini-gate distinction without changing
+its frozen oracle. E13 remained `RESOLVED / carrefour-market-capitole` with its disputed status.
+
+Measured usage was 250,707 input tokens, including 13,804 cached input tokens, 0 supplied
+cache-write tokens, 4,347 output tokens, and 2,088 reasoning tokens. The repository pricing
+method estimated `$0.052873` for this run. Historical few-shot Luna was 86/90 (95.56%) with one
+clear false `RESOLVED`; historical Sol/medium was 89/90 (98.89%) with zero clear false
+`RESOLVED` and only disputed E13. Luna is now a strong cost-saving production candidate, but
+production remains Sol/medium pending explicit human adoption review. This run produced no error
+cluster requiring a prompt change; the sole non-disputed miss was a conservative abstention.
+
 ## Acceptance criteria
 
 1. Exactly 8 Luna provider calls, one per frozen case.

@@ -74,3 +74,24 @@ def test_frozen_calibration_source_is_exactly_ten_predating_examples(monkeypatch
     ]
     assert examples[-1].decision.outcome == "AMBIGUOUS"
     assert examples[-1].decision.id is None
+
+
+def test_summary_tolerates_provider_usage_without_cache_write_counter() -> None:
+    """Aggregate completed evidence when the provider omits optional cache-write usage."""
+    runner = load_runner()
+    row = {
+        "schema_valid": True,
+        "outcome": "UNRESOLVED",
+        "correct": True,
+        "false_resolved": False,
+        "label_disputed": False,
+        "latency_seconds": 0.1,
+        "input_tokens": 10,
+        "cached_input_tokens": 0,
+        "output_tokens": 2,
+        "reasoning_tokens": 1,
+    }
+
+    summary = runner.summarize("gpt-5.6-luna", [row])
+
+    assert summary["token_usage"]["cache_write_tokens"] == 0

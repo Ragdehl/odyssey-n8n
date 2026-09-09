@@ -221,7 +221,7 @@ def summarize(model: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "output_tokens",
         "reasoning_tokens",
     )
-    totals = Counter({field: sum(row[field] for row in rows) for field in token_fields})
+    totals = Counter({field: sum(row.get(field, 0) or 0 for row in rows) for field in token_fields})
     correct = sum(row["correct"] for row in rows)
     resolved_returned = returned_counts["RESOLVED"]
     correct_resolved = correct_counts["RESOLVED"]
