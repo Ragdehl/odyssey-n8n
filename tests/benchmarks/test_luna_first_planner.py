@@ -890,3 +890,47 @@ def test_atomicity_oracle_at04_is_one_unit_two_facts() -> None:
         if x["id"] == "AT04"
     )
     assert (oracle["units"], oracle["facts"]) == (1, 2)
+
+
+def test_at08_adjudicated_oracle_requires_canonical_amend() -> None:
+    """An explicit correction is remove plus amend, never surface-word record."""
+    import json
+
+    from benchmarks.luna_first_planner.evaluate_atomicity import evaluate_atomicity
+    from odyssey_core.request_planning import KnowledgeUnit, SelectionCriteria, WriteAction
+
+    oracle = next(
+        item
+        for item in json.loads(
+            Path("benchmarks/luna_first_planner/atomicity_oracle.json").read_text()
+        )["oracles"]
+        if item["id"] == "AT08"
+    )
+    target = SelectionCriteria("Alex", "Alex", "person", (), None)
+    units = (
+        KnowledgeUnit(target, "remove", (), (), ("Alex owns the red car.",), (), "one"),
+        KnowledgeUnit(target, "amend", (), (), ("Alex owns the blue car.",), (), "one"),
+    )
+    valid = evaluate_atomicity(RequestPlan(actions=[WriteAction(units)], limitations=[]), oracle)
+    assert valid.safe_structure is True
+    assert oracle["intents"] == ["remove", "amend"]
+    wrong = (
+        units[0],
+        KnowledgeUnit(target, "record", (), (), ("Alex owns the blue car.",), (), "one"),
+    )
+    wrong_result = evaluate_atomicity(
+        RequestPlan(actions=[WriteAction(wrong)], limitations=[]), oracle
+    )
+    assert "missing_intent:amend" in wrong_result.findings
+
+
+def test_at08_historical_live_classification_remains_unchanged() -> None:
+    """The post-live oracle correction does not rewrite the retained historical row."""
+    rows = [
+        json.loads(line)
+        for line in Path("benchmarks/.live-results/luna-atomicity-v1.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    at08 = next(row for row in rows if row["case_id"] == "AT08")
+    assert at08["classification"] == "UNSAFE_NON_ESCALATION"
