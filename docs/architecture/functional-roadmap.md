@@ -36,7 +36,8 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.1B focused live answerer model evidence                    ✅ complete
 20.2A mobile web source + offline deterministic checks        ✅ complete
 20.2B real n8n serving + Chrome Android validation            ✅ complete
-20.2C planner incident hardening + focused live gate          🔄 in review
+20.2C planner incident hardening + focused live gate          ✅ complete
+20.2D Luna-first planner experiment preparation               🔄 in review
 20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
@@ -61,10 +62,16 @@ security/deployment boundary.
 
 ### 20.2C — planner incident hardening
 
-The first focused Sol/low live evidence gate has completed once. Deterministic hardening and bounded
-post-parse validation diagnostics remain under review; follow-up live calls require separate human
-authorization. See
-[Planner incident hardening](planner-incident-hardening.md).
+Complete. The production Sol/low planner now has explicit clarification, a bounded output envelope,
+zero automatic retries, and bounded post-parse validation diagnostics. See
+[Planner incident hardening](planner-incident-hardening.md). Follow-up provider calls remain separately
+authorized.
+
+### 20.2D — Luna-first planner experiment preparation
+
+Prepare a frozen, provider-free Luna/low `PLAN | CLARIFY | ESCALATE` benchmark around the unchanged
+production RequestPlan validator. Production routing remains Sol/low. See
+[Phase 20.2D — Luna-first planner experiment preparation](phase-20-2d-luna-first-planner-experiment.md).
 
 ### 20.3 — protected deployment
 
@@ -102,7 +109,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 💡 **Cost-aware planning:** real provider evidence now shows planner cost can be material. After the current Online MVP path is stable and runaway-output protection is in place, benchmark Luna `PLAN | ESCALATE` against the existing strong planner. Reuse historical Luna failure cases and permit narrow deterministic escalation guards for benchmark-proven unsafe patterns, especially unjustified mapping of event/fact dates to note `created_at`/`updated_at`. Adoption still requires zero unsafe non-escalations on critical sentinels and materially lower measured end-to-end cost. See [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 🔄 **Cost-aware planning:** deterministic preparation for the Luna-first experiment is active in Phase 20.2D. Production remains Sol/low, and live Luna calls require separate human authorization. Adoption still requires zero unsafe non-escalations on critical sentinels and materially lower measured end-to-end cost. See [Phase 20.2D](phase-20-2d-luna-first-planner-experiment.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
