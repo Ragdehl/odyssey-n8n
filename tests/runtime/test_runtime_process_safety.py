@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_runtime import composition
 from odyssey_runtime import server as runtime_server
-from odyssey_runtime.composition import RuntimeComposition
+from odyssey_runtime.composition import (
+    RuntimeComposition,
+    _current_time,
+    _path_env,
+    _positive_int_env,
+)
 
 
 def _result() -> ApplicationResult:
@@ -128,3 +135,28 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
     runtime_server.serve(runtime, host="127.0.0.1", port=18765)
 
     assert calls == [("127.0.0.1", 18765)]
+
+
+def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Runtime configuration rejects empty/invalid values and exposes explicit clock context."""
+    monkeypatch.setenv("TEST_PATH", "   ")
+    with pytest.raises(ValueError, match="must not be empty"):
+        _path_env("TEST_PATH", str(tmp_path))
+
+    monkeypatch.setenv("TEST_INT", "not-an-int")
+    with pytest.raises(ValueError, match="must be a positive integer"):
+        _positive_int_env("TEST_INT", "4")
+    monkeypatch.setenv("TEST_INT", "0")
+    with pytest.raises(ValueError, match="must be a positive integer"):
+        _positive_int_env("TEST_INT", "4")
+
+    monkeypatch.setenv("TZ", "Europe/Paris")
+    current = _current_time()
+    assert set(current) == {"date", "time", "timezone", "timestamp"}
+    assert current["timezone"] == "Europe/Paris"
+
+    monkeypatch.setenv("TZ", "Not/AZone")
+    with pytest.raises(ValueError, match="valid IANA timezone"):
+        _current_time()

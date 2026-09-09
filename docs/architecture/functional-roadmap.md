@@ -39,7 +39,8 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2C planner incident hardening + focused live gate          ✅ complete
 20.2D Luna-first planner experiment preparation               ✅ complete
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
-20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ next
+20.2F Luna-first production planning + bounded Sol fallback   ➡️ next
+20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
 ```
 
 ### 20.1B — answerer adoption gate
@@ -82,6 +83,14 @@ document. Luna inherited the strongest established Sol/low RequestPlan semantic 
 genuine fail-closed results. This was the bounded gate before any production Luna-first -> Sol
 fallback implementation; production routing remains Sol and implementation is not activated here.
 
+### 20.2F — Luna-first production planning
+
+Current adoption gate. Reuse the exact Phase 20.2E Luna/low provider boundary as the production first
+pass. Safe Luna PLAN results execute directly; CLARIFY and ESCALATE remain non-executing and ask the
+user rather than granting a stronger model authority to guess missing truth. A bounded fail-closed
+Luna structured-result error may make one Sol/low fallback call. Per-model provider usage must remain
+separately observable. See [Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
+
 ### 20.3 — protected deployment
 
 Before personal knowledge/provider actions are reachable from the Internet, protect the Odyssey hostname with an explicit access-control boundary. Use disposable data for first integration evidence and keep real-vault activation human controlled. Cloudflare/security/network changes require explicit approval.
@@ -118,7 +127,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 💡 **Cost-aware planning:** Phase 20.2E prompt-parity and atomicity validation is complete, with zero genuine unsafe non-escalations and zero genuine fail-closed results after adjudication. Production remains Sol/low; any Luna-first -> Sol fallback implementation/adoption is still deferred and requires its own bounded implementation and production-evidence gate. See [Phase 20.2D](phase-20-2d-luna-first-planner-experiment.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 🔄 **Cost-aware planning:** Phase 20.2F is the active production-adoption gate following the successful 20.2E Luna prompt-parity evidence. The first cut routes safe Luna results directly, asks the user on Luna abstention, and retains Sol/low only as a single fail-closed structured-result fallback. See [Phase 20.2F](phase-20-2f-luna-first-production.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
