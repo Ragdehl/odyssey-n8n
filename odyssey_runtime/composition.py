@@ -199,7 +199,7 @@ def _path_env(name: str, default: str) -> Path:
 def _build_contextual_reasoner() -> OpenAIContextualReasoner:
     """Build the production contextual reasoner with the canonical few-shot prefix."""
     return OpenAIContextualReasoner(
-        os.environ.get("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-sol"),
+        os.environ.get("ODYSSEY_CONTEXTUAL_MODEL", "gpt-5.6-luna"),
         reasoning_effort="medium",
         examples=load_contextual_calibration_examples(),
     )
