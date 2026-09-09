@@ -1,6 +1,6 @@
 # Phase 20.2G — contextual reasoner Luna replacement gate
 
-Status: **live gate completed; adoption blocked pending review**.
+Status: **live gate completed; prompt/configuration parity correction in progress; adoption blocked**.
 
 ## Objective
 
@@ -67,6 +67,30 @@ reasoning tokens. The runner estimated `$0.005163` using the dated repository pr
 The gate scored 7/8: clear false `RESOLVED` = 0, invalid = 0, and A19 safe, but A22's
 `UNRESOLVED` versus frozen `AMBIGUOUS` label is a conservative distinction that must not be
 silently relaxed. Production remains `gpt-5.6-sol` / medium; no adoption change was made.
+
+## Prompt-parity follow-up
+
+Review after the mini-gate found that production composition had constructed the contextual
+reasoner without the ten labelled calibration turns, while the benchmark supplied them. This was
+configuration drift against ADR 0003's selected Sol/medium few-shot contract and ADR 0004's
+production-parity checkpoint. The canonical ordered examples now live in
+`config/contextual-calibration.json`, are loaded by `odyssey_core` for production, and are consumed
+by the benchmark adapter; production does not import from `benchmarks/`. The production default
+remains Sol/medium and the `ODYSSEY_CONTEXTUAL_MODEL` override remains supported.
+
+A22's frozen candidate evidence contains all three plausible exact Carrefour entities:
+`carrefour-balma`, `carrefour-labege`, and `carrefour-market-capitole`, plus two lower-plausibility
+stores. Its `UNRESOLVED` Luna result was therefore a conservative abstention, not evidence that
+the candidate set was incomplete. Current write-target semantics already treat ambiguous exact
+evidence as clarification even when contextual output is `UNRESOLVED`; the distinction remains
+material for the benchmark and is not relaxed or converted into a Carrefour-specific rule.
+
+After deterministic parity verification, the smallest proposed follow-up is five new Luna/medium
+calls using frozen cases `A22`, `A19`, `A28`, `A31`, and `A02` (collision, historical ambiguity,
+another ambiguity, unresolved, and positive resolution). No provider calls are authorized by this
+follow-up preparation. At the previous gate's observed token envelope, the conservative no-cache
+planning estimate is approximately `$0.004` for five calls; production adoption remains blocked
+until this separate gate is explicitly authorized and passes.
 
 ## Acceptance criteria
 
