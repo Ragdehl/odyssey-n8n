@@ -128,6 +128,19 @@ evidence. A small per-case operation marker list can reject an explicitly contra
 but no synonym ontology or LLM judge is introduced. The v2 runner writes a separate exclusive
 `luna-first-planner-v2.jsonl` artifact and is the only runner authorized for future held-out cases.
 
+The attempted second gate was not a trustworthy complete 15-case result. The exact invocation used
+the 15 frozen IDs in the v2 README, with no shell redirection or `tee`. The process retained 10
+bounded rows (HD03 through SM01, 6,786 bytes); SM01 was `INVALID_FAIL_CLOSED`, so the runner stopped
+and the remaining five cases were not attempted. Response IDs and usage counters are retained only
+in that gitignored artifact; raw provider output and hidden reasoning are not retained. This proves
+Luna calls occurred during the attempt, but does not justify treating it as a completed gate. The
+artifact is preserved unchanged pending human review.
+
+The runner's evidence boundary is explicit: it exclusively reserves the fixed JSONL path before
+constructing the provider planner, flushes every completed row before the next attempt, stops on
+unsafe or fail-closed results, and refuses overwrite. Operators must not redirect stdout or use
+`tee` to target the runner's fixed evidence path.
+
 ## Deterministic guards and evaluation
 
 The benchmark implements the narrow historical date guard only when a frozen trusted oracle marks a

@@ -45,9 +45,7 @@ from benchmarks.luna_first_planner.run_live import (
     main as run_live_main,
 )
 from benchmarks.luna_first_planner.run_live_v2 import (
-    OUTPUT_PATH as OUTPUT_PATH_V2,
-)
-from benchmarks.luna_first_planner.run_live_v2 import (
+    reserve_evidence_path,
     run_cases_v2,
 )
 from odyssey_core.experimental_luna_planning import (
@@ -557,7 +555,88 @@ def test_v2_runner_uses_only_remaining_cases_and_never_executes(
     assert [row["case_id"] for row in rows] == remaining
     assert all(row["evaluator_version"] == EVALUATOR_VERSION for row in rows)
     assert all(row["classification"] == "SAFE_ESCALATE" for row in rows)
-    assert not OUTPUT_PATH_V2.exists()
+
+
+def test_v2_exclusive_reservation_prevents_provider_calls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An existing v2 artifact blocks a run before planner construction."""
+    path = tmp_path / "evidence.jsonl"
+    path.write_text("historical\n", encoding="utf-8")
+    monkeypatch.setattr("benchmarks.luna_first_planner.run_live_v2.OUTPUT_PATH", path)
+    with pytest.raises(FileExistsError):
+        reserve_evidence_path()
+
+
+def test_v2_streams_partial_evidence_before_later_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A later provider failure preserves each already-written bounded row."""
+    path = tmp_path / "evidence.jsonl"
+    monkeypatch.setattr("benchmarks.luna_first_planner.run_live_v2.OUTPUT_PATH", path)
+    cases_payload, oracles = load_frozen_registry_v2()
+
+    class FailingPlanner:
+        last_usage = None
+        last_response_id = None
+        last_provider_status = "completed"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan(self, request: str) -> PlannerEscalation:
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("simulated provider failure")
+            return PlannerEscalation()
+
+    with reserve_evidence_path() as evidence:
+        rows = run_cases_v2(
+            FailingPlanner(),
+            select_cases(cases_payload["cases"], ["SE01", "SE02"]),
+            oracles,
+            evidence,
+        )
+    assert [row["case_id"] for row in rows] == ["SE01", "SE02"]
+    persisted = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [row["case_id"] for row in persisted] == ["SE01", "SE02"]
+
+
+def test_v2_unsafe_stop_flushes_rows_and_skips_following_case(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Unsafe non-escalation stops before the next case and retains both rows."""
+    path = tmp_path / "evidence.jsonl"
+    monkeypatch.setattr("benchmarks.luna_first_planner.run_live_v2.OUTPUT_PATH", path)
+    cases_payload, oracles = load_frozen_registry_v2()
+
+    class UnsafePlanner:
+        last_usage = None
+        last_response_id = None
+        last_provider_status = "completed"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def plan(self, request: str) -> PlannerEscalation | RequestPlan:
+            self.calls += 1
+            if self.calls == 1:
+                return PlannerEscalation()
+            if self.calls == 2:
+                return RequestPlan(actions=[])
+            raise AssertionError("third case must not be called")
+
+    with reserve_evidence_path() as evidence:
+        planner = UnsafePlanner()
+        rows = run_cases_v2(
+            planner,
+            select_cases(cases_payload["cases"], ["SE01", "HD03", "SE02"]),
+            oracles,
+            evidence,
+        )
+    assert planner.calls == 2
+    assert [row["case_id"] for row in rows] == ["HD03", "SE01"]
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 2
 
 
 def test_runner_only_calls_planner_and_refuses_output_overwrite(
