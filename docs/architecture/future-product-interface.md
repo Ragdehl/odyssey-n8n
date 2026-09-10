@@ -72,6 +72,22 @@ Answerer      Luna / none
 
 This is safe stage/model metadata, not hidden chain-of-thought. The existing request-level operational evidence should be reused rather than adding a second tracing system.
 
+#### Early testing priority — advanced per-request inspector
+
+During the first real-use period after production/development isolation is in place, treat the advanced per-request inspector as an early testing aid rather than waiting for a full analytics dashboard. The user should be able to open the detail for an individual chat response and inspect, when reliable evidence exists:
+
+- estimated total logical-request cost;
+- total and allowlisted provider token counters;
+- ordered execution stages/capabilities actually traversed;
+- model + reasoning configuration at each provider-bearing stage;
+- number of contextual-resolver/provider invocations where distinguishable;
+- whether bounded Sol fallback was used;
+- total/stage latency and safe outcome/error category.
+
+The purpose is to spot abnormal real-use behavior while using Odyssey normally, for example a trivial request that costs much more than comparable requests, repeated resolver calls, an unexpected Sol fallback, or one stage dominating latency. The inspector must report observed bounded evidence, not infer an execution path from the final answer, and must never reveal hidden chain-of-thought, raw prompts, unrestricted provider payloads, credentials, or unrelated personal content.
+
+This early inspector can remain advanced/admin-only even if a small cost cue is later shown to ordinary users. A full dashboard and final chart selection remain later decisions driven by accumulated real telemetry.
+
 ### UI-2 — read-only Notes view
 
 Add a user-facing browser over the same canonical Odyssey knowledge:
