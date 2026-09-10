@@ -77,6 +77,31 @@ A failed gate means the branch is not ready. It does not require discarding cohe
 
 The stable deterministic CI check name is `Python CI / Python deterministic checks`. Whether branch protection currently requires it is a GitHub repository setting and should be verified before relying on that enforcement. Protection/visibility/security settings are operational GitHub boundaries and must not be changed implicitly by repository code.
 
+## Production and development isolation
+
+Once real users depend on Odyssey, ordinary development must not execute against the same public deployment, live workflows, or personal-data boundary as production. Maintain a stable production deployment and a separate development/staging deployment for feature testing before promotion.
+
+The default branch model should remain as simple as possible:
+
+```text
+feature branch / PR
+        |
+        v
+development or staging deployment
+        |
+   tests + human validation
+        |
+        v
+      main
+        |
+        v
+production deployment used by real users
+```
+
+`main` should represent the production-ready source. Feature branches may feed the development/staging environment. Do not introduce a permanent `develop` branch merely by convention; add one only if repeated parallel integration work demonstrates that a long-lived integration branch is materially useful.
+
+Production and development must use separate mutable/runtime boundaries wherever sharing could allow a test to affect users or personal knowledge. At minimum, deployment planning must explicitly review hostname/routing, n8n workflow activation, environment/configuration, runtime state, provider credentials/telemetry attribution, and vault/data targets. Development evidence should use disposable/non-personal data by default. Promotion to production remains an explicit deployment action after merge and validation; merging source code alone must not silently mutate production data or security boundaries.
+
 ## Documentation lifecycle
 
 The documentation structure intentionally separates current truth from historical evidence:
