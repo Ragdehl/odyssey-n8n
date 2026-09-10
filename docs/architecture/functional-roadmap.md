@@ -94,21 +94,30 @@ smoke confirmed Luna-first planning active. See
 
 ### 20.2G — contextual reasoner Luna replacement
 
-The full frozen 90-case Luna/medium benchmark completed with 88/90 frozen-label accuracy, 35/35
-correct `RESOLVED` decisions, zero clear false `RESOLVED`, and zero invalid outputs. One miss was the
-historically disputed E13 label; the only non-disputed miss was a conservative
-`AMBIGUOUS -> UNRESOLVED` abstention. The prompt/configuration is now canonical and shared by runtime
-and benchmark. PR #102 stages the production contextual default change from Sol/medium to Luna/medium
-while preserving the ten-example few-shot prefix and environment override. This adoption is not yet
-merged or deployed. See [Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
+Complete. The full frozen 90-case Luna/medium benchmark produced 88/90 frozen-label accuracy,
+35/35 correct `RESOLVED` decisions, zero clear false `RESOLVED`, and zero invalid outputs. One miss
+was the historically disputed E13 label; the only non-disputed miss was a conservative
+`AMBIGUOUS -> UNRESOLVED` abstention. PR #102 merged the production contextual default change from
+Sol/medium to Luna/medium while preserving the canonical ten-example few-shot prefix and environment
+override. During Phase 20.3B recovery the Raspberry runtime was restarted and provider-free local
+inspection confirmed the running composition now loads Luna/medium with exactly ten canonical
+examples. See [Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
 
 ### 20.3 — protected deployment
 
-Before personal knowledge/provider actions are reachable from the Internet, protect the Odyssey hostname with an explicit access-control boundary. Use disposable data for first integration evidence and keep real-vault activation human controlled. Cloudflare/security/network changes require explicit approval.
+Current. Runtime activation is complete, but the Cloudflare portion of 20.3B is still pending because
+the Raspberry does not yet have an authorized Cloudflare control-plane management credential. Before
+personal knowledge/provider actions are reachable from the Internet, protect the Odyssey hostname
+with an explicit access-control boundary. Use disposable data for first integration evidence and keep
+real-vault activation human controlled. Cloudflare/security/network changes require explicit approval.
 
 ## Committed post-MVP directions
 
 These are real product directions, but their exact implementation order should follow evidence from Odyssey Online usage rather than speculative phase numbering.
+
+### Production and development isolation
+
+Once real users depend on Odyssey, maintain a stable production deployment and a separate development/staging deployment so feature work and disposable tests cannot affect users or personal knowledge. `main` remains the production-ready source by default; feature branches feed development/staging before promotion. A permanent `develop` branch is optional and should be introduced only if repeated parallel integration work justifies it. See [Development Pipeline](development-pipeline.md#production-and-development-isolation).
 
 ### Composable applications and capabilities
 
@@ -138,7 +147,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 🔄 **Cost-aware model routing:** Luna-first production planning is complete, and Phase 20.2G stages Luna/medium as the contextual reasoner default after full 90-case evidence with zero clear false resolutions. Deployment remains a separate human-controlled step. See [Phase 20.2G](phase-20-2g-contextual-luna-gate.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 🔄 **Cost-aware model routing:** Luna-first production planning and Luna/medium contextual reasoning are now active; retain bounded Sol fallback only where the validated production contract requires it and continue optimizing from measured telemetry rather than assumption. See [Phase 20.2G](phase-20-2g-contextual-luna-gate.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
