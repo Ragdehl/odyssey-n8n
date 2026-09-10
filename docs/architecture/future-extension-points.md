@@ -13,21 +13,12 @@ Use these documents as the detailed owners:
 - [Future Odyssey help and conversation context](future-help-and-conversation-context.md) — isolated product-help retrieval plus bounded ephemeral follow-up context.
 - [Future semantic request history](phase-17-request-records.md) — explicit history of what the user asked and what Odyssey did, correlated through `request_id`, isolated from canonical personal retrieval and operational tracing, and never hidden model reasoning.
 - [Future product usage observability](future-product-usage-observability.md) — safe user/admin usage, timing, token, and cost projections from existing evidence.
+- [Future Odyssey product interface](future-product-interface.md) — mobile-first chat feedback, note browsing/editing, activity/change visualization, and role-aware advanced surfaces.
 - [Future capture-context provenance](future-capture-context-provenance.md) — optional request/fact capture location/context without confusing it with entity properties.
 - [Future pending-reference evolution](future-pending-reference-evolution.md) — safe relinking, recurrence signals, and advisory schema-evolution evidence.
 - [Future retrieval refinements](future-query-decomposed-retrieval.md) — query decomposition/entity coverage first, then measured candidate reduction/compact evidence if needed.
 
-Real Odyssey Online use also preserves these deferred interface directions:
-
-- **Write acknowledgement and note access:** present a human-safe summary of what was created or updated and,
-  when a future consumer need is evidenced, offer access to that canonical note without exposing raw mutation,
-  provider, or runtime payloads.
-- **Knowledge/note browsing:** add browse/search/read interfaces over the same Core/Markdown authority rather
-  than a second note store or alternate semantic layer.
-- **Visual theming:** iterate on presentation only after product usage warrants it; it is not an architecture
-  requirement.
-
-When one of those capabilities becomes active work, update its owner and the roadmap rather than copying its detailed design here.
+Real Odyssey Online use also preserves visual theming as a deferred interface direction. Iterate on presentation only after product usage warrants it; visual theming is not an architecture requirement. Detailed chat/note/activity/advanced-interface direction now belongs to [Future Odyssey product interface](future-product-interface.md) rather than being duplicated here.
 
 ## Application routing and composition
 
