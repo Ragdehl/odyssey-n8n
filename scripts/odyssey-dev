@@ -86,7 +86,7 @@ n8n_health_once() {
 wait_n8n_health() {
   local attempt
   for attempt in $(seq 1 45); do
-    if n8n_health_once; then
+    if n8n_health_once >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
