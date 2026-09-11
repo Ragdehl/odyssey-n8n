@@ -1,6 +1,6 @@
 # Phase 20.3 — Protected Raspberry/Cloudflare deployment + E2E
 
-Status: **20.3B partially complete — runtime activation complete; Cloudflare control-plane work blocked**.
+Status: **20.3B partially complete — 20.3D bounded real-vault activation complete; Cloudflare control-plane work remains blocked**.
 
 ## Objective
 
@@ -266,3 +266,134 @@ The exact next authorized operation requires Cloudflare control-plane access for
 account/tunnel. It must create only the dedicated hostname and narrow five-path protection, then
 read back the non-secret identifiers and run the bounded probes. Do not substitute the tunnel
 runtime token, add a broad n8n policy, or run the probes before that protection exists.
+
+## 20.3C — disposable E2E deployment reconciliation — 2026-09-11
+
+The disposable runtime remained intentionally active with:
+
+```text
+ODYSSEY_VAULT_ROOT=/tmp/odyssey-20-3c/vault
+ODYSSEY_RUNTIME_ROOT=/tmp/odyssey-20-3c/runtime
+ODYSSEY_PENDING_ROOT=/tmp/odyssey-20-3c/state/pending
+```
+
+No real-vault path was connected and no 20.3D activation was performed.
+
+The disposable Nora Vidal WRITE/READ evidence remains request-correlated and clean:
+
+| Evidence | Locator/result |
+| --- | --- |
+| Vault Git commit | `fa6719e0a3c11950d1a6ad039fa5e246181a67b7` (`odyssey: apply request`) |
+| Request correlation | Commit trailer `Odyssey-Request: web-0d098c68-efc6-4c40-bddf-3a2f3515f07a` |
+| Created note | `Nora Vidal - c66f0167-6819-404d-a9a8-3c6ce3b06a69.md` |
+| Fact locator 0 | `odyssey:fact request=web-0d098c68-efc6-4c40-bddf-3a2f3515f07a ordinal=0` — Trabaja en Airbus. |
+| Fact locator 1 | `odyssey:fact request=web-0d098c68-efc6-4c40-bddf-3a2f3515f07a ordinal=1` — Vive en Albi. |
+| Working tree | Clean at the disposable vault commit; no pending files were present. |
+
+### Active workflow drift and reconciliation
+
+Before reconciliation, the active product workflow was:
+
+```text
+name: Odyssey — Online product boundary
+id: hMbt07KRz8HVDOUO
+active version: e367aa85-c08b-44df-a8de-748b22df8c91
+```
+
+The precise source/deployment delta was confined to `Route bounded product result`.
+`workflows/odyssey-online.ts` routes `status=needs_attention` with the allowlisted
+`clarification_code=UNRECOGNIZED_REQUEST` to the deterministic clarification response before
+retrieval/answer routing. The active deployed node omitted that condition and therefore fell
+through to the empty completed response. The webhook path, validation, runtime bridge, route
+connections, grounded-answerer branch, answerer model/configuration, and
+`Odyssey Phase 20.2B OpenAI Answerer` credential binding otherwise matched the checked-in
+workflow. This explains the direct-runtime PASS alongside the n8n product-boundary discrepancy.
+
+The supported n8n deployment mechanism was an atomic `update_workflow` operation against the
+existing workflow, followed by `publish_workflow`. This preserved the active workflow ID and
+avoided a second active `/api/request` workflow or deletion of inactive duplicates. After
+reconciliation the active workflow is:
+
+```text
+id: hMbt07KRz8HVDOUO
+active version: 7c1df175-e9b2-466d-91c4-fa0f15a0e431
+webhook: POST /api/request
+```
+
+The existing OpenAI answerer credential binding remained in place; no credential was recreated
+or auto-assigned.
+
+### Clarification evidence
+
+The direct runtime request `qzxqzx` already passed with `needs_attention`,
+`clarification_code=UNRECOGNIZED_REQUEST`, empty actions, `pending_work.required=false`,
+`history.status=NOT_ATTEMPTED`, and unchanged disposable-vault HEAD.
+
+After deployment, local n8n request `request_id=qzxqzx` passed:
+
+```json
+{
+  "request_id": "qzxqzx",
+  "status": "needs_attention",
+  "kind": "clarification",
+  "message": "No he podido interpretar la solicitud. Reformúlala con más detalle."
+}
+```
+
+n8n execution `233` confirms the bounded path: the runtime returned the expected clarification,
+`Route bounded product result` emitted the deterministic clarification, `Need grounded answer?`
+took its direct branch, and the OpenAI answerer node did not execute. The runtime recorded exactly
+one provider call, `planner.luna` (`gpt-5.6-luna`, low reasoning); no answerer call was made.
+Pending work was skipped and no pending file was created. The disposable vault HEAD remained
+`fa6719e0a3c11950d1a6ad039fa5e246181a67b7`.
+
+Provider-free checks also confirmed that the active workflow still contains the WRITE/READ
+deterministic routing (`succeeded`/`completed` unit acknowledgement and empty response), the
+grounded-answerer branch with its explicit evidence projection, and the answerer credential
+binding. The focused deterministic source tests passed under the repository virtual environment.
+
+The protected disposable browser/mobile E2E is complete. Real-vault activation is recorded below as a
+separate bounded deployment gate; no real-vault provider-backed WRITE was used as activation evidence.
+
+## 20.3D — bounded production-vault activation — 2026-09-11
+
+The explicitly authorized production bootstrap was completed after a fresh preflight. The configured
+production vault is `/data/odyssey/vault`; it was empty before mutation, including no canonical
+Markdown, and remains empty after bootstrap. The existing `/data/odyssey/.git` parent directory
+was inspected and left untouched: it is not the vault repository.
+
+The vault itself is now the exact local Git repository root:
+
+```text
+git -C /data/odyssey/vault rev-parse --show-toplevel
+/data/odyssey/vault
+
+git -C /data/odyssey/vault rev-parse HEAD
+465773757427597b1f6036e94e670c8dd360d882
+```
+
+The SHA is the explicit empty baseline commit `odyssey: initialize empty vault`. The vault Git
+working tree is clean (`## main`). Only the two previously identified rebuildable production index
+artifacts were reset: `/data/odyssey/runtime/context.sqlite3` and
+`/data/odyssey/runtime/semantic.sqlite3`. Their guarded Odyssey index deletion methods verified
+the index markers before removal. `/data/odyssey/runtime/phase17e-retrieval/` benchmark results
+and the embedding cache were not deleted. The existing `build_runtime_from_environment()` path
+then rebuilt both SQLite indexes from the empty canonical vault using the configured local
+embedding cache, producing zero indexed notes; no durable `/data/odyssey/state/pending` data was
+modified.
+
+Before activation, no Odyssey service or process was active and `127.0.0.1:8765` rejected health
+requests. The private runtime was started through the established foreground process boundary under
+the transient user unit `odyssey-phase20-3d-runtime.service` (PID 202011), using the existing
+runtime environment file. Post-start verification showed the unit `active/running`, a listener only
+on `172.18.0.1:8765`, HTTP 200 from `http://172.18.0.1:8765/healthz`, and no listener on
+`127.0.0.1:8765`. n8n's unrelated `127.0.0.1:18780` listener was unchanged. No synthetic personal
+WRITE or provider-backed request was sent.
+
+Operational learning: a parent `/data/odyssey/.git` directory does not make the vault a Git
+repository; exact-root and baseline-commit checks must be performed against `/data/odyssey/vault`
+itself. Runtime activation also requires an explicit supervisor/environment launch because the
+previous disposable service was gone; the runtime remains private on the Docker bridge address.
+
+The full Phase 20.3 acceptance gate is still open because the previously recorded Cloudflare
+control-plane work is blocked. Human merge and the remaining security review remain required.
