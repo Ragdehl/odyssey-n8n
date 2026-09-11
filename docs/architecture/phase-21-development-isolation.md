@@ -234,7 +234,9 @@ DEV stop/restart sequence, the production health endpoint stayed HTTP 200.
 Reusable operational learning: n8n imports/publishes an active workflow reliably only while the
 same DEV database is not owned by a running n8n process; publish before DEV startup, then verify
 active version metadata after startup. The operator codifies that sequence and fails closed on
-missing source/deployment identity or DEV credential contamination.
+missing source/deployment identity or DEV credential contamination. A cold DEV semantic runtime
+initialization observed during redeploy needed about 46 seconds, so the DEV-only health wait allows
+60 seconds before failing closed rather than treating normal cold startup as a deployment failure.
 
 Rollback remains DEV-only: stop `odyssey-dev`, remove the DEV container/volume only when its
 synthetic state/evidence is no longer required, and remove only the DEV hostname, DEV Access
