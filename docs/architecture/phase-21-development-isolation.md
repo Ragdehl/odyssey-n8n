@@ -1,6 +1,6 @@
 # Phase 21 — Production/development isolation
 
-Status: 21A architecture challenge complete; 21B transient proof complete; 21C next.
+Status: 21A architecture challenge complete; 21B transient proof complete; 21C complete; 21D next.
 
 ## Objective
 
@@ -120,12 +120,57 @@ the existing immutable production dependency environment did not cross data root
 21C should provide explicit DEV deploy/start/stop/status operations and a persistent DEV
 root.
 
-## 21C gate
+## Observed 21C evidence
 
-Provision the persistent DEV root/runtime boundary and fixed operator commands so DEV can
-be deployed, started, stopped, and inspected without manual environment switching. Then
-measure the real resource headroom and decide whether a separate DEV n8n instance is
-justified for synchronized browser/workflow testing. If it is piloted, verify that the DEV
-front end, runtime/backend, and workflow source can be tied to the same deployed commit.
-Any implementation must verify fixed PROD/DEV identities and prove production invariants
-before and after.
+The persistent DEV data root is `/data/odyssey-dev`, created with user ownership and
+mode `750`, separate from `/data/odyssey`. It contains only `vault/`, `state/pending/`,
+and `runtime/` (including the DEV-only embedding cache). The DEV vault has its own exact
+Git root and history: empty baseline `578342c6147607c0e568fc7b9ac0ffc35a54428c`, then
+synthetic-only sentinel commit `c498ae2ac31844b0b216c782eaa7340abcfd0b54` and persistent
+sentinel commit `0012eefcedfe3590ce5398fe04c2b13e165367b3`. No production Markdown was
+copied.
+
+The DEV source executes from `/home/ragdehl/projects/odyssey-dev/.venv/bin/python`.
+This is a separate venv with an explicit read-only `.pth` reference to the already
+installed local dependency packages; the production venv itself was not modified. The
+tracked `scripts/odyssey-dev` command and `deploy/odyssey-dev-runtime.service` define
+fixed roots, actor, host, and port. The command's root guard rejects escapes or overlap
+with `/data/odyssey`; the service wrapper invokes the same guard before starting Core.
+
+The persistent user service is `odyssey-dev-runtime.service` on `127.0.0.1:28765`.
+`odyssey-dev deploy` requires a clean DEV source checkout, restarts only this unit,
+waits for health, and records the exact successful source commit in
+`/data/odyssey-dev/runtime/deployed-commit`. `start`, `stop`, `restart`, and `status`
+use the same fixed identity without manual environment or branch switching. A host
+entrypoint is installed at `~/.local/bin/odyssey-dev` as a symlink to the tracked command.
+
+The offline proof wrote/read the synthetic `dev-phase21c-persistent-sentinel`, rebuilt
+both indexes with two notes, stopped DEV, started it again, and read the note after
+restart. Both context and semantic indexes contained two note rows; both DEV health
+probes returned HTTP 200. The deployed source identity was
+`75bfd623c1b6a21b668c78db76dab6aec464934c` during the proof.
+
+With production and DEV active, observed resources were 4 GiB RAM with about 1.5 GiB
+available, 1.5 GiB swap free, load `0.84 0.51 0.23`, production runtime RSS about
+538 MiB, DEV runtime RSS about 649 MiB, n8n process RSS about 302 MiB plus task runner
+about 88 MiB, and cloudflared about 35 MiB. Docker's memory-limit display was
+unavailable (`0B`), so RSS is the usable comparison. On this evidence the decision is
+**HOLD_DEV_N8N**: the DEV runtime alone adds substantial memory and swap pressure on a
+4 GiB host, while browser/workflow value can be evaluated after the fixed private DEV
+runtime is operational. Revisit with measured demand and a capacity margin before adding
+another n8n instance.
+
+Production remained unchanged: vault HEAD
+`0a87fed0e4386c4913fa3be1035611eba1af7107`, canonical Markdown SHA256
+`aed19f725ee9702b7e9cc64a4e2cae997215157fee3f1b027565d0b610732bb8`, clean status,
+empty pending state, context/semantic hashes unchanged, runtime PID `202011` and
+listener/health unchanged, n8n container identity unchanged, and no production command
+or service was restarted. No provider/model/API call was made.
+
+## 21D gate
+
+If browser/workflow integration requires it, evaluate a synchronized DEV n8n/routing
+pilot under the `HOLD_DEV_N8N` capacity decision. Any implementation must verify fixed
+PROD/DEV identities, preserve the endpoint-based operator model, and prove production
+invariants before and after. The current 21C command surface is the deployment boundary;
+it does not yet create external routing or a DEV n8n instance.

@@ -44,7 +44,8 @@ See [Phase 21 — production/development isolation](phase-21-development-isolati
 20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
 21A   isolation architecture challenge                         ✅ complete
 21B   isolated DEV checkout/data + transient runtime proof     ✅ complete
-21C   separate DEV n8n instance and persistent operations     ⬜ planned
+21C   persistent DEV runtime/operations + DEV n8n decision   ✅ complete
+21D   synchronized DEV n8n/routing pilot (if justified)      ⬜ planned
 ```
 
 ### 20.1B — answerer adoption gate
