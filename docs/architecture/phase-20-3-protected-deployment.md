@@ -261,10 +261,11 @@ The clarification drift incident also established that request diagnostics must 
 
 These are deployment facts, not reasons to change Odyssey Core semantics.
 
-## 20.3A read-only Raspberry inventory
+## 20.3A read-only Raspberry inventory — historical snapshot (2026-09-09)
 
 The live Raspberry inspection on 2026-09-09 established the following facts without executing an
-Odyssey workflow:
+Odyssey workflow. This section is retained as checkpoint evidence and does not describe the later
+20.3B/20.3D final live state.
 
 | Component | Observed state |
 | --- | --- |
@@ -275,7 +276,7 @@ Odyssey workflow:
 | cloudflared | Docker container `cloudflared`, token-run mode with tunnel ID `0b99a438-fdb8-4978-9035-ef48df039bc4`; control-plane configuration reports only `n8n.ragdehl.com -> http://n8n:5678` plus a `404` catch-all. No local ingress file is mounted. |
 | `odyssey.ragdehl.com` | No DNS resolution was returned and no tunnel hostname route was observed. It does not currently exist as an active product hostname. |
 
-The active n8n workflows confirm these production URLs:
+The active n8n workflows confirmed these production URLs at that checkpoint:
 
 ```text
 https://n8n.ragdehl.com/api/request
@@ -285,29 +286,28 @@ https://n8n.ragdehl.com/api/app.js
 https://n8n.ragdehl.com/api/client.js
 ```
 
-The browser's `/api/request` therefore reaches the active `request` webhook through the n8n
-`/api` webhook prefix. The private Tailscale path is the same `/api` mapping on
-`pi.taild6a0e7.ts.net`; the public Cloudflare tunnel currently routes the whole n8n hostname to
-the n8n service, so the Odyssey product paths are alternate public-host bypasses today. The n8n
-workflow trigger metadata reports no webhook credentials, and no Access policy is currently
-observable at this boundary.
+At that checkpoint, the browser's `/api/request` reached the active `request` webhook through the
+n8n `/api` webhook prefix. The private Tailscale path used the same `/api` mapping on
+`pi.taild6a0e7.ts.net`; the public Cloudflare tunnel routed the whole n8n hostname to the n8n
+service, so the Odyssey product paths were alternate public-host bypasses. The n8n workflow trigger
+metadata reported no webhook credentials, and no Access policy was observable at that boundary.
 
-### Read-only attack/bypass inventory
+### Read-only attack/bypass inventory at that checkpoint
 
 | Host/path | Reaches | Protection requirement |
 | --- | --- | --- |
-| `odyssey.ragdehl.com/*` | No current route/DNS; future dedicated page, assets, and API | Must be protected before creation |
+| `odyssey.ragdehl.com/*` | No route/DNS at the checkpoint; future dedicated page, assets, and API | Must be protected before creation |
 | `n8n.ragdehl.com/api/request` | Active Odyssey product request workflow -> private runtime | Must receive equivalent Access protection or explicit deny |
 | `n8n.ragdehl.com/api/odyssey`, `/api/styles.css`, `/api/app.js`, `/api/client.js` | Active read-only Odyssey page/static workflows | Must receive equivalent protection or explicit deny |
 | `pi.taild6a0e7.ts.net/api/*` | Tailscale Serve -> loopback n8n product prefix | Keep private; do not broaden exposure |
 | `172.18.0.1:8765` / `127.0.0.1:18780` | Private runtime / n8n origin | Must remain non-public |
 
-No unauthenticated workflow request was sent. The inventory is configuration-derived; it does not
+No unauthenticated workflow request was sent. The inventory was configuration-derived; it did not
 claim an execution or provider reachability test.
 
-### Concrete 20.3B mutation plan and rollback
+### Concrete 20.3B mutation plan and rollback — historical plan
 
-After a separate human approval immediately before execution, the smallest protected change is:
+After a separate human approval immediately before execution, the smallest protected change was:
 
 1. Create `odyssey.ragdehl.com` as a dedicated Cloudflare Tunnel public hostname to the existing
    n8n origin.
@@ -320,12 +320,12 @@ After a separate human approval immediately before execution, the smallest prote
 4. Prove unauthenticated requests stop before n8n/runtime/provider/vault execution, then run the
    disposable-data E2E gate.
 
-Rollback is to disable/remove only the Odyssey hostname route and its Odyssey-specific alternate-
+Rollback was to disable/remove only the Odyssey hostname route and its Odyssey-specific alternate-
 host policy, leaving n8n administration/OAuth/MCP, the private runtime, and vault data unchanged.
-The current routing does not support a safe public Odyssey hostname until these protections are in
-place; no Phase 20.3B mutation was performed in 20.3A.
+No Phase 20.3B mutation had been performed during 20.3A; the later completed 20.3B section above
+records the authorized implementation and verification.
 
-## Recovery evidence — 2026-09-09
+## Recovery evidence — 2026-09-09 — historical checkpoint
 
 The interrupted deployment session was audited before any new deployment write. The result was
 **state A**: no Phase 20.3B Cloudflare mutation had occurred. `odyssey.ragdehl.com` still had no
@@ -333,8 +333,8 @@ DNS record or tunnel route, and no Odyssey-specific Access application, policy, 
 protection was present in the observed control-plane state. No public security probe was replayed
 while that bypass remained open.
 
-The only authorized recovery mutation was restarting the existing Odyssey runtime. The service is
-now active as `odyssey-phase20-2f-runtime.service`, PID `182642`, started at `2026-09-09 22:55:49
+The only authorized recovery mutation was restarting the existing Odyssey runtime. The service was
+active as `odyssey-phase20-2f-runtime.service`, PID `182642`, started at `2026-09-09 22:55:49
 CEST`. A provider-free local composition inspection reported:
 
 ```text
@@ -344,12 +344,12 @@ examples=10
 ```
 
 The existing n8n container, loopback binding, Tailscale Serve mapping, DNS operating state, and
-real-vault boundary were not changed. The runtime token-run process remains connected to the
-existing tunnel, but this host exposes no Cloudflare control-plane API credential or management
-connector with which to create/read back routes and Access resources. Consequently the protected
-hostname, Access policy, tunnel-side JWT validation, alternate-host path protection, and their
-unauthenticated probes remain pending; no provider call, Odyssey action, or vault mutation was
-caused by recovery.
+real-vault boundary were not changed at that checkpoint. The runtime token-run process remained
+connected to the existing tunnel, but the host exposed no Cloudflare control-plane API credential
+or management connector with which to create/read back routes and Access resources. Consequently
+the protected hostname, Access policy, tunnel-side JWT validation, alternate-host path protection,
+and their unauthenticated probes were still pending at that time; no provider call, Odyssey action,
+or vault mutation was caused by recovery.
 
 At that recovery checkpoint, the exact next authorized operation required Cloudflare control-plane
 access for the existing account/tunnel and was intentionally blocked until that access existed.
