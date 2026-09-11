@@ -136,6 +136,18 @@ These are real product directions; exact implementation should remain incrementa
 
 Once real use depends on Odyssey, maintain a stable production deployment and a separate development/staging deployment so feature work and disposable tests cannot affect users or personal knowledge. `main` remains the production-ready source by default; feature branches feed development/staging before promotion. A permanent `develop` branch is optional and should be introduced only if repeated parallel integration work justifies it. See [Development Pipeline](development-pipeline.md#production-and-development-isolation).
 
+```text
+21A architecture/isolation decision                         ✅ complete
+21B transient isolated runtime proof                        ✅ complete
+21C persistent isolated DEV runtime/operator workflow       ✅ complete
+21D on-demand DEV n8n + fixed protected browser endpoint    ➡️ propagation/mobile checkpoint
+```
+
+The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
+database/container. It is not a permanent Git branch. The remaining 21D gate is public TLS/Access
+observation and the human mobile check at the fixed DEV product endpoint; Phase 21 does not
+complete until that evidence and final production non-interference comparison pass.
+
 ### Natural conversation and history
 
 Conversation continuity is now a concrete post-MVP requirement, not only a speculative idea. The intended architecture is **context on demand**, not a hard-coded “always send the last N messages” window.

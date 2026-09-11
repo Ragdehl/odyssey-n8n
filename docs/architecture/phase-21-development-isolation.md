@@ -1,6 +1,8 @@
 # Phase 21 — Production/development isolation
 
-Status: 21A architecture challenge complete; 21B transient proof complete; 21C complete; 21D next.
+Status: 21A architecture challenge complete; 21B transient proof complete; 21C complete;
+21D control-plane/runtime evidence complete, with public TLS/Access propagation and the human
+mobile checkpoint still pending.
 
 ## Objective
 
@@ -167,10 +169,74 @@ empty pending state, context/semantic hashes unchanged, runtime PID `202011` and
 listener/health unchanged, n8n container identity unchanged, and no production command
 or service was restarted. No provider/model/API call was made.
 
-## 21D gate
+## Observed 21D control-plane and runtime evidence
 
-If browser/workflow integration requires it, evaluate a synchronized DEV n8n/routing
-pilot under the `HOLD_DEV_N8N` capacity decision. Any implementation must verify fixed
-PROD/DEV identities, preserve the endpoint-based operator model, and prove production
-invariants before and after. The current 21C command surface is the deployment boundary;
-it does not yet create external routing or a DEV n8n instance.
+21D added an **on-demand** DEV browser/workflow boundary. It does not alter the production
+source checkout, `/data/odyssey`, production n8n volume/database/workflow, or production
+runtime. The DEV identities are fixed:
+
+```text
+DEV n8n container       odyssey-dev-n8n
+DEV n8n database volume odyssey-dev-n8n-data
+DEV n8n listener        172.18.0.1:28780 (Docker bridge gateway only)
+DEV runtime              127.0.0.1:28765
+DEV product URL          https://dev.odyssey.ragdehl.com/api/odyssey
+DEV canonical/runtime    /data/odyssey-dev
+```
+
+DEV n8n has its own Docker identity and volume, mounts only generated DEV web assets read-only,
+and has no `/data/odyssey` mount or imported credentials. It uses host networking only so the
+checked-in DEV workflow can reach the loopback-only DEV runtime; n8n itself binds only the Docker
+bridge gateway rather than a public host interface. The rendered workflow is fail-closed: it
+requires explicit deployment environment and runtime target values, and the operator rejects
+rendered JSON containing the production runtime or production data root.
+
+`odyssey-dev deploy` requires a clean source checkout, renders the DEV workflow from the same
+source commit, prepares the DEV-marked web asset, imports/publishes workflows while DEV n8n is
+stopped, starts only DEV components, verifies health, confirms zero DEV n8n credentials, and
+records source/workflow fingerprints under `/data/odyssey-dev/runtime`. `status` reports
+`MATCH`, `DRIFT`, or `UNKNOWN` provenance rather than assuming a workflow matches source. The
+published workflow IDs are `odyssey-online` and `odyssey-online-static`; their names include
+`DEV` and their active version IDs remain runtime evidence rather than a second source authority.
+
+The DEV web marker is generated from deployment identity, not maintained as a DEV fork. The
+checked-in default is `PROD`; the DEV deployment writes only the generated runtime copy with the
+exact deployed commit. Normal operation remains `odyssey-dev deploy`, `start`, `stop`, and
+`status`; it does not require switching variables, ports, roots, or branches.
+
+Cloudflare uses the existing healthy tunnel. The DEV CNAME points only to that tunnel, and a
+distinct `Odyssey DEV` Access application/policy follows the production authorized-identity
+principle without altering the production application or policy. The DEV tunnel ingress is
+limited to the six product routes (`/api/odyssey`, static assets, and `/api/request`) and targets
+only `172.18.0.1:28780`; this prevents the DEV n8n editor/admin root from being reachable through
+the DEV hostname. DNS and tunnel/Access control-plane postconditions passed. Public edge
+TLS/Access behavior must still be observed after hostname propagation before the mobile checkpoint
+is requested.
+
+The no-provider local proof returned the static page, generated DEV environment marker, and
+bounded invalid-request response; that response bypassed the runtime and answerer. A process
+inside DEV n8n received HTTP 200 from `127.0.0.1:28765/healthz`; the persisted DEV workflow target
+was exactly that DEV runtime, contained no production runtime target, and the DEV credential count
+was zero. No provider/model call was made.
+
+Capacity remains intentionally on-demand. A settled 4 GiB host observation was:
+
+| State | Available RAM | Swap free | Relevant RSS |
+| --- | ---: | ---: | --- |
+| A — PROD only | 2429 MiB | 684 MiB | production n8n 133 MiB + 55 MiB runner |
+| B — PROD + DEV runtime | 1810 MiB | 684 MiB | DEV runtime 652 MiB |
+| C — PROD + DEV runtime + DEV n8n | 982 MiB | 600 MiB | DEV runtime 592 MiB; DEV n8n 746 MiB + 145 MiB runner |
+
+This supports **ON_DEMAND_DEV_N8N_ACCEPTABLE**, not an always-on DEV n8n service: start it only
+for bounded browser/workflow sessions and use `odyssey-dev stop` afterward. During the measured
+DEV stop/restart sequence, the production health endpoint stayed HTTP 200.
+
+Reusable operational learning: n8n imports/publishes an active workflow reliably only while the
+same DEV database is not owned by a running n8n process; publish before DEV startup, then verify
+active version metadata after startup. The operator codifies that sequence and fails closed on
+missing source/deployment identity or DEV credential contamination.
+
+Rollback remains DEV-only: stop `odyssey-dev`, remove the DEV container/volume only when its
+synthetic state/evidence is no longer required, and remove only the DEV hostname, DEV Access
+application/policy, and DEV ingress rule. Production services, routes, data, and Access policy
+must never be restarted or reverted as part of DEV rollback.

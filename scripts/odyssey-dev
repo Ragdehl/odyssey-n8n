@@ -17,7 +17,7 @@ UNIT_SOURCE=$DEV_SOURCE/deploy/$UNIT
 UNIT_TARGET=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT
 PYTHON=$DEV_SOURCE/.venv/bin/python
 DEPLOYED_COMMIT=$DEV_RUNTIME/deployed-commit
-DEV_PUBLIC_URL=https://dev.odyssey.ragdehl.com
+DEV_PRODUCT_URL=https://dev.odyssey.ragdehl.com/api/odyssey
 N8N_COMPOSE=$DEV_SOURCE/deploy/odyssey-dev-n8n.compose.yaml
 N8N_PROJECT=odyssey-dev
 N8N_CONTAINER=odyssey-dev-n8n
@@ -270,10 +270,10 @@ status() {
   if n8n_health_once >/dev/null 2>&1; then n8n_health=healthy; else n8n_health=unhealthy; fi
   metadata=$(workflow_metadata 2>/dev/null || echo unavailable)
   provenance=$(workflow_provenance)
-  if curl --silent --show-error --max-time 5 --output /dev/null "$DEV_PUBLIC_URL/api/odyssey"; then public_status=reachable; else public_status=unavailable; fi
+  if curl --silent --max-time 5 --output /dev/null "$DEV_PRODUCT_URL"; then public_status=reachable; else public_status=unavailable; fi
   printf 'environment=DEV\ndev_state=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nn8n_container=%s\nn8n_state=%s\nn8n_address=%s:%s\nn8n_health=%s\nn8n_volume=%s\nworkflow_metadata=%s\nworkflow_source_provenance=%s\npublic_url=%s\npublic_endpoint=%s\n' \
     "$state" "$DEV_HOST" "$DEV_PORT" "$health_state" "$DEV_ROOT" "$DEV_SOURCE" "$deployed" "$commit" "$branch" \
-    "$([ -z "$dirty" ] && echo yes || echo no)" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PUBLIC_URL" "$public_status"
+    "$([ -z "$dirty" ] && echo yes || echo no)" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PRODUCT_URL" "$public_status"
 }
 
 deploy() {
