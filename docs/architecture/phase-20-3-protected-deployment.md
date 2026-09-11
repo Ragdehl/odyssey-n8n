@@ -1,6 +1,6 @@
 # Phase 20.3 — Protected Raspberry/Cloudflare deployment + E2E
 
-Status: **20.3B partially complete — 20.3D bounded real-vault activation complete; Cloudflare control-plane work remains blocked**.
+Status: ✅ **IMPLEMENTATION/EVIDENCE COMPLETE — 20.3A–20.3D complete; final human review/merge remains.**
 
 ## Objective
 
@@ -54,8 +54,8 @@ Phase 20.3 is complete only when retained evidence shows all of the following:
 6. Browser page/API remain same-origin; no browser-held provider credential or permissive CORS rule is introduced.
 7. Protected disposable-data E2E demonstrates page load, one deterministic write acknowledgement, one grounded read, and one fail-closed clarification/error path.
 8. No unauthenticated probe causes Odyssey workflow execution, provider call, action, or vault mutation.
-9. Real-vault activation remains a separate explicit human-controlled step after disposable-data E2E is clean.
-10. Repository verification, CI/review, and human merge/activation gates remain intact.
+9. Real-vault activation is performed only as a separate explicit human-controlled step after disposable-data E2E is clean.
+10. Repository verification, CI/review, human activation, and human merge gates remain intact.
 
 ## Architecture challenge
 
@@ -238,11 +238,9 @@ Odyssey: no grounded evidence / no inferred referent
 
 This is **not** a Phase 20.3 failure. The current browser submits each request independently, so the planner never receives the previous visible turns. The fail-closed result is safe, but natural conversation continuity is missing. The future design is owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md): context should be retrieved on demand by the same planner flow, not by always hard-coding a fixed number of prior messages into every request.
 
-### 20.3D — real-vault activation gate — pending explicit human authorization
+### 20.3D — historical pre-activation gate — closed
 
-20.3C completion does not authorize reconnecting the protected public product flow to real personal knowledge. At the 20.3C close, no runtime is listening on port `8765` and protected Odyssey Online should not be expected to process requests until 20.3D is explicitly authorized and activated.
-
-20.3D authorization permits only the bounded reconnection of the protected Odyssey product flow to the real runtime/vault and a minimal real-data smoke test. It does not authorize merge, unrelated Cloudflare/n8n/OAuth/MCP changes, or broader production/development restructuring.
+At the 20.3C close, reconnecting the protected product flow to real personal knowledge still required a separate explicit human authorization and no runtime was listening on port `8765`. That gate was subsequently authorized and completed. The retained production-vault bootstrap and activation evidence is recorded in the final 20.3D section below; no additional activation decision remains pending.
 
 ## Rollback
 
@@ -353,10 +351,10 @@ hostname, Access policy, tunnel-side JWT validation, alternate-host path protect
 unauthenticated probes remain pending; no provider call, Odyssey action, or vault mutation was
 caused by recovery.
 
-The exact next authorized operation requires Cloudflare control-plane access for the existing
-account/tunnel. It must create only the dedicated hostname and narrow five-path protection, then
-read back the non-secret identifiers and run the bounded probes. Do not substitute the tunnel
-runtime token, add a broad n8n policy, or run the probes before that protection exists.
+At that recovery checkpoint, the exact next authorized operation required Cloudflare control-plane
+access for the existing account/tunnel and was intentionally blocked until that access existed.
+That historical blocker was later resolved by the completed 20.3B work recorded above; it is not a
+current Phase 20.3 gate.
 
 ## 20.3C — disposable E2E deployment reconciliation — 2026-09-11
 
@@ -486,6 +484,6 @@ repository; exact-root and baseline-commit checks must be performed against `/da
 itself. Runtime activation also requires an explicit supervisor/environment launch because the
 previous disposable service was gone; the runtime remains private on the Docker bridge address.
 
-The full Phase 20.3 acceptance gate is still open because the previously recorded Cloudflare
-control-plane work is blocked. Human merge and the remaining security review remain required.
-These requirements are deferred from Phase 20.3 so deployment/security completion does not expand into a new product/model contract during the live activation gate.
+All Phase 20.3 security, disposable-E2E, and production-activation evidence required by 20.3A–20.3D is now retained. No further production mutation is required by this phase. The remaining gate is final PR review and human merge.
+
+Conversation continuity and production/development isolation remain post-Phase-20.3 follow-ups; they do not block completion of this deployment phase.
