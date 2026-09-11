@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Phase 20 — Odyssey Online MVP
+## Current phase — Phase 20: Odyssey Online MVP
 
 Goal: deliver the smallest useful standalone Odyssey experience in a phone browser, then let real usage drive improvements.
 
@@ -108,11 +108,19 @@ first real personal use
 production / development isolation
         |
         v
-conversation continuity foundation
+user self-identity binding to ordinary person note
+        |
+        v
+request feedback / advanced inspector + note access
+        |
+        v
+conversation persistence / continuity
         |
         v
 real-usage-driven UI / capability work
 ```
+
+The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
 
@@ -157,9 +165,9 @@ Planner/model extensibility must stay configuration-driven where semantics are a
 
 ### Multi-user shared knowledge
 
-Support private and selectively shared knowledge only after authentication, authorization-before-retrieval, synchronization, conflict, and storage boundaries are explicit. A shared household list is an early concrete validation scenario.
+Support private and selectively shared knowledge only after authentication, authorization-before-retrieval, synchronization, conflict, and storage boundaries are explicit. A shared household list is an early concrete validation scenario. Each authenticated actor should be able to bind to its own ordinary canonical `person` note without creating a special `user` knowledge type or per-application profile copy.
 
-See [Multi-user Collaboration Direction](multi-user-collaboration-direction.md).
+See [Multi-user Collaboration Direction](multi-user-collaboration-direction.md) and [Future user self-identity binding](future-user-self-identity.md).
 
 ## Later / conditional directions
 
