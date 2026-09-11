@@ -52,10 +52,14 @@ source_state() {
     "$DEV_SOURCE" "$branch" "$commit" "$([ -z "$dirty" ] && echo yes || echo no)"
 }
 
-health() {
+health_once() {
+  curl --fail --silent --show-error --max-time 5 "http://$DEV_HOST:$DEV_PORT/healthz" >/dev/null
+}
+
+wait_health() {
   local attempt
   for attempt in $(seq 1 30); do
-    if curl --fail --silent --show-error --max-time 5 "http://$DEV_HOST:$DEV_PORT/healthz" >/dev/null; then
+    if health_once; then
       return 0
     fi
     sleep 1
@@ -87,7 +91,7 @@ runtime() {
 start() {
   guard
   systemctl --user start "$UNIT"
-  health || fail "DEV runtime did not become healthy"
+  wait_health || fail "DEV runtime did not become healthy"
 }
 
 stop() {
@@ -102,7 +106,7 @@ status() {
   branch=$(git -C "$DEV_SOURCE" branch --show-current 2>/dev/null || echo unavailable)
   dirty=$(git -C "$DEV_SOURCE" status --porcelain 2>/dev/null || true)
   deployed=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || echo none)
-  if health >/dev/null 2>&1; then health_state=healthy; else health_state=unhealthy; fi
+  if health_once >/dev/null 2>&1; then health_state=healthy; else health_state=unhealthy; fi
   printf 'dev_state=%s\naddress=%s:%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nhealth=%s\n' \
     "$state" "$DEV_HOST" "$DEV_PORT" "$DEV_ROOT" "$DEV_SOURCE" "$deployed" "$commit" \
     "$branch" "$([ -z "$dirty" ] && echo yes || echo no)" "$health_state"
@@ -115,7 +119,7 @@ deploy() {
   commit=$(git -C "$DEV_SOURCE" rev-parse HEAD)
   install_unit
   systemctl --user restart "$UNIT"
-  health || fail "DEV runtime did not become healthy after deploy"
+  wait_health || fail "DEV runtime did not become healthy after deploy"
   temporary=$(mktemp "$DEV_RUNTIME/.deployed-commit.XXXXXX")
   printf '%s\n' "$commit" >"$temporary"
   chmod 640 "$temporary"
