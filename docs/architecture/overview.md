@@ -185,6 +185,31 @@ The browser does not hold provider credentials or semantic authority. It creates
 
 The exact current Phase 20 contract is [Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
+Deployment correctness is part of the product boundary. Version-controlled workflow source is the reviewable contract; the active n8n workflow is an operational deployment of that contract and may drift. Deployment verification should therefore identify the single active workflow for each public product path and compare it with the expected source/fingerprint rather than assuming an import/redeploy succeeded. The Phase 20.3 clarification incident demonstrated this boundary concretely: Core/runtime produced the correct clarification while a stale active n8n workflow transformed it into an empty result until the deployment was reconciled. See [Future Odyssey product usage observability](future-product-usage-observability.md#deployment-provenance-and-boundary-level-diagnostics).
+
+## Source code responsibility map
+
+- `odyssey_core/` — reusable application/domain behavior.
+- `odyssey_core/atomic_facts.py` — canonical atomic-fact parsing/rendering primitives.
+- `config/note-schema.json` — exact note schema and planner-facing schema guidance.
+- `workflows/` — version-controlled n8n orchestration/integration workflows.
+- `odyssey_web/` — browser-only UI/client logic.
+- `benchmarks/` — frozen evidence for model/retrieval decisions; never production authority.
+
+## Architecture invariants
+
+1. Markdown remains authoritative personal knowledge.
+2. Stable identity is independent from current human-readable name and physical filename.
+3. Retrieval evidence is not mutation authority.
+4. Models operate within bounded validated contracts; deterministic Core keeps safety authority.
+5. n8n integrates/orchestrates but does not duplicate Core semantics.
+6. Derived state remains rebuildable; durable non-knowledge state remains isolated from the vault.
+7. Real personal data, credentials, security boundaries, and destructive actions require explicit human control.
+8. Add infrastructure only after a measured need appears.
+9. Production integration deployment must be provenance-aware: the active n8n workflow serving a public product path must be identifiable and verifiably aligned with the version-controlled workflow contract.
+
+Implementation status belongs in the [Functional Roadmap](functional-roadmap.md). Exact historical rationale remains in phase documents, [ADRs](../decisions/README.md), and benchmark records.
+
 ## Configuration-driven model boundaries
 
 Odyssey's model-facing components must stay generic with respect to concrete note types and properties wherever Core already supports the underlying semantics. Adding a supported canonical type or property should normally be a schema/configuration change plus validation/tests, not a new production branch naming that type in a model component.
@@ -218,26 +243,3 @@ Configuration-driven does not mean every future capability is executable without
 Current gap: Odyssey preserves generic `DelegateAction`, but executable application selection/manifest routing is still deferred. The intended future shape is a compact configuration-driven capability registry plus generic routing/execution boundaries, described in [Future Extension Points](future-extension-points.md).
 
 Model names, reasoning effort, output schemas, and generic safety instructions may still be explicit component configuration. That is distinct from hard-coding the user's ontology or application vocabulary into model logic.
-
-## Source code responsibility map
-
-- `odyssey_core/` — reusable application/domain behavior.
-- `odyssey_core/atomic_facts.py` — canonical atomic-fact parsing/rendering primitives.
-- `config/note-schema.json` — exact note schema and planner-facing schema guidance.
-- `workflows/` — version-controlled n8n orchestration/integration workflows.
-- `odyssey_web/` — browser-only UI/client logic.
-- `benchmarks/` — frozen evidence for model/retrieval decisions; never production authority.
-
-## Architecture invariants
-
-1. Markdown remains authoritative personal knowledge.
-2. Stable identity is independent from current human-readable name and physical filename.
-3. Retrieval evidence is not mutation authority.
-4. Models operate within bounded validated contracts; deterministic Core keeps safety authority.
-5. Schema/configuration drives supported ontology semantics; model components must not accumulate concrete type/app branches when a generic contract can represent them.
-6. n8n integrates/orchestrates but does not duplicate Core semantics.
-7. Derived state remains rebuildable; durable non-knowledge state remains isolated from the vault.
-8. Real personal data, credentials, security boundaries, and destructive actions require explicit human control.
-9. Add infrastructure only after a measured need appears.
-
-Implementation status belongs in the [Functional Roadmap](functional-roadmap.md). Exact historical rationale remains in phase documents, [ADRs](../decisions/README.md), and benchmark records.
