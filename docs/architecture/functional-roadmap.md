@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — Phase 20: Odyssey Online MVP
+## Phase 20 — Odyssey Online MVP
 
 Goal: deliver the smallest useful standalone Odyssey experience in a phone browser, then let real usage drive improvements.
 
@@ -41,7 +41,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
-20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ A-D complete; human merge next
+20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
 ```
 
 ### 20.1B — answerer adoption gate
@@ -66,7 +66,7 @@ Complete. The full frozen 90-case Luna/medium benchmark produced 88/90 frozen-la
 
 ### 20.3 — protected deployment
 
-Implementation and retained live evidence are complete for 20.3A–20.3D on PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation have all been verified. No additional production activation is pending; the remaining gate for this phase is final PR review and human merge.
+Complete and merged in PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation were all verified before merge.
 
 ```text
 20.3A deployment/security inventory                          ✅ complete
@@ -83,8 +83,8 @@ Implementation and retained live evidence are complete for 20.3A–20.3D on PR #
       stop disposable runtime / close test state             ✅
 20.3D real-vault activation                                  ✅ complete
       exact /data/odyssey/vault Git root + baseline          ✅
-      rebuildable production indexes reset/rebuilt            ✅
-      private production runtime health/listening verified    ✅
+      rebuildable production indexes reset/rebuilt           ✅
+      private production runtime health/listening verified   ✅
 ```
 
 20.3B uses the dedicated `odyssey.ragdehl.com` Access application with the approved user identity, tunnel-side Access JWT validation, and a separate deny-by-default Access application covering only the five Odyssey paths on `n8n.ragdehl.com`; unrelated n8n root/admin behavior remains unchanged. The Cloudflare/certificate/Docker-DNS recovery details belong to the Phase 20.3 deployment document rather than this roadmap.
@@ -95,12 +95,14 @@ Implementation and retained live evidence are complete for 20.3A–20.3D on PR #
 
 The first mobile E2E also exposed a product requirement: the visible chat currently does not carry conversation context into the planner, so a follow-up such as `¿Dónde vive?` safely abstains even after discussing one person. That future requirement is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 
-## Intended near-term order after Phase 20.3
+## Next gate — production and development isolation
 
-Keep the order small and evidence-driven:
+Phase 20.3 is merged and the production path is available for real use. Before substantial new feature development, establish a separate development/staging deployment so disposable tests cannot affect the production runtime or personal knowledge.
+
+A first real personal WRITE/READ through the already-protected production UI is normal product use and may be performed before this infrastructure follow-up; it should not be turned into another synthetic benchmark.
 
 ```text
-final review + human merge of Phase 20.3
+first real personal use
         |
         v
 production / development isolation
@@ -111,8 +113,6 @@ conversation continuity foundation
         v
 real-usage-driven UI / capability work
 ```
-
-The production/development split should happen before substantial new feature development so future disposable tests cannot affect real personal knowledge.
 
 ## Committed post-MVP directions
 
