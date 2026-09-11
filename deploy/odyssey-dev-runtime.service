@@ -1,0 +1,27 @@
+[Unit]
+Description=Odyssey isolated DEV runtime
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ragdehl/projects/odyssey-dev
+ExecStart=/home/ragdehl/projects/odyssey-dev/scripts/odyssey-dev runtime
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/data/odyssey-dev
+Environment=ODYSSEY_VAULT_ROOT=/data/odyssey-dev/vault
+Environment=ODYSSEY_STATE_ROOT=/data/odyssey-dev/state
+Environment=ODYSSEY_PENDING_ROOT=/data/odyssey-dev/state/pending
+Environment=ODYSSEY_RUNTIME_ROOT=/data/odyssey-dev/runtime
+Environment=ODYSSEY_EMBEDDING_CACHE=/data/odyssey-dev/runtime/embedding-cache
+Environment=ODYSSEY_SCHEMA_PATH=/home/ragdehl/projects/odyssey-dev/config/note-schema.json
+Environment=ODYSSEY_RUNTIME_HOST=127.0.0.1
+Environment=ODYSSEY_RUNTIME_PORT=28765
+Environment=ODYSSEY_ACTOR=odyssey-dev
+Environment=TZ=Europe/Paris
+
+[Install]
+WantedBy=default.target
