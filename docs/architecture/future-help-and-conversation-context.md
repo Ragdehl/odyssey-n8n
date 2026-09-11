@@ -4,20 +4,19 @@ Status: **preserved product direction; first mobile E2E has now validated the ne
 
 ## Product goal
 
-Odyssey should eventually support natural questions not only about the user's personal knowledge, but also about **Odyssey itself**:
+Odyssey should support natural conversation without requiring the user to know where information is stored. The same conversational surface should eventually understand immediate follow-ups, retrieve older conversation history when explicitly relevant, answer from canonical personal knowledge, and route product-help or specialized-capability requests appropriately.
+
+The core product principle is:
 
 ```text
-"¿Qué puede hacer Odyssey?"
-"¿Cómo creo una nota?"
-"¿Cómo funcionan las aplicaciones?"
-"¿Y eso cómo lo hago desde el móvil?"
+user speaks naturally
+      |
+      v
+Odyssey decides which bounded context / source / capability is relevant
+      |
+      v
+answer remains grounded in the authority appropriate to that source
 ```
-
-The user should be able to ask these questions through the same conversational surface rather than needing a separate manual or a completely separate assistant product.
-
-This does not require a new application architecture by default. The smallest useful direction is a **help/product-knowledge scope** routed through the same general retrieval + bounded answerer pattern.
-
-Real Odyssey Online use also established a later **general conversational** scope for ordinary requests such as “Hola, ¿qué tal?”. It should be evaluated as another capability of the same conversational surface, not assumed to require a separate app. Ordinary conversation is not durable Odyssey memory, must not fabricate personal knowledge, and may use the bounded session context described below. Personal knowledge answers remain grounded in authorized retrieved evidence.
 
 ## First mobile E2E finding
 
@@ -33,6 +32,43 @@ The last request is naturally understandable to a person, but the current produc
 
 This establishes a product requirement: **ordinary follow-ups must be able to reuse bounded recent conversation context without turning conversation text into canonical personal knowledge.**
 
+## Configuration-driven extensibility is a design requirement
+
+Conversation/history support must preserve Odyssey's existing schema-driven philosophy rather than accumulating hard-coded prompt branches.
+
+`config/note-schema.json` already carries machine-readable type/property descriptions, examples, retrieval guidance, and retrieval examples. Production planner capabilities are projected dynamically from that schema. New canonical note types/properties whose semantics are already supported by Core should therefore flow through the planner without production code naming each concrete type.
+
+Apply the same pattern to non-canonical sources and specialized capabilities. Conversation history should **not** become a canonical note type merely to make the planner aware that it exists. Instead, introduce a compact configuration/registry contract for planner-visible sources/scopes when C3 is implemented. Conceptually:
+
+```json
+{
+  "sources": [
+    {
+      "id": "personal_knowledge",
+      "description": "Current canonical user knowledge.",
+      "authority": "current_personal_truth",
+      "examples": ["¿Dónde vive Marta?"]
+    },
+    {
+      "id": "conversation_history",
+      "description": "What the user and Odyssey said in prior conversations; not current factual authority.",
+      "authority": "historical_conversation_evidence",
+      "examples": ["¿Qué te pregunté hace dos meses sobre Marta?"]
+    },
+    {
+      "id": "odyssey_help",
+      "description": "User-facing Odyssey product documentation and capability guidance.",
+      "authority": "product_documentation",
+      "examples": ["¿Cómo funcionan las tareas en Odyssey?"]
+    }
+  ]
+}
+```
+
+The exact filename and schema are deferred, but the contract is not: once the generic source/capability projection exists, adding another supported source should normally be a configuration change plus validation/tests, not a new hard-coded planner branch. The generic planner prompt should receive a projected source-capability block, analogous to the existing schema-derived retrieval/write capability blocks.
+
+The same principle should guide future Odyssey applications/capabilities: declarative descriptors should tell the planner what capabilities exist and when they are relevant; generic execution boundaries own how a selected capability is invoked. Do not require editing the base planner prompt for every new application unless the generic contract itself needs to evolve.
+
 ## Decided implementation sequence
 
 Implement conversation continuity in three functional stages. A fourth optimization stage is optional and should be justified by real usage rather than built pre-emptively.
@@ -45,14 +81,15 @@ Initial contract:
 
 - keep the current Luna-first planner as the first semantic interpreter;
 - do **not** add a dedicated conversation-rewrite LLM, router LLM, or agent;
-- send the current request together with bounded recent visible turns;
-- start with at most **three complete user/Odyssey exchanges (six messages)** before the current request;
-- also enforce an initial **6,000-character total context cap**, trimming the oldest complete turns first;
-- do not summarize recent context in C1; replay the small bounded window directly;
-- treat recent assistant text as reference-resolution context, not as canonical factual authority;
+- provide the current request together with a small bounded tail of recent visible conversation;
+- start with the **last two complete user/Odyssey exchanges** as the normal context window;
+- permit at most **three complete exchanges (six messages)** as a hard message-count ceiling;
+- enforce an initial **6,000-character absolute safety cap**, trimming the oldest complete exchange first; this is a ceiling, not a target payload size;
+- do not summarize recent context in the first implementation;
+- treat recent assistant text only as reference-resolution/conversation evidence, never as canonical factual authority;
 - if the referent remains ambiguous, clarify rather than guess.
 
-The browser/product request may evolve conceptually from:
+Conceptually the browser/product request may evolve from:
 
 ```json
 {
@@ -75,21 +112,24 @@ to a bounded shape such as:
 }
 ```
 
-The exact field names remain an implementation detail, but the product boundary must validate roles, message count, and size rather than accepting unbounded arbitrary history.
+The exact field names remain an implementation detail. The product boundary must validate roles, message count, and size rather than accepting unbounded arbitrary history.
 
-The planner should receive the recent context as an explicit secondary input and use it only to interpret ellipsis, pronouns, follow-ups, and omitted referents in the **current** request. For the example above, the same Luna planner should be able to produce the ordinary personal-knowledge retrieval plan for `Nora Vidal`; normal retrieval then grounds the answer from canonical knowledge.
+The same Luna planner receives this recent context as a secondary input. It uses it only to interpret ellipsis, pronouns, omitted referents, and conversational follow-ups in the **current** request. For the example above, the planner should produce the ordinary personal-knowledge retrieval plan for Nora Vidal; normal canonical retrieval then supplies the factual evidence for the answer.
 
-A model-facing prompt change will therefore be required, but it should be a narrow inheritance-first extension of the validated Luna-first planner prompt. The essential instruction is:
+Do not create a second LLM call just to decide whether context is needed. The simplest C1 implementation can include the small recent tail on each active-conversation planner request. This adds bounded input tokens but no extra model hop. A deterministic pre-filter may be evaluated later only if measured cost justifies the complexity and does not harm natural follow-ups.
+
+The planner-facing invariant is:
 
 ```text
-current request = authoritative intent
-recent context = reference-resolution evidence
-canonical retrieval = factual authority
+current request      = authoritative user intent
+recent conversation  = reference-resolution evidence
+selected source      = determines what kind of evidence is being requested
+canonical retrieval  = factual authority for current personal-knowledge answers
 ```
 
-Prior assistant wording must never become current personal truth merely because it appears in recent context. Material prompt changes require the normal deterministic and focused live-evidence gates from `AGENTS.md`.
+Recent context should be appended as data to the planner input, not implemented as per-feature prose branches in the base prompt. The generic planner contract needs one stable rule explaining the authority of recent context; concrete note types, sources, and applications remain configuration-driven wherever the generic contracts support them.
 
-C1 should remain cheap: one existing planner call, the existing retrieval path, and the existing answerer where needed. No additional LLM call is justified merely to resolve recent conversational references.
+Material model-facing contract changes still require the deterministic and focused live-evidence gates from `AGENTS.md`.
 
 ### C2 — durable conversation records
 
@@ -118,43 +158,21 @@ Goal: support natural historical questions such as:
 "Antes hablamos de una empresa para Marta, ¿cuál era?"
 ```
 
-Do not model conversation history as an ordinary personal note type. Expose it to planning as a **logical retrieval scope/capability** instead.
+Do not model conversation history as an ordinary personal note type. Expose it to planning through the configuration-driven **source/scope registry** described above.
 
-Conceptually the planner may know compact scope descriptions such as:
+`PERSONAL_KNOWLEDGE` remains the default authority for current personal facts. `CONVERSATION_HISTORY` is selected when the request asks about prior discussion, wording, prior requests, or historical conversational references. A generic unresolved pronoun with no useful recent anchor should clarify rather than search the user's entire history speculatively.
 
-```text
-PERSONAL_KNOWLEDGE
-  Current canonical user knowledge. Use for questions about what is true/known now.
-
-CONVERSATION_HISTORY
-  What the user and Odyssey said in prior conversations. Use for questions about prior discussion,
-  wording, requests, or historical conversational references. Never treat it as current truth.
-
-ODYSSEY_HELP
-  User-facing product documentation and capability guidance.
-```
-
-This follows the same principle already used for capability/app descriptions: the planner knows what sources/capabilities exist and chooses the appropriate one from the user's natural request. It does **not** require a second semantic interpreter.
-
-When C3 is implemented, prefer an explicit retrieval-source/scope contract at the planner/application boundary over a canonical `conversation` note type. `PERSONAL_KNOWLEDGE` should remain the default. `CONVERSATION_HISTORY` should be selected when the request semantically asks about past conversation/history, or when a bounded recent-context reference clearly points to historical conversation evidence. A generic unresolved pronoun with no useful anchor should clarify rather than search the user's entire history speculatively.
-
-Reuse the existing embedding/retrieval machinery where practical, with logical/index isolation so conversation hits cannot contaminate ordinary personal-knowledge results. Do not introduce a second vector service or general-purpose search stack merely for conversation history.
+Reuse existing embedding/retrieval machinery where practical, with logical/index isolation so conversation hits cannot contaminate ordinary personal-knowledge results. Do not introduce a second vector service or general-purpose search stack merely for conversation history.
 
 ### C4 — optional compression and retention optimization
 
-Only after real usage shows a need, evaluate:
+Only after real usage shows a need, evaluate compact session-state representations, summaries for long active conversations, chunking/compaction of old records, retention controls, cross-device/session continuation, and richer links between conversation history, affected canonical notes, and Git/request evidence.
 
-- summaries for very long active conversations;
-- chunking/compaction strategies for old conversation records;
-- retention controls;
-- cross-device/session continuation;
-- richer links between conversation history, affected canonical notes, and Git/request evidence.
-
-C4 is an optimization stage, not a prerequisite for natural immediate follow-ups or basic historical search.
+One possible measured optimization is to replace part of repeated raw recent text with compact structured anchors derived from already-available typed results (for example recent canonical entity names/selections) while keeping enough visible text to resolve conversational references. This must remain deterministic and must not introduce another LLM call merely to save planner input tokens.
 
 ## Why conversation history is a scope, not a canonical note type
 
-Adding `conversation` to the ordinary note schema would not actually eliminate model-facing work: the planner would still need instructions/examples that explain **when** to choose that type and how it differs from personal truth. It would also make internal history participate in normal canonical semantics unless many exceptions were added.
+Adding `conversation` to the ordinary note schema would not eliminate model-facing semantics. The planner would still need to know when prior conversation is relevant and, crucially, that old chat text is not current factual authority. It would also make internal history participate in normal canonical semantics unless many exceptions were added.
 
 For example:
 
@@ -168,100 +186,39 @@ Old conversation:
 
 A normal query such as `¿Dónde vive Marta?` must retrieve the canonical Marta knowledge, not an old speculative chat message that happens to be semantically similar. Conversely, `¿qué dijimos sobre si Marta se mudaba a Burdeos?` should search conversation history.
 
-That distinction is naturally a **source/scope distinction**, not an entity-type distinction.
+That distinction is a **source/authority distinction**, not an entity-type distinction.
 
 A conversation record may still have internal metadata such as `kind: conversation`, but that metadata belongs to the history representation and is not part of the canonical personal note ontology.
 
-## Help as a knowledge scope, not a second personal vault
+## Token/cost strategy
 
-User-facing Odyssey documentation can be represented as ordinary human-readable Markdown knowledge, but it should remain logically separated from the user's personal knowledge so product documentation cannot contaminate ordinary personal retrieval.
+Do **not** send the entire conversation history to Luna on every request.
 
-Conceptually:
-
-```text
-user request
-     |
-     v
-scope / intent interpretation
-     |
-     +--> PERSONAL_KNOWLEDGE
-     |
-     +--> CONVERSATION_HISTORY
-     |
-     +--> ODYSSEY_HELP
-     |
-     `--> OTHER CAPABILITY / AMBIGUOUS
-```
-
-For `ODYSSEY_HELP`, retrieval searches only the product-help corpus. The resulting grounded evidence can then be sent through the same bounded answerer contract used for normal Odyssey retrieval answers.
-
-The exact physical storage is intentionally deferred. A separate vault is one valid option, but it is **not yet a requirement**. Product help may be better represented as versioned, read-only Markdown shipped with or generated from the Odyssey product documentation. The important contract is logical scope isolation, not a particular filesystem layout.
-
-Help content should be written for users, not copied blindly from developer architecture documentation. It may include:
-
-- what Odyssey can and cannot do;
-- how common user actions work;
-- explanations of applications/capabilities;
-- privacy and sharing behavior;
-- examples of useful requests;
-- troubleshooting and product limitations;
-- version-specific behavior when relevant.
-
-## Routing strategy
-
-Do not introduce an expensive general model call solely to recognize help or history intent.
-
-Start from the simplest measured strategy:
-
-1. let the existing Luna-first planner interpret the current request using compact descriptions of available scopes/capabilities;
-2. use deterministic or explicit UI signals when they genuinely simplify the case;
-3. use ordinary scoped retrieval after the planner has selected the source;
-4. fail safely or ask for clarification when a request genuinely mixes scopes or has an unresolved referent.
-
-A separate routing model should be introduced only if measured evidence later shows that the existing planner contract cannot make these choices reliably or economically.
-
-Representative mixed cases must be considered later, for example:
+C1 sends only the small recent tail needed for immediate conversational continuity. C3 retrieves older conversation evidence only when the planner selects the conversation-history source. Therefore the mature flow is conceptually:
 
 ```text
-"¿Puede Odyssey recordarme lo que compré en Carrefour?"
+current request
++ small recent tail
++ compact configured capability/source descriptions
+          |
+          v
+   same Luna-first planner
+          |
+          +--> ordinary personal request -> no old chat history loaded
+          |
+          `--> historical-conversation request
+                    |
+                    v
+             retrieve only relevant old history
 ```
 
-That question may ask simultaneously about product capability and the user's own stored knowledge. The planner must not silently leak personal knowledge into a product-help answer or vice versa.
+The 6,000-character C1 limit is an abuse/safety ceiling, not the expected per-request context. Normal short exchanges should be far below it. Measure real token/cost telemetry before adding heuristics or compression complexity.
 
-## Conversation context is not durable memory
+## Help as another scoped source
 
-A useful conversational interface needs follow-up understanding:
+User-facing Odyssey documentation can be represented as human-readable Markdown, but it must remain logically separated from personal knowledge so product documentation cannot contaminate ordinary personal retrieval. The same source/capability registry direction can describe `ODYSSEY_HELP` without a new planner layer.
 
-```text
-User: ¿Cómo funcionan las tareas?
-Assistant: ...
-User: ¿Y cómo creo una?
-```
-
-The second request needs enough recent context to understand what `una` refers to.
-
-```text
-recent conversation turns
-        |
-        v
-bounded session context
-        + current request
-        |
-        v
-same Luna-first planner
-        |
-        v
-normal scoped retrieval / write / capability path
-```
-
-The user saying something in conversation does **not** automatically make it durable personal knowledge.
-
-```text
-conversation context  !=  Odyssey memory
-
-"¿y luego qué?"       -> recent session context
-"recuerda que..."     -> normal Odyssey write path
-```
+Help content should be written for users and may cover what Odyssey can/cannot do, common actions, applications/capabilities, privacy/sharing, examples, troubleshooting, limitations, and version-specific behavior.
 
 ## Relationship with semantic request history
 
@@ -279,37 +236,25 @@ semantic request history
 
 They can be correlated through `request_id` and `conversation_id`, but neither becomes canonical personal truth.
 
-## Likely product shape
-
-A mature request may conceptually flow as follows:
+## Mature product shape
 
 ```text
 current request
    +
-recent bounded context
+small bounded recent context
+   +
+configuration-derived source/capability descriptions
    |
    v
 same Luna-first planner
    |
-   +--> PERSONAL_KNOWLEDGE
-   |       |
-   |       v
-   |   personal retrieval / mutation
+   +--> PERSONAL_KNOWLEDGE -> personal retrieval / mutation
    |
-   +--> CONVERSATION_HISTORY
-   |       |
-   |       v
-   |   scoped history retrieval
+   +--> CONVERSATION_HISTORY -> scoped history retrieval
    |
-   +--> ODYSSEY_HELP
-   |       |
-   |       v
-   |   product-help retrieval
+   +--> ODYSSEY_HELP -> product-help retrieval
    |
-   `--> other capability / ambiguity
-           |
-           v
-       existing delegation / clarification path
+   `--> other capability / ambiguity -> existing delegation / clarification path
 
 retrieved grounded evidence
           |
@@ -320,22 +265,22 @@ same bounded answerer
 conversational response
 ```
 
-The planner chooses **how to interpret the request and where to retrieve**; it does not become a second knowledge authority. The answerer remains grounded in evidence from the selected scope.
+The planner interprets the request and selects the appropriate generic action/source/capability contract; it does not become a second knowledge authority.
 
-## Validation scenarios for the future
+## Validation scenarios
 
 Before adopting each stage, test at least:
 
 - `¿Dónde vive?` after immediately discussing one person;
-- follow-up pronouns/references across two or three recent exchanges;
+- follow-up references across two or three recent exchanges;
 - two plausible recent referents -> clarification, not guessing;
 - old assistant text contradicting canonical knowledge -> canonical knowledge wins for current-fact questions;
 - explicit `remember this` requests still use the normal Odyssey write path;
 - direct historical questions such as `¿qué te pregunté ayer?` select conversation history;
 - ordinary personal questions do not search conversation history;
+- adding a supported planner-visible source through configuration does not require a concrete production branch naming that source;
 - direct product-help questions do not search personal knowledge;
-- mixed help + personal-knowledge requests fail safely or preserve both intents explicitly;
-- no leakage from personal knowledge into help-only answers;
+- mixed scopes fail safely or preserve both intents explicitly;
 - no accidental persistence of ordinary chat turns as durable personal memory;
 - long-session behavior remains bounded rather than sending unlimited history to models.
 
@@ -343,12 +288,12 @@ Before adopting each stage, test at least:
 
 Decide from implementation evidence and real Odyssey Online usage:
 
-1. whether C1 recent context should live only in browser/request state or gain short-lived server/session state after the minimal version;
-2. the exact Markdown layout and metadata schema for C2 conversation records;
-3. the exact planner/application representation of source scope in C3;
-4. whether help content lives in a dedicated vault, a versioned read-only Markdown corpus, or another minimal representation;
-5. whether long conversations ever need summarization rather than simple bounded replay plus historical retrieval;
-6. retention and deletion controls for durable conversation history;
+1. exact configuration filename/schema for planner-visible sources/capabilities;
+2. whether C1 recent context initially lives only in browser/request state or short-lived server/session state;
+3. exact Markdown layout and metadata schema for C2 conversation records;
+4. exact generic planner/application representation of source selection in C3;
+5. whether long conversations need structured-anchor compression or summarization;
+6. retention/deletion controls for durable conversation history;
 7. whether a later measured need justifies a separate router model despite the default decision to reuse the Luna-first planner.
 
 Do not introduce a new database, chat-history service, separate vector store, second general-purpose agent, or additional LLM hop until real usage demonstrates that the simpler staged design is insufficient.
