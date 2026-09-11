@@ -99,13 +99,13 @@ The first mobile E2E also exposed a product requirement: the visible chat curren
 
 Phase 20.3 is merged and the production path is available for real use. Before substantial new feature development, establish a separate development/staging deployment so disposable tests cannot affect the production runtime or personal knowledge.
 
-A first real personal WRITE/READ through the already-protected production UI is normal product use and may be performed before this infrastructure follow-up; it should not be turned into another synthetic benchmark.
+The first real personal production cycle is now complete. On 2026-09-11 the mobile UI wrote `Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus`, producing one canonical `person` note for Edgar with two atomic facts and a request-correlated Git commit/index refresh; the subsequent mobile READ `¿Dónde trabaja Edgar?` returned `Edgar trabaja en Alten para Airbus.` No synthetic benchmark request was used for this milestone.
 
 ```text
-first real personal use
+first real personal use                               ✅ complete
         |
         v
-production / development isolation
+production / development isolation                    ➡️ next
         |
         v
 user self-identity binding to ordinary person note
