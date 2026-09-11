@@ -41,7 +41,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
-20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ current
+20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ A-D complete; human merge next
 ```
 
 ### 20.1B — answerer adoption gate
@@ -66,7 +66,7 @@ Complete. The full frozen 90-case Luna/medium benchmark produced 88/90 frozen-la
 
 ### 20.3 — protected deployment
 
-Current. The security/control-plane work and disposable protected browser E2E are complete. The next gate is the separate human-controlled 20.3D decision to reconnect the protected product flow to the real Odyssey runtime/vault.
+Implementation and retained live evidence are complete for 20.3A–20.3D on PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation have all been verified. No additional production activation is pending; the remaining gate for this phase is final PR review and human merge.
 
 ```text
 20.3A deployment/security inventory                          ✅ complete
@@ -81,23 +81,26 @@ Current. The security/control-plane work and disposable protected browser E2E ar
       reconcile deployed n8n workflow drift                  ✅
       final protected browser clarification                  ✅
       stop disposable runtime / close test state             ✅
-20.3D real-vault activation                                  ➡️ human approval required
+20.3D real-vault activation                                  ✅ complete
+      exact /data/odyssey/vault Git root + baseline          ✅
+      rebuildable production indexes reset/rebuilt            ✅
+      private production runtime health/listening verified    ✅
 ```
 
 20.3B uses the dedicated `odyssey.ragdehl.com` Access application with the approved user identity, tunnel-side Access JWT validation, and a separate deny-by-default Access application covering only the five Odyssey paths on `n8n.ragdehl.com`; unrelated n8n root/admin behavior remains unchanged. The Cloudflare/certificate/Docker-DNS recovery details belong to the Phase 20.3 deployment document rather than this roadmap.
 
-20.3C used an isolated disposable vault/runtime/pending root before any real-vault product test. The protected mobile E2E has successful WRITE, READ, and explicit clarification evidence, plus request-correlated Markdown/Git evidence. During clarification testing, a deployment-drift bug was found: the active n8n Odyssey product workflow had fallen behind the checked-in `workflows/odyssey-online.ts` contract. The existing active workflow was reconciled and republished without creating a second active endpoint, and the final protected browser clarification passed. The disposable runtime and test state were then stopped/removed with explicit human authorization; port `8765` is currently free and no real-vault runtime was started during cleanup.
+20.3C used an isolated disposable vault/runtime/pending root before any real-vault product test. The protected mobile E2E has successful WRITE, READ, and explicit clarification evidence, plus request-correlated Markdown/Git evidence. During clarification testing, a deployment-drift bug was found: the active n8n Odyssey product workflow had fallen behind the checked-in `workflows/odyssey-online.ts` contract. The existing active workflow was reconciled and republished without creating a second active endpoint, and the final protected browser clarification passed. At the 20.3C close the disposable runtime and test state were stopped/removed and port `8765` was free; 20.3D subsequently activated the separate real production runtime after the authorized vault bootstrap.
+
+20.3D initialized `/data/odyssey/vault` as the exact production Git repository root with empty baseline commit `465773757427597b1f6036e94e670c8dd360d882`, reset only the guarded rebuildable `context.sqlite3` and `semantic.sqlite3` indexes, rebuilt them from the empty canonical vault, and started the private production runtime. Post-start evidence showed HTTP 200 on `172.18.0.1:8765/healthz`, with no listener on `127.0.0.1:8765`. No synthetic personal WRITE was used for activation.
 
 The first mobile E2E also exposed a product requirement: the visible chat currently does not carry conversation context into the planner, so a follow-up such as `¿Dónde vive?` safely abstains even after discussing one person. That future requirement is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
-
-20.3D remains a separate human-controlled gate. Do not reconnect the protected product flow to real personal knowledge until that activation is explicitly authorized.
 
 ## Intended near-term order after Phase 20.3
 
 Keep the order small and evidence-driven:
 
 ```text
-human-approved 20.3D real-vault activation
+final review + human merge of Phase 20.3
         |
         v
 production / development isolation
