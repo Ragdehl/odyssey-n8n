@@ -41,7 +41,7 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
-20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ A-D complete; human merge next
+20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
 ```
 
 ### 20.1B — answerer adoption gate
@@ -66,7 +66,7 @@ Complete. The full frozen 90-case Luna/medium benchmark produced 88/90 frozen-la
 
 ### 20.3 — protected deployment
 
-Implementation and retained live evidence are complete for 20.3A–20.3D on PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation have all been verified. No additional production activation is pending; the remaining gate for this phase is final PR review and human merge.
+Complete and merged in PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation were all verified before merge.
 
 ```text
 20.3A deployment/security inventory                          ✅ complete
@@ -83,8 +83,8 @@ Implementation and retained live evidence are complete for 20.3A–20.3D on PR #
       stop disposable runtime / close test state             ✅
 20.3D real-vault activation                                  ✅ complete
       exact /data/odyssey/vault Git root + baseline          ✅
-      rebuildable production indexes reset/rebuilt            ✅
-      private production runtime health/listening verified    ✅
+      rebuildable production indexes reset/rebuilt           ✅
+      private production runtime health/listening verified   ✅
 ```
 
 20.3B uses the dedicated `odyssey.ragdehl.com` Access application with the approved user identity, tunnel-side Access JWT validation, and a separate deny-by-default Access application covering only the five Odyssey paths on `n8n.ragdehl.com`; unrelated n8n root/admin behavior remains unchanged. The Cloudflare/certificate/Docker-DNS recovery details belong to the Phase 20.3 deployment document rather than this roadmap.
@@ -95,24 +95,32 @@ Implementation and retained live evidence are complete for 20.3A–20.3D on PR #
 
 The first mobile E2E also exposed a product requirement: the visible chat currently does not carry conversation context into the planner, so a follow-up such as `¿Dónde vive?` safely abstains even after discussing one person. That future requirement is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 
-## Intended near-term order after Phase 20.3
+## Next gate — production and development isolation
 
-Keep the order small and evidence-driven:
+Phase 20.3 is merged and the production path is available for real use. Before substantial new feature development, establish a separate development/staging deployment so disposable tests cannot affect the production runtime or personal knowledge.
+
+The first real personal production cycle is now complete. On 2026-09-11 the mobile UI wrote `Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus`, producing one canonical `person` note for Edgar with two atomic facts and a request-correlated Git commit/index refresh; the subsequent mobile READ `¿Dónde trabaja Edgar?` returned `Edgar trabaja en Alten para Airbus.` No synthetic benchmark request was used for this milestone.
 
 ```text
-final review + human merge of Phase 20.3
+first real personal use                               ✅ complete
         |
         v
-production / development isolation
+production / development isolation                    ➡️ next
         |
         v
-conversation continuity foundation
+user self-identity binding to ordinary person note
+        |
+        v
+request feedback / advanced inspector + note access
+        |
+        v
+conversation persistence / continuity
         |
         v
 real-usage-driven UI / capability work
 ```
 
-The production/development split should happen before substantial new feature development so future disposable tests cannot affect real personal knowledge.
+The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
 
@@ -157,9 +165,9 @@ Planner/model extensibility must stay configuration-driven where semantics are a
 
 ### Multi-user shared knowledge
 
-Support private and selectively shared knowledge only after authentication, authorization-before-retrieval, synchronization, conflict, and storage boundaries are explicit. A shared household list is an early concrete validation scenario.
+Support private and selectively shared knowledge only after authentication, authorization-before-retrieval, synchronization, conflict, and storage boundaries are explicit. A shared household list is an early concrete validation scenario. Each authenticated actor should be able to bind to its own ordinary canonical `person` note without creating a special `user` knowledge type or per-application profile copy.
 
-See [Multi-user Collaboration Direction](multi-user-collaboration-direction.md).
+See [Multi-user Collaboration Direction](multi-user-collaboration-direction.md) and [Future user self-identity binding](future-user-self-identity.md).
 
 ## Later / conditional directions
 
