@@ -121,9 +121,10 @@ During the first real-use period after production/development isolation is in pl
 - model + reasoning configuration at each provider-bearing stage;
 - number of contextual-resolver/provider invocations where distinguishable;
 - whether bounded Sol fallback was used;
-- total/stage latency and safe outcome/error category.
+- total/stage latency and safe outcome/error category;
+- safe integration/deployment provenance when relevant, including whether the active n8n product workflow matches the expected version-controlled source (`MATCH | DRIFT | UNKNOWN`).
 
-The purpose is to spot abnormal real-use behavior while using Odyssey normally, for example a trivial request that costs much more than comparable requests, repeated resolver calls, an unexpected Sol fallback, or one stage dominating latency. The inspector must report observed bounded evidence, not infer an execution path from the final answer, and must never reveal hidden chain-of-thought, raw prompts, unrestricted provider payloads, credentials, or unrelated personal content.
+The purpose is to spot abnormal real-use behavior while using Odyssey normally, for example a trivial request that costs much more than comparable requests, repeated resolver calls, an unexpected Sol fallback, one stage dominating latency, or a correct runtime result being transformed incorrectly by a stale integration workflow. The inspector must report observed bounded evidence, not infer an execution path from the final answer, and must never reveal hidden chain-of-thought, raw prompts, unrestricted provider payloads, credentials, or unrelated personal content.
 
 This early inspector can remain advanced/admin-only even if a small cost cue is later shown to ordinary users. A full dashboard and final chart selection remain later decisions driven by accumulated real telemetry.
 
@@ -255,10 +256,10 @@ The first sequence should favor features that help validate Odyssey while it is 
 separate production from development/staging
         |
         v
-conversation continuity + durable/persistent chat foundation
+UI-1 request feedback + advanced request drill-down
         |
         v
-UI-1 request feedback + advanced request drill-down
+UI-0 durable chat history/resume + conversation continuity foundation
         |
         v
 UI-2 read-only Notes
@@ -271,16 +272,15 @@ UI-3 Activity / change visualization
         `--> UI-4 note editing after read/change safety is proven
 ```
 
-This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. In particular, bounded advanced diagnostics may be useful early during testing even if the ordinary-user surface remains minimal.
+This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. In particular, bounded advanced diagnostics may be useful early during testing even if the ordinary-user surface remains minimal; durable conversation storage may also become the enabling substrate for UI-0 and conversational context work.
 
 ## Product principles
 
 - Keep the chat simple by default; use drill-down instead of persistent technical clutter.
-- Persist visible conversation history so reopening Odyssey does not erase the user's conversational workspace.
 - Show what Odyssey actually did from durable evidence, not what the answer text merely claims it did.
 - Prefer human-readable change summaries before raw Git diffs.
 - Keep note browsing/editing on the canonical Markdown/Core boundary.
-- Reuse `conversation_id`, `request_id`, Git correlation, application results, and existing operational evidence.
+- Reuse `request_id`, Git correlation, application results, and existing operational evidence.
 - Never expose hidden reasoning, raw prompts, secrets, unrestricted logs, or unrelated personal content in diagnostics.
 - Add role-aware surfaces only when the authorization model can enforce them.
 - Build charts from useful retained evidence; do not create a new analytics platform just to render graphs.
@@ -292,9 +292,8 @@ Decide with real Odyssey usage:
 1. whether per-message cost is always visible, optional, or advanced-only;
 2. whether ordinary users should see tokens at all;
 3. exact mobile navigation (`Chat / Notes / Activity`, drawer, or another compact pattern);
-4. exact chat-list grouping/title/archive/delete/export behavior once durable conversations exist;
-5. whether change receipts live inside the assistant bubble, immediately below it, or in a linked activity panel;
-6. which level of diff is useful to ordinary users versus advanced users;
-7. which note-editing mode should come first;
-8. which usage graphs deserve a permanent dashboard;
-9. exact roles/permissions for advanced diagnostics once Odyssey becomes multi-user.
+4. whether change receipts live inside the assistant bubble, immediately below it, or in a linked activity panel;
+5. which level of diff is useful to ordinary users versus advanced users;
+6. which note-editing mode should come first;
+7. which usage graphs deserve a permanent dashboard;
+8. exact roles/permissions for advanced diagnostics once Odyssey becomes multi-user.
