@@ -104,6 +104,19 @@ For a significant functional phase:
 
 When discussion creates a real future requirement or functional direction, preserve it in the roadmap or the appropriate canonical future-direction document. Do not leave project direction only in chat, an issue, a PR description, or agent memory.
 
+## Operational learning and incident closure
+
+When a non-trivial bug, deployment drift, hidden precondition, environment mismatch, or operational failure is diagnosed, the task is not complete when the immediate symptom disappears. Preserve the reusable learning before closing the work.
+
+- Record the learning in the smallest canonical owner: phase/benchmark docs for checkpoint evidence, infrastructure/runbook docs for operational recovery, architecture/storage docs for durable invariants, and future-direction docs for deferred product work.
+- Capture only what will help the next occurrence: **symptom or trigger, affected boundary, root cause, corrective action, verification evidence, and the preventive diagnostic/check**. Add rollback/safety constraints when the fix touches live data, security, credentials, networking, or deployment state.
+- Prefer converting a discovered failure mode into an executable guard when practical: deterministic test, preflight assertion, deployment fingerprint/drift check, health probe, validation command, or runbook checklist. If automation is not justified yet, document the manual check explicitly.
+- Distinguish **observed live state** from intended/configured state. Never document a live fix, migration, activation, or cleanup as complete until its post-change verification has actually passed.
+- Do not turn `AGENTS.md` into an incident log. This section defines the capture discipline; actual incidents and solutions belong in their canonical technical owner and should be linked instead of duplicated.
+- If a debugging path required multiple layers to isolate the fault, preserve the shortest reusable boundary-isolation method so future agents do not repeat broad trial-and-error.
+
+The [Development Pipeline](docs/architecture/development-pipeline.md) owns the detailed close-the-loop process. Git/PR history alone is not a substitute for a still-needed operational invariant or recovery procedure.
+
 ## Implementation routing
 
 Use the smallest executor that can validate the work reliably:

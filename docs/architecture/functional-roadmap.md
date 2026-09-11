@@ -40,75 +40,110 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2D Luna-first planner experiment preparation               ✅ complete
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
-20.2G contextual reasoner Luna replacement                    ➡️ adoption staged; merge/deploy next
-20.3  protected Raspberry/Cloudflare deployment + E2E        ⬜
+20.2G contextual reasoner Luna replacement                    ✅ complete
+20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ A-D complete; human merge next
 ```
 
 ### 20.1B — answerer adoption gate
 
-Run the frozen live answerer cases when the Raspberry/provider environment is available. Start with the inexpensive Luna candidate, compare a materially cheaper candidate, and keep Sol as a quality reference rather than an assumed production default. Adoption requires grounded, useful answers without material hallucination or evidence loss.
-
-See [Phase 20.1 grounded-answerer benchmark](phase-20-1-grounded-answerer-benchmark.md).
+Complete. Frozen live evidence selected the inexpensive grounded answerer without weakening the bounded evidence contract. See [Phase 20.1 grounded-answerer benchmark](phase-20-1-grounded-answerer-benchmark.md).
 
 ### 20.2B — real browser integration
 
-Complete. The checked-in `odyssey_web/` surface is served through the private n8n-facing product
-boundary. Raspberry-backed integration evidence covers the narrow request/response routes, and the
-physical Chrome/Android checkpoint covers the mobile UI, bounded delivery failure, restored controls,
-and explicit same-`request_id` Retry behavior. The detailed retained evidence belongs to the linked
-Phase 20 document rather than being duplicated here.
-
-PR #89 is merged. Its former stacked follow-up, PR #92, closed automatically when the merged feature
-branch was removed; the fresh 20.2C branch and pull request supersede that implementation without
-rewriting or deleting the historical branch. Phase 20.3 remains a distinct planned
-security/deployment boundary.
+Complete. The checked-in `odyssey_web/` surface is served through the private n8n-facing product boundary. Raspberry-backed integration evidence covers the narrow request/response routes, and the physical Chrome/Android checkpoint covers the mobile UI, bounded delivery failure, restored controls, and explicit same-`request_id` Retry behavior.
 
 ### 20.2C — planner incident hardening
 
-Complete. The production Sol/low planner now has explicit clarification, a bounded output envelope,
-zero automatic retries, and bounded post-parse validation diagnostics. See
-[Planner incident hardening](planner-incident-hardening.md). Follow-up provider calls remain separately
-authorized.
+Complete. The production planner has explicit clarification, a bounded output envelope, zero automatic retries, and bounded post-parse validation diagnostics. See [Planner incident hardening](planner-incident-hardening.md).
 
-### 20.2D — Luna-first planner experiment preparation
+### 20.2D–20.2F — Luna-first planner adoption
 
-Complete. This phase prepared the frozen Luna/low `PLAN | CLARIFY | ESCALATE` benchmark around the
-unchanged production RequestPlan validator. Production routing remains Sol/low. See
-[Phase 20.2D — Luna-first planner experiment preparation](phase-20-2d-luna-first-planner-experiment.md).
-
-### 20.2E — Luna prompt-parity and atomicity validation
-
-Complete live gate, with final offline human/contract adjudication recorded in the linked phase
-document. Luna inherited the strongest established Sol/low RequestPlan semantic instructions; the
-17-case atomicity/decomposition benchmark produced zero genuine unsafe non-escalations and zero
-genuine fail-closed results. This was the bounded gate before production Luna-first routing.
-
-### 20.2F — Luna-first production planning
-
-Complete. Production planning now uses the validated Luna/low provider boundary first, returns safe
-PLAN/CLARIFY results directly, converts Luna ESCALATE into non-executing user clarification, and
-retains one Sol/low fallback only for bounded structured fail-closed errors. Separate provider-call
-telemetry preserves the real Luna/Sol usage split. The merged runtime was deployed and a production
-smoke confirmed Luna-first planning active. See
-[Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
+Complete. Luna/low inherited the strongest established RequestPlan semantics, passed the focused prompt-parity/atomicity gates, and is now the production first pass. Safe PLAN/CLARIFY returns directly; structured fail-closed may invoke one bounded Sol/low fallback. Separate provider-call evidence preserves the real Luna/Sol usage split. See [Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
 
 ### 20.2G — contextual reasoner Luna replacement
 
-The full frozen 90-case Luna/medium benchmark completed with 88/90 frozen-label accuracy, 35/35
-correct `RESOLVED` decisions, zero clear false `RESOLVED`, and zero invalid outputs. One miss was the
-historically disputed E13 label; the only non-disputed miss was a conservative
-`AMBIGUOUS -> UNRESOLVED` abstention. The prompt/configuration is now canonical and shared by runtime
-and benchmark. PR #102 stages the production contextual default change from Sol/medium to Luna/medium
-while preserving the ten-example few-shot prefix and environment override. This adoption is not yet
-merged or deployed. See [Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
+Complete. The full frozen 90-case Luna/medium benchmark produced 88/90 frozen-label accuracy, 35/35 correct `RESOLVED` decisions, zero clear false `RESOLVED`, and zero invalid outputs. Production now uses Luna/medium with the same canonical ten-example calibration prefix. See [Phase 20.2G — contextual reasoner Luna replacement gate](phase-20-2g-contextual-luna-gate.md).
 
 ### 20.3 — protected deployment
 
-Before personal knowledge/provider actions are reachable from the Internet, protect the Odyssey hostname with an explicit access-control boundary. Use disposable data for first integration evidence and keep real-vault activation human controlled. Cloudflare/security/network changes require explicit approval.
+Implementation and retained live evidence are complete for 20.3A–20.3D on PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation have all been verified. No additional production activation is pending; the remaining gate for this phase is final PR review and human merge.
+
+```text
+20.3A deployment/security inventory                          ✅ complete
+20.3B protected hostname + Access + tunnel JWT enforcement   ✅ complete
+      exact Odyssey-path bypass closure on n8n hostname      ✅ complete
+20.3C disposable protected mobile E2E                        ✅ complete
+      protected login / UI / CSS / JS                        ✅
+      disposable WRITE                                       ✅
+      disposable READ                                        ✅
+      fail-closed clarification                              ✅
+      inspect disposable Markdown/Git evidence               ✅
+      reconcile deployed n8n workflow drift                  ✅
+      final protected browser clarification                  ✅
+      stop disposable runtime / close test state             ✅
+20.3D real-vault activation                                  ✅ complete
+      exact /data/odyssey/vault Git root + baseline          ✅
+      rebuildable production indexes reset/rebuilt            ✅
+      private production runtime health/listening verified    ✅
+```
+
+20.3B uses the dedicated `odyssey.ragdehl.com` Access application with the approved user identity, tunnel-side Access JWT validation, and a separate deny-by-default Access application covering only the five Odyssey paths on `n8n.ragdehl.com`; unrelated n8n root/admin behavior remains unchanged. The Cloudflare/certificate/Docker-DNS recovery details belong to the Phase 20.3 deployment document rather than this roadmap.
+
+20.3C used an isolated disposable vault/runtime/pending root before any real-vault product test. The protected mobile E2E has successful WRITE, READ, and explicit clarification evidence, plus request-correlated Markdown/Git evidence. During clarification testing, a deployment-drift bug was found: the active n8n Odyssey product workflow had fallen behind the checked-in `workflows/odyssey-online.ts` contract. The existing active workflow was reconciled and republished without creating a second active endpoint, and the final protected browser clarification passed. At the 20.3C close the disposable runtime and test state were stopped/removed and port `8765` was free; 20.3D subsequently activated the separate real production runtime after the authorized vault bootstrap.
+
+20.3D initialized `/data/odyssey/vault` as the exact production Git repository root with empty baseline commit `465773757427597b1f6036e94e670c8dd360d882`, reset only the guarded rebuildable `context.sqlite3` and `semantic.sqlite3` indexes, rebuilt them from the empty canonical vault, and started the private production runtime. Post-start evidence showed HTTP 200 on `172.18.0.1:8765/healthz`, with no listener on `127.0.0.1:8765`. No synthetic personal WRITE was used for activation.
+
+The first mobile E2E also exposed a product requirement: the visible chat currently does not carry conversation context into the planner, so a follow-up such as `¿Dónde vive?` safely abstains even after discussing one person. That future requirement is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+
+## Intended near-term order after Phase 20.3
+
+Keep the order small and evidence-driven:
+
+```text
+final review + human merge of Phase 20.3
+        |
+        v
+production / development isolation
+        |
+        v
+conversation continuity foundation
+        |
+        v
+real-usage-driven UI / capability work
+```
+
+The production/development split should happen before substantial new feature development so future disposable tests cannot affect real personal knowledge.
 
 ## Committed post-MVP directions
 
-These are real product directions, but their exact implementation order should follow evidence from Odyssey Online usage rather than speculative phase numbering.
+These are real product directions; exact implementation should remain incremental.
+
+### Production and development isolation
+
+Once real use depends on Odyssey, maintain a stable production deployment and a separate development/staging deployment so feature work and disposable tests cannot affect users or personal knowledge. `main` remains the production-ready source by default; feature branches feed development/staging before promotion. A permanent `develop` branch is optional and should be introduced only if repeated parallel integration work justifies it. See [Development Pipeline](development-pipeline.md#production-and-development-isolation).
+
+### Natural conversation and history
+
+Conversation continuity is now a concrete post-MVP requirement, not only a speculative idea. The intended architecture is **context on demand**, not a hard-coded “always send the last N messages” window.
+
+```text
+current request
+      |
+      v
+same Luna-first planner
+      |
+      +--> self-contained -> execute normally
+      |
+      `--> context needed
+               |
+               v
+       retrieve relevant conversation evidence
+               |
+               v
+       same planner, bounded second pass
+```
+
+Conversation/history must remain a source/authority distinction, not an ordinary canonical note type. Visible conversation records should be durable Markdown-like non-knowledge state; historical retrieval must remain logically isolated from current personal-knowledge retrieval. Later coarse-to-fine navigation may use derived conversation/daily/weekly/monthly/yearly summaries that point back to raw conversations. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 
 ### Composable applications and capabilities
 
@@ -118,7 +153,7 @@ Applications should reuse shared Odyssey knowledge and lower-level capabilities 
 Reminders <- Tasks <- Projects
 ```
 
-The first real application should define the smallest dependency/routing contract from evidence. Core remains the safe knowledge/write boundary. See [Future Extension Points](future-extension-points.md) and [Odyssey Platform Direction](odyssey-platform-direction.md).
+Planner/model extensibility must stay configuration-driven where semantics are already supported. The current planner derives note-type/property capabilities from `config/note-schema.json`; downstream model boundaries are generic with respect to concrete note types. The remaining application gap is executable manifest/registry routing for `DelegateAction`, not hard-coded app selection in the base planner. See [Architecture Overview](overview.md#configuration-driven-model-boundaries), [Future Extension Points](future-extension-points.md), and [Odyssey Platform Direction](odyssey-platform-direction.md).
 
 ### Multi-user shared knowledge
 
@@ -132,13 +167,13 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 
 - 💡 **Retrieval refinement from real misses:** first test query-decomposed multi-fact/entity-coverage retrieval; only then add candidate reduction or compact evidence if measured cost/volume justifies it. See [Future retrieval refinements](future-query-decomposed-retrieval.md).
 - 💡 **Pending-reference evolution / schema coaching:** safely relink exact attributable occurrences and use repeated unresolved patterns only as advisory evidence for future schema proposals. See [Future pending-reference evolution](future-pending-reference-evolution.md).
-- 💡 **Product help + bounded conversation context:** isolate Odyssey help from personal retrieval and keep ordinary recent conversation ephemeral unless explicitly remembered. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
-- 💡 **Usage/cost observability:** project already-collected safe operational/provider evidence into simple and advanced product views without creating a second tracing authority. See [Future product usage observability](future-product-usage-observability.md).
+- 💡 **Hierarchical conversation summaries:** conversation/day/week/month/year derived summaries may later narrow historical search before drilling down to raw supporting turns; they remain rebuildable navigation aids, never authority. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+- 💡 **Usage/cost observability:** project already-collected safe operational/provider evidence into simple and advanced product views without creating a second tracing authority. This now explicitly includes integration/deployment provenance and a `MATCH | DRIFT | UNKNOWN` view of checked-in workflow source versus the active deployed workflow. See [Future product usage observability](future-product-usage-observability.md).
 - 💡 **Capture-context provenance:** optional location/context belongs to fact/request provenance, not entity properties. See [Future capture-context provenance](future-capture-context-provenance.md).
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
-- 🔄 **Cost-aware model routing:** Luna-first production planning is complete, and Phase 20.2G stages Luna/medium as the contextual reasoner default after full 90-case evidence with zero clear false resolutions. Deployment remains a separate human-controlled step. See [Phase 20.2G](phase-20-2g-contextual-luna-gate.md) and [Future Extension Points](future-extension-points.md#cost-aware-request-planning).
+- 🔄 **Cost-aware model routing:** Luna-first production planning and Luna/medium contextual reasoning are active; retain bounded Sol fallback only where the validated production contract requires it and continue optimizing from measured telemetry rather than assumption.
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.
 
