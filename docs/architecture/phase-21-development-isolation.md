@@ -29,7 +29,7 @@ Target operator experience:
 
 ```text
 PROD                                  DEV
-odyssey.ragdehl.com                   dev.odyssey.ragdehl.com (when mobile access is enabled)
+odyssey.ragdehl.com                   odyssey-dev.ragdehl.com (when mobile access is enabled)
 main / explicit production release    currently deployed development commit
 /data/odyssey                         /data/odyssey-dev
 production runtime                    development runtime
@@ -180,7 +180,7 @@ DEV n8n container       odyssey-dev-n8n
 DEV n8n database volume odyssey-dev-n8n-data
 DEV n8n listener        172.18.0.1:28780 (Docker bridge gateway only)
 DEV runtime              127.0.0.1:28765
-DEV product URL          https://dev.odyssey.ragdehl.com/api/odyssey
+DEV product URL          https://odyssey-dev.ragdehl.com/api/odyssey
 DEV canonical/runtime    /data/odyssey-dev
 ```
 
@@ -218,6 +218,12 @@ bounded invalid-request response; that response bypassed the runtime and answere
 inside DEV n8n received HTTP 200 from `127.0.0.1:28765/healthz`; the persisted DEV workflow target
 was exactly that DEV runtime, contained no production runtime target, and the DEV credential count
 was zero. No provider/model call was made.
+
+The first DEV hostname was a multi-level name that was not covered by the zone's Universal SSL
+certificate in this full-zone setup. The replacement uses the first-level hostname
+`odyssey-dev.ragdehl.com`, which remains within the existing Universal SSL boundary; no Total TLS
+or Advanced Certificate change is required. The previous DEV DNS, Access, and tunnel state remains
+temporarily in place until the replacement hostname passes public TLS and Access verification.
 
 Capacity remains intentionally on-demand. A settled 4 GiB host observation was:
 
