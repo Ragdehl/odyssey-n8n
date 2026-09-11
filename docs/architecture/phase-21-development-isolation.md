@@ -12,9 +12,57 @@ the stable `main` deployment and `/data/odyssey` remains production-only.
 
 Use a separate source checkout, separate vault/state/runtime/index roots, and a separate
 runtime for development. Development uses synthetic or disposable data by default. A
-separate n8n development instance is the intended later boundary, but is not created in
-21B. No public development route is required for the initial proof. Do not introduce a
-permanent `develop` branch unless repeated integration work justifies it.
+separate n8n development instance is a candidate later boundary when browser/workflow
+testing justifies it, not a requirement by symmetry. No public development route is
+required for the initial proof. Do not introduce a permanent `develop` branch unless
+repeated integration work justifies it.
+
+## Operator model and DEV deployment identity
+
+The persistent DEV environment and Git branch model are separate concerns. Odyssey should
+provide a fixed development product identity without requiring the operator to switch
+variables, roots, ports, or Git branches manually.
+
+Target operator experience:
+
+```text
+PROD                                  DEV
+odyssey.ragdehl.com                   dev.odyssey.ragdehl.com (when mobile access is enabled)
+main / explicit production release    currently deployed development commit
+/data/odyssey                         /data/odyssey-dev
+production runtime                    development runtime
+production n8n boundary               development n8n boundary when justified
+real personal knowledge               synthetic/non-personal knowledge
+```
+
+The development environment may deploy the active feature branch/worktree directly. A
+long-lived `dev` branch is therefore optional, not required to obtain a stable DEV product.
+The deployed DEV front end, runtime/backend code, and checked-in n8n workflow source should
+come from the same Git commit whenever those layers are under test together. Deployment
+and status evidence should expose that commit so drift is visible.
+
+Normal development should look like:
+
+```text
+feature branch / worktree
+        |
+        v
+explicit DEV deploy
+        |
+        v
+open fixed DEV URL and test front + backend + workflow together
+        |
+        v
+PR / human merge to main
+        |
+        v
+explicit production promotion/deploy
+```
+
+The user should switch between PROD and DEV by opening different fixed product endpoints,
+not by reconfiguring Odyssey. The DEV UI should carry an unmistakable visual DEV marker
+when browser access is enabled. Production promotion remains explicit; merging source must
+not silently mutate production.
 
 ## 21B contract
 
@@ -69,11 +117,15 @@ swap free, load `0.48 0.26 0.10`, production RSS about 646 MiB, and DEV RSS abou
 631 MiB. Readings fluctuate; this proves concurrency but does not establish a precise
 incremental capacity budget. The DEV worktree initially lacked its own `.venv`; using
 the existing immutable production dependency environment did not cross data roots, but
-21C should provide an explicit DEV start/status command and a persistent DEV root.
+21C should provide explicit DEV deploy/start/stop/status operations and a persistent DEV
+root.
 
 ## 21C gate
 
-Decide whether the host can safely provision a persistent `/data/odyssey-dev` boundary
-and whether the observed roughly 631 MiB DEV RSS leaves sufficient capacity for a DEV
-n8n pilot. Any implementation must verify fixed PROD/DEV identities without manual
-environment switching and prove production invariants before and after.
+Provision the persistent DEV root/runtime boundary and fixed operator commands so DEV can
+be deployed, started, stopped, and inspected without manual environment switching. Then
+measure the real resource headroom and decide whether a separate DEV n8n instance is
+justified for synchronized browser/workflow testing. If it is piloted, verify that the DEV
+front end, runtime/backend, and workflow source can be tied to the same deployed commit.
+Any implementation must verify fixed PROD/DEV identities and prove production invariants
+before and after.
