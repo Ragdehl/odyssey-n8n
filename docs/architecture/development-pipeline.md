@@ -67,6 +67,48 @@ For production model-facing changes, deterministic checks are necessary but not 
 
 A failed gate means the branch is not ready. It does not require discarding coherent work; record a safe checkpoint when useful and continue/fix the blocker.
 
+## Close the loop on incidents and debugging
+
+A solved incident should reduce the cost of the next similar incident. After a non-trivial bug, deployment drift, hidden environment precondition, or operational failure is understood, close the loop before declaring the work complete.
+
+Use this compact pattern:
+
+```text
+symptom / trigger
+      |
+      v
+smallest failing boundary
+      |
+      v
+root cause
+      |
+      v
+bounded fix
+      |
+      v
+post-fix verification
+      |
+      +--> executable guard when justified
+      `--> durable canonical note/runbook otherwise
+```
+
+The durable record should normally contain only:
+
+1. the symptom/trigger and affected boundary;
+2. the confirmed root cause, not abandoned hypotheses;
+3. the bounded corrective action;
+4. the exact verification that proved recovery;
+5. the cheapest preventive diagnostic or guard for recurrence;
+6. rollback/safety notes when live data, credentials, networking, deployment, or security are involved.
+
+Choose the canonical owner rather than creating an incident-document backlog: phase/benchmark docs preserve checkpoint evidence; infrastructure/runbooks own operational recovery; architecture/storage docs own durable invariants; future-direction docs own deferred improvements. Link between owners instead of duplicating the story.
+
+When practical, promote the lesson from prose into a deterministic check: test, preflight assertion, deployment/source fingerprint check, health probe, explicit environment-root verification, or bounded runbook command. If the check is not worth automating yet, keep the manual verification step explicit.
+
+For multi-layer failures, prefer boundary isolation over broad changes. Compare the same input at adjacent boundaries and eliminate healthy layers before changing prompts, models, infrastructure, or canonical data. Preserve the shortest successful isolation method when it will be reusable.
+
+Never mark a live action complete merely because the intended command was issued. Record **observed post-change state** separately from intended/configured state and require explicit verification evidence.
+
 ## Pull Request lifecycle
 
 - Significant work normally starts/continues as a Draft PR.
