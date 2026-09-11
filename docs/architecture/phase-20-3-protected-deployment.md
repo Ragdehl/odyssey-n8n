@@ -1,6 +1,6 @@
 # Phase 20.3 — Protected Raspberry/Cloudflare deployment + E2E
 
-Status: **20.3B complete; 20.3C protected disposable E2E functional gate passed, pending disposable-runtime shutdown/cleanup; 20.3D real-vault activation not yet authorized**.
+Status: **20.3B complete; 20.3C protected disposable E2E complete; 20.3D real-vault activation pending explicit human authorization**.
 
 ## Objective
 
@@ -168,7 +168,7 @@ path = /api/odyssey
 
 It preserves the existing sandbox directives and adds `allow-same-origin`. After deployment, the protected mobile page loaded the intended Odyssey UI and its same-origin CSS/JS correctly. No permissive global CORS or global n8n sandbox disablement was introduced.
 
-### 20.3C — disposable protected mobile E2E — functional gate passed
+### 20.3C — disposable protected mobile E2E — complete
 
 Before provider-backed product actions, the running real-vault runtime was stopped and a disposable environment was prepared under:
 
@@ -179,9 +179,9 @@ Before provider-backed product actions, the running real-vault runtime was stopp
   state/pending/
 ```
 
-The disposable vault has its own Git repository/baseline commit because production write history expects the configured vault root to be the Git root. Runtime/index/pending data are isolated from real Odyssey data. The existing local embedding model cache is reused because it contains model assets rather than personal knowledge.
+The disposable vault had its own Git repository/baseline commit because production write history expects the configured vault root to be the Git root. Runtime/index/pending data were isolated from real Odyssey data. The existing local embedding model cache was reused because it contains model assets rather than personal knowledge.
 
-The temporary runtime is active on the same private host boundary:
+The temporary runtime used the same private host boundary:
 
 ```text
 ODYSSEY_RUNTIME_HOST=172.18.0.1
@@ -190,8 +190,6 @@ ODYSSEY_VAULT_ROOT=/tmp/odyssey-20-3c/vault
 ODYSSEY_RUNTIME_ROOT=/tmp/odyssey-20-3c/runtime
 ODYSSEY_PENDING_ROOT=/tmp/odyssey-20-3c/state/pending
 ```
-
-Local `/healthz` is healthy and process-environment inspection confirmed the three disposable roots before browser testing.
 
 Protected Android/Chrome evidence:
 
@@ -223,6 +221,14 @@ The existing active workflow ID was preserved and reconciled atomically with the
 
 Deterministic verification after reconciliation passed: Workflow SDK validation, focused Odyssey Online workflow tests (8 passed), full deterministic suite (694 passed, 79 skipped), Ruff check/format, `git diff --check`, and secret-pattern scan. An initial sandboxed test run had nine runtime-boundary failures solely because the sandbox prohibited the local HTTP fixture; rerunning with the required local fixture allowance passed all 694 runnable tests.
 
+Operational closure was then performed with explicit human authorization:
+
+- `odyssey-phase20-3c-runtime.service` was stopped and verified `inactive`;
+- port `8765` was verified free;
+- `/tmp/odyssey-20-3c` was removed;
+- `/run/user/1000/odyssey-20-3c.env` was removed;
+- no real-vault runtime was started during cleanup.
+
 A separate follow-up test exposed a future product requirement:
 
 ```text
@@ -232,18 +238,11 @@ Odyssey: no grounded evidence / no inferred referent
 
 This is **not** a Phase 20.3 failure. The current browser submits each request independently, so the planner never receives the previous visible turns. The fail-closed result is safe, but natural conversation continuity is missing. The future design is owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md): context should be retrieved on demand by the same planner flow, not by always hard-coding a fixed number of prior messages into every request.
 
-Remaining 20.3C operational closure:
+### 20.3D — real-vault activation gate — pending explicit human authorization
 
-1. stop the disposable runtime;
-2. close/clean disposable test state only after preserving any needed evidence;
-3. do **not** reconnect the public product flow to the real vault as part of cleanup;
-4. update final PR/roadmap status after shutdown evidence is retained.
+20.3C completion does not authorize reconnecting the protected public product flow to real personal knowledge. At the 20.3C close, no runtime is listening on port `8765` and protected Odyssey Online should not be expected to process requests until 20.3D is explicitly authorized and activated.
 
-### 20.3D — real-vault activation gate — pending
-
-Requires separate explicit human approval after disposable E2E passes. A protected route does not itself authorize public-path access to real personal knowledge.
-
-The disposable runtime must not be silently replaced by a real-vault runtime merely as cleanup from 20.3C. Real-vault connection is the 20.3D decision.
+20.3D authorization permits only the bounded reconnection of the protected Odyssey product flow to the real runtime/vault and a minimal real-data smoke test. It does not authorize merge, unrelated Cloudflare/n8n/OAuth/MCP changes, or broader production/development restructuring.
 
 ## Rollback
 
