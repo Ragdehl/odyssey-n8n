@@ -29,6 +29,29 @@ Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus.
 
 Odyssey may create or enrich an ordinary `person` note for Edgar. Once that note is safely identified as the current user's person identity, later requests such as `¿Dónde trabajo?`, `apunta que mi coche es un Scénic`, or an application needing facts about the current user can resolve first-person references against that same canonical note.
 
+## First real production evidence — 2026-09-11
+
+The first real production WRITE created exactly one ordinary canonical `person` note for Edgar in `/data/odyssey/vault`, with stable note ID `f8411b59-174e-4e96-93bb-76a26af2af8d`. It stored two request-correlated atomic facts: `Es ingeniero de datos.` and `Trabaja en Alten para Airbus.` The note is therefore suitable to become the first user's self-person target once the binding is implemented; no profile migration or special note conversion is required.
+
+That same production evidence exposed the missing actor-identity propagation clearly:
+
+```yaml
+created_by: {"app": "odyssey-runtime", "human": null}
+updated_by: {"app": "odyssey-runtime", "human": null}
+```
+
+This is valid under the current provenance contract because the application actor is present, but it means the protected browser/runtime path does not yet project an authenticated human into a stable `human` actor identifier. Self-identity implementation should therefore treat these as two related but distinct tasks:
+
+```text
+authenticated/request human identity
+        |
+        +--> provenance actor ID -> created_by.human / updated_by.human
+        |
+        `--> self-person binding -> stable canonical Edgar note ID
+```
+
+Do not infer either value from the Edgar display name. The actor identifier should come from the authenticated/request identity boundary, while the self-person binding should point to the canonical note by stable note ID. In the current single-user product these can be introduced together, but the architecture must keep them conceptually separate for future multi-user behavior.
+
 ## Core distinction
 
 Do not conflate **the actor using Odyssey** with **the canonical person entity that represents that human in personal knowledge**.
@@ -159,6 +182,9 @@ validate first real user's person note
 persist stable user -> person_note_id binding
         |
         v
+propagate stable human actor provenance
+        |
+        v
 first-person resolver/planner context
         |
         v
@@ -183,4 +209,5 @@ At minimum, implementation should cover:
 - two users with similar/same names retain distinct actor bindings;
 - applications reuse the same binding instead of creating private profile copies;
 - self-note facts remain searchable/statistically visible like ordinary canonical knowledge;
+- authenticated human provenance is retained when the request boundary supplies it;
 - no first-person alias hacks or hidden profile copy become a second authority.
