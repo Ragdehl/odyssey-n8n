@@ -18,7 +18,7 @@ advanced/admin/developer
 
 Canonical Markdown remains the source of truth. Git, request traces, usage evidence, and indexes are supporting history/diagnostic state, not alternate note stores.
 
-Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, and advanced surfaces.
+Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). User-to-self-note identity is owned by [Future user self-identity binding](future-user-self-identity.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, and advanced surfaces.
 
 ## Proposed product shape
 
@@ -135,7 +135,8 @@ Add a user-facing browser over the same canonical Odyssey knowledge:
 - search and browse notes;
 - open one note in a readable rendered view;
 - expose useful metadata/links only when it helps the user;
-- navigate from a chat change receipt directly to the affected note.
+- navigate from a chat change receipt directly to the affected note;
+- treat the current user's own canonical `person` note like every other ordinary person note for search/statistics/history, while optionally presenting a small `Tú`/`You` cue derived from the stable self-identity binding rather than from a special note type or hidden profile copy.
 
 Example:
 
