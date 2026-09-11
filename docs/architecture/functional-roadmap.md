@@ -24,11 +24,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — Phase 20: Odyssey Online MVP
+## Current phase — Phase 21: production/development isolation
 
-Goal: deliver the smallest useful standalone Odyssey experience in a phone browser, then let real usage drive improvements.
+Goal: keep production personal knowledge and product flow isolated from ordinary development and testing.
 
-See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
+See [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -41,7 +41,10 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
-20.3  protected Raspberry/Cloudflare deployment + E2E        ➡️ A-D complete; human merge next
+20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
+21A   isolation architecture challenge                         ✅ complete
+21B   isolated DEV checkout/data + transient runtime proof     ✅ complete
+21C   separate DEV n8n instance and persistent operations     ⬜ planned
 ```
 
 ### 20.1B — answerer adoption gate
@@ -66,7 +69,7 @@ Complete. The full frozen 90-case Luna/medium benchmark produced 88/90 frozen-la
 
 ### 20.3 — protected deployment
 
-Implementation and retained live evidence are complete for 20.3A–20.3D on PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation have all been verified. No additional production activation is pending; the remaining gate for this phase is final PR review and human merge.
+Implementation and retained live evidence are complete for 20.3A–20.3D on merged PR #103. The protected Cloudflare boundary, disposable mobile E2E, production-vault Git bootstrap/index rebuild, and bounded real-runtime activation have all been verified.
 
 ```text
 20.3A deployment/security inventory                          ✅ complete
@@ -112,7 +115,7 @@ conversation continuity foundation
 real-usage-driven UI / capability work
 ```
 
-The production/development split should happen before substantial new feature development so future disposable tests cannot affect real personal knowledge.
+Phase 21A and 21B are complete. The production/development split should precede substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
 
 ## Committed post-MVP directions
 
