@@ -21,6 +21,8 @@ answer remains grounded in the authority appropriate to that source
 
 The user should not need to know whether something lives in personal knowledge, recent conversation, old conversation history, product help, or an application.
 
+The active conversation should also retain the stable actor/user identity needed to resolve first-person references through the separate [Future user self-identity binding](future-user-self-identity.md). Conversation history is not the authority for who the user is; it carries/correlates the actor identity, while the durable user-to-`person` binding determines which canonical person note represents `yo`/`me`/`mi` for that actor.
+
 ## First mobile E2E finding
 
 The first protected mobile E2E made the missing conversation contract concrete:
@@ -34,6 +36,34 @@ User: ¿Dónde vive?
 The current product sends each browser submission independently, so the planner sees `¿Dónde vive?` with no referent and safely abstains. This establishes a product requirement: **follow-ups must be able to recover conversation context without making chat text canonical personal truth.**
 
 The same E2E also exposed a distinct presentation requirement: visible conversations must persist across page/app reopen. That WhatsApp-like history/resume behavior is a product projection over the durable conversation records described below, not a second history store and not canonical personal knowledge. See [Future Odyssey product interface](future-product-interface.md#ui-0--persistent-conversation-history-and-resume).
+
+## Multiple parallel conversations and application-scoped entry points
+
+Odyssey should support several durable conversations in parallel instead of one global rolling transcript. A user may keep separate conversations for practical or thematic reasons, for example:
+
+```text
+Chats
+├─ Odyssey
+├─ Casa
+├─ Comida
+└─ Viajes
+```
+
+Each conversation has its own stable `conversation_id`, visible history, and current conversational context. Starting a new conversation creates a new identity; reopening one resumes the existing identity and context.
+
+A conversation may optionally be opened from, or associated with, a specialized application/capability such as Food, Projects, Tasks, or Odyssey Help. That association is **routing/context metadata**, not a separate knowledge silo:
+
+```text
+conversation "Comida"
+        |
+        +--> optional capability/app context: Food
+        |
+        `--> same shared Odyssey canonical knowledge
+```
+
+The user should also be able to have an ordinary general Odyssey conversation with no application scope. Applications must not copy the user's profile or canonical notes into app-specific stores merely because a chat was opened from that app. The same source/capability registry and generic routing boundary should determine which detailed application contract is loaded when needed.
+
+The exact UX for switching chats, pinning/app grouping, default app context, and moving a conversation between scopes is deferred. Preserve the architectural invariant: **conversation identity and optional application scope are distinct from canonical personal knowledge and from the user's stable self-person binding.**
 
 ## Configuration-driven extensibility is a design requirement
 
@@ -135,31 +165,11 @@ Preferred initial representation:
 - stable `conversation_id` so reopening/continuing a chat resumes the same conversation identity;
 - correlate turns through `conversation_id` and existing `request_id` values;
 - preserve user-visible user messages, final Odyssey responses, timestamps, and bounded typed outcome metadata useful for retrieval/audit;
+- preserve/correlate the stable actor/user identity for the conversation so first-person semantics can use the self-person binding without inferring identity from chat text;
 - support chronological re-rendering for the UI without making browser `localStorage` the durable authority;
 - never persist hidden chain-of-thought, private model reasoning, raw provider prompts, or arbitrary intermediate model responses.
 
 Conversation history records what was said; it is not automatically evidence that the content is currently true.
-
-#### Multiple conversations and optional application context
-
-The product should support **multiple durable conversations in parallel**, not one global ever-growing transcript. A user may deliberately keep separate threads for unrelated themes such as household planning, Odyssey development, food, travel, or another recurring topic, reopen any of them later, and start a new conversation without losing the others.
-
-A conversation may also be opened from, or optionally associated with, a specialized Odyssey application/capability (for example a future food application). That association is **routing/context metadata, not a separate knowledge silo**: the conversation still uses the same Odyssey identity, canonical knowledge, authorization, and generic planner/capability contracts. An app-scoped conversation may bias which capability is offered first when appropriate, but it must not hard-code a different planner, duplicate the user's notes, or prevent the request from reaching another capability when the user's actual intent requires it.
-
-Conceptually:
-
-```text
-Odyssey conversations
-   |
-   +--> Casa
-   +--> Proyecto Odyssey
-   +--> Viajes
-   `--> Comida  -- optional app/capability context
-                         |
-                         `--> same shared Odyssey knowledge + generic routing
-```
-
-Conversation titles may initially be user-supplied or deterministically derived from the first meaningful turn; do not add a title-generation model call merely to support multiple threads.
 
 ### C3 — scoped semantic conversation-history retrieval
 
@@ -274,10 +284,10 @@ Neither becomes canonical personal truth.
 
 ## Validation scenarios
 
-Future implementation must cover immediate omitted referents, two plausible recent referents, explicit old-time references, current-fact questions contradicting old chat, historical questions that must not contaminate personal retrieval, configuration-added sources without concrete planner branches, coarse-to-fine summary retrieval, durable reopen/resume of visible conversations, multiple parallel conversation identities, optional application/capability-scoped conversations without knowledge silos, and bounded resource behavior.
+Future implementation must cover immediate omitted referents, two plausible recent referents, explicit old-time references, current-fact questions contradicting old chat, historical questions that must not contaminate personal retrieval, configuration-added sources without concrete planner branches, coarse-to-fine summary retrieval, durable reopen/resume of visible conversations, multiple parallel conversations with isolated conversational context but shared canonical knowledge, optional app/capability-scoped conversation entry points, actor/self binding carried across reopened conversations, and bounded resource behavior.
 
 ## Remaining deferred decisions
 
-The implementation phase must still decide the exact source/capability registry schema, the structured planner result for requesting context, current-conversation storage before C2 persistence exists, absolute retrieval budgets, Markdown conversation layout, history index isolation, summary-generation policy, retention/deletion controls, optional application-context metadata, and whether measured evidence ever justifies a separate routing model.
+The implementation phase must still decide the exact source/capability registry schema, the structured planner result for requesting context, current-conversation storage before C2 persistence exists, absolute retrieval budgets, Markdown conversation layout, history index isolation, summary-generation policy, retention/deletion controls, exact app/capability conversation-scope metadata, and whether measured evidence ever justifies a separate routing model.
 
 Do not introduce a new database, chat-history service, separate vector store, second general-purpose agent, or additional permanent model layer until real usage demonstrates that the simpler design is insufficient.
