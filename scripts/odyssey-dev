@@ -53,7 +53,14 @@ source_state() {
 }
 
 health() {
-  curl --fail --silent --show-error --max-time 5 "http://$DEV_HOST:$DEV_PORT/healthz" >/dev/null
+  local attempt
+  for attempt in $(seq 1 30); do
+    if curl --fail --silent --show-error --max-time 5 "http://$DEV_HOST:$DEV_PORT/healthz" >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 install_unit() {
