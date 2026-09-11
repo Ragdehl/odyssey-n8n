@@ -1,6 +1,6 @@
 # Phase 20.3 — Protected Raspberry/Cloudflare deployment + E2E
 
-Status: **20.3B complete; 20.3C protected disposable E2E functionally complete pending disposable-runtime shutdown/cleanup; 20.3D real-vault activation not yet authorized**.
+Status: **20.3B complete; 20.3C protected disposable E2E functional gate passed, pending disposable-runtime shutdown/cleanup; 20.3D real-vault activation not yet authorized**.
 
 ## Objective
 
