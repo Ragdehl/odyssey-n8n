@@ -181,6 +181,8 @@ This work is also **not a sequencing blocker** for continued Odyssey Online deve
 
 The Phase 20.3 protected mobile E2E exposed a concrete observability gap: Core/runtime diagnostics were sufficient to prove that `qzxqzx` correctly produced `needs_attention + UNRECOGNIZED_REQUEST`, while the deployed n8n product workflow returned an ordinary empty-result response because the active workflow had drifted behind the version-controlled `workflows/odyssey-online.ts` contract.
 
+After the active n8n workflow was reconciled with the checked-in source, the same request returned the intended clarification locally through n8n and then through the protected mobile browser path. This confirms that deployment provenance is not merely a debugging convenience: it can explain a real product-response mismatch even when model/Core behavior is correct.
+
 This establishes a durable requirement: advanced request diagnostics must eventually cover not only model/Core stages, but also the **integration boundary and deployed artifact identity** that transformed the result.
 
 A useful bounded trace should be able to show, when available:
@@ -210,18 +212,17 @@ The deployment path should also converge on a stable operational identity instea
 For the advanced per-request inspector, boundary-level status is as important as model telemetry. A future diagnostic could therefore make a mismatch obvious without showing unsafe internals:
 
 ```text
-Planner          Luna / low       CLARIFY
-Runtime          application      CLARIFY
-n8n router                         EMPTY   ⚠
-Answerer                           skipped
+Planner        Luna / low      CLARIFY
+Runtime                         CLARIFY
+n8n router                      EMPTY  ⚠
+Answerer                        skipped
+Final product                   EMPTY
 
 Deployment
-source revision                    abc123
-active workflow                    hMbt... / version e367...
-source match                       DRIFT   ⚠
+source/workflow                 DRIFT  ⚠
 ```
 
-Ordinary users do not need this information in the chat. It belongs in authorized advanced diagnostics and deployment verification. Reuse existing Git/n8n/runtime evidence where possible; do not introduce a new observability service merely to calculate deployment provenance.
+The ordinary-user chat should still remain simple; this boundary/provenance view belongs in authorized advanced diagnostics and deployment verification.
 
 ## Validation scenarios for the future
 
@@ -236,9 +237,8 @@ Before adopting the product surface, validate at least:
 - a historical calculation identifies the pricing snapshot used;
 - monthly totals aggregate request-level evidence without double counting retries/provider calls;
 - a month-end projection is clearly labelled and can be absent when insufficient evidence exists;
-- boundary-level diagnostics can distinguish planner/runtime outcome from n8n routing/final product outcome;
-- deployment verification can identify the active production workflow and deterministically report source/deployment drift or unknown provenance;
-- duplicate workflow history cannot make production verification silently inspect the wrong active public endpoint;
+- deployment verification detects a deliberately stale active n8n workflow as `DRIFT` without provider calls;
+- one request trace can distinguish a correct runtime clarification from an incorrect downstream n8n product classification;
 - no prompts, hidden reasoning, credentials, unrestricted exceptions, or unrelated personal knowledge leak through the diagnostic view;
 - any future multi-user view enforces authorization before detailed telemetry is returned.
 
@@ -254,6 +254,6 @@ Decide from real Odyssey Online usage:
 6. the billing/calendar period used for forecasts;
 7. the simplest month-end projection that is useful without creating false precision;
 8. whether provider invoice/billing data should ever be reconciled with Odyssey's request-level estimates;
-9. the exact deterministic fingerprint/provenance contract that ties version-controlled workflow source to the active n8n deployment.
+9. the exact deterministic workflow fingerprint/provenance representation and where its deployment evidence should live.
 
 Do not introduce a new observability service, analytics database, telemetry vendor, or billing subsystem until the existing bounded request evidence is shown to be insufficient for an actual product requirement.
