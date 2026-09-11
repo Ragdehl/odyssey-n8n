@@ -1,6 +1,6 @@
 # Phase 20.3 — Protected Raspberry/Cloudflare deployment + E2E
 
-Status: **20.3B complete; 20.3C disposable protected E2E in progress; 20.3D real-vault activation not yet authorized**.
+Status: **20.3B complete; 20.3C protected disposable E2E functionally complete pending disposable-runtime shutdown/cleanup; 20.3D real-vault activation not yet authorized**.
 
 ## Objective
 
@@ -168,7 +168,7 @@ path = /api/odyssey
 
 It preserves the existing sandbox directives and adds `allow-same-origin`. After deployment, the protected mobile page loaded the intended Odyssey UI and its same-origin CSS/JS correctly. No permissive global CORS or global n8n sandbox disablement was introduced.
 
-### 20.3C — disposable protected mobile E2E — in progress
+### 20.3C — disposable protected mobile E2E — functional gate passed
 
 Before provider-backed product actions, the running real-vault runtime was stopped and a disposable environment was prepared under:
 
@@ -193,7 +193,7 @@ ODYSSEY_PENDING_ROOT=/tmp/odyssey-20-3c/state/pending
 
 Local `/healthz` is healthy and process-environment inspection confirmed the three disposable roots before browser testing.
 
-Protected Android/Chrome evidence so far:
+Protected Android/Chrome evidence:
 
 ```text
 WRITE
@@ -205,23 +205,39 @@ READ
 User: ¿Dónde trabaja Nora Vidal?
 Odyssey: Nora Vidal trabaja en Airbus.
 Result: PASS; grounded read recovered disposable written knowledge
+
+CLARIFICATION
+User: qzxqzx
+Odyssey: No he podido interpretar la solicitud. Reformúlala con más detalle.
+Product kind: clarification
+Result: PASS through protected browser/mobile path
 ```
 
-A follow-up test then exposed a separate future product requirement:
+The WRITE produced disposable commit `fa6719e0a3c11950d1a6ad039fa5e246181a67b7`, creating only the Nora Vidal note with both facts and request-correlated `Odyssey-Request` / fact locators. The disposable working tree remained clean.
+
+The first protected `qzxqzx` browser attempt incorrectly returned an ordinary empty result. Bounded layer-by-layer diagnosis proved that Luna/Core/runtime were correct: a direct runtime request returned `status=needs_attention`, `clarification_code=UNRECOGNIZED_REQUEST`, no actions, no pending work, no Git history mutation, and unchanged disposable Git HEAD. The same request through local n8n returned an ordinary empty result.
+
+Exporting the deployed n8n workflows then showed the cause: the single active `Odyssey — Online product boundary` workflow (`hMbt07KRz8HVDOUO`) had deployment drift and did not contain the checked-in `needs_attention + UNRECOGNIZED_REQUEST -> kind=clarification` branch present in `workflows/odyssey-online.ts`.
+
+The existing active workflow ID was preserved and reconciled atomically with the version-controlled source, then republished; no second active `/api/request` workflow was created. Focused local verification then returned the expected clarification, with one `planner.luna` provider call, no answerer call, no pending work, and unchanged disposable Git HEAD. The final human-run protected mobile test also returned the dedicated clarification UI, closing the functional 20.3C E2E gate.
+
+Deterministic verification after reconciliation passed: Workflow SDK validation, focused Odyssey Online workflow tests (8 passed), full deterministic suite (694 passed, 79 skipped), Ruff check/format, `git diff --check`, and secret-pattern scan. An initial sandboxed test run had nine runtime-boundary failures solely because the sandbox prohibited the local HTTP fixture; rerunning with the required local fixture allowance passed all 694 runnable tests.
+
+A separate follow-up test exposed a future product requirement:
 
 ```text
 User: ¿Dónde vive?
 Odyssey: no grounded evidence / no inferred referent
 ```
 
-This is **not** counted as the Phase 20.3C clarification-path test. The current browser submits each request independently, so the planner never receives the previous visible turns. The fail-closed result is safe, but natural conversation continuity is missing. The future design is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md): context should be retrieved on demand by the same planner flow, not by always hard-coding a fixed number of prior messages into every request.
+This is **not** a Phase 20.3 failure. The current browser submits each request independently, so the planner never receives the previous visible turns. The fail-closed result is safe, but natural conversation continuity is missing. The future design is owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md): context should be retrieved on demand by the same planner flow, not by always hard-coding a fixed number of prior messages into every request.
 
-Remaining 20.3C evidence:
+Remaining 20.3C operational closure:
 
-1. submit an intentionally meaningless request such as `qzxqzx` and confirm the explicit `UNRECOGNIZED_REQUEST` clarification path;
-2. inspect disposable Markdown and Git history to prove the WRITE landed only in the disposable vault with request-correlated history;
-3. stop the disposable runtime and close/clean the disposable test state without reconnecting the public product flow to real personal knowledge;
-4. update retained evidence/PR status and run repository verification before declaring 20.3C complete.
+1. stop the disposable runtime;
+2. close/clean disposable test state only after preserving any needed evidence;
+3. do **not** reconnect the public product flow to the real vault as part of cleanup;
+4. update final PR/roadmap status after shutdown evidence is retained.
 
 ### 20.3D — real-vault activation gate — pending
 
@@ -244,4 +260,6 @@ A failed public-path check means Odyssey public access stays disabled; it never 
 
 The first real mobile interaction demonstrates that a chat-looking UI is not sufficient for conversational semantics. Future work must preserve visible conversations as isolated non-canonical history and let the same Luna-first planner request relevant conversation evidence only when needed. Historical retrieval should eventually support hierarchical conversation/day/week/month/year derived summaries for coarse-to-fine navigation while raw conversation evidence remains authoritative for what was actually said.
 
-This requirement is deferred from Phase 20.3 so deployment/security completion does not expand into a new model contract during the live activation gate.
+The clarification drift incident also established that request diagnostics must include integration/deployment provenance, not only Core/model telemetry. A future advanced inspector should correlate planner/runtime/n8n/final-product outcomes and expose a safe `MATCH | DRIFT | UNKNOWN` view of repository workflow source versus the single active deployed workflow. See [Future Odyssey product usage observability](future-product-usage-observability.md).
+
+These requirements are deferred from Phase 20.3 so deployment/security completion does not expand into a new product/model contract during the live activation gate.
