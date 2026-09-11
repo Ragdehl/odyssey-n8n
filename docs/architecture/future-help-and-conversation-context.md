@@ -33,6 +33,8 @@ User: ¿Dónde vive?
 
 The current product sends each browser submission independently, so the planner sees `¿Dónde vive?` with no referent and safely abstains. This establishes a product requirement: **follow-ups must be able to recover conversation context without making chat text canonical personal truth.**
 
+The same E2E also exposed a distinct presentation requirement: visible conversations must persist across page/app reopen. That WhatsApp-like history/resume behavior is a product projection over the durable conversation records described below, not a second history store and not canonical personal knowledge. See [Future Odyssey product interface](future-product-interface.md#ui-0--persistent-conversation-history-and-resume).
+
 ## Configuration-driven extensibility is a design requirement
 
 Conversation/history support must preserve Odyssey's schema/configuration-driven philosophy rather than accumulating concrete prompt branches.
@@ -123,15 +125,17 @@ A prior assistant message must never become current truth merely because it reso
 
 ### C2 — durable conversation records
 
-Goal: preserve what the user and Odyssey visibly said so older conversations can later be queried.
+Goal: preserve what the user and Odyssey visibly said so older conversations can later be queried and the product UI can restore/reopen prior chats.
 
 Preferred initial representation:
 
 - human-readable Markdown conversation records outside the canonical personal-knowledge vault;
 - durable non-knowledge/history state, conceptually `/data/odyssey/state/conversations/`;
 - one record per conversation/session rather than one canonical note per turn;
+- stable `conversation_id` so reopening/continuing a chat resumes the same conversation identity;
 - correlate turns through `conversation_id` and existing `request_id` values;
 - preserve user-visible user messages, final Odyssey responses, timestamps, and bounded typed outcome metadata useful for retrieval/audit;
+- support chronological re-rendering for the UI without making browser `localStorage` the durable authority;
 - never persist hidden chain-of-thought, private model reasoning, raw provider prompts, or arbitrary intermediate model responses.
 
 Conversation history records what was said; it is not automatically evidence that the content is currently true.
@@ -249,7 +253,7 @@ Neither becomes canonical personal truth.
 
 ## Validation scenarios
 
-Future implementation must cover immediate omitted referents, two plausible recent referents, explicit old-time references, current-fact questions contradicting old chat, historical questions that must not contaminate personal retrieval, configuration-added sources without concrete planner branches, coarse-to-fine summary retrieval, and bounded resource behavior.
+Future implementation must cover immediate omitted referents, two plausible recent referents, explicit old-time references, current-fact questions contradicting old chat, historical questions that must not contaminate personal retrieval, configuration-added sources without concrete planner branches, coarse-to-fine summary retrieval, durable reopen/resume of visible conversations, and bounded resource behavior.
 
 ## Remaining deferred decisions
 
