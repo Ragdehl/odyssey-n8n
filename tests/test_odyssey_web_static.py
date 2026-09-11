@@ -37,6 +37,7 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
 
     assert parser.api_endpoint == "/api/request"
     assert "./styles.css" in parser.links
+    assert (None, "./environment.js") in parser.scripts
     assert ("module", "./app.js") in parser.scripts
     assert {
         "odyssey-form",
@@ -53,6 +54,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'event.key !== "Enter" || event.isComposing' in app
     assert "appendRetryControl(retrySubmission)" in app
     assert "void sendSubmission(submission, true)" in app
+    assert 'deployment.environment !== "DEV"' in app
+    assert "marker.textContent = deployment.commit" in app
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'enterkeyhint="enter"' in index
@@ -62,6 +65,10 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert ".conversation { display: flex; flex-direction: column;" in styles
     assert "overflow-y: auto" in styles
     assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
+    assert ".deployment-marker" in styles
+
+    environment = (WEB_ROOT / "environment.js").read_text(encoding="utf-8")
+    assert 'environment: "PROD"' in environment
 
 
 def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:
