@@ -54,9 +54,36 @@ Future durable workflow state should use this boundary only when it cannot be re
 
 A derived database may improve retrieval or analytics but must never become the only copy of user knowledge.
 
-## Git history
+When a production vault is intentionally bootstrapped/reset and the canonical Markdown state is known, stale derived indexes may be removed and rebuilt from that canonical state. Stop the runtime first, verify the exact configured roots, and delete only artifacts that are explicitly rebuildable; this operation must never be used to infer or replace missing canonical knowledge.
 
-The vault may use local Git history for request-correlated audit/recovery of canonical mutations. Git is not an alternate knowledge model and Git SHAs are not embedded into every fact. `request_id` provides the normal correlation bridge.
+## Git history and production bootstrap
+
+The vault uses local Git history for request-correlated audit/recovery of canonical mutations. Git is not an alternate knowledge model and Git SHAs are not embedded into every fact. `request_id` provides the normal correlation bridge.
+
+Production mutation history has an exact-root invariant:
+
+```text
+ODYSSEY_VAULT_ROOT=/data/odyssey/vault
+             |
+             v
+/data/odyssey/vault/.git   <- exact repository root
+             |
+             v
+baseline commit exists before production mutation
+```
+
+A Git repository in `/data/odyssey` or another parent directory does **not** satisfy this contract. `GitHistoryRecorder` deliberately rejects a parent repository and also rejects a newly initialized repository with no baseline commit.
+
+Production activation/preflight must therefore verify all of the following before accepting a real write:
+
+1. the configured vault root resolves to the intended production path;
+2. `git -C "$ODYSSEY_VAULT_ROOT" rev-parse --show-toplevel` resolves to that exact same path;
+3. `git -C "$ODYSSEY_VAULT_ROOT" rev-parse HEAD` succeeds, proving a baseline commit exists;
+4. the working tree is in the expected state before the runtime is exposed to product traffic.
+
+Git initialization/bootstrap is an explicit deployment action, never an implicit runtime side effect. An empty production vault may use an explicit empty baseline commit; if personal Markdown already exists, creating its first baseline commits that current content into local history and therefore requires the normal real-data authorization gate.
+
+A stray or incomplete `.git` directory outside the configured vault root must not be mistaken for production history readiness. Check the exact root and HEAD rather than relying on the presence of a `.git` name.
 
 ## n8n low-level file utilities
 

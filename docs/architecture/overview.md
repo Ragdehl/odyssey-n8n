@@ -185,6 +185,8 @@ The browser does not hold provider credentials or semantic authority. It creates
 
 The exact current Phase 20 contract is [Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
+Deployment correctness is part of the product boundary. Version-controlled workflow source is the reviewable contract; the active n8n workflow is an operational deployment of that contract and may drift. Deployment verification should therefore identify the single active workflow for each public product path and compare it with the expected source/fingerprint rather than assuming an import/redeploy succeeded. The Phase 20.3 clarification incident demonstrated this boundary concretely: Core/runtime produced the correct clarification while a stale active n8n workflow transformed it into an empty result until the deployment was reconciled. See [Future Odyssey product usage observability](future-product-usage-observability.md#deployment-provenance-and-boundary-level-diagnostics).
+
 ## Source code responsibility map
 
 - `odyssey_core/` — reusable application/domain behavior.
@@ -204,5 +206,40 @@ The exact current Phase 20 contract is [Odyssey Online MVP](phase-20-odyssey-onl
 6. Derived state remains rebuildable; durable non-knowledge state remains isolated from the vault.
 7. Real personal data, credentials, security boundaries, and destructive actions require explicit human control.
 8. Add infrastructure only after a measured need appears.
+9. Production integration deployment must be provenance-aware: the active n8n workflow serving a public product path must be identifiable and verifiably aligned with the version-controlled workflow contract.
 
 Implementation status belongs in the [Functional Roadmap](functional-roadmap.md). Exact historical rationale remains in phase documents, [ADRs](../decisions/README.md), and benchmark records.
+
+## Configuration-driven model boundaries
+
+Odyssey's model-facing components must stay generic with respect to concrete note types and properties wherever Core already supports the underlying semantics. Adding a supported canonical type or property should normally be a schema/configuration change plus validation/tests, not a new production branch naming that type in a model component.
+
+Current audit of the production model boundaries:
+
+```text
+config/note-schema.json
+        |
+        v
+schema-derived retrieval/write capabilities
+        |
+        v
+Luna-first planner
+        |
+        +--> same generic RequestPlan contract
+        `--> bounded Sol fallback on structured fail-closed only
+
+retrieval / write execution
+        |
+        +--> contextual resolver: candidate/type data in, generic RESOLVED/AMBIGUOUS/UNRESOLVED out
+        +--> writer: resolved note/facts in, bounded edit operations out
+        +--> fact selector: supplied fact candidates in, locator decision out
+        `--> grounded answerer: supplied evidence in, grounded answer out
+```
+
+The top-level planner receives note-type/property capabilities projected dynamically from `config/note-schema.json`; Luna-first reuses the same semantic planner contract and the Sol fallback receives the same active schema. The contextual resolver, bounded writer, fact selector, and grounded answerer use fixed generic safety instructions but do not implement per-note-type production branches.
+
+Configuration-driven does not mean every future capability is executable without code. A new type/property that fits already-supported Core semantics should flow through configuration. A genuinely new executable capability may require an executor, permission boundary, and tests, but once the future capability/app registry exists it should not require rewriting the base planner prompt or adding a concrete app-name branch there.
+
+Current gap: Odyssey preserves generic `DelegateAction`, but executable application selection/manifest routing is still deferred. The intended future shape is a compact configuration-driven capability registry plus generic routing/execution boundaries, described in [Future Extension Points](future-extension-points.md).
+
+Model names, reasoning effort, output schemas, and generic safety instructions may still be explicit component configuration. That is distinct from hard-coding the user's ontology or application vocabulary into model logic.
