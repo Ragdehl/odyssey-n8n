@@ -10,6 +10,7 @@ Use these documents as the detailed owners:
 
 - [Odyssey Platform Direction](odyssey-platform-direction.md) — long-term Core/server/client/application boundary, user-owned storage, and local-first portability.
 - [Multi-user Collaboration Direction](multi-user-collaboration-direction.md) — authentication/authorization, private/shared knowledge, groups, synchronization, and conflict safety.
+- [Future user self-identity binding](future-user-self-identity.md) — bind each authenticated/current human to an ordinary canonical `person` note by stable note ID so first-person requests and applications can reuse the same knowledge without a profile silo or special `user` note type.
 - [Future Odyssey help and conversation context](future-help-and-conversation-context.md) — isolated product-help retrieval plus bounded ephemeral follow-up context.
 - [Future semantic request history](phase-17-request-records.md) — explicit history of what the user asked and what Odyssey did, correlated through `request_id`, isolated from canonical personal retrieval and operational tracing, and never hidden model reasoning.
 - [Future product usage observability](future-product-usage-observability.md) — safe user/admin usage, timing, token, and cost projections from existing evidence.
