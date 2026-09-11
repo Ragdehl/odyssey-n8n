@@ -185,6 +185,40 @@ The browser does not hold provider credentials or semantic authority. It creates
 
 The exact current Phase 20 contract is [Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
+## Configuration-driven model boundaries
+
+Odyssey's model-facing components must stay generic with respect to concrete note types and properties wherever Core already supports the underlying semantics. Adding a supported canonical type or property should normally be a schema/configuration change plus validation/tests, not a new production branch naming that type in a model component.
+
+Current audit of the production model boundaries:
+
+```text
+config/note-schema.json
+        |
+        v
+schema-derived retrieval/write capabilities
+        |
+        v
+Luna-first planner
+        |
+        +--> same generic RequestPlan contract
+        `--> bounded Sol fallback on structured fail-closed only
+
+retrieval / write execution
+        |
+        +--> contextual resolver: candidate/type data in, generic RESOLVED/AMBIGUOUS/UNRESOLVED out
+        +--> writer: resolved note/facts in, bounded edit operations out
+        +--> fact selector: supplied fact candidates in, locator decision out
+        `--> grounded answerer: supplied evidence in, grounded answer out
+```
+
+The top-level planner receives note-type/property capabilities projected dynamically from `config/note-schema.json`; Luna-first reuses the same semantic planner contract and the Sol fallback receives the same active schema. The contextual resolver, bounded writer, fact selector, and grounded answerer use fixed generic safety instructions but do not implement per-note-type production branches.
+
+Configuration-driven does not mean every future capability is executable without code. A new type/property that fits already-supported Core semantics should flow through configuration. A genuinely new executable capability may require an executor, permission boundary, and tests, but once the future capability/app registry exists it should not require rewriting the base planner prompt or adding a concrete app-name branch there.
+
+Current gap: Odyssey preserves generic `DelegateAction`, but executable application selection/manifest routing is still deferred. The intended future shape is a compact configuration-driven capability registry plus generic routing/execution boundaries, described in [Future Extension Points](future-extension-points.md).
+
+Model names, reasoning effort, output schemas, and generic safety instructions may still be explicit component configuration. That is distinct from hard-coding the user's ontology or application vocabulary into model logic.
+
 ## Source code responsibility map
 
 - `odyssey_core/` — reusable application/domain behavior.
@@ -200,9 +234,10 @@ The exact current Phase 20 contract is [Odyssey Online MVP](phase-20-odyssey-onl
 2. Stable identity is independent from current human-readable name and physical filename.
 3. Retrieval evidence is not mutation authority.
 4. Models operate within bounded validated contracts; deterministic Core keeps safety authority.
-5. n8n integrates/orchestrates but does not duplicate Core semantics.
-6. Derived state remains rebuildable; durable non-knowledge state remains isolated from the vault.
-7. Real personal data, credentials, security boundaries, and destructive actions require explicit human control.
-8. Add infrastructure only after a measured need appears.
+5. Schema/configuration drives supported ontology semantics; model components must not accumulate concrete type/app branches when a generic contract can represent them.
+6. n8n integrates/orchestrates but does not duplicate Core semantics.
+7. Derived state remains rebuildable; durable non-knowledge state remains isolated from the vault.
+8. Real personal data, credentials, security boundaries, and destructive actions require explicit human control.
+9. Add infrastructure only after a measured need appears.
 
 Implementation status belongs in the [Functional Roadmap](functional-roadmap.md). Exact historical rationale remains in phase documents, [ADRs](../decisions/README.md), and benchmark records.
