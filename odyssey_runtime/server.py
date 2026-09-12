@@ -9,6 +9,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
+from odyssey_core.identity_boundary import AuthenticatedActorContext
+
 from .composition import RuntimeComposition
 from .serialization import application_result_to_response
 
@@ -63,10 +65,10 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 if length < 0 or length > MAX_REQUEST_BYTES:
                     raise ValueError("request body is too large")
                 payload = json.loads(self.rfile.read(length))
-                if not isinstance(payload, dict) or set(payload) not in (
-                    {"request"},
-                    {"request", "request_id"},
-                ):
+                if not isinstance(payload, dict) or not {"request"}.issubset(payload):
+                    raise ValueError("request payload has unsupported fields")
+                allowed = {"request", "request_id", "authenticated_actor"}
+                if set(payload) - allowed:
                     raise ValueError("request payload has unsupported fields")
                 request = payload["request"]
                 if not isinstance(request, str) or not request.strip():
@@ -77,11 +79,17 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     or _REQUEST_ID_PATTERN.fullmatch(request_id) is None
                 ):
                     raise ValueError("request_id must be a safe non-empty identifier")
+                actor_payload = payload.get("authenticated_actor")
+                authenticated_actor = (
+                    None
+                    if actor_payload is None
+                    else AuthenticatedActorContext.from_payload(actor_payload)
+                )
             except (TypeError, ValueError):
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
                 return
             try:
-                result = runtime.execute(request, request_id)
+                result = runtime.execute(request, request_id, authenticated_actor)
                 self._write_json(HTTPStatus.OK, application_result_to_response(result))
             except Exception:
                 payload: dict[str, Any] = {"error": "runtime failure"}

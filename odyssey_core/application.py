@@ -17,6 +17,7 @@ from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
+from .identity_boundary import AuthenticatedActorContext, SelfBindingError, SelfBindingRepository
 from .materialization import (
     BoundedNoteWriter,
     materialize_create,
@@ -31,6 +32,7 @@ from .observability import (
     ProviderCallEvidence,
     normalize_provider_usage,
 )
+from .persistence import ActorInput
 from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import UnitTargetPreflight, preflight_write_action
 from .request_planning import (
@@ -176,12 +178,14 @@ def execute_request(
     semantic_index: Any,
     embedder: Any,
     contextual_reasoner: Any,
-    actor: str,
+    actor: ActorInput,
     now: str,
     context_limit: int,
     writer: BoundedNoteWriter | None = None,
     fact_selector: AtomicFactSelector | None = None,
     request_id_factory: Callable[[], str] = allocate_request_id,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
     pending_recorder: PendingWorkRecorder | None = None,
@@ -204,6 +208,8 @@ def execute_request(
         context_limit: Explicit positive retrieval result budget.
         writer: Optional bounded UPDATE writer.
         request_id_factory: Injected one-per-request ID generator.
+        authenticated_actor: Optional normalized actor context from the trusted integration
+            boundary; raw headers, JWTs, and provider credentials are not accepted.
         preflight_id_allocator: Optional deterministic CREATE ID allocator.
         semantic_limit: Existing bounded semantic-resolution candidate budget.
         pending_recorder: Optional create-only durable pending-work recorder.
@@ -223,6 +229,10 @@ def execute_request(
     request_id = request_id_factory()
     if not isinstance(request_id, str) or not request_id.strip():
         raise ValueError("request_id_factory must return a non-empty string")
+    if authenticated_actor is not None and not isinstance(
+        authenticated_actor, AuthenticatedActorContext
+    ):
+        raise ValueError("authenticated actor context is invalid")
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic)
     try:
@@ -326,7 +336,15 @@ def execute_request(
         )
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
-                action_index, action, repository, schema, context_index, embedder, context_limit
+                action_index,
+                action,
+                repository,
+                schema,
+                context_index,
+                embedder,
+                context_limit,
+                authenticated_actor,
+                self_binding_repository,
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -350,6 +368,8 @@ def execute_request(
                 request_id,
                 unit_ordinals,
                 measured_fact_selector,
+                authenticated_actor,
+                self_binding_repository,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -499,6 +519,8 @@ def _execute_retrieve(
     context_index: Any,
     embedder: Any,
     context_limit: int,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
 ) -> ActionResult:
     """Execute one ordinary retrieval or preserve unsupported graph intent as deferred evidence."""
     if action.plan.link_scope is not None:
@@ -508,7 +530,27 @@ def _execute_retrieve(
             ActionStatus.DEFERRED,
             reason="UNSUPPORTED_RETRIEVAL_LINK_SCOPE",
         )
+    allowed_note_ids: frozenset[str] | None = None
+    if action.plan.self_target is not None:
+        if action.plan.self_target != "self":
+            return ActionResult(
+                action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
+            )
+        if authenticated_actor is None or self_binding_repository is None:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
+            )
+        try:
+            binding = self_binding_repository.resolve(authenticated_actor.stable_user_id)
+        except SelfBindingError:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
+            )
+        allowed_note_ids = frozenset({binding.person_note_id})
     try:
+        context_kwargs: dict[str, Any] = {}
+        if allowed_note_ids is not None:
+            context_kwargs["allowed_note_ids"] = allowed_note_ids
         context = get_context(
             repository,
             schema,
@@ -518,6 +560,7 @@ def _execute_retrieve(
             limit=context_limit,
             type=action.plan.type,
             filters=action.plan.filters,
+            **context_kwargs,
         )
     except Exception as error:
         return ActionResult(
@@ -534,7 +577,7 @@ def _execute_write(
     semantic_index: Any,
     embedder: Any,
     contextual_reasoner: Any,
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
     semantic_limit: int,
@@ -542,6 +585,8 @@ def _execute_write(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     cardinalities = {unit.cardinality for unit in action.units}
@@ -580,6 +625,8 @@ def _execute_write(
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
             semantic_limit=semantic_limit,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
             **kwargs,
         )
         rendering = render_reference_facts(action, preflight)
@@ -611,7 +658,7 @@ def _execute_bulk(
     action: WriteAction,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
     request_id: str,
@@ -652,7 +699,7 @@ def _execute_single_units(
     rendered_facts: tuple[tuple[str, ...], ...],
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
     request_id: str,

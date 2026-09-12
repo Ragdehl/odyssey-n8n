@@ -22,6 +22,7 @@ from odyssey_core.fact_selection import AtomicFactSelector, FactCandidate, valid
 from odyssey_core.notes import Note, parse_note, validate_note
 from odyssey_core.observability import normalize_provider_usage
 from odyssey_core.persistence import (
+    ActorInput,
     EntityPersistenceResult,
     PersistenceOperation,
     create_entity,
@@ -78,7 +79,7 @@ def materialize_create(
     unit_index: int,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     rendered_facts: tuple[str, ...] | None = None,
     request_id: str | None = None,
@@ -205,7 +206,7 @@ def _validate_create_candidate(
     metadata: dict[str, Any],
     content: str,
     entity_id: str,
-    actor: str,
+    actor: ActorInput,
     now: str,
     schema: dict[str, Any],
 ) -> None:
@@ -375,7 +376,7 @@ def materialize_update(
     *,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None = None,
     rendered_facts: tuple[str, ...] | None = None,
@@ -532,7 +533,7 @@ def materialize_delete(
     *,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
 ) -> EntityPersistenceResult:
     """Materialize one resolved single-note DELETE through Core lifecycle persistence.
@@ -575,7 +576,7 @@ def materialize_type_migration(
     *,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
 ) -> EntityPersistenceResult:
     """Migrate one resolved active note in place without a writer or link rewrite.

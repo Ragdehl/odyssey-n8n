@@ -29,6 +29,7 @@ WRITE_INTENTS = ("record", "amend", "remove", "delete")
 _PROPERTY_OPS = ("set", "remove")
 _TAG_CHANGE_OPS = ("add", "remove")
 _LINK_DIRECTIONS = ("incoming", "outgoing", "both")
+SELF_TARGET = "self"
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
@@ -37,7 +38,8 @@ _PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerR
 
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
-Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, and link_scope. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, and self_target. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. A relational target such as "mi hermano" remains an ordinary target. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
 represented by the selection. Do not infer `all_matching` from plural wording alone, from several
@@ -162,6 +164,7 @@ class SelectionCriteria:
     type: str | None
     filters: tuple[ContextFilter, ...]
     link_scope: LinkScope | None
+    self_target: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -866,8 +869,9 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                     },
                 ]
             },
+            "self_target": {"type": ["string", "null"], "enum": [SELF_TARGET, None]},
         },
-        "required": ["entity", "query", "type", "filters", "link_scope"],
+        "required": ["entity", "query", "type", "filters", "link_scope", "self_target"],
         "additionalProperties": False,
     }
 
@@ -1098,9 +1102,12 @@ def _validate_selection(
     Raises:
         RequestPlanningError: If query, type, filter shape, or filter semantics are invalid.
     """
-    required = {"entity", "query", "type", "filters", "link_scope"}
-    legacy_required = {"query", "type", "filters"}
-    if not isinstance(raw, dict) or (set(raw) != required and set(raw) != legacy_required):
+    required = {"entity", "query", "type", "filters", "link_scope", "self_target"}
+    legacy_required = {"entity", "query", "type", "filters", "link_scope"}
+    legacy_minimum = {"query", "type", "filters"}
+    if not isinstance(raw, dict) or (
+        set(raw) != required and set(raw) != legacy_required and set(raw) != legacy_minimum
+    ):
         raise RequestPlanningError(f"{label} fields are invalid")
     entity, query, note_type, raw_filters = (
         raw.get("entity"),
@@ -1134,6 +1141,11 @@ def _validate_selection(
             code=PlannerValidationCode.INVALID_FILTER,
         ) from error
     link_scope = _validate_link_scope(raw.get("link_scope"), schema, capabilities, label=label)
+    self_target = raw.get("self_target")
+    if self_target not in (None, SELF_TARGET):
+        raise RequestPlanningError(f"{label} self_target is invalid")
+    if self_target == SELF_TARGET and (entity is not None or note_type not in (None, "person")):
+        raise RequestPlanningError(f"{label} self_target must select the direct person target")
     return SelectionCriteria(
         entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
@@ -1142,6 +1154,7 @@ def _validate_selection(
             ContextFilter(item["field"], item["op"], item["value"]) for item in raw_filters
         ),
         link_scope=link_scope,
+        self_target=self_target,
     )
 
 
@@ -1319,6 +1332,8 @@ def _validate_knowledge_unit(
         )
     if cardinality == "all_matching" and target.entity is not None:
         raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
+    if cardinality == "all_matching" and target.self_target is not None:
+        raise RequestPlanningError("self_target requires one direct target")
     intent = unit["intent"]
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")

@@ -24,11 +24,12 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current gate — self-identity binding
+## Current gate — post-merge Phase 22 production adoption
 
-Goal: bind the stable current/authenticated user identity to the ordinary canonical `person` note without introducing a special user knowledge type or duplicating personal facts.
+Goal: activate the already-validated Phase 22 self-identity path in production through trusted production identity projection, explicit real-user/person binding, and an explicit clean-main deployment with health/provenance verification.
 
-See [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
+Phase 22 implementation is complete in isolated DEV after the identity, binding, provenance, and deterministic self-resolution foundations and the grounded SELF READ/WRITE gate. The next gate is explicit post-merge production adoption: trusted production authentication projection, real-user mapping/binding, and an explicit clean-main deployment with health/provenance verification.
+See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -47,6 +48,12 @@ See [Future user self-identity binding](future-user-self-identity.md). The compl
 21C   persistent DEV runtime/operations + DEV n8n decision   ✅ complete
 21D   synchronized DEV n8n/routing pilot                     ✅ complete
 Phase 21 production/development isolation                    ✅ complete
+22A  self-identity architecture contract                    ✅ complete
+22B  typed actor boundary + principal mapping foundation     ✅ complete
+22C  explicit self-person binding                             ✅ complete
+22D  authenticated human provenance propagation                ✅ complete
+22E  deterministic self resolution                              ✅ complete
+22F  focused isolated-DEV adoption gate                         ✅ complete
 ```
 
 ### 20.1B — answerer adoption gate
@@ -113,7 +120,7 @@ first real personal use                               ✅ complete
 production / development isolation                    ✅ complete
         |
         v
-user self-identity binding to ordinary person note    ➡️ next
+user self-identity binding to ordinary person note    ✅ isolated DEV implementation complete
         |
         v
 request feedback / advanced inspector + note access
@@ -127,7 +134,7 @@ real-usage-driven UI / capability work
 
 The production/development split now precedes substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
 
-The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
+The self-identity implementation is complete in isolated DEV: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. Production authentication projection, real-user binding, and explicit promotion remain separate post-merge gates. See [Phase 22 contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
 
@@ -147,7 +154,7 @@ Phase 21 production/development isolation                   ✅ complete
 
 The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
 database/container. It is not a permanent Git branch. The fixed protected endpoint and human
-browser checkpoint are complete; self-identity binding is now the next functional gate.
+browser checkpoint are complete; self-identity production adoption is now the explicit post-merge gate.
 
 ### Natural conversation and history
 

@@ -26,3 +26,19 @@ def test_different_head_is_not_coherent() -> None:
 
 def test_dirty_checkout_is_not_coherent() -> None:
     assert coherence_result(CURRENT, CURRENT, CURRENT, " M scripts/odyssey-dev") is False
+
+
+def test_publish_allows_only_the_approved_dev_answerer_credential() -> None:
+    """Keep DEV deployment bounded to its single explicitly approved credential."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "SELECT name, type FROM credentials_entity ORDER BY name" in source
+    assert "Odyssey DEV OpenAI Answerer" in source
+    assert "httpBearerAuth" in source
+    assert "DEV n8n credentials are not exactly the approved DEV answerer credential" in source
+
+
+def test_render_binds_the_isolated_answerer_credential_id() -> None:
+    """Keep the generated DEV workflow bound to the isolated credential record."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID" in source
+    assert 'name: "Odyssey DEV OpenAI Answerer"' in source

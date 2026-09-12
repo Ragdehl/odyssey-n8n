@@ -9,6 +9,11 @@ from typing import Any
 from odyssey_core.context import find_filtered_note_ids
 from odyssey_core.contextual import ContextualReasoner
 from odyssey_core.identity import find_deleted_exact_entity_candidates
+from odyssey_core.identity_boundary import (
+    AuthenticatedActorContext,
+    SelfBindingError,
+    SelfBindingRepository,
+)
 from odyssey_core.request_planning import KnowledgeUnit
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
 from odyssey_core.semantic import SemanticEntityIndex, TextEmbedder
@@ -52,6 +57,8 @@ def decide_write_target(
     contextual_reasoner: ContextualReasoner,
     semantic_limit: int,
     explicit_new_entity: bool = False,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
 ) -> WriteTargetDecision:
     """Resolve one validated write target and authorize only safe later work.
 
@@ -84,6 +91,24 @@ def decide_write_target(
     target = unit.target
     if target.link_scope is not None:
         return _clarification("unsupported_link_scope")
+    if target.self_target is not None:
+        if target.self_target != "self" or target.type not in (None, "person"):
+            return _clarification("invalid_self_target")
+        if authenticated_actor is None or self_binding_repository is None:
+            return _clarification("self_identity_unavailable")
+        try:
+            binding = self_binding_repository.resolve(authenticated_actor.stable_user_id)
+        except SelfBindingError:
+            return _clarification("self_identity_unavailable")
+        if target.filters:
+            allowed_ids = find_filtered_note_ids(
+                repository, schema, target.filters, note_type="person"
+            )
+            if binding.person_note_id not in allowed_ids:
+                return _clarification("self_identity_unavailable")
+        return WriteTargetDecision(
+            WriteTargetOutcome.UPDATE, existing_note_id=binding.person_note_id
+        )
     canonical_types = _canonical_types(schema)
     if target.type is not None and target.type not in canonical_types:
         return _clarification("invalid_target_type")

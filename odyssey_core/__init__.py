@@ -44,6 +44,17 @@ from .identity import (
     find_exact_entity_candidates,
     resolve_exact_entity,
 )
+from .identity_boundary import (
+    AuthenticatedActorContext,
+    ExternalPrincipal,
+    IdentityBoundaryError,
+    IdentityMappingRepository,
+    OdysseyUser,
+    SelfBinding,
+    SelfBindingConflictError,
+    SelfBindingError,
+    SelfBindingRepository,
+)
 from .materialization import (
     WRITER_CONTEXT_MODE,
     WRITER_MODEL,
@@ -73,6 +84,7 @@ from .observability import (
 )
 from .pending_work import PendingWorkError, PendingWorkRepository, project_pending_work
 from .persistence import (
+    ActorInput,
     EntityAlreadyExistsError,
     EntityIdentityMismatchError,
     EntityPersistenceResult,
@@ -103,6 +115,7 @@ from .request_planning import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_MODEL,
     PLANNER_REASONING_EFFORT,
+    SELF_TARGET,
     WRITE_INTENTS,
     DelegateAction,
     KnowledgeReference,
@@ -156,6 +169,16 @@ __all__ = [
     "GitHistoryResult",
     "HistoryRecorder",
     "HistoryStatus",
+    "AuthenticatedActorContext",
+    "ExternalPrincipal",
+    "IdentityBoundaryError",
+    "IdentityMappingRepository",
+    "OdysseyUser",
+    "ActorInput",
+    "SelfBinding",
+    "SelfBindingConflictError",
+    "SelfBindingError",
+    "SelfBindingRepository",
     "DependencyEvidence",
     "PendingWorkRecorder",
     "PendingWorkStatus",
@@ -236,6 +259,7 @@ __all__ = [
     "PlannerResult",
     "RequestPlan",
     "SelectionCriteria",
+    "SELF_TARGET",
     "TagChange",
     "RequestPlanningError",
     "RetrievalPlan",

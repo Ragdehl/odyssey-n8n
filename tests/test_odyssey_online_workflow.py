@@ -62,6 +62,30 @@ def test_workflow_rendering_requires_an_explicit_safe_target() -> None:
     assert "ODYSSEY_WORKFLOW_RUNTIME_URL ||" not in source
 
 
+def test_dev_identity_is_render_time_only_and_not_browser_controlled() -> None:
+    """Project only the synthetic DEV actor configured at render time into the runtime payload."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "ODYSSEY_DEV_STABLE_USER_ID is required for DEV rendering" in source
+    assert "ODYSSEY_DEV_STABLE_USER_ID is forbidden for PROD rendering" in source
+    assert "authenticated_actor: { stable_user_id:" in source
+    assert "authenticated_actor: $json" not in source
+    assert "ODYSSEY_DEV_STABLE_USER_ID" in source
+
+
+def test_answerer_credential_name_is_environment_scoped() -> None:
+    """Keep the DEV answerer credential distinct from the production workflow credential."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "Odyssey DEV OpenAI Answerer" in source
+    assert "Odyssey Phase 20.2B OpenAI Answerer" in source
+    assert "newCredential(answererCredentialName)" in source
+
+
+def test_dev_answerer_credential_requires_a_rendered_isolated_id() -> None:
+    """Keep DEV workflow credential resolution bound to the isolated n8n record."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "newCredential(answererCredentialName)" in source
+
+
 def test_planner_clarification_bypasses_answerer_with_deterministic_text() -> None:
     """Map only Core's allowlisted clarification to the direct product response."""
     source = SOURCE.read_text(encoding="utf-8")

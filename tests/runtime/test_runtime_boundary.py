@@ -22,6 +22,7 @@ from odyssey_core.application import (
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
 from odyssey_core.git_history import GitHistoryResult
+from odyssey_core.identity_boundary import OdysseyUser
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -362,6 +363,65 @@ def test_http_boundary_rejects_invalid_input_without_calling_core() -> None:
         response = connection.getresponse()
         assert response.status == 400
         assert json.loads(response.read()) == {"error": "invalid request"}
+        assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_forwards_only_normalized_actor_context() -> None:
+    """Forward a validated Odyssey user identity while excluding raw provider identity."""
+    calls: list[tuple[str, str | None, str | None]] = []
+    user = OdysseyUser.new()
+
+    def execute(request: str, request_id: str | None, actor) -> ApplicationResult:
+        """Capture only the typed actor context reaching the Core adapter."""
+        calls.append((request, request_id, actor.stable_user_id))
+        return _result()
+
+    server = _test_server(RuntimeComposition(core_execute=execute, refresh_indexes=lambda: None))
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps(
+                {
+                    "request": "hello",
+                    "request_id": "trusted-1",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        response.read()
+        assert calls == [("hello", "trusted-1", user.stable_user_id)]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_rejects_browser_identity_fields_without_calling_core() -> None:
+    """Reject raw subject-shaped fields rather than treating them as actor authority."""
+    calls: list[str] = []
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request, request_id: calls.append(request),
+            refresh_indexes=lambda: None,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps({"request": "hello", "subject": "provider-subject"}),
+            headers={"Cf-Access-Authenticated-User-Email": "untrusted@example.invalid"},
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        response.read()
         assert calls == []
     finally:
         server.shutdown()

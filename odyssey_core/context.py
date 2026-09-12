@@ -616,6 +616,7 @@ class ContextIndex:
         type: str | None = None,
         required_tags: Sequence[str] = (),
         filters: Sequence[ContextFilter | Mapping[str, Any]] = (),
+        allowed_note_ids: frozenset[str] | None = None,
     ) -> tuple[_ContextCandidate, ...]:
         """Return deterministic ranking candidates after exact type/tag filtering."""
         if not isinstance(query, str) or not query.strip():
@@ -721,6 +722,8 @@ class ContextIndex:
                     _encoded_tags,
                     blob,
                 ) in rows:
+                    if allowed_note_ids is not None and note_id not in allowed_note_ids:
+                        continue
                     vector = _blob_vector(blob)
                     if len(vector) != dimension:
                         raise ContextIndexError("Stored embedding dimension is inconsistent")
@@ -762,6 +765,7 @@ def get_context(
     type: str | None = None,
     required_tags: Sequence[str] = (),
     filters: Sequence[ContextFilter | Mapping[str, Any]] = (),
+    allowed_note_ids: frozenset[str] | None = None,
 ) -> ContextPackage:
     """Retrieve ranked, authoritative atomic notes for an interpreted knowledge query.
 
@@ -776,6 +780,7 @@ def get_context(
         required_tags: Optional controlled tags; every tag must be present.
         filters: Optional schema-declared structured constraints. Each filter is a
             ``ContextFilter`` or mapping with ``field``, ``op``, and ``value`` keys.
+        allowed_note_ids: Optional authoritative stable-ID restriction applied before ranking.
 
     Returns:
         Immutable package containing current validated note content and provenance.
@@ -792,6 +797,7 @@ def get_context(
         type=type,
         required_tags=required_tags,
         filters=filters,
+        allowed_note_ids=allowed_note_ids,
     )
     items: list[ContextItem] = []
     for candidate in candidates:

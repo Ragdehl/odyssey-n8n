@@ -19,6 +19,7 @@ from odyssey_core.contextual_calibration import load_contextual_calibration_exam
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
+from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -26,8 +27,11 @@ from odyssey_core.observability import (
     ProviderCallEvidence,
 )
 from odyssey_core.pending_work import PendingWorkRepository
+from odyssey_core.persistence import ActorInput
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
+
+_VAULT_REPOSITORY_TYPE = VaultRepository
 
 # Preserve the existing runtime composition injection seam while changing its production target.
 # Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
@@ -39,11 +43,16 @@ OpenAIRequestPlanner = LunaFirstRequestPlanner
 class RuntimeComposition:
     """Own one long-lived assembly of providers, repositories, indexes, and Core execution."""
 
-    core_execute: Callable[[str, str | None], ApplicationResult]
+    core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
     monotonic: Callable[[], float] = perf_counter
 
-    def execute(self, user_request: str, request_id: str | None = None) -> ApplicationResult:
+    def execute(
+        self,
+        user_request: str,
+        request_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+    ) -> ApplicationResult:
         """Execute one request and refresh derived indexes after affected mutations.
 
         Args:
@@ -54,7 +63,10 @@ class RuntimeComposition:
             The typed Core ApplicationResult after any required derived-index refresh.
         """
         started = self.monotonic()
-        result = self.core_execute(user_request, request_id)
+        if authenticated_actor is None:
+            result = self.core_execute(user_request, request_id)
+        else:
+            result = self.core_execute(user_request, request_id, authenticated_actor)
         stages = list(result.operational.stages)
         if result.affected_stable_note_ids:
             refresh_started = self.monotonic()
@@ -115,6 +127,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     vault_root = _path_env("ODYSSEY_VAULT_ROOT", "/data/odyssey/vault")
     runtime_root = _path_env("ODYSSEY_RUNTIME_ROOT", "/data/odyssey/runtime")
     pending_root = _path_env("ODYSSEY_PENDING_ROOT", "/data/odyssey/state/pending")
+    state_root = _path_env("ODYSSEY_STATE_ROOT", str(pending_root.parent))
     pending_root.mkdir(parents=True, exist_ok=True)
     schema_path = _path_env("ODYSSEY_SCHEMA_PATH", str(project_root / "config/note-schema.json"))
     embedding_cache = _path_env(
@@ -132,16 +145,30 @@ def build_runtime_from_environment() -> RuntimeComposition:
     writer = OpenAILunaWriter()
     fact_selector = OpenAILunaFactSelector()
     pending_recorder = PendingWorkRepository(pending_root)
+    self_binding_repository = (
+        SelfBindingRepository(state_root, repository, schema)
+        if isinstance(repository, _VAULT_REPOSITORY_TYPE)
+        else None
+    )
     history_recorder = GitHistoryRecorder(vault_root)
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
 
-    def core_execute(user_request: str, request_id: str | None = None) -> ApplicationResult:
+    def core_execute(
+        user_request: str,
+        request_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+    ) -> ApplicationResult:
         """Execute one request with fresh Luna-first planning and persistence clock context."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
         request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
+        if authenticated_actor is not None and not isinstance(
+            authenticated_actor, AuthenticatedActorContext
+        ):
+            raise ValueError("authenticated actor context is invalid")
+        persistence_actor = _persistence_actor(actor, authenticated_actor)
         result = execute_request(
             user_request,
             planner=planner,
@@ -151,7 +178,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             semantic_index=semantic_index,
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
-            actor=actor,
+            actor=persistence_actor,
             now=clock["timestamp"],
             context_limit=context_limit,
             writer=writer,
@@ -159,6 +186,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
             pending_recorder=pending_recorder,
             history_recorder=history_recorder,
             request_id_factory=request_id_factory,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)
@@ -171,6 +200,18 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
     refresh_indexes()
     return RuntimeComposition(core_execute=core_execute, refresh_indexes=refresh_indexes)
+
+
+def _persistence_actor(
+    application_actor: str, authenticated_actor: AuthenticatedActorContext | None
+) -> ActorInput:
+    """Combine the stable application actor with optional normalized human provenance."""
+    if not isinstance(application_actor, str) or not application_actor.strip():
+        raise ValueError("application actor must be a non-empty string")
+    return {
+        "human": authenticated_actor.stable_user_id if authenticated_actor is not None else None,
+        "app": application_actor,
+    }
 
 
 def _replace_planner_provider_calls(
