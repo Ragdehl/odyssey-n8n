@@ -252,6 +252,23 @@ authenticated edge CSP and verify the sandbox includes `allow-same-origin` befor
 mobile checkpoint. This repeats the Phase 20.3 failure mode and is intentionally recorded here so
 it is not rediscovered during the next isolated deployment.
 
+### Follow-up static-asset routing correction
+
+After the CSP correction, an authenticated DEV browser still received the HTML but a `404` for
+`/api/styles.css`, and the DEV marker was absent. Layered diagnosis showed that the checked-in and
+published static workflow exposed all five asset/page webhooks and that direct DEV n8n requests
+returned `200` with the expected content types. The first failing layer was the Cloudflare tunnel:
+its DEV product-path regular expression had been over-escaped, so `/api/odyssey` and `/api/request`
+matched while dotted asset paths did not.
+
+The DEV ingress now uses the single-escape pattern for `styles.css`, `app.js`, `client.js`, and
+`environment.js`, still scoped to `odyssey-dev.ragdehl.com` and the existing DEV n8n target. Each
+product path is checked directly at n8n and reaches the public Access boundary without a routing
+`404` before authentication; the n8n editor/admin route remains absent. The authenticated browser
+recheck remains the final presentation checkpoint. Reusable lesson: asset existence and CSP
+correctness do not prove tunnel routing—test every generated product path through the external
+boundary and inspect the live regex for escaping before closing the browser checkpoint.
+
 Capacity remains intentionally on-demand. A settled 4 GiB host observation was:
 
 | State | Available RAM | Swap free | Relevant RSS |
