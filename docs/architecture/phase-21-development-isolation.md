@@ -209,9 +209,9 @@ distinct `Odyssey DEV` Access application/policy follows the production authoriz
 principle without altering the production application or policy. The DEV tunnel ingress is
 limited to the six product routes (`/api/odyssey`, static assets, and `/api/request`) and targets
 only `172.18.0.1:28780`; this prevents the DEV n8n editor/admin root from being reachable through
-the DEV hostname. DNS and tunnel/Access control-plane postconditions passed. Public edge
-TLS/Access behavior must still be observed after hostname propagation before the mobile checkpoint
-is requested.
+the DEV hostname. DNS, public TLS, and Access control-plane/data-plane postconditions passed. An
+authenticated browser recheck of the rendered page remains the final mobile checkpoint after the
+CSP correction below.
 
 The no-provider local proof returned the static page, generated DEV environment marker, and
 bounded invalid-request response; that response bypassed the runtime and answerer. A process
@@ -222,8 +222,35 @@ was zero. No provider/model call was made.
 The first DEV hostname was a multi-level name that was not covered by the zone's Universal SSL
 certificate in this full-zone setup. The replacement uses the first-level hostname
 `odyssey-dev.ragdehl.com`, which remains within the existing Universal SSL boundary; no Total TLS
-or Advanced Certificate change is required. The previous DEV DNS, Access, and tunnel state remains
-temporarily in place until the replacement hostname passes public TLS and Access verification.
+or Advanced Certificate change is required.
+
+### Repeated n8n webhook CSP correction
+
+The first authenticated DEV mobile checkpoint reproduced the Phase 20.3 symptom: the HTML loaded
+as raw unstyled content while the CSS and JavaScript asset endpoints existed and returned `200`.
+The boundary comparison identified the same n8n webhook sandbox behavior documented in
+[Phase 20.3's same-origin CSP correction](phase-20-3-protected-deployment.md#same-origin-csp-correction):
+the sandbox omitted `allow-same-origin`, giving the document an opaque origin and breaking relative
+same-origin asset/API behavior.
+
+The corrective Cloudflare Response Header Transform Rule is narrowly scoped to:
+
+```text
+host = odyssey-dev.ragdehl.com
+path = /api/odyssey
+```
+
+It preserves the existing n8n sandbox directives and sets the same CSP used by the working PROD
+rule, adding only `allow-same-origin`. The existing PROD rule was read back and its definition was
+verified unchanged. No global n8n sandbox change, permissive CORS, or broader hostname/path rule
+was introduced. Public DEV HTTPS now returns an Access-protected response, and the rule's effective
+CSP includes `allow-same-origin`; the authenticated human browser must recheck the rendered page.
+
+Reusable lesson: a protected page and individually healthy assets are not sufficient browser
+verification for an n8n webhook. For every separately hosted Odyssey hostname, inspect the
+authenticated edge CSP and verify the sandbox includes `allow-same-origin` before closing the
+mobile checkpoint. This repeats the Phase 20.3 failure mode and is intentionally recorded here so
+it is not rediscovered during the next isolated deployment.
 
 Capacity remains intentionally on-demand. A settled 4 GiB host observation was:
 
