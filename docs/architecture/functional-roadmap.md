@@ -53,7 +53,7 @@ Phase 21 production/development isolation                    ✅ complete
 22C  explicit self-person binding                             ✅ complete
 22D  authenticated human provenance propagation                ✅ complete
 22E  deterministic self resolution                              ✅ complete
-22F  focused isolated-DEV adoption gate                         ➡️ current (blocked)
+22F  focused isolated-DEV adoption gate                         ✅ complete
 ```
 
 ### 20.1B — answerer adoption gate
@@ -120,7 +120,7 @@ first real personal use                               ✅ complete
 production / development isolation                    ✅ complete
         |
         v
-user self-identity binding to ordinary person note    ➡️ next
+user self-identity binding to ordinary person note    ✅ isolated DEV implementation complete
         |
         v
 request feedback / advanced inspector + note access
@@ -134,7 +134,7 @@ real-usage-driven UI / capability work
 
 The production/development split now precedes substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
 
-The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
+The self-identity implementation is complete in isolated DEV: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. Production authentication projection, real-user binding, and explicit promotion remain separate post-merge gates. See [Phase 22 contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
 

@@ -1,6 +1,6 @@
 # Phase 22A — self-identity architecture contract
 
-Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding complete; 22D provenance complete; 22E self resolution complete; 22F blocked at DEV answerer credential boundary.**
+Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding complete; 22D provenance complete; 22E self resolution complete; 22F isolated-DEV adoption complete.**
 
 This document owns the Phase 22 contract and decisions. The broader product direction and
 examples remain in [Future user self-identity binding](future-user-self-identity.md).
@@ -165,12 +165,12 @@ fall through to CREATE. Missing actor, missing/malformed binding, deleted or non
 and invalid identity state return the existing deferred/needs-attention path. Ordinary named and
 relational targets remain unchanged; possessive wording alone does not activate SELF.
 
-### 22F — focused adoption gate — incomplete
+### 22F — focused adoption gate — complete in isolated DEV
 
 Run deterministic Core/runtime/workflow checks and a focused DEV validation only after the identity
 boundary is approved. Production binding or real-person use remains a separate explicit human
 gate. Validate per-actor key separation and ordinary note/search/statistics behavior. Phase 22F
-does not complete until both the grounded SELF READ and SELF WRITE pass through isolated DEV.
+is complete when both the grounded SELF READ and SELF WRITE pass through isolated DEV.
 
 ## Observed 22F implementation evidence
 
@@ -178,19 +178,32 @@ The DEV-only proof mechanism is render-time projection: `odyssey-dev deploy` cre
 synthetic UUID in `/data/odyssey-dev/state/dev-actor.json`, binds it to the synthetic canonical
 person `odyssey-dev-synthetic-person` in `self-bindings.json`, and renders that value into the DEV
 n8n runtime payload. Browser input cannot select or override it; production rendering omits the
-field. The DEV runtime and n8n workflow were deployed coherently at commit
-`bcfce8db76064b89c4ba5bb57a74c64a5de1250c`, and status reported `MATCH`.
+field. The isolated DEV n8n volume contains exactly one DEV-only HTTP Bearer credential named
+`Odyssey DEV OpenAI Answerer`; its secret came from the existing DEV runtime environment and was
+never copied from production or recorded in the repository. The workflow renderer attaches the
+credential's non-secret n8n ID to the generated DEV workflow because the SDK otherwise serializes
+an empty credential reference. The production logical credential name remains unchanged.
 
 The synthetic SELF WRITE passed through DEV n8n -> runtime -> Core: the existing person note was
 updated with the synthetic fact, no second person was created, and provenance contained the
 synthetic Odyssey user ID with application actor `odyssey-dev`. The required SELF READ reached
-the DEV workflow but failed at the grounded answerer node because the isolated DEV n8n database
-contains zero credentials; the execution metadata records the bounded `Credentials not found`
-failure. No credential was copied or created. The two product requests were issued once each;
-the expected conservative ceiling was three Luna calls and `$0.0192`, below the `$0.05` gate.
-Usage/cost evidence for these runtime calls was not retained in the bounded execution metadata,
-so no exact total is claimed. The remaining gate requires explicit approval for a DEV-only
-answerer credential or an equally safe existing provider boundary.
+updated by the synthetic Odyssey user ID with application actor `odyssey-dev`; the vault contains
+one synthetic person note and no duplicate. After the credential boundary was completed, one
+additional synthetic SELF READ (`read-22f-final-2`) returned `Trabaja en Synthetic Systems.`.
+The successful DEV execution was recorded as n8n execution 107, with the bound note and synthetic
+fact present in its bounded execution data and no `Credentials not found` failure. The deployed
+runtime and both active DEV workflows reported `MATCH` at commit `4c09b41d581ddf803bd884045489c410c7488172`.
+
+The final READ gate allowed two Luna calls (planner and grounded answerer), no retry, and no Sol
+fallback. Its conservative ceiling was `$0.0128` using the retained Luna pricing snapshot, below
+the `$0.05` gate. The retained bounded evidence did not supply complete token counters or an exact
+provider cost, so no exact actual cost is claimed. The earlier synthetic WRITE remains the valid
+write evidence. Production health stayed HTTP 200; the production vault HEAD remained
+`0a87fed0e4386c4913fa3be1035611eba1af7107` and no production service/data was targeted.
+
+Phase 22 implementation is complete in isolated DEV. Production authentication projection,
+external-principal mapping, real-user/person binding, and explicit production deployment remain
+separate post-merge human gates; no real production identity or personal note was changed here.
 
 ## Observed 22B implementation evidence
 
