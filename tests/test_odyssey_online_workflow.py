@@ -72,6 +72,14 @@ def test_dev_identity_is_render_time_only_and_not_browser_controlled() -> None:
     assert "ODYSSEY_DEV_STABLE_USER_ID" in source
 
 
+def test_answerer_credential_name_is_environment_scoped() -> None:
+    """Keep the DEV answerer credential distinct from the production workflow credential."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "Odyssey DEV OpenAI Answerer" in source
+    assert "Odyssey Phase 20.2B OpenAI Answerer" in source
+    assert "newCredential(answererCredentialName)" in source
+
+
 def test_planner_clarification_bypasses_answerer_with_deterministic_text() -> None:
     """Map only Core's allowlisted clarification to the direct product response."""
     source = SOURCE.read_text(encoding="utf-8")
