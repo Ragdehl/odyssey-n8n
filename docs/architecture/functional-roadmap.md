@@ -28,7 +28,8 @@ Canonical/historical detail remains in the phase documents under this directory 
 
 Goal: bind the stable current/authenticated user identity to the ordinary canonical `person` note without introducing a special user knowledge type or duplicating personal facts.
 
-See [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
+Phase 22A defines the architecture contract; implementation starts only after this design gate.
+See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete

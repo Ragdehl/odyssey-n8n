@@ -144,6 +144,14 @@ production deployment used by real users
 
 Production and development must use separate mutable/runtime boundaries wherever sharing could allow a test to affect users or personal knowledge. At minimum, deployment planning must explicitly review hostname/routing, n8n workflow activation, environment/configuration, runtime state, provider credentials/telemetry attribution, and vault/data targets. Development evidence should use disposable/non-personal data by default. Promotion to production remains an explicit deployment action after merge and validation; merging source code alone must not silently mutate production data or security boundaries.
 
+The approved future operational equivalent is a smallest-safe `odyssey-prod deploy` boundary, to be
+implemented only when a concrete phase requires it. It must accept only a clean approved `main`,
+record the exact deployed source identity, update only the production components required by that
+release, verify post-deploy health and source provenance, and fail closed on drift or an ambiguous
+deployment target. It must preserve the explicit human promotion gate without requiring manual
+switching of environment variables, roots, ports, or branches. This is a documented future
+requirement, not a Phase 22 implementation unless self-identity proves it necessary.
+
 ## Documentation lifecycle
 
 The documentation structure intentionally separates current truth from historical evidence:
