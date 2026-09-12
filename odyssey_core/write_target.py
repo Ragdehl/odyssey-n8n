@@ -98,7 +98,7 @@ def decide_write_target(
             return _clarification("self_identity_unavailable")
         try:
             binding = self_binding_repository.resolve(authenticated_actor.stable_user_id)
-        except (SelfBindingError, ValueError):
+        except SelfBindingError:
             return _clarification("self_identity_unavailable")
         if target.filters:
             allowed_ids = find_filtered_note_ids(

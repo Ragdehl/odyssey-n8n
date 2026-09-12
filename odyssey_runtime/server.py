@@ -9,7 +9,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
-from odyssey_core.identity_boundary import AuthenticatedActorContext, IdentityBoundaryError
+from odyssey_core.identity_boundary import AuthenticatedActorContext
 
 from .composition import RuntimeComposition
 from .serialization import application_result_to_response
@@ -85,7 +85,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     if actor_payload is None
                     else AuthenticatedActorContext.from_payload(actor_payload)
                 )
-            except (IdentityBoundaryError, TypeError, ValueError):
+            except (TypeError, ValueError):
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
                 return
             try:

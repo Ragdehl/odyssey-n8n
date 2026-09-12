@@ -127,8 +127,9 @@ def test_invalid_person_targets_fail_closed(
     if note_id != "missing":
         _note(vault, f"other/{note_id}.md", note_id, note_type, deleted)
 
+    user_id = OdysseyUser.new().stable_user_id
     with pytest.raises(SelfBindingError):
-        repository.bind(OdysseyUser.new().stable_user_id, note_id)
+        repository.bind(user_id, note_id)
 
 
 def test_malformed_and_duplicate_state_fail_closed(

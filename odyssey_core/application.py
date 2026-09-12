@@ -542,7 +542,7 @@ def _execute_retrieve(
             )
         try:
             binding = self_binding_repository.resolve(authenticated_actor.stable_user_id)
-        except (SelfBindingError, ValueError):
+        except SelfBindingError:
             return ActionResult(
                 action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
             )

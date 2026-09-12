@@ -28,7 +28,7 @@ Canonical/historical detail remains in the phase documents under this directory 
 
 Goal: validate the completed self-identity path in the isolated DEV environment before any production binding or real-person use.
 
-Phase 22F is the next implementation gate after the completed identity, binding, provenance, and deterministic self-resolution foundations.
+Phase 22F is the current adoption gate after the completed identity, binding, provenance, and deterministic self-resolution foundations; it is blocked on the isolated DEV grounded-answerer credential boundary.
 See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
@@ -53,7 +53,7 @@ Phase 21 production/development isolation                    ✅ complete
 22C  explicit self-person binding                             ✅ complete
 22D  authenticated human provenance propagation                ✅ complete
 22E  deterministic self resolution                              ✅ complete
-22F  focused isolated-DEV adoption gate                         ➡️ next
+22F  focused isolated-DEV adoption gate                         ➡️ current (blocked)
 ```
 
 ### 20.1B — answerer adoption gate

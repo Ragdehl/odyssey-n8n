@@ -73,10 +73,10 @@ def test_mapping_state_fails_closed_when_malformed(tmp_path: Path) -> None:
     """Reject malformed durable identity state instead of guessing or repairing it."""
     (tmp_path / "identity-mappings.json").write_text('{"principals": []}\n', encoding="utf-8")
 
+    repository = IdentityMappingRepository(tmp_path)
+    principal = ExternalPrincipal("issuer", "subject")
     with pytest.raises(IdentityBoundaryError):
-        IdentityMappingRepository(tmp_path).resolve_or_create(
-            ExternalPrincipal("issuer", "subject")
-        )
+        repository.resolve_or_create(principal)
 
 
 def test_browser_controlled_identity_fields_are_not_a_trusted_context() -> None:
