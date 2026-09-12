@@ -44,6 +44,46 @@ The first executable application should define the smallest real routing/manifes
 
 Capabilities may depend on reusable lower-level capabilities when that prevents duplication, for example `Projects -> Tasks -> Reminders`. Dependencies must eventually be explicit, non-circular, and unable to bypass Core mutation/authorization rules.
 
+## Shopping/consumption inference and assisted shopping lists
+
+A future purchases/food/shopping capability may use incomplete evidence to **suggest** what is probably needed next without pretending Odyssey has a complete household inventory.
+
+Useful evidence may include:
+
+- explicit purchase occurrences and their products/quantities when known;
+- receipt/ticket documents that evidence purchases (without collapsing a receipt into the purchase itself);
+- recipes, servings, household composition, and explicit meals/consumption the user chooses to record;
+- recurring purchase cadence and explicit pantry/stock corrections when available.
+
+The critical boundary is uncertainty: Odyssey will often not know every meal, every consumption event, every purchase, or the exact current stock. Therefore absence of recorded consumption or purchase is not authoritative stock evidence. Estimated depletion, likely replenishment, and shopping priority should remain **derived/advisory signals**, not silently persisted canonical facts.
+
+A useful product shape is:
+
+```text
+canonical purchase / product / recipe / household evidence
+                    |
+                    v
+      generic retrieval + structured analytics
+                    |
+                    v
+      shopping capability derived scoring
+                    |
+                    v
+  likely-needed suggestions + reason/confidence
+                    |
+                    v
+     user add / dismiss / correct with one tap
+                    |
+                    v
+       confirmed shopping-list state only
+```
+
+Examples of signals worth testing later are unusually overdue recurring purchases, estimated depletion from known meals/recipes and household size, and ingredients likely needed for planned recipes. The UI should prioritize likely-needed items visually and make confirmation/removal trivial rather than asking the user to maintain a perfect stock ledger.
+
+This does **not** justify a new database, agent framework, or separate inference architecture by default. Reuse current knowledge, retrieval, and deterministic analytics first. A shopping application/capability is justified only for the genuinely domain-specific layer: persistent list state, ranking policy, feedback such as dismiss/correct, and a dedicated visual surface. User corrections should improve future derived behavior where practical but must not rewrite canonical purchase/consumption history unless the user explicitly asks to correct that history.
+
+If household sharing is later enabled, the same confirmed shopping-list state is a natural early shared-knowledge/use-state scenario; probabilistic suggestions should remain distinguishable from explicitly confirmed list items.
+
 ## Type-aware writing profiles
 
 Deterministic rendering remains the default for prepared CREATE facts. A future note/application type may opt into a writing profile only when human-readable body organization materially benefits from semantic rendering.
