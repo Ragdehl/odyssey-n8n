@@ -235,13 +235,16 @@ def _selection(value: SelectionCriteria | None) -> dict[str, Any] | None:
     """Project a validated selection and optional link scope into JSON values."""
     if value is None:
         return None
-    return {
+    projected = {
         "entity": value.entity,
         "query": value.query,
         "type": value.type,
         "filters": [_filter(item) for item in value.filters],
         "link_scope": _link_scope(value.link_scope),
     }
+    if value.self_target is not None:
+        projected["self_target"] = value.self_target
+    return projected
 
 
 def _filter(value: ContextFilter) -> dict[str, Any]:

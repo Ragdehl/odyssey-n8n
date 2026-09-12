@@ -60,6 +60,7 @@ def selection(
         "type": note_type,
         "filters": filters or [],
         "link_scope": link_scope,
+        "self_target": None,
     }
 
 

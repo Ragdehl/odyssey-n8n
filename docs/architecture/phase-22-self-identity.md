@@ -1,6 +1,6 @@
 # Phase 22A — self-identity architecture contract
 
-Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding complete; 22D provenance complete; 22E next.**
+Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding complete; 22D provenance complete; 22E self resolution complete; 22F next.**
 
 This document owns the Phase 22 contract and decisions. The broader product direction and
 examples remain in [Future user self-identity binding](future-user-self-identity.md).
@@ -151,10 +151,19 @@ does not rewrite provenance. Calls without authenticated context retain the comp
 `{"human": null, "app": ODYSSEY_ACTOR}`. Provenance does not require a self-person binding and
 never records provider subjects, email, JWTs, display names, or person note IDs.
 
-### 22E — deterministic self resolution
+### 22E — deterministic self resolution — complete
 
-Add explicit self-target planning/resolution before semantic search. Test self retrieval/update,
-relational targets, rename-by-stable-ID, missing/ambiguous bindings, and no alias hacks.
+The planner emits only the nullable semantic `self_target: "self"` signal on the shared
+`SelectionCriteria`; it emits no user, person-note, provider, email, or filename identity. Core
+resolves that signal before ordinary exact or semantic identity work through the existing
+`SelfBindingRepository`, obtaining the stable `person_note_id` and revalidating its active
+canonical `person` note.
+
+SELF retrieval passes only the bound stable note ID as an authoritative candidate restriction to
+the existing context index. SELF writes pass directly into existing UPDATE preflight and cannot
+fall through to CREATE. Missing actor, missing/malformed binding, deleted or non-person target,
+and invalid identity state return the existing deferred/needs-attention path. Ordinary named and
+relational targets remain unchanged; possessive wording alone does not activate SELF.
 
 ### 22F — focused adoption gate
 
@@ -197,7 +206,22 @@ app-only compatibility, `NO_CHANGE`, DELETE, and type migration. They verify tha
 Odyssey-owned stable user ID reaches human provenance and that an existing self binding is not
 required for provenance.
 
-Phase 22A–22D acceptance is met when the actor, external principal, Odyssey user, and person are
+## Observed 22E implementation evidence
+
+Deterministic coverage proves bound self READ and UPDATE behavior, same-name isolation, rename and
+filename stability, two-user separation, missing/deleted/non-person fail-closed behavior, no
+fallback CREATE, and preservation of ordinary relational/named targets. The focused live planner
+gate used five synthetic cases with five completed `gpt-5.6-luna` low-effort/no-retry calls and
+no Sol fallback. It emitted SELF for direct “where I work” retrieval and “record where I live”,
+and no SELF signal for relational, possessive, or ordinary named-person sentinels. Reported usage
+was 57,995 input tokens (57 ordinary and 57,938 cached), 573 output tokens, and an estimated
+`$0.001858` under the retained 2026-09-07 pricing snapshot. One initial schema-validation API
+submission failed before model execution and reported no usage; the strict schema was corrected
+and the five-case gate then passed. An earlier post-fix harness attempt completed one additional
+Luna call before crashing while reading local usage metadata; its provider counters were not
+retained, so the captured amount is a verified lower bound rather than a total for every call.
+
+Phase 22A–22E acceptance is met when the actor, external principal, Odyssey user, and person are
 distinct; the external source is an issuer-scoped opaque subject; the mapping generates and
 validates an Odyssey-owned ID; runtime identity is typed and validated; mapping state is durable
 non-knowledge state; self resolution is deterministic and precedes semantic search; invalid

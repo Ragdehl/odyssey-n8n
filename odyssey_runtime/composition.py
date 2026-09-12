@@ -19,7 +19,7 @@ from odyssey_core.contextual_calibration import load_contextual_calibration_exam
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
-from odyssey_core.identity_boundary import AuthenticatedActorContext
+from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -30,6 +30,8 @@ from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.persistence import ActorInput
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
+
+_VAULT_REPOSITORY_TYPE = VaultRepository
 
 # Preserve the existing runtime composition injection seam while changing its production target.
 # Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
@@ -125,6 +127,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     vault_root = _path_env("ODYSSEY_VAULT_ROOT", "/data/odyssey/vault")
     runtime_root = _path_env("ODYSSEY_RUNTIME_ROOT", "/data/odyssey/runtime")
     pending_root = _path_env("ODYSSEY_PENDING_ROOT", "/data/odyssey/state/pending")
+    state_root = _path_env("ODYSSEY_STATE_ROOT", str(pending_root.parent))
     pending_root.mkdir(parents=True, exist_ok=True)
     schema_path = _path_env("ODYSSEY_SCHEMA_PATH", str(project_root / "config/note-schema.json"))
     embedding_cache = _path_env(
@@ -142,6 +145,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
     writer = OpenAILunaWriter()
     fact_selector = OpenAILunaFactSelector()
     pending_recorder = PendingWorkRepository(pending_root)
+    self_binding_repository = (
+        SelfBindingRepository(state_root, repository, schema)
+        if isinstance(repository, _VAULT_REPOSITORY_TYPE)
+        else None
+    )
     history_recorder = GitHistoryRecorder(vault_root)
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
@@ -179,6 +187,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             history_recorder=history_recorder,
             request_id_factory=request_id_factory,
             authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)

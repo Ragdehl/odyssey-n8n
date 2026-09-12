@@ -24,11 +24,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current gate — deterministic self resolution
+## Current gate — Phase 22F isolated-DEV adoption
 
-Goal: resolve the authenticated user's stable self target to the ordinary canonical `person` note without introducing a special user knowledge type or duplicating personal facts.
+Goal: validate the completed self-identity path in the isolated DEV environment before any production binding or real-person use.
 
-Phase 22E is the next implementation gate after the completed identity, binding, and provenance foundations.
+Phase 22F is the next implementation gate after the completed identity, binding, provenance, and deterministic self-resolution foundations.
 See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
@@ -52,7 +52,8 @@ Phase 21 production/development isolation                    ✅ complete
 22B  typed actor boundary + principal mapping foundation     ✅ complete
 22C  explicit self-person binding                             ✅ complete
 22D  authenticated human provenance propagation                ✅ complete
-22E  deterministic self resolution                              ➡️ next
+22E  deterministic self resolution                              ✅ complete
+22F  focused isolated-DEV adoption gate                         ➡️ next
 ```
 
 ### 20.1B — answerer adoption gate

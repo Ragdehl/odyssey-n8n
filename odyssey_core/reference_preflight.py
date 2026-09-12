@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
+from .identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .request_planning import KnowledgeUnit, WriteAction
 from .storage import VaultRepository
@@ -46,6 +47,8 @@ def preflight_write_action(
     contextual_reasoner: Any,
     semantic_limit: int,
     id_allocator: Callable[[], str] = allocate_stable_id,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Decide every ordered unit once and preallocate safe CREATE identities without writing.
 
@@ -89,6 +92,8 @@ def preflight_write_action(
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
             semantic_limit=semantic_limit,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
         )
         results.append(
             _materialize_decision(

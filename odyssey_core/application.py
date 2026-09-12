@@ -17,7 +17,7 @@ from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
-from .identity_boundary import AuthenticatedActorContext
+from .identity_boundary import AuthenticatedActorContext, SelfBindingError, SelfBindingRepository
 from .materialization import (
     BoundedNoteWriter,
     materialize_create,
@@ -185,6 +185,7 @@ def execute_request(
     fact_selector: AtomicFactSelector | None = None,
     request_id_factory: Callable[[], str] = allocate_request_id,
     authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
     pending_recorder: PendingWorkRecorder | None = None,
@@ -335,7 +336,15 @@ def execute_request(
         )
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
-                action_index, action, repository, schema, context_index, embedder, context_limit
+                action_index,
+                action,
+                repository,
+                schema,
+                context_index,
+                embedder,
+                context_limit,
+                authenticated_actor,
+                self_binding_repository,
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -359,6 +368,8 @@ def execute_request(
                 request_id,
                 unit_ordinals,
                 measured_fact_selector,
+                authenticated_actor,
+                self_binding_repository,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -508,6 +519,8 @@ def _execute_retrieve(
     context_index: Any,
     embedder: Any,
     context_limit: int,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
 ) -> ActionResult:
     """Execute one ordinary retrieval or preserve unsupported graph intent as deferred evidence."""
     if action.plan.link_scope is not None:
@@ -517,7 +530,27 @@ def _execute_retrieve(
             ActionStatus.DEFERRED,
             reason="UNSUPPORTED_RETRIEVAL_LINK_SCOPE",
         )
+    allowed_note_ids: frozenset[str] | None = None
+    if action.plan.self_target is not None:
+        if action.plan.self_target != "self":
+            return ActionResult(
+                action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
+            )
+        if authenticated_actor is None or self_binding_repository is None:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
+            )
+        try:
+            binding = self_binding_repository.resolve(authenticated_actor.stable_user_id)
+        except (SelfBindingError, ValueError):
+            return ActionResult(
+                action_index, action.kind, ActionStatus.DEFERRED, reason="self_identity_unavailable"
+            )
+        allowed_note_ids = frozenset({binding.person_note_id})
     try:
+        context_kwargs: dict[str, Any] = {}
+        if allowed_note_ids is not None:
+            context_kwargs["allowed_note_ids"] = allowed_note_ids
         context = get_context(
             repository,
             schema,
@@ -527,6 +560,7 @@ def _execute_retrieve(
             limit=context_limit,
             type=action.plan.type,
             filters=action.plan.filters,
+            **context_kwargs,
         )
     except Exception as error:
         return ActionResult(
@@ -551,6 +585,8 @@ def _execute_write(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     cardinalities = {unit.cardinality for unit in action.units}
@@ -589,6 +625,8 @@ def _execute_write(
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
             semantic_limit=semantic_limit,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
             **kwargs,
         )
         rendering = render_reference_facts(action, preflight)
