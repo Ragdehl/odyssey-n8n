@@ -1,4 +1,4 @@
-# Phase 22A — self-identity architecture contract
+# Phase 22 — self-identity architecture contract
 
 Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding complete; 22D provenance complete; 22E self resolution complete; 22F isolated-DEV adoption complete.**
 
@@ -184,15 +184,15 @@ never copied from production or recorded in the repository. The workflow rendere
 credential's non-secret n8n ID to the generated DEV workflow because the SDK otherwise serializes
 an empty credential reference. The production logical credential name remains unchanged.
 
-The synthetic SELF WRITE passed through DEV n8n -> runtime -> Core: the existing person note was
-updated with the synthetic fact, no second person was created, and provenance contained the
-synthetic Odyssey user ID with application actor `odyssey-dev`. The required SELF READ reached
-updated by the synthetic Odyssey user ID with application actor `odyssey-dev`; the vault contains
-one synthetic person note and no duplicate. After the credential boundary was completed, one
-additional synthetic SELF READ (`read-22f-final-2`) returned `Trabaja en Synthetic Systems.`.
-The successful DEV execution was recorded as n8n execution 107, with the bound note and synthetic
-fact present in its bounded execution data and no `Credentials not found` failure. The deployed
-runtime and both active DEV workflows reported `MATCH` at commit `4c09b41d581ddf803bd884045489c410c7488172`.
+The synthetic SELF WRITE passed through DEV n8n -> runtime -> Core: the existing bound person note
+was updated with the synthetic fact, no second synthetic person was created, and provenance
+contained the synthetic Odyssey user ID with application actor `odyssey-dev`. The vault therefore
+contains one synthetic person note and no duplicate. After the credential boundary was completed,
+one additional synthetic SELF READ (`read-22f-final-2`) returned `Trabaja en Synthetic Systems.`.
+The successful DEV READ was recorded as n8n execution 107, with the bound note and synthetic fact
+present in its bounded execution data and no `Credentials not found` failure. The final DEV
+deployment used commit `94edc30e28b94ba053f008df238471adb44e68d2`; runtime and n8n were healthy,
+the checkout was clean, and workflow provenance reported `MATCH`.
 
 The final READ gate allowed two Luna calls (planner and grounded answerer), no retry, and no Sol
 fallback. Its conservative ceiling was `$0.0128` using the retained Luna pricing snapshot, below
