@@ -69,7 +69,7 @@ def _ensure_person(vault: VaultRepository, schema: dict[str, object]) -> bool:
     """Create or validate the one synthetic canonical person note."""
     person_path = vault.root / PERSON_PATH
     if person_path.exists() and not person_path.is_symlink():
-        note = vault.read_text(PERSON_PATH)
+        note = vault.read_text(str(PERSON_PATH))
         parsed = parse_note(note)
         validate_note(parsed, schema)
         if parsed.metadata.get("id") != PERSON_ID or parsed.metadata.get("type") != "person":
