@@ -27,6 +27,8 @@ N8N_HOST=172.18.0.1
 N8N_PORT=28780
 N8N_RENDER=$DEV_RUNTIME/n8n-render
 N8N_DEPLOYMENT=$DEV_RUNTIME/n8n-deployment
+DEV_ACTOR_FILE=$DEV_STATE/dev-actor.json
+DEV_FIXTURE_SCRIPT=$DEV_SOURCE/scripts/prepare_odyssey_dev_identity.py
 
 fail() {
   echo "odyssey-dev: $*" >&2
@@ -42,7 +44,7 @@ within_dev_root() {
 
 guard() {
   local path resolved
-  for path in "$DEV_ROOT" "$DEV_VAULT" "$DEV_STATE" "$DEV_PENDING" "$DEV_RUNTIME" "$DEV_CACHE" "$DEV_WEB" "$N8N_RENDER"; do
+  for path in "$DEV_ROOT" "$DEV_VAULT" "$DEV_STATE" "$DEV_PENDING" "$DEV_RUNTIME" "$DEV_CACHE" "$DEV_WEB" "$N8N_RENDER" "$DEV_ACTOR_FILE"; do
     resolved=$(realpath -m -- "$path")
     within_dev_root "$resolved" || fail "mutable path escapes DEV root: $path -> $resolved"
     case "$resolved" in
@@ -53,6 +55,7 @@ guard() {
   [ -f "$DEV_SCHEMA" ] || fail "DEV schema is missing: $DEV_SCHEMA"
   [ -x "$PYTHON" ] || fail "DEV Python environment is missing: $PYTHON"
   [ -f "$N8N_COMPOSE" ] || fail "DEV n8n definition is missing: $N8N_COMPOSE"
+  [ -f "$DEV_FIXTURE_SCRIPT" ] || fail "DEV identity fixture script is missing: $DEV_FIXTURE_SCRIPT"
 }
 
 source_state() {
@@ -142,12 +145,21 @@ prepare_web_assets() {
   mv -f "$temporary" "$DEV_WEB/environment.js"
 }
 
+prepare_dev_identity() {
+  "$PYTHON" "$DEV_FIXTURE_SCRIPT" \
+    --state-root "$DEV_STATE" --vault-root "$DEV_VAULT" --schema "$DEV_SCHEMA"
+}
+
 render_workflows() {
+  local stable_user_id
+  stable_user_id=$(sed -n 's/.*"stable_user_id": "\([^"]*\)".*/\1/p' "$DEV_ACTOR_FILE")
+  [ -n "$stable_user_id" ] || fail "DEV synthetic actor state is invalid"
   install -d -m 750 "$N8N_RENDER"
   rm -f "$N8N_RENDER/odyssey-online.json" "$N8N_RENDER/odyssey-online-static.json"
   docker run --rm --network none \
     -e ODYSSEY_WORKFLOW_ENVIRONMENT=DEV \
     -e ODYSSEY_WORKFLOW_RUNTIME_URL="http://$DEV_HOST:$DEV_PORT/execute" \
+    -e ODYSSEY_DEV_STABLE_USER_ID="$stable_user_id" \
     -v "$DEV_SOURCE/workflows:/workspace:ro" \
     -v "$N8N_RENDER:/output" \
     --entrypoint /bin/sh "$N8N_IMAGE" -lc '
@@ -303,6 +315,7 @@ status() {
 deploy() {
   guard
   [ -z "$(git -C "$DEV_SOURCE" status --porcelain)" ] || fail "DEV source checkout is dirty"
+  prepare_dev_identity
   install_unit
   systemctl --user restart "$UNIT"
   wait_health || fail "DEV runtime did not become healthy after deploy"
