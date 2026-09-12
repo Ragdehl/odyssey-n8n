@@ -139,6 +139,38 @@ Counts, sums, averages, grouping, and similar operations should run deterministi
 
 Odyssey may later surface old knowledge because of time, active context, a project, or related incoming knowledge. It should be low-friction and non-disruptive, with real usage evidence determining which triggers are useful. Do not add notification infrastructure merely to preserve the idea.
 
+## Feature challenge before extension
+
+Every proposed feature should first be challenged against the architecture that already exists. The default assumption is **reuse before extension**: a new user-visible capability does not imply a new subsystem, application, note type, model stage, or infrastructure component.
+
+Before adding architecture, ask in this order:
+
+1. **Can Odyssey already do this with the current primitives?** Try to express the request as the existing generic `READ` / `WRITE` / `DelegateAction` model and current retrieval, grounded synthesis, identity, and mutation contracts.
+2. **Can a small generic change unlock it?** Prefer a bounded planner/retrieval/configuration/contract improvement that helps many requests over a feature-specific branch.
+3. **Can the user remain unaware of the mechanism?** The user should normally ask in natural language and should not need to choose an app, mode, retrieval strategy, model, note type, or workflow merely because the implementation is composed internally.
+4. **Does the request truly need specialized executable semantics?** Introduce or delegate to an application/capability only when generic grounded retrieval/synthesis is insufficient because the operation needs domain-specific lifecycle/state, deterministic calculations, specialized mutation rules, permissions, external side effects/integrations, or persistent workflow state.
+5. **Does new infrastructure have measured justification?** A new service, database, model stage, framework, or long-lived component is the last resort and requires concrete evidence that the simpler path cannot satisfy the real use case.
+
+Preferred escalation order:
+
+```text
+already supported behavior
+        |
+        v
+small configuration / prompt / contract change
+        |
+        v
+small generic Core capability
+        |
+        v
+registered app / DelegateAction
+        |
+        v
+new infrastructure only with measured need
+```
+
+This applies especially when a feature sounds novel but is actually a composition of existing abilities. Cross-note comparison, recommendation, matching, or inference should first be tested as multiple bounded retrievals plus grounded synthesis rather than being promoted automatically into a new application. New abstractions should earn their existence through a concrete failure of the simpler architecture.
+
 ## General rule
 
 Progressive disclosure applies to both product and architecture: keep the current Core small, load domain instructions only when the corresponding capability is selected, and add model/infrastructure/schema complexity only after a measured need appears.
