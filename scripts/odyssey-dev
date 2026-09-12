@@ -180,7 +180,7 @@ render_workflows() {
 }
 
 publish_workflows() {
-  local credential_count
+  local credential_inventory
   n8n_compose stop >/dev/null 2>&1 || true
   docker run --rm --network none \
     -v "$N8N_VOLUME:/home/node/.n8n" \
@@ -192,12 +192,14 @@ publish_workflows() {
       n8n publish:workflow --id=odyssey-online >/dev/null
       n8n publish:workflow --id=odyssey-online-static >/dev/null
     '
-  credential_count=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
+  credential_inventory=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
-    process.stdout.write(String(db.prepare("SELECT COUNT(*) AS count FROM credentials_entity").get().count));
+    const rows = db.prepare("SELECT name, type FROM credentials_entity ORDER BY name").all();
+    process.stdout.write(rows.map((row) => `${row.name}\t${row.type}`).join("\n"));
   ')
-  [ "$credential_count" = 0 ] || fail "DEV n8n database contains credentials; refusing to start"
+  [ "$credential_inventory" = $'Odyssey DEV OpenAI Answerer\thttpBearerAuth' ] \
+    || fail "DEV n8n credentials are not exactly the approved DEV answerer credential"
 }
 
 workflow_metadata() {
