@@ -80,6 +80,12 @@ def test_answerer_credential_name_is_environment_scoped() -> None:
     assert "newCredential(answererCredentialName)" in source
 
 
+def test_dev_answerer_credential_requires_a_rendered_isolated_id() -> None:
+    """Keep DEV workflow credential resolution bound to the isolated n8n record."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "newCredential(answererCredentialName)" in source
+
+
 def test_planner_clarification_bypasses_answerer_with_deterministic_text() -> None:
     """Map only Core's allowlisted clarification to the direct product response."""
     source = SOURCE.read_text(encoding="utf-8")

@@ -151,15 +151,23 @@ prepare_dev_identity() {
 }
 
 render_workflows() {
-  local stable_user_id
+  local stable_user_id answerer_credential_id
   stable_user_id=$(sed -n 's/.*"stable_user_id": "\([^"]*\)".*/\1/p' "$DEV_ACTOR_FILE")
   [ -n "$stable_user_id" ] || fail "DEV synthetic actor state is invalid"
+  answerer_credential_id=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
+    const rows = db.prepare("SELECT id FROM credentials_entity WHERE name = ? AND type = ?").all("Odyssey DEV OpenAI Answerer", "httpBearerAuth");
+    if (rows.length !== 1) process.exit(1);
+    process.stdout.write(rows[0].id);
+  ') || fail "approved DEV answerer credential is missing or ambiguous"
   install -d -m 750 "$N8N_RENDER"
   rm -f "$N8N_RENDER/odyssey-online.json" "$N8N_RENDER/odyssey-online-static.json"
   docker run --rm --network none \
     -e ODYSSEY_WORKFLOW_ENVIRONMENT=DEV \
     -e ODYSSEY_WORKFLOW_RUNTIME_URL="http://$DEV_HOST:$DEV_PORT/execute" \
     -e ODYSSEY_DEV_STABLE_USER_ID="$stable_user_id" \
+    -e ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID="$answerer_credential_id" \
     -v "$DEV_SOURCE/workflows:/workspace:ro" \
     -v "$N8N_RENDER:/output" \
     --entrypoint /bin/sh "$N8N_IMAGE" -lc '
@@ -175,8 +183,21 @@ render_workflows() {
       render odyssey-online.ts odyssey-online.json
       render odyssey-online-static.ts odyssey-online-static.json
     '
+  docker run --rm --network none \
+    -e ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID="$answerer_credential_id" \
+    -v "$N8N_RENDER:/output" \
+    --entrypoint node "$N8N_IMAGE" -e '
+      const fs = require("node:fs");
+      const path = "/output/odyssey-online.json";
+      const workflow = JSON.parse(fs.readFileSync(path, "utf8"));
+      const answerer = workflow.nodes.find((node) => node.name === "Luna grounded answerer");
+      if (!answerer) process.exit(1);
+      answerer.credentials = { httpBearerAuth: { id: process.env.ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID, name: "Odyssey DEV OpenAI Answerer" } };
+      fs.writeFileSync(path, JSON.stringify(workflow));
+    '
   grep -Fq "http://$DEV_HOST:$DEV_PORT/execute" "$N8N_RENDER/odyssey-online.json" || fail "DEV workflow did not render its fixed DEV runtime target"
   ! grep -REq '172\.18\.0\.1:8765|/data/odyssey' "$N8N_RENDER"/*.json || fail "rendered DEV workflow contains a production target"
+  grep -Fq 'Odyssey DEV OpenAI Answerer' "$N8N_RENDER/odyssey-online.json" || fail "rendered DEV workflow lacks its isolated answerer credential"
 }
 
 publish_workflows() {
