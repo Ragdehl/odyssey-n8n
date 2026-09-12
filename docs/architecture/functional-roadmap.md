@@ -26,9 +26,9 @@ Canonical/historical detail remains in the phase documents under this directory 
 
 ## Current gate — self-identity binding
 
-Goal: keep production personal knowledge and product flow isolated from ordinary development and testing.
+Goal: bind the stable current/authenticated user identity to the ordinary canonical `person` note without introducing a special user knowledge type or duplicating personal facts.
 
-See [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
+See [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -42,10 +42,10 @@ See [Phase 21 — production/development isolation](phase-21-development-isolati
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
 20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
-21A   isolation architecture challenge                         ✅ complete
-21B   isolated DEV checkout/data + transient runtime proof     ✅ complete
+21A   isolation architecture challenge                       ✅ complete
+21B   isolated DEV checkout/data + transient runtime proof   ✅ complete
 21C   persistent DEV runtime/operations + DEV n8n decision   ✅ complete
-21D   synchronized DEV n8n/routing pilot                    ✅ complete
+21D   synchronized DEV n8n/routing pilot                     ✅ complete
 Phase 21 production/development isolation                    ✅ complete
 ```
 
@@ -102,18 +102,18 @@ The first mobile E2E also exposed a product requirement: the visible chat curren
 
 ## Phase 21 status — production and development isolation
 
-Phase 20.3 is merged and the production path is available for real use. Phase 21A and 21B are complete; the next gate is 21C, establishing persistent development/staging operations and evaluating a separate development n8n instance so disposable tests cannot affect the production runtime or personal knowledge.
+Phase 21A–21D are complete. Odyssey now has a persistent isolated DEV source/data/runtime boundary, an on-demand separate DEV n8n stack, a fixed Access-protected DEV browser endpoint, deployment provenance/drift checks, and verified production non-interference.
 
-The first real personal production cycle is now complete. On 2026-09-11 the mobile UI wrote `Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus`, producing one canonical `person` note for Edgar with two atomic facts and a request-correlated Git commit/index refresh; the subsequent mobile READ `¿Dónde trabaja Edgar?` returned `Edgar trabaja en Alten para Airbus.` No synthetic benchmark request was used for this milestone.
+The first real personal production cycle is complete. On 2026-09-11 the mobile UI wrote `Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus`, producing one canonical `person` note for Edgar with two atomic facts and a request-correlated Git commit/index refresh; the subsequent mobile READ `¿Dónde trabaja Edgar?` returned `Edgar trabaja en Alten para Airbus.` No synthetic benchmark request was used for this milestone.
 
 ```text
 first real personal use                               ✅ complete
         |
         v
-production / development isolation                    ✅ 21A–21B complete
+production / development isolation                    ✅ complete
         |
         v
-user self-identity binding to ordinary person note     ➡️ next after 21C
+user self-identity binding to ordinary person note    ➡️ next
         |
         v
 request feedback / advanced inspector + note access
@@ -125,9 +125,7 @@ conversation persistence / continuity
 real-usage-driven UI / capability work
 ```
 
-Phase 21A–21D and Phase 21 are complete. The production/development split now precedes substantial
-new feature development so future disposable tests cannot affect real personal knowledge. See
-the [Phase 21 evidence](phase-21-development-isolation.md).
+The production/development split now precedes substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
 
 The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
 
