@@ -211,6 +211,55 @@ new infrastructure only with measured need
 
 This applies especially when a feature sounds novel but is actually a composition of existing abilities. Cross-note comparison, recommendation, matching, or inference should first be tested as multiple bounded retrievals plus grounded synthesis rather than being promoted automatically into a new application. New abstractions should earn their existence through a concrete failure of the simpler architecture.
 
+## Agent-assisted application delivery
+
+Once Odyssey reaches routine application/capability development, evaluate a bounded automation loop so approved app features do not require the same level of manual supervision as Core architecture work.
+
+The human/assistant design step stays mandatory. Before automation starts, define a compact **feature contract** containing at least:
+
+- intended user-visible behavior and examples;
+- the reuse-first architecture challenge and why existing primitives are or are not sufficient;
+- non-goals and allowed implementation scope;
+- acceptance criteria and deterministic tests;
+- data/security/production boundaries;
+- model/cost/time budget and stop conditions;
+- rollback expectations.
+
+A preferred delivery loop is:
+
+```text
+human-approved feature contract
+            |
+            v
+implementation agent in isolated DEV
+            |
+            v
+deterministic tests / lint / security checks
+            |
+            v
+independent validation agent with fresh context
+            |
+      +-----+-----+
+      |           |
+   PASS        bounded fixes
+      |           |
+      `-----<-----'
+            |
+            v
+draft PR + evidence summary
+            |
+            v
+human final review / merge / explicit promotion
+```
+
+The implementation and validation roles should not be the same uninterrupted agent context: the validator should independently inspect the feature contract, diff, tests, and evidence. Deterministic checks run before spending model budget. Routine mechanical review may use a cheaper model; architecture/security ambiguity can escalate to a stronger model.
+
+Automation must remain bounded. Configure maximum repair rounds, time/model budget, writable roots, network/tool permissions, and explicit fail-closed conditions. Stop for human review on architecture ambiguity, secrets, personal/production data, destructive operations, permissions, migrations, or any required production mutation. Do not autonomously merge to `main` or promote/deploy production merely because all automated checks pass.
+
+Approved features may later enter a queue and run opportunistically during low-activity windows (for example a bounded nightly job) using the isolated DEV environment. Prefer a simple queue + scheduler over trying to infer whether the user is currently working. Scriptable/headless Codex execution is a natural candidate for this pipeline, but quota-aware scheduling should use only supported/stable usage signals. Do not scrape UI or depend on undocumented quota internals merely to consume unused allowance near a reset. Until a reliable machine-readable allowance exists, enforce Odyssey-owned per-job/per-period budgets, stop cleanly when Codex reports a usage limit, and resume after the next permitted window.
+
+This delivery automation is tooling around application development, not a new Odyssey semantic subsystem. Introduce it only when app work becomes repetitive enough that the saved supervision materially exceeds the maintenance cost of the automation itself.
+
 ## General rule
 
 Progressive disclosure applies to both product and architecture: keep the current Core small, load domain instructions only when the corresponding capability is selected, and add model/infrastructure/schema complexity only after a measured need appears.
