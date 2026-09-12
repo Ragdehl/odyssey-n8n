@@ -1,6 +1,6 @@
 # Phase 22A — self-identity architecture contract
 
-Status: **22A design complete; implementation not started.**
+Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding next.**
 
 This document owns the Phase 22 contract and decisions. The broader product direction and
 examples remain in [Future user self-identity binding](future-user-self-identity.md).
@@ -31,10 +31,11 @@ claim or stable user ID. The runtime accepts only `request` and optional `reques
 the static application actor from `ODYSSEY_ACTOR`. Production evidence shows
 `created_by.human` and `updated_by.human` are currently null.
 
-The preferred future source is the validated Access JWT `sub` claim (or an equivalent
-issuer-scoped opaque subject explicitly exposed by the trusted adapter), not email. Email is
-human-readable and can change; the opaque subject is suitable as a stable key only within its
-validated issuer/team/audience boundary. No identity value is recorded here.
+The validated Access JWT `sub` claim (or an equivalent issuer-scoped opaque subject explicitly
+exposed by the trusted adapter) is the external-principal subject, not Odyssey's durable user ID.
+Email is human-readable and can change, so it is not a durable key. The mapping repository
+converts the validated `(issuer, subject)` pair into a newly generated Odyssey-owned UUID. No
+provider identity value is used as `created_by.human`, and no identity value is recorded here.
 
 ## Contract decisions
 
@@ -42,8 +43,9 @@ validated issuer/team/audience boundary. No identity value is recorded here.
 
 The smallest safe conversion is a trusted integration adapter after Access validation and before
 Core execution. n8n may orchestrate extraction, but raw browser-supplied identity headers must
-never be trusted. The adapter maps the validated subject to `stable_user_id` and passes typed
-context to the runtime. Core receives neither raw headers nor JWTs, email, or credentials.
+never be trusted. The adapter resolves the validated external principal through the identity
+mapping repository, maps it to an Odyssey-owned `stable_user_id`, and passes typed context to the
+runtime. Core receives neither raw headers nor JWTs, email, provider subjects, or credentials.
 
 ### Runtime request contract
 
@@ -53,7 +55,7 @@ Extend the current envelope with one optional typed actor context while preservi
 {
   "request": "¿Dónde trabajo?",
   "request_id": "trusted-correlation-id",
-  "authenticated_actor": {"stable_user_id": "issuer-scoped-opaque-id"}
+  "authenticated_actor": {"stable_user_id": "odyssey-owned-uuid-v4"}
 }
 ```
 
@@ -62,14 +64,14 @@ The runtime validates the shape, rejects empty/unsafe IDs, and rejects unrecogni
 typed identity to provenance and deterministic self resolution. `ODYSSEY_ACTOR` remains the
 separate application actor.
 
-### Binding persistence
+### External-principal mapping persistence
 
 Persist a small versioned mapping in durable non-knowledge state under the configured state root,
-preferably `state/identity-bindings.json`, with the existing root guard and atomic restrictive
+preferably `state/identity-mappings.json`, with the existing root guard and atomic restrictive
 writes:
 
 ```json
-{"schema_version": 1, "bindings": {"stable-user-id": {"person_note_id": "stable-person-note-id"}}}
+{"format": "odyssey_identity_mapping", "format_version": 1, "principals": [{"issuer": "...", "subject": "...", "odyssey_user_id": "..."}]}
 ```
 
 The binding references only a stable canonical note ID. It is not a Markdown fact, profile copy,
@@ -109,11 +111,14 @@ large subphase would make authentication, account state, and knowledge mutation 
 
 ## Implementation sequence and acceptance criteria
 
-### 22B — trusted actor context
+### 22B — trusted actor context — complete
 
-Add typed runtime validation and the trusted adapter projection. Test accepted/rejected envelopes
-and ensure raw browser headers cannot supply identity. No production deployment or Cloudflare
-change is implied.
+The runtime now accepts an optional exact `authenticated_actor.stable_user_id` envelope containing
+only an Odyssey-owned UUIDv4, forwards it as typed context to Core, and rejects provider-shaped
+or extra fields. `IdentityMappingRepository` persists validated external `(issuer, subject)` pairs
+to Odyssey-owned UUIDs using versioned guarded JSON and atomic restrictive writes. This foundation
+does not extract identity from the browser, change Cloudflare, bind a real person, or write human
+provenance yet. Deterministic boundary, spoofing, two-principal, and malformed-state tests pass.
 
 ### 22C — durable binding state
 
@@ -137,9 +142,24 @@ Run deterministic Core/runtime/workflow checks and a focused DEV validation only
 boundary is approved. Production binding or real-person use remains a separate explicit human
 gate. Validate per-actor key separation and ordinary note/search/statistics behavior.
 
-Phase 22A acceptance is met when the actor and person are distinct; the preferred identity source
-is an issuer-scoped opaque subject; runtime identity is typed and validated; binding state is
-durable non-knowledge state keyed to a stable note ID; self resolution is deterministic and
-precedes semantic search; invalid identity state fails closed; and the design supports per-actor
-bindings without implementing multi-user authorization. No provider calls or production data are
-used in 22A.
+## Observed 22B implementation evidence
+
+The code path is currently intentionally limited to:
+
+```text
+trusted adapter (future external-principal validation/mapping)
+        -> AuthenticatedActorContext(odyssey_user_id)
+        -> runtime HTTP boundary
+        -> Core execution boundary
+```
+
+The current browser/n8n path has not been changed to manufacture or forward identity, so an
+untrusted client cannot spoof a human actor through headers. No provider subject is passed into
+canonical note metadata or provenance; provenance propagation remains 22D.
+
+Phase 22A/22B acceptance is met when the actor, external principal, Odyssey user, and person are
+distinct; the external source is an issuer-scoped opaque subject; the mapping generates and
+validates an Odyssey-owned ID; runtime identity is typed and validated; mapping state is durable
+non-knowledge state; self resolution is deterministic and precedes semantic search; invalid
+identity state fails closed; and the design supports per-actor mappings without implementing
+multi-user authorization. No provider calls or production data are used in 22A.

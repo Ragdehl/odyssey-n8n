@@ -48,6 +48,9 @@ See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future
 21C   persistent DEV runtime/operations + DEV n8n decision   ✅ complete
 21D   synchronized DEV n8n/routing pilot                     ✅ complete
 Phase 21 production/development isolation                    ✅ complete
+22A  self-identity architecture contract                    ✅ complete
+22B  typed actor boundary + principal mapping foundation     ✅ complete
+22C  explicit self-person binding                             ➡️ next
 ```
 
 ### 20.1B — answerer adoption gate

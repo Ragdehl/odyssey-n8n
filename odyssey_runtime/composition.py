@@ -19,6 +19,7 @@ from odyssey_core.contextual_calibration import load_contextual_calibration_exam
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
+from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -39,11 +40,16 @@ OpenAIRequestPlanner = LunaFirstRequestPlanner
 class RuntimeComposition:
     """Own one long-lived assembly of providers, repositories, indexes, and Core execution."""
 
-    core_execute: Callable[[str, str | None], ApplicationResult]
+    core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
     monotonic: Callable[[], float] = perf_counter
 
-    def execute(self, user_request: str, request_id: str | None = None) -> ApplicationResult:
+    def execute(
+        self,
+        user_request: str,
+        request_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+    ) -> ApplicationResult:
         """Execute one request and refresh derived indexes after affected mutations.
 
         Args:
@@ -54,7 +60,10 @@ class RuntimeComposition:
             The typed Core ApplicationResult after any required derived-index refresh.
         """
         started = self.monotonic()
-        result = self.core_execute(user_request, request_id)
+        if authenticated_actor is None:
+            result = self.core_execute(user_request, request_id)
+        else:
+            result = self.core_execute(user_request, request_id, authenticated_actor)
         stages = list(result.operational.stages)
         if result.affected_stable_note_ids:
             refresh_started = self.monotonic()
@@ -136,12 +145,20 @@ def build_runtime_from_environment() -> RuntimeComposition:
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
 
-    def core_execute(user_request: str, request_id: str | None = None) -> ApplicationResult:
+    def core_execute(
+        user_request: str,
+        request_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+    ) -> ApplicationResult:
         """Execute one request with fresh Luna-first planning and persistence clock context."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
         request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
+        if authenticated_actor is not None and not isinstance(
+            authenticated_actor, AuthenticatedActorContext
+        ):
+            raise ValueError("authenticated actor context is invalid")
         result = execute_request(
             user_request,
             planner=planner,
@@ -159,6 +176,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             pending_recorder=pending_recorder,
             history_recorder=history_recorder,
             request_id_factory=request_id_factory,
+            authenticated_actor=authenticated_actor,
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)

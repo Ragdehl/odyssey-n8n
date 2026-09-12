@@ -17,6 +17,7 @@ from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
+from .identity_boundary import AuthenticatedActorContext
 from .materialization import (
     BoundedNoteWriter,
     materialize_create,
@@ -182,6 +183,7 @@ def execute_request(
     writer: BoundedNoteWriter | None = None,
     fact_selector: AtomicFactSelector | None = None,
     request_id_factory: Callable[[], str] = allocate_request_id,
+    authenticated_actor: AuthenticatedActorContext | None = None,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
     pending_recorder: PendingWorkRecorder | None = None,
@@ -204,6 +206,8 @@ def execute_request(
         context_limit: Explicit positive retrieval result budget.
         writer: Optional bounded UPDATE writer.
         request_id_factory: Injected one-per-request ID generator.
+        authenticated_actor: Optional normalized actor context from the trusted integration
+            boundary; raw headers, JWTs, and provider credentials are not accepted.
         preflight_id_allocator: Optional deterministic CREATE ID allocator.
         semantic_limit: Existing bounded semantic-resolution candidate budget.
         pending_recorder: Optional create-only durable pending-work recorder.
@@ -223,6 +227,10 @@ def execute_request(
     request_id = request_id_factory()
     if not isinstance(request_id, str) or not request_id.strip():
         raise ValueError("request_id_factory must return a non-empty string")
+    if authenticated_actor is not None and not isinstance(
+        authenticated_actor, AuthenticatedActorContext
+    ):
+        raise ValueError("authenticated actor context is invalid")
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic)
     try:

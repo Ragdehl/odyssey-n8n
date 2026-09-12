@@ -44,6 +44,13 @@ from .identity import (
     find_exact_entity_candidates,
     resolve_exact_entity,
 )
+from .identity_boundary import (
+    AuthenticatedActorContext,
+    ExternalPrincipal,
+    IdentityBoundaryError,
+    IdentityMappingRepository,
+    OdysseyUser,
+)
 from .materialization import (
     WRITER_CONTEXT_MODE,
     WRITER_MODEL,
@@ -156,6 +163,11 @@ __all__ = [
     "GitHistoryResult",
     "HistoryRecorder",
     "HistoryStatus",
+    "AuthenticatedActorContext",
+    "ExternalPrincipal",
+    "IdentityBoundaryError",
+    "IdentityMappingRepository",
+    "OdysseyUser",
     "DependencyEvidence",
     "PendingWorkRecorder",
     "PendingWorkStatus",
