@@ -26,7 +26,7 @@ Canonical/historical detail remains in the phase documents under this directory 
 
 ## Current gate — post-merge Phase 22 production adoption
 
-Goal: validate the completed self-identity path in the isolated DEV environment before any production binding or real-person use.
+Goal: activate the already-validated Phase 22 self-identity path in production through trusted production identity projection, explicit real-user/person binding, and an explicit clean-main deployment with health/provenance verification.
 
 Phase 22 implementation is complete in isolated DEV after the identity, binding, provenance, and deterministic self-resolution foundations and the grounded SELF READ/WRITE gate. The next gate is explicit post-merge production adoption: trusted production authentication projection, real-user mapping/binding, and an explicit clean-main deployment with health/provenance verification.
 See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
