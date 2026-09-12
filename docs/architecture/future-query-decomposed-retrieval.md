@@ -75,6 +75,61 @@ This can reduce provider input, but stale identity summaries are dangerous. Pref
 
 Atomic-fact retrieval is another rebuildable projection hypothesis; success would change retrieval evidence selection, never write authority.
 
+### Generic cross-note reasoning and matching
+
+A request may need to combine several independent evidence sets rather than identify one entity from several clues. Treat that as a natural extension of generic Odyssey retrieval + grounded synthesis, not as a reason to create a bespoke application for every relationship pattern.
+
+Representative examples:
+
+- `¿Qué cosas podría hacer Xavi, mi amigo el electricista manitas?` — combine Xavi's profile/skills with relevant candidate knowledge (tasks are only one possible candidate set).
+- `¿Qué regalo le podría gustar a Alice?` — combine a person's interests/preferences with products, ideas, or past purchases.
+- `¿Qué recetas puedo hacer con lo que suelo comprar y lo que ya tengo?` — combine recipe knowledge with product/purchase/pantry-like evidence.
+- `¿Qué opciones de vacaciones encajan con lo que nos gusta y con los niños?` — combine people/preferences/past-trip evidence with candidate destinations or plans.
+- `¿Qué herramientas o materiales que ya tengo podrían servirme para arreglar esto?` — combine a problem/project with tool/material/product knowledge.
+- `¿Qué personas que conozco podrían ayudarme con este tema?` — combine a topic/problem with people, roles, skills, and relationship knowledge.
+- `¿Qué notas parecen relacionadas o contradictorias aunque nunca las haya enlazado?` — compare evidence across notes while keeping inference distinct from canonical facts.
+
+Preferred generic shape:
+
+```text
+natural-language request
+        |
+        v
+planner identifies independent evidence needs
+        |
+        +--> RetrieveAction / evidence set A
+        +--> RetrieveAction / evidence set B
+        `--> optionally more bounded sets
+                    |
+                    v
+          grounded cross-set synthesis
+                    |
+                    v
+     answer / comparison / recommendation
+```
+
+The architecture rule is:
+
+```text
+cross-note reasoning / recommendation / comparison
+    -> generic Core retrieval + grounded synthesis
+
+specialized executable behavior
+    -> DelegateAction -> registered capability/app
+```
+
+A dedicated app is justified only when the request needs domain-specific executable semantics such as persistent workflow state, external side effects/integrations, specialized permissions, exact analytics/calculation contracts, or specialized mutation/lifecycle rules. Merely needing to reason across several notes is not enough.
+
+The likely failure mode is retrieval, not reasoning: a whole-query embedding can recover one side of a comparison while missing another candidate set whose wording is only indirectly related. If real usage exposes that problem, test the smallest generic decomposition/candidate-set improvement before adding a reranker, graph database, vector database, agent framework, or new long-lived service.
+
+Guardrails for this pattern:
+
+- keep canonical note identity and provenance attached to every evidence item;
+- distinguish retrieved fact from model inference/suggestion in output and future inspector views;
+- never persist inferred relations automatically unless the user explicitly asks and normal write validation succeeds;
+- prefer deterministic candidate filters when a domain later provides useful structured fields;
+- fail gracefully when a required evidence set cannot be retrieved reliably.
+
 ## Benchmark guardrails
 
 - Keep canonical entity identity attached to every fact/evidence item.

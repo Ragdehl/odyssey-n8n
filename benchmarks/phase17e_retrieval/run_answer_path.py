@@ -328,7 +328,9 @@ def main() -> None:
     ranking_artifact = repository_path(args.ranking_artifact)
     cases = repository_path(args.cases)
     schema = repository_path(args.schema)
-    output = Path(__file__).resolve().parents[2] / args.output.name
+    output_directory = Path(__file__).resolve().parents[2] / "benchmarks/.live-results"
+    output_directory.mkdir(parents=True, exist_ok=True)
+    output = output_directory / args.output.name
     output.write_text(
         json.dumps(
             run_live(

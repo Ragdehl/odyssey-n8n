@@ -11,6 +11,17 @@ const conversation = document.querySelector("#interaction");
 const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.content ?? "/api/request";
 let retrySubmission = null;
 
+function showDeploymentMarker() {
+  const deployment = globalThis.ODYSSEY_DEPLOYMENT;
+  if (!deployment || deployment.environment !== "DEV") return;
+  const marker = document.createElement("p");
+  marker.className = "deployment-marker";
+  marker.textContent = deployment.commit ? "DEV · " + deployment.commit.slice(0, 12) : "DEV";
+  document.querySelector(".brand")?.append(marker);
+}
+
+showDeploymentMarker();
+
 function setBusy(isBusy) {
   input.disabled = isBusy;
   sendButton.disabled = isBusy;

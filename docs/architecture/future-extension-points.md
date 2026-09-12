@@ -44,6 +44,46 @@ The first executable application should define the smallest real routing/manifes
 
 Capabilities may depend on reusable lower-level capabilities when that prevents duplication, for example `Projects -> Tasks -> Reminders`. Dependencies must eventually be explicit, non-circular, and unable to bypass Core mutation/authorization rules.
 
+## Shopping/consumption inference and assisted shopping lists
+
+A future purchases/food/shopping capability may use incomplete evidence to **suggest** what is probably needed next without pretending Odyssey has a complete household inventory.
+
+Useful evidence may include:
+
+- explicit purchase occurrences and their products/quantities when known;
+- receipt/ticket documents that evidence purchases (without collapsing a receipt into the purchase itself);
+- recipes, servings, household composition, and explicit meals/consumption the user chooses to record;
+- recurring purchase cadence and explicit pantry/stock corrections when available.
+
+The critical boundary is uncertainty: Odyssey will often not know every meal, every consumption event, every purchase, or the exact current stock. Therefore absence of recorded consumption or purchase is not authoritative stock evidence. Estimated depletion, likely replenishment, and shopping priority should remain **derived/advisory signals**, not silently persisted canonical facts.
+
+A useful product shape is:
+
+```text
+canonical purchase / product / recipe / household evidence
+                    |
+                    v
+      generic retrieval + structured analytics
+                    |
+                    v
+      shopping capability derived scoring
+                    |
+                    v
+  likely-needed suggestions + reason/confidence
+                    |
+                    v
+     user add / dismiss / correct with one tap
+                    |
+                    v
+       confirmed shopping-list state only
+```
+
+Examples of signals worth testing later are unusually overdue recurring purchases, estimated depletion from known meals/recipes and household size, and ingredients likely needed for planned recipes. The UI should prioritize likely-needed items visually and make confirmation/removal trivial rather than asking the user to maintain a perfect stock ledger.
+
+This does **not** justify a new database, agent framework, or separate inference architecture by default. Reuse current knowledge, retrieval, and deterministic analytics first. A shopping application/capability is justified only for the genuinely domain-specific layer: persistent list state, ranking policy, feedback such as dismiss/correct, and a dedicated visual surface. User corrections should improve future derived behavior where practical but must not rewrite canonical purchase/consumption history unless the user explicitly asks to correct that history.
+
+If household sharing is later enabled, the same confirmed shopping-list state is a natural early shared-knowledge/use-state scenario; probabilistic suggestions should remain distinguishable from explicitly confirmed list items.
+
 ## Type-aware writing profiles
 
 Deterministic rendering remains the default for prepared CREATE facts. A future note/application type may opt into a writing profile only when human-readable body organization materially benefits from semantic rendering.
@@ -138,6 +178,87 @@ Counts, sums, averages, grouping, and similar operations should run deterministi
 ## Proactive resurfacing
 
 Odyssey may later surface old knowledge because of time, active context, a project, or related incoming knowledge. It should be low-friction and non-disruptive, with real usage evidence determining which triggers are useful. Do not add notification infrastructure merely to preserve the idea.
+
+## Feature challenge before extension
+
+Every proposed feature should first be challenged against the architecture that already exists. The default assumption is **reuse before extension**: a new user-visible capability does not imply a new subsystem, application, note type, model stage, or infrastructure component.
+
+Before adding architecture, ask in this order:
+
+1. **Can Odyssey already do this with the current primitives?** Try to express the request as the existing generic `READ` / `WRITE` / `DelegateAction` model and current retrieval, grounded synthesis, identity, and mutation contracts.
+2. **Can a small generic change unlock it?** Prefer a bounded planner/retrieval/configuration/contract improvement that helps many requests over a feature-specific branch.
+3. **Can the user remain unaware of the mechanism?** The user should normally ask in natural language and should not need to choose an app, mode, retrieval strategy, model, note type, or workflow merely because the implementation is composed internally.
+4. **Does the request truly need specialized executable semantics?** Introduce or delegate to an application/capability only when generic grounded retrieval/synthesis is insufficient because the operation needs domain-specific lifecycle/state, deterministic calculations, specialized mutation rules, permissions, external side effects/integrations, or persistent workflow state.
+5. **Does new infrastructure have measured justification?** A new service, database, model stage, framework, or long-lived component is the last resort and requires concrete evidence that the simpler path cannot satisfy the real use case.
+
+Preferred escalation order:
+
+```text
+already supported behavior
+        |
+        v
+small configuration / prompt / contract change
+        |
+        v
+small generic Core capability
+        |
+        v
+registered app / DelegateAction
+        |
+        v
+new infrastructure only with measured need
+```
+
+This applies especially when a feature sounds novel but is actually a composition of existing abilities. Cross-note comparison, recommendation, matching, or inference should first be tested as multiple bounded retrievals plus grounded synthesis rather than being promoted automatically into a new application. New abstractions should earn their existence through a concrete failure of the simpler architecture.
+
+## Agent-assisted application delivery
+
+Once Odyssey reaches routine application/capability development, evaluate a bounded automation loop so approved app features do not require the same level of manual supervision as Core architecture work.
+
+The human/assistant design step stays mandatory. Before automation starts, define a compact **feature contract** containing at least:
+
+- intended user-visible behavior and examples;
+- the reuse-first architecture challenge and why existing primitives are or are not sufficient;
+- non-goals and allowed implementation scope;
+- acceptance criteria and deterministic tests;
+- data/security/production boundaries;
+- model/cost/time budget and stop conditions;
+- rollback expectations.
+
+A preferred delivery loop is:
+
+```text
+human-approved feature contract
+            |
+            v
+implementation agent in isolated DEV
+            |
+            v
+deterministic tests / lint / security checks
+            |
+            v
+independent validation agent with fresh context
+            |
+      +-----+-----+
+      |           |
+   PASS        bounded fixes
+      |           |
+      `-----<-----'
+            |
+            v
+draft PR + evidence summary
+            |
+            v
+human final review / merge / explicit promotion
+```
+
+The implementation and validation roles should not be the same uninterrupted agent context: the validator should independently inspect the feature contract, diff, tests, and evidence. Deterministic checks run before spending model budget. Routine mechanical review may use a cheaper model; architecture/security ambiguity can escalate to a stronger model.
+
+Automation must remain bounded. Configure maximum repair rounds, time/model budget, writable roots, network/tool permissions, and explicit fail-closed conditions. Stop for human review on architecture ambiguity, secrets, personal/production data, destructive operations, permissions, migrations, or any required production mutation. Do not autonomously merge to `main` or promote/deploy production merely because all automated checks pass.
+
+Approved features may later enter a queue and run opportunistically during low-activity windows (for example a bounded nightly job) using the isolated DEV environment. Prefer a simple queue + scheduler over trying to infer whether the user is currently working. Scriptable/headless Codex execution is a natural candidate for this pipeline, but quota-aware scheduling should use only supported/stable usage signals. Do not scrape UI or depend on undocumented quota internals merely to consume unused allowance near a reset. Until a reliable machine-readable allowance exists, enforce Odyssey-owned per-job/per-period budgets, stop cleanly when Codex reports a usage limit, and resume after the next permitted window.
+
+This delivery automation is tooling around application development, not a new Odyssey semantic subsystem. Introduce it only when app work becomes repetitive enough that the saved supervision materially exceeds the maintenance cost of the automation itself.
 
 ## General rule
 

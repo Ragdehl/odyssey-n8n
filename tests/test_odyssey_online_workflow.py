@@ -53,6 +53,15 @@ def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:
     assert ".add(runtime.onError(route))" in source
 
 
+def test_workflow_rendering_requires_an_explicit_safe_target() -> None:
+    """Reject an omitted deployment target rather than silently selecting production."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "ODYSSEY_WORKFLOW_ENVIRONMENT must be DEV or PROD" in source
+    assert "ODYSSEY_WORKFLOW_RUNTIME_URL is required" in source
+    assert "ODYSSEY_WORKFLOW_RUNTIME_URL ??" not in source
+    assert "ODYSSEY_WORKFLOW_RUNTIME_URL ||" not in source
+
+
 def test_planner_clarification_bypasses_answerer_with_deterministic_text() -> None:
     """Map only Core's allowlisted clarification to the direct product response."""
     source = SOURCE.read_text(encoding="utf-8")

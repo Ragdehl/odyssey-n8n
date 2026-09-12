@@ -24,11 +24,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — Phase 20: Odyssey Online MVP
+## Current gate — self-identity binding
 
-Goal: deliver the smallest useful standalone Odyssey experience in a phone browser, then let real usage drive improvements.
+Goal: bind the stable current/authenticated user identity to the ordinary canonical `person` note without introducing a special user knowledge type or duplicating personal facts.
 
-See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
+See [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -42,6 +42,11 @@ See [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
 20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
+21A   isolation architecture challenge                       ✅ complete
+21B   isolated DEV checkout/data + transient runtime proof   ✅ complete
+21C   persistent DEV runtime/operations + DEV n8n decision   ✅ complete
+21D   synchronized DEV n8n/routing pilot                     ✅ complete
+Phase 21 production/development isolation                    ✅ complete
 ```
 
 ### 20.1B — answerer adoption gate
@@ -95,20 +100,20 @@ Complete and merged in PR #103. The protected Cloudflare boundary, disposable mo
 
 The first mobile E2E also exposed a product requirement: the visible chat currently does not carry conversation context into the planner, so a follow-up such as `¿Dónde vive?` safely abstains even after discussing one person. That future requirement is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 
-## Next gate — production and development isolation
+## Phase 21 status — production and development isolation
 
-Phase 20.3 is merged and the production path is available for real use. Before substantial new feature development, establish a separate development/staging deployment so disposable tests cannot affect the production runtime or personal knowledge.
+Phase 21A–21D are complete. Odyssey now has a persistent isolated DEV source/data/runtime boundary, an on-demand separate DEV n8n stack, a fixed Access-protected DEV browser endpoint, deployment provenance/drift checks, and verified production non-interference.
 
-The first real personal production cycle is now complete. On 2026-09-11 the mobile UI wrote `Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus`, producing one canonical `person` note for Edgar with two atomic facts and a request-correlated Git commit/index refresh; the subsequent mobile READ `¿Dónde trabaja Edgar?` returned `Edgar trabaja en Alten para Airbus.` No synthetic benchmark request was used for this milestone.
+The first real personal production cycle is complete. On 2026-09-11 the mobile UI wrote `Me llamo Edgar, soy data engineer y trabajo en Alten para Airbus`, producing one canonical `person` note for Edgar with two atomic facts and a request-correlated Git commit/index refresh; the subsequent mobile READ `¿Dónde trabaja Edgar?` returned `Edgar trabaja en Alten para Airbus.` No synthetic benchmark request was used for this milestone.
 
 ```text
 first real personal use                               ✅ complete
         |
         v
-production / development isolation                    ➡️ next
+production / development isolation                    ✅ complete
         |
         v
-user self-identity binding to ordinary person note
+user self-identity binding to ordinary person note    ➡️ next
         |
         v
 request feedback / advanced inspector + note access
@@ -120,6 +125,8 @@ conversation persistence / continuity
 real-usage-driven UI / capability work
 ```
 
+The production/development split now precedes substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
+
 The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
@@ -129,6 +136,18 @@ These are real product directions; exact implementation should remain incrementa
 ### Production and development isolation
 
 Once real use depends on Odyssey, maintain a stable production deployment and a separate development/staging deployment so feature work and disposable tests cannot affect users or personal knowledge. `main` remains the production-ready source by default; feature branches feed development/staging before promotion. A permanent `develop` branch is optional and should be introduced only if repeated parallel integration work justifies it. See [Development Pipeline](development-pipeline.md#production-and-development-isolation).
+
+```text
+21A architecture/isolation decision                         ✅ complete
+21B transient isolated runtime proof                        ✅ complete
+21C persistent isolated DEV runtime/operator workflow       ✅ complete
+21D on-demand DEV n8n + fixed protected browser endpoint    ✅ complete
+Phase 21 production/development isolation                   ✅ complete
+```
+
+The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
+database/container. It is not a permanent Git branch. The fixed protected endpoint and human
+browser checkpoint are complete; self-identity binding is now the next functional gate.
 
 ### Natural conversation and history
 
@@ -163,6 +182,8 @@ Reminders <- Tasks <- Projects
 
 Planner/model extensibility must stay configuration-driven where semantics are already supported. The current planner derives note-type/property capabilities from `config/note-schema.json`; downstream model boundaries are generic with respect to concrete note types. The remaining application gap is executable manifest/registry routing for `DelegateAction`, not hard-coded app selection in the base planner. See [Architecture Overview](overview.md#configuration-driven-model-boundaries), [Future Extension Points](future-extension-points.md), and [Odyssey Platform Direction](odyssey-platform-direction.md).
 
+Once application work becomes repetitive, evaluate a bounded **agent-assisted delivery loop**: human + assistant approve a feature contract and validation criteria, an implementation agent works only in isolated DEV, deterministic checks run first, an independent validation agent reviews from fresh context, and only a final evidence-backed PR returns to the human for acceptance. This automation should not be introduced during Core architecture work and must never autonomously merge/promote production. Detailed guardrails and scheduling direction live in [Future Extension Points](future-extension-points.md#agent-assisted-application-delivery).
+
 ### Multi-user shared knowledge
 
 Support private and selectively shared knowledge only after authentication, authorization-before-retrieval, synchronization, conflict, and storage boundaries are explicit. A shared household list is an early concrete validation scenario. Each authenticated actor should be able to bind to its own ordinary canonical `person` note without creating a special `user` knowledge type or per-application profile copy.
@@ -181,6 +202,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).
 - 💡 **Direct Markdown/Obsidian edit ingestion:** eventually recognize authorized external edits, avoid self-trigger loops, validate only required normalization, refresh derived state, and audit accepted changes.
 - 💡 **Structured analytics:** deterministic counts/sums/grouping over rebuildable structured/index data; do not load the whole vault into an LLM for arithmetic.
+- 💡 **Agent-assisted app delivery:** after application work becomes routine, queue only human-approved feature contracts and let bounded implementation/validation agents work in isolated DEV with deterministic gates, explicit budgets, no autonomous merge/promotion, and final human acceptance. See [Future Extension Points](future-extension-points.md#agent-assisted-application-delivery).
 - 🔄 **Cost-aware model routing:** Luna-first production planning and Luna/medium contextual reasoning are active; retain bounded Sol fallback only where the validated production contract requires it and continue optimizing from measured telemetry rather than assumption.
 - 💡 **Proactive resurfacing:** non-disruptive reminders/context suggestions only after direct usage demonstrates value.
 - 💡 **Performance/index optimization:** optimize from measurements, not anticipated scale.

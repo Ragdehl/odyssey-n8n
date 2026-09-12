@@ -1,0 +1,330 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEV_SOURCE=/home/ragdehl/projects/odyssey-dev
+DEV_ROOT=/data/odyssey-dev
+DEV_VAULT=$DEV_ROOT/vault
+DEV_STATE=$DEV_ROOT/state
+DEV_PENDING=$DEV_STATE/pending
+DEV_RUNTIME=$DEV_ROOT/runtime
+DEV_CACHE=$DEV_RUNTIME/embedding-cache
+DEV_WEB=$DEV_RUNTIME/web
+DEV_SCHEMA=$DEV_SOURCE/config/note-schema.json
+DEV_HOST=127.0.0.1
+DEV_PORT=28765
+UNIT=odyssey-dev-runtime.service
+UNIT_SOURCE=$DEV_SOURCE/deploy/$UNIT
+UNIT_TARGET=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT
+PYTHON=$DEV_SOURCE/.venv/bin/python
+DEPLOYED_COMMIT=$DEV_RUNTIME/deployed-commit
+DEV_PRODUCT_URL=https://odyssey-dev.ragdehl.com/api/odyssey
+N8N_COMPOSE=$DEV_SOURCE/deploy/odyssey-dev-n8n.compose.yaml
+N8N_PROJECT=odyssey-dev
+N8N_CONTAINER=odyssey-dev-n8n
+N8N_VOLUME=odyssey-dev-n8n-data
+N8N_IMAGE=docker.n8n.io/n8nio/n8n:2.33.7
+N8N_HOST=172.18.0.1
+N8N_PORT=28780
+N8N_RENDER=$DEV_RUNTIME/n8n-render
+N8N_DEPLOYMENT=$DEV_RUNTIME/n8n-deployment
+
+fail() {
+  echo "odyssey-dev: $*" >&2
+  exit 1
+}
+
+within_dev_root() {
+  case "$1" in
+    "$DEV_ROOT"|"$DEV_ROOT"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+guard() {
+  local path resolved
+  for path in "$DEV_ROOT" "$DEV_VAULT" "$DEV_STATE" "$DEV_PENDING" "$DEV_RUNTIME" "$DEV_CACHE" "$DEV_WEB" "$N8N_RENDER"; do
+    resolved=$(realpath -m -- "$path")
+    within_dev_root "$resolved" || fail "mutable path escapes DEV root: $path -> $resolved"
+    case "$resolved" in
+      /data/odyssey|/data/odyssey/*) fail "mutable path overlaps production root: $resolved" ;;
+    esac
+  done
+  [ "$(realpath -m -- "$DEV_SOURCE")" = "$DEV_SOURCE" ] || fail "DEV source path is not fixed"
+  [ -f "$DEV_SCHEMA" ] || fail "DEV schema is missing: $DEV_SCHEMA"
+  [ -x "$PYTHON" ] || fail "DEV Python environment is missing: $PYTHON"
+  [ -f "$N8N_COMPOSE" ] || fail "DEV n8n definition is missing: $N8N_COMPOSE"
+}
+
+source_state() {
+  local commit branch dirty
+  commit=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null) || fail "DEV source is not a Git checkout"
+  branch=$(git -C "$DEV_SOURCE" branch --show-current)
+  dirty=$(git -C "$DEV_SOURCE" status --porcelain)
+  printf 'source=%s\nbranch=%s\ncommit=%s\nclean=%s\n' \
+    "$DEV_SOURCE" "$branch" "$commit" "$([ -z "$dirty" ] && echo yes || echo no)"
+}
+
+source_is_coherent() {
+  local current recorded deployed dirty
+  current=$1
+  recorded=$2
+  deployed=$3
+  dirty=$4
+  [ -z "$dirty" ] && [ -n "$current" ] && [ "$current" = "$recorded" ] && [ "$current" = "$deployed" ]
+}
+
+assert_deployed_source_coherent() {
+  local current recorded deployed dirty
+  current=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null) || fail "DEV source is not a Git checkout"
+  dirty=$(git -C "$DEV_SOURCE" status --porcelain)
+  [ -z "$dirty" ] || fail "DEV source checkout is dirty; run odyssey-dev deploy after committing or discarding changes"
+  recorded=$(sed -n 's/^source_commit=//p' "$N8N_DEPLOYMENT")
+  deployed=$(cat "$DEPLOYED_COMMIT")
+  source_is_coherent "$current" "$recorded" "$deployed" "$dirty" \
+    || fail "DEV source HEAD does not match the deployed commit; run odyssey-dev deploy"
+}
+
+health_once() {
+  curl --fail --silent --show-error --max-time 5 "http://$DEV_HOST:$DEV_PORT/healthz" >/dev/null
+}
+
+wait_health() {
+  local attempt
+  for attempt in $(seq 1 60); do
+    if health_once >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+n8n_health_once() {
+  curl --fail --silent --show-error --max-time 5 "http://$N8N_HOST:$N8N_PORT/healthz" >/dev/null
+}
+
+wait_n8n_health() {
+  local attempt
+  for attempt in $(seq 1 45); do
+    if n8n_health_once >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+n8n_compose() {
+  docker compose --project-name "$N8N_PROJECT" --file "$N8N_COMPOSE" "$@"
+}
+
+install_unit() {
+  [ -f "$UNIT_SOURCE" ] || fail "service definition is missing: $UNIT_SOURCE"
+  install -D -m 644 "$UNIT_SOURCE" "$UNIT_TARGET"
+  systemctl --user daemon-reload
+}
+
+ensure_n8n_volume() {
+  if docker volume inspect "$N8N_VOLUME" >/dev/null 2>&1; then
+    return
+  fi
+  docker volume create --label odyssey.environment=dev --label odyssey.component=n8n "$N8N_VOLUME" >/dev/null
+}
+
+prepare_web_assets() {
+  local commit temporary
+  commit=$(git -C "$DEV_SOURCE" rev-parse HEAD)
+  install -d -m 750 "$DEV_WEB"
+  cp -a "$DEV_SOURCE/odyssey_web/." "$DEV_WEB/"
+  temporary=$(mktemp "$DEV_WEB/.environment.js.XXXXXX")
+  printf 'globalThis.ODYSSEY_DEPLOYMENT = Object.freeze({environment: "DEV", commit: "%s"});\n' "$commit" >"$temporary"
+  chmod 640 "$temporary"
+  mv -f "$temporary" "$DEV_WEB/environment.js"
+}
+
+render_workflows() {
+  install -d -m 750 "$N8N_RENDER"
+  rm -f "$N8N_RENDER/odyssey-online.json" "$N8N_RENDER/odyssey-online-static.json"
+  docker run --rm --network none \
+    -e ODYSSEY_WORKFLOW_ENVIRONMENT=DEV \
+    -e ODYSSEY_WORKFLOW_RUNTIME_URL="http://$DEV_HOST:$DEV_PORT/execute" \
+    -v "$DEV_SOURCE/workflows:/workspace:ro" \
+    -v "$N8N_RENDER:/output" \
+    --entrypoint /bin/sh "$N8N_IMAGE" -lc '
+      set -eu
+      mkdir -p /tmp/node_modules/@n8n
+      ln -s /usr/local/lib/node_modules/n8n/node_modules/@n8n/workflow-sdk /tmp/node_modules/@n8n/workflow-sdk
+      render() {
+        source=$1
+        destination=$2
+        cp "/workspace/$source" "/tmp/$source"
+        node --experimental-strip-types -e "import(\"/tmp/$source\").then((module) => process.stdout.write(JSON.stringify(module.default.toJSON())))" >"/output/$destination"
+      }
+      render odyssey-online.ts odyssey-online.json
+      render odyssey-online-static.ts odyssey-online-static.json
+    '
+  grep -Fq "http://$DEV_HOST:$DEV_PORT/execute" "$N8N_RENDER/odyssey-online.json" || fail "DEV workflow did not render its fixed DEV runtime target"
+  ! grep -REq '172\.18\.0\.1:8765|/data/odyssey' "$N8N_RENDER"/*.json || fail "rendered DEV workflow contains a production target"
+}
+
+publish_workflows() {
+  local credential_count
+  n8n_compose stop >/dev/null 2>&1 || true
+  docker run --rm --network none \
+    -v "$N8N_VOLUME:/home/node/.n8n" \
+    -v "$N8N_RENDER:/import:ro" \
+    --entrypoint /bin/sh "$N8N_IMAGE" -lc '
+      set -eu
+      n8n import:workflow --input=/import/odyssey-online.json >/dev/null
+      n8n import:workflow --input=/import/odyssey-online-static.json >/dev/null
+      n8n publish:workflow --id=odyssey-online >/dev/null
+      n8n publish:workflow --id=odyssey-online-static >/dev/null
+    '
+  credential_count=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
+    process.stdout.write(String(db.prepare("SELECT COUNT(*) AS count FROM credentials_entity").get().count));
+  ')
+  [ "$credential_count" = 0 ] || fail "DEV n8n database contains credentials; refusing to start"
+}
+
+workflow_metadata() {
+  docker exec "$N8N_CONTAINER" node -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
+    const rows = db.prepare("SELECT id, name, active, versionId, activeVersionId FROM workflow_entity WHERE id IN (?, ?) ORDER BY id").all("odyssey-online", "odyssey-online-static");
+    process.stdout.write(JSON.stringify(rows));
+  '
+}
+
+assert_published_workflows() {
+  local metadata
+  metadata=$(workflow_metadata) || fail "unable to read DEV n8n workflow metadata"
+  "$PYTHON" -c '
+import json
+import sys
+rows = {row["id"]: row for row in json.load(sys.stdin)}
+expected = {"odyssey-online", "odyssey-online-static"}
+if set(rows) != expected:
+    raise SystemExit("missing DEV workflow")
+if any(row.get("active") != 1 or "DEV" not in row.get("name", "") for row in rows.values()):
+    raise SystemExit("DEV workflow is inactive or lacks the DEV identity")
+' <<<"$metadata" || fail "DEV workflow publication verification failed"
+}
+
+record_deployment() {
+  local commit temporary online_hash static_hash
+  commit=$(git -C "$DEV_SOURCE" rev-parse HEAD)
+  online_hash=$(sha256sum "$N8N_RENDER/odyssey-online.json" | cut -d' ' -f1)
+  static_hash=$(sha256sum "$N8N_RENDER/odyssey-online-static.json" | cut -d' ' -f1)
+  temporary=$(mktemp "$DEV_RUNTIME/.n8n-deployment.XXXXXX")
+  printf 'source_commit=%s\nonline_workflow_sha256=%s\nstatic_workflow_sha256=%s\nruntime_target=http://%s:%s/execute\n' \
+    "$commit" "$online_hash" "$static_hash" "$DEV_HOST" "$DEV_PORT" >"$temporary"
+  chmod 640 "$temporary"
+  mv -f "$temporary" "$N8N_DEPLOYMENT"
+  temporary=$(mktemp "$DEV_RUNTIME/.deployed-commit.XXXXXX")
+  printf '%s\n' "$commit" >"$temporary"
+  chmod 640 "$temporary"
+  mv -f "$temporary" "$DEPLOYED_COMMIT"
+}
+
+workflow_provenance() {
+  local current deployed recorded_commit dirty metadata
+  [ -f "$N8N_DEPLOYMENT" ] || { echo UNKNOWN; return; }
+  current=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null || true)
+  dirty=$(git -C "$DEV_SOURCE" status --porcelain 2>/dev/null || true)
+  deployed=$(sed -n 's/^source_commit=//p' "$N8N_DEPLOYMENT")
+  recorded_commit=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || true)
+  source_is_coherent "$current" "$deployed" "$recorded_commit" "$dirty" || { echo DRIFT; return; }
+  metadata=$(workflow_metadata 2>/dev/null || true)
+  [ -n "$metadata" ] || { echo UNKNOWN; return; }
+  "$PYTHON" -c '
+import json
+import sys
+rows = {row["id"]: row for row in json.load(sys.stdin)}
+expected = {"odyssey-online", "odyssey-online-static"}
+if set(rows) != expected or any(row.get("active") != 1 or "DEV" not in row.get("name", "") for row in rows.values()):
+    raise SystemExit(1)
+' <<<"$metadata" && echo MATCH || echo DRIFT
+}
+
+runtime() {
+  guard
+  export ODYSSEY_VAULT_ROOT="$DEV_VAULT"
+  export ODYSSEY_STATE_ROOT="$DEV_STATE"
+  export ODYSSEY_PENDING_ROOT="$DEV_PENDING"
+  export ODYSSEY_RUNTIME_ROOT="$DEV_RUNTIME"
+  export ODYSSEY_EMBEDDING_CACHE="$DEV_CACHE"
+  export ODYSSEY_SCHEMA_PATH="$DEV_SCHEMA"
+  export ODYSSEY_RUNTIME_HOST="$DEV_HOST"
+  export ODYSSEY_RUNTIME_PORT="$DEV_PORT"
+  export ODYSSEY_ACTOR=odyssey-dev
+  export TZ=Europe/Paris
+  exec "$PYTHON" -m odyssey_runtime
+}
+
+start() {
+  guard
+  [ -f "$N8N_DEPLOYMENT" ] || fail "DEV n8n is not deployed; run odyssey-dev deploy"
+  [ -f "$DEPLOYED_COMMIT" ] || fail "DEV deployment identity is missing; run odyssey-dev deploy"
+  assert_deployed_source_coherent
+  systemctl --user start "$UNIT"
+  wait_health || fail "DEV runtime did not become healthy"
+  n8n_compose up -d >/dev/null
+  wait_n8n_health || fail "DEV n8n did not become healthy"
+  assert_published_workflows
+}
+
+stop() {
+  guard
+  n8n_compose stop >/dev/null 2>&1 || true
+  systemctl --user stop "$UNIT"
+}
+
+status() {
+  local state commit branch dirty deployed health_state n8n_state n8n_health metadata provenance public_status
+  guard
+  state=$(systemctl --user is-active "$UNIT" 2>/dev/null || true)
+  commit=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null || echo unavailable)
+  branch=$(git -C "$DEV_SOURCE" branch --show-current 2>/dev/null || echo unavailable)
+  dirty=$(git -C "$DEV_SOURCE" status --porcelain 2>/dev/null || true)
+  deployed=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || echo none)
+  if health_once >/dev/null 2>&1; then health_state=healthy; else health_state=unhealthy; fi
+  n8n_state=$(docker inspect --format '{{.State.Status}}' "$N8N_CONTAINER" 2>/dev/null || echo absent)
+  if n8n_health_once >/dev/null 2>&1; then n8n_health=healthy; else n8n_health=unhealthy; fi
+  metadata=$(workflow_metadata 2>/dev/null || echo unavailable)
+  provenance=$(workflow_provenance)
+  if curl --silent --max-time 5 --output /dev/null "$DEV_PRODUCT_URL"; then public_status=reachable; else public_status=unavailable; fi
+  printf 'environment=DEV\ndev_state=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nn8n_container=%s\nn8n_state=%s\nn8n_address=%s:%s\nn8n_health=%s\nn8n_volume=%s\nworkflow_metadata=%s\nworkflow_source_provenance=%s\npublic_url=%s\npublic_endpoint=%s\n' \
+    "$state" "$DEV_HOST" "$DEV_PORT" "$health_state" "$DEV_ROOT" "$DEV_SOURCE" "$deployed" "$commit" "$branch" \
+    "$([ -z "$dirty" ] && echo yes || echo no)" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PRODUCT_URL" "$public_status"
+}
+
+deploy() {
+  guard
+  [ -z "$(git -C "$DEV_SOURCE" status --porcelain)" ] || fail "DEV source checkout is dirty"
+  install_unit
+  systemctl --user restart "$UNIT"
+  wait_health || fail "DEV runtime did not become healthy after deploy"
+  prepare_web_assets
+  ensure_n8n_volume
+  render_workflows
+  publish_workflows
+  n8n_compose up -d >/dev/null
+  wait_n8n_health || fail "DEV n8n did not become healthy after deploy"
+  assert_published_workflows
+  record_deployment
+  printf 'deployed_commit=%s\n' "$(git -C "$DEV_SOURCE" rev-parse HEAD)"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-status}" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; start ;;
+    status) status ;;
+    deploy) deploy ;;
+    runtime) runtime ;;
+    *) fail "usage: odyssey-dev {start|stop|restart|status|deploy}" ;;
+  esac
+fi
