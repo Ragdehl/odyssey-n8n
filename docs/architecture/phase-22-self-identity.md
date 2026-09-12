@@ -1,6 +1,6 @@
 # Phase 22A — self-identity architecture contract
 
-Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding next.**
+Status: **22A design complete; 22B identity-boundary foundation complete; 22C binding complete; 22D provenance complete; 22E next.**
 
 This document owns the Phase 22 contract and decisions. The broader product direction and
 examples remain in [Future user self-identity binding](future-user-self-identity.md).
@@ -134,10 +134,22 @@ The guarded `SelfBindingRepository` now persists only an Odyssey user ID and an 
 swap rebind with the expected previous note ID. Test coverage includes target validation, rename
 stability, malformed state, and synthetic multi-user separation. No real person is bound.
 
-### 22D — provenance propagation
+### 22D — provenance propagation — complete
 
-Record the validated stable user ID in `created_by.human`/`updated_by.human`, preserving the app
-actor. Test request correlation and human-null autonomous actions.
+The trusted runtime composition combines the validated `AuthenticatedActorContext.stable_user_id`
+with the existing `ODYSSEY_ACTOR` application identity immediately before Core persistence:
+
+```text
+AuthenticatedActorContext(stable_user_id) + ODYSSEY_ACTOR
+        -> {"human": stable_user_id, "app": application_actor}
+        -> existing normalize_actor_provenance() and lifecycle persistence
+```
+
+CREATE records both values in `created_by` and `updated_by`; UPDATE, DELETE, and type migration
+preserve creation provenance and attribute the lifecycle update to the current pair. `NO_CHANGE`
+does not rewrite provenance. Calls without authenticated context retain the compatibility form
+`{"human": null, "app": ODYSSEY_ACTOR}`. Provenance does not require a self-person binding and
+never records provider subjects, email, JWTs, display names, or person note IDs.
 
 ### 22E — deterministic self resolution
 
@@ -178,7 +190,14 @@ The self-binding repository stores no provider principal, email, display name, f
 or copied fact. It resolves the target against the canonical repository by stable note ID and
 requires exactly one active note with type `person`.
 
-Phase 22A–22C acceptance is met when the actor, external principal, Odyssey user, and person are
+## Observed 22D implementation evidence
+
+Deterministic lifecycle tests cover authenticated CREATE and UPDATE, distinct Odyssey users,
+app-only compatibility, `NO_CHANGE`, DELETE, and type migration. They verify that only the
+Odyssey-owned stable user ID reaches human provenance and that an existing self binding is not
+required for provenance.
+
+Phase 22A–22D acceptance is met when the actor, external principal, Odyssey user, and person are
 distinct; the external source is an issuer-scoped opaque subject; the mapping generates and
 validates an Odyssey-owned ID; runtime identity is typed and validated; mapping state is durable
 non-knowledge state; self resolution is deterministic and precedes semantic search; invalid

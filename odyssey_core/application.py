@@ -32,6 +32,7 @@ from .observability import (
     ProviderCallEvidence,
     normalize_provider_usage,
 )
+from .persistence import ActorInput
 from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import UnitTargetPreflight, preflight_write_action
 from .request_planning import (
@@ -177,7 +178,7 @@ def execute_request(
     semantic_index: Any,
     embedder: Any,
     contextual_reasoner: Any,
-    actor: str,
+    actor: ActorInput,
     now: str,
     context_limit: int,
     writer: BoundedNoteWriter | None = None,
@@ -542,7 +543,7 @@ def _execute_write(
     semantic_index: Any,
     embedder: Any,
     contextual_reasoner: Any,
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
     semantic_limit: int,
@@ -619,7 +620,7 @@ def _execute_bulk(
     action: WriteAction,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
     request_id: str,
@@ -660,7 +661,7 @@ def _execute_single_units(
     rendered_facts: tuple[tuple[str, ...], ...],
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
     request_id: str,

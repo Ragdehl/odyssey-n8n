@@ -84,6 +84,7 @@ from .observability import (
 )
 from .pending_work import PendingWorkError, PendingWorkRepository, project_pending_work
 from .persistence import (
+    ActorInput,
     EntityAlreadyExistsError,
     EntityIdentityMismatchError,
     EntityPersistenceResult,
@@ -172,6 +173,7 @@ __all__ = [
     "IdentityBoundaryError",
     "IdentityMappingRepository",
     "OdysseyUser",
+    "ActorInput",
     "SelfBinding",
     "SelfBindingConflictError",
     "SelfBindingError",

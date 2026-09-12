@@ -27,6 +27,7 @@ from odyssey_core.observability import (
     ProviderCallEvidence,
 )
 from odyssey_core.pending_work import PendingWorkRepository
+from odyssey_core.persistence import ActorInput
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
@@ -159,6 +160,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             authenticated_actor, AuthenticatedActorContext
         ):
             raise ValueError("authenticated actor context is invalid")
+        persistence_actor = _persistence_actor(actor, authenticated_actor)
         result = execute_request(
             user_request,
             planner=planner,
@@ -168,7 +170,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             semantic_index=semantic_index,
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
-            actor=actor,
+            actor=persistence_actor,
             now=clock["timestamp"],
             context_limit=context_limit,
             writer=writer,
@@ -189,6 +191,18 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
     refresh_indexes()
     return RuntimeComposition(core_execute=core_execute, refresh_indexes=refresh_indexes)
+
+
+def _persistence_actor(
+    application_actor: str, authenticated_actor: AuthenticatedActorContext | None
+) -> ActorInput:
+    """Combine the stable application actor with optional normalized human provenance."""
+    if not isinstance(application_actor, str) or not application_actor.strip():
+        raise ValueError("application actor must be a non-empty string")
+    return {
+        "human": authenticated_actor.stable_user_id if authenticated_actor is not None else None,
+        "app": application_actor,
+    }
 
 
 def _replace_planner_provider_calls(

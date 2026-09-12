@@ -7,7 +7,7 @@ from typing import Any
 
 from .context import ContextRetrievalError, find_filtered_note_ids
 from .materialization import BoundedNoteWriter, MaterializationError, materialize_update
-from .persistence import EntityPersistenceResult
+from .persistence import ActorInput, EntityPersistenceResult
 from .request_planning import KnowledgeUnit
 from .storage import VaultRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome
@@ -50,7 +50,7 @@ def execute_bulk_update(
     *,
     repository: VaultRepository,
     schema: dict[str, Any],
-    actor: str,
+    actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None = None,
     request_id: str | None = None,
