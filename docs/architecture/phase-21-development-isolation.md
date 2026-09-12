@@ -1,8 +1,7 @@
 # Phase 21 — Production/development isolation
 
-Status: 21A architecture challenge complete; 21B transient proof complete; 21C complete;
-21D control-plane/runtime evidence complete, with public TLS/Access propagation and the human
-mobile checkpoint still pending.
+Status: Phase 21 complete: 21A architecture challenge, 21B transient proof, 21C persistent
+DEV runtime, and 21D isolated on-demand browser/workflow environment are complete.
 
 ## Objective
 
@@ -168,6 +167,25 @@ Production remained unchanged: vault HEAD
 empty pending state, context/semantic hashes unchanged, runtime PID `202011` and
 listener/health unchanged, n8n container identity unchanged, and no production command
 or service was restarted. No provider/model/API call was made.
+
+## 21D close evidence
+
+The synchronized DEV deployment is complete. `odyssey-dev deploy` renders the frontend and
+both checked-in workflows from one clean source commit, publishes only the isolated DEV n8n
+database, records that commit, and starts the DEV runtime. `odyssey-dev start` now fails closed
+when the checkout is dirty or its HEAD differs from the recorded deployment identity; `status`
+reports `DRIFT` in either case. A new commit is moved into DEV only through the explicit clean
+`odyssey-dev deploy` operation.
+
+The fixed protected endpoint was human-verified on Chrome Android and Brave desktop. Brave
+Android also passed after disabling Shields. The later human semantic DEV READ is separate
+evidence from the earlier zero-provider deployment proof: the deployment proof established
+isolation and deterministic routing without a provider call, while the human READ established
+the live browser/workflow/model path. No production data or service was used by the DEV test.
+
+The reusable operational boundary is therefore: develop and commit in the feature worktree,
+run `odyssey-dev deploy`, then use the fixed DEV endpoint; never start a changed or dirty
+checkout as though it were the previously deployed environment.
 
 ## Observed 21D control-plane and runtime evidence
 

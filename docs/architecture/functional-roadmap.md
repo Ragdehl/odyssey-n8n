@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — Phase 21: production/development isolation
+## Current gate — self-identity binding
 
 Goal: keep production personal knowledge and product flow isolated from ordinary development and testing.
 
@@ -45,7 +45,8 @@ See [Phase 21 — production/development isolation](phase-21-development-isolati
 21A   isolation architecture challenge                         ✅ complete
 21B   isolated DEV checkout/data + transient runtime proof     ✅ complete
 21C   persistent DEV runtime/operations + DEV n8n decision   ✅ complete
-21D   synchronized DEV n8n/routing pilot (if justified)      ⬜ planned
+21D   synchronized DEV n8n/routing pilot                    ✅ complete
+Phase 21 production/development isolation                    ✅ complete
 ```
 
 ### 20.1B — answerer adoption gate
@@ -124,7 +125,9 @@ conversation persistence / continuity
 real-usage-driven UI / capability work
 ```
 
-Phase 21A and 21B are complete. The production/development split should precede substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
+Phase 21A–21D and Phase 21 are complete. The production/development split now precedes substantial
+new feature development so future disposable tests cannot affect real personal knowledge. See
+the [Phase 21 evidence](phase-21-development-isolation.md).
 
 The self-identity step should stay small: bind the stable current/authenticated user identity to an ordinary canonical `person` note by stable note ID so first-person requests and future applications can reuse the same knowledge. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. See [Future user self-identity binding](future-user-self-identity.md).
 
@@ -140,13 +143,13 @@ Once real use depends on Odyssey, maintain a stable production deployment and a 
 21A architecture/isolation decision                         ✅ complete
 21B transient isolated runtime proof                        ✅ complete
 21C persistent isolated DEV runtime/operator workflow       ✅ complete
-21D on-demand DEV n8n + fixed protected browser endpoint    ➡️ propagation/mobile checkpoint
+21D on-demand DEV n8n + fixed protected browser endpoint    ✅ complete
+Phase 21 production/development isolation                   ✅ complete
 ```
 
 The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
-database/container. It is not a permanent Git branch. The remaining 21D gate is public TLS/Access
-observation and the human mobile check at the fixed DEV product endpoint; Phase 21 does not
-complete until that evidence and final production non-interference comparison pass.
+database/container. It is not a permanent Git branch. The fixed protected endpoint and human
+browser checkpoint are complete; self-identity binding is now the next functional gate.
 
 ### Natural conversation and history
 

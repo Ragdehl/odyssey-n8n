@@ -64,6 +64,26 @@ source_state() {
     "$DEV_SOURCE" "$branch" "$commit" "$([ -z "$dirty" ] && echo yes || echo no)"
 }
 
+source_is_coherent() {
+  local current recorded deployed dirty
+  current=$1
+  recorded=$2
+  deployed=$3
+  dirty=$4
+  [ -z "$dirty" ] && [ -n "$current" ] && [ "$current" = "$recorded" ] && [ "$current" = "$deployed" ]
+}
+
+assert_deployed_source_coherent() {
+  local current recorded deployed dirty
+  current=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null) || fail "DEV source is not a Git checkout"
+  dirty=$(git -C "$DEV_SOURCE" status --porcelain)
+  [ -z "$dirty" ] || fail "DEV source checkout is dirty; run odyssey-dev deploy after committing or discarding changes"
+  recorded=$(sed -n 's/^source_commit=//p' "$N8N_DEPLOYMENT")
+  deployed=$(cat "$DEPLOYED_COMMIT")
+  source_is_coherent "$current" "$recorded" "$deployed" "$dirty" \
+    || fail "DEV source HEAD does not match the deployed commit; run odyssey-dev deploy"
+}
+
 health_once() {
   curl --fail --silent --show-error --max-time 5 "http://$DEV_HOST:$DEV_PORT/healthz" >/dev/null
 }
@@ -209,11 +229,13 @@ record_deployment() {
 }
 
 workflow_provenance() {
-  local current deployed metadata
+  local current deployed recorded_commit dirty metadata
   [ -f "$N8N_DEPLOYMENT" ] || { echo UNKNOWN; return; }
   current=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null || true)
+  dirty=$(git -C "$DEV_SOURCE" status --porcelain 2>/dev/null || true)
   deployed=$(sed -n 's/^source_commit=//p' "$N8N_DEPLOYMENT")
-  [ -n "$current" ] && [ "$current" = "$deployed" ] || { echo DRIFT; return; }
+  recorded_commit=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || true)
+  source_is_coherent "$current" "$deployed" "$recorded_commit" "$dirty" || { echo DRIFT; return; }
   metadata=$(workflow_metadata 2>/dev/null || true)
   [ -n "$metadata" ] || { echo UNKNOWN; return; }
   "$PYTHON" -c '
@@ -244,6 +266,8 @@ runtime() {
 start() {
   guard
   [ -f "$N8N_DEPLOYMENT" ] || fail "DEV n8n is not deployed; run odyssey-dev deploy"
+  [ -f "$DEPLOYED_COMMIT" ] || fail "DEV deployment identity is missing; run odyssey-dev deploy"
+  assert_deployed_source_coherent
   systemctl --user start "$UNIT"
   wait_health || fail "DEV runtime did not become healthy"
   n8n_compose up -d >/dev/null
@@ -293,12 +317,14 @@ deploy() {
   printf 'deployed_commit=%s\n' "$(git -C "$DEV_SOURCE" rev-parse HEAD)"
 }
 
-case "${1:-status}" in
-  start) start ;;
-  stop) stop ;;
-  restart) stop; start ;;
-  status) status ;;
-  deploy) deploy ;;
-  runtime) runtime ;;
-  *) fail "usage: odyssey-dev {start|stop|restart|status|deploy}" ;;
-esac
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-status}" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; start ;;
+    status) status ;;
+    deploy) deploy ;;
+    runtime) runtime ;;
+    *) fail "usage: odyssey-dev {start|stop|restart|status|deploy}" ;;
+  esac
+fi
