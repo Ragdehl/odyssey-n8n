@@ -24,11 +24,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current gate — Phase 22F isolated-DEV adoption
+## Current gate — post-merge Phase 22 production adoption
 
 Goal: validate the completed self-identity path in the isolated DEV environment before any production binding or real-person use.
 
-Phase 22F is the current adoption gate after the completed identity, binding, provenance, and deterministic self-resolution foundations; it is blocked on the isolated DEV grounded-answerer credential boundary.
+Phase 22 implementation is complete in isolated DEV after the identity, binding, provenance, and deterministic self-resolution foundations and the grounded SELF READ/WRITE gate. The next gate is explicit post-merge production adoption: trusted production authentication projection, real-user mapping/binding, and an explicit clean-main deployment with health/provenance verification.
 See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
@@ -154,7 +154,7 @@ Phase 21 production/development isolation                   ✅ complete
 
 The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
 database/container. It is not a permanent Git branch. The fixed protected endpoint and human
-browser checkpoint are complete; self-identity binding is now the next functional gate.
+browser checkpoint are complete; self-identity production adoption is now the explicit post-merge gate.
 
 ### Natural conversation and history
 
