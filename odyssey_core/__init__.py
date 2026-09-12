@@ -50,6 +50,10 @@ from .identity_boundary import (
     IdentityBoundaryError,
     IdentityMappingRepository,
     OdysseyUser,
+    SelfBinding,
+    SelfBindingConflictError,
+    SelfBindingError,
+    SelfBindingRepository,
 )
 from .materialization import (
     WRITER_CONTEXT_MODE,
@@ -168,6 +172,10 @@ __all__ = [
     "IdentityBoundaryError",
     "IdentityMappingRepository",
     "OdysseyUser",
+    "SelfBinding",
+    "SelfBindingConflictError",
+    "SelfBindingError",
+    "SelfBindingRepository",
     "DependencyEvidence",
     "PendingWorkRecorder",
     "PendingWorkStatus",

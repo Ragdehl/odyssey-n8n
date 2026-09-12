@@ -74,9 +74,16 @@ writes:
 {"format": "odyssey_identity_mapping", "format_version": 1, "principals": [{"issuer": "...", "subject": "...", "odyssey_user_id": "..."}]}
 ```
 
-The binding references only a stable canonical note ID. It is not a Markdown fact, profile copy,
-alias, or authorization grant. A repository abstraction owns validation and atomic update; no new
-database or service is justified.
+The external-principal mapping above references no canonical note. The separate 22C self-binding
+state maps only `odyssey_user_id` to `person_note_id`:
+
+```json
+{"format": "odyssey_self_bindings", "format_version": 1, "bindings": [{"odyssey_user_id": "...", "person_note_id": "..."}]}
+```
+
+It is not a Markdown fact, profile copy, alias, provider mapping, or authorization grant. A
+repository abstraction owns note validation and atomic update; no new database or service is
+justified.
 
 ### First-person resolution
 
@@ -120,11 +127,12 @@ to Odyssey-owned UUIDs using versioned guarded JSON and atomic restrictive write
 does not extract identity from the browser, change Cloudflare, bind a real person, or write human
 provenance yet. Deterministic boundary, spoofing, two-principal, and malformed-state tests pass.
 
-### 22C — durable binding state
+### 22C — durable binding state — complete
 
-Add the guarded state repository and explicit bind/rebind operation against a selected stable
-`person` note. Test atomic persistence, malformed state, missing/deleted notes, and two synthetic
-users with distinct bindings.
+The guarded `SelfBindingRepository` now persists only an Odyssey user ID and an active canonical
+`person` note ID. Initial binding is idempotent; conflicting binding requires explicit compare and
+swap rebind with the expected previous note ID. Test coverage includes target validation, rename
+stability, malformed state, and synthetic multi-user separation. No real person is bound.
 
 ### 22D — provenance propagation
 
@@ -157,7 +165,20 @@ The current browser/n8n path has not been changed to manufacture or forward iden
 untrusted client cannot spoof a human actor through headers. No provider subject is passed into
 canonical note metadata or provenance; provenance propagation remains 22D.
 
-Phase 22A/22B acceptance is met when the actor, external principal, Odyssey user, and person are
+## Observed 22C implementation evidence
+
+The mapping and binding files are separate durable state:
+
+```text
+(issuer, subject) -> identity-mappings.json -> odyssey_user_id
+odyssey_user_id  -> self-bindings.json       -> person_note_id
+```
+
+The self-binding repository stores no provider principal, email, display name, filename, alias,
+or copied fact. It resolves the target against the canonical repository by stable note ID and
+requires exactly one active note with type `person`.
+
+Phase 22A–22C acceptance is met when the actor, external principal, Odyssey user, and person are
 distinct; the external source is an issuer-scoped opaque subject; the mapping generates and
 validates an Odyssey-owned ID; runtime identity is typed and validated; mapping state is durable
 non-knowledge state; self resolution is deterministic and precedes semantic search; invalid
