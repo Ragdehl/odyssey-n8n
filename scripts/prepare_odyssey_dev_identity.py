@@ -7,10 +7,13 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from odyssey_core.identity_boundary import OdysseyUser, SelfBindingRepository
 from odyssey_core.notes import Note, parse_note, serialize_note, validate_note
@@ -84,7 +87,7 @@ def _ensure_person(vault: VaultRepository, schema: dict[str, object]) -> bool:
         "schema_version": 3,
     }
     vault.create_text(
-        PERSON_PATH,
+        str(PERSON_PATH),
         serialize_note(
             Note(
                 metadata=metadata,
