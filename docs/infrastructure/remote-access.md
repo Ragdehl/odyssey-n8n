@@ -23,6 +23,18 @@ Raspberry / Codex
 
 SSH should not be exposed directly to the public Internet. Android currently uses Termius as the SSH client; client choice is not an Odyssey semantic dependency.
 
+Tailscale is **not** an Odyssey Online product ingress. The historical Tailscale Serve mapping that
+proxied `/api` to production n8n was retired during Phase 23B after trust-boundary review showed that
+it reached the same identity-projecting workflow without crossing Cloudflare Access/cloudflared JWT
+validation. Tailscale remains connected for administrative SSH only; Odyssey product traffic uses the
+protected Cloudflare Access -> cloudflared -> n8n path.
+
+The live removal used `tailscale serve off` after an implementation agent chose a broader command
+than requested. Post-change evidence established that the obsolete `/api` mapping was the only Serve
+configuration, so no unrelated Serve handler was lost. This is incident evidence, not a reusable
+recipe: inspect the full current Serve configuration first and do not use a broad Serve disable as a
+narrow path-removal substitute when unrelated handlers exist or their absence is unknown.
+
 ### Raspberry DNS ownership
 
 The Raspberry currently keeps Tailscale connectivity while declining Tailscale-managed system DNS:
@@ -70,13 +82,19 @@ Phase 20.3 requires the user-facing Odyssey Online hostname to have explicit acc
 
 Cloudflare Access or another explicitly approved mechanism may provide that protection, but choosing/changing the network/security configuration requires human approval and environment-backed E2E verification.
 
+The current production identity-projection contract depends on the Cloudflare Access/cloudflared path
+being the trusted product ingress. Reintroducing a Tailscale Serve `/api` mapping or another alternate
+remote/private path to the same production workflow requires a new trust-boundary review before that
+path may carry identity-bearing product traffic.
+
 ## Security rules
 
 - no public SSH/router port forwarding;
 - keep n8n/cloudflared/Tailscale components patched;
 - never commit tunnel tokens, OAuth credentials, API keys, or private host details;
 - rotate credentials immediately if exposed;
-- treat Cloudflare routes/access policies, n8n external exposure, and real-vault activation as explicit security/deployment actions;
-- preserve same-origin browser/API behavior where Phase 20 adopts it rather than adding permissive CORS without need.
+- treat Cloudflare routes/access policies, n8n external exposure, Tailscale Serve product exposure, and real-vault activation as explicit security/deployment actions;
+- preserve same-origin browser/API behavior where Phase 20 adopts it rather than adding permissive CORS without need;
+- keep Tailscale as the administrative SSH path unless a separately reviewed product-ingress contract is explicitly adopted.
 
 See [Raspberry Runtime and Development Setup](raspberry-runtime.md) for host/runtime layout and [Phase 20 Odyssey Online MVP](../architecture/phase-20-odyssey-online-mvp.md) for the product boundary.
