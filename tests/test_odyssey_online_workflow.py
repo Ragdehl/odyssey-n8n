@@ -72,6 +72,31 @@ def test_dev_identity_is_render_time_only_and_not_browser_controlled() -> None:
     assert "ODYSSEY_DEV_STABLE_USER_ID" in source
 
 
+def test_prod_projects_only_trusted_access_issuer_and_subject() -> None:
+    """Project validated Access claims while excluding the raw assertion and other claims."""
+    source = SOURCE.read_text(encoding="utf-8")
+
+    assert "headers['cf-access-jwt-assertion']" in source
+    assert "headers['Cf-Access-Jwt-Assertion']" in source
+    assert "Buffer.from(segments[1], 'base64url')" in source
+    assert "external_principal = { issuer: claims.iss, subject: claims.sub }" in source
+    assert "external_principal: $json.external_principal" in source
+    assert "assertion: $json" not in source
+    assert "email: claims" not in source
+    assert "aud: claims" not in source
+    assert "token: claims" not in source
+
+
+def test_prod_access_projection_fails_closed_before_runtime_for_bad_assertion() -> None:
+    """Keep missing or malformed trusted Access material on the direct safe-error route."""
+    source = SOURCE.read_text(encoding="utf-8")
+
+    assert "if (typeof assertion !== 'string' || !assertion.trim())" in source
+    assert "if (segments.length !== 3)" in source
+    assert "Odyssey no ha podido autenticar esta solicitud." in source
+    assert "external_principal" in source
+
+
 def test_answerer_credential_name_is_environment_scoped() -> None:
     """Keep the DEV answerer credential distinct from the production workflow credential."""
     source = SOURCE.read_text(encoding="utf-8")

@@ -24,18 +24,20 @@ The protected production path is:
 Cloudflare Access -> cloudflared tunnel JWT validation -> n8n -> runtime -> Core
 ```
 
-Access authentication is established at the edge/tunnel boundary. The standard Access assertion
-is carried as `Cf-Access-Jwt-Assertion`; standard identity projections may include
-`Cf-Access-Authenticated-User-Email`, but the checked-in n8n workflow does not extract a human
-claim or stable user ID. The runtime accepts only `request` and optional `request_id`, and records
-the static application actor from `ODYSSEY_ACTOR`. Production evidence shows
-`created_by.human` and `updated_by.human` are currently null.
+Access authentication is established at the edge/tunnel boundary. The production n8n workflow
+extracts only non-empty `iss` and `sub` from the validated `Cf-Access-Jwt-Assertion` and sends
+them as a typed `external_principal`; it never forwards the token or other claims. The private
+runtime resolves that principal through the existing mapping repository and creates an
+`AuthenticatedActorContext` only from the returned Odyssey-owned stable user ID. DEV continues
+to use its isolated synthetic actor. No real production mapping or self binding exists yet.
 
 The validated Access JWT `sub` claim (or an equivalent issuer-scoped opaque subject explicitly
 exposed by the trusted adapter) is the external-principal subject, not Odyssey's durable user ID.
-Email is human-readable and can change, so it is not a durable key. The mapping repository
-converts the validated `(issuer, subject)` pair into a newly generated Odyssey-owned UUID. No
-provider identity value is used as `created_by.human`, and no identity value is recorded here.
+Email is human-readable and can change, so it is not a durable key. The mapping repository can
+convert the validated `(issuer, subject)` pair into a newly generated Odyssey-owned UUID only for
+explicitly controlled provisioning. Ordinary production requests use the strict read-only
+resolve-existing path and fail closed for unknown or malformed state. No provider identity value
+is used as `created_by.human`, and no identity value is recorded here.
 
 ## Contract decisions
 
@@ -49,7 +51,9 @@ runtime. Core receives neither raw headers nor JWTs, email, provider subjects, o
 
 ### Runtime request contract
 
-Extend the current envelope with one optional typed actor context while preserving `request_id`:
+Extend the current envelope with one optional typed actor context while preserving `request_id`.
+Production may provide an external principal; internal/DEV callers may provide the synthetic
+actor, but the two shapes are mutually exclusive:
 
 ```json
 {
@@ -59,10 +63,19 @@ Extend the current envelope with one optional typed actor context while preservi
 }
 ```
 
-The runtime validates the shape, rejects empty/unsafe IDs, and rejects unrecognized fields.
-`stable_user_id` is opaque and never a display name. The internal Core context carries the same
-typed identity to provenance and deterministic self resolution. `ODYSSEY_ACTOR` remains the
-separate application actor.
+```json
+{
+  "request": "¿Dónde trabajo?",
+  "request_id": "trusted-correlation-id",
+  "external_principal": {"issuer": "trusted-issuer", "subject": "opaque-subject"}
+}
+```
+
+The runtime validates both exact shapes, rejects empty/control-bearing values and unrecognized
+fields, and rejects a request containing both. An external principal is resolve-existing only;
+unknown principals fail before Core execution. `stable_user_id` is opaque and never a display
+name. The internal Core context carries only the Odyssey-owned identity to provenance and
+deterministic self resolution. `ODYSSEY_ACTOR` remains the separate application actor.
 
 ### External-principal mapping persistence
 
@@ -207,18 +220,20 @@ separate post-merge human gates; no real production identity or personal note wa
 
 ## Observed 22B implementation evidence
 
-The code path is currently intentionally limited to:
+The current trusted production path is:
 
 ```text
-trusted adapter (future external-principal validation/mapping)
+validated Access assertion -> n8n iss/sub projection
+        -> external_principal -> runtime resolve-existing mapping
         -> AuthenticatedActorContext(odyssey_user_id)
         -> runtime HTTP boundary
         -> Core execution boundary
 ```
 
-The current browser/n8n path has not been changed to manufacture or forward identity, so an
-untrusted client cannot spoof a human actor through headers. No provider subject is passed into
-canonical note metadata or provenance; provenance propagation remains 22D.
+Browser input cannot manufacture or override the projected identity. No provider subject is
+passed into canonical note metadata or provenance; provenance propagation remains 22D. Unknown
+production principals fail closed, while controlled provisioning retains `resolve_or_create()`
+outside the ordinary request path.
 
 ## Observed 22C implementation evidence
 

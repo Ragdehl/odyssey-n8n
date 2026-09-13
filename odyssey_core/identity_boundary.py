@@ -37,6 +37,23 @@ class ExternalPrincipal:
             if any(ord(char) < 32 or ord(char) == 127 for char in value):
                 raise IdentityBoundaryError(f"external principal {name} is invalid")
 
+    @classmethod
+    def from_payload(cls, payload: object) -> ExternalPrincipal:
+        """Parse the exact trusted principal shape accepted by the runtime boundary.
+
+        Args:
+            payload: JSON object containing only ``issuer`` and ``subject``.
+
+        Returns:
+            A validated external principal.
+
+        Raises:
+            IdentityBoundaryError: If the payload has missing, extra, or invalid fields.
+        """
+        if not isinstance(payload, dict) or set(payload) != {"issuer", "subject"}:
+            raise IdentityBoundaryError("external principal has unsupported fields")
+        return cls(payload["issuer"], payload["subject"])
+
 
 @dataclass(frozen=True, slots=True)
 class OdysseyUser:
@@ -125,6 +142,27 @@ class IdentityMappingRepository:
         )
         self._write(payload)
         return user
+
+    def resolve_existing(self, principal: ExternalPrincipal) -> OdysseyUser:
+        """Resolve one already-provisioned principal without changing durable state.
+
+        Args:
+            principal: Validated external issuer/subject pair to look up.
+
+        Returns:
+            The existing Odyssey-owned user for the unique principal mapping.
+
+        Raises:
+            IdentityBoundaryError: If the principal is unknown, the state is malformed,
+                or more than one mapping matches it.
+        """
+        if not isinstance(principal, ExternalPrincipal):
+            raise IdentityBoundaryError("identity mapping requires an external principal")
+        payload = self._read()
+        matches = [item for item in payload["principals"] if _principal_matches(item, principal)]
+        if len(matches) != 1:
+            raise IdentityBoundaryError("external principal mapping is not uniquely provisioned")
+        return OdysseyUser(matches[0]["odyssey_user_id"])
 
     def _read(self) -> dict[str, object]:
         """Read and strictly validate the versioned mapping state."""

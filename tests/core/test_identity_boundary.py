@@ -79,6 +79,74 @@ def test_mapping_state_fails_closed_when_malformed(tmp_path: Path) -> None:
         repository.resolve_or_create(principal)
 
 
+def test_known_principal_resolves_existing_user_without_provisioning(tmp_path: Path) -> None:
+    """Resolve one provisioned principal without changing its durable mapping."""
+    repository = IdentityMappingRepository(tmp_path)
+    principal = ExternalPrincipal("issuer", "subject")
+    user = repository.resolve_or_create(principal)
+    before = (tmp_path / "identity-mappings.json").read_bytes()
+
+    assert repository.resolve_existing(principal) == user
+    assert (tmp_path / "identity-mappings.json").read_bytes() == before
+
+
+def test_unknown_principal_does_not_create_mapping_or_allocate_user(tmp_path: Path) -> None:
+    """Fail closed for an unknown principal while leaving absent state absent."""
+    repository = IdentityMappingRepository(tmp_path)
+
+    with pytest.raises(IdentityBoundaryError):
+        repository.resolve_existing(ExternalPrincipal("issuer", "unknown"))
+
+    assert not (tmp_path / "identity-mappings.json").exists()
+
+
+def test_duplicate_principal_fails_closed_for_existing_lookup(tmp_path: Path) -> None:
+    """Reject duplicate durable principal state instead of selecting one mapping."""
+    path = tmp_path / "identity-mappings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "format": "odyssey_identity_mapping",
+                "format_version": 1,
+                "principals": [
+                    {
+                        "issuer": "issuer",
+                        "subject": "subject",
+                        "odyssey_user_id": str(OdysseyUser.new().stable_user_id),
+                    },
+                    {
+                        "issuer": "issuer",
+                        "subject": "subject",
+                        "odyssey_user_id": str(OdysseyUser.new().stable_user_id),
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = path.read_bytes()
+
+    with pytest.raises(IdentityBoundaryError):
+        IdentityMappingRepository(tmp_path).resolve_existing(ExternalPrincipal("issuer", "subject"))
+
+    assert path.read_bytes() == before
+
+
+def test_external_principal_payload_is_exact_and_rejects_provider_fields() -> None:
+    """Accept only issuer/subject and reject email, audience, token, or actor fields."""
+    principal = ExternalPrincipal.from_payload({"issuer": "issuer", "subject": "subject"})
+
+    assert principal == ExternalPrincipal("issuer", "subject")
+    for payload in (
+        {"issuer": "issuer"},
+        {"subject": "subject"},
+        {"issuer": "issuer", "subject": "subject", "email": "ignored"},
+        {"issuer": "issuer", "subject": "subject", "aud": "ignored"},
+    ):
+        with pytest.raises(IdentityBoundaryError):
+            ExternalPrincipal.from_payload(payload)
+
+
 def test_browser_controlled_identity_fields_are_not_a_trusted_context() -> None:
     """The normalized context cannot be constructed from an email or external subject field."""
     with pytest.raises(IdentityBoundaryError):

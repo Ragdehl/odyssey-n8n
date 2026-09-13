@@ -19,7 +19,12 @@ from odyssey_core.contextual_calibration import load_contextual_calibration_exam
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
-from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
+from odyssey_core.identity_boundary import (
+    AuthenticatedActorContext,
+    ExternalPrincipal,
+    IdentityMappingRepository,
+    SelfBindingRepository,
+)
 from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -45,6 +50,7 @@ class RuntimeComposition:
 
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
+    identity_mapping_repository: IdentityMappingRepository | None = None
     monotonic: Callable[[], float] = perf_counter
 
     def execute(
@@ -52,6 +58,7 @@ class RuntimeComposition:
         user_request: str,
         request_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
     ) -> ApplicationResult:
         """Execute one request and refresh derived indexes after affected mutations.
 
@@ -62,6 +69,15 @@ class RuntimeComposition:
         Returns:
             The typed Core ApplicationResult after any required derived-index refresh.
         """
+        if authenticated_actor is not None and external_principal is not None:
+            raise ValueError("authenticated actor and external principal are mutually exclusive")
+        if external_principal is not None:
+            if self.identity_mapping_repository is None:
+                raise ValueError("external principal mapping is unavailable")
+            authenticated_actor = self.identity_mapping_repository.resolve_existing(
+                external_principal
+            )
+            authenticated_actor = AuthenticatedActorContext(authenticated_actor.stable_user_id)
         started = self.monotonic()
         if authenticated_actor is None:
             result = self.core_execute(user_request, request_id)
@@ -150,6 +166,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         if isinstance(repository, _VAULT_REPOSITORY_TYPE)
         else None
     )
+    identity_mapping_repository = IdentityMappingRepository(state_root)
     history_recorder = GitHistoryRecorder(vault_root)
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
@@ -199,7 +216,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         semantic_index.rebuild(repository, schema, embedder)
 
     refresh_indexes()
-    return RuntimeComposition(core_execute=core_execute, refresh_indexes=refresh_indexes)
+    return RuntimeComposition(
+        core_execute=core_execute,
+        refresh_indexes=refresh_indexes,
+        identity_mapping_repository=identity_mapping_repository,
+    )
 
 
 def _persistence_actor(

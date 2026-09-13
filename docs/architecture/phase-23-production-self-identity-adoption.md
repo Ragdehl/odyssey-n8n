@@ -1,6 +1,6 @@
 # Phase 23 — production self-identity adoption
 
-Status: **23A repository + live production-boundary inventory complete; 23D reboot-safe production operator implemented but not deployed. 23B remains pending after current production-runtime/tunnel recovery. No identity/data/deploy mutation is authorized without its explicit human gate.**
+Status: **23A repository + live production-boundary inventory complete; 23B trust configuration and trusted-principal projection implemented; 23D reboot-safe production operator deployed and active with MATCH provenance. 23C remains pending its explicit human data/security gate.**
 
 ## Objective
 
@@ -52,9 +52,10 @@ Phase 22 already provides:
 - fail-closed behavior for missing/invalid actor or binding state;
 - successful isolated-DEV SELF READ/WRITE evidence.
 
-The production browser workflow still deliberately omits `authenticated_actor`; only DEV rendering
-injects the synthetic actor. `IdentityMappingRepository` is not yet wired into the production
-request path.
+The production browser workflow now projects only `iss` and `sub` from the validated Access assertion
+as `external_principal`; the private runtime resolves that principal through an existing-only mapping
+before constructing `AuthenticatedActorContext`. DEV rendering continues to inject its synthetic actor
+from `ODYSSEY_DEV_STABLE_USER_ID`. `IdentityMappingRepository` remains runtime/Core-owned durable state.
 
 The protected production route already has the intended outer trust boundary:
 
@@ -108,28 +109,66 @@ Phase 23 production adoption is complete only when retained evidence shows all o
 - Conversation persistence/history work.
 - Any production write used merely to prove infrastructure when a read-only proof is sufficient.
 
-### Open evidence required before implementation
+### Retained 23B trust evidence and implementation
 
-A read-only live inventory must establish, without printing secret/token values:
+The completed read-only live inventory established, without printing secret/token values:
 
-1. Which Cloudflare Access identity headers actually reach the current production n8n webhook after
-   tunnel-side JWT validation.
-2. Whether the validated assertion available at n8n contains the expected issuer-scoped `sub` and
-   the claim/audience shape required to identify the existing Access application; report claim
-   names/shape only, not real values.
-3. The current production n8n workflow/deployed-source identity and the exact private runtime target.
-4. The current production runtime service/environment roots (`vault`, `state`, `runtime`) and
-   application actor, without exposing secrets.
-5. Whether the deployed production operator/service provenance matches the approved source. The
-   tracked `odyssey-prod` operator exposes this as `MATCH`, `DRIFT`, or `UNKNOWN`; no live
-   deployment is implied by its implementation.
+1. The dedicated `odyssey.ragdehl.com` route has Access required and team configuration, and its
+   effective `audTag` is a single entry matching the existing Odyssey Access application audience.
+   An earlier apparent missing value was an `EARLIER_SCHEMA_INTERPRETATION_ERROR`: the API returns
+   `audTag` as a list, not a scalar string.
+2. All five documented Odyssey product paths on `n8n.ragdehl.com` are covered by the narrow Access
+   application, while the n8n root remains outside that product-path policy. No Cloudflare repair was
+   performed.
+3. The production runtime is healthy on `172.18.0.1:8765`, its deployed source provenance is `MATCH`,
+   and the reboot-safe service is active and enabled.
+4. Pre-PR trust-boundary review found that the historical Tailscale Serve `/api` mapping still reached
+   the same production n8n product surface without crossing cloudflared Access validation. That made
+   the Access assertion header name insufficient by itself to prove provenance. With explicit human
+   authorization, the obsolete Tailscale product Serve mapping was retired. Post-change checks showed
+   Serve empty, Tailscale still connected, `accept-dns=false` preserved, SSH administration preserved,
+   Funnel disabled, and cloudflared, n8n, and the Odyssey runtime unchanged. No alternate known
+   non-cloudflared remote/private ingress remained for `/api/request`; the resulting classification was
+   `TRUST_BOUNDARY_SOUND`.
 
-No new authenticated product/model request is required for this inventory if retained execution
-metadata can establish the header/claim shape safely.
+The removal operation used `tailscale serve off`, which was broader than the requested narrow-path
+procedure and therefore must not be treated as a reusable path-removal recipe. It was safe in this
+specific live state only because post-change evidence established that the obsolete `/api` mapping was
+the sole Serve configuration and no unrelated handler was lost. Future Serve changes must inspect the
+full live Serve configuration first and must not use a broad disable operation as a substitute for a
+narrow removal when unrelated handlers exist or their absence has not been established.
+
+### Operational lessons retained from 23B
+
+- Prefer provider documentation plus effective configuration evidence over inspecting a real user's
+  token when that is sufficient to establish the trust contract. Sensitive runtime evidence should be
+  the last resort, not the first diagnostic path.
+- Reconcile API schema/representation before declaring configuration drift. The false missing-`audTag`
+  diagnosis came from treating a list-valued field as though it were a scalar. If a mutation preflight
+  contradicts the prior diagnosis, abort the mutation and reconcile the live representation first.
+- A trusted header name does not prove trusted provenance. Before making a forwarded identity header
+  authoritative, enumerate every ingress that can reach the same workflow and prove that each relevant
+  ingress crosses the validation boundary or cannot supply identity-bearing traffic.
+- Express live security/network changes as an exact semantic diff and verify the installed CLI/API
+  behavior before execution. Broad commands such as `off` or `reset` are not acceptable substitutes
+  for a narrow change unless the complete live scope has already been proven to contain only the
+  authorized target and the authorization explicitly covers that broader effect.
+- If an approval layer reports a denial while the transcript later appears to show a command as run,
+  treat live state as `UNKNOWN`. Stop further mutation and verify the actual post-state rather than
+  inferring what happened from the transcript alone.
+- Separate read-only investigation from mutation authorization. Evidence collection can refine or
+  invalidate the premise of a planned change; authorization for one exact mutation must not be reused
+  automatically after that premise changes.
+
+The implementation adds a strict runtime `external_principal` shape. PROD n8n extracts only the
+issuer and subject claims from the already-validated `Cf-Access-Jwt-Assertion`; it never forwards the
+JWT, audience, expiry, email, headers, or browser identity fields. Ordinary traffic uses
+`IdentityMappingRepository.resolve_existing`; unknown or malformed mappings fail closed without
+creating state. The real production mapping and self binding remain Phase 23C human-gated.
 
 ## Architecture challenge
 
-Result: **PROCEED, with one live-boundary evidence dependency before implementation.**
+Result: **PROCEED.**
 
 The real problem is trusted identity projection and controlled production promotion, not new
 knowledge semantics or new authentication infrastructure. Phase 22 already owns mapping, binding,
@@ -142,10 +181,12 @@ current Access policy has one user. That would make policy membership an implici
 and could silently impersonate a newly allowed Access user later. The production request must be
 projected from the validated principal on each request.
 
-Do not move `identity-mappings.json` ownership into n8n. Core already owns the durable identity
-mapping contract. The exact integration shape (for example, a narrow private runtime identity
-adapter orchestrated by n8n) should be chosen only after the live inventory confirms what validated
-principal material reaches n8n. No additional service is justified.
+Do not move `identity-mappings.json` ownership into n8n. Core owns the durable identity mapping
+contract. The live inventory confirms the validated principal boundary, so the smallest integration
+is an n8n projection followed by the private runtime adapter into that existing Core boundary. No
+additional service is justified. The trusted production product ingress is the Cloudflare
+Access/cloudflared path; Tailscale remains an administrative SSH boundary rather than an alternate
+Odyssey product ingress.
 
 ## Production operator requirement discovered during adoption
 
@@ -154,9 +195,8 @@ as a transient user unit and was no longer present after a Raspberry reboot. The
 contract can be reconstructed safely from stable configuration, but the former one-off transient
 launch metadata itself was volatile. This is operational debt, not a self-identity semantic failure.
 
-After the current recovery and identity adoption work, the next production-hardening step is the
-smallest `odyssey-prod` operator/service that makes production reproducible and reboot-safe while
-remaining human-gated for promotion:
+The reboot-safe `odyssey-prod` operator/service is now deployed in production and remains human-gated
+for future promotion:
 
 ```text
 approved clean main
@@ -171,17 +211,17 @@ odyssey-prod deploy
       `--> fail closed on drift, ambiguity, or unhealthy dependencies
 ```
 
-This must not become automatic merge-to-PROD promotion. The automation is inside the explicit
-operator; the human production gate remains. n8n workflow provenance remains a future read-only
-verification concern and is outside the runtime service lifecycle.
+This is not automatic merge-to-PROD promotion. The automation is inside the explicit operator; the
+human production gate remains. n8n workflow provenance remains a read-only verification concern and
+is outside the runtime service lifecycle.
 
 ## Planned sequence after 23A
 
 ```text
 23A  repository + read-only live boundary inventory                    ✅ complete
-23B  trusted validated-principal -> Odyssey-user projection            pending after runtime/tunnel recovery
+23B  trusted validated-principal -> Odyssey-user projection            implementation complete; trust boundary sound; mapping/binding remain gated
 23C  explicit real-user -> existing person binding                     pending human data gate
-23D  reboot-safe explicit production deploy/operator + provenance      implemented; human deploy gate
+23D  reboot-safe explicit production deploy/operator + provenance      ✅ deployed; active/enabled; MATCH
 23E  read-only real SELF E2E + closure                                 pending
 ```
 
