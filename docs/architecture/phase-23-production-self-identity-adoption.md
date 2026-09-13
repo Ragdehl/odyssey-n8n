@@ -138,6 +138,28 @@ the sole Serve configuration and no unrelated handler was lost. Future Serve cha
 full live Serve configuration first and must not use a broad disable operation as a substitute for a
 narrow removal when unrelated handlers exist or their absence has not been established.
 
+### Operational lessons retained from 23B
+
+- Prefer provider documentation plus effective configuration evidence over inspecting a real user's
+  token when that is sufficient to establish the trust contract. Sensitive runtime evidence should be
+  the last resort, not the first diagnostic path.
+- Reconcile API schema/representation before declaring configuration drift. The false missing-`audTag`
+  diagnosis came from treating a list-valued field as though it were a scalar. If a mutation preflight
+  contradicts the prior diagnosis, abort the mutation and reconcile the live representation first.
+- A trusted header name does not prove trusted provenance. Before making a forwarded identity header
+  authoritative, enumerate every ingress that can reach the same workflow and prove that each relevant
+  ingress crosses the validation boundary or cannot supply identity-bearing traffic.
+- Express live security/network changes as an exact semantic diff and verify the installed CLI/API
+  behavior before execution. Broad commands such as `off` or `reset` are not acceptable substitutes
+  for a narrow change unless the complete live scope has already been proven to contain only the
+  authorized target and the authorization explicitly covers that broader effect.
+- If an approval layer reports a denial while the transcript later appears to show a command as run,
+  treat live state as `UNKNOWN`. Stop further mutation and verify the actual post-state rather than
+  inferring what happened from the transcript alone.
+- Separate read-only investigation from mutation authorization. Evidence collection can refine or
+  invalidate the premise of a planned change; authorization for one exact mutation must not be reused
+  automatically after that premise changes.
+
 The implementation adds a strict runtime `external_principal` shape. PROD n8n extracts only the
 issuer and subject claims from the already-validated `Cf-Access-Jwt-Assertion`; it never forwards the
 JWT, audience, expiry, email, headers, or browser identity fields. Ordinary traffic uses
