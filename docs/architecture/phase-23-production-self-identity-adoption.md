@@ -1,6 +1,6 @@
 # Phase 23 — production self-identity adoption
 
-Status: **23A repository inspection complete; live production-boundary inventory pending. No production mutation authorized.**
+Status: **23A repository inspection complete; 23D reboot-safe production operator implemented but not deployed. Live production-boundary inventory and human deployment authorization remain pending.**
 
 ## Objective
 
@@ -114,8 +114,9 @@ A read-only live inventory must establish, without printing secret/token values:
 3. The current production n8n workflow/deployed-source identity and the exact private runtime target.
 4. The current production runtime service/environment roots (`vault`, `state`, `runtime`) and
    application actor, without exposing secrets.
-5. Whether a smallest-safe production deploy operator already exists. Repository inspection says
-   the approved `odyssey-prod deploy` boundary is documented but not implemented.
+5. Whether the deployed production operator/service provenance matches the approved source. The
+   tracked `odyssey-prod` operator exposes this as `MATCH`, `DRIFT`, or `UNKNOWN`; no live
+   deployment is implied by its implementation.
 
 No new authenticated product/model request is required for this inventory if retained execution
 metadata can establish the header/claim shape safely.
@@ -146,7 +147,7 @@ principal material reaches n8n. No additional service is justified.
 23A  repository + read-only live boundary inventory          CURRENT
 23B  trusted validated-principal -> Odyssey-user projection  pending
 23C  explicit real-user -> existing person binding           pending human data gate
-23D  smallest-safe explicit production deploy operator       pending human deploy gate
+23D  reboot-safe explicit production deploy operator          implemented; human deploy gate
 23E  read-only real SELF E2E + closure                       pending
 ```
 
