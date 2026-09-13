@@ -122,6 +122,21 @@ The completed read-only live inventory established, without printing secret/toke
    performed.
 3. The production runtime is healthy on `172.18.0.1:8765`, its deployed source provenance is `MATCH`,
    and the reboot-safe service is active and enabled.
+4. Pre-PR trust-boundary review found that the historical Tailscale Serve `/api` mapping still reached
+   the same production n8n product surface without crossing cloudflared Access validation. That made
+   the Access assertion header name insufficient by itself to prove provenance. With explicit human
+   authorization, the obsolete Tailscale product Serve mapping was retired. Post-change checks showed
+   Serve empty, Tailscale still connected, `accept-dns=false` preserved, SSH administration preserved,
+   Funnel disabled, and cloudflared, n8n, and the Odyssey runtime unchanged. No alternate known
+   non-cloudflared remote/private ingress remained for `/api/request`; the resulting classification was
+   `TRUST_BOUNDARY_SOUND`.
+
+The removal operation used `tailscale serve off`, which was broader than the requested narrow-path
+procedure and therefore must not be treated as a reusable path-removal recipe. It was safe in this
+specific live state only because post-change evidence established that the obsolete `/api` mapping was
+the sole Serve configuration and no unrelated handler was lost. Future Serve changes must inspect the
+full live Serve configuration first and must not use a broad disable operation as a substitute for a
+narrow removal when unrelated handlers exist or their absence has not been established.
 
 The implementation adds a strict runtime `external_principal` shape. PROD n8n extracts only the
 issuer and subject claims from the already-validated `Cf-Access-Jwt-Assertion`; it never forwards the
@@ -147,7 +162,9 @@ projected from the validated principal on each request.
 Do not move `identity-mappings.json` ownership into n8n. Core owns the durable identity mapping
 contract. The live inventory confirms the validated principal boundary, so the smallest integration
 is an n8n projection followed by the private runtime adapter into that existing Core boundary. No
-additional service is justified.
+additional service is justified. The trusted production product ingress is the Cloudflare
+Access/cloudflared path; Tailscale remains an administrative SSH boundary rather than an alternate
+Odyssey product ingress.
 
 ## Production operator requirement discovered during adoption
 
@@ -180,7 +197,7 @@ is outside the runtime service lifecycle.
 
 ```text
 23A  repository + read-only live boundary inventory                    ✅ complete
-23B  trusted validated-principal -> Odyssey-user projection            implementation complete; mapping/binding remain gated
+23B  trusted validated-principal -> Odyssey-user projection            implementation complete; trust boundary sound; mapping/binding remain gated
 23C  explicit real-user -> existing person binding                     pending human data gate
 23D  reboot-safe explicit production deploy/operator + provenance      ✅ deployed; active/enabled; MATCH
 23E  read-only real SELF E2E + closure                                 pending
