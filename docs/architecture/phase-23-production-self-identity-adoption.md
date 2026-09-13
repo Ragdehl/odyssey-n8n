@@ -1,6 +1,6 @@
 # Phase 23 — production self-identity adoption
 
-Status: **23A repository inspection complete; 23D reboot-safe production operator implemented but not deployed. Live production-boundary inventory and human deployment authorization remain pending.**
+Status: **23A repository + live production-boundary inventory complete; 23D reboot-safe production operator implemented but not deployed. 23B remains pending after current production-runtime/tunnel recovery. No identity/data/deploy mutation is authorized without its explicit human gate.**
 
 ## Objective
 
@@ -88,8 +88,14 @@ Phase 23 production adoption is complete only when retained evidence shows all o
    CREATE.
 9. Production deployment is an explicit clean-`main` action that records deployed source identity,
    updates only required production components, verifies health/provenance, and fails closed on
-   drift or ambiguous targets.
-10. No production personal-data or security mutation occurs before its explicit human gate.
+   drift or ambiguous targets. The production runtime must be managed through a reboot-safe,
+   reproducible operator/service contract rather than a one-off transient unit whose launch state
+   disappears after host reboot.
+10. The production operator exposes enough status/health evidence to distinguish source drift,
+    runtime absence, workflow drift, and tunnel reachability without requiring a semantic/provider
+    request. Infrastructure checks should detect known stale-container DNS conditions before
+    broader network changes are considered.
+11. No production personal-data or security mutation occurs before its explicit human gate.
 
 ### Out of scope
 
@@ -141,14 +147,42 @@ mapping contract. The exact integration shape (for example, a narrow private run
 adapter orchestrated by n8n) should be chosen only after the live inventory confirms what validated
 principal material reaches n8n. No additional service is justified.
 
+## Production operator requirement discovered during adoption
+
+The Phase 23 live inspection found that the previously working production runtime had been launched
+as a transient user unit and was no longer present after a Raspberry reboot. The current production
+contract can be reconstructed safely from stable configuration, but the former one-off transient
+launch metadata itself was volatile. This is operational debt, not a self-identity semantic failure.
+
+After the current recovery and identity adoption work, the next production-hardening step is the
+smallest `odyssey-prod` operator/service that makes production reproducible and reboot-safe while
+remaining human-gated for promotion:
+
+```text
+approved clean main
+      |
+      v
+odyssey-prod deploy
+      +--> install/update reboot-safe runtime service contract
+      +--> preserve canonical /data/odyssey data boundaries
+      +--> install only production runtime/operator artifacts
+      +--> record exact deployed source identity
+      +--> verify private runtime health/provenance plus tunnel diagnostics
+      `--> fail closed on drift, ambiguity, or unhealthy dependencies
+```
+
+This must not become automatic merge-to-PROD promotion. The automation is inside the explicit
+operator; the human production gate remains. n8n workflow provenance remains a future read-only
+verification concern and is outside the runtime service lifecycle.
+
 ## Planned sequence after 23A
 
 ```text
-23A  repository + read-only live boundary inventory          CURRENT
-23B  trusted validated-principal -> Odyssey-user projection  pending
-23C  explicit real-user -> existing person binding           pending human data gate
-23D  reboot-safe explicit production deploy operator          implemented; human deploy gate
-23E  read-only real SELF E2E + closure                       pending
+23A  repository + read-only live boundary inventory                    ✅ complete
+23B  trusted validated-principal -> Odyssey-user projection            pending after runtime/tunnel recovery
+23C  explicit real-user -> existing person binding                     pending human data gate
+23D  reboot-safe explicit production deploy/operator + provenance      implemented; human deploy gate
+23E  read-only real SELF E2E + closure                                 pending
 ```
 
 A production SELF WRITE is not required for 23E unless read-only evidence is insufficient and the
