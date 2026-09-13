@@ -22,7 +22,11 @@ from odyssey_core.application import (
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
 from odyssey_core.git_history import GitHistoryResult
-from odyssey_core.identity_boundary import OdysseyUser
+from odyssey_core.identity_boundary import (
+    ExternalPrincipal,
+    IdentityMappingRepository,
+    OdysseyUser,
+)
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -402,6 +406,144 @@ def test_http_boundary_forwards_only_normalized_actor_context() -> None:
         server.server_close()
 
 
+def test_http_boundary_resolves_existing_external_principal_before_core(tmp_path: Path) -> None:
+    """Map one trusted external principal to the Odyssey-owned actor before Core execution."""
+    calls: list[str] = []
+    repository = IdentityMappingRepository(tmp_path)
+    principal = ExternalPrincipal("issuer", "subject")
+    user = repository.resolve_or_create(principal)
+
+    def execute(request: str, request_id: str | None, actor) -> ApplicationResult:
+        """Capture only the normalized Odyssey actor reaching Core."""
+        calls.append(actor.stable_user_id)
+        return _result()
+
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=execute,
+            refresh_indexes=lambda: None,
+            identity_mapping_repository=repository,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps(
+                {
+                    "request": "hello",
+                    "external_principal": {"issuer": "issuer", "subject": "subject"},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        response.read()
+        assert calls == [user.stable_user_id]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_unknown_external_principal_fails_before_core(tmp_path: Path) -> None:
+    """Reject an unmapped external principal without invoking semantic Core execution."""
+    calls: list[str] = []
+    repository = IdentityMappingRepository(tmp_path)
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request, request_id: calls.append(request),
+            refresh_indexes=lambda: None,
+            identity_mapping_repository=repository,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps(
+                {
+                    "request": "hello",
+                    "external_principal": {"issuer": "issuer", "subject": "unknown"},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid request"}
+        assert calls == []
+        assert not (tmp_path / "identity-mappings.json").exists()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize(
+    "principal",
+    [
+        {"issuer": "issuer"},
+        {"issuer": "issuer", "subject": ""},
+        {"issuer": "issuer", "subject": "subject", "email": "ignored"},
+    ],
+)
+def test_http_boundary_rejects_malformed_external_principal_without_core(principal) -> None:
+    """Reject malformed/provider-shaped principals before semantic execution."""
+    calls: list[str] = []
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request, request_id: calls.append(request),
+            refresh_indexes=lambda: None,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps({"request": "hello", "external_principal": principal}),
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        response.read()
+        assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_rejects_actor_and_external_principal_together() -> None:
+    """Do not permit two competing identity authorities in one runtime request."""
+    user = OdysseyUser.new()
+    calls: list[str] = []
+    server = _test_server(
+        RuntimeComposition(
+            core_execute=lambda request, request_id: calls.append(request),
+            refresh_indexes=lambda: None,
+        )
+    )
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/execute",
+            body=json.dumps(
+                {
+                    "request": "hello",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                    "external_principal": {"issuer": "issuer", "subject": "subject"},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        response.read()
+        assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_http_boundary_rejects_browser_identity_fields_without_calling_core() -> None:
     """Reject raw subject-shaped fields rather than treating them as actor authority."""
     calls: list[str] = []
@@ -698,6 +840,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
 
     runtime = composition.build_runtime_from_environment()
     assert pending.is_dir()
+    assert isinstance(runtime.identity_mapping_repository, IdentityMappingRepository)
     assert runtime.execute("hello").request_id == "request-test"
 
 

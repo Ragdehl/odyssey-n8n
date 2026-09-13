@@ -9,7 +9,11 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
-from odyssey_core.identity_boundary import AuthenticatedActorContext
+from odyssey_core.identity_boundary import (
+    AuthenticatedActorContext,
+    ExternalPrincipal,
+    IdentityBoundaryError,
+)
 
 from .composition import RuntimeComposition
 from .serialization import application_result_to_response
@@ -67,9 +71,11 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict) or not {"request"}.issubset(payload):
                     raise ValueError("request payload has unsupported fields")
-                allowed = {"request", "request_id", "authenticated_actor"}
+                allowed = {"request", "request_id", "authenticated_actor", "external_principal"}
                 if set(payload) - allowed:
                     raise ValueError("request payload has unsupported fields")
+                if "authenticated_actor" in payload and "external_principal" in payload:
+                    raise ValueError("request identity fields are mutually exclusive")
                 request = payload["request"]
                 if not isinstance(request, str) or not request.strip():
                     raise ValueError("request must be a non-empty string")
@@ -85,12 +91,26 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     if actor_payload is None
                     else AuthenticatedActorContext.from_payload(actor_payload)
                 )
-            except (TypeError, ValueError):
+                principal_payload = payload.get("external_principal")
+                external_principal = (
+                    None
+                    if principal_payload is None
+                    else ExternalPrincipal.from_payload(principal_payload)
+                )
+            except (TypeError, ValueError, IdentityBoundaryError):
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
                 return
             try:
-                result = runtime.execute(request, request_id, authenticated_actor)
+                result = runtime.execute(
+                    request,
+                    request_id,
+                    authenticated_actor,
+                    external_principal,
+                )
                 self._write_json(HTTPStatus.OK, application_result_to_response(result))
+            except IdentityBoundaryError:
+                self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
+                return
             except Exception:
                 payload: dict[str, Any] = {"error": "runtime failure"}
                 if request_id is not None:
