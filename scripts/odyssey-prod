@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Production promotion is deliberately explicit. This operator never manages n8n or cloudflared.
+PROD_USER=ragdehl
+PROD_SOURCE=/home/ragdehl/projects/odyssey
+PROD_ROOT=/data/odyssey
+PROD_VAULT=$PROD_ROOT/vault
+PROD_STATE=$PROD_ROOT/state
+PROD_PENDING=$PROD_STATE/pending
+PROD_RUNTIME=$PROD_ROOT/runtime
+PROD_CACHE=$PROD_RUNTIME/phase11a-benchmark/embedding-cache
+PROD_SCHEMA=$PROD_SOURCE/config/note-schema.json
+PROD_HOST=172.18.0.1
+PROD_PORT=8765
+PROD_ENV_SOURCE=/home/ragdehl/.config/odyssey/secrets.env
+UNIT=odyssey-prod-runtime.service
+UNIT_SOURCE=$PROD_SOURCE/deploy/$UNIT
+UNIT_TARGET=/home/ragdehl/.config/systemd/user/$UNIT
+OPERATOR_TARGET=/home/ragdehl/.local/bin/odyssey-prod
+PYTHON=$PROD_SOURCE/.venv/bin/python
+DEPLOYED_COMMIT=$PROD_RUNTIME/deployed-commit
+
+fail() {
+  echo "odyssey-prod: $*" >&2
+  exit 1
+}
+
+prod_git() {
+  git --git-dir="$PROD_SOURCE/.git" --work-tree="$PROD_SOURCE" "$@"
+}
+
+path_is_within() {
+  local path=$1 root=$2
+  case "$path" in
+    "$root"|"$root"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+paths_do_not_overlap() {
+  local first second
+  first=$(realpath -m -- "$1")
+  second=$(realpath -m -- "$2")
+  ! path_is_within "$first" "$second" && ! path_is_within "$second" "$first"
+}
+
+environment_source_has_required_keys() {
+  local source=$1
+  [ -f "$source" ] || return 1
+  awk '
+    /^[[:space:]]*export[[:space:]]+OPENAI_API_KEY=/ { found = 1 }
+    /^[[:space:]]*OPENAI_API_KEY=/ { found = 1 }
+    END { exit !found }
+  ' "$source"
+}
+
+guard() {
+  local path resolved mode owner
+  [ "$(id -un)" = "$PROD_USER" ] || fail "production operator must run as $PROD_USER"
+  [ "$(realpath -m -- "$PROD_SOURCE")" = "$PROD_SOURCE" ] || fail "production source path is not fixed"
+  [ -d "$PROD_SOURCE/.git" ] || fail "production Git directory is missing"
+  [ "$(prod_git rev-parse --show-toplevel 2>/dev/null)" = "$PROD_SOURCE" ] \
+    || fail "production source worktree is not fixed"
+  for path in "$PROD_ROOT" "$PROD_VAULT" "$PROD_STATE" "$PROD_PENDING" "$PROD_RUNTIME" "$PROD_CACHE"; do
+    resolved=$(realpath -m -- "$path")
+    path_is_within "$resolved" "$PROD_ROOT" || fail "production path escapes root: $path -> $resolved"
+    paths_do_not_overlap "$resolved" /data/odyssey-dev || fail "production path overlaps DEV root: $resolved"
+  done
+  [ -d "$PROD_VAULT" ] || fail "production vault is missing"
+  [ -d "$PROD_STATE" ] || fail "production state root is missing"
+  [ -d "$PROD_RUNTIME" ] || fail "production runtime root is missing"
+  [ -f "$PROD_SCHEMA" ] || fail "production schema is missing"
+  [ -x "$PYTHON" ] || fail "production Python environment is missing"
+  [ -f "$UNIT_SOURCE" ] || fail "production service definition is missing"
+  [ -f "$PROD_ENV_SOURCE" ] || fail "production environment source is missing"
+  owner=$(stat -c '%U:%G' "$PROD_ENV_SOURCE")
+  mode=$(stat -c '%a' "$PROD_ENV_SOURCE")
+  [ "$owner" = "$PROD_USER:$PROD_USER" ] || fail "production environment source owner is unsafe"
+  [ "$mode" = 600 ] || fail "production environment source mode is unsafe"
+  environment_source_has_required_keys "$PROD_ENV_SOURCE" \
+    || fail "production environment source lacks required key names"
+}
+
+source_is_approved() {
+  local branch=$1 dirty=$2 head=$3 local_main=$4 upstream_main=$5
+  [ "$branch" = main ] && [ -z "$dirty" ] && [ "$head" = "$local_main" ] \
+    && [ "$local_main" = "$upstream_main" ]
+}
+
+assert_approved_source() {
+  local branch dirty head local_main upstream_main
+  head=$(prod_git rev-parse HEAD 2>/dev/null) || fail "production source is not a Git checkout"
+  branch=$(prod_git branch --show-current)
+  dirty=$(prod_git status --porcelain)
+  local_main=$(prod_git rev-parse main 2>/dev/null) || fail "local main is unavailable"
+  upstream_main=$(prod_git rev-parse refs/remotes/origin/main 2>/dev/null) \
+    || fail "approved upstream main is unavailable"
+  source_is_approved "$branch" "$dirty" "$head" "$local_main" "$upstream_main" \
+    || fail "production deploy requires clean synchronized main"
+}
+
+assert_reboot_persistence() {
+  [ "$(loginctl show-user "$PROD_USER" -p Linger --value 2>/dev/null)" = yes ] \
+    || fail "user-systemd linger is required for reboot-safe production deployment"
+}
+
+health_once() {
+  curl --fail --silent --show-error --max-time 5 \
+    "http://$PROD_HOST:$PROD_PORT/healthz" >/dev/null
+}
+
+wait_health() {
+  local attempt
+  for attempt in $(seq 1 60); do
+    if health_once >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+provenance_state() {
+  local current=$1 recorded=$2 branch=$3 dirty=$4 local_main=$5 upstream_main=$6
+  if [ -z "$current" ] || [ -z "$recorded" ] || [ -z "$local_main" ] || [ -z "$upstream_main" ]; then
+    echo UNKNOWN
+  elif source_is_approved "$branch" "$dirty" "$current" "$local_main" "$upstream_main" \
+    && [ "$current" = "$recorded" ]; then
+    echo MATCH
+  else
+    echo DRIFT
+  fi
+}
+
+deployment_provenance() {
+  local current recorded branch dirty local_main upstream_main
+  current=$(prod_git rev-parse HEAD 2>/dev/null || true)
+  recorded=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || true)
+  branch=$(prod_git branch --show-current 2>/dev/null || true)
+  dirty=$(prod_git status --porcelain 2>/dev/null || true)
+  local_main=$(prod_git rev-parse main 2>/dev/null || true)
+  upstream_main=$(prod_git rev-parse refs/remotes/origin/main 2>/dev/null || true)
+  provenance_state "$current" "$recorded" "$branch" "$dirty" "$local_main" "$upstream_main"
+}
+
+record_deployment() {
+  local commit temporary
+  commit=$(prod_git rev-parse HEAD)
+  temporary=$(mktemp "$PROD_RUNTIME/.deployed-commit.XXXXXX")
+  printf '%s\n' "$commit" >"$temporary"
+  chmod 640 "$temporary"
+  mv -f "$temporary" "$DEPLOYED_COMMIT"
+}
+
+install_artifacts() {
+  install -D -m 644 "$UNIT_SOURCE" "$UNIT_TARGET"
+  install -d -m 755 /home/ragdehl/.local/bin
+  ln -sfn "$PROD_SOURCE/scripts/odyssey-prod" "$OPERATOR_TARGET"
+  systemctl --user daemon-reload
+}
+
+runtime() {
+  guard
+  exec "$PYTHON" -m odyssey_runtime
+}
+
+cloudflared_dns_diagnostic() {
+  local host_dns container_state resolver_state error_state
+  if getent ahosts cloudflare.com >/dev/null 2>&1; then host_dns=reachable; else host_dns=unavailable; fi
+  container_state=$(docker inspect --format '{{.State.Status}}' cloudflared 2>/dev/null || echo absent)
+  if [ "$container_state" = running ] \
+    && docker cp cloudflared:/etc/resolv.conf - 2>/dev/null | tar -xOf - 2>/dev/null \
+      | awk '/^nameserver[[:space:]]+/ { found = 1 } END { exit !found }'; then
+    resolver_state=present
+  else
+    resolver_state=unavailable
+  fi
+  if docker logs --since 1h cloudflared 2>&1 \
+    | grep -Eqi '127\\.0\\.0\\.11:53.*server misbehaving|lookup .*server misbehaving|quic.*timeout'; then
+    error_state=observed
+  else
+    error_state=not-observed
+  fi
+  printf 'cloudflared_container=%s\nhost_dns=%s\ncloudflared_resolver=%s\ncloudflared_dns_or_quic_error=%s\n' \
+    "$container_state" "$host_dns" "$resolver_state" "$error_state"
+}
+
+status() {
+  local state health current branch dirty recorded provenance
+  guard
+  state=$(systemctl --user is-active "$UNIT" 2>/dev/null || true)
+  current=$(prod_git rev-parse HEAD 2>/dev/null || echo unavailable)
+  branch=$(prod_git branch --show-current 2>/dev/null || echo unavailable)
+  dirty=$(prod_git status --porcelain 2>/dev/null || true)
+  recorded=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || echo none)
+  if health_once >/dev/null 2>&1; then health=healthy; else health=unhealthy; fi
+  provenance=$(deployment_provenance)
+  printf 'environment=PROD\nruntime_service=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nsource_provenance=%s\n' \
+    "$state" "$PROD_HOST" "$PROD_PORT" "$health" "$PROD_ROOT" "$PROD_SOURCE" "$recorded" \
+    "$current" "$branch" "$([ -z "$dirty" ] && echo yes || echo no)" "$provenance"
+  cloudflared_dns_diagnostic
+}
+
+deploy() {
+  guard
+  assert_approved_source
+  assert_reboot_persistence
+  install_artifacts
+  systemctl --user enable "$UNIT"
+  systemctl --user restart "$UNIT"
+  wait_health || fail "production runtime did not become healthy on $PROD_HOST:$PROD_PORT"
+  record_deployment
+  printf 'deployed_commit=%s\n' "$(prod_git rev-parse HEAD)"
+}
+
+restart() {
+  guard
+  [ "$(deployment_provenance)" = MATCH ] \
+    || fail "production source provenance is not MATCH; run approved odyssey-prod deploy"
+  systemctl --user restart "$UNIT"
+  wait_health || fail "production runtime did not become healthy on $PROD_HOST:$PROD_PORT"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-status}" in
+    status) status ;;
+    deploy) deploy ;;
+    restart) restart ;;
+    runtime) runtime ;;
+    *) fail "usage: odyssey-prod {status|deploy|restart}" ;;
+  esac
+fi

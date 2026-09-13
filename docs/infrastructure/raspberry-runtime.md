@@ -40,6 +40,27 @@ The host user `ragdehl` and n8n container user `node` both use UID/GID `1000:100
 
 See [Local Storage Boundary](../architecture/storage.md) for semantic authority and file-access rules.
 
+## Production runtime operator
+
+`odyssey-prod` is the tracked, human-gated production runtime operator. Its persistent user service
+is `odyssey-prod-runtime.service`, bound only to the Docker bridge at `172.18.0.1:8765`. It uses
+the existing protected environment source at `~/.config/odyssey/secrets.env`; credentials are never
+copied into the repository or service file.
+
+`odyssey-prod deploy` is an explicit promotion action, not a consequence of merging to `main`. It
+fails closed unless the fixed production checkout is clean `main`, exactly matches `origin/main`,
+has disjoint production/DEV data roots, has the expected environment source structurally, and the
+already-established `ragdehl` user manager has lingering enabled. It installs only the production
+operator/service artifacts, enables/restarts only `odyssey-prod-runtime.service`, verifies the
+private health endpoint, and records the deployed source commit under the rebuildable runtime root.
+Starting the runtime may refresh derived indexes; it never makes a provider call merely to pass the
+health check.
+
+`odyssey-prod status` is read-only. It reports runtime health and source provenance as `MATCH`,
+`DRIFT`, or `UNKNOWN`, plus a non-mutating comparison of host DNS reachability with the existing
+cloudflared container's resolver/log state. It never restarts n8n or cloudflared; Cloudflare tunnel
+recovery remains a separate infrastructure lifecycle and needs separate authorization.
+
 ## Codex
 
 The host shell command `odyssey` is the convenience entry point: it changes to `/home/ragdehl/projects/odyssey`, starts Codex from the repository so `AGENTS.md` is loaded, and grants the approved writable paths `/data/odyssey` and `/home/ragdehl/docker/n8n` used by environment-sensitive work.

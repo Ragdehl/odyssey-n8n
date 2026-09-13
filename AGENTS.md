@@ -135,6 +135,19 @@ When preparing a prompt for Codex or another development agent for the user:
 - include the recommended model and reasoning effort, with a short cost/capability rationale when model choice is relevant;
 - do not omit the summary just because the prompt itself is long.
 
+### ChatGPT-to-agent handoff communication preference
+
+This is an assistant-facing communication preference for the ChatGPT project assistant,
+not an execution instruction for Codex or another implementation agent. Before ChatGPT
+gives the user a Codex prompt, it should briefly explain in Spanish what is happening
+functionally and technically, why the Codex step is needed, which component or boundary
+is involved, what Codex will touch and deliberately leave untouched, and what result is
+expected. After the user returns Codex output, ChatGPT should first explain in Spanish
+what Codex found or changed, what that means functionally, what happened technically,
+whether it matches the expected architecture and safety contract, and what is unblocked
+or remains pending. Keep the explanation concise but informative; use a small ASCII
+diagram when it materially clarifies the handoff.
+
 ## Documentation ownership
 
 Odyssey deliberately keeps few **canonical owners** and links to them instead of copying their content.

@@ -1,0 +1,32 @@
+[Unit]
+Description=Odyssey production runtime
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ragdehl/projects/odyssey
+EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env
+ExecStart=/home/ragdehl/projects/odyssey/scripts/odyssey-prod runtime
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/data/odyssey
+Environment=ODYSSEY_VAULT_ROOT=/data/odyssey/vault
+Environment=ODYSSEY_STATE_ROOT=/data/odyssey/state
+Environment=ODYSSEY_PENDING_ROOT=/data/odyssey/state/pending
+Environment=ODYSSEY_RUNTIME_ROOT=/data/odyssey/runtime
+Environment=ODYSSEY_EMBEDDING_CACHE=/data/odyssey/runtime/phase11a-benchmark/embedding-cache
+Environment=ODYSSEY_SCHEMA_PATH=/home/ragdehl/projects/odyssey/config/note-schema.json
+Environment=ODYSSEY_RUNTIME_HOST=172.18.0.1
+Environment=ODYSSEY_RUNTIME_PORT=8765
+Environment=ODYSSEY_ACTOR=odyssey-runtime
+Environment=TZ=Europe/Paris
+
+[Install]
+WantedBy=default.target
