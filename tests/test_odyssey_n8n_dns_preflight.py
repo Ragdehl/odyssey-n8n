@@ -7,7 +7,9 @@ SCRIPT = Path(__file__).parents[1] / "scripts" / "odyssey-n8n-dns-preflight"
 
 
 def test_preflight_script_is_valid_bash() -> None:
-    result = subprocess.run(["bash", "-n", str(SCRIPT)], check=False, capture_output=True, text=True)
+    result = subprocess.run(
+        ["bash", "-n", str(SCRIPT)], check=False, capture_output=True, text=True
+    )
     assert result.returncode == 0, result.stderr
 
 
