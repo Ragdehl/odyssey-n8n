@@ -5,6 +5,10 @@ from pathlib import Path
 SOURCE = Path(__file__).parents[1] / "workflows" / "odyssey-online.ts"
 
 
+def _answerer_key(request_id: str) -> str:
+    return f"odyssey-answer-{request_id}"
+
+
 def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
@@ -127,3 +131,29 @@ def test_frozen_answerer_keeps_the_language_instruction_for_live_sentinels() -> 
     """Retain the frozen user-language instruction after the English live regression."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "Reply in the user's language unless the request explicitly asks otherwise." in source
+
+
+def test_answerer_uses_request_id_idempotency_header() -> None:
+    """Bind provider replay identity to the validated logical delivery only."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "sendHeaders: true" in source
+    assert "name: 'Idempotency-Key'" in source
+    assert "'odyssey-answer-' + $('Route bounded product result').item.json.request_id" in source
+
+
+def test_answerer_idempotency_key_is_stable_per_delivery() -> None:
+    """The bounded provider key is deterministic and distinct for new deliveries."""
+    first_key = _answerer_key("delivery-a")
+    second_key = _answerer_key("delivery-b")
+    assert first_key == "odyssey-answer-delivery-a"
+    assert second_key == "odyssey-answer-delivery-b"
+    assert first_key != second_key
+    assert len(_answerer_key("a" * 128)) <= 256
+
+
+def test_answerer_idempotency_key_excludes_request_and_identity_data() -> None:
+    """Keep request text, claims, and Odyssey identity outside provider replay identity."""
+    expression = "'odyssey-answer-' + $('Route bounded product result').item.json.request_id"
+    assert ".item.json.request +" not in expression
+    for forbidden in ("issuer", "subject", "email", "stable_user_id", "person_note_id", "aud"):
+        assert forbidden not in expression

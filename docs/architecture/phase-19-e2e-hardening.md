@@ -273,6 +273,9 @@ Those directions remain in their roadmap/future-extension contracts. Phase 20 ha
 ## Open decisions
 
 1. **Retry identity / idempotency key:** Phase 19.1 evidence uses a delivery-owned `request_id` propagated through n8n/runtime and durable atomic fact locators for bounded replay protection. A persistent idempotency ledger is not justified by the current evidence; reconsider only if later retry cases escape these canonical guards.
+
+The bounded grounded answerer now applies the same logical-delivery principle at the provider boundary: its non-secret `Idempotency-Key` is deterministically derived from the validated Odyssey `request_id`. Core mutation replay protection remains unchanged; intentional new requests use different request IDs and therefore different provider keys. No request ledger or additional infrastructure is introduced.
+
 2. **Observability persistence:** choose the smallest safe representation in 19.2 after identifying which evidence is not already available from application results, Git, n8n executions, and provider responses.
 3. **Separate `trace_id`:** default is **no**; reconsider only if one logical request requires multiple distinguishable operational attempts.
 
