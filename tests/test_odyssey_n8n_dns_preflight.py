@@ -1,7 +1,7 @@
 """Deterministic contract tests for the production n8n DNS preflight."""
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "odyssey-n8n-dns-preflight"
 
