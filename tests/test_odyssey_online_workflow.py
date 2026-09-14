@@ -142,9 +142,12 @@ def test_answerer_uses_request_id_idempotency_header() -> None:
 
 
 def test_answerer_idempotency_key_is_stable_per_delivery() -> None:
-    """The bounded provider key is equal for retries and distinct for new deliveries."""
-    assert _answerer_key("delivery-a") == _answerer_key("delivery-a")
-    assert _answerer_key("delivery-a") != _answerer_key("delivery-b")
+    """The bounded provider key is deterministic and distinct for new deliveries."""
+    first_key = _answerer_key("delivery-a")
+    second_key = _answerer_key("delivery-b")
+    assert first_key == "odyssey-answer-delivery-a"
+    assert second_key == "odyssey-answer-delivery-b"
+    assert first_key != second_key
     assert len(_answerer_key("a" * 128)) <= 256
 
 
