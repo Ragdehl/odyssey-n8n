@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Read-only production preflight for the provider DNS path used by n8n.
+# This script never calls the provider API and never mutates Docker/network state.
+N8N_CONTAINER=${ODYSSEY_N8N_CONTAINER:-n8n}
+PROVIDER_HOST=${ODYSSEY_PROVIDER_HOST:-api.openai.com}
+PROBE_COUNT=${ODYSSEY_N8N_DNS_PROBES:-20}
+
+fail() {
+  echo "odyssey-n8n-dns-preflight: $*" >&2
+  exit 1
+}
+
+case "$PROBE_COUNT" in
+  ''|*[!0-9]*) fail "ODYSSEY_N8N_DNS_PROBES must be a positive integer" ;;
+esac
+[ "$PROBE_COUNT" -gt 0 ] || fail "ODYSSEY_N8N_DNS_PROBES must be a positive integer"
+
+container_state=$(docker inspect --format '{{.State.Status}}' "$N8N_CONTAINER" 2>/dev/null || echo absent)
+if getent ahosts "$PROVIDER_HOST" >/dev/null 2>&1; then
+  host_dns=healthy
+else
+  host_dns=unhealthy
+fi
+
+resolver_state=unavailable
+if [ "$container_state" = running ]; then
+  if docker exec "$N8N_CONTAINER" cat /etc/resolv.conf 2>/dev/null \
+    | awk '/^nameserver[[:space:]]+/ { found = 1 } END { exit !found }'; then
+    resolver_state=present
+  fi
+fi
+
+recent_dns_error=not-observed
+if docker logs --since 1h "$N8N_CONTAINER" 2>&1 \
+  | grep -Eqi 'EAI_AGAIN|query .*:53.*timeout|lookup .*server misbehaving'; then
+  recent_dns_error=observed
+fi
+
+node_output='node_dns_success=0
+node_dns_failure=0
+node_dns_eai_again=0'
+node_rc=1
+if [ "$container_state" = running ]; then
+  if node_output=$(docker exec \
+      -e ODYSSEY_DNS_HOST="$PROVIDER_HOST" \
+      -e ODYSSEY_DNS_PROBES="$PROBE_COUNT" \
+      "$N8N_CONTAINER" node -e '
+const dns = require("dns");
+const host = process.env.ODYSSEY_DNS_HOST;
+const count = Number.parseInt(process.env.ODYSSEY_DNS_PROBES || "0", 10);
+let success = 0;
+let failure = 0;
+let eaiAgain = 0;
+function probe(index) {
+  if (index >= count) {
+    console.log(`node_dns_success=${success}`);
+    console.log(`node_dns_failure=${failure}`);
+    console.log(`node_dns_eai_again=${eaiAgain}`);
+    process.exit(failure === 0 ? 0 : 1);
+  }
+  dns.lookup(host, (error) => {
+    if (error) {
+      failure += 1;
+      if (error.code === "EAI_AGAIN") eaiAgain += 1;
+    } else {
+      success += 1;
+    }
+    setTimeout(() => probe(index + 1), 50);
+  });
+}
+probe(0);
+' 2>/dev/null); then
+    node_rc=0
+  else
+    node_rc=$?
+  fi
+fi
+
+printf 'n8n_container=%s\nhost_dns=%s\nn8n_resolver=%s\n%s\nrecent_dns_error=%s\n' \
+  "$container_state" "$host_dns" "$resolver_state" "$node_output" "$recent_dns_error"
+
+if [ "$container_state" != running ]; then
+  echo 'dns_preflight=UNKNOWN'
+  exit 1
+fi
+if [ "$host_dns" = healthy ] && [ "$node_rc" -ne 0 ]; then
+  echo 'dns_preflight=DRIFT'
+  exit 1
+fi
+if [ "$host_dns" != healthy ]; then
+  echo 'dns_preflight=HOST_UNHEALTHY'
+  exit 1
+fi
+if [ "$resolver_state" != present ]; then
+  echo 'dns_preflight=UNKNOWN'
+  exit 1
+fi
+
+echo 'dns_preflight=MATCH'
