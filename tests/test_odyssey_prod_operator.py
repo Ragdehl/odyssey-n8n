@@ -22,9 +22,34 @@ def bash(function: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_release_selection_requires_a_resolved_commit() -> None:
-    assert bash("source_is_approved", CURRENT, CURRENT).returncode == 0
-    assert bash("source_is_approved", CURRENT, OTHER).returncode != 0
+def test_production_release_selection_requires_a_full_sha() -> None:
+    assert bash("is_full_commit_sha", CURRENT).returncode == 0
+    assert bash("is_full_commit_sha", "main").returncode != 0
+    assert bash("is_full_commit_sha", CURRENT[:-1]).returncode != 0
+
+
+def test_cli_dispatch_forwards_the_deployment_argument() -> None:
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source {SCRIPT}; deploy() {{ printf "count=%s arg=%s\\n" "$#" "$1"; }}; main deploy {CURRENT}',
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0
+    assert result.stdout == f"count=1 arg={CURRENT}\n"
+
+
+def test_cli_deploy_rejects_invalid_argument_counts_without_live_preflight() -> None:
+    for arguments in (("deploy",), ("deploy", CURRENT, OTHER)):
+        result = subprocess.run(
+            ["bash", str(SCRIPT), *arguments], check=False, text=True, capture_output=True
+        )
+        assert result.returncode != 0
+        assert "exactly one full commit SHA" in result.stderr
 
 
 def test_root_guard_refuses_production_dev_overlap() -> None:
@@ -68,6 +93,8 @@ def test_source_contract_uses_the_established_explicit_worktree() -> None:
     assert 'git -C "$release" checkout --detach "$resolved"' in source
     assert "production release worktree is dirty" in source
     assert "PYTHON=/home/ragdehl/projects/odyssey-prod-venv/bin/python" in source
+    assert "production deploy requires exactly one full commit SHA" in source
+    assert 'main "$@"' in source
 
 
 def test_deploy_targets_only_production_runtime_service() -> None:
@@ -108,6 +135,30 @@ def test_status_is_read_only_and_cloudflared_diagnostic_has_no_lifecycle_action(
     assert "docker recreate" not in diagnostic
 
 
+def test_failed_candidate_cannot_replace_stable_control_operator(tmp_path: Path) -> None:
+    """A candidate is not the rollback control path until health succeeds."""
+    source = tmp_path / "source-operator"
+    stable = tmp_path / "libexec" / "odyssey-prod"
+    target = tmp_path / "bin" / "odyssey-prod"
+    source.write_text("known-good\n", encoding="utf-8")
+    subprocess.run(
+        ["bash", "-c", f"source {SCRIPT}; ensure_control_operator {source} {stable} {target}"],
+        check=True,
+    )
+    candidate = tmp_path / "candidate-operator"
+    candidate.write_text("failed-candidate\n", encoding="utf-8")
+    result = subprocess.run(
+        ["bash", "-c", f"source {SCRIPT}; ensure_control_operator {candidate} {stable} {target}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert stable.read_text(encoding="utf-8") == "known-good\n"
+    assert target.is_symlink()
+    assert target.resolve() == stable
+
+
 def test_dirty_human_checkout_is_untouched_while_release_moves_between_commits(
     tmp_path: Path,
 ) -> None:
@@ -145,6 +196,8 @@ def test_dirty_human_checkout_is_untouched_while_release_moves_between_commits(
     git = ["git", "-c", "core.bare=false", "--git-dir", str(bare), "--work-tree", str(human)]
     commit_b = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
     commit_a = subprocess.check_output([*git, "rev-parse", "HEAD~1"], text=True).strip()
+    assert bash("resolve_commit", str(bare), commit_b).stdout.strip() == commit_b
+    assert bash("resolve_commit", str(bare), "main").returncode != 0
     subprocess.run([*git, "read-tree", commit_b], check=True)
     subprocess.run([*git, "checkout-index", "--all"], check=True)
     (human / "release.txt").write_text("B\n", encoding="utf-8")

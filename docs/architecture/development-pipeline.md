@@ -144,13 +144,16 @@ production deployment used by real users
 
 Production and development must use separate mutable/runtime boundaries wherever sharing could allow a test to affect users or personal knowledge. At minimum, deployment planning must explicitly review hostname/routing, n8n workflow activation, environment/configuration, runtime state, provider credentials/telemetry attribution, and vault/data targets. Development evidence should use disposable/non-personal data by default. Promotion to production remains an explicit deployment action after merge and validation; merging source code alone must not silently mutate production data or security boundaries.
 
-The production promotion boundary is `odyssey-prod deploy COMMIT`. It resolves and records the
-explicit commit, materializes that commit in the dedicated `/home/ragdehl/projects/odyssey-prod-release`
-Git worktree, and restarts only the production runtime service after health verification. The normal
+The production promotion boundary is `odyssey-prod prepare FULL_SHA` followed by independent
+environment provisioning and `odyssey-prod deploy FULL_SHA`. It materializes and records only the
+explicit 40-character commit in the dedicated `/home/ragdehl/projects/odyssey-prod-release` Git
+worktree, then restarts only the production runtime service after health verification. Mutable refs
+such as `main`, tags, and short SHAs are rejected. The normal
 working repository may be dirty, staged, detached, or on another branch; it is never cleaned,
 reset, checked out, restored, or used as the runtime source. Merging `main` makes a commit available
 but does not deploy it. The release worktree is a controlled operational target and must be changed
-only by an explicit promotion action.
+only by an explicit promotion action. The rollback/control operator remains outside the candidate
+release and is promoted only after health succeeds.
 
 ## Documentation lifecycle
 

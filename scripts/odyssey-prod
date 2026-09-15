@@ -19,6 +19,8 @@ UNIT=odyssey-prod-runtime.service
 UNIT_SOURCE=$PROD_RELEASE/deploy/$UNIT
 UNIT_TARGET=/home/ragdehl/.config/systemd/user/$UNIT
 OPERATOR_TARGET=/home/ragdehl/.local/bin/odyssey-prod
+OPERATOR_STABLE=/home/ragdehl/.local/libexec/odyssey-prod
+OPERATOR_SOURCE=${BASH_SOURCE[0]}
 # PROD dependencies live outside both the release worktree and the human checkout.
 PYTHON=/home/ragdehl/projects/odyssey-prod-venv/bin/python
 DEPLOYED_COMMIT=$PROD_RUNTIME/deployed-commit
@@ -57,10 +59,14 @@ environment_source_has_required_keys() {
   ' "$source"
 }
 
-assert_release_artifacts() {
+assert_release_source() {
   [ -f "$PROD_SCHEMA" ] || fail "production schema is missing from the release"
-  [ -x "$PYTHON" ] || fail "production Python environment is missing: $PYTHON"
   [ -f "$UNIT_SOURCE" ] || fail "production service definition is missing"
+}
+
+assert_release_artifacts() {
+  assert_release_source
+  [ -x "$PYTHON" ] || fail "production Python environment is missing: $PYTHON"
 }
 
 guard() {
@@ -94,16 +100,16 @@ guard() {
     || fail "production environment source lacks required key names"
 }
 
-source_is_approved() {
-  local requested=$1 resolved=$2
-  [ -n "$requested" ] && [ "$requested" = "$resolved" ]
+is_full_commit_sha() {
+  [[ "$1" =~ ^[0-9a-f]{40}$ ]]
 }
 
 resolve_commit() {
   local git_dir=$1 requested=$2 resolved
-  [ -n "$requested" ] || return 1
+  is_full_commit_sha "$requested" || return 1
   resolved=$(git --git-dir="$git_dir" rev-parse --verify --end-of-options "$requested^{commit}") || return 1
   git --git-dir="$git_dir" cat-file -e "$resolved^{commit}" || return 1
+  [ "$resolved" = "$requested" ] || return 1
   printf '%s\n' "$resolved"
 }
 
@@ -180,10 +186,27 @@ record_deployment() {
   mv -f "$temporary" "$DEPLOYED_COMMIT"
 }
 
+ensure_control_operator() {
+  local source=$1 stable=${2:-$OPERATOR_STABLE} target=${3:-$OPERATOR_TARGET}
+  [ -f "$source" ] || fail "deployment control operator source is missing"
+  if [ ! -f "$stable" ]; then
+    install -D -m 755 "$source" "$stable"
+  fi
+  install -d -m 755 "$(dirname "$target")"
+  ln -sfn "$stable" "$target"
+}
+
+promote_control_operator() {
+  local source=${1:-$PROD_RELEASE/scripts/odyssey-prod} stable=${2:-$OPERATOR_STABLE} target=${3:-$OPERATOR_TARGET} temporary
+  temporary=$(mktemp "$(dirname "$stable")/.odyssey-prod.XXXXXX")
+  install -m 755 "$source" "$temporary"
+  mv -f "$temporary" "$stable"
+  install -d -m 755 "$(dirname "$target")"
+  ln -sfn "$stable" "$target"
+}
+
 install_artifacts() {
   install -D -m 644 "$UNIT_SOURCE" "$UNIT_TARGET"
-  install -d -m 755 /home/ragdehl/.local/bin
-  ln -sfn "$PROD_RELEASE/scripts/odyssey-prod" "$OPERATOR_TARGET"
   systemctl --user daemon-reload
 }
 
@@ -231,10 +254,11 @@ status() {
 
 deploy() {
   local requested_commit resolved_commit
-  requested_commit=${1:-}
+  [ "$#" -eq 1 ] || fail "production deploy requires exactly one full commit SHA"
+  requested_commit=$1
   guard deploy
-  [ "$#" -eq 1 ] || fail "production deploy requires exactly one commit or commit-resolving ref"
   assert_reboot_persistence
+  ensure_control_operator "$OPERATOR_SOURCE"
   resolved_commit=$(materialize_release "$PROD_REPOSITORY/.git" "$PROD_RELEASE" "$requested_commit")
   assert_release_artifacts
   install_artifacts
@@ -242,7 +266,18 @@ deploy() {
   systemctl --user restart "$UNIT"
   wait_health || fail "production runtime did not become healthy on $PROD_HOST:$PROD_PORT"
   record_deployment "$resolved_commit"
+  promote_control_operator
   printf 'deployed_commit=%s\n' "$resolved_commit"
+}
+
+prepare() {
+  local requested_commit resolved_commit
+  [ "$#" -eq 1 ] || fail "production prepare requires exactly one full commit SHA"
+  requested_commit=$1
+  guard deploy
+  resolved_commit=$(materialize_release "$PROD_REPOSITORY/.git" "$PROD_RELEASE" "$requested_commit")
+  assert_release_source
+  printf 'prepared_commit=%s\n' "$resolved_commit"
 }
 
 restart() {
@@ -253,12 +288,21 @@ restart() {
   wait_health || fail "production runtime did not become healthy on $PROD_HOST:$PROD_PORT"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-  case "${1:-status}" in
-    status) status ;;
-    deploy) deploy ;;
-    restart) restart ;;
-    runtime) runtime ;;
-    *) fail "usage: odyssey-prod {status|deploy COMMIT|restart}" ;;
+main() {
+  local command=${1:-status}
+  if [ "$#" -gt 0 ]; then
+    shift
+  fi
+  case "$command" in
+    status) [ "$#" -eq 0 ] || fail "status does not accept arguments"; status ;;
+    prepare) prepare "$@" ;;
+    deploy) deploy "$@" ;;
+    restart) [ "$#" -eq 0 ] || fail "restart does not accept arguments"; restart ;;
+    runtime) [ "$#" -eq 0 ] || fail "runtime does not accept arguments"; runtime ;;
+    *) fail "usage: odyssey-prod {status|prepare FULL_SHA|deploy FULL_SHA|restart}" ;;
   esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
 fi

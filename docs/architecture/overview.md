@@ -192,16 +192,18 @@ Production application source has a separate Git boundary:
 ```text
 normal human repository (may be dirty or on another branch)
                          |
-             explicit odyssey-prod deploy COMMIT
+          explicit prepare/deploy FULL_SHA
                          v
 dedicated odyssey-prod-release worktree at exactly COMMIT
                          |
                     systemd -> runtime
 ```
 
-Merging `main` only makes a commit available. The explicit deployment action resolves the selected
-commit, materializes it in the release worktree, records its full identity, and never mutates the
-normal repository. Rollback is another explicit deployment of a previously approved commit.
+Merging `main` only makes a commit available. The explicit preparation/deployment actions accept
+only a full immutable commit SHA, materialize it in the release worktree, record its identity, and
+never mutate the normal repository. Rollback is another explicit preparation/deployment of a
+previously approved commit; the stable operator used to perform that rollback is outside the
+candidate worktree.
 
 ## Source code responsibility map
 
