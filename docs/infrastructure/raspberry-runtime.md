@@ -47,12 +47,57 @@ is `odyssey-prod-runtime.service`, bound only to the Docker bridge at `172.18.0.
 the existing protected environment source at `~/.config/odyssey/secrets.env`; credentials are never
 copied into the repository or service file.
 
-`odyssey-prod deploy` is an explicit promotion action, not a consequence of merging to `main`. It
-fails closed unless the fixed production checkout is clean `main`, exactly matches `origin/main`,
-has disjoint production/DEV data roots, has the expected environment source structurally, and the
-already-established `ragdehl` user manager has lingering enabled. It installs only the production
-operator/service artifacts, enables/restarts only `odyssey-prod-runtime.service`, verifies the
-private health endpoint, and records the deployed source commit under the rebuildable runtime root.
+`odyssey-prod prepare FULL_SHA` and `odyssey-prod deploy FULL_SHA` are explicit promotion actions,
+not consequences of merging to `main`. `prepare` materializes the exact 40-character commit in the
+dedicated `/home/ragdehl/projects/odyssey-prod-release` worktree without touching systemd. The
+operator then provisions/verifies the independent PROD environment, and `deploy` rechecks the exact
+release, interpreter, environment source, and data boundaries before installing or restarting only
+`odyssey-prod-runtime.service`. Mutable refs such as `main`, short SHAs, and tags are rejected.
+The deployment fails closed if the commit cannot be resolved, the release target is invalid/dirty,
+production/DEV data roots overlap, the environment source is unsafe, or the already-established
+`ragdehl` user manager lacks lingering. It records the exact deployed commit only after health
+verification. The ordinary human repository may remain dirty or be on another branch and is never
+repaired or rewritten by this action.
+
+The Raspberry source path is a shared **bare Git repository** with a human-facing file tree beside
+its `.git` directory; it is not a Git-recognized worktree (`git -C /home/ragdehl/projects/odyssey
+rev-parse --show-toplevel` therefore fails). The operator uses that bare repository as the object
+store and never treats the adjacent human files as runtime source. The service uses the release
+worktree for `WorkingDirectory`, runtime code, and schema. PROD dependencies use the separate
+`/home/ragdehl/projects/odyssey-prod-venv` environment, which must be provisioned/updated explicitly
+from the selected release during the controlled Raspberry migration; changes to the human
+checkout's `.venv` cannot affect PROD. The stable rollback operator is installed outside the
+release at `/home/ragdehl/.local/libexec/odyssey-prod` and is promoted only after candidate health
+verification. The release worktree is not a vault or data store.
+
+Post-merge Raspberry migration (separate controlled operation; not performed by this repository
+change):
+
+1. Confirm the merged commit is present in the shared Git object store and inspect its full SHA.
+2. Confirm the normal repository's branch, index, staged changes, and working files are preserved;
+   do not clean or repair it as part of deployment.
+3. Run `odyssey-prod prepare <full-commit-sha>` from the operator context; this does not start or
+   restart the service.
+4. Provision/update `/home/ragdehl/projects/odyssey-prod-venv` from the prepared release:
+   ```text
+   python3 -m venv /home/ragdehl/projects/odyssey-prod-venv
+   /home/ragdehl/projects/odyssey-prod-venv/bin/python -m pip install \
+     -r /home/ragdehl/projects/odyssey-prod-release/requirements-openai.txt \
+     -r /home/ragdehl/projects/odyssey-prod-release/requirements-semantic.txt
+   ```
+5. Verify the independent interpreter from the prepared release with
+   `/home/ragdehl/projects/odyssey-prod-venv/bin/python -c 'import odyssey_runtime, openai, fastembed'`.
+6. Run `odyssey-prod deploy <full-commit-sha>`. It rechecks the release and environment before
+   installing/restarting the service.
+7. Verify the release worktree HEAD, recorded `deployed-commit`, systemd unit's release paths,
+   private `/healthz`, and `odyssey-prod status` provenance before any user traffic check.
+8. If rollback is needed, explicitly prepare the previously recorded full commit, verify/use a
+   dependency environment compatible with that release; do not move
+   `main` or restore the human checkout. Leave `/data/odyssey`, n8n, and cloudflared untouched.
+
+Human approval is required before this live migration because it restarts the production runtime
+and changes the production code target, even though the repository-side mechanism is automated and
+fail-closed.
 Starting the runtime may refresh derived indexes; it never makes a provider call merely to pass the
 health check.
 
