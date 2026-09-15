@@ -32,14 +32,23 @@ def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> No
     fixture = DEV_FIXTURE.read_text(encoding="utf-8")
     assert "Works at Synthetic Systems." in fixture
     assert "route: 'answer'" in source
-    assert "items: items.map(i => ({ id: i.id, type: i.type, path: i.path, content: i.content }))" in source
+    assert (
+        "items: items.map(i => ({ id: i.id, type: i.type, path: i.path, content: i.content }))"
+        in source
+    )
 
 
 def test_failed_result_retains_existing_bounded_request_detail() -> None:
     """Keep safe operational/change evidence visible when Core returns a failed result."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "const hasOperationalEvidence = r.operational && typeof r.operational === 'object'" in source
-    assert "const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions)" in source
+    assert (
+        "const hasOperationalEvidence = r.operational && typeof r.operational === 'object'"
+        in source
+    )
+    assert (
+        "const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions)"
+        in source
+    )
     assert "request_detail ? { ...error, request_detail } : error" in source
 
 
@@ -55,7 +64,10 @@ def test_completed_response_and_answerer_failure_keep_existing_detail_contract()
     """Leave completed responses unchanged and retain detail on bounded answerer failures."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
-    assert "status: 'failed', kind: 'error', message: 'Odyssey no ha podido procesar esta solicitud.', request_detail: source.request_detail" in source
+    assert (
+        "status: 'failed', kind: 'error', message: 'Odyssey no ha podido procesar esta solicitud.', request_detail: source.request_detail"
+        in source
+    )
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
