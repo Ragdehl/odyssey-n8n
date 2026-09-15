@@ -19,9 +19,8 @@ UNIT=odyssey-prod-runtime.service
 UNIT_SOURCE=$PROD_RELEASE/deploy/$UNIT
 UNIT_TARGET=/home/ragdehl/.config/systemd/user/$UNIT
 OPERATOR_TARGET=/home/ragdehl/.local/bin/odyssey-prod
-# The interpreter is an installed dependency environment; application imports resolve from the
-# release WorkingDirectory, so the human checkout is not an application source.
-PYTHON=/home/ragdehl/projects/odyssey/.venv/bin/python
+# PROD dependencies live outside both the release worktree and the human checkout.
+PYTHON=/home/ragdehl/projects/odyssey-prod-venv/bin/python
 DEPLOYED_COMMIT=$PROD_RUNTIME/deployed-commit
 
 fail() {

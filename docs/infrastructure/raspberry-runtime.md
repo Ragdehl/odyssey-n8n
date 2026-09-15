@@ -57,9 +57,14 @@ It installs only the release's production service/operator artifacts, enables/re
 deployed commit under the rebuildable runtime root. The ordinary human repository may remain dirty
 or be on another branch and is never repaired or rewritten by this action.
 
-The service uses the release worktree for `WorkingDirectory`, runtime code, and schema. The Python
-dependency environment is shared as an installed host dependency, while application imports resolve
-from the release working directory. The release worktree is not a vault or data store.
+The Raspberry source path is a shared **bare Git repository** with a human-facing file tree beside
+its `.git` directory; it is not a Git-recognized worktree (`git -C /home/ragdehl/projects/odyssey
+rev-parse --show-toplevel` therefore fails). The operator uses that bare repository as the object
+store and never treats the adjacent human files as runtime source. The service uses the release
+worktree for `WorkingDirectory`, runtime code, and schema. PROD dependencies use the separate
+`/home/ragdehl/projects/odyssey-prod-venv` environment, which must be provisioned/updated explicitly
+from the selected release during the controlled Raspberry migration; changes to the human
+checkout's `.venv` cannot affect PROD. The release worktree is not a vault or data store.
 
 Post-merge Raspberry migration (separate controlled operation; not performed by this repository
 change):
@@ -68,9 +73,13 @@ change):
 2. Confirm the normal repository's branch, index, staged changes, and working files are preserved;
    do not clean or repair it as part of deployment.
 3. Run `odyssey-prod deploy <full-commit-sha>` from the operator context.
-4. Verify the release worktree HEAD, recorded `deployed-commit`, systemd unit's release paths,
+4. Before starting the service, provision `/home/ragdehl/projects/odyssey-prod-venv` from the
+   selected release's dependency contract and verify its interpreter/imports independently of the
+   human checkout's `.venv`.
+5. Verify the release worktree HEAD, recorded `deployed-commit`, systemd unit's release paths,
    private `/healthz`, and `odyssey-prod status` provenance before any user traffic check.
-5. If rollback is needed, explicitly deploy the previously recorded full commit; do not move
+6. If rollback is needed, explicitly deploy the previously recorded full commit and use a
+   dependency environment compatible with that release; do not move
    `main` or restore the human checkout. Leave `/data/odyssey`, n8n, and cloudflared untouched.
 
 Human approval is required before this live migration because it restarts the production runtime

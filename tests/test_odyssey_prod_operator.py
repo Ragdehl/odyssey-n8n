@@ -67,6 +67,7 @@ def test_source_contract_uses_the_established_explicit_worktree() -> None:
     assert 'git --git-dir="$git_dir" worktree add --detach "$release" "$resolved"' in source
     assert 'git -C "$release" checkout --detach "$resolved"' in source
     assert "production release worktree is dirty" in source
+    assert "PYTHON=/home/ragdehl/projects/odyssey-prod-venv/bin/python" in source
 
 
 def test_deploy_targets_only_production_runtime_service() -> None:
@@ -110,9 +111,9 @@ def test_status_is_read_only_and_cloudflared_diagnostic_has_no_lifecycle_action(
 def test_dirty_human_checkout_is_untouched_while_release_moves_between_commits(
     tmp_path: Path,
 ) -> None:
-    """Materialization must use the shared Git store, never the human worktree."""
-    bare = tmp_path / "repository.git"
+    """Materialization must use the actual bare-store-plus-files topology."""
     human = tmp_path / "human"
+    bare = human / ".git"
     release = tmp_path / "release"
     seed = tmp_path / "seed"
     subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True, text=True)
@@ -130,24 +131,36 @@ def test_dirty_human_checkout_is_untouched_while_release_moves_between_commits(
         capture_output=True,
         text=True,
     )
+    (seed / "release.txt").write_text("B\n", encoding="utf-8")
+    subprocess.run([*seed_git, "commit", "-am", "B"], check=True, capture_output=True, text=True)
     subprocess.run(
-        ["git", "--git-dir", str(bare), "worktree", "add", "--detach", str(human), "main"],
+        [*seed_git, "push", "origin", "HEAD:refs/heads/main"],
         check=True,
+        capture_output=True,
+        text=True,
     )
-    git = ["git", "-C", str(human)]
-    subprocess.run([*git, "config", "user.name", "Test"], check=True)
-    subprocess.run([*git, "config", "user.email", "test@example.invalid"], check=True)
-    commit_a = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
-    (human / "release.txt").write_text("B\n", encoding="utf-8")
-    subprocess.run([*git, "commit", "-am", "B"], check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "--git-dir", str(bare), "symbolic-ref", "HEAD", "refs/heads/main"], check=True
+    )
+    git = ["git", "-c", "core.bare=false", "--git-dir", str(bare), "--work-tree", str(human)]
     commit_b = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
-    subprocess.run([*git, "switch", "-c", "human-work"], check=True, capture_output=True, text=True)
+    commit_a = subprocess.check_output([*git, "rev-parse", "HEAD~1"], text=True).strip()
+    subprocess.run([*git, "read-tree", commit_b], check=True)
+    subprocess.run([*git, "checkout-index", "--all"], check=True)
+    (human / "release.txt").write_text("B\n", encoding="utf-8")
     (human / "release.txt").write_text("human unstaged\n", encoding="utf-8")
     (human / "human-staged.txt").write_text("staged\n", encoding="utf-8")
     subprocess.run([*git, "add", "human-staged.txt"], check=True)
     before_status = subprocess.check_output([*git, "status", "--porcelain"], text=True)
-    before_head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True)
-    before_branch = subprocess.check_output([*git, "branch", "--show-current"], text=True)
+    before_head = subprocess.check_output(
+        ["git", "--git-dir", str(bare), "symbolic-ref", "HEAD"], text=True
+    )
+    assert (
+        subprocess.check_output(
+            ["git", "-C", str(human), "rev-parse", "--is-bare-repository"], text=True
+        ).strip()
+        == "true"
+    )
 
     result = bash(
         "materialize_release",
@@ -163,11 +176,16 @@ def test_dirty_human_checkout_is_untouched_while_release_moves_between_commits(
         == commit_b
     )
     assert subprocess.check_output([*git, "status", "--porcelain"], text=True) == before_status
-    assert subprocess.check_output([*git, "rev-parse", "HEAD"], text=True) == before_head
-    assert subprocess.check_output([*git, "branch", "--show-current"], text=True) == before_branch
+    assert (
+        subprocess.check_output(["git", "--git-dir", str(bare), "symbolic-ref", "HEAD"], text=True)
+        == before_head
+    )
 
     result = bash("materialize_release", str(bare), str(release), commit_a)
     assert result.returncode == 0, result.stderr
     assert (release / "release.txt").read_text(encoding="utf-8") == "A\n"
     assert subprocess.check_output([*git, "status", "--porcelain"], text=True) == before_status
-    assert subprocess.check_output([*git, "rev-parse", "HEAD"], text=True) == before_head
+    assert (
+        subprocess.check_output(["git", "--git-dir", str(bare), "symbolic-ref", "HEAD"], text=True)
+        == before_head
+    )
