@@ -100,3 +100,15 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert "signal: controller.signal" in client
     assert "validateRequestDetail" in client
     assert "request_detail" in client
+    assert "validateEstimatedCost" in client
+    assert '"Coste estimado"' in app
+    assert '"Base de precios"' in app
+
+
+def test_static_asset_workflow_forces_revalidation_after_dev_deploy() -> None:
+    """Prevent normal reloads from retaining an older deployment's app assets."""
+    workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")
+    assert "Cache-Control" in workflow
+    assert "no-cache, no-store, must-revalidate" in workflow
+    assert "Pragma" in workflow
+    assert "Expires" in workflow

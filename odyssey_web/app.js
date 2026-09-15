@@ -84,6 +84,8 @@ function openRequestDetail(detail) {
   requestDetailTitle.textContent = "Detalles de la solicitud";
   appendDetailLine(requestDetailContent, "Solicitud", detail.request_id);
   appendDetailLine(requestDetailContent, "Latencia total", formatDuration(detail.operational.total_duration_ms));
+  appendDetailLine(requestDetailContent, "Coste estimado", formatEstimatedCost(detail.estimated_cost));
+  appendDetailLine(requestDetailContent, "Base de precios", detail.estimated_cost?.pricing_basis);
   const stages = document.createElement("section");
   stages.className = "detail-section";
   const heading = document.createElement("h3");
@@ -125,6 +127,12 @@ function openRequestDetail(detail) {
 
 function formatDuration(value) {
   return typeof value === "number" ? `${Math.round(value)} ms` : "No disponible";
+}
+
+function formatEstimatedCost(value) {
+  return value?.status === "estimated" && typeof value.amount_usd === "number"
+    ? `~$${value.amount_usd.toFixed(6)}`
+    : "No disponible";
 }
 
 function formatUsage(usage) {

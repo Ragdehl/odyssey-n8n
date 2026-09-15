@@ -10,6 +10,7 @@ DEV_RUNTIME=$DEV_ROOT/runtime
 DEV_CACHE=$DEV_RUNTIME/embedding-cache
 DEV_WEB=$DEV_RUNTIME/web
 DEV_SCHEMA=$DEV_SOURCE/config/note-schema.json
+DEV_PRICING=$DEV_SOURCE/benchmarks/phase20_answerer/pricing_snapshot.json
 DEV_HOST=127.0.0.1
 DEV_PORT=28765
 UNIT=odyssey-dev-runtime.service
@@ -53,6 +54,7 @@ guard() {
   done
   [ "$(realpath -m -- "$DEV_SOURCE")" = "$DEV_SOURCE" ] || fail "DEV source path is not fixed"
   [ -f "$DEV_SCHEMA" ] || fail "DEV schema is missing: $DEV_SCHEMA"
+  [ -f "$DEV_PRICING" ] || fail "DEV pricing snapshot is missing: $DEV_PRICING"
   [ -x "$PYTHON" ] || fail "DEV Python environment is missing: $PYTHON"
   [ -f "$N8N_COMPOSE" ] || fail "DEV n8n definition is missing: $N8N_COMPOSE"
   [ -f "$DEV_FIXTURE_SCRIPT" ] || fail "DEV identity fixture script is missing: $DEV_FIXTURE_SCRIPT"
@@ -151,9 +153,10 @@ prepare_dev_identity() {
 }
 
 render_workflows() {
-  local stable_user_id answerer_credential_id
+  local stable_user_id answerer_credential_id pricing_snapshot
   stable_user_id=$(sed -n 's/.*"stable_user_id": "\([^"]*\)".*/\1/p' "$DEV_ACTOR_FILE")
   [ -n "$stable_user_id" ] || fail "DEV synthetic actor state is invalid"
+  pricing_snapshot=$(tr -d '\n' <"$DEV_PRICING")
   answerer_credential_id=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
@@ -168,6 +171,7 @@ render_workflows() {
     -e ODYSSEY_WORKFLOW_RUNTIME_URL="http://$DEV_HOST:$DEV_PORT/execute" \
     -e ODYSSEY_DEV_STABLE_USER_ID="$stable_user_id" \
     -e ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID="$answerer_credential_id" \
+    -e ODYSSEY_PRICING_SNAPSHOT="$pricing_snapshot" \
     -v "$DEV_SOURCE/workflows:/workspace:ro" \
     -v "$N8N_RENDER:/output" \
     --entrypoint /bin/sh "$N8N_IMAGE" -lc '

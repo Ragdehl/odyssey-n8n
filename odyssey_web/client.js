@@ -108,7 +108,20 @@ export function validateRequestDetail(value, requestId) {
   }
   const stages = operational.stages.map((stage) => validateDetailStage(stage));
   const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
-  return {request_id: requestId, operational: {total_duration_ms: operational.total_duration_ms, stages}, changes};
+  const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
+  return {request_id: requestId, operational: {total_duration_ms: operational.total_duration_ms, stages}, changes, estimated_cost};
+}
+
+function validateEstimatedCost(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      !["estimated", "unavailable"].includes(value.status) || typeof value.pricing_basis !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value.pricing_basis)) {
+    throw new ProductRequestError("Odyssey returned invalid cost details.");
+  }
+  if (value.status === "estimated" && (typeof value.amount_usd !== "number" || !Number.isFinite(value.amount_usd) || value.amount_usd < 0)) {
+    throw new ProductRequestError("Odyssey returned invalid cost details.");
+  }
+  return {status: value.status, amount_usd: value.status === "estimated" ? value.amount_usd : null, pricing_basis: value.pricing_basis};
 }
 
 function validateDetailStage(value) {

@@ -43,7 +43,7 @@ This is primarily a presentation and access-boundary problem, not a reason to cr
 
 Phase 19.2 already added bounded request-level operational evidence under the existing `request_id`, including total duration, ordered stages, safe model/reasoning identity where available, provider-call boundaries, supplied token counters, and safe outcome/error categories.
 
-Phase 20.1A also provides provider-neutral usage extraction and cost aggregation helpers for the answerer benchmark. Phase 20.1B is expected to add a dated verified pricing snapshot for comparable live evidence.
+Phase 20.1A also provides provider-neutral usage extraction and cost aggregation helpers for the answerer benchmark. The dated verified snapshot at `benchmarks/phase20_answerer/pricing_snapshot.json` is now the canonical pricing input for bounded request-detail projections; the workflow renderer injects that snapshot into the existing n8n response boundary, while the browser only validates and displays the resulting estimate.
 
 A future product view should reuse these contracts where they fit instead of introducing a new tracing database, event stream, or analytics authority merely to draw graphs.
 
