@@ -47,12 +47,35 @@ is `odyssey-prod-runtime.service`, bound only to the Docker bridge at `172.18.0.
 the existing protected environment source at `~/.config/odyssey/secrets.env`; credentials are never
 copied into the repository or service file.
 
-`odyssey-prod deploy` is an explicit promotion action, not a consequence of merging to `main`. It
-fails closed unless the fixed production checkout is clean `main`, exactly matches `origin/main`,
-has disjoint production/DEV data roots, has the expected environment source structurally, and the
-already-established `ragdehl` user manager has lingering enabled. It installs only the production
-operator/service artifacts, enables/restarts only `odyssey-prod-runtime.service`, verifies the
-private health endpoint, and records the deployed source commit under the rebuildable runtime root.
+`odyssey-prod deploy COMMIT` is an explicit promotion action, not a consequence of merging to
+`main`. It resolves the requested commit from the shared Git object store and materializes it in
+the dedicated `/home/ragdehl/projects/odyssey-prod-release` worktree. It fails closed if the commit
+cannot be resolved, the release target is invalid/dirty, production/DEV data roots overlap, the
+environment source is unsafe, or the already-established `ragdehl` user manager lacks lingering.
+It installs only the release's production service/operator artifacts, enables/restarts only
+`odyssey-prod-runtime.service`, verifies the private health endpoint, and records the exact
+deployed commit under the rebuildable runtime root. The ordinary human repository may remain dirty
+or be on another branch and is never repaired or rewritten by this action.
+
+The service uses the release worktree for `WorkingDirectory`, runtime code, and schema. The Python
+dependency environment is shared as an installed host dependency, while application imports resolve
+from the release working directory. The release worktree is not a vault or data store.
+
+Post-merge Raspberry migration (separate controlled operation; not performed by this repository
+change):
+
+1. Confirm the merged commit is present in the shared Git object store and inspect its full SHA.
+2. Confirm the normal repository's branch, index, staged changes, and working files are preserved;
+   do not clean or repair it as part of deployment.
+3. Run `odyssey-prod deploy <full-commit-sha>` from the operator context.
+4. Verify the release worktree HEAD, recorded `deployed-commit`, systemd unit's release paths,
+   private `/healthz`, and `odyssey-prod status` provenance before any user traffic check.
+5. If rollback is needed, explicitly deploy the previously recorded full commit; do not move
+   `main` or restore the human checkout. Leave `/data/odyssey`, n8n, and cloudflared untouched.
+
+Human approval is required before this live migration because it restarts the production runtime
+and changes the production code target, even though the repository-side mechanism is automated and
+fail-closed.
 Starting the runtime may refresh derived indexes; it never makes a provider call merely to pass the
 health check.
 

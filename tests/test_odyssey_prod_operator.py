@@ -22,35 +22,9 @@ def bash(function: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_source_guard_accepts_only_clean_synchronized_main() -> None:
-    assert bash("source_is_approved", "main", "", CURRENT, CURRENT, CURRENT).returncode == 0
-
-
-def test_source_guard_refuses_non_main_deployment() -> None:
-    assert (
-        bash(
-            "source_is_approved",
-            "phase23-production-self-identity-adoption",
-            "",
-            CURRENT,
-            CURRENT,
-            CURRENT,
-        ).returncode
-        != 0
-    )
-
-
-def test_source_guard_refuses_dirty_checkout() -> None:
-    assert (
-        bash(
-            "source_is_approved", "main", " M scripts/odyssey-prod", CURRENT, CURRENT, CURRENT
-        ).returncode
-        != 0
-    )
-
-
-def test_source_guard_refuses_upstream_drift() -> None:
-    assert bash("source_is_approved", "main", "", CURRENT, CURRENT, OTHER).returncode != 0
+def test_release_selection_requires_a_resolved_commit() -> None:
+    assert bash("source_is_approved", CURRENT, CURRENT).returncode == 0
+    assert bash("source_is_approved", CURRENT, OTHER).returncode != 0
 
 
 def test_root_guard_refuses_production_dev_overlap() -> None:
@@ -76,17 +50,9 @@ def test_environment_source_is_checked_without_printing_values(tmp_path: Path) -
 
 
 def test_provenance_reports_match_drift_and_unknown() -> None:
-    assert (
-        bash("provenance_state", CURRENT, CURRENT, "main", "", CURRENT, CURRENT).stdout.strip()
-        == "MATCH"
-    )
-    assert (
-        bash("provenance_state", OTHER, CURRENT, "main", "", OTHER, OTHER).stdout.strip() == "DRIFT"
-    )
-    assert (
-        bash("provenance_state", "", CURRENT, "main", "", CURRENT, CURRENT).stdout.strip()
-        == "UNKNOWN"
-    )
+    assert bash("provenance_state", CURRENT, CURRENT, "", "").stdout.strip() == "MATCH"
+    assert bash("provenance_state", OTHER, CURRENT, "", "").stdout.strip() == "DRIFT"
+    assert bash("provenance_state", "", CURRENT, "", "").stdout.strip() == "UNKNOWN"
 
 
 def test_health_contract_is_private_production_endpoint() -> None:
@@ -98,8 +64,9 @@ def test_health_contract_is_private_production_endpoint() -> None:
 
 def test_source_contract_uses_the_established_explicit_worktree() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert 'git --git-dir="$PROD_SOURCE/.git" --work-tree="$PROD_SOURCE"' in source
-    assert "prod_git status --porcelain" in source
+    assert 'git --git-dir="$git_dir" worktree add --detach "$release" "$resolved"' in source
+    assert 'git -C "$release" checkout --detach "$resolved"' in source
+    assert "production release worktree is dirty" in source
 
 
 def test_deploy_targets_only_production_runtime_service() -> None:
@@ -119,6 +86,11 @@ def test_reboot_persistent_service_contract_is_structurally_present() -> None:
     assert "ODYSSEY_RUNTIME_HOST=172.18.0.1" in service
     assert "ODYSSEY_RUNTIME_PORT=8765" in service
     assert "ReadWritePaths=/data/odyssey" in service
+    assert "WorkingDirectory=/home/ragdehl/projects/odyssey-prod-release" in service
+    assert (
+        "ExecStart=/home/ragdehl/projects/odyssey-prod-release/scripts/odyssey-prod runtime"
+        in service
+    )
 
 
 def test_status_is_read_only_and_cloudflared_diagnostic_has_no_lifecycle_action() -> None:
@@ -133,3 +105,69 @@ def test_status_is_read_only_and_cloudflared_diagnostic_has_no_lifecycle_action(
     assert "docker compose" not in diagnostic
     assert "docker restart" not in diagnostic
     assert "docker recreate" not in diagnostic
+
+
+def test_dirty_human_checkout_is_untouched_while_release_moves_between_commits(
+    tmp_path: Path,
+) -> None:
+    """Materialization must use the shared Git store, never the human worktree."""
+    bare = tmp_path / "repository.git"
+    human = tmp_path / "human"
+    release = tmp_path / "release"
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "init", str(seed)], check=True, capture_output=True, text=True)
+    seed_git = ["git", "-C", str(seed)]
+    subprocess.run([*seed_git, "config", "user.name", "Test"], check=True)
+    subprocess.run([*seed_git, "config", "user.email", "test@example.invalid"], check=True)
+    (seed / "release.txt").write_text("A\n", encoding="utf-8")
+    subprocess.run([*seed_git, "add", "release.txt"], check=True)
+    subprocess.run([*seed_git, "commit", "-m", "A"], check=True, capture_output=True, text=True)
+    subprocess.run([*seed_git, "remote", "add", "origin", str(bare)], check=True)
+    subprocess.run(
+        [*seed_git, "push", "origin", "HEAD:refs/heads/main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "--git-dir", str(bare), "worktree", "add", "--detach", str(human), "main"],
+        check=True,
+    )
+    git = ["git", "-C", str(human)]
+    subprocess.run([*git, "config", "user.name", "Test"], check=True)
+    subprocess.run([*git, "config", "user.email", "test@example.invalid"], check=True)
+    commit_a = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    (human / "release.txt").write_text("B\n", encoding="utf-8")
+    subprocess.run([*git, "commit", "-am", "B"], check=True, capture_output=True, text=True)
+    commit_b = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run([*git, "switch", "-c", "human-work"], check=True, capture_output=True, text=True)
+    (human / "release.txt").write_text("human unstaged\n", encoding="utf-8")
+    (human / "human-staged.txt").write_text("staged\n", encoding="utf-8")
+    subprocess.run([*git, "add", "human-staged.txt"], check=True)
+    before_status = subprocess.check_output([*git, "status", "--porcelain"], text=True)
+    before_head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True)
+    before_branch = subprocess.check_output([*git, "branch", "--show-current"], text=True)
+
+    result = bash(
+        "materialize_release",
+        str(bare),
+        str(release),
+        commit_b,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == commit_b
+    assert (release / "release.txt").read_text(encoding="utf-8") == "B\n"
+    assert (
+        subprocess.check_output(["git", "-C", str(release), "rev-parse", "HEAD"], text=True).strip()
+        == commit_b
+    )
+    assert subprocess.check_output([*git, "status", "--porcelain"], text=True) == before_status
+    assert subprocess.check_output([*git, "rev-parse", "HEAD"], text=True) == before_head
+    assert subprocess.check_output([*git, "branch", "--show-current"], text=True) == before_branch
+
+    result = bash("materialize_release", str(bare), str(release), commit_a)
+    assert result.returncode == 0, result.stderr
+    assert (release / "release.txt").read_text(encoding="utf-8") == "A\n"
+    assert subprocess.check_output([*git, "status", "--porcelain"], text=True) == before_status
+    assert subprocess.check_output([*git, "rev-parse", "HEAD"], text=True) == before_head

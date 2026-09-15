@@ -3,22 +3,25 @@ set -euo pipefail
 
 # Production promotion is deliberately explicit. This operator never manages n8n or cloudflared.
 PROD_USER=ragdehl
-PROD_SOURCE=/home/ragdehl/projects/odyssey
+PROD_REPOSITORY=/home/ragdehl/projects/odyssey
+PROD_RELEASE=/home/ragdehl/projects/odyssey-prod-release
 PROD_ROOT=/data/odyssey
 PROD_VAULT=$PROD_ROOT/vault
 PROD_STATE=$PROD_ROOT/state
 PROD_PENDING=$PROD_STATE/pending
 PROD_RUNTIME=$PROD_ROOT/runtime
 PROD_CACHE=$PROD_RUNTIME/phase11a-benchmark/embedding-cache
-PROD_SCHEMA=$PROD_SOURCE/config/note-schema.json
+PROD_SCHEMA=$PROD_RELEASE/config/note-schema.json
 PROD_HOST=172.18.0.1
 PROD_PORT=8765
 PROD_ENV_SOURCE=/home/ragdehl/.config/odyssey/secrets.env
 UNIT=odyssey-prod-runtime.service
-UNIT_SOURCE=$PROD_SOURCE/deploy/$UNIT
+UNIT_SOURCE=$PROD_RELEASE/deploy/$UNIT
 UNIT_TARGET=/home/ragdehl/.config/systemd/user/$UNIT
 OPERATOR_TARGET=/home/ragdehl/.local/bin/odyssey-prod
-PYTHON=$PROD_SOURCE/.venv/bin/python
+# The interpreter is an installed dependency environment; application imports resolve from the
+# release WorkingDirectory, so the human checkout is not an application source.
+PYTHON=/home/ragdehl/projects/odyssey/.venv/bin/python
 DEPLOYED_COMMIT=$PROD_RUNTIME/deployed-commit
 
 fail() {
@@ -27,7 +30,7 @@ fail() {
 }
 
 prod_git() {
-  git --git-dir="$PROD_SOURCE/.git" --work-tree="$PROD_SOURCE" "$@"
+  git --git-dir="$PROD_REPOSITORY/.git" "$@"
 }
 
 path_is_within() {
@@ -58,10 +61,14 @@ environment_source_has_required_keys() {
 guard() {
   local path resolved mode owner
   [ "$(id -un)" = "$PROD_USER" ] || fail "production operator must run as $PROD_USER"
-  [ "$(realpath -m -- "$PROD_SOURCE")" = "$PROD_SOURCE" ] || fail "production source path is not fixed"
-  [ -d "$PROD_SOURCE/.git" ] || fail "production Git directory is missing"
-  [ "$(prod_git rev-parse --show-toplevel 2>/dev/null)" = "$PROD_SOURCE" ] \
-    || fail "production source worktree is not fixed"
+  [ "$(realpath -m -- "$PROD_REPOSITORY")" = "$PROD_REPOSITORY" ] \
+    || fail "production repository path is not fixed"
+  [ -d "$PROD_REPOSITORY/.git" ] || fail "production Git directory is missing"
+  [ "$(git --git-dir="$PROD_REPOSITORY/.git" rev-parse --is-bare-repository 2>/dev/null)" = true ] \
+    || fail "production repository must be the shared bare Git store"
+  [ "$(realpath -m -- "$PROD_RELEASE")" = "$PROD_RELEASE" ] \
+    || fail "production release path is not fixed"
+  [ "$PROD_RELEASE" != "$PROD_REPOSITORY" ] || fail "production release overlaps repository"
   for path in "$PROD_ROOT" "$PROD_VAULT" "$PROD_STATE" "$PROD_PENDING" "$PROD_RUNTIME" "$PROD_CACHE"; do
     resolved=$(realpath -m -- "$path")
     path_is_within "$resolved" "$PROD_ROOT" || fail "production path escapes root: $path -> $resolved"
@@ -70,9 +77,11 @@ guard() {
   [ -d "$PROD_VAULT" ] || fail "production vault is missing"
   [ -d "$PROD_STATE" ] || fail "production state root is missing"
   [ -d "$PROD_RUNTIME" ] || fail "production runtime root is missing"
-  [ -f "$PROD_SCHEMA" ] || fail "production schema is missing"
-  [ -x "$PYTHON" ] || fail "production Python environment is missing"
-  [ -f "$UNIT_SOURCE" ] || fail "production service definition is missing"
+  if [ "${1:-}" != deploy ]; then
+    [ -f "$PROD_SCHEMA" ] || fail "production schema is missing from the release"
+    [ -x "$PYTHON" ] || fail "production Python environment is missing"
+    [ -f "$UNIT_SOURCE" ] || fail "production service definition is missing"
+  fi
   [ -f "$PROD_ENV_SOURCE" ] || fail "production environment source is missing"
   owner=$(stat -c '%U:%G' "$PROD_ENV_SOURCE")
   mode=$(stat -c '%a' "$PROD_ENV_SOURCE")
@@ -83,21 +92,40 @@ guard() {
 }
 
 source_is_approved() {
-  local branch=$1 dirty=$2 head=$3 local_main=$4 upstream_main=$5
-  [ "$branch" = main ] && [ -z "$dirty" ] && [ "$head" = "$local_main" ] \
-    && [ "$local_main" = "$upstream_main" ]
+  local requested=$1 resolved=$2
+  [ -n "$requested" ] && [ "$requested" = "$resolved" ]
 }
 
-assert_approved_source() {
-  local branch dirty head local_main upstream_main
-  head=$(prod_git rev-parse HEAD 2>/dev/null) || fail "production source is not a Git checkout"
-  branch=$(prod_git branch --show-current)
-  dirty=$(prod_git status --porcelain)
-  local_main=$(prod_git rev-parse main 2>/dev/null) || fail "local main is unavailable"
-  upstream_main=$(prod_git rev-parse refs/remotes/origin/main 2>/dev/null) \
-    || fail "approved upstream main is unavailable"
-  source_is_approved "$branch" "$dirty" "$head" "$local_main" "$upstream_main" \
-    || fail "production deploy requires clean synchronized main"
+resolve_commit() {
+  local git_dir=$1 requested=$2 resolved
+  [ -n "$requested" ] || return 1
+  resolved=$(git --git-dir="$git_dir" rev-parse --verify --end-of-options "$requested^{commit}") || return 1
+  git --git-dir="$git_dir" cat-file -e "$resolved^{commit}" || return 1
+  printf '%s\n' "$resolved"
+}
+
+materialize_release() {
+  local git_dir=$1 release=$2 requested=$3 resolved dirty
+  resolved=$(resolve_commit "$git_dir" "$requested") \
+    || fail "requested release commit cannot be resolved: $requested"
+  if [ -e "$release" ]; then
+    [ -f "$release/.git" ] || fail "production release path is not an Odyssey Git worktree"
+    git -C "$release" rev-parse HEAD >/dev/null 2>&1 \
+      || fail "production release worktree is invalid"
+    dirty=$(git -C "$release" status --porcelain 2>/dev/null) \
+      || fail "production release worktree status is unavailable"
+    [ -z "$dirty" ] || fail "production release worktree is dirty"
+    git -C "$release" checkout --detach "$resolved" >/dev/null \
+      || fail "could not update production release worktree"
+  else
+    git --git-dir="$git_dir" worktree add --detach "$release" "$resolved" >/dev/null \
+      || fail "could not create production release worktree"
+  fi
+  [ "$(git -C "$release" rev-parse HEAD)" = "$resolved" ] \
+    || fail "production release worktree commit verification failed"
+  [ -z "$(git -C "$release" status --porcelain)" ] \
+    || fail "production release worktree is not clean after materialization"
+  printf '%s\n' "$resolved"
 }
 
 assert_reboot_persistence() {
@@ -122,11 +150,10 @@ wait_health() {
 }
 
 provenance_state() {
-  local current=$1 recorded=$2 branch=$3 dirty=$4 local_main=$5 upstream_main=$6
-  if [ -z "$current" ] || [ -z "$recorded" ] || [ -z "$local_main" ] || [ -z "$upstream_main" ]; then
+  local current=$1 recorded=$2 dirty=$3 branch=$4
+  if [ -z "$current" ] || [ -z "$recorded" ] || [ -n "$dirty" ] || [ -n "$branch" ]; then
     echo UNKNOWN
-  elif source_is_approved "$branch" "$dirty" "$current" "$local_main" "$upstream_main" \
-    && [ "$current" = "$recorded" ]; then
+  elif [ "$current" = "$recorded" ]; then
     echo MATCH
   else
     echo DRIFT
@@ -134,19 +161,16 @@ provenance_state() {
 }
 
 deployment_provenance() {
-  local current recorded branch dirty local_main upstream_main
-  current=$(prod_git rev-parse HEAD 2>/dev/null || true)
+  local current recorded branch dirty
+  current=$(git -C "$PROD_RELEASE" rev-parse HEAD 2>/dev/null || true)
   recorded=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || true)
-  branch=$(prod_git branch --show-current 2>/dev/null || true)
-  dirty=$(prod_git status --porcelain 2>/dev/null || true)
-  local_main=$(prod_git rev-parse main 2>/dev/null || true)
-  upstream_main=$(prod_git rev-parse refs/remotes/origin/main 2>/dev/null || true)
-  provenance_state "$current" "$recorded" "$branch" "$dirty" "$local_main" "$upstream_main"
+  branch=$(git -C "$PROD_RELEASE" branch --show-current 2>/dev/null || true)
+  dirty=$(git -C "$PROD_RELEASE" status --porcelain 2>/dev/null || true)
+  provenance_state "$current" "$recorded" "$dirty" "$branch"
 }
 
 record_deployment() {
-  local commit temporary
-  commit=$(prod_git rev-parse HEAD)
+  local commit=$1 temporary
   temporary=$(mktemp "$PROD_RUNTIME/.deployed-commit.XXXXXX")
   printf '%s\n' "$commit" >"$temporary"
   chmod 640 "$temporary"
@@ -156,7 +180,7 @@ record_deployment() {
 install_artifacts() {
   install -D -m 644 "$UNIT_SOURCE" "$UNIT_TARGET"
   install -d -m 755 /home/ragdehl/.local/bin
-  ln -sfn "$PROD_SOURCE/scripts/odyssey-prod" "$OPERATOR_TARGET"
+  ln -sfn "$PROD_RELEASE/scripts/odyssey-prod" "$OPERATOR_TARGET"
   systemctl --user daemon-reload
 }
 
@@ -190,28 +214,31 @@ status() {
   local state health current branch dirty recorded provenance
   guard
   state=$(systemctl --user is-active "$UNIT" 2>/dev/null || true)
-  current=$(prod_git rev-parse HEAD 2>/dev/null || echo unavailable)
-  branch=$(prod_git branch --show-current 2>/dev/null || echo unavailable)
-  dirty=$(prod_git status --porcelain 2>/dev/null || true)
+  current=$(git -C "$PROD_RELEASE" rev-parse HEAD 2>/dev/null || echo unavailable)
+  branch=$(git -C "$PROD_RELEASE" branch --show-current 2>/dev/null || echo unavailable)
+  dirty=$(git -C "$PROD_RELEASE" status --porcelain 2>/dev/null || true)
   recorded=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || echo none)
   if health_once >/dev/null 2>&1; then health=healthy; else health=unhealthy; fi
   provenance=$(deployment_provenance)
-  printf 'environment=PROD\nruntime_service=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nsource_provenance=%s\n' \
-    "$state" "$PROD_HOST" "$PROD_PORT" "$health" "$PROD_ROOT" "$PROD_SOURCE" "$recorded" \
+  printf 'environment=PROD\nruntime_service=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nrepository=%s\nrelease=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nsource_provenance=%s\n' \
+    "$state" "$PROD_HOST" "$PROD_PORT" "$health" "$PROD_ROOT" "$PROD_REPOSITORY" "$PROD_RELEASE" "$recorded" \
     "$current" "$branch" "$([ -z "$dirty" ] && echo yes || echo no)" "$provenance"
   cloudflared_dns_diagnostic
 }
 
 deploy() {
-  guard
-  assert_approved_source
+  local requested_commit resolved_commit
+  requested_commit=${1:-}
+  guard deploy
+  [ "$#" -eq 1 ] || fail "production deploy requires exactly one commit or commit-resolving ref"
   assert_reboot_persistence
+  resolved_commit=$(materialize_release "$PROD_REPOSITORY/.git" "$PROD_RELEASE" "$requested_commit")
   install_artifacts
   systemctl --user enable "$UNIT"
   systemctl --user restart "$UNIT"
   wait_health || fail "production runtime did not become healthy on $PROD_HOST:$PROD_PORT"
-  record_deployment
-  printf 'deployed_commit=%s\n' "$(prod_git rev-parse HEAD)"
+  record_deployment "$resolved_commit"
+  printf 'deployed_commit=%s\n' "$resolved_commit"
 }
 
 restart() {
@@ -228,6 +255,6 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     deploy) deploy ;;
     restart) restart ;;
     runtime) runtime ;;
-    *) fail "usage: odyssey-prod {status|deploy|restart}" ;;
+    *) fail "usage: odyssey-prod {status|deploy COMMIT|restart}" ;;
   esac
 fi
