@@ -75,6 +75,23 @@ This is a product-view requirement over the same conversation-history boundary, 
 
 ### UI-1 — request-level feedback in chat
 
+#### Approved first implementation slice
+
+The first UI-1 slice keeps the normal chat visually clean: an eligible response may show only a
+small secondary information affordance, and activating it opens a request-specific mobile bottom
+sheet that is closed by default and easily dismissed. The sheet is a reusable request-detail surface;
+it is not a permanent technical block or developer console. The initial implementation is isolated
+DEV work using the existing protected product boundary as the single-user advanced/admin gate. It
+does not introduce multi-user RBAC, a new endpoint, persistence, analytics infrastructure, or a
+second tracing authority.
+
+The response projection may expose only reliable bounded evidence already present in the real
+`ApplicationResult`/runtime contract: total and stage latency, ordered stages, safe model/reasoning
+metadata, provider-call records and allowlisted usage, safe outcomes/errors, and write changes
+derived from affected stable-note/unit evidence. Missing fields are omitted or unavailable. Retrieval
+note content, prompts, hidden reasoning, raw provider payloads, credentials, and inferred execution
+paths remain excluded.
+
 Make each response explain enough about what Odyssey did without turning the bubble into a developer console.
 
 For ordinary users, a write can show a compact change receipt such as:

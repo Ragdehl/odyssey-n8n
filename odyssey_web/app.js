@@ -9,6 +9,9 @@ const input = document.querySelector("#request-input");
 const sendButton = document.querySelector("#send-button");
 const conversation = document.querySelector("#interaction");
 const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.content ?? "/api/request";
+const requestDetailSheet = document.querySelector("#request-detail-sheet");
+const requestDetailTitle = document.querySelector("#request-detail-title");
+const requestDetailContent = document.querySelector("#request-detail-content");
 let retrySubmission = null;
 
 function showDeploymentMarker() {
@@ -47,6 +50,82 @@ function appendMessage(role, message, status = "") {
   conversation.append(article);
   conversation.scrollTop = conversation.scrollHeight;
   return article;
+}
+
+function appendDetailButton(article, detail) {
+  if (!detail || !requestDetailSheet) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "detail-button";
+  button.setAttribute("aria-label", "Ver detalles de esta solicitud");
+  button.textContent = "ⓘ";
+  button.addEventListener("click", () => openRequestDetail(detail));
+  article.append(button);
+}
+
+function appendDetailLine(parent, label, value) {
+  if (value === null || value === undefined || value === "") return;
+  const line = document.createElement("p");
+  line.className = "detail-line";
+  const name = document.createElement("span");
+  name.className = "detail-label";
+  name.textContent = label;
+  const content = document.createElement("span");
+  content.textContent = String(value);
+  line.append(name, content);
+  parent.append(line);
+}
+
+function openRequestDetail(detail) {
+  requestDetailContent.replaceChildren();
+  requestDetailTitle.textContent = "Detalles de la solicitud";
+  appendDetailLine(requestDetailContent, "Solicitud", detail.request_id);
+  appendDetailLine(requestDetailContent, "Latencia total", formatDuration(detail.operational.total_duration_ms));
+  const stages = document.createElement("section");
+  stages.className = "detail-section";
+  const heading = document.createElement("h3");
+  heading.textContent = "Etapas";
+  stages.append(heading);
+  for (const stage of detail.operational.stages) {
+    const row = document.createElement("article");
+    row.className = "detail-stage";
+    appendDetailLine(row, "Etapa", stage.name);
+    appendDetailLine(row, "Resultado", stage.outcome);
+    appendDetailLine(row, "Duración", formatDuration(stage.duration_ms));
+    appendDetailLine(row, "Modelo", stage.model);
+    appendDetailLine(row, "Razonamiento", stage.reasoning_effort);
+    appendDetailLine(row, "Error", stage.error_category);
+    appendDetailLine(row, "Llamadas de proveedor", stage.provider_calls.length || null);
+    if (stage.usage) appendDetailLine(row, "Tokens", formatUsage(stage.usage));
+    for (const call of stage.provider_calls) {
+      appendDetailLine(row, call.name || "Proveedor", `${call.model || "No disponible"} · ${formatDuration(call.duration_ms)}`);
+      appendDetailLine(row, "Resultado de proveedor", call.outcome);
+      if (call.usage) appendDetailLine(row, "Tokens de proveedor", formatUsage(call.usage));
+    }
+    stages.append(row);
+  }
+  requestDetailContent.append(stages);
+  if (detail.changes) {
+    const changes = document.createElement("section");
+    changes.className = "detail-section";
+    const heading = document.createElement("h3");
+    heading.textContent = "Cambios";
+    changes.append(heading);
+    appendDetailLine(changes, "Notas afectadas", detail.changes.affected_stable_note_ids.length || null);
+    for (const unit of detail.changes.units) {
+      appendDetailLine(changes, unit.operation || "Unidad", unit.status);
+    }
+    requestDetailContent.append(changes);
+  }
+  requestDetailSheet.showModal();
+}
+
+function formatDuration(value) {
+  return typeof value === "number" ? `${Math.round(value)} ms` : "No disponible";
+}
+
+function formatUsage(usage) {
+  return Object.entries(usage).map(([key, value]) => `${key}: ${value}`).join(" · ");
 }
 
 function appendLoading() {
@@ -89,6 +168,7 @@ async function sendSubmission(submission, isRetry = false) {
     loading.remove();
     const message = appendMessage("odyssey", result.message, result.status);
     message.querySelector(".eyebrow").textContent = resultLabel(result);
+    appendDetailButton(message, result.request_detail);
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;
     loading.remove();
@@ -126,4 +206,8 @@ input.addEventListener("keydown", (event) => {
   if (event.shiftKey) return;
   event.preventDefault();
   form.requestSubmit();
+});
+
+document.querySelector("#request-detail-close")?.addEventListener("click", () => {
+  requestDetailSheet?.close();
 });

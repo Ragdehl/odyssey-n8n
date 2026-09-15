@@ -1,6 +1,16 @@
 # Future Odyssey product usage observability
 
-Status: **preserved product direction; implementation deferred until the Odyssey Online product surface can use real request evidence**
+Status: **preserved product direction; UI-1 request-detail implementation is the current next phase**
+
+## Latency decision
+
+Current real response latency is noticeable, and measured evidence shows the Luna planner/provider
+call dominates it. Behavior-preserving local options such as long-lived OpenAI clients and immutable
+planner setup/schema caching were investigated and are expected to save only milliseconds. Latency
+optimization is therefore intentionally deferred until provider behavior/capabilities or future
+measurements justify revisiting it. No SELF/general fast path, phrase/intent/request-class bypass,
+prompt/model/reasoning/example/structured-output/semantic change, or routing/fallback change is part
+of that decision.
 
 ## Product goal
 

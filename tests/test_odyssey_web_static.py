@@ -44,6 +44,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
         "request-input",
         "send-button",
         "interaction",
+        "request-detail-sheet",
+        "request-detail-content",
     } <= parser.ids
 
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -56,6 +58,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert "void sendSubmission(submission, true)" in app
     assert 'deployment.environment !== "DEV"' in app
     assert "marker.textContent = deployment.commit" in app
+    assert "appendDetailButton(message, result.request_detail)" in app
+    assert "requestDetailSheet.showModal()" in app
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'enterkeyhint="enter"' in index
@@ -88,3 +92,5 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert 'credentials: "same-origin"' in client
     assert "PRODUCT_REQUEST_TIMEOUT_MS = 125_000" in client
     assert "signal: controller.signal" in client
+    assert "validateRequestDetail" in client
+    assert "request_detail" in client

@@ -51,6 +51,19 @@ textarea:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; border
 button { min-height: 2.75rem; border: 0; border-radius: .8rem; padding: .65rem .85rem; background: #2f2a74; color: white; font-weight: 700; touch-action: manipulation; }
 button:disabled { opacity: .55; }
 .retry-button { align-self: flex-start; min-height: 2.3rem; padding: .45rem .7rem; background: #6b5e31; }
+.detail-button { display: inline-grid; min-height: 1.5rem; width: 1.5rem; margin-left: .45rem; padding: 0; place-items: center; border-radius: 50%; background: transparent; color: #6b6f86; font-size: 1rem; vertical-align: middle; }
+.detail-button:focus-visible { outline: 2px solid #665ee8; outline-offset: 2px; }
+.request-detail-sheet { width: min(100% - 1rem, 38rem); max-height: min(82dvh, 42rem); margin: auto auto 0; padding: 0; border: 0; border-radius: 1rem 1rem 0 0; color: inherit; background: #fff; box-shadow: 0 -.5rem 2rem rgba(34, 45, 74, .18); }
+.request-detail-sheet::backdrop { background: rgba(23, 32, 51, .35); }
+.request-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1rem .75rem; border-bottom: 1px solid rgba(23, 32, 51, .1); }
+.request-detail-header h2 { margin: 0; font-size: 1rem; }
+.detail-close { min-height: 2rem; width: 2rem; padding: 0; border-radius: 50%; background: #eef0f7; color: #172033; font-size: 1.25rem; line-height: 1; }
+.request-detail-content { max-height: calc(min(82dvh, 42rem) - 4rem); overflow-y: auto; padding: .85rem 1rem 1.2rem; }
+.detail-section { margin-top: 1rem; }
+.detail-section h3 { margin: 0 0 .45rem; color: #6a7287; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
+.detail-stage { margin-top: .45rem; padding: .55rem .65rem; border: 1px solid rgba(23, 32, 51, .09); border-radius: .65rem; background: #f8f9fc; }
+.detail-line { display: flex; justify-content: space-between; gap: 1rem; margin: .2rem 0; font-size: .8rem; line-height: 1.35; }
+.detail-label { color: #6a7287; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 @media (min-width: 40rem) { .shell { padding-left: 1.5rem; padding-right: 1.5rem; } }

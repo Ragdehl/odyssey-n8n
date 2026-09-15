@@ -12,8 +12,17 @@ def _answerer_key(request_id: str) -> str:
 def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "const { request_id, status, kind, message }" in source
+    assert "const { request_id, status, kind, message, request_detail }" in source
     assert "Return deterministic product response" in source
+
+
+def test_request_detail_projection_excludes_retrieval_payloads() -> None:
+    """Project only bounded operational and change evidence to the browser surface."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const request_detail =" in source
+    assert "r.operational" in source
+    assert "affected_stable_note_ids" in source
+    assert "request_detail: source.request_detail" in source
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
