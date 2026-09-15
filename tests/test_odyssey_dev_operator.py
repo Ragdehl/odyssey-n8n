@@ -42,3 +42,11 @@ def test_render_binds_the_isolated_answerer_credential_id() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     assert "ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID" in source
     assert 'name: "Odyssey DEV OpenAI Answerer"' in source
+
+
+def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
+    """Keep the isolated DEV planner able to use the existing protected provider key."""
+    service = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-runtime.service").read_text(
+        encoding="utf-8"
+    )
+    assert "EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env" in service

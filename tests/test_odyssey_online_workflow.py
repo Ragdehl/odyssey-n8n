@@ -3,6 +3,7 @@
 from pathlib import Path
 
 SOURCE = Path(__file__).parents[1] / "workflows" / "odyssey-online.ts"
+DEV_FIXTURE = Path(__file__).parents[1] / "scripts" / "prepare_odyssey_dev_identity.py"
 
 
 def _answerer_key(request_id: str) -> str:
@@ -23,6 +24,38 @@ def test_request_detail_projection_excludes_retrieval_payloads() -> None:
     assert "r.operational" in source
     assert "affected_stable_note_ids" in source
     assert "request_detail: source.request_detail" in source
+
+
+def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> None:
+    """Keep the DEV SELF fixture and grounded evidence projection available to the answerer."""
+    source = SOURCE.read_text(encoding="utf-8")
+    fixture = DEV_FIXTURE.read_text(encoding="utf-8")
+    assert "Works at Synthetic Systems." in fixture
+    assert "route: 'answer'" in source
+    assert "items: items.map(i => ({ id: i.id, type: i.type, path: i.path, content: i.content }))" in source
+
+
+def test_failed_result_retains_existing_bounded_request_detail() -> None:
+    """Keep safe operational/change evidence visible when Core returns a failed result."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const hasOperationalEvidence = r.operational && typeof r.operational === 'object'" in source
+    assert "const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions)" in source
+    assert "request_detail ? { ...error, request_detail } : error" in source
+
+
+def test_failure_without_bounded_evidence_fails_closed() -> None:
+    """Do not fabricate a request-detail object for transport/runtime failures without evidence."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "} : undefined;" in source
+    assert "if (!id || !r || r.request_id !== id) return [{ json: error }];" in source
+    assert "stage: 'runtime'" not in source
+
+
+def test_completed_response_and_answerer_failure_keep_existing_detail_contract() -> None:
+    """Leave completed responses unchanged and retain detail on bounded answerer failures."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
+    assert "status: 'failed', kind: 'error', message: 'Odyssey no ha podido procesar esta solicitud.', request_detail: source.request_detail" in source
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
