@@ -57,6 +57,12 @@ environment_source_has_required_keys() {
   ' "$source"
 }
 
+assert_release_artifacts() {
+  [ -f "$PROD_SCHEMA" ] || fail "production schema is missing from the release"
+  [ -x "$PYTHON" ] || fail "production Python environment is missing: $PYTHON"
+  [ -f "$UNIT_SOURCE" ] || fail "production service definition is missing"
+}
+
 guard() {
   local path resolved mode owner
   [ "$(id -un)" = "$PROD_USER" ] || fail "production operator must run as $PROD_USER"
@@ -77,9 +83,7 @@ guard() {
   [ -d "$PROD_STATE" ] || fail "production state root is missing"
   [ -d "$PROD_RUNTIME" ] || fail "production runtime root is missing"
   if [ "${1:-}" != deploy ]; then
-    [ -f "$PROD_SCHEMA" ] || fail "production schema is missing from the release"
-    [ -x "$PYTHON" ] || fail "production Python environment is missing"
-    [ -f "$UNIT_SOURCE" ] || fail "production service definition is missing"
+    assert_release_artifacts
   fi
   [ -f "$PROD_ENV_SOURCE" ] || fail "production environment source is missing"
   owner=$(stat -c '%U:%G' "$PROD_ENV_SOURCE")
@@ -232,6 +236,7 @@ deploy() {
   [ "$#" -eq 1 ] || fail "production deploy requires exactly one commit or commit-resolving ref"
   assert_reboot_persistence
   resolved_commit=$(materialize_release "$PROD_REPOSITORY/.git" "$PROD_RELEASE" "$requested_commit")
+  assert_release_artifacts
   install_artifacts
   systemctl --user enable "$UNIT"
   systemctl --user restart "$UNIT"
