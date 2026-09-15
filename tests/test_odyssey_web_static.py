@@ -59,6 +59,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'deployment.environment !== "DEV"' in app
     assert "marker.textContent = deployment.commit" in app
     assert "appendDetailButton(message, result.request_detail)" in app
+    assert 'header.className = "message-header"' in app
+    assert 'article.querySelector(".message-header")?.append(button)' in app
     assert "requestDetailSheet.showModal()" in app
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
@@ -67,6 +69,10 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto;" in styles
     assert ".conversation { display: flex; flex-direction: column;" in styles
+    assert ".message-header { display: flex; align-items: center;" in styles
+    assert (
+        ".detail-button { display: inline-grid; flex: 0 0 2.75rem; min-height: 2.75rem;" in styles
+    )
     assert "overflow-y: auto" in styles
     assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
     assert ".deployment-marker" in styles

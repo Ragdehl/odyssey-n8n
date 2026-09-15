@@ -40,7 +40,10 @@ function appendMessage(role, message, status = "") {
   const body = document.createElement("p");
   body.className = "message-text";
   body.textContent = message;
-  article.append(label, body);
+  const header = document.createElement("div");
+  header.className = "message-header";
+  header.append(label);
+  article.append(header, body);
   if (status === "partial") {
     const notice = document.createElement("p");
     notice.className = "partial-notice";
@@ -60,7 +63,7 @@ function appendDetailButton(article, detail) {
   button.setAttribute("aria-label", "Ver detalles de esta solicitud");
   button.textContent = "ⓘ";
   button.addEventListener("click", () => openRequestDetail(detail));
-  article.append(button);
+  article.querySelector(".message-header")?.append(button);
 }
 
 function appendDetailLine(parent, label, value) {
