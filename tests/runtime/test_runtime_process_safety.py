@@ -164,7 +164,7 @@ def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
         _current_time()
 
 
-def test_runtime_conversation_helpers_preserve_actor_scope_and_context(tmp_path: Path) -> None:
+def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
     """Runtime conversation projections stay actor-scoped and use durable Core state."""
     repository = ConversationRepository(tmp_path / "state")
     runtime = RuntimeComposition(
@@ -204,13 +204,18 @@ def test_runtime_conversation_helpers_preserve_actor_scope_and_context(tmp_path:
         {"role": "user", "text": "Hablamos de Marta"},
         {"role": "assistant", "text": "Marta vive en Lyon"},
     ]
-    assert runtime.list_conversations(authenticated_actor=AuthenticatedActorContext("user-b")) == []
+    other = AuthenticatedActorContext("user-b")
+    assert runtime.list_conversations(authenticated_actor=other) == []
 
 
-def test_runtime_execute_persists_user_turn_and_forwards_conversation_identity(tmp_path: Path) -> None:
+def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     """Conversation execution persists the visible user turn before forwarding to Core."""
     repository = ConversationRepository(tmp_path / "state")
-    repository.create("user-a", now="2026-09-16T10:00:00Z", conversation_id="conv-1")
+    repository.create(
+        "user-a",
+        now="2026-09-16T10:00:00Z",
+        conversation_id="conv-1",
+    )
     calls: list[tuple[object, ...]] = []
 
     def execute(*args):
@@ -233,20 +238,29 @@ def test_runtime_execute_persists_user_turn_and_forwards_conversation_identity(t
 
     assert calls == [("¿Dónde vive?", "req-1", actor, "conv-1")]
     loaded = repository.load("user-a", "conv-1")
-    assert [(turn["request_id"], turn["role"], turn["text"]) for turn in loaded["turns"]] == [
-        ("req-1", "user", "¿Dónde vive?")
+    turns = [
+        (turn["request_id"], turn["role"], turn["text"])
+        for turn in loaded["turns"]
     ]
+    assert turns == [("req-1", "user", "¿Dónde vive?")]
 
 
 def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
     """Missing conversation and identity dependencies are explicit failures."""
     actor = AuthenticatedActorContext("user-a")
-    runtime = RuntimeComposition(core_execute=lambda *args: _result(), refresh_indexes=lambda: None)
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+    )
 
     with pytest.raises(ValueError, match="conversation repository is unavailable"):
         runtime.create_conversation(authenticated_actor=actor)
     with pytest.raises(ValueError, match="conversation repository is unavailable"):
-        runtime.execute("hola", conversation_id="conv-1", authenticated_actor=actor)
+        runtime.execute(
+            "hola",
+            conversation_id="conv-1",
+            authenticated_actor=actor,
+        )
 
     repository = ConversationRepository(tmp_path / "state")
     runtime = RuntimeComposition(
@@ -255,7 +269,10 @@ def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
         conversation_repository=repository,
     )
     with pytest.raises(ValueError, match="mutually exclusive"):
-        runtime.create_conversation(authenticated_actor=actor, external_principal=object())
+        runtime.create_conversation(
+            authenticated_actor=actor,
+            external_principal=object(),
+        )
     with pytest.raises(ValueError, match="external principal mapping is unavailable"):
         runtime.create_conversation(external_principal=object())
     with pytest.raises(ValueError, match="mutually exclusive"):
@@ -266,16 +283,16 @@ def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
         )
 
 
-def test_runtime_resolves_external_principal_before_conversation_access(tmp_path: Path) -> None:
+def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
     """External principals resolve to the stable internal actor before state access."""
     repository = ConversationRepository(tmp_path / "state")
+    marker = object()
 
     class MappingRepository:
         def resolve_existing(self, principal):
             assert principal is marker
             return AuthenticatedActorContext("mapped-user")
 
-    marker = object()
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(),
         refresh_indexes=lambda: None,
@@ -285,4 +302,5 @@ def test_runtime_resolves_external_principal_before_conversation_access(tmp_path
 
     created = runtime.create_conversation(external_principal=marker)
     conversation_id = str(created["conversation_id"])
-    assert repository.load("mapped-user", conversation_id)["conversation_id"] == conversation_id
+    loaded = repository.load("mapped-user", conversation_id)
+    assert loaded["conversation_id"] == conversation_id
