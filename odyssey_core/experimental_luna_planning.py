@@ -90,12 +90,15 @@ def validate_luna_experimental_result(
     same closed field set with three null payload fields, so it carries no action or invented user
     knowledge.
     """
-    if not isinstance(payload, dict) or set(payload) not in ({
-        "outcome",
-        "actions",
-        "limitations",
-        "clarification_code",
-    }, {"outcome", "actions", "limitations", "clarification_code", "context"}):
+    if not isinstance(payload, dict) or set(payload) not in (
+        {
+            "outcome",
+            "actions",
+            "limitations",
+            "clarification_code",
+        },
+        {"outcome", "actions", "limitations", "clarification_code", "context"},
+    ):
         raise RequestPlanningError("Experimental planner result fields are invalid")
     if payload["outcome"] != "ESCALATE":
         return validate_planner_result(payload, schema)
@@ -230,7 +233,9 @@ class OpenAILunaExperimentalPlanner:
             ) from error
         return cls(OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES), schema, current_context)
 
-    def plan(self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()) -> ExperimentalPlannerResult:
+    def plan(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> ExperimentalPlannerResult:
         """Make exactly one bounded Luna attempt and validate without executing its result."""
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
@@ -245,7 +250,11 @@ class OpenAILunaExperimentalPlanner:
             input=[
                 {
                     "role": "system",
-                    "content": render_luna_experimental_prompt(self._schema, self._current_context, conversation_context=conversation_context),
+                    "content": render_luna_experimental_prompt(
+                        self._schema,
+                        self._current_context,
+                        conversation_context=conversation_context,
+                    ),
                 },
                 {"role": "user", "content": request},
             ],

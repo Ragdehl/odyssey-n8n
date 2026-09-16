@@ -52,7 +52,9 @@ from .write_target import WriteTargetDecision, WriteTargetOutcome
 class RequestPlanner(Protocol):
     """Describe the validated planning boundary used by an application request."""
 
-    def plan(self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()) -> PlannerResult:
+    def plan(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> PlannerResult:
         """Return one validated plan or closed clarification for a raw request."""
 
 
@@ -192,7 +194,8 @@ def execute_request(
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
     monotonic: Callable[[], float] = perf_counter,
-    conversation_context_provider: Callable[[PlannerContextNeeded], Sequence[Mapping[str, str]]] | None = None,
+    conversation_context_provider: Callable[[PlannerContextNeeded], Sequence[Mapping[str, str]]]
+    | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -271,9 +274,13 @@ def execute_request(
         )
     if isinstance(plan, PlannerContextNeeded):
         if conversation_context_provider is None:
-            stages.append(_stage("planner.context", OperationalOutcome.FAILED, planner_started, monotonic))
+            stages.append(
+                _stage("planner.context", OperationalOutcome.FAILED, planner_started, monotonic)
+            )
             return _with_operational(
-                ApplicationResult(request_id, ApplicationStatus.FAILED, (), (), "conversation context unavailable"),
+                ApplicationResult(
+                    request_id, ApplicationStatus.FAILED, (), (), "conversation context unavailable"
+                ),
                 stages,
                 started,
                 monotonic,
@@ -281,18 +288,32 @@ def execute_request(
         context_started = monotonic()
         try:
             context = conversation_context_provider(plan)
-            plan = provider_recorder.invoke("planner.context", planner, planner.plan, user_request, context)
+            plan = provider_recorder.invoke(
+                "planner.context", planner, planner.plan, user_request, context
+            )
         except Exception as error:
-            stages.append(_stage("planner.context", OperationalOutcome.FAILED, context_started, monotonic, error))
+            stages.append(
+                _stage(
+                    "planner.context", OperationalOutcome.FAILED, context_started, monotonic, error
+                )
+            )
             return _with_operational(
-                ApplicationResult(request_id, ApplicationStatus.FAILED, (), (), _safe_reason(error)),
+                ApplicationResult(
+                    request_id, ApplicationStatus.FAILED, (), (), _safe_reason(error)
+                ),
                 stages,
                 started,
                 monotonic,
             )
         if isinstance(plan, PlannerContextNeeded):
             return _with_operational(
-                ApplicationResult(request_id, ApplicationStatus.FAILED, (), (), "conversation context remained ambiguous"),
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.FAILED,
+                    (),
+                    (),
+                    "conversation context remained ambiguous",
+                ),
                 stages,
                 started,
                 monotonic,
