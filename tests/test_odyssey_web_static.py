@@ -77,11 +77,13 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert "requestDetailSheet.showModal()" in app
     assert 'const MAIN_CONVERSATION_ID = "main"' in app
     assert 'operation: "main"' in app
-    assert 'payload: {limit: 40}' in app
-    assert 'payload: {limit: 40, before: cursor}' in app
+    assert "payload: {limit: 40}" in app
+    assert "payload: {limit: 40, before: cursor}" in app
     assert "if (!hasOlder || !olderCursor || loadingOlder) return;" in app
     assert "loadingOlder = true" in app
-    assert "conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight" in app
+    assert (
+        "conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight" in app
+    )
     assert 'conversation.addEventListener("scroll"' in app
     assert 'article.querySelector(".detail-button")' in app
     assert "olderCursor = data.before ?? null" in app

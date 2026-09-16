@@ -26,8 +26,8 @@ from odyssey_core.identity_boundary import (
     IdentityMappingRepository,
     SelfBindingRepository,
 )
-from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
+from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalStage,

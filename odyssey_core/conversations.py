@@ -612,8 +612,7 @@ def _validate_detail_changes(value: Any) -> None:
             or (
                 unit.get("stable_note_id") is not None
                 and (
-                    not isinstance(unit["stable_note_id"], str)
-                    or len(unit["stable_note_id"]) > 128
+                    not isinstance(unit["stable_note_id"], str) or len(unit["stable_note_id"]) > 128
                 )
             )
             or (

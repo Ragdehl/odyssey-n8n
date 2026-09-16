@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from .conversations import (
-    MAIN_CONVERSATION_ID,
     _CHUNK_MAX_TURNS,
     _PAGE_DEFAULT_TURNS,
     _PAGE_MAX_TURNS,
     _RECENT_CONTEXT_MAX_BYTES,
     _RECENT_CONTEXT_MAX_TURNS,
+    MAIN_CONVERSATION_ID,
     ConversationError,
     _timestamp,
     _validate_actor,
@@ -136,14 +136,8 @@ class LocalConversationStore:
 
         manifest = self._manifest()
         chunks = manifest["chunks"]
-        target = (
-            self._chunk_path(chunks[-1]["name"])
-            if chunks
-            else self._chunk_path("000001.json")
-        )
-        chunk = (
-            {"turns": []} if not chunks else self._read_chunk(target, chunks[-1]["count"])
-        )
+        target = self._chunk_path(chunks[-1]["name"]) if chunks else self._chunk_path("000001.json")
+        chunk = {"turns": []} if not chunks else self._read_chunk(target, chunks[-1]["count"])
         if len(chunk["turns"]) >= _CHUNK_MAX_TURNS:
             target = self._chunk_path(f"{len(chunks) + 1:06d}.json")
             chunk = {"turns": []}
@@ -255,9 +249,9 @@ class LocalConversationStore:
             return all(
                 self._request_entry(turn["request_id"], turn["role"], root=staging) is not None
                 for entry in manifest["chunks"]
-                for turn in self._read_chunk(
-                    staging / "chunks" / entry["name"], entry["count"]
-                )["turns"]
+                for turn in self._read_chunk(staging / "chunks" / entry["name"], entry["count"])[
+                    "turns"
+                ]
             )
         except ConversationError:
             return False
@@ -292,18 +286,14 @@ class LocalConversationStore:
             raise ConversationError("conversation manifest is invalid")
         return manifest
 
-    def _slice(
-        self, manifest: dict[str, Any], start: int, end: int
-    ) -> list[dict[str, Any]]:
+    def _slice(self, manifest: dict[str, Any], start: int, end: int) -> list[dict[str, Any]]:
         """Load only chunks overlapping the requested chronological range."""
         turns: list[dict[str, Any]] = []
         offset = 0
         for entry in manifest["chunks"]:
             next_offset = offset + entry["count"]
             if next_offset > start and offset < end:
-                chunk = self._read_chunk(
-                    self._chunk_path(entry["name"]), entry["count"]
-                )["turns"]
+                chunk = self._read_chunk(self._chunk_path(entry["name"]), entry["count"])["turns"]
                 turns.extend(chunk[max(0, start - offset) : min(entry["count"], end - offset)])
             offset = next_offset
         if len(turns) != end - start:
@@ -373,9 +363,10 @@ class LocalConversationStore:
             offset = int(raw.decode("ascii"))
         except (UnicodeDecodeError, ValueError) as error:
             raise ConversationError("conversation cursor is invalid") from error
-        if not hmac.compare_digest(
-            signature, hmac.digest(self._cursor_key, raw, "sha256")[:16]
-        ) or not 0 <= offset <= total:
+        if (
+            not hmac.compare_digest(signature, hmac.digest(self._cursor_key, raw, "sha256")[:16])
+            or not 0 <= offset <= total
+        ):
             raise ConversationError("conversation cursor is invalid")
         return offset
 
@@ -391,7 +382,7 @@ class LocalConversationStore:
         return self._main_directory() / "chunks" / name
 
     def _request_path(self, request_id: str, role: str, *, root: Path | None = None) -> Path:
-        digest = hashlib.sha256(f"{request_id}:{role}".encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(f"{request_id}:{role}".encode()).hexdigest()
         return (root or self._main_directory()) / "requests" / f"{digest}.json"
 
     @staticmethod

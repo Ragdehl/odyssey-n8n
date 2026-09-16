@@ -27,13 +27,13 @@ from odyssey_core.identity_boundary import (
     IdentityMappingRepository,
     OdysseyUser,
 )
+from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
     OperationalStage,
     ProviderCallEvidence,
 )
-from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_runtime import __main__ as runtime_main
 from odyssey_runtime import composition
 from odyssey_runtime.composition import RuntimeComposition

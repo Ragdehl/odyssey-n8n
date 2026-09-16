@@ -10,7 +10,6 @@ import pytest
 from odyssey_core.conversations import ConversationError
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 
-
 NOW = "2026-09-16T10:00:00+00:00"
 
 
