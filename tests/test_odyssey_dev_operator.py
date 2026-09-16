@@ -58,5 +58,5 @@ def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> Non
     assert "web_assets_sha256" in source
     assert "web_deployment_marker" in source
     assert "mounted_web_asset_fingerprint" in source
-    assert "web_assets_coherent \"$current\"" in source
+    assert 'web_assets_coherent "$current"' in source
     assert "/odyssey-web/environment.js" in source
