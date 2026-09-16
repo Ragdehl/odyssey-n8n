@@ -253,24 +253,92 @@ workflow_metadata() {
   docker exec "$N8N_CONTAINER" node -e '
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
-    const rows = db.prepare("SELECT id, name, active, versionId, activeVersionId FROM workflow_entity WHERE id IN (?, ?) ORDER BY id").all("odyssey-online", "odyssey-online-static");
+    const rows = db.prepare(`
+      SELECT workflow.id, workflow.name, workflow.active, workflow.versionId,
+             workflow.activeVersionId, history.nodes AS activeVersionNodes
+      FROM workflow_entity AS workflow
+      LEFT JOIN workflow_history AS history
+        ON history.workflowId = workflow.id
+       AND history.versionId = workflow.activeVersionId
+      WHERE workflow.id IN (?, ?)
+      ORDER BY workflow.id
+    `).all("odyssey-online", "odyssey-online-static");
     process.stdout.write(JSON.stringify(rows));
   '
+}
+
+workflow_publication_is_valid() {
+  "$PYTHON" -c '
+import json
+import sys
+
+rows = {row["id"]: row for row in json.load(sys.stdin)}
+expected = {
+    "odyssey-online": {("POST", "request"), ("POST", "conversation")},
+    "odyssey-online-static": {("GET", "odyssey")},
+}
+if set(rows) != set(expected):
+    raise SystemExit("missing DEV workflow")
+for workflow_id, expected_webhooks in expected.items():
+    row = rows[workflow_id]
+    if "DEV" not in row.get("name", ""):
+        raise SystemExit("DEV workflow lacks the DEV identity")
+    active_version = row.get("activeVersionId")
+    raw_nodes = row.get("activeVersionNodes")
+    if not isinstance(active_version, str) or not active_version or not isinstance(raw_nodes, str):
+        raise SystemExit("DEV workflow has no valid published active version")
+    try:
+        nodes = json.loads(raw_nodes)
+    except json.JSONDecodeError as error:
+        raise SystemExit("DEV workflow active version is invalid") from error
+    actual_webhooks = {
+        (node.get("parameters", {}).get("httpMethod"), node.get("parameters", {}).get("path"))
+        for node in nodes
+        if node.get("type") == "n8n-nodes-base.webhook"
+    }
+    if not expected_webhooks <= actual_webhooks:
+        raise SystemExit("DEV workflow active version lacks an expected webhook")
+'
 }
 
 assert_published_workflows() {
   local metadata
   metadata=$(workflow_metadata) || fail "unable to read DEV n8n workflow metadata"
+  workflow_publication_is_valid <<<"$metadata" || fail "DEV workflow publication verification failed"
+}
+
+route_readiness_once() {
+  local response body status
+  response=$(curl --silent --show-error --max-time 10 --write-out $'\n%{http_code}' \
+    --request POST "http://$N8N_HOST:$N8N_PORT/api/request" \
+    --header 'Content-Type: application/json' \
+    --data '{"request":"","request_id":"dev-readiness-invalid"}') || return 1
+  status=${response##*$'\n'}
+  body=${response%$'\n'*}
+  [ "$status" = 200 ] || return 1
   "$PYTHON" -c '
 import json
 import sys
-rows = {row["id"]: row for row in json.load(sys.stdin)}
-expected = {"odyssey-online", "odyssey-online-static"}
-if set(rows) != expected:
-    raise SystemExit("missing DEV workflow")
-if any(row.get("active") != 1 or "DEV" not in row.get("name", "") for row in rows.values()):
-    raise SystemExit("DEV workflow is inactive or lacks the DEV identity")
-' <<<"$metadata" || fail "DEV workflow publication verification failed"
+payload = json.load(sys.stdin)
+if payload != {
+    "request_id": "dev-readiness-invalid",
+    "status": "failed",
+    "kind": "error",
+    "message": "La solicitud no es válida.",
+}:
+    raise SystemExit(1)
+' <<<"$body"
+}
+
+wait_workflow_readiness() {
+  local attempt
+  for attempt in $(seq 1 45); do
+    if assert_published_workflows >/dev/null 2>&1 && route_readiness_once >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 record_deployment() {
@@ -302,14 +370,7 @@ workflow_provenance() {
   web_assets_coherent "$current" || { echo DRIFT; return; }
   metadata=$(workflow_metadata 2>/dev/null || true)
   [ -n "$metadata" ] || { echo UNKNOWN; return; }
-  "$PYTHON" -c '
-import json
-import sys
-rows = {row["id"]: row for row in json.load(sys.stdin)}
-expected = {"odyssey-online", "odyssey-online-static"}
-if set(rows) != expected or any(row.get("active") != 1 or "DEV" not in row.get("name", "") for row in rows.values()):
-    raise SystemExit(1)
-' <<<"$metadata" && echo MATCH || echo DRIFT
+  workflow_publication_is_valid <<<"$metadata" && route_readiness_once && echo MATCH || echo DRIFT
 }
 
 runtime() {
@@ -336,7 +397,7 @@ start() {
   wait_health || fail "DEV runtime did not become healthy"
   n8n_compose up -d >/dev/null
   wait_n8n_health || fail "DEV n8n did not become healthy"
-  assert_published_workflows
+  wait_workflow_readiness || fail "DEV n8n workflows did not become ready"
 }
 
 stop() {
@@ -379,7 +440,7 @@ deploy() {
   publish_workflows
   n8n_compose up -d >/dev/null
   wait_n8n_health || fail "DEV n8n did not become healthy after deploy"
-  assert_published_workflows
+  wait_workflow_readiness || fail "DEV n8n workflows did not become ready after deploy"
   record_deployment
   printf 'deployed_commit=%s\n' "$(git -C "$DEV_SOURCE" rev-parse HEAD)"
 }
