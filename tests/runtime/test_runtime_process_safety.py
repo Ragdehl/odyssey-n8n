@@ -238,10 +238,7 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
 
     assert calls == [("¿Dónde vive?", "req-1", actor, "conv-1")]
     loaded = repository.load("user-a", "conv-1")
-    turns = [
-        (turn["request_id"], turn["role"], turn["text"])
-        for turn in loaded["turns"]
-    ]
+    turns = [(turn["request_id"], turn["role"], turn["text"]) for turn in loaded["turns"]]
     assert turns == [("req-1", "user", "¿Dónde vive?")]
 
 
