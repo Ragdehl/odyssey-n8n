@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from odyssey_core.observability import normalize_provider_usage
 from odyssey_core.request_planning import (
     PlannerClarification,
+    PlannerContextNeeded,
     RequestPlan,
     RequestPlanningError,
     planner_result_json_schema,
@@ -39,7 +40,7 @@ _TEACHING_EXAMPLES_PATH = (
 
 
 class ResponsesClient(Protocol):
-    """Describe the injected Responses API subset used by the experiment."""
+    """Describe the injected subset of the OpenAI Responses client used by the planner."""
 
     responses: Any
 
@@ -51,14 +52,17 @@ class PlannerEscalation:
     outcome: str = "ESCALATE"
 
 
-ExperimentalPlannerResult = RequestPlan | PlannerClarification | PlannerEscalation
+ExperimentalPlannerResult = (
+    RequestPlan | PlannerClarification | PlannerContextNeeded | PlannerEscalation
+)
 
 
 def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the strict nested PLAN/CLARIFY/ESCALATE provider schema.
+    """Build the strict nested PLAN/CLARIFY/CONTEXT_NEEDED/ESCALATE provider schema.
 
-    PLAN embeds the existing RequestPlan provider schema.  The root remains a closed object and
-    the union remains beneath ``result`` for the supported Structured Outputs subset.
+    The production planner result contract is inherited unchanged, including CONTEXT_NEEDED, and
+    the Luna-only ESCALATE branch is appended. The root remains a closed object and the union stays
+    beneath ``result`` for the supported Structured Outputs subset.
     """
     production_schema = planner_result_json_schema(schema)
     existing_branches = production_schema["properties"]["result"]["anyOf"]
@@ -84,11 +88,11 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
 def validate_luna_experimental_result(
     payload: Any, schema: Mapping[str, Any]
 ) -> ExperimentalPlannerResult:
-    """Validate an experimental result without weakening production validation.
+    """Validate a Luna result without weakening production planner validation.
 
-    PLAN and CLARIFY pass directly through ``validate_planner_result``.  ESCALATE accepts only the
-    same closed field set with three null payload fields, so it carries no action or invented user
-    knowledge.
+    PLAN, CLARIFY, and CONTEXT_NEEDED pass directly through ``validate_planner_result``.
+    ESCALATE accepts only the same closed field set with three null payload fields, so it carries
+    no action or invented user knowledge.
     """
     if not isinstance(payload, dict) or set(payload) not in (
         {
@@ -122,6 +126,7 @@ def render_luna_experimental_prompt(
         schema: Parsed canonical Odyssey note schema.
         current_context: Explicit date, time, and timezone for relative date interpretation.
         teaching_examples: Frozen examples, injectable only for deterministic tests.
+        conversation_context: Bounded active-conversation evidence for an explicit second pass.
 
     Returns:
         Ordered safety instructions, current capability projections, and compact examples.
@@ -148,13 +153,22 @@ def render_luna_experimental_prompt(
         for item in examples
     )
     semantic_prompt = render_request_planner_prompt(schema, current_context, conversation_context)
+    context_decision = (
+        "CONTEXT_NEEDED is not available after bounded conversation evidence has been supplied; "
+        "use that evidence only to resolve the referent, then return PLAN, CLARIFY, or ESCALATE."
+        if conversation_context
+        else "CONTEXT_NEEDED when the request is understandable and actionable but cannot be safely "
+        "interpreted without a referent from the active conversation. This takes precedence over "
+        "ESCALATE for that specific missing-referent situation."
+    )
     return f"""{semantic_prompt}
 
 Choose the outcome before drafting fields:
 1. PLAN only when every material intent is preserved by the inherited RequestPlan semantics without unsafe approximation.
-2. CLARIFY only for unintelligible input; use only UNRECOGNIZED_REQUEST.
-3. ESCALATE whenever the request is understandable but its safe representation, identity, mutation meaning, branch structure, or supported semantics is uncertain. Never force a PLAN.
-4. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except CLARIFY's UNRECOGNIZED_REQUEST.
+2. {context_decision}
+3. CLARIFY only for unintelligible input; use only UNRECOGNIZED_REQUEST.
+4. ESCALATE whenever the request is understandable but its safe representation, mutation meaning, branch structure, or supported semantics is uncertain for reasons other than a missing active-conversation referent. Never force a PLAN.
+5. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except CLARIFY's UNRECOGNIZED_REQUEST.
 Never approximate a fact, event, decision, purchase, or other domain date with note lifecycle fields; preserve uncertain meaning and ESCALATE rather than guessing.
 
 Teaching examples (not evaluation cases):
