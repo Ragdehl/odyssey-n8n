@@ -6,6 +6,7 @@ import {
   PRODUCT_REQUEST_TIMEOUT_MS,
   createRequestId,
   createSubmission,
+  renderProductResultWithContinuity,
   requestConversation,
   requestProductResult,
   validateProductResponse,
@@ -60,6 +61,40 @@ test("main-conversation transport accepts only an object response", async () => 
     requestConversation({operation: "load_main", fetchImpl: async () => response({payload: []})}),
     ProductRequestError,
   );
+});
+
+test("a successful product result renders once when assistant continuity persists", async () => {
+  const rendered = [];
+  let persisted = 0;
+  let warned = 0;
+  const result = {request_id: "web-success", message: "Marta vive en Lyon."};
+
+  await renderProductResultWithContinuity({
+    result,
+    renderResult: (value) => rendered.push(value),
+    persistAssistantTurn: async () => { persisted += 1; },
+    warnContinuity: () => { warned += 1; },
+  });
+
+  assert.deepEqual(rendered, [result]);
+  assert.equal(persisted, 1);
+  assert.equal(warned, 0);
+});
+
+test("a continuity persistence failure keeps the valid product result visible", async () => {
+  const rendered = [];
+  let warned = 0;
+  const result = {request_id: "web-continuity", message: "Marta vive en Lyon."};
+
+  await renderProductResultWithContinuity({
+    result,
+    renderResult: (value) => rendered.push(value),
+    persistAssistantTurn: async () => { throw new Error("conversation unavailable"); },
+    warnContinuity: () => { warned += 1; },
+  });
+
+  assert.deepEqual(rendered, [result]);
+  assert.equal(warned, 1);
 });
 
 test("closed planner clarification is a normal bounded product result", () => {

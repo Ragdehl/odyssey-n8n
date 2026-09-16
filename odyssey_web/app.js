@@ -1,6 +1,7 @@
 import {
   ProductRequestError,
   createSubmission,
+  renderProductResultWithContinuity,
   requestProductResult,
   requestConversation,
 } from "./client.js";
@@ -183,6 +184,20 @@ function appendRetryControl(submission) {
   conversation.scrollTop = conversation.scrollHeight;
 }
 
+function appendContinuityWarning() {
+  const warning = document.createElement("p");
+  warning.className = "continuity-warning";
+  warning.textContent = "La respuesta se ha obtenido, pero no se ha podido guardar la continuidad de esta conversación.";
+  conversation.append(warning);
+  conversation.scrollTop = conversation.scrollHeight;
+}
+
+function renderProductResult(result) {
+  const message = appendMessage("odyssey", result.message, result.status);
+  message.querySelector(".eyebrow").textContent = resultLabel(result);
+  appendDetailButton(message, result.request_detail);
+}
+
 function resultLabel(result) {
   return {
     acknowledgement: "Hecho",
@@ -198,24 +213,27 @@ async function sendSubmission(submission, isRetry = false) {
   setBusy(true);
   try {
     const result = await requestProductResult({endpoint, submission, conversationId});
-    if (conversationId) {
-      await requestConversation({
-        endpoint: conversationEndpoint,
-        operation: "turn",
-        payload: {
-          conversation_id: conversationId,
-          request_id: submission.requestId,
-          role: "assistant",
-          text: result.message,
-          status: result.status,
-        },
-      });
-    }
     retrySubmission = null;
     loading.remove();
-    const message = appendMessage("odyssey", result.message, result.status);
-    message.querySelector(".eyebrow").textContent = resultLabel(result);
-    appendDetailButton(message, result.request_detail);
+    await renderProductResultWithContinuity({
+      result,
+      renderResult: renderProductResult,
+      persistAssistantTurn: async () => {
+        if (!conversationId) return;
+        await requestConversation({
+          endpoint: conversationEndpoint,
+          operation: "turn",
+          payload: {
+            conversation_id: conversationId,
+            request_id: submission.requestId,
+            role: "assistant",
+            text: result.message,
+            status: result.status,
+          },
+        });
+      },
+      warnContinuity: appendContinuityWarning,
+    });
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;
     loading.remove();

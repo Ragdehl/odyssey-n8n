@@ -59,6 +59,19 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'deployment.environment !== "DEV"' in app
     assert "marker.textContent = deployment.commit" in app
     assert "appendDetailButton(message, result.request_detail)" in app
+    assert "renderProductResultWithContinuity" in app
+    assert "appendContinuityWarning" in app
+    assert "La respuesta se ha obtenido" in app
+    assert (
+        "The existing chat remains usable if the optional history projection is unavailable." in app
+    )
+    success_flow = app[
+        app.index("const result = await requestProductResult") : app.index("} catch (error)")
+    ]
+    assert success_flow.index("retrySubmission = null") < success_flow.index(
+        "renderProductResultWithContinuity"
+    )
+    assert "appendRetryControl" not in success_flow
     assert 'header.className = "message-header"' in app
     assert 'article.querySelector(".message-header")?.append(button)' in app
     assert "requestDetailSheet.showModal()" in app
@@ -82,6 +95,7 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert "overflow-y: auto" in styles
     assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
     assert ".deployment-marker" in styles
+    assert ".continuity-warning" in styles
 
     environment = (WEB_ROOT / "environment.js").read_text(encoding="utf-8")
     assert 'environment: "PROD"' in environment

@@ -31,6 +31,7 @@ N8N_DEPLOYMENT=$DEV_RUNTIME/n8n-deployment
 DEV_ACTOR_FILE=$DEV_STATE/dev-actor.json
 DEV_FIXTURE_SCRIPT=$DEV_SOURCE/scripts/prepare_odyssey_dev_identity.py
 WEB_ASSETS=(environment.js index.html app.js client.js styles.css)
+DEV_PRODUCT_PATHS=(/api/odyssey /api/styles.css /api/app.js /api/client.js /api/environment.js /api/request /api/conversation)
 
 fail() {
   echo "odyssey-dev: $*" >&2
@@ -224,6 +225,37 @@ render_workflows() {
   grep -Fq "http://$DEV_HOST:$DEV_PORT/execute" "$N8N_RENDER/odyssey-online.json" || fail "DEV workflow did not render its fixed DEV runtime target"
   ! grep -REq '172\.18\.0\.1:8765|/data/odyssey' "$N8N_RENDER"/*.json || fail "rendered DEV workflow contains a production target"
   grep -Fq 'Odyssey DEV OpenAI Answerer' "$N8N_RENDER/odyssey-online.json" || fail "rendered DEV workflow lacks its isolated answerer credential"
+}
+
+assert_dev_product_route_inventory() {
+  "$PYTHON" - "$DEV_SOURCE/odyssey_web/index.html" "$N8N_RENDER/odyssey-online.json" "$N8N_RENDER/odyssey-online-static.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+expected = {
+    "/api/odyssey",
+    "/api/styles.css",
+    "/api/app.js",
+    "/api/client.js",
+    "/api/environment.js",
+    "/api/request",
+    "/api/conversation",
+}
+index, *workflow_paths = map(Path, sys.argv[1:])
+if any(route not in index.read_text(encoding="utf-8") for route in {"/api/request", "/api/conversation"}):
+    raise SystemExit("browser product endpoints are absent from the DEV route inventory")
+actual = set()
+for workflow_path in workflow_paths:
+    workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    for node in workflow["nodes"]:
+        if node.get("type") == "n8n-nodes-base.webhook":
+            path = node.get("parameters", {}).get("path")
+            if isinstance(path, str):
+                actual.add(f"/api/{path}")
+if actual != expected:
+    raise SystemExit(f"DEV workflow route inventory mismatch: {sorted(actual)}")
+PY
 }
 
 publish_workflows() {
@@ -437,6 +469,7 @@ deploy() {
   prepare_web_assets
   ensure_n8n_volume
   render_workflows
+  assert_dev_product_route_inventory || fail "DEV product route inventory is incomplete"
   publish_workflows
   n8n_compose up -d >/dev/null
   wait_n8n_health || fail "DEV n8n did not become healthy after deploy"

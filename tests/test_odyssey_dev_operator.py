@@ -156,3 +156,21 @@ def test_deployment_record_follows_workflow_readiness() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     deploy_tail = source[source.index("deploy() {") :]
     assert deploy_tail.index("wait_workflow_readiness") < deploy_tail.index("record_deployment")
+
+
+def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> None:
+    """Keep new UI routes from silently falling outside the explicit DEV route inventory."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    expected = (
+        "/api/odyssey",
+        "/api/styles.css",
+        "/api/app.js",
+        "/api/client.js",
+        "/api/environment.js",
+        "/api/request",
+        "/api/conversation",
+    )
+    for route in expected:
+        assert route in source
+    assert "assert_dev_product_route_inventory" in source
+    assert source.index("assert_dev_product_route_inventory") < source.index("publish_workflows")

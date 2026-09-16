@@ -70,6 +70,21 @@ export async function requestConversation({endpoint = "/api/conversation", opera
 }
 
 /**
+ * Render a valid product result before attempting optional transcript continuity persistence.
+ *
+ * @param {{result: object, renderResult: (result: object) => void, persistAssistantTurn: () => Promise<void>, warnContinuity: () => void}} options Rendering and persistence callbacks.
+ * @returns {Promise<void>} Resolves after the best-effort persistence attempt.
+ */
+export async function renderProductResultWithContinuity({result, renderResult, persistAssistantTurn, warnContinuity}) {
+  renderResult(result);
+  try {
+    await persistAssistantTurn();
+  } catch {
+    warnContinuity();
+  }
+}
+
+/**
  * Validate the narrow browser response contract returned by Odyssey Online.
  *
  * @param {unknown} value Parsed response payload.
