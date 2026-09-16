@@ -62,9 +62,15 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'header.className = "message-header"' in app
     assert 'article.querySelector(".message-header")?.append(button)' in app
     assert "requestDetailSheet.showModal()" in app
+    assert 'const MAIN_CONVERSATION_ID = "main"' in app
+    assert 'operation: "main"' in app
+    assert "loadConversationList" not in app
+    assert "startConversation" not in app
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'enterkeyhint="enter"' in index
+    assert "Nuevo chat" not in index
+    assert 'id="conversation-list"' not in index
 
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto;" in styles

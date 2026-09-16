@@ -13,10 +13,9 @@ const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.co
 const requestDetailSheet = document.querySelector("#request-detail-sheet");
 const requestDetailTitle = document.querySelector("#request-detail-title");
 const requestDetailContent = document.querySelector("#request-detail-content");
-const conversationList = document.querySelector("#conversation-list");
-const newConversationButton = document.querySelector("#new-conversation");
 const conversationEndpoint = document.querySelector('meta[name="odyssey-conversation-endpoint"]')?.content ?? "/api/conversation";
-let conversationId = null;
+const MAIN_CONVERSATION_ID = "main";
+let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
 
 function showDeploymentMarker() {
@@ -34,42 +33,20 @@ function conversationPayload() {
   return conversationId ? {conversation_id: conversationId} : {};
 }
 
-async function loadConversationList() {
-  const data = await requestConversation({endpoint: conversationEndpoint, operation: "list", payload: conversationPayload()});
-  conversationList.replaceChildren();
-  for (const item of data.conversations ?? []) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "conversation-choice";
-    button.textContent = item.title;
-    button.addEventListener("click", () => void openConversation(item.conversation_id));
-    conversationList.append(button);
-  }
-}
-
-async function openConversation(identifier) {
-  const data = await requestConversation({endpoint: conversationEndpoint, operation: "load", payload: {conversation_id: identifier}});
+async function loadMainConversation() {
+  const data = await requestConversation({endpoint: conversationEndpoint, operation: "main"});
   conversationId = data.conversation_id;
   conversation.replaceChildren();
   for (const turn of data.turns ?? []) appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
-  await loadConversationList();
-}
-
-async function startConversation() {
-  const data = await requestConversation({endpoint: conversationEndpoint, operation: "new"});
-  await openConversation(data.conversation_id);
 }
 
 void (async () => {
   try {
-    const data = await requestConversation({endpoint: conversationEndpoint, operation: "list"});
-    if (data.conversations?.[0]) await openConversation(data.conversations[0].conversation_id);
-    else await startConversation();
+    await loadMainConversation();
   } catch {
     // The existing chat remains usable if the optional history projection is unavailable.
   }
 })();
-newConversationButton?.addEventListener("click", () => void startConversation());
 
 function setBusy(isBusy) {
   input.disabled = isBusy;

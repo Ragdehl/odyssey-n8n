@@ -21,6 +21,7 @@ from odyssey_core.application import (
 )
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
+from odyssey_core.conversations import ConversationRepository
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
     ExternalPrincipal,
@@ -758,6 +759,34 @@ def test_http_boundary_preserves_delivery_identity_for_retries_and_distinguishes
             ("remember this", "n8n-123"),
             ("remember this", "n8n-124"),
         ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) -> None:
+    """The browser can reopen one durable main transcript but cannot manage arbitrary chats."""
+    user = OdysseyUser.new()
+    repository = ConversationRepository(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: None,
+        conversation_repository=repository,
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        body = json.dumps({"authenticated_actor": {"stable_user_id": user.stable_user_id}})
+        connection.request("POST", "/conversation/main", body=body)
+        response = connection.getresponse()
+        assert response.status == 200
+        conversation = json.loads(response.read())
+        assert conversation["conversation_id"] == "main"
+        assert conversation["turns"] == []
+        assert isinstance(conversation["created_at"], str)
+        assert isinstance(conversation["updated_at"], str)
+        connection.request("POST", "/conversation/list", body=body)
+        assert connection.getresponse().status == 404
     finally:
         server.shutdown()
         server.server_close()

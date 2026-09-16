@@ -133,13 +133,13 @@ def test_invalid_browser_request_bypasses_runtime_and_answerer() -> None:
 
 
 def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> None:
-    """Expose only bounded conversation operations through the existing workflow/runtime path."""
+    """Expose only the one actor-owned main conversation through the existing boundary."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "path: 'conversation'" in source
-    assert "['new', 'list', 'load', 'turn']" in source
+    assert "['main', 'turn']" in source
     assert "Execute conversation operation" in source
     assert "runtimeBaseUrl}/conversation/{{ $json.operation }}" in source
-    assert "conversation_id" in source
+    assert "conversation_id: 'main'" in source
 
 
 def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:

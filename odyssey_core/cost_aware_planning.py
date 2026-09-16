@@ -23,7 +23,6 @@ from odyssey_core.observability import (
 from odyssey_core.request_planning import (
     OpenAIRequestPlanner,
     PlannerClarification,
-    PlannerContextNeeded,
     PlannerResult,
     RequestPlan,
     RequestPlanningError,
@@ -103,7 +102,7 @@ class LunaFirstRequestPlanner:
         if isinstance(result, PlannerEscalation):
             self._sync_final_metadata(self._luna)
             return PlannerClarification("UNRECOGNIZED_REQUEST")
-        if isinstance(result, (RequestPlan, PlannerClarification, PlannerContextNeeded)):
+        if isinstance(result, (RequestPlan, PlannerClarification)):
             self._sync_final_metadata(self._luna)
             return result
         raise TypeError("Luna first pass returned an unsupported planner result")
@@ -136,7 +135,7 @@ class LunaFirstRequestPlanner:
             sol_started,
         )
         self._sync_final_metadata(self._sol)
-        if not isinstance(result, (RequestPlan, PlannerClarification, PlannerContextNeeded)):
+        if not isinstance(result, (RequestPlan, PlannerClarification)):
             raise TypeError("Sol fallback returned an unsupported planner result")
         return result
 

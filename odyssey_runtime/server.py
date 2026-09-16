@@ -64,19 +64,11 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             """Validate one request payload, execute Core, and return public evidence."""
             parsed = urlsplit(self.path)
-            if parsed.path in {"/conversation/new", "/conversation/list", "/conversation/load"}:
+            if parsed.path == "/conversation/main":
                 try:
                     payload = self._read_payload()
                     actor = self._identity_from_payload(payload)
-                    if parsed.path == "/conversation/new":
-                        response = runtime.create_conversation(*actor)
-                    elif parsed.path == "/conversation/list":
-                        response = {"conversations": runtime.list_conversations(*actor)}
-                    else:
-                        conversation_id = payload.get("conversation_id")
-                        if not isinstance(conversation_id, str):
-                            raise ValueError("conversation_id is required")
-                        response = runtime.load_conversation(conversation_id, *actor)
+                    response = runtime.main_conversation(*actor)
                     self._write_json(HTTPStatus.OK, response)
                 except (ConversationError, IdentityBoundaryError, TypeError, ValueError):
                     self._write_json(

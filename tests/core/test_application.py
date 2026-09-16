@@ -19,7 +19,6 @@ from odyssey_core import (
     KnowledgeUnit,
     OpenAIRequestPlanner,
     PlannerClarification,
-    PlannerContextNeeded,
     PlannerResult,
     RequestPlan,
     RetrieveAction,
@@ -46,18 +45,6 @@ class FakePlanner:
         if isinstance(self.value, Exception):
             raise self.value
         return self.value
-
-
-@dataclass
-class ContextPlanner:
-    """Request bounded context once, then return a normal validated plan."""
-
-    value: RequestPlan
-    calls: list[tuple[str, tuple]]
-
-    def plan(self, request: str, conversation_context=()) -> PlannerResult:
-        self.calls.append((request, tuple(conversation_context)))
-        return PlannerContextNeeded() if len(self.calls) == 1 else self.value
 
 
 def unit(name: str, *, references: tuple[KnowledgeReference, ...] = ()) -> KnowledgeUnit:
@@ -112,16 +99,28 @@ def test_retrieve_uses_existing_context_and_propagates_one_request_id(
     assert calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
 
 
-def test_context_needed_retrieves_bounded_evidence_before_second_planner_pass(
+def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Context-dependent planning remains generic and executes only after the second pass."""
-    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
-    planner = ContextPlanner(
-        RequestPlan((RetrieveAction(SelectionCriteria(None, "Marta", None, (), None)),), ()), []
+    """Conversation continuity reaches only the one planner pass, never retrieval expansion."""
+    retrieval_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: retrieval_calls.append(kwargs) or object()
     )
+
+    @dataclass
+    class RecordingPlanner:
+        calls: list[tuple[str, tuple]]
+
+        def plan(self, request: str, conversation_context=()) -> PlannerResult:
+            self.calls.append((request, tuple(conversation_context)))
+            return RequestPlan(
+                (RetrieveAction(SelectionCriteria("Marta", "Marta", None, (), None)),), ()
+            )
+
+    planner = RecordingPlanner([])
     result = application.execute_request(
-        "¿Dónde vive?",
+        "¿Y dónde vive?",
         planner=planner,
         repository=object(),
         schema={},
@@ -133,15 +132,15 @@ def test_context_needed_retrieves_bounded_evidence_before_second_planner_pass(
         now="2026-08-28T12:00:00Z",
         context_limit=5,
         request_id_factory=lambda: "request-context",
-        conversation_context_provider=lambda _needed: (
+        conversation_context=(
             {"role": "user", "text": "Marta vive en Lyon"},
         ),
     )
     assert result.status is ApplicationStatus.COMPLETED
     assert planner.calls == [
-        ("¿Dónde vive?", ()),
-        ("¿Dónde vive?", ({"role": "user", "text": "Marta vive en Lyon"},)),
+        ("¿Y dónde vive?", ({"role": "user", "text": "Marta vive en Lyon"},)),
     ]
+    assert retrieval_calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
 
 
 def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(

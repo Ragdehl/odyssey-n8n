@@ -34,44 +34,22 @@ Exact tabs, names, and placement remain product decisions. Do not add navigation
 
 ## Interface roadmap
 
-### UI-0 — persistent conversation history and resume
+### UI-0 — persistent main conversation and resume
 
-The chat surface should behave like a durable messaging product rather than a transient form. Closing/reopening Odyssey must not make prior visible conversations disappear.
-
-Target user experience:
+The first durable chat product is deliberately one ordinary conversation, not a chat manager.
+Opening Odyssey restores the authenticated actor's visible chronological main transcript; the user
+continues naturally without choosing a topic, opening a chat, or creating a new one. The stable
+internal `conversation_id` and request correlation remain implementation details of the durable
+non-canonical state contract.
 
 ```text
-Chats
-----------------
-Hoy
-  Nora Vidal
-  Proyecto Odyssey
-
-Ayer
-  Ideas para el jardín
-
-[open conversation]
-        |
-        v
-previous visible turns remain available
-        |
-        v
-continue the same conversation
+open Odyssey -> restore main transcript -> continue natural conversation
 ```
 
-Requirements:
-
-- show a list/history of the user's prior Odyssey conversations when durable conversation records exist;
-- reopening a conversation restores the visible user/Odyssey turns in chronological order;
-- continuing an old conversation reuses its stable `conversation_id` rather than inventing a disconnected thread;
-- a new-chat action starts a new conversation identity explicitly;
-- titles/grouping may be simple and derived initially (for example first meaningful request + date); do not require a title-generation LLM just for this;
-- timestamps and basic session boundaries should remain visible enough for the user to orient themselves;
-- browser `localStorage` may cache presentation state, but it must not become the sole durable authority for conversation history;
-- the durable source for visible chat history should reuse the non-canonical conversation records defined by the conversation/history contract, correlated through `conversation_id` and `request_id`;
-- deleting/retaining/exporting conversations is a later policy decision and must not silently delete canonical personal knowledge that may have been created from those conversations.
-
-This is a product-view requirement over the same conversation-history boundary, not a reason to make conversations canonical personal notes. The exact WhatsApp-like presentation can evolve, but **chat persistence across page/app reopen is a committed requirement**.
+Recent visible turns may provide continuity to the planner, but canonical Markdown remains authority
+for current facts and normal retrieval/mutation. The browser is never the durable authority.
+Conversation list/new/open, titles, topic splitting, and deletion/export policy are future product
+decisions; they are not UI-0 acceptance requirements. See the current [UI-0 contract](ui-0-durable-conversations.md).
 
 ### UI-1 — request-level feedback in chat
 
@@ -298,7 +276,7 @@ The first sequence should favor features that make Odyssey simpler to use while 
 UI-1 request feedback + advanced request drill-down
         |
         v
-UI-0 durable chat history/resume + conversation continuity foundation
+UI-0 durable main conversation + one-pass continuity foundation
         |
         v
 UI-2 read-only Notes

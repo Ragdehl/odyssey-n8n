@@ -16,6 +16,9 @@ from uuid import uuid4
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
 _MAX_RECORD_BYTES = 256 * 1024
 _MAX_TURNS = 200
+MAIN_CONVERSATION_ID = "main"
+_RECENT_CONTEXT_MAX_BYTES = 4096
+_RECENT_CONTEXT_MAX_TURNS = 16
 
 
 class ConversationError(ValueError):
@@ -64,6 +67,14 @@ class ConversationRepository:
         }
         self._write(target, record)
         return self._public(record)
+
+    def load_or_create_main(self, actor_id: str, *, now: str) -> dict[str, Any]:
+        """Return the actor's durable main conversation, creating it once when absent."""
+        actor = _validate_actor(actor_id)
+        target = self._path(actor, MAIN_CONVERSATION_ID)
+        if target.exists():
+            return self.load(actor, MAIN_CONVERSATION_ID)
+        return self.create(actor, now=now, conversation_id=MAIN_CONVERSATION_ID)
 
     def load(self, actor_id: str, conversation_id: str) -> dict[str, Any]:
         """Load one validated actor-owned conversation without exposing internal actor data."""
@@ -145,14 +156,26 @@ class ConversationRepository:
         self._write(path, internal)
         return self._public(internal)
 
-    def context(
-        self, actor_id: str, conversation_id: str, *, max_turns: int = 8, max_bytes: int = 12000
+    def recent_context(
+        self,
+        actor_id: str,
+        conversation_id: str,
+        *,
+        exclude_request_id: str | None = None,
+        max_turns: int = _RECENT_CONTEXT_MAX_TURNS,
+        max_bytes: int = _RECENT_CONTEXT_MAX_BYTES,
     ) -> list[dict[str, str]]:
-        """Return a bounded recent evidence slice for context-on-demand planning."""
+        """Return complete recent visible turns for one planner call without current-turn duplication."""
+        if max_turns <= 0 or max_bytes <= 0:
+            raise ConversationError("recent context bounds are invalid")
+        if exclude_request_id is not None:
+            _validate_id(exclude_request_id, "request_id")
         record = self.load(actor_id, conversation_id)
         selected: list[dict[str, str]] = []
         size = 0
         for turn in reversed(record["turns"]):
+            if turn["request_id"] == exclude_request_id:
+                continue
             item = {"role": turn["role"], "text": turn["text"]}
             cost = len(json.dumps(item, ensure_ascii=False).encode("utf-8"))
             if len(selected) >= max_turns or size + cost > max_bytes:

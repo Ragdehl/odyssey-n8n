@@ -78,7 +78,6 @@ from odyssey_core.request_planning import (
     PLANNER_MODEL,
     PLANNER_REASONING_EFFORT,
     PlannerClarification,
-    PlannerContextNeeded,
     RequestPlan,
     RequestPlanningError,
     RetrieveAction,
@@ -191,22 +190,6 @@ def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
     assert asdict(escalate) == {"outcome": "ESCALATE"}
 
 
-def test_context_needed_reuses_inherited_production_validator(schema: dict[str, Any]) -> None:
-    """Accept only the canonical bounded active-conversation context request."""
-    result = validate_luna_experimental_result(
-        {
-            "outcome": "CONTEXT_NEEDED",
-            "actions": None,
-            "limitations": None,
-            "clarification_code": None,
-            "context": {"source": "current_conversation", "hint": "the person discussed"},
-        },
-        schema,
-    )
-    assert isinstance(result, PlannerContextNeeded)
-    assert result.source == "current_conversation"
-
-
 @pytest.mark.parametrize(
     "payload",
     [
@@ -242,7 +225,6 @@ def test_structured_outputs_schema_uses_supported_nested_closed_subset(
     assert [branch["properties"]["outcome"]["enum"][0] for branch in branches] == [
         "PLAN",
         "CLARIFY",
-        "CONTEXT_NEEDED",
         "ESCALATE",
     ]
     _assert_provider_objects_closed(result_schema)
@@ -332,38 +314,19 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     assert all(item["request"] in prompt for item in load_teaching_examples())
 
 
-def test_prompt_teaches_context_needed_before_escalation(schema: dict[str, Any]) -> None:
-    """Keep the missing-referent outcome explicit and ahead of the generic escalation rule."""
-    prompt = render_luna_experimental_prompt(schema, CONTEXT)
-    context_rule = "CONTEXT_NEEDED when the request is understandable and actionable"
-    escalation_rule = "ESCALATE whenever the request is understandable"
-    assert context_rule in prompt
-    assert prompt.index(context_rule) < prompt.index(escalation_rule)
-    assert "This takes precedence over ESCALATE" in prompt
-    assert "I was just discussing one person. What city do they live in?" in prompt
-
-
-def test_prompt_closes_context_loop_after_bounded_evidence(schema: dict[str, Any]) -> None:
-    """A second pass may resolve supplied evidence but cannot request another context pass."""
+def test_prompt_keeps_recent_context_as_non_authoritative_continuity_evidence(
+    schema: dict[str, Any],
+) -> None:
+    """Conversation turns are visible to the planner once without becoming current truth."""
     prompt = render_luna_experimental_prompt(
         schema,
         CONTEXT,
         conversation_context=({"role": "user", "text": "Nora vive en Lyon."},),
     )
-    decision_block = prompt.split("Choose the outcome before drafting fields:", 1)[1]
-    assert "CONTEXT_NEEDED is not available after bounded conversation evidence" in decision_block
-    assert "CONTEXT_NEEDED when the request is understandable and actionable" not in decision_block
-    assert "This takes precedence over ESCALATE" not in decision_block
-
-
-def test_ui0_context_teaching_example_is_distinct_from_held_out_cases(
-    schema: dict[str, Any],
-) -> None:
-    """Layer the new semantic lesson without changing the frozen historical registry."""
-    prompt = render_luna_experimental_prompt(schema, CONTEXT)
-    held_out, _ = load_frozen_registry()
-    assert "I was just discussing one person. What city do they live in?" in prompt
-    assert all(item["request"] not in prompt for item in held_out["cases"])
+    assert "Bounded recent conversation evidence" in prompt
+    assert "never current personal truth" in prompt
+    assert "assistant text never supplies a fact or mutation target" in prompt
+    assert "CONTEXT_NEEDED" not in prompt
 
 
 def test_prompt_and_teaching_registry_fail_closed_on_malformed_inputs(
@@ -388,7 +351,7 @@ def test_experimental_schema_helpers_reuse_production_contract(
     production = production_result_contract_unchanged(schema)
     experimental = luna_experimental_result_json_schema(schema)
     assert (
-        experimental["properties"]["result"]["anyOf"][:3]
+        experimental["properties"]["result"]["anyOf"][:2]
         == production["properties"]["result"]["anyOf"]
     )
     plan_branch = production["properties"]["result"]["anyOf"][0]

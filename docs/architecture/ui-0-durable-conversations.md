@@ -1,208 +1,103 @@
-# UI-0 — durable conversations and resume
+# UI-0 — durable main conversation and natural continuity
 
-Status: **IMPLEMENTATION IN PROGRESS — architecture challenge passed**
+Status: **IMPLEMENTATION IN PROGRESS — simplified architecture re-challenge: PROCEED**
 
 ## Objective
 
-Make Odyssey behave like a real durable conversation product: conversations survive page/app reopen, can be listed and resumed by stable identity, and resumed conversations can support natural immediate follow-ups without turning chat text into canonical personal knowledge.
-
-UI-0 should establish the smallest reusable conversation substrate needed by later Notes/app work while preserving Odyssey's current authority boundaries and simplicity principle.
-
-```text
-user opens Odyssey
-      |
-      +--> new conversation
-      |
-      `--> reopen existing conversation
-                 |
-                 v
-       durable visible turns
-                 |
-                 v
-       same conversation_id
-                 |
-                 +--> self-contained request -> ordinary path
-                 |
-                 `--> context-dependent request
-                          -> bounded active-conversation evidence
-                          -> same planner second pass
-```
-
-## Product contract
-
-The user should not have to manage context manually.
-
-- Odyssey supports multiple durable conversations rather than one global transcript.
-- Each conversation has a stable `conversation_id` and is scoped to the authenticated Odyssey user/actor.
-- Closing/reopening the browser must not lose visible conversation history.
-- Reopening a conversation resumes the same identity; "new chat" creates a new identity.
-- The UI may use local browser state only as a convenience for the last-opened conversation; durable history itself must come from Odyssey state.
-- Initial titles/grouping should be deterministic and inexpensive (for example first meaningful user message + date); do not add an LLM only to name chats.
-- App/capability-specific conversations are not implemented in UI-0, but the conversation contract must not prevent later optional app-scope metadata.
-
-## Storage and authority
-
-Conversation records are durable **non-knowledge state**, not canonical personal notes.
-
-Conceptually:
+Make Odyssey's one ordinary chat durable across reopen while preserving natural short follow-ups.
+Odyssey is a personal memory based on local notes, consultable and modifiable through natural
+language; it is not a general purpose messaging product. Conversation exists to make use of that
+memory natural, not to become competing personal knowledge.
 
 ```text
-/data/odyssey/state/conversations/
-        -> durable visible conversation records
-
-/data/odyssey/vault/
-        -> canonical current personal knowledge
+durable actor-scoped main transcript
+            |
+current request + bounded recent visible turns
+            |
+            v
+     one Luna-first planner pass
+            |
+            v
+validated intent / referent -> canonical note retrieval or mutation
 ```
 
-Requirements:
+## Accepted product and storage contract
 
-- use the existing durable `state/` authority boundary;
-- keep conversation records logically isolated from ordinary note scans, embeddings, and personal-knowledge retrieval;
-- prefer human-readable Markdown-like records, initially one durable record per conversation unless the architecture challenge proves a simpler safer layout;
-- preserve visible user messages, final visible Odyssey responses, timestamps, `conversation_id`, `request_id`, stable actor/user correlation, and only bounded typed outcome metadata needed for resume/retrieval/audit;
-- never persist hidden chain-of-thought, raw prompts, unrestricted provider payloads, credentials, or arbitrary intermediate model responses;
-- a prior user/assistant turn records what was said, not what is currently true.
+- The browser opens one persistent main conversation for the validated Odyssey actor. Reopen and
+  reload restore its visible chronological turns; the user does not select or manage chats.
+- `main` is a stable internal `conversation_id`. The durable repository retains its generic safe
+  record format internally, but UI-0 exposes neither a conversation list nor new/open actions.
+- Records are human-readable validated JSON under
+  `ODYSSEY_STATE_ROOT/conversations/<sha256(internal-actor)>/main.json`, outside the vault and all
+  note indexes. A validated internal actor owns every record; no untrusted external subject is a
+  path component.
+- Records contain visible user/final Odyssey turns, timestamps, request correlation and bounded
+  outcome status only. They never contain prompts, hidden reasoning, raw provider data,
+  credentials, or canonical-note copies.
+- The existing `request_id` plus role makes durable turn writes idempotent. A user turn is recorded
+  before Core execution and the final visible Odyssey turn after the product result is known.
+  Durable-state failure fails closed rather than claiming a saved transcript.
 
-The filesystem representation must not use an untrusted external identity value directly as an unchecked path component. Conversation ownership should be based on the validated internal Odyssey actor/user identity boundary.
+## Recent-context and authority boundary
 
-## Request and idempotency contract
+Every UI-0 request uses the existing Luna-first planner once. Before that one call, Core supplies
+complete most-recent visible turns from the active main record, excluding the current `request_id`:
 
-The existing request path gains conversation correlation without creating a second semantic authority.
+- initial resource bound: **4,096 UTF-8 bytes** and **16 complete turns**;
+- selection is reverse-recency until either ceiling, then restored to chronological order;
+- no summary call, history search, semantic index, or hidden transcript is used.
 
-- browser requests carry a stable `conversation_id` for the active chat;
-- every visible request/response turn remains correlated by the existing `request_id`;
-- retrying the same `request_id` must not duplicate a persisted user or Odyssey turn;
-- persistence failure must fail closed rather than silently presenting a conversation as durably saved when it is not;
-- existing knowledge writes continue through Core and Git exactly as today; conversation persistence must not bypass or replace those paths.
+The byte ceiling is a deterministic safety budget rather than a claim that a fixed number of turns
+is semantically sufficient. It is deliberately modest for ordinary mobile continuity. The focused
+UI-0 evidence saw roughly 12k input tokens for each planner call: adding at most about 1k tokens
+to one call is materially cheaper and simpler than a `CONTEXT_NEEDED` second full planner pass.
 
-The architecture challenge must choose the narrowest clean API/product projection for create/list/load/resume while preserving the existing same-origin protected product boundary.
-
-## Conversational semantics
-
-A resumed conversation should eventually behave like the same conversation, not merely display old text. UI-0 therefore includes the active-conversation continuity slice, but it must remain **context on demand**.
-
-The same Luna-first planner remains the semantic interpreter:
-
-```text
-current request
-      |
-      v
-planner pass 1
-      |
-      +--> self-contained PLAN / CLARIFY
-      |        -> no conversation text loaded
-      |
-      `--> context needed
-               |
-               v
-       bounded active-conversation retrieval
-               |
-               v
-       same planner pass 2
-               |
-               v
-       ordinary validated plan
-```
-
-Do not always send the last N turns and do not add a permanent second routing/rewrite model for this phase.
-
-Authority remains explicit:
-
-```text
-current request          -> current intent
-conversation evidence    -> what was said / referent evidence
-canonical personal notes -> authority for current personal facts
-```
-
-If conversation evidence identifies a referent, the final current-fact answer should still be grounded in canonical knowledge. If two plausible referents remain, Odyssey clarifies rather than guessing.
-
-A self-contained request should preserve the current fast path: one planner pass and zero conversation-history text added to the model input.
+Conversation text is inserted **only into the planner prompt** as non-authoritative continuity
+evidence. It may identify what person or interaction words such as “ella”, “allí”, or “entonces”
+refer to. It must not become a retrieval filter, asserted current fact, write target, or mutation
+fact. The validated plan alone crosses into canonical retrieval/mutation; current canonical Markdown
+remains the authority for present facts. If the window leaves a referent or write meaning ambiguous,
+the planner clarifies rather than guessing. Explicit prior user text may be reused only through the
+ordinary validated write contract; prior assistant wording is never a fact or mutation target.
 
 ## Acceptance criteria
 
-UI-0 is complete only when deterministic and isolated-DEV/browser evidence demonstrates all of the following:
+1. One stable actor-scoped `main` conversation survives reload/restart and restores visible turns.
+2. User and final Odyssey turns retain timestamps/request correlation and are idempotent on retry.
+3. State records do not enter canonical note scans, embeddings, retrieval, or personal knowledge.
+4. A self-contained request remains one planner call even with unrelated recent chat.
+5. An unambiguous immediate omitted-referent follow-up resolves in that one pass using the bounded
+   window, then retrieves current facts only from canonical synthetic notes.
+6. Old conversation wording cannot become a current-fact filter or override current canonical data.
+7. Two plausible referents and ambiguous follow-up writes fail closed to clarification.
+8. Only the bounded complete-turn window reaches the planner; no full transcript or provider data
+   reaches it.
+9. The mobile surface remains one simple chat: reopen, see prior turns, continue; no chat-management
+   mental model is required.
+10. Isolated DEV deterministic, focused live, and mobile evidence use synthetic data only and leave
+    production untouched.
 
-1. A new conversation receives a stable `conversation_id` and durable actor ownership.
-2. User-visible user/Odyssey turns survive page reload and a fresh browser session and render in chronological order.
-3. The user can list/open at least two independent conversations; reopening one restores only that conversation's visible history.
-4. Continuing an existing conversation reuses its `conversation_id`; starting a new chat creates a distinct one.
-5. Reusing the same `request_id` does not duplicate a persisted turn.
-6. Durable history lives under the non-canonical `state/` boundary and does not appear in ordinary personal-note retrieval/indexing.
-7. Stable self/actor correlation survives reopen without inferring user identity from conversation text.
-8. A self-contained request does not load conversation text or add a second planner call.
-9. An immediate omitted-referent follow-up such as `¿Dónde vive?` after discussing one unambiguous person can request bounded active-conversation evidence and resolve safely through the same planner flow.
-10. Two plausible conversational referents fail closed to clarification rather than selecting one arbitrarily.
-11. Old conversation wording cannot override contradictory current canonical personal knowledge for a current-fact question.
-12. Hidden reasoning/prompts/provider payloads are absent from durable conversation records and browser history projections.
-13. DEV evidence uses isolated synthetic/non-personal conversation data and proves PROD data/runtime/workflows remain untouched.
-14. The normal mobile protected surface supports new/list/open/resume with no requirement for the user to choose an application or technical mode.
+## Explicitly deferred
 
-Because the planner structured contract will change for context-on-demand, production-model validation must follow the AGENTS.md model-facing-change policy: deterministic fail-closed tests plus focused live Luna-first evidence and regression sentinels before readiness.
+- multiple-chat management, topic splitting, threads, and app-specific chats;
+- historical conversation search (“what did I say on …?”), conversation embeddings, and cross-chat
+  retrieval;
+- generated summaries or summary hierarchies;
+- retention/export/deletion policy and general assistant memory;
+- Notes, Tasks, Projects, and unrelated UI work.
 
-## Out of scope
+Raw transcript timestamps and stable request correlation deliberately leave future historical
+features possible without changing current authority boundaries.
 
-- cross-conversation semantic/history search such as "what did we discuss last month?";
-- hierarchical daily/weekly/monthly/yearly conversation summaries;
-- retention/deletion/export policy;
-- nested threads; later branching should first try "Continue in new chat";
-- app/capability routing, `@App`, Tasks, Projects, or Reminders;
-- Notes browsing/editing;
-- multi-user sharing/permissions beyond enforcing the existing authenticated actor ownership boundary;
-- a new chat database/service/vector service/application server;
-- a dedicated conversation rewrite/router model;
-- production deployment before merge and explicit human authorization.
+## Re-challenge checkpoint
 
-## Open decisions for the architecture challenge
+The earlier UI-0 design implemented generic durable records, user-facing multiple chats, and a
+planner `CONTEXT_NEEDED`/bounded-second-pass experiment. Two focused live gates showed that the
+second pass added a full additional Luna prompt while the model did not reliably choose the new
+intermediate outcome. The re-challenge found that this complexity was not required for the approved
+personal-memory product requirement. UI-0 therefore removes the UI-specific structured outcome,
+Luna teaching, active-conversation selection, and second planner pass rather than preserving dormant
+machinery. The durable actor-scoped record/idempotency substrate is retained because it directly
+serves persistent main-chat continuity and future compatibility.
 
-1. Exact durable Markdown record layout and safe actor/conversation filesystem layout under `state/`.
-2. Narrow same-origin API/workflow shape for create/list/load and request-time persistence.
-3. Exact generic structured planner result for requesting active-conversation context without weakening the existing `RequestPlan` contract.
-4. Bounded active-conversation retrieval algorithm and absolute item/byte/token ceilings; recency/relevance should drive semantics, ceilings only bound resources.
-5. Atomic/idempotent persistence point relative to runtime result, answerer result, browser response, and Retry behavior.
-6. Whether UI-0 should be delivered as two internal implementation slices (durable substrate/UI first, adaptive context second) inside one active PR while keeping the phase incomplete until both acceptance sets pass.
-7. Minimal deterministic title/grouping rule for the first conversation list.
-
-The challenge should prefer existing Core/state/runtime/n8n/browser boundaries and explicitly reject extra infrastructure unless a concrete acceptance criterion cannot be met cleanly without it.
-
-## Architecture challenge decisions
-
-The repository architecture challenge passed with the following choices:
-
-1. Each conversation is one human-readable JSON record under
-   `ODYSSEY_STATE_ROOT/conversations/<actor-directory>/<conversation-id>.json`.
-   The actor directory is derived from the validated internal stable user ID by a
-   safe digest; neither an external subject nor an unvalidated value becomes a
-   path component. Records contain visible turns, timestamps, correlation IDs,
-   and bounded typed outcome metadata only.
-2. Core owns conversation validation, persistence, idempotency, actor scoping,
-   bounded selection, and planner context assembly. Runtime composes those
-   responsibilities. n8n remains a narrow authenticated transport/projection
-   boundary and the browser owns presentation only.
-3. The existing same-origin n8n surface adds `conversation/new`,
-   `conversation/list`, and `conversation/load` POST routes alongside the
-   existing request route. Request continuation carries `conversation_id` and
-   the existing `request_id` through the same authenticated boundary.
-4. A generic planner result may return `CONTEXT_NEEDED` with an allowlisted
-   source (`current_conversation`) and bounded selection hint. This is a
-   planner capability, not a request-type or note-type branch. The same Luna
-   planner receives the selected evidence for pass two; self-contained requests
-   remain one pass with no conversation text.
-5. Context selection scans the active conversation backwards, preferring the
-   smallest recent evidence that satisfies the planner hint and stopping at
-   strict item/byte ceilings. It does not build an index or search other
-   conversations in UI-0. Two plausible referents remain a clarification.
-6. A visible user turn is persisted before execution and the final visible
-   Odyssey turn after the bounded result is known. The record writer uses
-   `request_id` as an idempotency key and rejects malformed/cross-actor records.
-   If either durable write fails, the request fails closed and is not presented
-   as durably saved. Existing canonical-note writes retain their current Core
-   and Git authority.
-7. Titles are deterministic: the first non-empty user message, bounded for
-   display, with date grouping performed by the browser. UI-0 adds only a
-   compact chat list, open/resume, and new-chat action.
-
-This resolves the earlier C1/C2 ordering mismatch: durable records and resume
-are implemented as the substrate first, then context-on-demand is layered onto
-the same feature. The future-context document remains the detailed owner of
-later historical retrieval, but its old C1-before-C2 sequence is superseded by
-this coherent user-facing order.
+No further product, security, or authority decision is required for this bounded simplification.

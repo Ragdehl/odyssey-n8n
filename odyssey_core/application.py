@@ -39,7 +39,6 @@ from .request_planning import (
     DelegateAction,
     KnowledgeUnit,
     PlannerClarification,
-    PlannerContextNeeded,
     PlannerResult,
     RequestPlan,
     RetrieveAction,
@@ -194,8 +193,7 @@ def execute_request(
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
     monotonic: Callable[[], float] = perf_counter,
-    conversation_context_provider: Callable[[PlannerContextNeeded], Sequence[Mapping[str, str]]]
-    | None = None,
+    conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -219,6 +217,8 @@ def execute_request(
         semantic_limit: Existing bounded semantic-resolution candidate budget.
         pending_recorder: Optional create-only durable pending-work recorder.
         history_recorder: Optional request-level local Git history recorder.
+        conversation_context: Bounded visible recent turns used only by the planner to resolve
+            continuity; Core never passes this text to canonical retrieval or mutation boundaries.
 
     Returns:
         One stable request result. Clarifications and planning failures perform no actions or writes.
@@ -241,7 +241,11 @@ def execute_request(
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic)
     try:
-        plan = provider_recorder.invoke("planner", planner, planner.plan, user_request)
+        plan = (
+            provider_recorder.invoke("planner", planner, planner.plan, user_request, conversation_context)
+            if conversation_context
+            else provider_recorder.invoke("planner", planner, planner.plan, user_request)
+        )
     except Exception as error:
         stages.append(
             OperationalStage(
@@ -272,52 +276,6 @@ def execute_request(
             started,
             monotonic,
         )
-    if isinstance(plan, PlannerContextNeeded):
-        if conversation_context_provider is None:
-            stages.append(
-                _stage("planner.context", OperationalOutcome.FAILED, planner_started, monotonic)
-            )
-            return _with_operational(
-                ApplicationResult(
-                    request_id, ApplicationStatus.FAILED, (), (), "conversation context unavailable"
-                ),
-                stages,
-                started,
-                monotonic,
-            )
-        context_started = monotonic()
-        try:
-            context = conversation_context_provider(plan)
-            plan = provider_recorder.invoke(
-                "planner.context", planner, planner.plan, user_request, context
-            )
-        except Exception as error:
-            stages.append(
-                _stage(
-                    "planner.context", OperationalOutcome.FAILED, context_started, monotonic, error
-                )
-            )
-            return _with_operational(
-                ApplicationResult(
-                    request_id, ApplicationStatus.FAILED, (), (), _safe_reason(error)
-                ),
-                stages,
-                started,
-                monotonic,
-            )
-        if isinstance(plan, PlannerContextNeeded):
-            return _with_operational(
-                ApplicationResult(
-                    request_id,
-                    ApplicationStatus.FAILED,
-                    (),
-                    (),
-                    "conversation context remained ambiguous",
-                ),
-                stages,
-                started,
-                monotonic,
-            )
     planner_duration_ms = _elapsed_ms(planner_started, monotonic())
     if isinstance(plan, PlannerClarification):
         stages.append(

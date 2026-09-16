@@ -36,7 +36,7 @@ _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerResult. Use the supplied current date, time, and timezone.
 
-When the request is understandable but cannot be safely interpreted without a referent from the active conversation, return CONTEXT_NEEDED with source current_conversation and a short generic hint. Do not choose a person, note, fact, or action from the hint. If bounded conversation evidence is supplied, use it only to resolve the referent and then return the ordinary PLAN or CLARIFY outcome. Conversation text is evidence of what was said, never authority for current personal facts.
+Bounded recent conversation evidence may resolve a referent or conversational continuity, but it records only what was said and is never current personal truth. Use it only to identify the subject or interaction the user means. Do not turn a prior user statement or assistant response into a current-fact filter, retrieval constraint, or asserted fact. Canonical notes remain the authority for current facts. A follow-up write may reuse an explicit fact from earlier user text only when the ordinary write contract can represent it; assistant text never supplies a fact or mutation target. If the recent evidence still leaves the referent or requested mutation ambiguous, return CLARIFY rather than guessing.
 
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
@@ -275,15 +275,7 @@ class PlannerClarification:
     code: str
 
 
-@dataclass(frozen=True, slots=True)
-class PlannerContextNeeded:
-    """Request bounded active-conversation evidence before planning can continue."""
-
-    source: str = "current_conversation"
-    hint: str = "referent"
-
-
-PlannerResult = RequestPlan | PlannerClarification | PlannerContextNeeded
+PlannerResult = RequestPlan | PlannerClarification
 
 
 def plan_fact_ordinals(plan: RequestPlan) -> tuple[tuple[int, ...], ...]:
@@ -525,31 +517,11 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         "required": required,
         "additionalProperties": False,
     }
-    context_branch = {
-        "type": "object",
-        "properties": {
-            "outcome": {"type": "string", "enum": ["CONTEXT_NEEDED"]},
-            "actions": {"type": "null"},
-            "limitations": {"type": "null"},
-            "clarification_code": {"type": "null"},
-            "context": {
-                "type": "object",
-                "properties": {
-                    "source": {"type": "string", "enum": ["current_conversation"]},
-                    "hint": {"type": "string", "minLength": 1, "maxLength": 160},
-                },
-                "required": ["source", "hint"],
-                "additionalProperties": False,
-            },
-        },
-        "required": ["outcome", "actions", "limitations", "clarification_code", "context"],
-        "additionalProperties": False,
-    }
     # Structured Outputs rejects a root-level anyOf; keep the root closed and
     # place the discriminated union beneath the required result property.
     return {
         "type": "object",
-        "properties": {"result": {"anyOf": [plan_branch, clarify_branch, context_branch]}},
+        "properties": {"result": {"anyOf": [plan_branch, clarify_branch]}},
         "required": ["result"],
         "additionalProperties": False,
     }
@@ -569,15 +541,12 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
     Raises:
         RequestPlanningError: If the discriminator, payload combination, or nested plan is invalid.
     """
-    if not isinstance(payload, dict) or set(payload) not in (
-        {
-            "outcome",
-            "actions",
-            "limitations",
-            "clarification_code",
-        },
-        {"outcome", "actions", "limitations", "clarification_code", "context"},
-    ):
+    if not isinstance(payload, dict) or set(payload) != {
+        "outcome",
+        "actions",
+        "limitations",
+        "clarification_code",
+    }:
         raise RequestPlanningError("PlannerResult must contain only its required fields")
     outcome = payload["outcome"]
     if outcome == "PLAN":
@@ -601,26 +570,6 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
         ):
             raise RequestPlanningError("CLARIFY must contain one supported code and no actions")
         return PlannerClarification(code)
-    if outcome == "CONTEXT_NEEDED":
-        context = payload.get("context")
-        if (
-            set(payload) != {"outcome", "actions", "limitations", "clarification_code", "context"}
-            or payload["actions"] is not None
-            or payload["limitations"] is not None
-            or payload["clarification_code"] is not None
-        ):
-            raise RequestPlanningError("CONTEXT_NEEDED must carry no actions or clarification")
-        if not isinstance(context, dict) or set(context) != {"source", "hint"}:
-            raise RequestPlanningError("CONTEXT_NEEDED context is invalid")
-        hint = context["hint"]
-        if (
-            context["source"] != "current_conversation"
-            or not isinstance(hint, str)
-            or not hint.strip()
-            or len(hint) > 160
-        ):
-            raise RequestPlanningError("CONTEXT_NEEDED context is invalid")
-        return PlannerContextNeeded(hint=hint)
     raise RequestPlanningError("PlannerResult outcome is unsupported")
 
 

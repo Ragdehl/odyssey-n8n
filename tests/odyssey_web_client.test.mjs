@@ -121,6 +121,26 @@ test("transport sends only request and request_id through same-origin JSON", asy
   assert.equal(result.kind, "acknowledgement");
 });
 
+test("main-conversation transport remains correlated before history reload completes", async () => {
+  const submission = createSubmission("Hola", fakeCrypto, "main");
+  let captured;
+  const fetchImpl = async (_endpoint, options) => {
+    captured = options;
+    return response({
+      payload: {
+        request_id: submission.requestId,
+        status: "completed",
+        kind: "acknowledgement",
+        message: "Hecho.",
+      },
+    });
+  };
+
+  await requestProductResult({endpoint: "/api/request", submission, fetchImpl});
+
+  assert.equal(JSON.parse(captured.body).conversation_id, "main");
+});
+
 test("network failure is retryable so caller can reuse the same submission id", async () => {
   const submission = {request: "Hola", requestId: "web-retry"};
   const fetchImpl = async () => {

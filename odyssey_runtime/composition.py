@@ -16,7 +16,7 @@ from odyssey_core.application import ApplicationResult, allocate_request_id, exe
 from odyssey_core.context import ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
-from odyssey_core.conversations import ConversationRepository
+from odyssey_core.conversations import MAIN_CONVERSATION_ID, ConversationRepository
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
@@ -90,6 +90,10 @@ class RuntimeComposition:
                 else "odyssey-runtime"
             )
             request_id = request_id or allocate_request_id()
+            if conversation_id == MAIN_CONVERSATION_ID:
+                self.conversation_repository.load_or_create_main(
+                    resolved_actor, now=_current_time()["timestamp"]
+                )
             self.conversation_repository.append_turn(
                 resolved_actor,
                 conversation_id,
@@ -165,6 +169,16 @@ class RuntimeComposition:
         now = _current_time()["timestamp"]
         return repository.create(actor, now=now)
 
+    def main_conversation(
+        self,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Return the one durable main conversation for the trusted actor."""
+        repository = self._conversation_repository()
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        return repository.load_or_create_main(actor, now=_current_time()["timestamp"])
+
     def list_conversations(
         self,
         authenticated_actor: AuthenticatedActorContext | None = None,
@@ -209,16 +223,19 @@ class RuntimeComposition:
             status=status,
         )
 
-    def conversation_context(
+    def recent_conversation_context(
         self,
         conversation_id: str,
+        request_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
     ) -> list[dict[str, str]]:
-        """Return bounded active-conversation evidence for a future planner pass."""
+        """Return the bounded recent main-conversation window for one planner pass."""
         repository = self._conversation_repository()
         actor = self._resolve_actor(authenticated_actor, external_principal)
-        return repository.context(actor, conversation_id)
+        return repository.recent_context(
+            actor, conversation_id, exclude_request_id=request_id
+        )
 
     def _conversation_repository(self) -> ConversationRepository:
         if self.conversation_repository is None:
@@ -324,17 +341,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
             request_id_factory=request_id_factory,
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
-            conversation_context_provider=(
-                (
-                    lambda _needed: conversation_repository.context(
-                        authenticated_actor.stable_user_id
-                        if authenticated_actor is not None
-                        else actor,
-                        conversation_id or "",
-                    )
+            conversation_context=(
+                conversation_repository.recent_context(
+                    authenticated_actor.stable_user_id if authenticated_actor is not None else actor,
+                    conversation_id,
+                    exclude_request_id=request_id,
                 )
-                if conversation_id is not None
-                else None
+                if conversation_id is not None and request_id is not None
+                else ()
             ),
         )
         calls = getattr(planner, "last_provider_calls", ())

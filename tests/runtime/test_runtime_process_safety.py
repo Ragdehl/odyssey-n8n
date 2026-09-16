@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
-from odyssey_core.conversations import ConversationRepository
+from odyssey_core.conversations import MAIN_CONVERSATION_ID, ConversationRepository
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_runtime import composition
@@ -168,8 +168,8 @@ def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
         _current_time()
 
 
-def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
-    """Runtime conversation projections stay actor-scoped and use durable Core state."""
+def test_runtime_main_conversation_is_actor_scoped_and_has_recent_context(tmp_path: Path) -> None:
+    """The product main conversation is durable, actor-scoped, and safely windowed."""
     repository = ConversationRepository(tmp_path / "state")
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(),
@@ -178,7 +178,7 @@ def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
     )
     actor = AuthenticatedActorContext(USER_A)
 
-    created = runtime.create_conversation(authenticated_actor=actor)
+    created = runtime.main_conversation(authenticated_actor=actor)
     conversation_id = str(created["conversation_id"])
     runtime.append_conversation_turn(
         conversation_id,
@@ -196,12 +196,12 @@ def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
         authenticated_actor=actor,
     )
 
-    listed = runtime.list_conversations(authenticated_actor=actor)
     loaded = runtime.load_conversation(conversation_id, authenticated_actor=actor)
-    context = runtime.conversation_context(conversation_id, authenticated_actor=actor)
+    context = runtime.recent_conversation_context(
+        conversation_id, authenticated_actor=actor
+    )
 
-    assert listed[0]["conversation_id"] == conversation_id
-    assert listed[0]["turn_count"] == 2
+    assert conversation_id == MAIN_CONVERSATION_ID
     assert loaded["conversation_id"] == conversation_id
     assert "actor_id" not in loaded
     assert context == [
@@ -209,17 +209,12 @@ def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
         {"role": "assistant", "text": "Marta vive en Lyon"},
     ]
     other = AuthenticatedActorContext(USER_B)
-    assert runtime.list_conversations(authenticated_actor=other) == []
+    assert runtime.main_conversation(authenticated_actor=other)["turns"] == []
 
 
 def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     """Conversation execution persists the visible user turn before forwarding to Core."""
     repository = ConversationRepository(tmp_path / "state")
-    repository.create(
-        USER_A,
-        now="2026-09-16T10:00:00Z",
-        conversation_id="conv-1",
-    )
     calls: list[tuple[object, ...]] = []
 
     def execute(*args):
@@ -236,12 +231,12 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     runtime.execute(
         "¿Dónde vive?",
         request_id="req-1",
-        conversation_id="conv-1",
+        conversation_id=MAIN_CONVERSATION_ID,
         authenticated_actor=actor,
     )
 
-    assert calls == [("¿Dónde vive?", "req-1", actor, "conv-1")]
-    loaded = repository.load(USER_A, "conv-1")
+    assert calls == [("¿Dónde vive?", "req-1", actor, MAIN_CONVERSATION_ID)]
+    loaded = repository.load(USER_A, MAIN_CONVERSATION_ID)
     turns = [(turn["request_id"], turn["role"], turn["text"]) for turn in loaded["turns"]]
     assert turns == [("req-1", "user", "¿Dónde vive?")]
 

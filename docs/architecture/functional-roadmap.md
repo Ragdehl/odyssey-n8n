@@ -24,9 +24,13 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — UI-0 durable chat history/resume
+## Current phase — UI-0 durable main conversation/continuity
 
-Goal: make Odyssey conversations durable and resumable so closing/reopening the product does not lose visible history, while keeping conversation records isolated from canonical personal knowledge and preparing the later context-on-demand continuity flow.
+Goal: make Odyssey's one ordinary chat durable across reopen and support natural immediate
+continuity with one bounded recent-turn window in the existing Luna-first planner pass. Conversation
+records stay isolated from canonical personal knowledge; canonical Markdown remains authority for
+current facts and normal retrieval/mutation. UI-0 does not make users manage chats or retain the
+previous `CONTEXT_NEEDED`/second-pass experiment. See [UI-0 durable main conversation](ui-0-durable-conversations.md).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 
@@ -66,7 +70,7 @@ Phase 21 production/development isolation                    ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
 UI-1 request detail / advanced inspector                         ✅ complete in PROD
-UI-0 durable chat history/resume                                 ➡️ next
+UI-0 durable main conversation/continuity                        ➡️ next
 UI-2 read-only Notes                                              ⬜ planned
 Tasks — first real application + minimal app routing              ⬜ planned
 Projects — compose over Tasks                                     ⬜ planned
@@ -146,7 +150,7 @@ user self-identity binding to ordinary person note    ✅ complete
 UI-1 request feedback / advanced inspector            ✅ complete in PROD
         |
         v
-UI-0 durable chats + resume / conversation continuity ➡️ next
+UI-0 durable main conversation / continuity ➡️ next
         |
         v
 UI-2 read-only Notes
@@ -185,26 +189,13 @@ explicit human-gated production promotion.
 
 ### Natural conversation and history
 
-Conversation continuity is now a concrete post-MVP requirement, not only a speculative idea. The intended architecture is **context on demand**, not a hard-coded “always send the last N messages” window.
-
-```text
-current request
-      |
-      v
-same Luna-first planner
-      |
-      +--> self-contained -> execute normally
-      |
-      `--> context needed
-               |
-               v
-       retrieve relevant conversation evidence
-               |
-               v
-       same planner, bounded second pass
-```
-
-Conversation/history must remain a source/authority distinction, not an ordinary canonical note type. Visible conversation records should be durable Markdown-like non-knowledge state; historical retrieval must remain logically isolated from current personal-knowledge retrieval. Later coarse-to-fine navigation may use derived conversation/daily/weekly/monthly/yearly summaries that point back to raw conversations. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+Conversation continuity is a concrete post-MVP requirement, delivered first as one persistent main
+chat rather than chat management. A deterministic bounded recent-turn window accompanies the current
+request in the existing Luna-first planner call. It may resolve conversational wording but never
+becomes a current-fact source or retrieval expansion; the validated plan continues to route to
+canonical Markdown only. Historical conversation search, semantic indexes, summaries, topic
+splitting, and multiple-chat UX remain conditional future work. See [Future Odyssey help and
+conversation context](future-help-and-conversation-context.md).
 
 ### Composable applications and capabilities
 

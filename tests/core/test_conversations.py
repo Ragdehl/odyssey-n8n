@@ -41,7 +41,7 @@ def test_conversation_round_trip_is_actor_scoped_and_idempotent(tmp_path: Path) 
         repository.load("other@example", "conv-1")
 
 
-def test_conversation_context_is_bounded_and_keeps_recent_order(tmp_path: Path) -> None:
+def test_recent_context_is_bounded_and_keeps_recent_order(tmp_path: Path) -> None:
     repository = ConversationRepository(tmp_path / "state")
     repository.create("actor", now="2026-09-16T10:00:00+00:00", conversation_id="conv-1")
     for index in range(4):
@@ -53,7 +53,7 @@ def test_conversation_context_is_bounded_and_keeps_recent_order(tmp_path: Path) 
             text=f"mensaje {index}",
             created_at=f"2026-09-16T10:00:0{index + 1}+00:00",
         )
-    assert repository.context("actor", "conv-1", max_turns=2) == [
+    assert repository.recent_context("actor", "conv-1", max_turns=2) == [
         {"role": "user", "text": "mensaje 2"},
         {"role": "user", "text": "mensaje 3"},
     ]
@@ -203,7 +203,7 @@ def test_conversation_list_handles_empty_actor_and_bounded_title(tmp_path: Path)
     assert len(summary.title) == 81
 
 
-def test_conversation_context_respects_byte_budget(tmp_path: Path) -> None:
+def test_recent_context_respects_byte_budget_and_excludes_current_turn(tmp_path: Path) -> None:
     repository = ConversationRepository(tmp_path / "state")
     repository.create("actor", now="2026-09-16T10:00:00Z", conversation_id="conv-1")
     repository.append_turn(
@@ -214,7 +214,27 @@ def test_conversation_context_respects_byte_budget(tmp_path: Path) -> None:
         text="mensaje demasiado largo para este presupuesto",
         created_at="2026-09-16T10:00:01Z",
     )
-    assert repository.context("actor", "conv-1", max_turns=8, max_bytes=1) == []
+    assert repository.recent_context("actor", "conv-1", max_turns=8, max_bytes=1) == []
+    repository.append_turn(
+        "actor",
+        "conv-1",
+        request_id="req-2",
+        role="user",
+        text="¿Y dónde vive?",
+        created_at="2026-09-16T10:00:02Z",
+    )
+    assert repository.recent_context("actor", "conv-1", exclude_request_id="req-2") == [
+        {"role": "user", "text": "mensaje demasiado largo para este presupuesto"}
+    ]
+
+
+def test_main_conversation_is_stable_per_actor(tmp_path: Path) -> None:
+    """One actor reopens the same durable main conversation without a chat-list decision."""
+    repository = ConversationRepository(tmp_path / "state")
+    first = repository.load_or_create_main("actor", now="2026-09-16T10:00:00Z")
+    second = repository.load_or_create_main("actor", now="2026-09-16T10:01:00Z")
+    assert first["conversation_id"] == "main"
+    assert second["conversation_id"] == "main"
 
 
 def test_conversation_turn_and_record_size_limits_fail_closed(
