@@ -252,3 +252,100 @@ def test_request_detail_is_bounded_safe_and_excluded_from_context(tmp_path: Path
             7,
             detail={"request_id": "wrong", "operational": {"total_duration_ms": 1, "stages": []}},
         )
+
+
+def test_request_detail_preserves_only_bounded_operational_summary(tmp_path: Path) -> None:
+    """The inspector-safe allowlist retains bounded provider, change, and cost evidence."""
+    store = _store(tmp_path)
+    detail = {
+        "request_id": "req-9",
+        "operational": {
+            "total_duration_ms": 12.5,
+            "stages": [
+                {
+                    "name": "planner",
+                    "outcome": "completed",
+                    "duration_ms": 4,
+                    "model": "gpt-5-mini",
+                    "reasoning_effort": "low",
+                    "usage": {"input_tokens": 10, "output_tokens": 2},
+                    "provider_calls": [
+                        {
+                            "name": "planner-model",
+                            "outcome": "completed",
+                            "usage": {"input_tokens": 10, "output_tokens": 2},
+                        }
+                    ],
+                }
+            ],
+        },
+        "changes": {
+            "affected_stable_note_ids": ["note-1"],
+            "units": [{"stable_note_id": "note-1", "operation": "update", "status": "done"}],
+        },
+        "estimated_cost": {
+            "status": "estimated",
+            "amount_usd": 0.01,
+            "pricing_basis": "2026-09-16",
+        },
+    }
+    _append(store, 9, detail=detail)
+    assert store.load_main_page()["turns"][0]["request_detail"] == detail
+    with pytest.raises(ConversationError, match="request detail"):
+        _append(
+            store,
+            11,
+            detail={
+                **detail,
+                "request_id": "req-11",
+                "operational": {"total_duration_ms": float("inf"), "stages": []},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        {"operational": {"total_duration_ms": 1, "stages": [{"name": "x" * 81, "outcome": "ok"}]}},
+        {
+            "operational": {
+                "total_duration_ms": 1,
+                "stages": [{"name": "x", "outcome": "ok", "model": "x" * 121}],
+            }
+        },
+        {
+            "operational": {
+                "total_duration_ms": 1,
+                "stages": [{"name": "x", "outcome": "ok", "duration_ms": True}],
+            }
+        },
+        {
+            "operational": {
+                "total_duration_ms": 1,
+                "stages": [{"name": "x", "outcome": "ok", "usage": {"input_tokens": True}}],
+            }
+        },
+        {
+            "operational": {"total_duration_ms": 1, "stages": []},
+            "changes": {"affected_stable_note_ids": ["x" * 129], "units": []},
+        },
+        {
+            "operational": {"total_duration_ms": 1, "stages": []},
+            "changes": {
+                "affected_stable_note_ids": [],
+                "units": [{"stable_note_id": "note-1", "status": 1}],
+            },
+        },
+    ],
+)
+def test_request_detail_rejects_unbounded_nested_fields(tmp_path: Path, detail: dict) -> None:
+    """Nested inspector data rejects oversized, non-numeric, and non-operational values."""
+    store = _store(tmp_path)
+    with pytest.raises(ConversationError, match="request detail"):
+        store.append_turn(
+            request_id="req-invalid",
+            role="assistant",
+            text="reply",
+            created_at=NOW,
+            request_detail={"request_id": "req-invalid", **detail},
+        )
