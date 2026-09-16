@@ -11,6 +11,7 @@ from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.experimental_luna_planning import PlannerEscalation
 from odyssey_core.request_planning import (
     PlannerClarification,
+    PlannerContextNeeded,
     RequestPlan,
     RequestPlanningError,
 )
@@ -62,6 +63,21 @@ def test_luna_clarification_skips_sol() -> None:
     result = _planner(luna, sol).plan("...???...")
 
     assert result == PlannerClarification("UNRECOGNIZED_REQUEST")
+    assert sol.calls == 0
+
+
+def test_luna_context_needed_returns_directly_without_sol() -> None:
+    """A validated context request remains a Luna result and never invokes Sol."""
+    luna = _FakePlanner(
+        PlannerContextNeeded("current_conversation", "the person discussed"),
+        model="gpt-5.6-luna",
+    )
+    sol = _FakePlanner(RequestPlan(actions=(), limitations=()), model="gpt-5.6-sol")
+
+    result = _planner(luna, sol).plan("¿Dónde vive?")
+
+    assert isinstance(result, PlannerContextNeeded)
+    assert luna.calls == 1
     assert sol.calls == 0
 
 
