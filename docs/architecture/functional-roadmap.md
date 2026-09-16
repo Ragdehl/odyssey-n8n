@@ -24,17 +24,11 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current adoption gate — UI-1 production browser checkpoint
+## Current phase — UI-0 durable chat history/resume
 
-Goal: close the merged UI-1 request-detail inspector with the final human-authenticated production
-browser check, then move directly to durable conversation history/resume.
+Goal: make Odyssey conversations durable and resumable so closing/reopening the product does not lose visible history, while keeping conversation records isolated from canonical personal knowledge and preparing the later context-on-demand continuity flow.
 
-Phase 23 is closed. Retained human-authenticated production browser evidence showed `¿Dónde trabajo?`
-returning `Trabajas en Alten para Airbus.`, proving real production SELF READ behavior. UI-1 merged
-in PR #113 and the commit-selected production promotion has reached the operator-side verification
-boundary; the remaining close condition is the human-authenticated browser checkpoint on the real
-production endpoint. UI-1 reuses existing bounded request evidence without changing planner or
-routing semantics.
+Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 
 Phase 22/23 identity adoption remains governed by the explicit production contract: trusted
 production identity projection, real-user/person binding, and an explicit commit-selected
@@ -71,8 +65,8 @@ Phase 21 production/development isolation                    ✅ complete
 23C  explicit production self binding                             ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
-UI-1 request detail / advanced inspector                         ➡️ merged; PROD browser checkpoint pending
-UI-0 durable chat history/resume                                 ⬜ next
+UI-1 request detail / advanced inspector                         ✅ complete in PROD
+UI-0 durable chat history/resume                                 ➡️ next
 UI-2 read-only Notes                                              ⬜ planned
 Tasks — first real application + minimal app routing              ⬜ planned
 Projects — compose over Tasks                                     ⬜ planned
@@ -149,10 +143,10 @@ production / development isolation                    ✅ complete
 user self-identity binding to ordinary person note    ✅ complete
         |
         v
-UI-1 request feedback / advanced inspector            ➡️ PROD browser checkpoint
+UI-1 request feedback / advanced inspector            ✅ complete in PROD
         |
         v
-UI-0 durable chats + resume / conversation continuity
+UI-0 durable chats + resume / conversation continuity ➡️ next
         |
         v
 UI-2 read-only Notes
