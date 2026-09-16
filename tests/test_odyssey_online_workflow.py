@@ -24,6 +24,9 @@ def test_request_detail_projection_excludes_retrieval_payloads() -> None:
     assert "r.operational" in source
     assert "affected_stable_note_ids" in source
     assert "const request_detail = withAnswerer(source.request_detail)" in source
+    assert "function safeOperational(value)" in source
+    assert "safeOperational(r.operational)" in source
+    assert "provider_payload" not in source
 
 
 def test_request_cost_uses_one_bounded_call_record_per_provider_call() -> None:

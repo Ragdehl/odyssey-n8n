@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
@@ -528,7 +529,12 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
 
 
 def _safe_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
@@ -577,10 +583,10 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         ):
             raise ConversationError("request detail is invalid")
     calls = value.get("provider_calls", [])
-    if not isinstance(calls, list) or len(calls) > 16:
+    if not isinstance(calls, list) or len(calls) > 16 or (not allow_calls and calls):
         raise ConversationError("request detail is invalid")
     for call in calls:
-        _validate_detail_stage({**call, "provider_calls": []}, allow_calls=False)
+        _validate_detail_stage(call, allow_calls=False)
 
 
 def _validate_detail_changes(value: Any) -> None:
@@ -602,6 +608,18 @@ def _validate_detail_changes(value: Any) -> None:
             not isinstance(unit, dict)
             or set(unit) - {"stable_note_id", "operation", "status"}
             or not isinstance(unit.get("status"), str)
+            or len(unit["status"]) > 80
+            or (
+                unit.get("stable_note_id") is not None
+                and (
+                    not isinstance(unit["stable_note_id"], str)
+                    or len(unit["stable_note_id"]) > 128
+                )
+            )
+            or (
+                unit.get("operation") is not None
+                and (not isinstance(unit["operation"], str) or len(unit["operation"]) > 80)
+            )
         ):
             raise ConversationError("request detail is invalid")
 

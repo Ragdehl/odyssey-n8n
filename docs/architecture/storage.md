@@ -48,6 +48,15 @@ Phase 17B established `state/pending/` for durable incomplete work. Pending reco
 
 Future durable workflow state should use this boundary only when it cannot be rebuilt and when the semantics are clearly non-canonical.
 
+UI-0 conversation state is durable presentation/operational state, not factual memory. Each user
+conceptually owns a local vault/state root. In hosted deployments, authenticated identity selects
+that isolated root at the outer boundary; the inner conversation store is root-bound so the same
+layout remains suitable for a future local client. A complete visible transcript is segmented for
+bounded presentation reads, while planner continuity receives only the newest complete role/text
+suffix (at most 4,096 UTF-8 bytes and 16 turns). Request details, pagination cursors, and transcript
+metadata never enter planner context. Shared-note permissions and synchronization remain separate
+from private local transcript storage.
+
 ## Rebuildable runtime state
 
 `runtime/` contains derived state such as SQLite indexes, embeddings/projections, caches, and other artifacts that can be rebuilt from canonical Markdown plus versioned application configuration.

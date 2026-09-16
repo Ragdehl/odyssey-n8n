@@ -7,9 +7,10 @@ from pathlib import Path
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
-from odyssey_core.conversations import MAIN_CONVERSATION_ID, ConversationRepository
+from odyssey_core.conversations import MAIN_CONVERSATION_ID
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import AuthenticatedActorContext
+from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_runtime import composition
 from odyssey_runtime import server as runtime_server
 from odyssey_runtime.composition import (
@@ -170,11 +171,11 @@ def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
 
 def test_runtime_main_conversation_is_actor_scoped_and_has_recent_context(tmp_path: Path) -> None:
     """The product main conversation is durable, actor-scoped, and safely windowed."""
-    repository = ConversationRepository(tmp_path / "state")
+    resolver = ConversationRootResolver(tmp_path / "state")
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(),
         refresh_indexes=lambda: None,
-        conversation_repository=repository,
+        conversation_root_resolver=resolver,
     )
     actor = AuthenticatedActorContext(USER_A)
 
@@ -212,7 +213,7 @@ def test_runtime_main_conversation_is_actor_scoped_and_has_recent_context(tmp_pa
 
 def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     """Conversation execution persists the visible user turn before forwarding to Core."""
-    repository = ConversationRepository(tmp_path / "state")
+    resolver = ConversationRootResolver(tmp_path / "state")
     calls: list[tuple[object, ...]] = []
 
     def execute(*args):
@@ -222,7 +223,7 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     runtime = RuntimeComposition(
         core_execute=execute,
         refresh_indexes=lambda: None,
-        conversation_repository=repository,
+        conversation_root_resolver=resolver,
     )
     actor = AuthenticatedActorContext(USER_A)
 
@@ -234,7 +235,7 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     )
 
     assert calls == [("¿Dónde vive?", "req-1", actor, MAIN_CONVERSATION_ID)]
-    loaded = repository.load(USER_A, MAIN_CONVERSATION_ID)
+    loaded = LocalConversationStore(resolver.resolve(USER_A)).load_main_page()
     turns = [(turn["request_id"], turn["role"], turn["text"]) for turn in loaded["turns"]]
     assert turns == [("req-1", "user", "¿Dónde vive?")]
 
@@ -247,28 +248,19 @@ def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
         refresh_indexes=lambda: None,
     )
 
-    with pytest.raises(ValueError, match="conversation repository is unavailable"):
-        runtime.create_conversation(authenticated_actor=actor)
-    with pytest.raises(ValueError, match="conversation repository is unavailable"):
+    with pytest.raises(ValueError, match="conversation root resolver is unavailable"):
         runtime.execute(
             "hola",
             conversation_id="conv-1",
             authenticated_actor=actor,
         )
 
-    repository = ConversationRepository(tmp_path / "state")
+    resolver = ConversationRootResolver(tmp_path / "state")
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(),
         refresh_indexes=lambda: None,
-        conversation_repository=repository,
+        conversation_root_resolver=resolver,
     )
-    with pytest.raises(ValueError, match="mutually exclusive"):
-        runtime.create_conversation(
-            authenticated_actor=actor,
-            external_principal=object(),
-        )
-    with pytest.raises(ValueError, match="external principal mapping is unavailable"):
-        runtime.create_conversation(external_principal=object())
     with pytest.raises(ValueError, match="mutually exclusive"):
         runtime.execute(
             "hola",
@@ -279,7 +271,7 @@ def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
 
 def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
     """External principals resolve to the stable internal actor before state access."""
-    repository = ConversationRepository(tmp_path / "state")
+    resolver = ConversationRootResolver(tmp_path / "state")
     marker = object()
 
     class MappingRepository:
@@ -291,10 +283,9 @@ def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
         core_execute=lambda *args: _result(),
         refresh_indexes=lambda: None,
         identity_mapping_repository=MappingRepository(),
-        conversation_repository=repository,
+        conversation_root_resolver=resolver,
     )
 
-    created = runtime.create_conversation(external_principal=marker)
-    conversation_id = str(created["conversation_id"])
-    loaded = repository.load(MAPPED_USER, conversation_id)
-    assert loaded["conversation_id"] == conversation_id
+    loaded = runtime.main_conversation(external_principal=marker)
+    assert loaded["conversation_id"] == MAIN_CONVERSATION_ID
+    assert LocalConversationStore(resolver.resolve(MAPPED_USER)).load_main_page()["turns"] == []

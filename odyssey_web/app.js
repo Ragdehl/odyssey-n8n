@@ -47,6 +47,7 @@ async function loadMainConversation() {
     const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
     if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
   }
+  conversation.scrollTop = conversation.scrollHeight;
 }
 
 void (async () => {
@@ -115,7 +116,7 @@ conversation.addEventListener("scroll", () => {
 });
 
 function appendDetailButton(article, detail) {
-  if (!detail || !requestDetailSheet) return;
+  if (!detail || !requestDetailSheet || article.querySelector(".detail-button")) return;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "detail-button";

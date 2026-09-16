@@ -10,7 +10,7 @@ language; it is not a general purpose messaging product. Conversation exists to 
 memory natural, not to become competing personal knowledge.
 
 ```text
-durable actor-scoped main transcript
+authenticated actor -> isolated local root -> durable main transcript
             |
 current request + bounded recent visible turns
             |
@@ -25,12 +25,13 @@ validated intent / referent -> canonical note retrieval or mutation
 
 - The browser opens one persistent main conversation for the validated Odyssey actor. Reopen and
   reload restore its visible chronological turns; the user does not select or manage chats.
-- `main` is a stable internal `conversation_id`. The durable repository retains its generic safe
-  record format internally, but UI-0 exposes neither a conversation list nor new/open actions.
-- Records are human-readable validated JSON under
-  `ODYSSEY_STATE_ROOT/conversations/<sha256(internal-actor)>/main.json`, outside the vault and all
-  note indexes. A validated internal actor owns every record; no untrusted external subject is a
-  path component.
+- `main` is a stable internal `conversation_id`; UI-0 exposes neither a conversation list nor
+  new/open actions. Hosted authentication resolves the actor to an isolated local state root before
+  constructing the root-bound store. The store has no multi-user layout or actor field.
+- The root-bound transcript is human-readable validated JSON under a private local state root as
+  `main/manifest.json`, bounded `main/chunks/*.json`, and an operational request-id lookup. The
+  manifest exposes no filesystem path through pagination cursors. Legacy actor-scoped `main.json`
+  is staged and atomically migrated without touching the vault.
 - Records contain visible user/final Odyssey turns, timestamps, request correlation and bounded
   outcome status only. They never contain prompts, hidden reasoning, raw provider data,
   credentials, or canonical-note copies.
@@ -62,7 +63,8 @@ ordinary validated write contract; prior assistant wording is never a fact or mu
 
 ## Acceptance criteria
 
-1. One stable actor-scoped `main` conversation survives reload/restart and restores visible turns.
+1. One stable root-bound `main` conversation survives reload/restart and restores its complete
+   visible transcript through newest-first, 40-turn pages (maximum 50) and upward pagination.
 2. User and final Odyssey turns retain timestamps/request correlation and are idempotent on retry.
 3. State records do not enter canonical note scans, embeddings, retrieval, or personal knowledge.
 4. A self-contained request remains one planner call even with unrelated recent chat.
@@ -70,8 +72,8 @@ ordinary validated write contract; prior assistant wording is never a fact or mu
    window, then retrieves current facts only from canonical synthetic notes.
 6. Old conversation wording cannot become a current-fact filter or override current canonical data.
 7. Two plausible referents and ambiguous follow-up writes fail closed to clarification.
-8. Only the bounded complete-turn window reaches the planner; no full transcript or provider data
-   reaches it.
+8. Only the bounded complete-turn window reaches the planner; no full transcript, cursor,
+   pagination metadata, or request detail reaches it.
 9. The mobile surface remains one simple chat: reopen, see prior turns, continue; no chat-management
    mental model is required.
 10. Isolated DEV deterministic, focused live, and mobile evidence use synthetic data only and leave

@@ -21,7 +21,6 @@ from odyssey_core.application import (
 )
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
-from odyssey_core.conversations import ConversationRepository
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
     ExternalPrincipal,
@@ -34,6 +33,7 @@ from odyssey_core.observability import (
     OperationalStage,
     ProviderCallEvidence,
 )
+from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_runtime import __main__ as runtime_main
 from odyssey_runtime import composition
 from odyssey_runtime.composition import RuntimeComposition
@@ -767,11 +767,11 @@ def test_http_boundary_preserves_delivery_identity_for_retries_and_distinguishes
 def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) -> None:
     """The browser can reopen one durable main transcript but cannot manage arbitrary chats."""
     user = OdysseyUser.new()
-    repository = ConversationRepository(tmp_path / "state")
+    resolver = ConversationRootResolver(tmp_path / "state")
     runtime = RuntimeComposition(
         core_execute=lambda request, request_id: _result(),
         refresh_indexes=lambda: None,
-        conversation_repository=repository,
+        conversation_root_resolver=resolver,
     )
     server = _test_server(runtime)
     try:
@@ -785,6 +785,14 @@ def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) 
         assert conversation["turns"] == []
         assert isinstance(conversation["created_at"], str)
         assert isinstance(conversation["updated_at"], str)
+        connection.request(
+            "POST",
+            "/conversation/main",
+            body=json.dumps(
+                {"limit": 51, "authenticated_actor": {"stable_user_id": user.stable_user_id}}
+            ),
+        )
+        assert connection.getresponse().status == 400
         connection.request("POST", "/conversation/list", body=body)
         assert connection.getresponse().status == 404
     finally:
