@@ -19,6 +19,7 @@ from odyssey_core import (
     KnowledgeUnit,
     OpenAIRequestPlanner,
     PlannerClarification,
+    PlannerContextNeeded,
     PlannerResult,
     RequestPlan,
     RetrieveAction,
@@ -39,12 +40,24 @@ class FakePlanner:
     value: PlannerResult | Exception
     calls: int = 0
 
-    def plan(self, request: str) -> PlannerResult:
+    def plan(self, request: str, conversation_context=()) -> PlannerResult:
         """Return the configured planner result or its configured planning failure."""
         self.calls += 1
         if isinstance(self.value, Exception):
             raise self.value
         return self.value
+
+
+@dataclass
+class ContextPlanner:
+    """Request bounded context once, then return a normal validated plan."""
+
+    value: RequestPlan
+    calls: list[tuple[str, tuple]]
+
+    def plan(self, request: str, conversation_context=()) -> PlannerResult:
+        self.calls.append((request, tuple(conversation_context)))
+        return PlannerContextNeeded() if len(self.calls) == 1 else self.value
 
 
 def unit(name: str, *, references: tuple[KnowledgeReference, ...] = ()) -> KnowledgeUnit:
@@ -97,6 +110,38 @@ def test_retrieve_uses_existing_context_and_propagates_one_request_id(
     assert result.action_results[0].retrieval is retrieved
     assert result.operational.stages[1].provider_calls == ()
     assert calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
+
+
+def test_context_needed_retrieves_bounded_evidence_before_second_planner_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Context-dependent planning remains generic and executes only after the second pass."""
+    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
+    planner = ContextPlanner(
+        RequestPlan((RetrieveAction(SelectionCriteria(None, "Marta", None, (), None)),), ()), []
+    )
+    result = application.execute_request(
+        "¿Dónde vive?",
+        planner=planner,
+        repository=object(),
+        schema={},
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="test",
+        now="2026-08-28T12:00:00Z",
+        context_limit=5,
+        request_id_factory=lambda: "request-context",
+        conversation_context_provider=lambda _needed: (
+            {"role": "user", "text": "Marta vive en Lyon"},
+        ),
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert planner.calls == [
+        ("¿Dónde vive?", ()),
+        ("¿Dónde vive?", ({"role": "user", "text": "Marta vive en Lyon"},)),
+    ]
 
 
 def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(

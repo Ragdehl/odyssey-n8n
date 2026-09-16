@@ -132,6 +132,16 @@ def test_invalid_browser_request_bypasses_runtime_and_answerer() -> None:
     assert "valid.output(1).to(direct).to(respond)" in source
 
 
+def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> None:
+    """Expose only bounded conversation operations through the existing workflow/runtime path."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "path: 'conversation'" in source
+    assert "['new', 'list', 'load', 'turn']" in source
+    assert "Execute conversation operation" in source
+    assert "runtimeBaseUrl}/conversation/{{ $json.operation }}" in source
+    assert "conversation_id" in source
+
+
 def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:
     """Keep private-runtime transport failures inside the deterministic product boundary."""
     source = SOURCE.read_text(encoding="utf-8")

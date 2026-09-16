@@ -1,6 +1,6 @@
 # UI-0 — durable conversations and resume
 
-Status: **CONTRACT PROPOSED — architecture challenge required before implementation**
+Status: **IMPLEMENTATION IN PROGRESS — architecture challenge passed**
 
 ## Objective
 
@@ -163,3 +163,46 @@ Because the planner structured contract will change for context-on-demand, produ
 7. Minimal deterministic title/grouping rule for the first conversation list.
 
 The challenge should prefer existing Core/state/runtime/n8n/browser boundaries and explicitly reject extra infrastructure unless a concrete acceptance criterion cannot be met cleanly without it.
+
+## Architecture challenge decisions
+
+The repository architecture challenge passed with the following choices:
+
+1. Each conversation is one human-readable JSON record under
+   `ODYSSEY_STATE_ROOT/conversations/<actor-directory>/<conversation-id>.json`.
+   The actor directory is derived from the validated internal stable user ID by a
+   safe digest; neither an external subject nor an unvalidated value becomes a
+   path component. Records contain visible turns, timestamps, correlation IDs,
+   and bounded typed outcome metadata only.
+2. Core owns conversation validation, persistence, idempotency, actor scoping,
+   bounded selection, and planner context assembly. Runtime composes those
+   responsibilities. n8n remains a narrow authenticated transport/projection
+   boundary and the browser owns presentation only.
+3. The existing same-origin n8n surface adds `conversation/new`,
+   `conversation/list`, and `conversation/load` POST routes alongside the
+   existing request route. Request continuation carries `conversation_id` and
+   the existing `request_id` through the same authenticated boundary.
+4. A generic planner result may return `CONTEXT_NEEDED` with an allowlisted
+   source (`current_conversation`) and bounded selection hint. This is a
+   planner capability, not a request-type or note-type branch. The same Luna
+   planner receives the selected evidence for pass two; self-contained requests
+   remain one pass with no conversation text.
+5. Context selection scans the active conversation backwards, preferring the
+   smallest recent evidence that satisfies the planner hint and stopping at
+   strict item/byte ceilings. It does not build an index or search other
+   conversations in UI-0. Two plausible referents remain a clarification.
+6. A visible user turn is persisted before execution and the final visible
+   Odyssey turn after the bounded result is known. The record writer uses
+   `request_id` as an idempotency key and rejects malformed/cross-actor records.
+   If either durable write fails, the request fails closed and is not presented
+   as durably saved. Existing canonical-note writes retain their current Core
+   and Git authority.
+7. Titles are deterministic: the first non-empty user message, bounded for
+   display, with date grouping performed by the browser. UI-0 adds only a
+   compact chat list, open/resume, and new-chat action.
+
+This resolves the earlier C1/C2 ordering mismatch: durable records and resume
+are implemented as the substrate first, then context-on-demand is layered onto
+the same feature. The future-context document remains the detailed owner of
+later historical retrieval, but its old C1-before-C2 sequence is superseded by
+this coherent user-facing order.

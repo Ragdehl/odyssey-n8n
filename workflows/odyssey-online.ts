@@ -7,6 +7,7 @@ if (deploymentEnvironment !== 'DEV' && deploymentEnvironment !== 'PROD') {
   throw new Error('ODYSSEY_WORKFLOW_ENVIRONMENT must be DEV or PROD');
 }
 if (!runtimeUrl) throw new Error('ODYSSEY_WORKFLOW_RUNTIME_URL is required');
+const runtimeBaseUrl = runtimeUrl.replace(/\/execute$/, '');
 if (deploymentEnvironment === 'DEV' && !devStableUserId) {
   throw new Error('ODYSSEY_DEV_STABLE_USER_ID is required for DEV rendering');
 }
@@ -84,8 +85,8 @@ const authenticatedActor = deploymentEnvironment === 'DEV'
   ? `, authenticated_actor: { stable_user_id: ${JSON.stringify(devStableUserId)} }`
   : '';
 const runtimeIdentity = deploymentEnvironment === 'DEV'
-  ? authenticatedActor
-  : ', external_principal: $json.external_principal';
+  ? `${authenticatedActor}, conversation_id: $('Odyssey product request').item.json.body?.conversation_id`
+  : `, external_principal: $json.external_principal, conversation_id: $('Odyssey product request').item.json.body?.conversation_id`;
 const productionPrincipalProjection = deploymentEnvironment === 'PROD'
   ? `
 const headers = $input.first().json.headers;
@@ -130,4 +131,12 @@ const finish = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: '
 const direct = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Return deterministic product response', parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "const { request_id, status, kind, message, request_detail } = $input.first().json; return [{ json: { request_id, status, kind, message, request_detail } }];" }, position: [1020, 100] }, output: [{ request_id: 'web-example', status: 'completed', kind: 'empty', message: 'No hay evidencia suficiente en Odyssey para responder.', request_detail: { request_id: 'web-example', operational: { total_duration_ms: 100, stages: [] }, changes: { affected_stable_note_ids: [], units: [] } } }] });
 const respond = node({ type: 'n8n-nodes-base.respondToWebhook', version: 1.5, config: { name: 'Respond to Odyssey browser', parameters: { respondWith: 'json', responseBody: expr('{{ $json }}') }, position: [1500, 0] }, output: [{}] });
 
-export default workflow('odyssey-online', workflowName).add(request).to(validate).to(valid).add(valid.output(0).to(runtime).to(route).to(select)).add(runtime.onError(route)).add(select.output(0).to(answer).to(finish).to(respond)).add(select.output(1).to(direct).to(respond)).add(valid.output(1).to(direct).to(respond));
+const conversationRequest = trigger({ type: 'n8n-nodes-base.webhook', version: 2.1, config: { name: 'Odyssey conversation request', parameters: { httpMethod: 'POST', path: 'conversation', responseMode: 'responseNode' }, position: [0, 700] }, output: [{ body: { operation: 'list' } }] });
+const conversationIdentity = deploymentEnvironment === 'DEV'
+  ? `const authenticated_actor = { stable_user_id: ${JSON.stringify(devStableUserId)} };`
+  : `const headers = $input.first().json.headers; const assertion = headers && typeof headers === 'object' ? headers['cf-access-jwt-assertion'] ?? headers['Cf-Access-Jwt-Assertion'] : null; let external_principal; try { if (typeof assertion !== 'string' || !assertion.trim()) throw new Error(); const segments = assertion.split('.'); if (segments.length !== 3) throw new Error(); JSON.parse(Buffer.from(segments[0], 'base64url').toString('utf8')); const claims = JSON.parse(Buffer.from(segments[1], 'base64url').toString('utf8')); if (!claims || typeof claims.iss !== 'string' || !claims.iss.trim() || typeof claims.sub !== 'string' || !claims.sub.trim()) throw new Error(); external_principal = { issuer: claims.iss, subject: claims.sub }; } catch { return [{ json: { invalid: true, error: 'invalid conversation identity' } }]; }`;
+const conversationValidate = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Validate conversation request', parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: `const body = $input.first().json.body || {}; const operation = typeof body.operation === 'string' ? body.operation : ''; const validOperation = ['new', 'list', 'load', 'turn'].includes(operation); const conversation_id = typeof body.conversation_id === 'string' ? body.conversation_id : undefined; const request_id = typeof body.request_id === 'string' ? body.request_id : undefined; const role = typeof body.role === 'string' ? body.role : undefined; const text = typeof body.text === 'string' ? body.text : undefined; if (!validOperation || (operation === 'load' && !conversation_id) || (operation === 'turn' && (!conversation_id || !request_id || !['user', 'assistant'].includes(role) || !text))) return [{ json: { invalid: true, error: 'invalid conversation request' } }]; ${conversationIdentity} return [{ json: { operation, conversation_id, request_id, role, text${deploymentEnvironment === 'DEV' ? ', authenticated_actor' : ', external_principal'} } }];` }, position: [240, 700] }, output: [{ operation: 'list' }] });
+const conversationCall = node({ type: 'n8n-nodes-base.httpRequest', version: 4.5, config: { name: 'Execute conversation operation', parameters: { method: 'POST', url: expr(`${runtimeBaseUrl}/conversation/{{ $json.operation }}`), sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: expr('{{ $json }}'), options: { timeout: 10000 }, response: { response: { neverError: true, responseFormat: 'json' } } }, onError: 'continueErrorOutput', position: [520, 700] }, output: [{}] });
+const conversationRespond = node({ type: 'n8n-nodes-base.respondToWebhook', version: 1.5, config: { name: 'Respond to conversation browser', parameters: { respondWith: 'json', responseBody: expr('{{ $json.body || $json }}') }, position: [780, 700] }, output: [{}] });
+
+export default workflow('odyssey-online', workflowName).add(request).to(validate).to(valid).add(valid.output(0).to(runtime).to(route).to(select)).add(runtime.onError(route)).add(select.output(0).to(answer).to(finish).to(respond)).add(select.output(1).to(direct).to(respond)).add(valid.output(1).to(direct).to(respond)).add(conversationRequest).to(conversationValidate).to(conversationCall).to(conversationRespond);

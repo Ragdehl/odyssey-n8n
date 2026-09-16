@@ -7,6 +7,7 @@ Luna ESCALATE does not authorize stronger-model guessing: it becomes a normal us
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from time import perf_counter
 from typing import Any
 
@@ -22,6 +23,7 @@ from odyssey_core.observability import (
 from odyssey_core.request_planning import (
     OpenAIRequestPlanner,
     PlannerClarification,
+    PlannerContextNeeded,
     PlannerResult,
     RequestPlan,
     RequestPlanningError,
@@ -61,7 +63,9 @@ class LunaFirstRequestPlanner:
             OpenAIRequestPlanner.from_environment(schema, current_context),
         )
 
-    def plan(self, request: str) -> PlannerResult:
+    def plan(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> PlannerResult:
         """Return a validated plan/clarification with at most one Luna and one Sol call."""
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
@@ -69,7 +73,11 @@ class LunaFirstRequestPlanner:
 
         luna_started = perf_counter()
         try:
-            result = self._luna.plan(request)
+            result = (
+                self._luna.plan(request, conversation_context)
+                if conversation_context
+                else self._luna.plan(request)
+            )
         except RequestPlanningError as error:
             self._append_call(
                 LUNA_PROVIDER_STAGE,
@@ -78,7 +86,7 @@ class LunaFirstRequestPlanner:
                 luna_started,
                 error,
             )
-            return self._plan_with_sol(request)
+            return self._plan_with_sol(request, conversation_context)
         except Exception as error:
             self._append_call(
                 LUNA_PROVIDER_STAGE,
@@ -95,16 +103,22 @@ class LunaFirstRequestPlanner:
         if isinstance(result, PlannerEscalation):
             self._sync_final_metadata(self._luna)
             return PlannerClarification("UNRECOGNIZED_REQUEST")
-        if isinstance(result, (RequestPlan, PlannerClarification)):
+        if isinstance(result, (RequestPlan, PlannerClarification, PlannerContextNeeded)):
             self._sync_final_metadata(self._luna)
             return result
         raise TypeError("Luna first pass returned an unsupported planner result")
 
-    def _plan_with_sol(self, request: str) -> PlannerResult:
+    def _plan_with_sol(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> PlannerResult:
         """Make the single bounded Sol fallback after a fail-closed Luna result."""
         sol_started = perf_counter()
         try:
-            result = self._sol.plan(request)
+            result = (
+                self._sol.plan(request, conversation_context)
+                if conversation_context
+                else self._sol.plan(request)
+            )
         except Exception as error:
             self._append_call(
                 "planner.sol_fallback",
@@ -122,7 +136,7 @@ class LunaFirstRequestPlanner:
             sol_started,
         )
         self._sync_final_metadata(self._sol)
-        if not isinstance(result, (RequestPlan, PlannerClarification)):
+        if not isinstance(result, (RequestPlan, PlannerClarification, PlannerContextNeeded)):
             raise TypeError("Sol fallback returned an unsupported planner result")
         return result
 

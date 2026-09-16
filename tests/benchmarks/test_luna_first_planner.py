@@ -225,6 +225,7 @@ def test_structured_outputs_schema_uses_supported_nested_closed_subset(
     assert [branch["properties"]["outcome"]["enum"][0] for branch in branches] == [
         "PLAN",
         "CLARIFY",
+        "CONTEXT_NEEDED",
         "ESCALATE",
     ]
     _assert_provider_objects_closed(result_schema)
@@ -336,7 +337,7 @@ def test_experimental_schema_helpers_reuse_production_contract(
     production = production_result_contract_unchanged(schema)
     experimental = luna_experimental_result_json_schema(schema)
     assert (
-        experimental["properties"]["result"]["anyOf"][:2]
+        experimental["properties"]["result"]["anyOf"][:3]
         == production["properties"]["result"]["anyOf"]
     )
     plan_branch = production["properties"]["result"]["anyOf"][0]

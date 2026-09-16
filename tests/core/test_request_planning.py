@@ -792,11 +792,19 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     assert result_schema["additionalProperties"] is False
     assert result_schema["required"] == ["result"]
     result_union = result_schema["properties"]["result"]
-    assert len(result_union["anyOf"]) == 2
+    assert len(result_union["anyOf"]) == 3
+    context = next(
+        branch
+        for branch in result_union["anyOf"]
+        if branch["properties"]["outcome"]["enum"] == ["CONTEXT_NEEDED"]
+    )
+    assert context["properties"]["context"]["properties"]["source"]["enum"] == [
+        "current_conversation"
+    ]
     for branch in result_union["anyOf"]:
         assert branch["type"] == "object"
         assert branch["additionalProperties"] is False
-        assert branch["required"] == ["outcome", "actions", "limitations", "clarification_code"]
+        assert "outcome" in branch["required"]
     invalid_plan = {
         "outcome": "PLAN",
         "actions": None,
@@ -814,6 +822,34 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     }
     with pytest.raises(RequestPlanningError, match="CLARIFY must"):
         validate_planner_result(invalid_clarification, schema)
+
+
+def test_context_needed_is_bounded_and_has_no_executable_payload(schema: dict) -> None:
+    """A planner may request only the generic active-conversation evidence source."""
+    from odyssey_core.request_planning import PlannerContextNeeded
+
+    result = validate_planner_result(
+        {
+            "outcome": "CONTEXT_NEEDED",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+            "context": {"source": "current_conversation", "hint": "the person discussed"},
+        },
+        schema,
+    )
+    assert isinstance(result, PlannerContextNeeded)
+    with pytest.raises(RequestPlanningError):
+        validate_planner_result(
+            {
+                "outcome": "CONTEXT_NEEDED",
+                "actions": None,
+                "limitations": None,
+                "clarification_code": None,
+                "context": {"source": "personal_knowledge", "hint": "x"},
+            },
+            schema,
+        )
 
 
 @pytest.mark.parametrize(

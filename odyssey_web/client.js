@@ -43,12 +43,30 @@ export function createRequestId(cryptoImpl = globalThis.crypto) {
  * @returns {{request: string, requestId: string}} Submission ready for transport.
  * @throws {ProductRequestError} When the request is empty.
  */
-export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto) {
+export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, conversationId = null) {
   const request = String(rawRequest ?? "").trim();
   if (!request) {
     throw new ProductRequestError("The request is empty.");
   }
-  return {request, requestId: createRequestId(cryptoImpl)};
+  const submission = {request, requestId: createRequestId(cryptoImpl)};
+  if (typeof conversationId === "string" && conversationId) submission.conversationId = conversationId;
+  return submission;
+}
+
+/** Send one bounded conversation operation through the existing same-origin boundary. */
+export async function requestConversation({endpoint = "/api/conversation", operation, payload = {}, fetchImpl = globalThis.fetch}) {
+  const response = await fetchImpl(endpoint, {
+    method: "POST",
+    headers: {"Content-Type": "application/json", Accept: "application/json"},
+    credentials: "same-origin",
+    body: JSON.stringify({...payload, operation}),
+  });
+  if (!response.ok) throw new ProductRequestError("No se ha podido cargar la conversación.", false);
+  const value = await response.json();
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
+  }
+  return value;
 }
 
 /**
@@ -196,6 +214,7 @@ function validateDetailChanges(value) {
 export async function requestProductResult({
   endpoint,
   submission,
+  conversationId = submission?.conversationId,
   fetchImpl = globalThis.fetch,
   timeoutMs = PRODUCT_REQUEST_TIMEOUT_MS,
   AbortControllerImpl = globalThis.AbortController,
@@ -217,6 +236,7 @@ export async function requestProductResult({
       body: JSON.stringify({
         request: submission.request,
         request_id: submission.requestId,
+        ...(conversationId ? {conversation_id: conversationId} : {}),
       }),
       signal: controller.signal,
     });

@@ -104,7 +104,14 @@ The exact filename/schema is deferred. The contract is not: once the generic pro
 
 ## Decided implementation sequence
 
-### C1 — adaptive current-conversation context
+UI-0 now implements durable records/resume first and context-on-demand second
+within one coherent user-facing chat feature. This supersedes the earlier
+planning-only C1-before-C2 order: context retrieval needs a durable active
+conversation and the user-facing reopen/resume contract is the approved next
+phase. The detailed historical/context-search direction below remains valid
+for later work.
+
+### C1 — adaptive current-conversation context (UI-0 second slice)
 
 Goal: make immediate follow-ups natural without sending a fixed number of prior messages to the model on every request.
 
@@ -153,7 +160,7 @@ canonical personal notes = authority for current personal facts
 
 A prior assistant message must never become current truth merely because it resolves a pronoun.
 
-### C2 — durable conversation records
+### C2 — durable conversation records (UI-0 first slice)
 
 Goal: preserve what the user and Odyssey visibly said so older conversations can later be queried and the product UI can restore/reopen prior chats.
 

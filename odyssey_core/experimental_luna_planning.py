@@ -90,12 +90,12 @@ def validate_luna_experimental_result(
     same closed field set with three null payload fields, so it carries no action or invented user
     knowledge.
     """
-    if not isinstance(payload, dict) or set(payload) != {
+    if not isinstance(payload, dict) or set(payload) not in ({
         "outcome",
         "actions",
         "limitations",
         "clarification_code",
-    }:
+    }, {"outcome", "actions", "limitations", "clarification_code", "context"}):
         raise RequestPlanningError("Experimental planner result fields are invalid")
     if payload["outcome"] != "ESCALATE":
         return validate_planner_result(payload, schema)
@@ -111,6 +111,7 @@ def render_luna_experimental_prompt(
     current_context: Mapping[str, str],
     *,
     teaching_examples: Sequence[Mapping[str, Any]] | None = None,
+    conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -143,7 +144,7 @@ def render_luna_experimental_prompt(
         f"Lesson: {item['lesson']}"
         for item in examples
     )
-    semantic_prompt = render_request_planner_prompt(schema, current_context)
+    semantic_prompt = render_request_planner_prompt(schema, current_context, conversation_context)
     return f"""{semantic_prompt}
 
 Choose the outcome before drafting fields:
@@ -229,7 +230,7 @@ class OpenAILunaExperimentalPlanner:
             ) from error
         return cls(OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES), schema, current_context)
 
-    def plan(self, request: str) -> ExperimentalPlannerResult:
+    def plan(self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()) -> ExperimentalPlannerResult:
         """Make exactly one bounded Luna attempt and validate without executing its result."""
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
@@ -244,7 +245,7 @@ class OpenAILunaExperimentalPlanner:
             input=[
                 {
                     "role": "system",
-                    "content": render_luna_experimental_prompt(self._schema, self._current_context),
+                    "content": render_luna_experimental_prompt(self._schema, self._current_context, conversation_context=conversation_context),
                 },
                 {"role": "user", "content": request},
             ],

@@ -2,6 +2,7 @@ import {
   ProductRequestError,
   createSubmission,
   requestProductResult,
+  requestConversation,
 } from "./client.js";
 
 const form = document.querySelector("#odyssey-form");
@@ -12,6 +13,10 @@ const endpoint = document.querySelector('meta[name="odyssey-api-endpoint"]')?.co
 const requestDetailSheet = document.querySelector("#request-detail-sheet");
 const requestDetailTitle = document.querySelector("#request-detail-title");
 const requestDetailContent = document.querySelector("#request-detail-content");
+const conversationList = document.querySelector("#conversation-list");
+const newConversationButton = document.querySelector("#new-conversation");
+const conversationEndpoint = document.querySelector('meta[name="odyssey-conversation-endpoint"]')?.content ?? "/api/conversation";
+let conversationId = null;
 let retrySubmission = null;
 
 function showDeploymentMarker() {
@@ -24,6 +29,47 @@ function showDeploymentMarker() {
 }
 
 showDeploymentMarker();
+
+function conversationPayload() {
+  return conversationId ? {conversation_id: conversationId} : {};
+}
+
+async function loadConversationList() {
+  const data = await requestConversation({endpoint: conversationEndpoint, operation: "list", payload: conversationPayload()});
+  conversationList.replaceChildren();
+  for (const item of data.conversations ?? []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "conversation-choice";
+    button.textContent = item.title;
+    button.addEventListener("click", () => void openConversation(item.conversation_id));
+    conversationList.append(button);
+  }
+}
+
+async function openConversation(identifier) {
+  const data = await requestConversation({endpoint: conversationEndpoint, operation: "load", payload: {conversation_id: identifier}});
+  conversationId = data.conversation_id;
+  conversation.replaceChildren();
+  for (const turn of data.turns ?? []) appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
+  await loadConversationList();
+}
+
+async function startConversation() {
+  const data = await requestConversation({endpoint: conversationEndpoint, operation: "new"});
+  await openConversation(data.conversation_id);
+}
+
+void (async () => {
+  try {
+    const data = await requestConversation({endpoint: conversationEndpoint, operation: "list"});
+    if (data.conversations?.[0]) await openConversation(data.conversations[0].conversation_id);
+    else await startConversation();
+  } catch {
+    // The existing chat remains usable if the optional history projection is unavailable.
+  }
+})();
+newConversationButton?.addEventListener("click", () => void startConversation());
 
 function setBusy(isBusy) {
   input.disabled = isBusy;
@@ -174,7 +220,20 @@ async function sendSubmission(submission, isRetry = false) {
   const loading = appendLoading();
   setBusy(true);
   try {
-    const result = await requestProductResult({endpoint, submission});
+    const result = await requestProductResult({endpoint, submission, conversationId});
+    if (conversationId) {
+      await requestConversation({
+        endpoint: conversationEndpoint,
+        operation: "turn",
+        payload: {
+          conversation_id: conversationId,
+          request_id: submission.requestId,
+          role: "assistant",
+          text: result.message,
+          status: result.status,
+        },
+      });
+    }
     retrySubmission = null;
     loading.remove();
     const message = appendMessage("odyssey", result.message, result.status);
@@ -201,7 +260,7 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   let submission;
   try {
-    submission = createSubmission(input.value);
+    submission = createSubmission(input.value, globalThis.crypto, conversationId);
   } catch {
     input.focus();
     return;
