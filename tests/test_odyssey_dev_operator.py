@@ -50,3 +50,13 @@ def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
         encoding="utf-8"
     )
     assert "EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env" in service
+
+
+def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> None:
+    """Prevent MATCH when the served DEV web mount belongs to another deployment."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "web_assets_sha256" in source
+    assert "web_deployment_marker" in source
+    assert "mounted_web_asset_fingerprint" in source
+    assert "web_assets_coherent \"$current\"" in source
+    assert "/odyssey-web/environment.js" in source

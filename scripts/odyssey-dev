@@ -30,6 +30,7 @@ N8N_RENDER=$DEV_RUNTIME/n8n-render
 N8N_DEPLOYMENT=$DEV_RUNTIME/n8n-deployment
 DEV_ACTOR_FILE=$DEV_STATE/dev-actor.json
 DEV_FIXTURE_SCRIPT=$DEV_SOURCE/scripts/prepare_odyssey_dev_identity.py
+WEB_ASSETS=(environment.js index.html app.js client.js styles.css)
 
 fail() {
   echo "odyssey-dev: $*" >&2
@@ -87,6 +88,7 @@ assert_deployed_source_coherent() {
   deployed=$(cat "$DEPLOYED_COMMIT")
   source_is_coherent "$current" "$recorded" "$deployed" "$dirty" \
     || fail "DEV source HEAD does not match the deployed commit; run odyssey-dev deploy"
+  web_assets_coherent "$current" || fail "DEV web assets do not match the deployed commit; run odyssey-dev deploy"
 }
 
 health_once() {
@@ -145,6 +147,26 @@ prepare_web_assets() {
   printf 'globalThis.ODYSSEY_DEPLOYMENT = Object.freeze({environment: "DEV", commit: "%s"});\n' "$commit" >"$temporary"
   chmod 640 "$temporary"
   mv -f "$temporary" "$DEV_WEB/environment.js"
+}
+
+web_asset_fingerprint() {
+  sha256sum "${WEB_ASSETS[@]/#/$DEV_WEB/}" | awk '{print $1}' | sha256sum | cut -d' ' -f1
+}
+
+mounted_web_asset_fingerprint() {
+  docker exec "$N8N_CONTAINER" sh -lc \
+    'sha256sum /odyssey-web/environment.js /odyssey-web/index.html /odyssey-web/app.js /odyssey-web/client.js /odyssey-web/styles.css | awk '\''{print $1}'\'' | sha256sum | cut -d" " -f1'
+}
+
+web_assets_coherent() {
+  local expected_commit recorded_fingerprint recorded_marker
+  expected_commit=$1
+  recorded_fingerprint=$(sed -n 's/^web_assets_sha256=//p' "$N8N_DEPLOYMENT")
+  recorded_marker=$(sed -n 's/^web_deployment_marker=//p' "$N8N_DEPLOYMENT")
+  [ "$recorded_marker" = "$expected_commit" ] || return 1
+  [ "$recorded_fingerprint" = "$(web_asset_fingerprint)" ] || return 1
+  [ "$recorded_fingerprint" = "$(mounted_web_asset_fingerprint)" ] || return 1
+  grep -Fq "commit: \"$expected_commit\"" "$DEV_WEB/environment.js" || return 1
 }
 
 prepare_dev_identity() {
@@ -252,13 +274,15 @@ if any(row.get("active") != 1 or "DEV" not in row.get("name", "") for row in row
 }
 
 record_deployment() {
-  local commit temporary online_hash static_hash
+  local commit temporary online_hash static_hash web_hash web_marker
   commit=$(git -C "$DEV_SOURCE" rev-parse HEAD)
   online_hash=$(sha256sum "$N8N_RENDER/odyssey-online.json" | cut -d' ' -f1)
   static_hash=$(sha256sum "$N8N_RENDER/odyssey-online-static.json" | cut -d' ' -f1)
+  web_hash=$(web_asset_fingerprint)
+  web_marker=$(sed -n 's/.*commit: "\([^"]*\)".*/\1/p' "$DEV_WEB/environment.js")
   temporary=$(mktemp "$DEV_RUNTIME/.n8n-deployment.XXXXXX")
-  printf 'source_commit=%s\nonline_workflow_sha256=%s\nstatic_workflow_sha256=%s\nruntime_target=http://%s:%s/execute\n' \
-    "$commit" "$online_hash" "$static_hash" "$DEV_HOST" "$DEV_PORT" >"$temporary"
+  printf 'source_commit=%s\nonline_workflow_sha256=%s\nstatic_workflow_sha256=%s\nweb_assets_sha256=%s\nweb_deployment_marker=%s\nruntime_target=http://%s:%s/execute\n' \
+    "$commit" "$online_hash" "$static_hash" "$web_hash" "$web_marker" "$DEV_HOST" "$DEV_PORT" >"$temporary"
   chmod 640 "$temporary"
   mv -f "$temporary" "$N8N_DEPLOYMENT"
   temporary=$(mktemp "$DEV_RUNTIME/.deployed-commit.XXXXXX")
@@ -275,6 +299,7 @@ workflow_provenance() {
   deployed=$(sed -n 's/^source_commit=//p' "$N8N_DEPLOYMENT")
   recorded_commit=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || true)
   source_is_coherent "$current" "$deployed" "$recorded_commit" "$dirty" || { echo DRIFT; return; }
+  web_assets_coherent "$current" || { echo DRIFT; return; }
   metadata=$(workflow_metadata 2>/dev/null || true)
   [ -n "$metadata" ] || { echo UNKNOWN; return; }
   "$PYTHON" -c '
@@ -321,22 +346,24 @@ stop() {
 }
 
 status() {
-  local state commit branch dirty deployed health_state n8n_state n8n_health metadata provenance public_status
+  local state commit branch dirty deployed health_state n8n_state n8n_health metadata provenance public_status web_hash web_marker
   guard
   state=$(systemctl --user is-active "$UNIT" 2>/dev/null || true)
   commit=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null || echo unavailable)
   branch=$(git -C "$DEV_SOURCE" branch --show-current 2>/dev/null || echo unavailable)
   dirty=$(git -C "$DEV_SOURCE" status --porcelain 2>/dev/null || true)
   deployed=$(cat "$DEPLOYED_COMMIT" 2>/dev/null || echo none)
+  web_hash=$(web_asset_fingerprint 2>/dev/null || echo unavailable)
+  web_marker=$(sed -n 's/.*commit: "\([^"]*\)".*/\1/p' "$DEV_WEB/environment.js" 2>/dev/null || echo unavailable)
   if health_once >/dev/null 2>&1; then health_state=healthy; else health_state=unhealthy; fi
   n8n_state=$(docker inspect --format '{{.State.Status}}' "$N8N_CONTAINER" 2>/dev/null || echo absent)
   if n8n_health_once >/dev/null 2>&1; then n8n_health=healthy; else n8n_health=unhealthy; fi
   metadata=$(workflow_metadata 2>/dev/null || echo unavailable)
   provenance=$(workflow_provenance)
   if curl --silent --max-time 5 --output /dev/null "$DEV_PRODUCT_URL"; then public_status=reachable; else public_status=unavailable; fi
-  printf 'environment=DEV\ndev_state=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nn8n_container=%s\nn8n_state=%s\nn8n_address=%s:%s\nn8n_health=%s\nn8n_volume=%s\nworkflow_metadata=%s\nworkflow_source_provenance=%s\npublic_url=%s\npublic_endpoint=%s\n' \
+  printf 'environment=DEV\ndev_state=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nweb_deployment_marker=%s\nweb_assets_sha256=%s\nn8n_container=%s\nn8n_state=%s\nn8n_address=%s:%s\nn8n_health=%s\nn8n_volume=%s\nworkflow_metadata=%s\nworkflow_source_provenance=%s\npublic_url=%s\npublic_endpoint=%s\n' \
     "$state" "$DEV_HOST" "$DEV_PORT" "$health_state" "$DEV_ROOT" "$DEV_SOURCE" "$deployed" "$commit" "$branch" \
-    "$([ -z "$dirty" ] && echo yes || echo no)" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PRODUCT_URL" "$public_status"
+    "$([ -z "$dirty" ] && echo yes || echo no)" "$web_marker" "$web_hash" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PRODUCT_URL" "$public_status"
 }
 
 deploy() {

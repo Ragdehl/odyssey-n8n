@@ -187,6 +187,12 @@ The reusable operational boundary is therefore: develop and commit in the featur
 run `odyssey-dev deploy`, then use the fixed DEV endpoint; never start a changed or dirty
 checkout as though it were the previously deployed environment.
 
+The same deployment identity must cover the browser surface: `odyssey-dev` records a
+fingerprint of the generated web assets and their deployment marker, and status/provenance
+compares both the DEV host files and the `/odyssey-web` container mount. Workflow metadata
+MATCH alone is insufficient evidence that the mounted static product belongs to the recorded
+commit.
+
 ### DEV provider-runtime precondition
 
 The first UI-1 browser checkpoint exposed one additional deployment precondition: the DEV n8n
