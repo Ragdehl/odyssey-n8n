@@ -37,6 +37,21 @@ _TEACHING_EXAMPLES_PATH = (
     / "luna_first_planner"
     / "teaching_examples.json"
 )
+_UI0_CONTEXT_TEACHING_EXAMPLE: dict[str, Any] = {
+    "id": "ui0-context-needed",
+    "request": "I was just discussing one person. What city do they live in?",
+    "result": {
+        "outcome": "CONTEXT_NEEDED",
+        "actions": None,
+        "limitations": None,
+        "clarification_code": None,
+        "context": {"source": "current_conversation", "hint": "the person discussed"},
+    },
+    "lesson": (
+        "When an understandable request needs a missing referent from the active conversation, "
+        "request bounded current-conversation evidence before planning; do not guess or escalate."
+    ),
+}
 
 
 class ResponsesClient(Protocol):
@@ -143,6 +158,8 @@ def render_luna_experimental_prompt(
     examples = (
         list(teaching_examples) if teaching_examples is not None else load_teaching_examples()
     )
+    _validate_teaching_examples(examples)
+    examples.append(_UI0_CONTEXT_TEACHING_EXAMPLE)
     _validate_teaching_examples(examples)
     for item in examples:
         validate_luna_experimental_result(item["result"], schema)

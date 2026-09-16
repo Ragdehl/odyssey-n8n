@@ -340,6 +340,7 @@ def test_prompt_teaches_context_needed_before_escalation(schema: dict[str, Any])
     assert context_rule in prompt
     assert prompt.index(context_rule) < prompt.index(escalation_rule)
     assert "This takes precedence over ESCALATE" in prompt
+    assert "I was just discussing one person. What city do they live in?" in prompt
 
 
 def test_prompt_closes_context_loop_after_bounded_evidence(schema: dict[str, Any]) -> None:
@@ -353,6 +354,16 @@ def test_prompt_closes_context_loop_after_bounded_evidence(schema: dict[str, Any
     assert "CONTEXT_NEEDED is not available after bounded conversation evidence" in decision_block
     assert "CONTEXT_NEEDED when the request is understandable and actionable" not in decision_block
     assert "This takes precedence over ESCALATE" not in decision_block
+
+
+def test_ui0_context_teaching_example_is_distinct_from_held_out_cases(
+    schema: dict[str, Any],
+) -> None:
+    """Layer the new semantic lesson without changing the frozen historical registry."""
+    prompt = render_luna_experimental_prompt(schema, CONTEXT)
+    held_out, _ = load_frozen_registry()
+    assert "I was just discussing one person. What city do they live in?" in prompt
+    assert all(item["request"] not in prompt for item in held_out["cases"])
 
 
 def test_prompt_and_teaching_registry_fail_closed_on_malformed_inputs(
