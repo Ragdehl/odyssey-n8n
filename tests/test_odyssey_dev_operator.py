@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "odyssey-dev"
@@ -65,7 +67,9 @@ def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> Non
 
 def publication_result(rows: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
     """Run the DEV operator's pure active-version publication validator."""
-    command = f"source {SCRIPT}; workflow_publication_is_valid"
+    command = (
+        f"source {SCRIPT}; PYTHON={shlex.quote(sys.executable)}; workflow_publication_is_valid"
+    )
     return subprocess.run(
         ["bash", "-c", command],
         check=False,
