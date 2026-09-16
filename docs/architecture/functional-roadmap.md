@@ -24,15 +24,17 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — UI-1 request detail / advanced inspector
+## Current adoption gate — UI-1 production browser checkpoint
 
-Goal: expose one request's existing bounded operational evidence through a closed-by-default detail
-surface without turning the normal chat into a technical console.
+Goal: close the merged UI-1 request-detail inspector with the final human-authenticated production
+browser check, then move directly to durable conversation history/resume.
 
 Phase 23 is closed. Retained human-authenticated production browser evidence showed `¿Dónde trabajo?`
-returning `Trabajas en Alten para Airbus.`, proving real production SELF READ behavior. Codex did not
-reproduce the user's Cloudflare Access session. UI-1 is implemented in the current PR and reuses
-existing bounded request evidence without changing planner or routing semantics.
+returning `Trabajas en Alten para Airbus.`, proving real production SELF READ behavior. UI-1 merged
+in PR #113 and the commit-selected production promotion has reached the operator-side verification
+boundary; the remaining close condition is the human-authenticated browser checkpoint on the real
+production endpoint. UI-1 reuses existing bounded request evidence without changing planner or
+routing semantics.
 
 Phase 22/23 identity adoption remains governed by the explicit production contract: trusted
 production identity projection, real-user/person binding, and an explicit commit-selected
@@ -69,7 +71,12 @@ Phase 21 production/development isolation                    ✅ complete
 23C  explicit production self binding                             ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
-UI-1 request detail / advanced inspector                         ✅ complete in isolated DEV
+UI-1 request detail / advanced inspector                         ➡️ merged; PROD browser checkpoint pending
+UI-0 durable chat history/resume                                 ⬜ next
+UI-2 read-only Notes                                              ⬜ planned
+Tasks — first real application + minimal app routing              ⬜ planned
+Projects — compose over Tasks                                     ⬜ planned
+Reminders — lower-level time/reminder capability                  ⬜ planned
 ```
 
 Latency optimization remains intentionally deferred: provider/model time dominates measured latency,
@@ -139,21 +146,27 @@ first real personal use                               ✅ complete
 production / development isolation                    ✅ complete
         |
         v
-user self-identity binding to ordinary person note    ✅ isolated DEV implementation complete
+user self-identity binding to ordinary person note    ✅ complete
         |
         v
-request feedback / advanced inspector + note access
+UI-1 request feedback / advanced inspector            ➡️ PROD browser checkpoint
         |
         v
-conversation persistence / continuity
+UI-0 durable chats + resume / conversation continuity
         |
         v
-real-usage-driven UI / capability work
+UI-2 read-only Notes
+        |
+        v
+Tasks -> Projects -> Reminders application validation
+        |
+        v
+Activity / editing / analytics ordered by real use
 ```
 
 The production/development split now precedes substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
 
-The self-identity implementation is complete in isolated DEV, and Phase 23B now projects the validated production Access principal through n8n into the private runtime's existing-only mapping boundary. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. The real production mapping and self binding remain explicit Phase 23C gates. The tracked reboot-safe `odyssey-prod` operator is human-gated, and cloudflared lifecycle remains outside it. See [Phase 22 contract](phase-22-self-identity.md), [Phase 23 production adoption](phase-23-production-self-identity-adoption.md), and [Future user self-identity binding](future-user-self-identity.md).
+The self-identity implementation is complete and Phase 23 production adoption is closed. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. The tracked reboot-safe `odyssey-prod` operator is human-gated, and cloudflared lifecycle remains outside it. See [Phase 22 contract](phase-22-self-identity.md), [Phase 23 production adoption](phase-23-production-self-identity-adoption.md), and [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
 
@@ -173,7 +186,8 @@ Phase 21 production/development isolation                   ✅ complete
 
 The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
 database/container. It is not a permanent Git branch. The fixed protected endpoint and human
-browser checkpoint are complete; self-identity production adoption is now the explicit post-merge gate.
+browser checkpoint are complete; ordinary feature work should continue through isolated DEV before
+explicit human-gated production promotion.
 
 ### Natural conversation and history
 
@@ -206,7 +220,11 @@ Applications should reuse shared Odyssey knowledge and lower-level capabilities 
 Reminders <- Tasks <- Projects
 ```
 
-Planner/model extensibility must stay configuration-driven where semantics are already supported. The current planner derives note-type/property capabilities from `config/note-schema.json`; downstream model boundaries are generic with respect to concrete note types. The remaining application gap is executable manifest/registry routing for `DelegateAction`, not hard-coded app selection in the base planner. See [Architecture Overview](overview.md#configuration-driven-model-boundaries), [Future Extension Points](future-extension-points.md), and [Odyssey Platform Direction](odyssey-platform-direction.md).
+The approved user interaction model is **automatic routing by default, explicit routing when useful**. Ordinary users should speak naturally in any Odyssey chat; the relevant capability is selected internally and only that selected capability should execute/respond. Optional syntax such as `@Tasks` may direct or disambiguate a request but must never be required. App-specific chats may exist as secondary focused entry points while reusing the same knowledge, identity and history rather than creating silos. Applications may show a small capability identity in the UI, but should not become independent personalities that all listen to every message. Full nested threads are deferred; a simpler “continue in new chat from this message” pattern should be tried first if branching becomes useful.
+
+The first real application is **Tasks**, chosen to prove the smallest practical manifest/routing/state contract. **Projects** follows by reusing Tasks, and **Reminders** supplies the lower-level time/reminder capability where justified. Do not build a generic plugin platform before Tasks proves what the common application contract actually needs.
+
+Planner/model extensibility must stay configuration-driven where semantics are already supported. The current planner derives note-type/property capabilities from `config/note-schema.json`; downstream model boundaries are generic with respect to concrete note types. The remaining application gap is executable manifest/registry routing for `DelegateAction`, not hard-coded app selection in the base planner. See [Architecture Overview](overview.md#configuration-driven-model-boundaries), [Future Odyssey product interface](future-product-interface.md#application-interaction--automatic-by-default-explicit-when-useful), [Future Extension Points](future-extension-points.md), and [Odyssey Platform Direction](odyssey-platform-direction.md).
 
 Once application work becomes repetitive, evaluate a bounded **agent-assisted delivery loop**: human + assistant approve a feature contract and validation criteria, an implementation agent works only in isolated DEV, deterministic checks run first, an independent validation agent reviews from fresh context, and only a final evidence-backed PR returns to the human for acceptance. This automation should not be introduced during Core architecture work and must never autonomously merge/promote production. Detailed guardrails and scheduling direction live in [Future Extension Points](future-extension-points.md#agent-assisted-application-delivery).
 
