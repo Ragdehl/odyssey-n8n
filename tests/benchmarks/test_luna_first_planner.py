@@ -212,6 +212,21 @@ def test_malformed_outcome_combinations_fail_closed(
         validate_luna_experimental_result(payload, schema)
 
 
+def test_obsolete_context_field_is_rejected_by_the_luna_validator(schema: dict[str, Any]) -> None:
+    """Removing UI-0's second pass must also close its former result payload field."""
+    with pytest.raises(RequestPlanningError, match="fields are invalid"):
+        validate_luna_experimental_result(
+            {
+                "outcome": "ESCALATE",
+                "actions": None,
+                "limitations": None,
+                "clarification_code": None,
+                "context": {"source": "current_conversation", "hint": "person"},
+            },
+            schema,
+        )
+
+
 def test_structured_outputs_schema_uses_supported_nested_closed_subset(
     schema: dict[str, Any],
 ) -> None:
