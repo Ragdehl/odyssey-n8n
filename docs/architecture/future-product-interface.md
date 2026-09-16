@@ -48,8 +48,10 @@ open Odyssey -> restore main transcript -> continue natural conversation
 
 Recent visible turns may provide continuity to the planner, but canonical Markdown remains authority
 for current facts and normal retrieval/mutation. The browser is never the durable authority.
-Conversation list/new/open, titles, topic splitting, and deletion/export policy are future product
-decisions; they are not UI-0 acceptance requirements. See the current [UI-0 contract](ui-0-durable-conversations.md).
+Conversation list/new/open, titles, topic splitting, and deletion/export policy are not committed
+product directions or UI-0 acceptance requirements. Historical transcript search is likewise not a
+memory roadmap; any such feature would need separate product justification. See the current [UI-0
+contract](ui-0-durable-conversations.md).
 
 ### UI-1 — request-level feedback in chat
 
@@ -169,13 +171,15 @@ The user-facing rules should stay simple:
 
 - **normal chat is enough** — the user should not need to choose an app before asking for something;
 - an optional explicit mention such as `@Tasks` may direct a request when the user wants control or disambiguation, but mentions must never be required for ordinary use;
-- an app-specific chat such as `Tasks` or `Projects` may exist as a secondary, capability-first entry point for focused work, but it must reuse the same knowledge, identity, conversation/history and application state rather than becoming a silo;
+- an app-specific focused entry point may exist when a capability needs one, but it must reuse the same knowledge, identity, and application state rather than becoming a silo;
 - a response may carry a small capability label such as `Tasks` so the user understands what acted, without inventing separate personalities or making the product feel like a room full of independent agents;
 - composition remains internal when useful: a project may use Tasks, and Tasks may use Reminders, without requiring the user to hop between app screens.
 
 The first real application should be **Tasks**. Its implementation should prove the smallest practical application manifest/routing/state contract rather than introducing a generic plugin platform first. If that works well, **Projects** should follow and reuse Tasks; **Reminders** should then provide the lower-level time/reminder capability where justified. The existing architectural direction remains `Reminders <- Tasks <- Projects`.
 
-Full message threads are intentionally deferred. If real chat use needs branching before a thread model has earned its complexity, prefer a simple **Continue in new chat** action anchored to the source message/conversation context. Add true nested threads only if real use demonstrates that separate conversations are insufficient.
+Full message threads and branching chat management are not committed product directions. Evaluate a
+capability-specific surface only when a concrete need cannot be met through the main conversation
+and canonical knowledge.
 
 The detailed executable routing/composition contract remains owned by [Future Extension Points](future-extension-points.md#application-routing-and-composition) and [Odyssey Platform Direction](odyssey-platform-direction.md#application-routingcomposition).
 
@@ -295,14 +299,14 @@ UI-3 Activity / UI-4 editing / UI-5 analytics
 ordered by real usage and validation needs
 ```
 
-This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. The first application is intentionally scheduled before building every remaining UI surface: Tasks is a concrete way to validate application routing/composition without prematurely building a general plugin system. Durable conversation storage remains the enabling substrate for both ordinary chat continuity and later app-specific/focused conversations.
+This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. The first application is intentionally scheduled before building every remaining UI surface: Tasks is a concrete way to validate application routing/composition without prematurely building a general plugin system. Durable conversation storage serves ordinary chat continuity; a later capability surface must earn its own product case.
 
 ## Product principles
 
 - Keep the chat simple by default; use drill-down instead of persistent technical clutter.
 - The user should normally speak naturally; automatic capability selection is the default and explicit `@App` routing is optional.
 - Do not make all applications listen to every message; select only the capability needed for the request.
-- App-specific chats are secondary entry points, not separate knowledge silos.
+- Capability-specific entry points, if justified, are not separate knowledge silos.
 - Show what Odyssey actually did from durable evidence, not what the answer text merely claims it did.
 - Prefer human-readable change summaries before raw Git diffs.
 - Keep note browsing/editing on the canonical Markdown/Core boundary.
@@ -318,10 +322,10 @@ Decide with real Odyssey usage:
 1. whether per-message cost is always visible, optional, or advanced-only;
 2. whether ordinary users should see tokens at all;
 3. exact mobile navigation (`Chat / Notes / Activity`, drawer, or another compact pattern);
-4. exact placement/visual treatment of capability labels and app-specific conversations;
+4. exact placement/visual treatment of capability labels and any justified capability-specific surface;
 5. whether change receipts live inside the assistant bubble, immediately below it, or in a linked activity panel;
 6. which level of diff is useful to ordinary users versus advanced users;
 7. which note-editing mode should come first;
 8. which usage graphs deserve a permanent dashboard;
 9. exact roles/permissions for advanced diagnostics once Odyssey becomes multi-user;
-10. whether real use eventually justifies nested threads beyond the simpler `Continue in new chat` model.
+10. whether a concrete capability ever needs a specialized surface beyond the main conversation.

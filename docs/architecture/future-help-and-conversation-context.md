@@ -1,7 +1,7 @@
 # Future Odyssey help and conversation context
 
-Status: **UI-0 one-pass recent continuity is current; historical conversation retrieval and derived
-memory remain deferred.**
+Status: **UI-0 one-pass recent continuity is current. Conversation persistence is UX and
+operational state, not a historical knowledge source.**
 
 ## Purpose
 
@@ -25,20 +25,23 @@ the referent or write meaning ambiguous, Odyssey clarifies. UI-0 has no `CONTEXT
 second planner pass, context router, summary model, conversation semantic index, or cross-chat
 search. The detailed current contract is [UI-0 durable main conversation](ui-0-durable-conversations.md).
 
-## Deferred historical direction
+## Historical knowledge is canonical knowledge work
 
-The following capabilities remain possible only after direct use establishes their need and an
-architecture challenge selects bounded authority and retention contracts:
+Questions such as “¿Qué apunté sobre Marta hace dos años?” or “¿Qué sabía de Marta entonces?” are
+future canonical knowledge chronology/retrieval work. They should use canonical notes, atomic-fact
+capture provenance, note-level dates, and canonical Git/request history as appropriate—not older
+chat text. The existing knowledge model distinguishes `captured_at` from `happened_at`; this is not
+a reason to add redundant universal per-fact timestamps or change the note schema.
 
-- historical questions such as “what did I say on 1 February 2024?”;
-- search over older transcript data, cross-conversation discovery, or conversation embeddings;
-- generated conversation/day/week/month/year summaries or summary hierarchies;
-- topic splitting, multiple-chat management, threads, or general-purpose assistant memory;
-- retention, deletion, export, and user-visible history navigation policy.
+Exact transcript questions such as “¿Qué palabras escribí en el chat el 1 de febrero de 2024?” are
+not a core Odyssey memory capability. Historical transcript search, cross-conversation discovery,
+embeddings, or generated transcript summaries are not expected follow-on work from UI-0. They would
+need separate explicit product justification, retention policy, and authority review before entering
+any roadmap.
 
-Raw transcript timestamps and stable request correlation are retained so a later historical feature
-can identify supporting turns. Any future index or summary is derived navigation evidence only; it
-must point to raw durable records and never replace canonical note authority.
+Raw transcript timestamps and stable request correlation serve visible continuity and safe
+operational history. They do not reserve a transcript-memory feature or make the transcript a
+retrieval corpus.
 
 ## Authority and safety invariants
 

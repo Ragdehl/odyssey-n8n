@@ -43,7 +43,7 @@ Canonical personal knowledge is Markdown owned by the user/workspace. SQLite ind
 
 The user should remain able to inspect, back up, synchronize, and use the Markdown independently of Odyssey.
 
-Conversation context may help interpret an elliptical request such as “¿y dónde vive?”, but it must not silently promote old chat wording or assistant output into current personal truth. Current-fact answers remain grounded in canonical notes unless the user is explicitly asking about conversation history itself.
+Conversation context may help interpret an elliptical request such as “¿y dónde vive?”, but it must not silently promote old chat wording or assistant output into current personal truth. Current-fact answers remain grounded in canonical notes. Exact historical transcript wording is not a core Odyssey memory capability; any separate transcript product would need explicit justification.
 
 ### Structure must earn its complexity
 
@@ -65,7 +65,7 @@ Odyssey is not tied to one chat product. A mobile/web client, ChatGPT, another a
 
 The current product work is a minimal mobile web MVP so real usage can reveal which improvements are valuable before adding richer interfaces, collaboration, applications, or local/mobile runtimes.
 
-The default conversational surface should remain simple: enough recent conversation context to let the user speak naturally, while the notes remain the actual memory and knowledge authority. Long-term conversation-history features should be introduced only when real use demonstrates that recent context is insufficient.
+The default conversational surface should remain simple: enough recent conversation context to let the user speak naturally, while the notes remain the actual memory and knowledge authority. Historical knowledge questions belong to canonical notes, fact-capture chronology, and canonical Git/request history—not to conversation-history retrieval.
 
 ## Longer-term direction
 

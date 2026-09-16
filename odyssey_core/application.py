@@ -242,7 +242,9 @@ def execute_request(
     provider_recorder = _ProviderCallRecorder(monotonic)
     try:
         plan = (
-            provider_recorder.invoke("planner", planner, planner.plan, user_request, conversation_context)
+            provider_recorder.invoke(
+                "planner", planner, planner.plan, user_request, conversation_context
+            )
             if conversation_context
             else provider_recorder.invoke("planner", planner, planner.plan, user_request)
         )

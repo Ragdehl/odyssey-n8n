@@ -233,9 +233,7 @@ class RuntimeComposition:
         """Return the bounded recent main-conversation window for one planner pass."""
         repository = self._conversation_repository()
         actor = self._resolve_actor(authenticated_actor, external_principal)
-        return repository.recent_context(
-            actor, conversation_id, exclude_request_id=request_id
-        )
+        return repository.recent_context(actor, conversation_id, exclude_request_id=request_id)
 
     def _conversation_repository(self) -> ConversationRepository:
         if self.conversation_repository is None:
@@ -343,7 +341,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
             self_binding_repository=self_binding_repository,
             conversation_context=(
                 conversation_repository.recent_context(
-                    authenticated_actor.stable_user_id if authenticated_actor is not None else actor,
+                    authenticated_actor.stable_user_id
+                    if authenticated_actor is not None
+                    else actor,
                     conversation_id,
                     exclude_request_id=request_id,
                 )

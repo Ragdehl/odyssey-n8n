@@ -197,9 +197,7 @@ def test_runtime_main_conversation_is_actor_scoped_and_has_recent_context(tmp_pa
     )
 
     loaded = runtime.load_conversation(conversation_id, authenticated_actor=actor)
-    context = runtime.recent_conversation_context(
-        conversation_id, authenticated_actor=actor
-    )
+    context = runtime.recent_conversation_context(conversation_id, authenticated_actor=actor)
 
     assert conversation_id == MAIN_CONVERSATION_ID
     assert loaded["conversation_id"] == conversation_id

@@ -105,7 +105,9 @@ def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
     """Conversation continuity reaches only the one planner pass, never retrieval expansion."""
     retrieval_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        application, "get_context", lambda *args, **kwargs: retrieval_calls.append(kwargs) or object()
+        application,
+        "get_context",
+        lambda *args, **kwargs: retrieval_calls.append(kwargs) or object(),
     )
 
     @dataclass
@@ -132,9 +134,7 @@ def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
         now="2026-08-28T12:00:00Z",
         context_limit=5,
         request_id_factory=lambda: "request-context",
-        conversation_context=(
-            {"role": "user", "text": "Marta vive en Lyon"},
-        ),
+        conversation_context=({"role": "user", "text": "Marta vive en Lyon"},),
     )
     assert result.status is ApplicationStatus.COMPLETED
     assert planner.calls == [

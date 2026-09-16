@@ -36,6 +36,8 @@ _TEACHING_EXAMPLES_PATH = (
     / "luna_first_planner"
     / "teaching_examples.json"
 )
+
+
 class ResponsesClient(Protocol):
     """Describe the injected subset of the OpenAI Responses client used by the planner."""
 

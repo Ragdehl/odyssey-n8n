@@ -79,15 +79,15 @@ ordinary validated write contract; prior assistant wording is never a fact or mu
 
 ## Explicitly deferred
 
-- multiple-chat management, topic splitting, threads, and app-specific chats;
-- historical conversation search (“what did I say on …?”), conversation embeddings, and cross-chat
-  retrieval;
-- generated summaries or summary hierarchies;
+- multiple-chat management, topic splitting, and threads; any future capability-specific surface;
 - retention/export/deletion policy and general assistant memory;
 - Notes, Tasks, Projects, and unrelated UI work.
 
-Raw transcript timestamps and stable request correlation deliberately leave future historical
-features possible without changing current authority boundaries.
+Transcript search, conversation embeddings, and generated transcript summaries are not an Odyssey
+memory roadmap. A future feature for exact old chat wording would need its own explicit product
+justification; it is not implied by persistence, timestamps, or request correlation. Historical
+knowledge questions belong to canonical notes, fact capture chronology, and canonical Git/request
+history.
 
 ## Re-challenge checkpoint
 
