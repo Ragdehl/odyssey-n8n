@@ -68,7 +68,18 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 try:
                     payload = self._read_payload()
                     actor = self._identity_from_payload(payload)
-                    response = runtime.main_conversation(*actor)
+                    allowed = {
+                        "operation",
+                        "limit",
+                        "before",
+                        "authenticated_actor",
+                        "external_principal",
+                    }
+                    if set(payload) - allowed:
+                        raise ValueError("main payload is invalid")
+                    response = runtime.main_conversation(
+                        *actor, limit=payload.get("limit"), before=payload.get("before")
+                    )
                     self._write_json(HTTPStatus.OK, response)
                 except (ConversationError, IdentityBoundaryError, TypeError, ValueError):
                     self._write_json(
@@ -85,6 +96,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "role",
                         "text",
                         "status",
+                        "request_detail",
                         "authenticated_actor",
                         "external_principal",
                     }
@@ -100,6 +112,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                             payload["role"],
                             payload["text"],
                             payload.get("status"),
+                            payload.get("request_detail"),
                             *self._identity_from_payload(payload),
                         ),
                     )

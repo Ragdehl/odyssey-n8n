@@ -18,6 +18,9 @@ const conversationEndpoint = document.querySelector('meta[name="odyssey-conversa
 const MAIN_CONVERSATION_ID = "main";
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
+let olderCursor = null;
+let hasOlder = false;
+let loadingOlder = false;
 
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
@@ -35,10 +38,15 @@ function conversationPayload() {
 }
 
 async function loadMainConversation() {
-  const data = await requestConversation({endpoint: conversationEndpoint, operation: "main"});
+  const data = await requestConversation({endpoint: conversationEndpoint, operation: "main", payload: {limit: 40}});
   conversationId = data.conversation_id;
+  olderCursor = data.before ?? null;
+  hasOlder = data.has_older === true;
   conversation.replaceChildren();
-  for (const turn of data.turns ?? []) appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
+  for (const turn of data.turns ?? []) {
+    const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
+    if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
+  }
 }
 
 void (async () => {
@@ -55,7 +63,7 @@ function setBusy(isBusy) {
   sendButton.textContent = isBusy ? "Enviando…" : "Enviar";
 }
 
-function appendMessage(role, message, status = "") {
+function appendMessage(role, message, status = "", {prepend = false, scroll = true} = {}) {
   const article = document.createElement("article");
   article.className = "message message-" + role;
   const label = document.createElement("p");
@@ -74,10 +82,37 @@ function appendMessage(role, message, status = "") {
     notice.textContent = "La respuesta puede ser incompleta.";
     article.append(notice);
   }
-  conversation.append(article);
-  conversation.scrollTop = conversation.scrollHeight;
+  if (prepend) conversation.prepend(article); else conversation.append(article);
+  if (scroll) conversation.scrollTop = conversation.scrollHeight;
   return article;
 }
+
+async function loadOlderConversation() {
+  if (!hasOlder || !olderCursor || loadingOlder) return;
+  loadingOlder = true;
+  const cursor = olderCursor;
+  const previousHeight = conversation.scrollHeight;
+  const previousTop = conversation.scrollTop;
+  try {
+    const data = await requestConversation({endpoint: conversationEndpoint, operation: "main", payload: {limit: 40, before: cursor}});
+    if (cursor !== olderCursor) return;
+    for (const turn of [...(data.turns ?? [])].reverse()) {
+      const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status, {prepend: true, scroll: false});
+      if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
+    }
+    olderCursor = data.before ?? null;
+    hasOlder = data.has_older === true;
+    conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight;
+  } catch {
+    // The current bounded page remains usable when older presentation history is unavailable.
+  } finally {
+    loadingOlder = false;
+  }
+}
+
+conversation.addEventListener("scroll", () => {
+  if (conversation.scrollTop <= 80) void loadOlderConversation();
+});
 
 function appendDetailButton(article, detail) {
   if (!detail || !requestDetailSheet) return;
@@ -229,6 +264,7 @@ async function sendSubmission(submission, isRetry = false) {
             role: "assistant",
             text: result.message,
             status: result.status,
+            request_detail: result.request_detail,
           },
         });
       },

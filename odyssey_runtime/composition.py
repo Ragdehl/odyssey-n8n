@@ -173,11 +173,15 @@ class RuntimeComposition:
         self,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
+        *,
+        limit: int | None = None,
+        before: str | None = None,
     ) -> dict[str, object]:
         """Return the one durable main conversation for the trusted actor."""
         repository = self._conversation_repository()
         actor = self._resolve_actor(authenticated_actor, external_principal)
-        return repository.load_or_create_main(actor, now=_current_time()["timestamp"])
+        repository.load_or_create_main(actor, now=_current_time()["timestamp"])
+        return repository.load_main_page(actor, limit=40 if limit is None else limit, before=before)
 
     def list_conversations(
         self,
@@ -207,6 +211,7 @@ class RuntimeComposition:
         role: str,
         text: str,
         status: str | None = None,
+        request_detail: dict[str, object] | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
     ) -> dict[str, object]:
@@ -221,6 +226,7 @@ class RuntimeComposition:
             text=text,
             created_at=_current_time()["timestamp"],
             status=status,
+            request_detail=request_detail,
         )
 
     def recent_conversation_context(
