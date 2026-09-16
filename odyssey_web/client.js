@@ -77,7 +77,106 @@ export function validateProductResponse(value) {
     throw new ProductRequestError("Odyssey returned an empty message.");
   }
 
-  return {request_id, status, kind, message};
+  const result = {request_id, status, kind, message};
+  if (value.request_detail !== undefined) {
+    result.request_detail = validateRequestDetail(value.request_detail, request_id);
+  }
+  return result;
+}
+
+/**
+ * Validate bounded diagnostic evidence for one logical request.
+ *
+ * @param {unknown} value Provider/runtime evidence projected by the product boundary.
+ * @param {string} requestId Request identifier that must match the detail record.
+ * @returns {object} Safe request detail suitable for text-only rendering.
+ * @throws {ProductRequestError} When diagnostic evidence is malformed.
+ */
+export function validateRequestDetail(value, requestId) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.request_id !== requestId) {
+    throw new ProductRequestError("Odyssey returned invalid request details.");
+  }
+  const operational = value.operational;
+  if (!operational || typeof operational !== "object" || Array.isArray(operational)) {
+    throw new ProductRequestError("Odyssey returned invalid operational details.");
+  }
+  if (operational.total_duration_ms !== null && typeof operational.total_duration_ms !== "number") {
+    throw new ProductRequestError("Odyssey returned invalid request timing.");
+  }
+  if (!Array.isArray(operational.stages)) {
+    throw new ProductRequestError("Odyssey returned invalid request stages.");
+  }
+  const stages = operational.stages.map((stage) => validateDetailStage(stage));
+  const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
+  const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
+  return {request_id: requestId, operational: {total_duration_ms: operational.total_duration_ms, stages}, changes, estimated_cost};
+}
+
+function validateEstimatedCost(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      !["estimated", "unavailable"].includes(value.status) || typeof value.pricing_basis !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value.pricing_basis)) {
+    throw new ProductRequestError("Odyssey returned invalid cost details.");
+  }
+  if (value.status === "estimated" && (typeof value.amount_usd !== "number" || !Number.isFinite(value.amount_usd) || value.amount_usd < 0)) {
+    throw new ProductRequestError("Odyssey returned invalid cost details.");
+  }
+  return {status: value.status, amount_usd: value.status === "estimated" ? value.amount_usd : null, pricing_basis: value.pricing_basis};
+}
+
+function validateDetailStage(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey returned invalid stage details.");
+  }
+  const textFields = ["name", "outcome", "model", "reasoning_effort", "error_category"];
+  if (typeof value.name !== "string" || typeof value.outcome !== "string") {
+    throw new ProductRequestError("Odyssey returned invalid stage metadata.");
+  }
+  for (const field of textFields) {
+    if (value[field] !== null && value[field] !== undefined && typeof value[field] !== "string") {
+      throw new ProductRequestError("Odyssey returned invalid stage metadata.");
+    }
+  }
+  if (value.duration_ms !== null && value.duration_ms !== undefined && typeof value.duration_ms !== "number") {
+    throw new ProductRequestError("Odyssey returned invalid stage timing.");
+  }
+  if (!Array.isArray(value.provider_calls)) {
+    throw new ProductRequestError("Odyssey returned invalid provider details.");
+  }
+  const usage = value.usage === null || value.usage === undefined ? undefined : validateUsage(value.usage);
+  const providerCalls = value.provider_calls.map((call) => validateDetailStage({...call, provider_calls: []}));
+  return {name: value.name, outcome: value.outcome, duration_ms: value.duration_ms, model: value.model,
+    reasoning_effort: value.reasoning_effort, usage, error_category: value.error_category, provider_calls: providerCalls};
+}
+
+function validateUsage(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey returned invalid token details.");
+  }
+  const result = {};
+  const allowed = new Set(["input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens"]);
+  for (const [key, count] of Object.entries(value)) {
+    if (!allowed.has(key)) throw new ProductRequestError("Odyssey returned unsupported token details.");
+    if (!Number.isInteger(count) || count < 0) throw new ProductRequestError("Odyssey returned invalid token details.");
+    result[key] = count;
+  }
+  return result;
+}
+
+function validateDetailChanges(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !Array.isArray(value.units)) {
+    throw new ProductRequestError("Odyssey returned invalid change details.");
+  }
+  const units = value.units.map((unit) => {
+    if (!unit || typeof unit !== "object" || typeof unit.status !== "string" ||
+        (unit.stable_note_id !== null && typeof unit.stable_note_id !== "string")) {
+      throw new ProductRequestError("Odyssey returned invalid change details.");
+    }
+    return {status: unit.status, operation: typeof unit.operation === "string" ? unit.operation : null,
+      stable_note_id: unit.stable_note_id};
+  });
+  return {affected_stable_note_ids: Array.isArray(value.affected_stable_note_ids)
+    ? value.affected_stable_note_ids.filter((id) => typeof id === "string") : [], units};
 }
 
 /**

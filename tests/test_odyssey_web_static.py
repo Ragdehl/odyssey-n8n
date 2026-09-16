@@ -44,6 +44,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
         "request-input",
         "send-button",
         "interaction",
+        "request-detail-sheet",
+        "request-detail-content",
     } <= parser.ids
 
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -56,6 +58,10 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert "void sendSubmission(submission, true)" in app
     assert 'deployment.environment !== "DEV"' in app
     assert "marker.textContent = deployment.commit" in app
+    assert "appendDetailButton(message, result.request_detail)" in app
+    assert 'header.className = "message-header"' in app
+    assert 'article.querySelector(".message-header")?.append(button)' in app
+    assert "requestDetailSheet.showModal()" in app
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'enterkeyhint="enter"' in index
@@ -63,6 +69,10 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto;" in styles
     assert ".conversation { display: flex; flex-direction: column;" in styles
+    assert ".message-header { display: flex; align-items: center;" in styles
+    assert (
+        ".detail-button { display: inline-grid; flex: 0 0 2.75rem; min-height: 2.75rem;" in styles
+    )
     assert "overflow-y: auto" in styles
     assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
     assert ".deployment-marker" in styles
@@ -88,3 +98,17 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert 'credentials: "same-origin"' in client
     assert "PRODUCT_REQUEST_TIMEOUT_MS = 125_000" in client
     assert "signal: controller.signal" in client
+    assert "validateRequestDetail" in client
+    assert "request_detail" in client
+    assert "validateEstimatedCost" in client
+    assert '"Coste estimado"' in app
+    assert '"Base de precios"' in app
+
+
+def test_static_asset_workflow_forces_revalidation_after_dev_deploy() -> None:
+    """Prevent normal reloads from retaining an older deployment's app assets."""
+    workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")
+    assert "Cache-Control" in workflow
+    assert "no-cache, no-store, must-revalidate" in workflow
+    assert "Pragma" in workflow
+    assert "Expires" in workflow

@@ -1,6 +1,6 @@
 # Phase 23 — production self-identity adoption
 
-Status: **23A repository + live production-boundary inventory complete; 23B trust configuration and trusted-principal projection implemented; 23D reboot-safe production operator deployed and active with MATCH provenance. 23C remains pending its explicit human data/security gate.**
+Status: **complete**. 23A repository + live production-boundary inventory, 23B trusted-principal projection, 23C explicit production mapping/binding, 23D reboot-safe production operator, and 23E read-only human-authenticated SELF evidence are complete.
 
 ## Objective
 
@@ -164,7 +164,8 @@ The implementation adds a strict runtime `external_principal` shape. PROD n8n ex
 issuer and subject claims from the already-validated `Cf-Access-Jwt-Assertion`; it never forwards the
 JWT, audience, expiry, email, headers, or browser identity fields. Ordinary traffic uses
 `IdentityMappingRepository.resolve_existing`; unknown or malformed mappings fail closed without
-creating state. The real production mapping and self binding remain Phase 23C human-gated.
+creating state. The real production mapping and self binding were completed under the explicit human
+data/security gate.
 
 ## Architecture challenge
 
@@ -219,11 +220,28 @@ is outside the runtime service lifecycle.
 
 ```text
 23A  repository + read-only live boundary inventory                    ✅ complete
-23B  trusted validated-principal -> Odyssey-user projection            implementation complete; trust boundary sound; mapping/binding remain gated
-23C  explicit real-user -> existing person binding                     pending human data gate
+23B  trusted validated-principal -> Odyssey-user projection            ✅ complete
+23C  explicit real-user -> existing person binding                     ✅ complete under human data gate
 23D  reboot-safe explicit production deploy/operator + provenance      ✅ deployed; active/enabled; MATCH
-23E  read-only real SELF E2E + closure                                 pending
+23E  read-only real SELF E2E + closure                                 ✅ complete
 ```
 
-A production SELF WRITE is not required for 23E unless read-only evidence is insufficient and the
-user explicitly approves that real personal-data mutation.
+A production SELF WRITE was not required for 23E because read-only evidence was sufficient.
+
+### 23E — read-only real SELF E2E and closure
+
+Phase 23E is complete based on retained human-authenticated production browser evidence from the
+normal mobile product session. The user request was:
+
+> ¿Dónde trabajo?
+
+Odyssey returned:
+
+> Trabajas en Alten para Airbus.
+
+This proves production SELF READ behavior from the user's perspective through the protected product
+boundary. Codex did not attempt to reproduce the user's Cloudflare Access browser session. No
+production write or additional personal-vault mutation was used for this closure checkpoint.
+
+The remaining product direction is the separate UI-1 advanced request inspector, which reuses bounded
+request evidence and does not extend Phase 23 identity semantics.

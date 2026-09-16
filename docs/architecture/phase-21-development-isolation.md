@@ -187,6 +187,26 @@ The reusable operational boundary is therefore: develop and commit in the featur
 run `odyssey-dev deploy`, then use the fixed DEV endpoint; never start a changed or dirty
 checkout as though it were the previously deployed environment.
 
+The same deployment identity must cover the browser surface: `odyssey-dev` records a
+fingerprint of the generated web assets and their deployment marker, and status/provenance
+compares both the DEV host files and the `/odyssey-web` container mount. Workflow metadata
+MATCH alone is insufficient evidence that the mounted static product belongs to the recorded
+commit.
+
+### DEV provider-runtime precondition
+
+The first UI-1 browser checkpoint exposed one additional deployment precondition: the DEV n8n
+answerer credential does not provide the planner's `OPENAI_API_KEY` to the separate DEV runtime.
+The symptom was a bounded browser failure, while direct execution with the synthetic actor showed
+`RequestPlanningError: OPENAI_API_KEY is required for Luna experiment planning`. The DEV runtime
+service therefore loads the existing protected provider environment through its service unit; the
+DEV vault, state, runtime, n8n database, and identity remain isolated from PROD.
+
+The preventive check is to reproduce one synthetic request at both boundaries after deployment:
+the private runtime must return an `ApplicationResult` response rather than a runtime `500`, and
+the DEV product webhook must return the bounded result. Do not diagnose this condition from the
+browser's generic error message alone.
+
 ## Observed 21D control-plane and runtime evidence
 
 21D added an **on-demand** DEV browser/workflow boundary. It does not alter the production

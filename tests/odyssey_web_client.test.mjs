@@ -64,6 +64,32 @@ test("product response validation accepts only the narrow browser contract", () 
   );
 });
 
+test("request detail accepts estimated cost with a dated pricing basis", () => {
+  const result = validateProductResponse({
+    request_id: "web-cost",
+    status: "completed",
+    kind: "answer",
+    message: "Hecho.",
+    request_detail: {
+      request_id: "web-cost",
+      operational: {total_duration_ms: 10, stages: []},
+      estimated_cost: {status: "estimated", amount_usd: 0.000123, pricing_basis: "2026-09-07"},
+    },
+  });
+  assert.equal(result.request_detail.estimated_cost.amount_usd, 0.000123);
+  assert.throws(() => validateProductResponse({
+    request_id: "web-cost",
+    status: "completed",
+    kind: "answer",
+    message: "Hecho.",
+    request_detail: {
+      request_id: "web-cost",
+      operational: {total_duration_ms: 10, stages: []},
+      estimated_cost: {status: "estimated", amount_usd: 0, pricing_basis: "unknown"},
+    },
+  }), ProductRequestError);
+});
+
 test("transport sends only request and request_id through same-origin JSON", async () => {
   const submission = {request: "Hola", requestId: "web-test"};
   let captured;

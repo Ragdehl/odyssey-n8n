@@ -1,6 +1,16 @@
 # Future Odyssey product usage observability
 
-Status: **preserved product direction; implementation deferred until the Odyssey Online product surface can use real request evidence**
+Status: **preserved product direction; UI-1 request-detail implementation is the current next phase**
+
+## Latency decision
+
+Current real response latency is noticeable, and measured evidence shows the Luna planner/provider
+call dominates it. Behavior-preserving local options such as long-lived OpenAI clients and immutable
+planner setup/schema caching were investigated and are expected to save only milliseconds. Latency
+optimization is therefore intentionally deferred until provider behavior/capabilities or future
+measurements justify revisiting it. No SELF/general fast path, phrase/intent/request-class bypass,
+prompt/model/reasoning/example/structured-output/semantic change, or routing/fallback change is part
+of that decision.
 
 ## Product goal
 
@@ -33,7 +43,7 @@ This is primarily a presentation and access-boundary problem, not a reason to cr
 
 Phase 19.2 already added bounded request-level operational evidence under the existing `request_id`, including total duration, ordered stages, safe model/reasoning identity where available, provider-call boundaries, supplied token counters, and safe outcome/error categories.
 
-Phase 20.1A also provides provider-neutral usage extraction and cost aggregation helpers for the answerer benchmark. Phase 20.1B is expected to add a dated verified pricing snapshot for comparable live evidence.
+Phase 20.1A also provides provider-neutral usage extraction and cost aggregation helpers for the answerer benchmark. The dated verified snapshot at `benchmarks/phase20_answerer/pricing_snapshot.json` is now the canonical pricing input for bounded request-detail projections; the workflow renderer injects that snapshot into the existing n8n response boundary, while the browser only validates and displays the resulting estimate.
 
 A future product view should reuse these contracts where they fit instead of introducing a new tracing database, event stream, or analytics authority merely to draw graphs.
 

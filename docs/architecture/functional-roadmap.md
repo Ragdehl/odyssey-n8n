@@ -24,11 +24,21 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current gate — post-merge Phase 22 production adoption
+## Current phase — UI-1 request detail / advanced inspector
 
-Goal: activate the already-validated Phase 22 self-identity path in production through trusted production identity projection, explicit real-user/person binding, and an explicit commit-selected deployment with health/provenance verification.
+Goal: expose one request's existing bounded operational evidence through a closed-by-default detail
+surface without turning the normal chat into a technical console.
 
-Phase 22 implementation is complete in isolated DEV after the identity, binding, provenance, and deterministic self-resolution foundations and the grounded SELF READ/WRITE gate. The next gate is explicit post-merge production adoption: trusted production authentication projection, real-user mapping/binding, and an explicit commit-selected deployment with health/provenance verification. The selected commit is materialized in the isolated production release worktree; merging `main` alone never changes PROD.
+Phase 23 is closed. Retained human-authenticated production browser evidence showed `¿Dónde trabajo?`
+returning `Trabajas en Alten para Airbus.`, proving real production SELF READ behavior. Codex did not
+reproduce the user's Cloudflare Access session. UI-1 is implemented in the current PR and reuses
+existing bounded request evidence without changing planner or routing semantics.
+
+Phase 22/23 identity adoption remains governed by the explicit production contract: trusted
+production identity projection, real-user/person binding, and an explicit commit-selected
+deployment with health/provenance verification. The selected commit is materialized in the
+isolated production release worktree; merging `main` alone never changes PROD. The production
+release-worktree and operator contract merged from PR #112 is preserved.
 See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
@@ -54,7 +64,16 @@ Phase 21 production/development isolation                    ✅ complete
 22D  authenticated human provenance propagation                ✅ complete
 22E  deterministic self resolution                              ✅ complete
 22F  focused isolated-DEV adoption gate                         ✅ complete
+23A  production repository + live boundary inventory             ✅ complete
+23B  trusted principal projection                                ✅ complete
+23C  explicit production self binding                             ✅ complete
+23D  reboot-safe production operator + provenance                ✅ complete
+23E  read-only human-authenticated production SELF E2E            ✅ complete
+UI-1 request detail / advanced inspector                         ✅ complete in isolated DEV
 ```
+
+Latency optimization remains intentionally deferred: provider/model time dominates measured latency,
+and no SELF/general or request-class fast path is authorized.
 
 ### 20.1B — answerer adoption gate
 

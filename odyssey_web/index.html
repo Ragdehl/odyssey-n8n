@@ -40,6 +40,14 @@
     </section>
   </main>
 
+  <dialog id="request-detail-sheet" class="request-detail-sheet" aria-labelledby="request-detail-title">
+    <div class="request-detail-header">
+      <h2 id="request-detail-title">Detalles de la solicitud</h2>
+      <button id="request-detail-close" class="detail-close" type="button" aria-label="Cerrar detalles">×</button>
+    </div>
+    <div id="request-detail-content" class="request-detail-content"></div>
+  </dialog>
+
   <script src="./environment.js"></script>
   <script type="module" src="./app.js"></script>
 </body>

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 SOURCE = Path(__file__).parents[1] / "workflows" / "odyssey-online.ts"
+DEV_FIXTURE = Path(__file__).parents[1] / "scripts" / "prepare_odyssey_dev_identity.py"
 
 
 def _answerer_key(request_id: str) -> str:
@@ -12,8 +13,90 @@ def _answerer_key(request_id: str) -> str:
 def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "const { request_id, status, kind, message }" in source
+    assert "const { request_id, status, kind, message, request_detail }" in source
     assert "Return deterministic product response" in source
+
+
+def test_request_detail_projection_excludes_retrieval_payloads() -> None:
+    """Project only bounded operational and change evidence to the browser surface."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const request_detail =" in source
+    assert "r.operational" in source
+    assert "affected_stable_note_ids" in source
+    assert "const request_detail = withAnswerer(source.request_detail)" in source
+
+
+def test_request_cost_uses_one_bounded_call_record_per_provider_call() -> None:
+    """Aggregate runtime and answerer usage without double-counting stage totals."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const pricingSnapshotText = process.env.ODYSSEY_PRICING_SNAPSHOT" in source
+    assert "if (Array.isArray(stage.provider_calls) && stage.provider_calls.length)" in source
+    assert "else if (stage.model && stage.usage)" in source
+    assert "provider_calls: [answererCall]" in source
+    assert "estimated_cost: requestCost(enriched.operational, pricing)" in source
+
+
+def test_request_cost_handles_cached_input_and_fails_closed() -> None:
+    """Keep cached pricing explicit and never represent missing evidence as zero."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "usage.cached_input_tokens > usage.input_tokens" in source
+    assert "rates.cached_input_per_million" in source
+    assert "status: 'unavailable', amount_usd: null" in source
+    assert "cacheWrite > 0" in source
+
+
+def test_request_cost_supports_luna_and_bounded_sol_calls() -> None:
+    """Use the dated snapshot for every allowlisted provider model, including Sol fallback."""
+    source = SOURCE.read_text(encoding="utf-8")
+    snapshot = (
+        Path(__file__).parents[1] / "benchmarks/phase20_answerer/pricing_snapshot.json"
+    ).read_text(encoding="utf-8")
+    assert '"gpt-5.6-luna"' in snapshot
+    assert '"gpt-5.6-sol"' in snapshot
+    assert "pricing.as_of" in source
+
+
+def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> None:
+    """Keep the DEV SELF fixture and grounded evidence projection available to the answerer."""
+    source = SOURCE.read_text(encoding="utf-8")
+    fixture = DEV_FIXTURE.read_text(encoding="utf-8")
+    assert "Works at Synthetic Systems." in fixture
+    assert "route: 'answer'" in source
+    assert (
+        "items: items.map(i => ({ id: i.id, type: i.type, path: i.path, content: i.content }))"
+        in source
+    )
+
+
+def test_failed_result_retains_existing_bounded_request_detail() -> None:
+    """Keep safe operational/change evidence visible when Core returns a failed result."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert (
+        "const hasOperationalEvidence = r.operational && typeof r.operational === 'object'"
+        in source
+    )
+    assert (
+        "const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions)"
+        in source
+    )
+    assert "request_detail ? { ...error, request_detail } : error" in source
+
+
+def test_failure_without_bounded_evidence_fails_closed() -> None:
+    """Do not fabricate a request-detail object for transport/runtime failures without evidence."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "} : undefined;" in source
+    assert "if (!id || !r || r.request_id !== id) return [{ json: error }];" in source
+    assert "stage: 'runtime'" not in source
+
+
+def test_completed_response_and_answerer_failure_keep_existing_detail_contract() -> None:
+    """Leave completed responses unchanged and retain detail on bounded answerer failures."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
+    assert (
+        "request_detail } }]; } catch { return [{ json: { request_id: source.request_id" in source
+    )
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:

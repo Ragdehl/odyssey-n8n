@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/ragdehl/projects/odyssey-dev
+EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env
 ExecStart=/home/ragdehl/projects/odyssey-dev/scripts/odyssey-dev runtime
 Restart=on-failure
 RestartSec=5s

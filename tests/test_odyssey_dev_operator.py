@@ -42,3 +42,21 @@ def test_render_binds_the_isolated_answerer_credential_id() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     assert "ODYSSEY_DEV_ANSWERER_CREDENTIAL_ID" in source
     assert 'name: "Odyssey DEV OpenAI Answerer"' in source
+
+
+def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
+    """Keep the isolated DEV planner able to use the existing protected provider key."""
+    service = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-runtime.service").read_text(
+        encoding="utf-8"
+    )
+    assert "EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env" in service
+
+
+def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> None:
+    """Prevent MATCH when the served DEV web mount belongs to another deployment."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "web_assets_sha256" in source
+    assert "web_deployment_marker" in source
+    assert "mounted_web_asset_fingerprint" in source
+    assert 'web_assets_coherent "$current"' in source
+    assert "/odyssey-web/environment.js" in source
