@@ -48,9 +48,9 @@ def test_request_cost_handles_cached_input_and_fails_closed() -> None:
 def test_request_cost_supports_luna_and_bounded_sol_calls() -> None:
     """Use the dated snapshot for every allowlisted provider model, including Sol fallback."""
     source = SOURCE.read_text(encoding="utf-8")
-    snapshot = (Path(__file__).parents[1] / "benchmarks/phase20_answerer/pricing_snapshot.json").read_text(
-        encoding="utf-8"
-    )
+    snapshot = (
+        Path(__file__).parents[1] / "benchmarks/phase20_answerer/pricing_snapshot.json"
+    ).read_text(encoding="utf-8")
     assert '"gpt-5.6-luna"' in snapshot
     assert '"gpt-5.6-sol"' in snapshot
     assert "pricing.as_of" in source
@@ -94,7 +94,9 @@ def test_completed_response_and_answerer_failure_keep_existing_detail_contract()
     """Leave completed responses unchanged and retain detail on bounded answerer failures."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
-    assert "request_detail } }]; } catch { return [{ json: { request_id: source.request_id" in source
+    assert (
+        "request_detail } }]; } catch { return [{ json: { request_id: source.request_id" in source
+    )
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
