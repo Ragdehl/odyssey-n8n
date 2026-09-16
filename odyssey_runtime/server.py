@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import json
 import re
 from http import HTTPStatus
@@ -22,6 +21,15 @@ from .serialization import application_result_to_response
 
 MAX_REQUEST_BYTES = 1_048_576
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
+_JSON_HTML_ESCAPES = str.maketrans(
+    {
+        "&": "\\u0026",
+        "<": "\\u003c",
+        ">": "\\u003e",
+        "\u2028": "\\u2028",
+        "\u2029": "\\u2029",
+    }
+)
 
 
 def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765) -> None:
@@ -184,7 +192,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
             except Exception:
                 payload: dict[str, Any] = {"error": "runtime failure"}
                 if request_id is not None:
-                    payload["request_id"] = html.escape(request_id, quote=True)
+                    payload["request_id"] = request_id
                     payload["stage"] = "runtime"
                 self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
 
@@ -219,11 +227,21 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
 
         def _write_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
             """Write one compact JSON response without exposing server internals."""
-            encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            encoded = _json_response_bytes(payload)
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
 
     return RuntimeHandler
+
+
+def _json_response_bytes(payload: dict[str, Any]) -> bytes:
+    """Serialize a response as JSON that remains inert if a client ignores its content type.
+
+    The Unicode escapes preserve the parsed JSON value while preventing response text from closing
+    an HTML element or script context if it is accidentally embedded by a downstream client.
+    """
+    return json.dumps(payload, ensure_ascii=False).translate(_JSON_HTML_ESCAPES).encode("utf-8")

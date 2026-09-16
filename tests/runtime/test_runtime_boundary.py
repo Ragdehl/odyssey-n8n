@@ -23,6 +23,7 @@ from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
+    AuthenticatedActorContext,
     ExternalPrincipal,
     IdentityMappingRepository,
     OdysseyUser,
@@ -795,6 +796,42 @@ def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) 
         assert connection.getresponse().status == 400
         connection.request("POST", "/conversation/list", body=body)
         assert connection.getresponse().status == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_conversation_json_escapes_html_significant_text_without_changing_it(
+    tmp_path: Path,
+) -> None:
+    """A durable transcript stays JSON-safe even if a client ignores the response media type."""
+    user = OdysseyUser.new()
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    runtime.append_conversation_turn(
+        "main",
+        "html-safe-1",
+        "assistant",
+        "<script>alert('not executable')</script>",
+        authenticated_actor=AuthenticatedActorContext(user.stable_user_id),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/conversation/main",
+            body=json.dumps({"authenticated_actor": {"stable_user_id": user.stable_user_id}}),
+        )
+        response = connection.getresponse()
+        body = response.read()
+        assert response.getheader("Content-Type") == "application/json; charset=utf-8"
+        assert response.getheader("X-Content-Type-Options") == "nosniff"
+        assert b"<script>" not in body
+        assert json.loads(body)["turns"][0]["text"] == "<script>alert('not executable')</script>"
     finally:
         server.shutdown()
         server.server_close()

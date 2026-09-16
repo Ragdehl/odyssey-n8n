@@ -103,6 +103,25 @@ def test_page_contract_rejects_cross_root_or_malformed_cursor(tmp_path: Path) ->
         first.load_main_page(limit=51)
 
 
+def test_append_idempotency_and_context_bounds_fail_closed(tmp_path: Path) -> None:
+    """The operational request index avoids rescans and invalid planner bounds cannot widen reads."""
+    store = _store(tmp_path)
+    _append(store, 1)
+    _append(store, 1)
+    assert len(store.load_main_page()["turns"]) == 1
+    with pytest.raises(ConversationError, match="already bound"):
+        store.append_turn(
+            request_id="req-1",
+            role="assistant",
+            text="different",
+            created_at=NOW,
+        )
+    with pytest.raises(ConversationError, match="bounds"):
+        store.recent_context(max_turns=0)
+    with pytest.raises(ConversationError, match="bounds"):
+        store.recent_context(max_bytes=0)
+
+
 def test_legacy_migration_preserves_safe_turns_and_recovers_incomplete_stage(
     tmp_path: Path,
 ) -> None:
@@ -144,6 +163,48 @@ def test_legacy_migration_preserves_safe_turns_and_recovers_incomplete_stage(
     assert (root / "main.json").exists()
     assert not (root / ".main.migrating").exists()
     assert store.load_or_create_main(now=NOW)["turns"] == legacy["turns"]
+
+
+def test_completed_migration_stage_is_published_without_rewriting_it(tmp_path: Path) -> None:
+    """A fully indexed staged migration is safe to publish after an interruption."""
+    store = _store(tmp_path)
+    root = store._root
+    stage = root / ".main.migrating"
+    turn = {
+        "request_id": "req-staged",
+        "role": "assistant",
+        "text": "staged reply",
+        "created_at": NOW,
+        "status": "completed",
+    }
+    store._write(stage / "chunks" / "000001.json", {"turns": [turn]})
+    store._write_request_entry("req-staged", "assistant", "staged reply", None, root=stage)
+    store._write(
+        stage / "manifest.json",
+        {
+            "conversation_id": "main",
+            "created_at": NOW,
+            "updated_at": NOW,
+            "turn_count": 1,
+            "chunks": [{"name": "000001.json", "count": 1}],
+        },
+    )
+    (root / "main.json").write_text(
+        json.dumps(
+            {
+                "conversation_id": "main",
+                "actor_id": "actor-a",
+                "created_at": NOW,
+                "updated_at": NOW,
+                "turns": [turn],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert store.load_or_create_main(now=NOW)["turns"] == [turn]
+    assert (root / "main").exists()
+    assert not stage.exists()
 
 
 def test_request_detail_is_bounded_safe_and_excluded_from_context(tmp_path: Path) -> None:
