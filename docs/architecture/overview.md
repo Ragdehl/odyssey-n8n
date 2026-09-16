@@ -187,6 +187,24 @@ The exact current Phase 20 contract is [Odyssey Online MVP](phase-20-odyssey-onl
 
 Deployment correctness is part of the product boundary. Version-controlled workflow source is the reviewable contract; the active n8n workflow is an operational deployment of that contract and may drift. Deployment verification should therefore identify the single active workflow for each public product path and compare it with the expected source/fingerprint rather than assuming an import/redeploy succeeded. The Phase 20.3 clarification incident demonstrated this boundary concretely: Core/runtime produced the correct clarification while a stale active n8n workflow transformed it into an empty result until the deployment was reconciled. See [Future Odyssey product usage observability](future-product-usage-observability.md#deployment-provenance-and-boundary-level-diagnostics).
 
+Production application source has a separate Git boundary:
+
+```text
+normal human repository (may be dirty or on another branch)
+                         |
+          explicit prepare/deploy FULL_SHA
+                         v
+dedicated odyssey-prod-release worktree at exactly COMMIT
+                         |
+                    systemd -> runtime
+```
+
+Merging `main` only makes a commit available. The explicit preparation/deployment actions accept
+only a full immutable commit SHA, materialize it in the release worktree, record its identity, and
+never mutate the normal repository. Rollback is another explicit preparation/deployment of a
+previously approved commit; the stable operator used to perform that rollback is outside the
+candidate worktree.
+
 ## Source code responsibility map
 
 - `odyssey_core/` — reusable application/domain behavior.

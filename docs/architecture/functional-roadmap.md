@@ -31,8 +31,14 @@ surface without turning the normal chat into a technical console.
 
 Phase 23 is closed. Retained human-authenticated production browser evidence showed `¿Dónde trabajo?`
 returning `Trabajas en Alten para Airbus.`, proving real production SELF READ behavior. Codex did not
-reproduce the user's Cloudflare Access session. UI-1 is the next significant phase and reuses existing
-bounded request evidence without changing planner or routing semantics.
+reproduce the user's Cloudflare Access session. UI-1 is implemented in the current PR and reuses
+existing bounded request evidence without changing planner or routing semantics.
+
+Phase 22/23 identity adoption remains governed by the explicit production contract: trusted
+production identity projection, real-user/person binding, and an explicit commit-selected
+deployment with health/provenance verification. The selected commit is materialized in the
+isolated production release worktree; merging `main` alone never changes PROD. The production
+release-worktree and operator contract merged from PR #112 is preserved.
 See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
 
 ```text
@@ -63,7 +69,7 @@ Phase 21 production/development isolation                    ✅ complete
 23C  explicit production self binding                             ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
-UI-1 request detail / advanced inspector                         ➡️ next
+UI-1 request detail / advanced inspector                         ✅ complete in isolated DEV
 ```
 
 Latency optimization remains intentionally deferred: provider/model time dominates measured latency,
