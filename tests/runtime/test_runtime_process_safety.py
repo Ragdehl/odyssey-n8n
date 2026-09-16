@@ -19,6 +19,10 @@ from odyssey_runtime.composition import (
     _positive_int_env,
 )
 
+USER_A = "11111111-1111-4111-8111-111111111111"
+USER_B = "22222222-2222-4222-8222-222222222222"
+MAPPED_USER = "33333333-3333-4333-8333-333333333333"
+
 
 def _result() -> ApplicationResult:
     """Return a completed non-mutating result for runtime wiring tests."""
@@ -172,7 +176,7 @@ def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
         refresh_indexes=lambda: None,
         conversation_repository=repository,
     )
-    actor = AuthenticatedActorContext("user-a")
+    actor = AuthenticatedActorContext(USER_A)
 
     created = runtime.create_conversation(authenticated_actor=actor)
     conversation_id = str(created["conversation_id"])
@@ -204,7 +208,7 @@ def test_runtime_conversation_helpers_scope_and_context(tmp_path: Path) -> None:
         {"role": "user", "text": "Hablamos de Marta"},
         {"role": "assistant", "text": "Marta vive en Lyon"},
     ]
-    other = AuthenticatedActorContext("user-b")
+    other = AuthenticatedActorContext(USER_B)
     assert runtime.list_conversations(authenticated_actor=other) == []
 
 
@@ -212,7 +216,7 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     """Conversation execution persists the visible user turn before forwarding to Core."""
     repository = ConversationRepository(tmp_path / "state")
     repository.create(
-        "user-a",
+        USER_A,
         now="2026-09-16T10:00:00Z",
         conversation_id="conv-1",
     )
@@ -227,7 +231,7 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
         refresh_indexes=lambda: None,
         conversation_repository=repository,
     )
-    actor = AuthenticatedActorContext("user-a")
+    actor = AuthenticatedActorContext(USER_A)
 
     runtime.execute(
         "¿Dónde vive?",
@@ -237,14 +241,14 @@ def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
     )
 
     assert calls == [("¿Dónde vive?", "req-1", actor, "conv-1")]
-    loaded = repository.load("user-a", "conv-1")
+    loaded = repository.load(USER_A, "conv-1")
     turns = [(turn["request_id"], turn["role"], turn["text"]) for turn in loaded["turns"]]
     assert turns == [("req-1", "user", "¿Dónde vive?")]
 
 
 def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
     """Missing conversation and identity dependencies are explicit failures."""
-    actor = AuthenticatedActorContext("user-a")
+    actor = AuthenticatedActorContext(USER_A)
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(),
         refresh_indexes=lambda: None,
@@ -288,7 +292,7 @@ def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
     class MappingRepository:
         def resolve_existing(self, principal):
             assert principal is marker
-            return AuthenticatedActorContext("mapped-user")
+            return AuthenticatedActorContext(MAPPED_USER)
 
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(),
@@ -299,5 +303,5 @@ def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
 
     created = runtime.create_conversation(external_principal=marker)
     conversation_id = str(created["conversation_id"])
-    loaded = repository.load("mapped-user", conversation_id)
+    loaded = repository.load(MAPPED_USER, conversation_id)
     assert loaded["conversation_id"] == conversation_id
