@@ -324,6 +324,12 @@ def test_runtime_rejects_non_main_conversation_operations(tmp_path: Path) -> Non
         runtime.create_conversation(authenticated_actor=AuthenticatedActorContext(USER_A))
     with pytest.raises(ValueError, match="unavailable"):
         runtime.list_conversations(authenticated_actor=AuthenticatedActorContext(USER_A))
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        runtime.main_conversation(
+            authenticated_actor=AuthenticatedActorContext(USER_A), external_principal=object()
+        )
+    with pytest.raises(ValueError, match="external principal mapping"):
+        runtime.main_conversation(external_principal=object())
 
 
 def test_runtime_rejects_non_main_execute_and_forwards_anonymous_main(tmp_path: Path) -> None:
