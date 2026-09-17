@@ -142,7 +142,8 @@ def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> N
     assert "['main', 'turn']" in source
     assert "Execute conversation operation" in source
     assert "runtimeBaseUrl}/conversation/{{ $json.operation }}" in source
-    assert "conversation_id: 'main'" in source
+    assert "...(operation === 'turn' ? { conversation_id: 'main' } : {})" in source
+    assert "return [{ json: { operation, conversation_id: 'main'," not in source
 
 
 def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:

@@ -794,6 +794,17 @@ def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) 
             ),
         )
         assert connection.getresponse().status == 400
+        connection.request(
+            "POST",
+            "/conversation/main",
+            body=json.dumps(
+                {
+                    "conversation_id": "main",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        assert connection.getresponse().status == 400
         connection.request("POST", "/conversation/list", body=body)
         assert connection.getresponse().status == 404
     finally:
