@@ -144,6 +144,12 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
     assert calls == [("127.0.0.1", 18765)]
 
 
+def test_runtime_server_rejects_invalid_port() -> None:
+    """Transport configuration fails before attempting a socket bind."""
+    with pytest.raises(ValueError, match="between 1 and 65535"):
+        runtime_server.serve(object(), port=0)
+
+
 def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -267,6 +273,12 @@ def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
             authenticated_actor=actor,
             external_principal=object(),
         )
+    with pytest.raises(ValueError, match="external principal mapping"):
+        runtime.execute("hola", external_principal=object())
+    with pytest.raises(ValueError, match="conversation root resolver"):
+        RuntimeComposition(
+            core_execute=lambda *args: _result(), refresh_indexes=lambda: None
+        ).main_conversation()
 
 
 def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
@@ -312,3 +324,24 @@ def test_runtime_rejects_non_main_conversation_operations(tmp_path: Path) -> Non
         runtime.create_conversation(authenticated_actor=AuthenticatedActorContext(USER_A))
     with pytest.raises(ValueError, match="unavailable"):
         runtime.list_conversations(authenticated_actor=AuthenticatedActorContext(USER_A))
+
+
+def test_runtime_rejects_non_main_execute_and_forwards_anonymous_main(tmp_path: Path) -> None:
+    """Execution uses the default hosted actor only for the one supported main conversation."""
+    calls: list[tuple[object, ...]] = []
+
+    def execute(*args):
+        calls.append(args)
+        return _result()
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.execute("text", conversation_id="other")
+    runtime.execute("text", conversation_id=MAIN_CONVERSATION_ID)
+    assert calls[0][0] == "text"
+    assert isinstance(calls[0][1], str)
+    assert calls[0][2:] == (None, MAIN_CONVERSATION_ID)
