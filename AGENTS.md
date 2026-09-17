@@ -96,6 +96,22 @@ Ask before actions with material data, security, architecture, or irreversibilit
 
 Routine implementation risk means proceed; material authority/security/data risk means ask. A failed final verification means the branch is not ready, not that coherent work should be discarded.
 
+## Product ambiguity and inference
+
+Do not turn an unstated assumption into settled product behavior. When a user-facing behavior,
+retention rule, navigation model, domain semantic, lifecycle, or phase boundary has more than one
+plausible interpretation and the canonical documentation does not already decide it, stop and ask the
+human before implementing or documenting one interpretation as the product contract.
+
+Do not treat nearby features, historical behavior, analogy with another product, implementation
+convenience, or a likely user preference as authorization. During phase definition, surface uncertain
+choices explicitly as **open decisions** and resolve them with the human before opening an
+implementation PR when the user has asked to define the phase first. Routine mechanical choices
+inside an already approved contract remain autonomous.
+
+The fail-closed principle applies to product definition as well as mutation safety: when the product
+contract is genuinely unknown, preserve the uncertainty rather than filling the gap with a guess.
+
 ## Significant functional phases
 
 For a significant functional phase:

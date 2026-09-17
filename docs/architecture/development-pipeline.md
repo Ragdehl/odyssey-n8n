@@ -67,6 +67,55 @@ For production model-facing changes, deterministic checks are necessary but not 
 
 A failed gate means the branch is not ready. It does not require discarding coherent work; record a safe checkpoint when useful and continue/fix the blocker.
 
+## Maintainability guard during feature work
+
+Code quality is a continuous constraint, not a reason to stop useful product work for speculative cleanup.
+Every significant architecture challenge and implementation review should include a small
+maintainability pass before adding new abstractions or parallel code paths:
+
+1. **Reuse before duplication.** Prefer an existing tested primitive, helper, repository, validator,
+   or contract when it already owns the behavior. Do not copy a near-equivalent implementation into
+   another capability merely to move faster locally.
+2. **Factor only proven repetition.** Two superficially similar code paths may have different trust,
+   data, or lifecycle boundaries. In particular, repeated validation at Core/runtime/integration/UI
+   trust boundaries can be intentional and should not be collapsed merely to satisfy DRY.
+3. **Keep coordinators coordinators.** A composition/orchestration file may dispatch work, but new
+   domain lifecycle rules should live in the capability/Core component that owns them rather than
+   accumulating as special-case branches in a central request function or n8n workflow.
+4. **Watch change amplification.** If one small product behavior repeatedly requires equivalent edits
+   in several unrelated files, or if tests need source-text assertions because no executable contract
+   exists, treat that as evidence for a better shared boundary.
+5. **Refactor with evidence.** Prefer bounded cleanup alongside or immediately after the feature that
+   exposes the problem. A broad rewrite requires a concrete maintenance/testability benefit and the
+   same deterministic verification as functional work.
+
+Current post-UI-0 watchpoints are deliberately a **review list, not an immediate refactor mandate**:
+
+- `odyssey_core/application.py` is still a useful request-level coordinator, but Tasks/Events/Projects
+  should not turn it into a growing set of application-specific branches;
+- `workflows/odyssey-online.ts` contains substantial embedded JavaScript for integration/product
+  projection; new capabilities should keep n8n thin rather than moving domain semantics into those
+  strings;
+- `odyssey_web/app.js` / `client.js` are appropriately small for the present UI, but UI-2 and later
+  capability surfaces should extract modules/components when responsibilities begin to mix;
+- the UI-0 transition left legacy conversation code/tests beside the root-bound
+  `LocalConversationStore`; retire or consolidate that historical path when compatibility evidence
+  shows it is safe, rather than carrying two apparent conversation authorities indefinitely;
+- historical names such as `experimental_luna_planning.py`, and source-string workflow assertions,
+  are hygiene candidates when the surrounding area is next touched, but do not justify risky churn by
+  themselves.
+
+The planned product sequence intentionally takes priority over a standalone cleanup phase now:
+**read-only Notes -> Tasks -> Events / Calendar (plus the Reminder behavior those capabilities
+actually need)**. After that application/calendar path has exposed the real extension patterns,
+perform a bounded maintainability checkpoint before substantial secondary-app expansion unless an
+earlier feature exposes concrete pain that should be fixed locally. That checkpoint should remove
+proven duplication/legacy, improve weak contract tests, and split genuine hotspots; it should not be a
+rewrite or architecture reset.
+
+The [Functional Roadmap](functional-roadmap.md) owns when that checkpoint sits in current sequencing.
+This document owns the reusable maintainability discipline applied during every phase.
+
 ## Close the loop on incidents and debugging
 
 A solved incident should reduce the cost of the next similar incident. After a non-trivial bug, deployment drift, hidden environment precondition, or operational failure is understood, close the loop before declaring the work complete.
