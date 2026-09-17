@@ -18,7 +18,7 @@ advanced/admin/developer
 
 Canonical Markdown remains the source of truth. Git, request traces, usage evidence, and indexes are supporting history/diagnostic state, not alternate note stores.
 
-Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). User-to-self-note identity is owned by [Future user self-identity binding](future-user-self-identity.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, applications, and advanced surfaces.
+Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). User-to-self-note identity is owned by [Future user self-identity binding](future-user-self-identity.md). Events/calendar semantics are owned by [Future Events / Calendar capability](future-events-calendar.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, applications, and advanced surfaces.
 
 ## Proposed product shape
 
@@ -163,6 +163,7 @@ user message
 Odyssey routing
      |
      +--> Tasks
+     +--> Events / Calendar
      +--> Projects
      `--> Shopping / other selected capability
 ```
@@ -173,9 +174,9 @@ The user-facing rules should stay simple:
 - an optional explicit mention such as `@Tasks` may direct a request when the user wants control or disambiguation, but mentions must never be required for ordinary use;
 - an app-specific focused entry point may exist when a capability needs one, but it must reuse the same knowledge, identity, and application state rather than becoming a silo;
 - a response may carry a small capability label such as `Tasks` so the user understands what acted, without inventing separate personalities or making the product feel like a room full of independent agents;
-- composition remains internal when useful: a project may use Tasks, and Tasks may use Reminders, without requiring the user to hop between app screens.
+- composition remains internal when useful: a project may use Tasks, while both Tasks and Events may use Reminders, without requiring the user to hop between app screens.
 
-The first real application should be **Tasks**. Its implementation should prove the smallest practical application manifest/routing/state contract rather than introducing a generic plugin platform first. If that works well, **Projects** should follow and reuse Tasks; **Reminders** should then provide the lower-level time/reminder capability where justified. The existing architectural direction remains `Reminders <- Tasks <- Projects`.
+The first real application should be **Tasks**. Its implementation should prove the smallest practical application manifest/routing/state contract rather than introducing a generic plugin platform first. Once that works, **Events / Calendar** is the next prioritized application area because time-aware personal behavior is unusually valuable in ordinary Odyssey use. **Reminders** should remain the lower-level notification/delivery capability used where Tasks or Events need it. **Projects** remains a committed consumer of Tasks, but it can follow the calendar path and the bounded maintainability checkpoint rather than blocking Events. See [Future Events / Calendar capability](future-events-calendar.md).
 
 Full message threads and branching chat management are not committed product directions. Evaluate a
 capability-specific surface only when a concrete need cannot be met through the main conversation
@@ -274,7 +275,7 @@ Do not decide exact charts before real usage shows which questions are useful. O
 
 ## Suggested sequencing after the protected MVP
 
-The first sequence should favor features that make Odyssey simpler to use while proving the application model incrementally:
+The first sequence should favor the most useful everyday surfaces while proving the application model incrementally:
 
 ```text
 UI-1 request feedback + advanced request drill-down
@@ -289,17 +290,20 @@ UI-2 read-only Notes
 Tasks — first real application + minimum routing/manifest/state contract
         |
         v
-Projects — reuse Tasks
+Events / Calendar — prioritized time-aware capability
         |
         v
-Reminders — lower-level time/reminder capability where justified
+Reminders — only the delivery semantics Tasks / Events actually need
         |
         v
-UI-3 Activity / UI-4 editing / UI-5 analytics
+bounded maintainability checkpoint
+        |
+        v
+Projects / UI-3 Activity / UI-4 editing / UI-5 analytics
 ordered by real usage and validation needs
 ```
 
-This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. The first application is intentionally scheduled before building every remaining UI surface: Tasks is a concrete way to validate application routing/composition without prematurely building a general plugin system. Durable conversation storage serves ordinary chat continuity; a later capability surface must earn its own product case.
+This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. The first application is intentionally scheduled before building every remaining UI surface: Tasks is a concrete way to validate application routing/composition without prematurely building a general plugin system. Events / Calendar then exercises the same extension boundary against a distinct time-aware domain before Odyssey pauses for bounded structural cleanup. Durable conversation storage serves ordinary chat continuity; a later capability surface must earn its own product case. The [Functional Roadmap](functional-roadmap.md) remains the canonical owner of current status and ordering.
 
 ## Product principles
 
