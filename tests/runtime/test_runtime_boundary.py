@@ -23,10 +23,12 @@ from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
+    AuthenticatedActorContext,
     ExternalPrincipal,
     IdentityMappingRepository,
     OdysseyUser,
 )
+from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -758,6 +760,126 @@ def test_http_boundary_preserves_delivery_identity_for_retries_and_distinguishes
             ("remember this", "n8n-123"),
             ("remember this", "n8n-124"),
         ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) -> None:
+    """The browser can reopen one durable main transcript but cannot manage arbitrary chats."""
+    user = OdysseyUser.new()
+    resolver = ConversationRootResolver(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        body = json.dumps({"authenticated_actor": {"stable_user_id": user.stable_user_id}})
+        connection.request("POST", "/conversation/main", body=body)
+        response = connection.getresponse()
+        assert response.status == 200
+        conversation = json.loads(response.read())
+        assert conversation["conversation_id"] == "main"
+        assert conversation["turns"] == []
+        assert isinstance(conversation["created_at"], str)
+        assert isinstance(conversation["updated_at"], str)
+        connection.request(
+            "POST",
+            "/conversation/main",
+            body=json.dumps(
+                {"limit": 51, "authenticated_actor": {"stable_user_id": user.stable_user_id}}
+            ),
+        )
+        assert connection.getresponse().status == 400
+        connection.request(
+            "POST",
+            "/conversation/main",
+            body=json.dumps(
+                {
+                    "conversation_id": "main",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        assert connection.getresponse().status == 400
+        connection.request("POST", "/conversation/list", body=body)
+        assert connection.getresponse().status == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_conversation_json_escapes_html_significant_text_without_changing_it(
+    tmp_path: Path,
+) -> None:
+    """A durable transcript stays JSON-safe even if a client ignores the response media type."""
+    user = OdysseyUser.new()
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    runtime.append_conversation_turn(
+        "main",
+        "html-safe-1",
+        "assistant",
+        "<script>alert('not executable')</script>",
+        authenticated_actor=AuthenticatedActorContext(user.stable_user_id),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/conversation/main",
+            body=json.dumps({"authenticated_actor": {"stable_user_id": user.stable_user_id}}),
+        )
+        response = connection.getresponse()
+        body = response.read()
+        assert response.getheader("Content-Type") == "application/json; charset=utf-8"
+        assert response.getheader("X-Content-Type-Options") == "nosniff"
+        assert b"<script>" not in body
+        assert json.loads(body)["turns"][0]["text"] == "<script>alert('not executable')</script>"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_boundary_persists_safe_detail_on_conversation_turn(tmp_path: Path) -> None:
+    """The n8n-facing turn route persists inspector-safe detail and rejects extra fields."""
+    user = OdysseyUser.new()
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        body = {
+            "conversation_id": "main",
+            "request_id": "detail-1",
+            "role": "assistant",
+            "text": "visible answer",
+            "status": "completed",
+            "request_detail": {
+                "request_id": "detail-1",
+                "operational": {"total_duration_ms": 1, "stages": []},
+            },
+            "authenticated_actor": {"stable_user_id": user.stable_user_id},
+        }
+        connection.request("POST", "/conversation/turn", body=json.dumps(body))
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["turns"][0]["request_detail"] == body["request_detail"]
+
+        connection.request(
+            "POST", "/conversation/turn", body=json.dumps({**body, "prompt": "secret"})
+        )
+        assert connection.getresponse().status == 400
     finally:
         server.shutdown()
         server.server_close()

@@ -39,7 +39,7 @@ class FakePlanner:
     value: PlannerResult | Exception
     calls: int = 0
 
-    def plan(self, request: str) -> PlannerResult:
+    def plan(self, request: str, conversation_context=()) -> PlannerResult:
         """Return the configured planner result or its configured planning failure."""
         self.calls += 1
         if isinstance(self.value, Exception):
@@ -97,6 +97,50 @@ def test_retrieve_uses_existing_context_and_propagates_one_request_id(
     assert result.action_results[0].retrieval is retrieved
     assert result.operational.stages[1].provider_calls == ()
     assert calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
+
+
+def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Conversation continuity reaches only the one planner pass, never retrieval expansion."""
+    retrieval_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application,
+        "get_context",
+        lambda *args, **kwargs: retrieval_calls.append(kwargs) or object(),
+    )
+
+    @dataclass
+    class RecordingPlanner:
+        calls: list[tuple[str, tuple]]
+
+        def plan(self, request: str, conversation_context=()) -> PlannerResult:
+            self.calls.append((request, tuple(conversation_context)))
+            return RequestPlan(
+                (RetrieveAction(SelectionCriteria("Marta", "Marta", None, (), None)),), ()
+            )
+
+    planner = RecordingPlanner([])
+    result = application.execute_request(
+        "¿Y dónde vive?",
+        planner=planner,
+        repository=object(),
+        schema={},
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="test",
+        now="2026-08-28T12:00:00Z",
+        context_limit=5,
+        request_id_factory=lambda: "request-context",
+        conversation_context=({"role": "user", "text": "Marta vive en Lyon"},),
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert planner.calls == [
+        ("¿Y dónde vive?", ({"role": "user", "text": "Marta vive en Lyon"},)),
+    ]
+    assert retrieval_calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
 
 
 def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(

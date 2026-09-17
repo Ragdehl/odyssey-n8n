@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import html
 import json
 import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
+from urllib.parse import urlsplit
 
+from odyssey_core.conversations import ConversationError
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
     ExternalPrincipal,
@@ -20,6 +21,15 @@ from .serialization import application_result_to_response
 
 MAX_REQUEST_BYTES = 1_048_576
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
+_JSON_HTML_ESCAPES = str.maketrans(
+    {
+        "&": "\\u0026",
+        "<": "\\u003c",
+        ">": "\\u003e",
+        "\u2028": "\\u2028",
+        "\u2029": "\\u2029",
+    }
+)
 
 
 def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765) -> None:
@@ -54,24 +64,85 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:  # noqa: N802
             """Return a bounded readiness response for the health endpoint."""
-            if self.path != "/healthz":
-                self._write_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+            if self.path == "/healthz":
+                self._write_json(HTTPStatus.OK, {"ok": True, "service": "odyssey-runtime"})
                 return
-            self._write_json(HTTPStatus.OK, {"ok": True, "service": "odyssey-runtime"})
+            self._write_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
         def do_POST(self) -> None:  # noqa: N802
             """Validate one request payload, execute Core, and return public evidence."""
-            if self.path != "/execute":
+            parsed = urlsplit(self.path)
+            if parsed.path == "/conversation/main":
+                try:
+                    payload = self._read_payload()
+                    actor = self._identity_from_payload(payload)
+                    allowed = {
+                        "operation",
+                        "limit",
+                        "before",
+                        "authenticated_actor",
+                        "external_principal",
+                    }
+                    if set(payload) - allowed:
+                        raise ValueError("main payload is invalid")
+                    response = runtime.main_conversation(
+                        *actor, limit=payload.get("limit"), before=payload.get("before")
+                    )
+                    self._write_json(HTTPStatus.OK, response)
+                except (ConversationError, IdentityBoundaryError, TypeError, ValueError):
+                    self._write_json(
+                        HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
+                    )
+                return
+            if parsed.path == "/conversation/turn":
+                try:
+                    payload = self._read_payload()
+                    allowed = {
+                        "operation",
+                        "conversation_id",
+                        "request_id",
+                        "role",
+                        "text",
+                        "status",
+                        "request_detail",
+                        "authenticated_actor",
+                        "external_principal",
+                    }
+                    if set(payload) - allowed or not all(
+                        key in payload for key in ("conversation_id", "request_id", "role", "text")
+                    ):
+                        raise ValueError("turn payload is invalid")
+                    self._write_json(
+                        HTTPStatus.OK,
+                        runtime.append_conversation_turn(
+                            payload["conversation_id"],
+                            payload["request_id"],
+                            payload["role"],
+                            payload["text"],
+                            payload.get("status"),
+                            payload.get("request_detail"),
+                            *self._identity_from_payload(payload),
+                        ),
+                    )
+                except (ConversationError, IdentityBoundaryError, TypeError, ValueError):
+                    self._write_json(
+                        HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
+                    )
+                return
+            if parsed.path != "/execute":
                 self._write_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
                 return
             try:
-                length = int(self.headers.get("Content-Length", "-1"))
-                if length < 0 or length > MAX_REQUEST_BYTES:
-                    raise ValueError("request body is too large")
-                payload = json.loads(self.rfile.read(length))
+                payload = self._read_payload()
                 if not isinstance(payload, dict) or not {"request"}.issubset(payload):
                     raise ValueError("request payload has unsupported fields")
-                allowed = {"request", "request_id", "authenticated_actor", "external_principal"}
+                allowed = {
+                    "request",
+                    "request_id",
+                    "conversation_id",
+                    "authenticated_actor",
+                    "external_principal",
+                }
                 if set(payload) - allowed:
                     raise ValueError("request payload has unsupported fields")
                 if "authenticated_actor" in payload and "external_principal" in payload:
@@ -85,6 +156,12 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     or _REQUEST_ID_PATTERN.fullmatch(request_id) is None
                 ):
                     raise ValueError("request_id must be a safe non-empty identifier")
+                conversation_id = payload.get("conversation_id")
+                if conversation_id is not None and (
+                    not isinstance(conversation_id, str)
+                    or _REQUEST_ID_PATTERN.fullmatch(conversation_id) is None
+                ):
+                    raise ValueError("conversation_id must be a safe non-empty identifier")
                 actor_payload = payload.get("authenticated_actor")
                 authenticated_actor = (
                     None
@@ -104,6 +181,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 result = runtime.execute(
                     request,
                     request_id,
+                    conversation_id,
                     authenticated_actor,
                     external_principal,
                 )
@@ -114,9 +192,34 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
             except Exception:
                 payload: dict[str, Any] = {"error": "runtime failure"}
                 if request_id is not None:
-                    payload["request_id"] = html.escape(request_id, quote=True)
+                    payload["request_id"] = request_id
                     payload["stage"] = "runtime"
                 self._write_json(HTTPStatus.INTERNAL_SERVER_ERROR, payload)
+
+        def _read_payload(self) -> dict[str, Any]:
+            """Read one bounded JSON object without logging its contents."""
+            length = int(self.headers.get("Content-Length", "-1"))
+            if length < 0 or length > MAX_REQUEST_BYTES:
+                raise ValueError("request body is too large")
+            payload = json.loads(self.rfile.read(length))
+            if not isinstance(payload, dict):
+                raise ValueError("request payload must be an object")
+            return payload
+
+        def _identity_from_payload(
+            self, payload: dict[str, Any]
+        ) -> tuple[AuthenticatedActorContext | None, ExternalPrincipal | None]:
+            """Decode the already-authenticated identity fields supplied by n8n."""
+            actor_payload = payload.get("authenticated_actor")
+            principal_payload = payload.get("external_principal")
+            return (
+                None
+                if actor_payload is None
+                else AuthenticatedActorContext.from_payload(actor_payload),
+                None
+                if principal_payload is None
+                else ExternalPrincipal.from_payload(principal_payload),
+            )
 
         def log_message(self, format: str, *args: Any) -> None:
             """Avoid logging request bodies or other potentially sensitive input."""
@@ -124,11 +227,21 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
 
         def _write_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
             """Write one compact JSON response without exposing server internals."""
-            encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            encoded = _json_response_bytes(payload)
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
 
     return RuntimeHandler
+
+
+def _json_response_bytes(payload: dict[str, Any]) -> bytes:
+    """Serialize a response as JSON that remains inert if a client ignores its content type.
+
+    The Unicode escapes preserve the parsed JSON value while preventing response text from closing
+    an HTML element or script context if it is accidentally embedded by a downstream client.
+    """
+    return json.dumps(payload, ensure_ascii=False).translate(_JSON_HTML_ESCAPES).encode("utf-8")

@@ -36,6 +36,8 @@ _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerResult. Use the supplied current date, time, and timezone.
 
+Bounded recent conversation evidence may resolve a referent or conversational continuity, but it records only what was said and is never current personal truth. Use it only to identify the subject or interaction the user means. Do not turn a prior user statement or assistant response into a current-fact filter, retrieval constraint, or asserted fact. Canonical notes remain the authority for current facts. A follow-up write may reuse an explicit fact from earlier user text only when the ordinary write contract can represent it; assistant text never supplies a fact or mutation target. If the recent evidence still leaves the referent or requested mutation ambiguous, return CLARIFY rather than guessing.
+
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, and self_target. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. A relational target such as "mi hermano" remains an ordinary target. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
@@ -296,7 +298,9 @@ def plan_fact_ordinals(plan: RequestPlan) -> tuple[tuple[int, ...], ...]:
 
 
 def render_request_planner_prompt(
-    schema: Mapping[str, Any], current_context: Mapping[str, str]
+    schema: Mapping[str, Any],
+    current_context: Mapping[str, str],
+    conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> str:
     """Render the production planner prompt from active schema and runtime context.
 
@@ -323,10 +327,19 @@ def render_request_planner_prompt(
         _RETRIEVAL_CAPABILITY_PLACEHOLDER,
         json.dumps(retrieval, ensure_ascii=False, separators=(",", ":")),
     )
-    return rendered.replace(
+    prompt = rendered.replace(
         _WRITE_CAPABILITY_PLACEHOLDER,
         json.dumps(writable, ensure_ascii=False, separators=(",", ":")),
     )
+    if conversation_context:
+        bounded = [
+            {"role": item.get("role"), "text": item.get("text")} for item in conversation_context
+        ]
+        prompt += (
+            "\n\nBounded active-conversation evidence (what was said, not current truth):\n"
+            + json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+        )
+    return prompt
 
 
 def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -538,7 +551,8 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
     outcome = payload["outcome"]
     if outcome == "PLAN":
         if (
-            payload["clarification_code"] is not None
+            set(payload) != {"outcome", "actions", "limitations", "clarification_code"}
+            or payload["clarification_code"] is not None
             or not isinstance(payload["actions"], list)
             or not isinstance(payload["limitations"], list)
         ):
@@ -549,7 +563,8 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
     if outcome == "CLARIFY":
         code = payload["clarification_code"]
         if (
-            payload["actions"] is not None
+            set(payload) != {"outcome", "actions", "limitations", "clarification_code"}
+            or payload["actions"] is not None
             or payload["limitations"] is not None
             or code not in PLANNER_CLARIFICATION_CODES
         ):
@@ -658,7 +673,9 @@ class OpenAIRequestPlanner:
             raise RequestPlanningError("Install the OpenAI SDK for request planning") from error
         return cls(OpenAI(max_retries=PLANNER_AUTOMATIC_RETRIES), schema, current_context)
 
-    def plan(self, request: str) -> PlannerResult:
+    def plan(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> PlannerResult:
         """Interpret one non-empty user request and fail closed on invalid model output.
 
         Args:
@@ -699,7 +716,7 @@ class OpenAIRequestPlanner:
                     {
                         "role": "system",
                         "content": render_request_planner_prompt(
-                            self._schema, self._current_context
+                            self._schema, self._current_context, conversation_context
                         ),
                     },
                     {"role": "user", "content": request},

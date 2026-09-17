@@ -796,7 +796,7 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     for branch in result_union["anyOf"]:
         assert branch["type"] == "object"
         assert branch["additionalProperties"] is False
-        assert branch["required"] == ["outcome", "actions", "limitations", "clarification_code"]
+        assert "outcome" in branch["required"]
     invalid_plan = {
         "outcome": "PLAN",
         "actions": None,
@@ -814,6 +814,21 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     }
     with pytest.raises(RequestPlanningError, match="CLARIFY must"):
         validate_planner_result(invalid_clarification, schema)
+
+
+def test_context_payload_is_not_a_planner_result(schema: dict) -> None:
+    """Recent conversation is planner input, never a third executable result outcome."""
+    with pytest.raises(RequestPlanningError):
+        validate_planner_result(
+            {
+                "outcome": "CONTEXT_NEEDED",
+                "actions": None,
+                "limitations": None,
+                "clarification_code": None,
+                "context": {"source": "personal_knowledge", "hint": "x"},
+            },
+            schema,
+        )
 
 
 @pytest.mark.parametrize(

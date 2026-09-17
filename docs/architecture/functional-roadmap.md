@@ -24,9 +24,13 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — UI-0 durable chat history/resume
+## Current phase — UI-0 durable main conversation/continuity
 
-Goal: make Odyssey conversations durable and resumable so closing/reopening the product does not lose visible history, while keeping conversation records isolated from canonical personal knowledge and preparing the later context-on-demand continuity flow.
+Goal: make Odyssey's one ordinary chat durable across reopen and support natural immediate
+continuity with one bounded recent-turn window in the existing Luna-first planner pass. Conversation
+records stay isolated from canonical personal knowledge; canonical Markdown remains authority for
+current facts and normal retrieval/mutation. UI-0 does not make users manage chats or retain the
+previous `CONTEXT_NEEDED`/second-pass experiment. See [UI-0 durable main conversation](ui-0-durable-conversations.md).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 
@@ -66,7 +70,7 @@ Phase 21 production/development isolation                    ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
 UI-1 request detail / advanced inspector                         ✅ complete in PROD
-UI-0 durable chat history/resume                                 ➡️ next
+UI-0 durable main conversation/continuity                        ➡️ next
 UI-2 read-only Notes                                              ⬜ planned
 Tasks — first real application + minimal app routing              ⬜ planned
 Projects — compose over Tasks                                     ⬜ planned
@@ -146,7 +150,7 @@ user self-identity binding to ordinary person note    ✅ complete
 UI-1 request feedback / advanced inspector            ✅ complete in PROD
         |
         v
-UI-0 durable chats + resume / conversation continuity ➡️ next
+UI-0 durable main conversation / continuity ➡️ next
         |
         v
 UI-2 read-only Notes
@@ -185,26 +189,14 @@ explicit human-gated production promotion.
 
 ### Natural conversation and history
 
-Conversation continuity is now a concrete post-MVP requirement, not only a speculative idea. The intended architecture is **context on demand**, not a hard-coded “always send the last N messages” window.
-
-```text
-current request
-      |
-      v
-same Luna-first planner
-      |
-      +--> self-contained -> execute normally
-      |
-      `--> context needed
-               |
-               v
-       retrieve relevant conversation evidence
-               |
-               v
-       same planner, bounded second pass
-```
-
-Conversation/history must remain a source/authority distinction, not an ordinary canonical note type. Visible conversation records should be durable Markdown-like non-knowledge state; historical retrieval must remain logically isolated from current personal-knowledge retrieval. Later coarse-to-fine navigation may use derived conversation/daily/weekly/monthly/yearly summaries that point back to raw conversations. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+Conversation continuity is a concrete post-MVP requirement, delivered first as one persistent main
+chat rather than chat management. A deterministic bounded recent-turn window accompanies the current
+request in the existing Luna-first planner call. It may resolve conversational wording but never
+becomes a current-fact source or retrieval expansion; the validated plan continues to route to
+canonical Markdown only. Historical knowledge questions belong to canonical notes, fact-capture
+chronology, and canonical Git/request history. Transcript search, summaries, topic splitting, and
+multiple-chat UX are not UI-0 follow-on roadmap work; any such product would require separate
+justification. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 
 ### Composable applications and capabilities
 
@@ -214,7 +206,7 @@ Applications should reuse shared Odyssey knowledge and lower-level capabilities 
 Reminders <- Tasks <- Projects
 ```
 
-The approved user interaction model is **automatic routing by default, explicit routing when useful**. Ordinary users should speak naturally in any Odyssey chat; the relevant capability is selected internally and only that selected capability should execute/respond. Optional syntax such as `@Tasks` may direct or disambiguate a request but must never be required. App-specific chats may exist as secondary focused entry points while reusing the same knowledge, identity and history rather than creating silos. Applications may show a small capability identity in the UI, but should not become independent personalities that all listen to every message. Full nested threads are deferred; a simpler “continue in new chat from this message” pattern should be tried first if branching becomes useful.
+The approved user interaction model is **automatic routing by default, explicit routing when useful**. Ordinary users should speak naturally in the main conversation; the relevant capability is selected internally and only that selected capability should execute/respond. Optional syntax such as `@Tasks` may direct or disambiguate a request but must never be required. A capability-specific surface may exist only when a concrete need justifies it, while reusing the same knowledge, identity, and application state rather than becoming a silo. Applications may show a small capability identity in the UI, but should not become independent personalities that all listen to every message. Nested threads and branching chat management are not committed directions.
 
 The first real application is **Tasks**, chosen to prove the smallest practical manifest/routing/state contract. **Projects** follows by reusing Tasks, and **Reminders** supplies the lower-level time/reminder capability where justified. Do not build a generic plugin platform before Tasks proves what the common application contract actually needs.
 
@@ -234,7 +226,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 
 - 💡 **Retrieval refinement from real misses:** first test query-decomposed multi-fact/entity-coverage retrieval; only then add candidate reduction or compact evidence if measured cost/volume justifies it. See [Future retrieval refinements](future-query-decomposed-retrieval.md).
 - 💡 **Pending-reference evolution / schema coaching:** safely relink exact attributable occurrences and use repeated unresolved patterns only as advisory evidence for future schema proposals. See [Future pending-reference evolution](future-pending-reference-evolution.md).
-- 💡 **Hierarchical conversation summaries:** conversation/day/week/month/year derived summaries may later narrow historical search before drilling down to raw supporting turns; they remain rebuildable navigation aids, never authority. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+- 💡 **Historical canonical-knowledge retrieval:** extend note/fact chronology and canonical Git/request-history access only when a concrete historical knowledge question requires it; do not substitute chat-history search. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 - 💡 **Usage/cost observability:** project already-collected safe operational/provider evidence into simple and advanced product views without creating a second tracing authority. This now explicitly includes integration/deployment provenance and a `MATCH | DRIFT | UNKNOWN` view of checked-in workflow source versus the active deployed workflow. See [Future product usage observability](future-product-usage-observability.md).
 - 💡 **Capture-context provenance:** optional location/context belongs to fact/request provenance, not entity properties. See [Future capture-context provenance](future-capture-context-provenance.md).
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).

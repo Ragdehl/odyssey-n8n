@@ -16,6 +16,7 @@ from odyssey_core.application import ApplicationResult, allocate_request_id, exe
 from odyssey_core.context import ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
+from odyssey_core.conversations import MAIN_CONVERSATION_ID
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
@@ -25,6 +26,7 @@ from odyssey_core.identity_boundary import (
     IdentityMappingRepository,
     SelfBindingRepository,
 )
+from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_core.materialization import OpenAILunaWriter
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -51,12 +53,14 @@ class RuntimeComposition:
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
     identity_mapping_repository: IdentityMappingRepository | None = None
+    conversation_root_resolver: ConversationRootResolver | None = None
     monotonic: Callable[[], float] = perf_counter
 
     def execute(
         self,
         user_request: str,
         request_id: str | None = None,
+        conversation_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
     ) -> ApplicationResult:
@@ -78,11 +82,35 @@ class RuntimeComposition:
                 external_principal
             )
             authenticated_actor = AuthenticatedActorContext(authenticated_actor.stable_user_id)
+        if conversation_id is not None and self.conversation_root_resolver is None:
+            raise ValueError("conversation root resolver is unavailable")
+        if conversation_id is not None:
+            resolved_actor = (
+                authenticated_actor.stable_user_id
+                if authenticated_actor is not None
+                else "odyssey-runtime"
+            )
+            request_id = request_id or allocate_request_id()
+            if conversation_id != MAIN_CONVERSATION_ID:
+                raise ValueError("only the main conversation is available")
+            self._conversation_store(resolved_actor).append_turn(
+                request_id=request_id,
+                role="user",
+                text=user_request,
+                created_at=_current_time()["timestamp"],
+            )
         started = self.monotonic()
-        if authenticated_actor is None:
-            result = self.core_execute(user_request, request_id)
+        if conversation_id is None:
+            if authenticated_actor is None:
+                result = self.core_execute(user_request, request_id)
+            else:
+                result = self.core_execute(user_request, request_id, authenticated_actor)
+        elif authenticated_actor is None:
+            result = self.core_execute(user_request, request_id, None, conversation_id)
         else:
-            result = self.core_execute(user_request, request_id, authenticated_actor)
+            result = self.core_execute(
+                user_request, request_id, authenticated_actor, conversation_id
+            )
         stages = list(result.operational.stages)
         if result.affected_stable_note_ids:
             refresh_started = self.monotonic()
@@ -127,6 +155,112 @@ class RuntimeComposition:
             ),
         )
 
+    def create_conversation(
+        self,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Create one durable conversation for the trusted actor at this boundary."""
+        del authenticated_actor, external_principal
+        raise ValueError("only the main conversation is available")
+
+    def main_conversation(
+        self,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+        *,
+        limit: int | None = None,
+        before: str | None = None,
+    ) -> dict[str, object]:
+        """Return the one durable main conversation for the trusted actor."""
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        store = self._conversation_store(actor)
+        store.load_or_create_main(now=_current_time()["timestamp"])
+        return store.load_main_page(limit=40 if limit is None else limit, before=before)
+
+    def list_conversations(
+        self,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> list[dict[str, object]]:
+        """List bounded durable conversations owned by the trusted actor."""
+        del authenticated_actor, external_principal
+        raise ValueError("conversation lists are unavailable")
+
+    def load_conversation(
+        self,
+        conversation_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Load one actor-owned durable conversation for browser resume."""
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        if conversation_id != MAIN_CONVERSATION_ID:
+            raise ValueError("only the main conversation is available")
+        return self._conversation_store(actor).load_main_page()
+
+    def append_conversation_turn(
+        self,
+        conversation_id: str,
+        request_id: str,
+        role: str,
+        text: str,
+        status: str | None = None,
+        request_detail: dict[str, object] | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Persist one visible turn idempotently for the trusted actor."""
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        if conversation_id != MAIN_CONVERSATION_ID:
+            raise ValueError("only the main conversation is available")
+        return self._conversation_store(actor).append_turn(
+            request_id=request_id,
+            role=role,
+            text=text,
+            created_at=_current_time()["timestamp"],
+            status=status,
+            request_detail=request_detail,
+        )
+
+    def recent_conversation_context(
+        self,
+        conversation_id: str,
+        request_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> list[dict[str, str]]:
+        """Return the bounded recent main-conversation window for one planner pass."""
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        if conversation_id != MAIN_CONVERSATION_ID:
+            raise ValueError("only the main conversation is available")
+        return self._conversation_store(actor).recent_context(exclude_request_id=request_id)
+
+    def _conversation_store(self, actor: str) -> LocalConversationStore:
+        """Resolve a trusted actor before constructing its root-bound local store."""
+        if self.conversation_root_resolver is None:
+            raise ValueError("conversation root resolver is unavailable")
+        return LocalConversationStore(self.conversation_root_resolver.resolve(actor))
+
+    def _resolve_actor(
+        self,
+        authenticated_actor: AuthenticatedActorContext | None,
+        external_principal: ExternalPrincipal | None,
+    ) -> str:
+        if authenticated_actor is not None and external_principal is not None:
+            raise ValueError("authenticated actor and external principal are mutually exclusive")
+        if external_principal is not None:
+            if self.identity_mapping_repository is None:
+                raise ValueError("external principal mapping is unavailable")
+            authenticated_actor = self.identity_mapping_repository.resolve_existing(
+                external_principal
+            )
+        return (
+            authenticated_actor.stable_user_id
+            if authenticated_actor is not None
+            else "odyssey-runtime"
+        )
+
 
 def build_runtime_from_environment() -> RuntimeComposition:
     """Build the production Core composition from environment-owned configuration.
@@ -161,6 +295,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     writer = OpenAILunaWriter()
     fact_selector = OpenAILunaFactSelector()
     pending_recorder = PendingWorkRepository(pending_root)
+    conversation_root_resolver = ConversationRootResolver(state_root)
     self_binding_repository = (
         SelfBindingRepository(state_root, repository, schema)
         if isinstance(repository, _VAULT_REPOSITORY_TYPE)
@@ -175,6 +310,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         user_request: str,
         request_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_id: str | None = None,
     ) -> ApplicationResult:
         """Execute one request with fresh Luna-first planning and persistence clock context."""
         clock = _current_time()
@@ -205,6 +341,17 @@ def build_runtime_from_environment() -> RuntimeComposition:
             request_id_factory=request_id_factory,
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
+            conversation_context=(
+                LocalConversationStore(
+                    conversation_root_resolver.resolve(
+                        authenticated_actor.stable_user_id
+                        if authenticated_actor is not None
+                        else actor
+                    )
+                ).recent_context(exclude_request_id=request_id)
+                if conversation_id is not None and request_id is not None
+                else ()
+            ),
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)
@@ -220,6 +367,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
         identity_mapping_repository=identity_mapping_repository,
+        conversation_root_resolver=conversation_root_resolver,
     )
 
 

@@ -6,7 +6,7 @@ materialization, and bulk membership remain in their existing Phase 13--16 bound
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from time import perf_counter
@@ -51,7 +51,9 @@ from .write_target import WriteTargetDecision, WriteTargetOutcome
 class RequestPlanner(Protocol):
     """Describe the validated planning boundary used by an application request."""
 
-    def plan(self, request: str) -> PlannerResult:
+    def plan(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> PlannerResult:
         """Return one validated plan or closed clarification for a raw request."""
 
 
@@ -191,6 +193,7 @@ def execute_request(
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
     monotonic: Callable[[], float] = perf_counter,
+    conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -214,6 +217,8 @@ def execute_request(
         semantic_limit: Existing bounded semantic-resolution candidate budget.
         pending_recorder: Optional create-only durable pending-work recorder.
         history_recorder: Optional request-level local Git history recorder.
+        conversation_context: Bounded visible recent turns used only by the planner to resolve
+            continuity; Core never passes this text to canonical retrieval or mutation boundaries.
 
     Returns:
         One stable request result. Clarifications and planning failures perform no actions or writes.
@@ -236,7 +241,13 @@ def execute_request(
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic)
     try:
-        plan = provider_recorder.invoke("planner", planner, planner.plan, user_request)
+        plan = (
+            provider_recorder.invoke(
+                "planner", planner, planner.plan, user_request, conversation_context
+            )
+            if conversation_context
+            else provider_recorder.invoke("planner", planner, planner.plan, user_request)
+        )
     except Exception as error:
         stages.append(
             OperationalStage(
@@ -399,7 +410,7 @@ def execute_request(
         model=getattr(planner, "model", None),
         reasoning_effort=getattr(planner, "reasoning_effort", None),
         usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
-        provider_calls=provider_recorder.calls[:1],
+        provider_calls=provider_recorder.calls,
     )
     stages.insert(0, planner_stage)
     result = ApplicationResult(

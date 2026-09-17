@@ -39,7 +39,7 @@ _TEACHING_EXAMPLES_PATH = (
 
 
 class ResponsesClient(Protocol):
-    """Describe the injected Responses API subset used by the experiment."""
+    """Describe the injected subset of the OpenAI Responses client used by the planner."""
 
     responses: Any
 
@@ -57,8 +57,9 @@ ExperimentalPlannerResult = RequestPlan | PlannerClarification | PlannerEscalati
 def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """Build the strict nested PLAN/CLARIFY/ESCALATE provider schema.
 
-    PLAN embeds the existing RequestPlan provider schema.  The root remains a closed object and
-    the union remains beneath ``result`` for the supported Structured Outputs subset.
+    The production planner result contract is inherited unchanged and the Luna-only ESCALATE branch
+    is appended. The root remains a closed object and the union stays beneath ``result`` for the
+    supported Structured Outputs subset.
     """
     production_schema = planner_result_json_schema(schema)
     existing_branches = production_schema["properties"]["result"]["anyOf"]
@@ -84,9 +85,9 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
 def validate_luna_experimental_result(
     payload: Any, schema: Mapping[str, Any]
 ) -> ExperimentalPlannerResult:
-    """Validate an experimental result without weakening production validation.
+    """Validate a Luna result without weakening production planner validation.
 
-    PLAN and CLARIFY pass directly through ``validate_planner_result``.  ESCALATE accepts only the
+    PLAN and CLARIFY pass directly through ``validate_planner_result``. ESCALATE accepts only the
     same closed field set with three null payload fields, so it carries no action or invented user
     knowledge.
     """
@@ -111,6 +112,7 @@ def render_luna_experimental_prompt(
     current_context: Mapping[str, str],
     *,
     teaching_examples: Sequence[Mapping[str, Any]] | None = None,
+    conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -118,6 +120,7 @@ def render_luna_experimental_prompt(
         schema: Parsed canonical Odyssey note schema.
         current_context: Explicit date, time, and timezone for relative date interpretation.
         teaching_examples: Frozen examples, injectable only for deterministic tests.
+        conversation_context: Bounded recent conversation continuity evidence for this pass.
 
     Returns:
         Ordered safety instructions, current capability projections, and compact examples.
@@ -143,13 +146,13 @@ def render_luna_experimental_prompt(
         f"Lesson: {item['lesson']}"
         for item in examples
     )
-    semantic_prompt = render_request_planner_prompt(schema, current_context)
+    semantic_prompt = render_request_planner_prompt(schema, current_context, conversation_context)
     return f"""{semantic_prompt}
 
 Choose the outcome before drafting fields:
 1. PLAN only when every material intent is preserved by the inherited RequestPlan semantics without unsafe approximation.
 2. CLARIFY only for unintelligible input; use only UNRECOGNIZED_REQUEST.
-3. ESCALATE whenever the request is understandable but its safe representation, identity, mutation meaning, branch structure, or supported semantics is uncertain. Never force a PLAN.
+3. ESCALATE whenever the request is understandable but its safe representation, mutation meaning, branch structure, or supported semantics is uncertain. Never force a PLAN.
 4. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except CLARIFY's UNRECOGNIZED_REQUEST.
 Never approximate a fact, event, decision, purchase, or other domain date with note lifecycle fields; preserve uncertain meaning and ESCALATE rather than guessing.
 
@@ -229,7 +232,9 @@ class OpenAILunaExperimentalPlanner:
             ) from error
         return cls(OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES), schema, current_context)
 
-    def plan(self, request: str) -> ExperimentalPlannerResult:
+    def plan(
+        self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> ExperimentalPlannerResult:
         """Make exactly one bounded Luna attempt and validate without executing its result."""
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
@@ -244,7 +249,11 @@ class OpenAILunaExperimentalPlanner:
             input=[
                 {
                     "role": "system",
-                    "content": render_luna_experimental_prompt(self._schema, self._current_context),
+                    "content": render_luna_experimental_prompt(
+                        self._schema,
+                        self._current_context,
+                        conversation_context=conversation_context,
+                    ),
                 },
                 {"role": "user", "content": request},
             ],

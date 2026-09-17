@@ -36,6 +36,14 @@ The current standalone consumer source lives under `odyssey_web/` as part of Pha
 
 Do not introduce LangGraph, a vector service, graph database, queue, additional application server, or other infrastructure unless a concrete requirement cannot be handled cleanly by the current boundaries.
 
+## Local-first ownership boundary
+
+Odyssey's target product is local-first. One user's Odyssey instance owns that user's local vault and durable local state. In hosted or server-backed deployments, authenticated identity should select the isolated user-local vault/state root; once that root is selected, inner local repositories should normally be root-bound rather than redundantly modeling multiple users in their physical storage layout.
+
+Future local/mobile clients should be able to reuse the same local storage semantics without requiring server-style multi-user partitioning. Multi-user identity, permissions, groups, and synchronization belong to the separate collaboration boundary used when knowledge crosses a sharing boundary. Private local-only knowledge or state must not become centrally hosted merely because collaboration exists.
+
+Current DEV/server actor isolation must remain enforced at the outer authentication/root-selection boundary; local-first storage is not permission to weaken current isolation. See [Odyssey Platform Direction](docs/architecture/odyssey-platform-direction.md) and [Multi-user Collaboration Direction](docs/architecture/multi-user-collaboration-direction.md) for the durable product direction.
+
 ## Development principles
 
 - Prefer the simplest working solution and challenge unnecessary complexity.

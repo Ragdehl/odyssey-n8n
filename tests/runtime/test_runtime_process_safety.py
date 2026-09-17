@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
+from odyssey_core.conversations import MAIN_CONVERSATION_ID
 from odyssey_core.git_history import GitHistoryResult
+from odyssey_core.identity_boundary import AuthenticatedActorContext
+from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_runtime import composition
 from odyssey_runtime import server as runtime_server
 from odyssey_runtime.composition import (
@@ -16,6 +19,10 @@ from odyssey_runtime.composition import (
     _path_env,
     _positive_int_env,
 )
+
+USER_A = "11111111-1111-4111-8111-111111111111"
+USER_B = "22222222-2222-4222-8222-222222222222"
+MAPPED_USER = "33333333-3333-4333-8333-333333333333"
 
 
 def _result() -> ApplicationResult:
@@ -137,6 +144,12 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
     assert calls == [("127.0.0.1", 18765)]
 
 
+def test_runtime_server_rejects_invalid_port() -> None:
+    """Transport configuration fails before attempting a socket bind."""
+    with pytest.raises(ValueError, match="between 1 and 65535"):
+        runtime_server.serve(object(), port=0)
+
+
 def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -160,3 +173,181 @@ def test_runtime_configuration_helpers_fail_closed_and_read_timezone(
     monkeypatch.setenv("TZ", "Not/AZone")
     with pytest.raises(ValueError, match="valid IANA timezone"):
         _current_time()
+
+
+def test_runtime_main_conversation_is_actor_scoped_and_has_recent_context(tmp_path: Path) -> None:
+    """The product main conversation is durable, actor-scoped, and safely windowed."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    actor = AuthenticatedActorContext(USER_A)
+
+    created = runtime.main_conversation(authenticated_actor=actor)
+    conversation_id = str(created["conversation_id"])
+    runtime.append_conversation_turn(
+        conversation_id,
+        "req-1",
+        "user",
+        "Hablamos de Marta",
+        authenticated_actor=actor,
+    )
+    runtime.append_conversation_turn(
+        conversation_id,
+        "req-1",
+        "assistant",
+        "Marta vive en Lyon",
+        status="completed",
+        authenticated_actor=actor,
+    )
+
+    loaded = runtime.load_conversation(conversation_id, authenticated_actor=actor)
+    context = runtime.recent_conversation_context(conversation_id, authenticated_actor=actor)
+
+    assert conversation_id == MAIN_CONVERSATION_ID
+    assert loaded["conversation_id"] == conversation_id
+    assert "actor_id" not in loaded
+    assert context == [
+        {"role": "user", "text": "Hablamos de Marta"},
+        {"role": "assistant", "text": "Marta vive en Lyon"},
+    ]
+    other = AuthenticatedActorContext(USER_B)
+    assert runtime.main_conversation(authenticated_actor=other)["turns"] == []
+
+
+def test_runtime_execute_forwards_conversation(tmp_path: Path) -> None:
+    """Conversation execution persists the visible user turn before forwarding to Core."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    calls: list[tuple[object, ...]] = []
+
+    def execute(*args):
+        calls.append(args)
+        return _result()
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    actor = AuthenticatedActorContext(USER_A)
+
+    runtime.execute(
+        "¿Dónde vive?",
+        request_id="req-1",
+        conversation_id=MAIN_CONVERSATION_ID,
+        authenticated_actor=actor,
+    )
+
+    assert calls == [("¿Dónde vive?", "req-1", actor, MAIN_CONVERSATION_ID)]
+    loaded = LocalConversationStore(resolver.resolve(USER_A)).load_main_page()
+    turns = [(turn["request_id"], turn["role"], turn["text"]) for turn in loaded["turns"]]
+    assert turns == [("req-1", "user", "¿Dónde vive?")]
+
+
+def test_runtime_conversation_dependencies_fail_closed(tmp_path: Path) -> None:
+    """Missing conversation and identity dependencies are explicit failures."""
+    actor = AuthenticatedActorContext(USER_A)
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+    )
+
+    with pytest.raises(ValueError, match="conversation root resolver is unavailable"):
+        runtime.execute(
+            "hola",
+            conversation_id="conv-1",
+            authenticated_actor=actor,
+        )
+
+    resolver = ConversationRootResolver(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        runtime.execute(
+            "hola",
+            authenticated_actor=actor,
+            external_principal=object(),
+        )
+    with pytest.raises(ValueError, match="external principal mapping"):
+        runtime.execute("hola", external_principal=object())
+    with pytest.raises(ValueError, match="conversation root resolver"):
+        RuntimeComposition(
+            core_execute=lambda *args: _result(), refresh_indexes=lambda: None
+        ).main_conversation()
+
+
+def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
+    """External principals resolve to the stable internal actor before state access."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    marker = object()
+
+    class MappingRepository:
+        def resolve_existing(self, principal):
+            assert principal is marker
+            return AuthenticatedActorContext(MAPPED_USER)
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        identity_mapping_repository=MappingRepository(),
+        conversation_root_resolver=resolver,
+    )
+
+    loaded = runtime.main_conversation(external_principal=marker)
+    assert loaded["conversation_id"] == MAIN_CONVERSATION_ID
+    assert LocalConversationStore(resolver.resolve(MAPPED_USER)).load_main_page()["turns"] == []
+
+
+def test_runtime_rejects_non_main_conversation_operations(tmp_path: Path) -> None:
+    """The root-bound UI-0 boundary exposes no arbitrary chat tenancy operations."""
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.load_conversation("other", authenticated_actor=AuthenticatedActorContext(USER_A))
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.append_conversation_turn(
+            "other", "req-1", "user", "text", authenticated_actor=AuthenticatedActorContext(USER_A)
+        )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.recent_conversation_context(
+            "other", authenticated_actor=AuthenticatedActorContext(USER_A)
+        )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.create_conversation(authenticated_actor=AuthenticatedActorContext(USER_A))
+    with pytest.raises(ValueError, match="unavailable"):
+        runtime.list_conversations(authenticated_actor=AuthenticatedActorContext(USER_A))
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        runtime.main_conversation(
+            authenticated_actor=AuthenticatedActorContext(USER_A), external_principal=object()
+        )
+    with pytest.raises(ValueError, match="external principal mapping"):
+        runtime.main_conversation(external_principal=object())
+
+
+def test_runtime_rejects_non_main_execute_and_forwards_anonymous_main(tmp_path: Path) -> None:
+    """Execution uses the default hosted actor only for the one supported main conversation."""
+    calls: list[tuple[object, ...]] = []
+
+    def execute(*args):
+        calls.append(args)
+        return _result()
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.execute("text", conversation_id="other")
+    runtime.execute("text", conversation_id=MAIN_CONVERSATION_ID)
+    assert calls[0][0] == "text"
+    assert isinstance(calls[0][1], str)
+    assert calls[0][2:] == (None, MAIN_CONVERSATION_ID)

@@ -6,6 +6,8 @@ import {
   PRODUCT_REQUEST_TIMEOUT_MS,
   createRequestId,
   createSubmission,
+  renderProductResultWithContinuity,
+  requestConversation,
   requestProductResult,
   validateProductResponse,
 } from "../odyssey_web/client.js";
@@ -32,6 +34,67 @@ test("new submissions trim text and receive a safe web request id", () => {
 
 test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
+});
+
+test("a missing secure identifier source fails closed", () => {
+  assert.throws(() => createRequestId(null), ProductRequestError);
+});
+
+test("main-conversation transport accepts only an object response", async () => {
+  let captured;
+  const loaded = await requestConversation({
+    operation: "load_main",
+    payload: {conversation_id: "main"},
+    fetchImpl: async (endpoint, options) => {
+      captured = {endpoint, options};
+      return response({payload: {conversation_id: "main", turns: []}});
+    },
+  });
+
+  assert.equal(captured.endpoint, "/api/conversation");
+  assert.deepEqual(JSON.parse(captured.options.body), {
+    conversation_id: "main",
+    operation: "load_main",
+  });
+  assert.equal(loaded.conversation_id, "main");
+  await assert.rejects(
+    requestConversation({operation: "load_main", fetchImpl: async () => response({payload: []})}),
+    ProductRequestError,
+  );
+});
+
+test("a successful product result renders once when assistant continuity persists", async () => {
+  const rendered = [];
+  let persisted = 0;
+  let warned = 0;
+  const result = {request_id: "web-success", message: "Marta vive en Lyon."};
+
+  await renderProductResultWithContinuity({
+    result,
+    renderResult: (value) => rendered.push(value),
+    persistAssistantTurn: async () => { persisted += 1; },
+    warnContinuity: () => { warned += 1; },
+  });
+
+  assert.deepEqual(rendered, [result]);
+  assert.equal(persisted, 1);
+  assert.equal(warned, 0);
+});
+
+test("a continuity persistence failure keeps the valid product result visible", async () => {
+  const rendered = [];
+  let warned = 0;
+  const result = {request_id: "web-continuity", message: "Marta vive en Lyon."};
+
+  await renderProductResultWithContinuity({
+    result,
+    renderResult: (value) => rendered.push(value),
+    persistAssistantTurn: async () => { throw new Error("conversation unavailable"); },
+    warnContinuity: () => { warned += 1; },
+  });
+
+  assert.deepEqual(rendered, [result]);
+  assert.equal(warned, 1);
 });
 
 test("closed planner clarification is a normal bounded product result", () => {
@@ -90,6 +153,48 @@ test("request detail accepts estimated cost with a dated pricing basis", () => {
   }), ProductRequestError);
 });
 
+test("request detail retains only validated bounded operational evidence", () => {
+  const result = validateProductResponse({
+    request_id: "web-detail",
+    status: "completed",
+    kind: "acknowledgement",
+    message: "Hecho.",
+    request_detail: {
+      request_id: "web-detail",
+      operational: {
+        total_duration_ms: null,
+        stages: [{
+          name: "planner",
+          outcome: "completed",
+          duration_ms: 12,
+          model: "gpt-5.6-luna",
+          reasoning_effort: "low",
+          error_category: null,
+          usage: {input_tokens: 3, output_tokens: 2},
+          provider_calls: [{
+            name: "provider",
+            outcome: "completed",
+            duration_ms: null,
+            model: null,
+            reasoning_effort: null,
+            error_category: null,
+            provider_calls: [],
+          }],
+        }],
+      },
+      changes: {
+        affected_stable_note_ids: ["note-1", 4],
+        units: [{status: "updated", operation: "update", stable_note_id: "note-1"}],
+      },
+      estimated_cost: {status: "unavailable", pricing_basis: "2026-09-07"},
+    },
+  });
+
+  assert.deepEqual(result.request_detail.changes.affected_stable_note_ids, ["note-1"]);
+  assert.equal(result.request_detail.operational.stages[0].usage.output_tokens, 2);
+  assert.equal(result.request_detail.estimated_cost.amount_usd, null);
+});
+
 test("transport sends only request and request_id through same-origin JSON", async () => {
   const submission = {request: "Hola", requestId: "web-test"};
   let captured;
@@ -119,6 +224,26 @@ test("transport sends only request and request_id through same-origin JSON", asy
     request_id: "web-test",
   });
   assert.equal(result.kind, "acknowledgement");
+});
+
+test("main-conversation transport remains correlated before history reload completes", async () => {
+  const submission = createSubmission("Hola", fakeCrypto, "main");
+  let captured;
+  const fetchImpl = async (_endpoint, options) => {
+    captured = options;
+    return response({
+      payload: {
+        request_id: submission.requestId,
+        status: "completed",
+        kind: "acknowledgement",
+        message: "Hecho.",
+      },
+    });
+  };
+
+  await requestProductResult({endpoint: "/api/request", submission, fetchImpl});
+
+  assert.equal(JSON.parse(captured.body).conversation_id, "main");
 });
 
 test("network failure is retryable so caller can reuse the same submission id", async () => {
