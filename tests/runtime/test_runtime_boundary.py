@@ -837,6 +837,43 @@ def test_http_conversation_json_escapes_html_significant_text_without_changing_i
         server.server_close()
 
 
+def test_http_boundary_persists_safe_detail_on_conversation_turn(tmp_path: Path) -> None:
+    """The n8n-facing turn route persists inspector-safe detail and rejects extra fields."""
+    user = OdysseyUser.new()
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        body = {
+            "conversation_id": "main",
+            "request_id": "detail-1",
+            "role": "assistant",
+            "text": "visible answer",
+            "status": "completed",
+            "request_detail": {
+                "request_id": "detail-1",
+                "operational": {"total_duration_ms": 1, "stages": []},
+            },
+            "authenticated_actor": {"stable_user_id": user.stable_user_id},
+        }
+        connection.request("POST", "/conversation/turn", body=json.dumps(body))
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["turns"][0]["request_detail"] == body["request_detail"]
+
+        connection.request(
+            "POST", "/conversation/turn", body=json.dumps({**body, "prompt": "secret"})
+        )
+        assert connection.getresponse().status == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_http_boundary_rejects_unsafe_delivery_identity_without_calling_core() -> None:
     """Reject path/control characters before an externally supplied identity reaches Core."""
     calls: list[tuple[str, str | None]] = []

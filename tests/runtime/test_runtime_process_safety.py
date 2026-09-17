@@ -289,3 +289,26 @@ def test_runtime_external_principal_maps_actor(tmp_path: Path) -> None:
     loaded = runtime.main_conversation(external_principal=marker)
     assert loaded["conversation_id"] == MAIN_CONVERSATION_ID
     assert LocalConversationStore(resolver.resolve(MAPPED_USER)).load_main_page()["turns"] == []
+
+
+def test_runtime_rejects_non_main_conversation_operations(tmp_path: Path) -> None:
+    """The root-bound UI-0 boundary exposes no arbitrary chat tenancy operations."""
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.load_conversation("other", authenticated_actor=AuthenticatedActorContext(USER_A))
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.append_conversation_turn(
+            "other", "req-1", "user", "text", authenticated_actor=AuthenticatedActorContext(USER_A)
+        )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.recent_conversation_context(
+            "other", authenticated_actor=AuthenticatedActorContext(USER_A)
+        )
+    with pytest.raises(ValueError, match="only the main conversation"):
+        runtime.create_conversation(authenticated_actor=AuthenticatedActorContext(USER_A))
+    with pytest.raises(ValueError, match="unavailable"):
+        runtime.list_conversations(authenticated_actor=AuthenticatedActorContext(USER_A))
