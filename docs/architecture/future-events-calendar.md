@@ -1,6 +1,6 @@
 # Future Events / Calendar capability
 
-Status: **preserved product direction; not yet scheduled for implementation**.
+Status: **preserved product direction; prioritized after Tasks proves the minimum application contract**.
 
 ## Why this capability exists
 
@@ -18,6 +18,11 @@ A practical motivating case is a pasted school-year schedule containing a mixtur
 Today Odyssey can preserve such material as canonical knowledge, for example as a `document`, but the
 current canonical schema has no structured `event` type or calendar capability. The future product
 should not solve that gap by pretending every dated occurrence is a task.
+
+Events / Calendar is intentionally treated as a **high-priority product capability adjacent to the
+Core experience**, even if it remains an application/capability rather than Core knowledge
+semantics. After read-only Notes and the first real Tasks application, calendar/event behavior is a
+near-term priority because it turns durable personal knowledge into useful time-aware daily behavior.
 
 ## Semantic boundary: Task vs Event vs Reminder
 
@@ -51,8 +56,8 @@ canonical representation of the event it points to.
 ## Composition direction
 
 Tasks remains the first real Odyssey application because it is the smallest practical way to prove
-application routing, state, and composition. Events / Calendar should be evaluated after Tasks has
-established that contract rather than expanding Tasks into a mixed task/calendar system.
+application routing, state, and composition. Events / Calendar should follow once Tasks has
+established that minimum contract rather than expanding Tasks into a mixed task/calendar system.
 
 A useful capability relationship is:
 
@@ -67,6 +72,28 @@ Events ------+
 
 Both Tasks and Events may use the lower-level Reminders capability. Projects may compose over Tasks.
 The user should not need to understand this internal composition.
+
+The current product priority is deliberately:
+
+```text
+UI-2 read-only Notes
+        |
+        v
+Tasks — prove the minimum application contract
+        |
+        v
+Events / Calendar — high-value time-aware capability
+        |
+        v
+Reminders integration where Tasks/Events need delivery semantics
+        |
+        v
+bounded maintainability checkpoint before secondary app expansion
+```
+
+Projects remains a committed direction, but it does not need to precede Events / Calendar. Real use
+may still adjust the exact boundary between Events and Reminders, and the
+[Functional Roadmap](functional-roadmap.md) remains the canonical owner of current sequencing.
 
 Normal interaction remains natural-language-first. Optional explicit routing may exist when useful,
 but the user should be able to paste a schedule or say "recuérdame el día antes" without choosing an
@@ -162,11 +189,11 @@ This direction does not yet commit Odyssey to:
 
 - external Google/Apple/Outlook calendar synchronization;
 - invitations, attendees, RSVP, availability, or meeting scheduling;
-- a dedicated calendar UI;
+- a dedicated calendar UI before the event contract proves it is useful;
 - unrestricted recurrence-rule support;
 - automatic task creation from every event;
 - automatic reminders for every event;
-- changing the current roadmap order before Tasks proves the application contract.
+- Projects or a generic plugin platform as a prerequisite for Events / Calendar.
 
 Whether Events becomes a dedicated application, a lower-level capability with an optional calendar
 surface, or a combination of both should be decided from the Tasks implementation and real Odyssey
