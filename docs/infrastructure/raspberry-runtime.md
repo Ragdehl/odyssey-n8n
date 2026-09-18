@@ -101,6 +101,26 @@ fail-closed.
 Starting the runtime may refresh derived indexes; it never makes a provider call merely to pass the
 health check.
 
+## Reboot readiness evidence
+
+The controlled reboot on 2026-09-18 exposed two separate startup-order races. The Raspberry booted at
+11:39:22 CEST. Docker restored the existing `cloudflared` and `n8n` containers at approximately
+11:39:42, and the container DNS reconciliation unit ran from 11:39:43 to 11:39:46. cloudflared
+received its bounded startup grace and was reported healthy. n8n was running with a resolver matching
+the healthy host resolver, but its private `/healthz` was not ready when the guard first assessed it;
+the guard therefore emitted `FAILED service=n8n reason=n8n health endpoint is not ready without DNS
+evidence`. The same n8n container became healthy shortly afterwards without recreation. This was a
+startup timing race, not stale container DNS or a persistent n8n failure.
+
+The same boot also started `odyssey-prod-runtime.service` before Docker had made its configured
+`172.18.0.1` bridge address available. Its first bind failed with `OSError: [Errno 99] Cannot assign
+requested address`; systemd's existing `Restart=on-failure` later succeeded after Docker networking
+settled. `network-online.target` and a running process are therefore not equivalent to Docker-network
+or application readiness. The runtime unit must wait, without changing network state, for the
+configured bind address to exist before starting the process. The container guard must likewise give
+n8n bounded resolver/DNS/private-health readiness time, preserve immediate stale-resolver recovery,
+and fail closed without recreation when readiness expires without stale-DNS proof.
+
 `odyssey-prod status` is read-only. It reports runtime health and source provenance as `MATCH`,
 `DRIFT`, or `UNKNOWN`, plus a non-mutating comparison of host DNS reachability with the existing
 cloudflared container's resolver/log state. It never restarts n8n or cloudflared; Cloudflare tunnel

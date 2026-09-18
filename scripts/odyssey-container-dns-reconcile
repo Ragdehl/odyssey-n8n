@@ -12,6 +12,7 @@ MAX_READINESS_ATTEMPTS=30
 READINESS_DELAY_SECONDS=2
 STARTUP_GRACE_ATTEMPTS=30
 STARTUP_GRACE_DELAY_SECONDS=2
+N8N_STARTUP_STATE=ready
 
 ASSESS_HEALTHY=0
 ASSESS_STALE=10
@@ -105,8 +106,8 @@ n8n_dns_ready() {
 }
 
 n8n_service_ready() {
-  curl --fail --silent --show-error --max-time 3 "$N8N_HEALTH_URL" >/dev/null 2>&1 \
-    && n8n_dns_ready
+  n8n_dns_ready \
+    && curl --fail --silent --show-error --max-time 3 "$N8N_HEALTH_URL" >/dev/null 2>&1
 }
 
 n8n_mount_fingerprint() {
@@ -226,7 +227,9 @@ wait_for_target() {
 }
 
 wait_for_startup_readiness() {
-  local attempt service all_running started_at
+  local attempt service all_running started_at cloudflared_ready
+  N8N_STARTUP_STATE=waiting
+  cloudflared_ready=0
   for attempt in $(seq 1 "$STARTUP_GRACE_ATTEMPTS"); do
     all_running=1
     for service in "${TARGET_SERVICES[@]}"; do
@@ -242,15 +245,29 @@ wait_for_startup_readiness() {
       if resolvers_match_host cloudflared; then
         started_at=$(cloudflared_started_at)
         if cloudflared_registered "$started_at"; then
-          return 0
+          cloudflared_ready=1
+          if ! resolvers_match_host n8n; then
+            N8N_STARTUP_STATE=stale
+            return 0
+          fi
+          if n8n_service_ready; then
+            N8N_STARTUP_STATE=ready
+            return 0
+          fi
+          log WAITING "service=n8n awaiting resolver, DNS, and health readiness (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+        else
+          log WAITING "service=cloudflared awaiting initial tunnel registration (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
         fi
-        log WAITING "service=cloudflared awaiting initial tunnel registration (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
       else
         return 0
       fi
     fi
     [ "$attempt" -lt "$STARTUP_GRACE_ATTEMPTS" ] && sleep "$STARTUP_GRACE_DELAY_SECONDS"
   done
+  if [ "$cloudflared_ready" -eq 1 ]; then
+    N8N_STARTUP_STATE=timeout
+    return 0
+  fi
   return 1
 }
 
@@ -270,6 +287,11 @@ run_guard() {
   fi
 
   for service in "${TARGET_SERVICES[@]}"; do
+    if [ "$service" = n8n ] && [ "$N8N_STARTUP_STATE" = timeout ]; then
+      log FAILED 'service=n8n reason=n8n startup readiness grace expired without stale DNS proof; no recreation'
+      overall=1
+      continue
+    fi
     if assess_target "$service"; then
       log HEALTHY "service=$service"
       continue
