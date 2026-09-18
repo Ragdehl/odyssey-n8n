@@ -155,6 +155,49 @@ The 502 disappeared. n8n was not recreated. Current host intent remains:
 
 Containers created before a host DNS handoff may retain stale Docker resolver external servers and should be inspected before changing wider network policy.
 
+### 2026-09-18 production DNS incident and durable prevention
+
+The reboot incident confirmed that process liveness is not readiness at this boundary. Docker
+successfully restarted both `n8n` and `cloudflared` under `unless-stopped`, but each existing
+container retained the Docker resolver external server captured when it was created. The host
+NetworkManager resolver had since changed. `cloudflared` therefore could not resolve its Access
+certificate endpoints and produced the protected-route 1033/502; n8n could not resolve
+`api.openai.com` and its grounded-answer HTTP node failed with `EAI_AGAIN`. The Odyssey runtime,
+vault/state/indexes, workflows, credentials, and persistent n8n volume were not causal.
+
+The smallest recovery is service-scoped recreation, after proving host DNS is healthy:
+
+```text
+docker compose -f /home/ragdehl/docker/n8n/compose.yaml \
+  up -d --no-deps --force-recreate --pull never cloudflared
+docker compose -f /home/ragdehl/docker/n8n/compose.yaml \
+  up -d --no-deps --force-recreate --pull never n8n
+```
+
+Only the affected service is recreated; no broad Docker/network reset or Cloudflare change is
+appropriate. A successful recovery verifies the new container resolver, cloudflared tunnel
+registration or n8n DNS plus private health, and the existing n8n data volume/configuration.
+Rollback is limited to restoring the prior container if an approved operator has a concrete
+reason; the guard itself never retries indefinitely or escalates to network changes.
+
+The repository-owned prevention is the fixed-scope
+`scripts/odyssey-container-dns-reconcile` one-shot guard and its
+`deploy/odyssey-container-dns-reconcile.service` boot-order contract. It runs after
+`network-online.target` and `docker.service`, proves host DNS first, assesses `cloudflared` and
+`n8n` independently, and performs at most one `--no-deps --force-recreate --pull never` recovery
+per affected service. It performs no provider/model request: n8n readiness uses a DNS lookup and
+the private `/healthz`; cloudflared readiness uses its resolver and bounded tunnel-registration
+evidence. Before assessment it also applies a bounded startup grace: both expected containers
+must be running, and a resolver-matching cloudflared container may finish its initial tunnel
+registration. A container still being restored by Docker therefore receives no premature
+recreation decision. Healthy services are untouched; failed recovery is logged visibly and stops
+without escalation. The guard is independent of `odyssey-prod` and cannot touch DEV, Odyssey runtime,
+vault/state/indexes, workflows, credentials, Git deployment state, or Cloudflare configuration.
+
+This guard is repository code only until a separate human-authorized production installation and
+activation step. Enabling a systemd unit, installing its stable executable, or changing live boot
+behavior is not part of repository implementation or CI verification.
+
 ### Same-origin CSP correction
 
 The Odyssey HTML initially loaded as raw/unstyled content even though the asset endpoints returned the expected files. n8n's webhook response CSP sandbox omitted `allow-same-origin`, causing the page to have an opaque origin and preventing the relative same-origin assets/API from behaving as intended.

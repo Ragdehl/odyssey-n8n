@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reconcile only the two production containers whose Docker DNS is part of the
+# public Odyssey boundary. This guard is intentionally independent of odyssey-prod.
+COMPOSE_FILE=/home/ragdehl/docker/n8n/compose.yaml
+COMPOSE_PROJECT=n8n
+TARGET_SERVICES=(cloudflared n8n)
+HOST_DNS_PROBES=(cloudflare.com api.openai.com)
+N8N_HEALTH_URL=http://127.0.0.1:18780/healthz
+MAX_READINESS_ATTEMPTS=30
+READINESS_DELAY_SECONDS=2
+STARTUP_GRACE_ATTEMPTS=30
+STARTUP_GRACE_DELAY_SECONDS=2
+
+ASSESS_HEALTHY=0
+ASSESS_STALE=10
+ASSESS_FAILED=20
+
+log() {
+  local level=$1 message=$2
+  printf 'odyssey-container-dns[%s] %s\n' "$level" "$message" >&2
+}
+
+docker_cmd() {
+  docker "$@"
+}
+
+compose_cmd() {
+  docker_cmd compose --file "$COMPOSE_FILE" "$@"
+}
+
+is_target_service() {
+  local service=$1 target
+  for target in "${TARGET_SERVICES[@]}"; do
+    [ "$service" = "$target" ] && return 0
+  done
+  return 1
+}
+
+host_resolvers() {
+  awk '$1 == "nameserver" && $2 !~ /^127\./ && $2 != "::1" { print $2 }' /etc/resolv.conf \
+    | sort -u
+}
+
+host_dns_healthy() {
+  local probe
+  [ -n "$(host_resolvers)" ] || return 1
+  for probe in "${HOST_DNS_PROBES[@]}"; do
+    getent ahosts "$probe" >/dev/null 2>&1 || return 1
+  done
+}
+
+container_external_resolvers() {
+  local service=$1
+  docker_cmd cp "$service:/etc/resolv.conf" - 2>/dev/null \
+    | tar -xOf - 2>/dev/null \
+    | sed -n -E 's/^# ExtServers: \[(.*)\]$/\1/p' \
+    | tr ',' '\n' \
+    | sed -n -E 's/^[[:space:]]*host\((.*)\)[[:space:]]*$/\1/p' \
+    | sort -u
+}
+
+resolvers_match_host() {
+  local service=$1 expected actual
+  expected=$(host_resolvers)
+  actual=$(container_external_resolvers "$service")
+  [ -n "$expected" ] && [ -n "$actual" ] && [ "$expected" = "$actual" ]
+}
+
+container_identity_valid() {
+  local service=$1 service_label project_label compose_label
+  service_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$service")
+  project_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$service")
+  compose_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$service")
+  [ "$service_label" = "$service" ] \
+    && [ "$project_label" = "$COMPOSE_PROJECT" ] \
+    && [ "$compose_label" = "$COMPOSE_FILE" ]
+}
+
+container_running() {
+  local service=$1
+  [ "$(docker_cmd inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" = running ]
+}
+
+validate_scope() {
+  local services service
+  services=$(compose_cmd config --services | sort)
+  [ "$services" = $'cloudflared\nn8n' ] || {
+    log FAILED "compose identity mismatch services=$(printf '%q' "$services")"
+    return 1
+  }
+  for service in "${TARGET_SERVICES[@]}"; do
+    if ! container_identity_valid "$service"; then
+      log FAILED "container identity mismatch service=$service"
+      return 1
+    fi
+  done
+}
+
+n8n_dns_ready() {
+  docker_cmd exec n8n node --eval \
+    'require("node:dns").lookup("api.openai.com", (error) => process.exit(error ? 1 : 0))' \
+    >/dev/null 2>&1
+}
+
+n8n_service_ready() {
+  curl --fail --silent --show-error --max-time 3 "$N8N_HEALTH_URL" >/dev/null 2>&1 \
+    && n8n_dns_ready
+}
+
+n8n_mount_fingerprint() {
+  docker_cmd inspect --format \
+    '{{range .Mounts}}{{printf "%s|%s|%s|%t\\n" .Type .Name .Destination .RW}}{{end}}' n8n \
+    | sort
+}
+
+cloudflared_started_at() {
+  docker_cmd inspect --format '{{.State.StartedAt}}' cloudflared
+}
+
+cloudflared_logs() {
+  local started_at=$1
+  docker_cmd logs --since "$started_at" cloudflared 2>&1
+}
+
+cloudflared_dns_error() {
+  local started_at=$1
+  cloudflared_logs "$started_at" \
+    | grep -Eqi '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout'
+}
+
+cloudflared_registered() {
+  local started_at=$1
+  [ "$(cloudflared_logs "$started_at" | grep -c 'Registered tunnel connection' || true)" -ge 1 ]
+}
+
+cloudflared_registered_after_last_dns_error() {
+  local started_at=$1 line saw_dns_error=0 registered_after=0
+  while IFS= read -r line; do
+    if grep -Eqi '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout' <<<"$line"; then
+      saw_dns_error=1
+      registered_after=0
+    elif grep -q 'Registered tunnel connection' <<<"$line"; then
+      registered_after=1
+    fi
+  done < <(cloudflared_logs "$started_at")
+  [ "$registered_after" -eq 1 ]
+}
+
+cloudflared_service_ready() {
+  local started_at
+  started_at=$(cloudflared_started_at)
+  resolvers_match_host cloudflared \
+    && cloudflared_registered_after_last_dns_error "$started_at"
+}
+
+target_ready() {
+  case "$1" in
+    cloudflared) cloudflared_service_ready ;;
+    n8n) resolvers_match_host n8n && n8n_service_ready ;;
+    *) return 1 ;;
+  esac
+}
+
+assess_target() {
+  local service=$1 started_at
+  case "$service" in
+    n8n)
+      if ! resolvers_match_host n8n; then
+        REASON="container resolver differs from current host resolver"
+        return "$ASSESS_STALE"
+      fi
+      if ! n8n_dns_ready; then
+        REASON="n8n cannot resolve api.openai.com while host DNS is healthy"
+        return "$ASSESS_STALE"
+      fi
+      if ! curl --fail --silent --show-error --max-time 3 "$N8N_HEALTH_URL" >/dev/null 2>&1; then
+        REASON="n8n health endpoint is not ready without DNS evidence"
+        return "$ASSESS_FAILED"
+      fi
+      ;;
+    cloudflared)
+      started_at=$(cloudflared_started_at)
+      if ! resolvers_match_host cloudflared; then
+        REASON="container resolver differs from current host resolver"
+        return "$ASSESS_STALE"
+      fi
+      if cloudflared_dns_error "$started_at"; then
+        if ! cloudflared_registered_after_last_dns_error "$started_at"; then
+          REASON="cloudflared logs show DNS resolution failure without later tunnel registration"
+          return "$ASSESS_STALE"
+        fi
+      fi
+      if ! cloudflared_registered "$started_at"; then
+        REASON="cloudflared has no registered tunnel connection"
+        return "$ASSESS_FAILED"
+      fi
+      ;;
+    *)
+      REASON="unexpected service"
+      return "$ASSESS_FAILED"
+      ;;
+  esac
+  return "$ASSESS_HEALTHY"
+}
+
+compose_recreate() {
+  local service=$1
+  is_target_service "$service" || {
+    log FAILED "refusing unexpected service=$service"
+    return 1
+  }
+  compose_cmd up -d --no-deps --force-recreate --pull never "$service"
+}
+
+wait_for_target() {
+  local service=$1 attempt
+  for attempt in $(seq 1 "$MAX_READINESS_ATTEMPTS"); do
+    if target_ready "$service"; then
+      return 0
+    fi
+    [ "$attempt" -lt "$MAX_READINESS_ATTEMPTS" ] && sleep "$READINESS_DELAY_SECONDS"
+  done
+  return 1
+}
+
+wait_for_startup_readiness() {
+  local attempt service all_running started_at
+  for attempt in $(seq 1 "$STARTUP_GRACE_ATTEMPTS"); do
+    all_running=1
+    for service in "${TARGET_SERVICES[@]}"; do
+      if ! container_running "$service"; then
+        all_running=0
+        log WAITING "service=$service container is still starting (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      fi
+    done
+    if [ "$all_running" -eq 1 ]; then
+      # A resolver match means cloudflared is still in ordinary tunnel startup;
+      # give its first registration a bounded window. A mismatch is already
+      # actionable stale DNS, so return and let assessment recover it.
+      if resolvers_match_host cloudflared; then
+        started_at=$(cloudflared_started_at)
+        if cloudflared_registered "$started_at"; then
+          return 0
+        fi
+        log WAITING "service=cloudflared awaiting initial tunnel registration (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      else
+        return 0
+      fi
+    fi
+    [ "$attempt" -lt "$STARTUP_GRACE_ATTEMPTS" ] && sleep "$STARTUP_GRACE_DELAY_SECONDS"
+  done
+  return 1
+}
+
+run_guard() {
+  local service code overall=0 n8n_mount_before
+  declare -A recover=()
+  declare -A reasons=()
+
+  validate_scope || return 1
+  if ! host_dns_healthy; then
+    log FAILED 'host DNS is unhealthy; no service will be recreated'
+    return 1
+  fi
+  if ! wait_for_startup_readiness; then
+    log FAILED 'expected production containers did not reach bounded startup readiness; no service will be recreated'
+    return 1
+  fi
+
+  for service in "${TARGET_SERVICES[@]}"; do
+    if assess_target "$service"; then
+      log HEALTHY "service=$service"
+      continue
+    else
+      code=$?
+    fi
+    case "$code" in
+      "$ASSESS_STALE")
+        recover["$service"]=1
+        reasons["$service"]=$REASON
+        ;;
+      *)
+        log FAILED "service=$service reason=$REASON"
+        overall=1
+        ;;
+    esac
+  done
+
+  for service in "${TARGET_SERVICES[@]}"; do
+    [ "${recover[$service]:-0}" = 1 ] || continue
+    n8n_mount_before=''
+    if [ "$service" = n8n ]; then
+      n8n_mount_before=$(n8n_mount_fingerprint)
+    fi
+    log RECOVERING "service=$service reason=${reasons[$service]}"
+    if ! compose_recreate "$service"; then
+      log FAILED "service=$service recreation failed; no retry or escalation"
+      overall=1
+      continue
+    fi
+    if [ "$service" = n8n ] && [ "$n8n_mount_before" != "$(n8n_mount_fingerprint)" ]; then
+      log FAILED 'service=n8n mount configuration changed after recreation; no retry or escalation'
+      overall=1
+      continue
+    fi
+    if wait_for_target "$service"; then
+      log RECOVERED "service=$service reason=${reasons[$service]}"
+    else
+      log FAILED "service=$service remains unhealthy after one recovery attempt; no retry or escalation"
+      overall=1
+    fi
+  done
+  return "$overall"
+}
+
+main() {
+  [ "$#" -eq 0 ] || { log FAILED 'guard accepts no arguments'; return 1; }
+  run_guard
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
