@@ -119,24 +119,40 @@ cloudflared_started_at() {
   docker_cmd inspect --format '{{.State.StartedAt}}' cloudflared
 }
 
+cloudflared_logs() {
+  local started_at=$1
+  docker_cmd logs --since "$started_at" cloudflared 2>&1
+}
+
 cloudflared_dns_error() {
   local started_at=$1
-  docker_cmd logs --since "$started_at" cloudflared 2>&1 \
+  cloudflared_logs "$started_at" \
     | grep -Eqi '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout'
 }
 
 cloudflared_registered() {
   local started_at=$1
-  [ "$(docker_cmd logs --since "$started_at" cloudflared 2>&1 \
-    | grep -c 'Registered tunnel connection' || true)" -ge 1 ]
+  [ "$(cloudflared_logs "$started_at" | grep -c 'Registered tunnel connection' || true)" -ge 1 ]
+}
+
+cloudflared_registered_after_last_dns_error() {
+  local started_at=$1 line saw_dns_error=0 registered_after=0
+  while IFS= read -r line; do
+    if grep -Eqi '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout' <<<"$line"; then
+      saw_dns_error=1
+      registered_after=0
+    elif grep -q 'Registered tunnel connection' <<<"$line"; then
+      registered_after=1
+    fi
+  done < <(cloudflared_logs "$started_at")
+  [ "$registered_after" -eq 1 ]
 }
 
 cloudflared_service_ready() {
   local started_at
   started_at=$(cloudflared_started_at)
   resolvers_match_host cloudflared \
-    && cloudflared_registered "$started_at" \
-    && ! cloudflared_dns_error "$started_at"
+    && cloudflared_registered_after_last_dns_error "$started_at"
 }
 
 target_ready() {
@@ -171,8 +187,10 @@ assess_target() {
         return "$ASSESS_STALE"
       fi
       if cloudflared_dns_error "$started_at"; then
-        REASON="cloudflared logs show DNS resolution failure"
-        return "$ASSESS_STALE"
+        if ! cloudflared_registered_after_last_dns_error "$started_at"; then
+          REASON="cloudflared logs show DNS resolution failure without later tunnel registration"
+          return "$ASSESS_STALE"
+        fi
       fi
       if ! cloudflared_registered "$started_at"; then
         REASON="cloudflared has no registered tunnel connection"

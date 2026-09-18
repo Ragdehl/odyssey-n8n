@@ -127,6 +127,34 @@ run_guard
     assert "HEALTHY" in result.stderr
 
 
+def test_transient_cloudflared_dns_error_before_registration_is_healthy() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+wait_for_startup_readiness() { :; }
+resolvers_match_host() { return 0; }
+cloudflared_started_at() { printf 'started\n'; }
+cloudflared_logs() {
+  printf '%s\n' \
+    'lookup api.cloudflare.com on 127.0.0.11:53: server misbehaving' \
+    'Registered tunnel connection conn=abc'
+}
+eval "$(declare -f assess_target | sed 's/^assess_target /real_assess_target /')"
+assess_target() {
+  if [ "$1" = n8n ]; then REASON='healthy n8n test state'; return 0; fi
+  real_assess_target "$1"
+}
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert "recreate:" not in result.stdout
+    assert "HEALTHY" in result.stderr
+
+
 def test_failed_recovery_has_no_second_attempt_or_escalation() -> None:
     result = run_bash(
         """
