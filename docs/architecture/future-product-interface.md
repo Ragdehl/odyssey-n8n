@@ -18,7 +18,7 @@ advanced/admin/developer
 
 Canonical Markdown remains the source of truth. Git, request traces, usage evidence, and indexes are supporting history/diagnostic state, not alternate note stores.
 
-Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). User-to-self-note identity is owned by [Future user self-identity binding](future-user-self-identity.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, and advanced surfaces.
+Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). User-to-self-note identity is owned by [Future user self-identity binding](future-user-self-identity.md). Events/calendar semantics are owned by [Future Events / Calendar capability](future-events-calendar.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, applications, and advanced surfaces.
 
 ## Proposed product shape
 
@@ -34,44 +34,24 @@ Exact tabs, names, and placement remain product decisions. Do not add navigation
 
 ## Interface roadmap
 
-### UI-0 — persistent conversation history and resume
+### UI-0 — persistent main conversation and resume
 
-The chat surface should behave like a durable messaging product rather than a transient form. Closing/reopening Odyssey must not make prior visible conversations disappear.
-
-Target user experience:
+The first durable chat product is deliberately one ordinary conversation, not a chat manager.
+Opening Odyssey restores the authenticated actor's visible chronological main transcript; the user
+continues naturally without choosing a topic, opening a chat, or creating a new one. The stable
+internal `conversation_id` and request correlation remain implementation details of the durable
+non-canonical state contract.
 
 ```text
-Chats
-----------------
-Hoy
-  Nora Vidal
-  Proyecto Odyssey
-
-Ayer
-  Ideas para el jardín
-
-[open conversation]
-        |
-        v
-previous visible turns remain available
-        |
-        v
-continue the same conversation
+open Odyssey -> restore main transcript -> continue natural conversation
 ```
 
-Requirements:
-
-- show a list/history of the user's prior Odyssey conversations when durable conversation records exist;
-- reopening a conversation restores the visible user/Odyssey turns in chronological order;
-- continuing an old conversation reuses its stable `conversation_id` rather than inventing a disconnected thread;
-- a new-chat action starts a new conversation identity explicitly;
-- titles/grouping may be simple and derived initially (for example first meaningful request + date); do not require a title-generation LLM just for this;
-- timestamps and basic session boundaries should remain visible enough for the user to orient themselves;
-- browser `localStorage` may cache presentation state, but it must not become the sole durable authority for conversation history;
-- the durable source for visible chat history should reuse the non-canonical conversation records defined by the conversation/history contract, correlated through `conversation_id` and `request_id`;
-- deleting/retaining/exporting conversations is a later policy decision and must not silently delete canonical personal knowledge that may have been created from those conversations.
-
-This is a product-view requirement over the same conversation-history boundary, not a reason to make conversations canonical personal notes. The exact WhatsApp-like presentation can evolve, but **chat persistence across page/app reopen is a committed requirement**.
+Recent visible turns may provide continuity to the planner, but canonical Markdown remains authority
+for current facts and normal retrieval/mutation. The browser is never the durable authority.
+Conversation list/new/open, titles, topic splitting, and deletion/export policy are not committed
+product directions or UI-0 acceptance requirements. Historical transcript search is likewise not a
+memory roadmap; any such feature would need separate product justification. See the current [UI-0
+contract](ui-0-durable-conversations.md).
 
 ### UI-1 — request-level feedback in chat
 
@@ -172,6 +152,38 @@ Proyecto Odyssey
 
 The first Notes view should be read-only. It must not create a second database or silently rewrite Markdown for presentation convenience.
 
+### Application interaction — automatic by default, explicit when useful
+
+Applications/capabilities should feel like parts of Odyssey rather than a set of bots the user must manage. The primary interaction remains an ordinary Odyssey conversation: the user speaks naturally, Odyssey selects the relevant capability, and only the selected capability executes/responds. Do not have every installed application inspect every message or compete to answer.
+
+```text
+user message
+     |
+     v
+Odyssey routing
+     |
+     +--> Tasks
+     +--> Events / Calendar
+     +--> Projects
+     `--> Shopping / other selected capability
+```
+
+The user-facing rules should stay simple:
+
+- **normal chat is enough** — the user should not need to choose an app before asking for something;
+- an optional explicit mention such as `@Tasks` may direct a request when the user wants control or disambiguation, but mentions must never be required for ordinary use;
+- an app-specific focused entry point may exist when a capability needs one, but it must reuse the same knowledge, identity, and application state rather than becoming a silo;
+- a response may carry a small capability label such as `Tasks` so the user understands what acted, without inventing separate personalities or making the product feel like a room full of independent agents;
+- composition remains internal when useful: a project may use Tasks, while both Tasks and Events may use Reminders, without requiring the user to hop between app screens.
+
+The first real application should be **Tasks**. Its implementation should prove the smallest practical application manifest/routing/state contract rather than introducing a generic plugin platform first. Once that works, **Events / Calendar** is the next prioritized application area because time-aware personal behavior is unusually valuable in ordinary Odyssey use. **Reminders** should remain the lower-level notification/delivery capability used where Tasks or Events need it. **Projects** remains a committed consumer of Tasks, but it can follow the calendar path and the bounded maintainability checkpoint rather than blocking Events. See [Future Events / Calendar capability](future-events-calendar.md).
+
+Full message threads and branching chat management are not committed product directions. Evaluate a
+capability-specific surface only when a concrete need cannot be met through the main conversation
+and canonical knowledge.
+
+The detailed executable routing/composition contract remains owned by [Future Extension Points](future-extension-points.md#application-routing-and-composition) and [Odyssey Platform Direction](odyssey-platform-direction.md#application-routingcomposition).
+
 ### UI-3 — Activity / "what changed" view
 
 Provide a history centered on user requests and canonical mutations, correlated by `request_id` and existing Git/request evidence.
@@ -263,42 +275,46 @@ Do not decide exact charts before real usage shows which questions are useful. O
 
 ## Suggested sequencing after the protected MVP
 
-The first sequence should favor features that help validate Odyssey while it is still young:
+The first sequence should favor the most useful everyday surfaces while proving the application model incrementally:
 
 ```text
-20.3B protected route
-20.3C disposable E2E
-20.3D real-vault activation
-        |
-        v
-separate production from development/staging
-        |
-        v
 UI-1 request feedback + advanced request drill-down
         |
         v
-UI-0 durable chat history/resume + conversation continuity foundation
+UI-0 durable main conversation + one-pass continuity foundation
         |
         v
 UI-2 read-only Notes
         |
         v
-UI-3 Activity / change visualization
+Tasks — first real application + minimum routing/manifest/state contract
         |
-        +--> UI-5 usage dashboard as real telemetry accumulates
+        v
+Events / Calendar — prioritized time-aware capability
         |
-        `--> UI-4 note editing after read/change safety is proven
+        v
+Reminders — only the delivery semantics Tasks / Events actually need
+        |
+        v
+bounded maintainability checkpoint
+        |
+        v
+Projects / UI-3 Activity / UI-4 editing / UI-5 analytics
+ordered by real usage and validation needs
 ```
 
-This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. In particular, bounded advanced diagnostics may be useful early during testing even if the ordinary-user surface remains minimal; durable conversation storage may also become the enabling substrate for UI-0 and conversational context work.
+This is a product roadmap, not fixed phase numbering. Real usage may justify moving one item earlier. The first application is intentionally scheduled before building every remaining UI surface: Tasks is a concrete way to validate application routing/composition without prematurely building a general plugin system. Events / Calendar then exercises the same extension boundary against a distinct time-aware domain before Odyssey pauses for bounded structural cleanup. Durable conversation storage serves ordinary chat continuity; a later capability surface must earn its own product case. The [Functional Roadmap](functional-roadmap.md) remains the canonical owner of current status and ordering.
 
 ## Product principles
 
 - Keep the chat simple by default; use drill-down instead of persistent technical clutter.
+- The user should normally speak naturally; automatic capability selection is the default and explicit `@App` routing is optional.
+- Do not make all applications listen to every message; select only the capability needed for the request.
+- Capability-specific entry points, if justified, are not separate knowledge silos.
 - Show what Odyssey actually did from durable evidence, not what the answer text merely claims it did.
 - Prefer human-readable change summaries before raw Git diffs.
 - Keep note browsing/editing on the canonical Markdown/Core boundary.
-- Reuse `request_id`, Git correlation, application results, and existing operational evidence.
+- Reuse `request_id`, `conversation_id`, Git correlation, application results, and existing operational evidence.
 - Never expose hidden reasoning, raw prompts, secrets, unrestricted logs, or unrelated personal content in diagnostics.
 - Add role-aware surfaces only when the authorization model can enforce them.
 - Build charts from useful retained evidence; do not create a new analytics platform just to render graphs.
@@ -310,8 +326,10 @@ Decide with real Odyssey usage:
 1. whether per-message cost is always visible, optional, or advanced-only;
 2. whether ordinary users should see tokens at all;
 3. exact mobile navigation (`Chat / Notes / Activity`, drawer, or another compact pattern);
-4. whether change receipts live inside the assistant bubble, immediately below it, or in a linked activity panel;
-5. which level of diff is useful to ordinary users versus advanced users;
-6. which note-editing mode should come first;
-7. which usage graphs deserve a permanent dashboard;
-8. exact roles/permissions for advanced diagnostics once Odyssey becomes multi-user.
+4. exact placement/visual treatment of capability labels and any justified capability-specific surface;
+5. whether change receipts live inside the assistant bubble, immediately below it, or in a linked activity panel;
+6. which level of diff is useful to ordinary users versus advanced users;
+7. which note-editing mode should come first;
+8. which usage graphs deserve a permanent dashboard;
+9. exact roles/permissions for advanced diagnostics once Odyssey becomes multi-user;
+10. whether a concrete capability ever needs a specialized surface beyond the main conversation.

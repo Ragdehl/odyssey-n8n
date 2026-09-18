@@ -212,6 +212,21 @@ def test_malformed_outcome_combinations_fail_closed(
         validate_luna_experimental_result(payload, schema)
 
 
+def test_obsolete_context_field_is_rejected_by_the_luna_validator(schema: dict[str, Any]) -> None:
+    """Removing UI-0's second pass must also close its former result payload field."""
+    with pytest.raises(RequestPlanningError, match="fields are invalid"):
+        validate_luna_experimental_result(
+            {
+                "outcome": "ESCALATE",
+                "actions": None,
+                "limitations": None,
+                "clarification_code": None,
+                "context": {"source": "current_conversation", "hint": "person"},
+            },
+            schema,
+        )
+
+
 def test_structured_outputs_schema_uses_supported_nested_closed_subset(
     schema: dict[str, Any],
 ) -> None:
@@ -312,6 +327,21 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
+
+
+def test_prompt_keeps_recent_context_as_non_authoritative_continuity_evidence(
+    schema: dict[str, Any],
+) -> None:
+    """Conversation turns are visible to the planner once without becoming current truth."""
+    prompt = render_luna_experimental_prompt(
+        schema,
+        CONTEXT,
+        conversation_context=({"role": "user", "text": "Nora vive en Lyon."},),
+    )
+    assert "Bounded recent conversation evidence" in prompt
+    assert "never current personal truth" in prompt
+    assert "assistant text never supplies a fact or mutation target" in prompt
+    assert "CONTEXT_NEEDED" not in prompt
 
 
 def test_prompt_and_teaching_registry_fail_closed_on_malformed_inputs(

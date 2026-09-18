@@ -24,6 +24,9 @@ def test_request_detail_projection_excludes_retrieval_payloads() -> None:
     assert "r.operational" in source
     assert "affected_stable_note_ids" in source
     assert "const request_detail = withAnswerer(source.request_detail)" in source
+    assert "function safeOperational(value)" in source
+    assert "safeOperational(r.operational)" in source
+    assert "provider_payload" not in source
 
 
 def test_request_cost_uses_one_bounded_call_record_per_provider_call() -> None:
@@ -130,6 +133,17 @@ def test_invalid_browser_request_bypasses_runtime_and_answerer() -> None:
     assert "Validate browser request" in source
     assert "La solicitud no es válida." in source
     assert "valid.output(1).to(direct).to(respond)" in source
+
+
+def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> None:
+    """Expose only the one actor-owned main conversation through the existing boundary."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "path: 'conversation'" in source
+    assert "['main', 'turn']" in source
+    assert "Execute conversation operation" in source
+    assert "runtimeBaseUrl}/conversation/{{ $json.operation }}" in source
+    assert "...(operation === 'turn' ? { conversation_id: 'main' } : {})" in source
+    assert "return [{ json: { operation, conversation_id: 'main'," not in source
 
 
 def test_runtime_timeout_routes_to_the_narrow_safe_error_boundary() -> None:

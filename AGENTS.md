@@ -36,6 +36,14 @@ The current standalone consumer source lives under `odyssey_web/` as part of Pha
 
 Do not introduce LangGraph, a vector service, graph database, queue, additional application server, or other infrastructure unless a concrete requirement cannot be handled cleanly by the current boundaries.
 
+## Local-first ownership boundary
+
+Odyssey's target product is local-first. One user's Odyssey instance owns that user's local vault and durable local state. In hosted or server-backed deployments, authenticated identity should select the isolated user-local vault/state root; once that root is selected, inner local repositories should normally be root-bound rather than redundantly modeling multiple users in their physical storage layout.
+
+Future local/mobile clients should be able to reuse the same local storage semantics without requiring server-style multi-user partitioning. Multi-user identity, permissions, groups, and synchronization belong to the separate collaboration boundary used when knowledge crosses a sharing boundary. Private local-only knowledge or state must not become centrally hosted merely because collaboration exists.
+
+Current DEV/server actor isolation must remain enforced at the outer authentication/root-selection boundary; local-first storage is not permission to weaken current isolation. See [Odyssey Platform Direction](docs/architecture/odyssey-platform-direction.md) and [Multi-user Collaboration Direction](docs/architecture/multi-user-collaboration-direction.md) for the durable product direction.
+
 ## Development principles
 
 - Prefer the simplest working solution and challenge unnecessary complexity.
@@ -87,6 +95,22 @@ Ask before actions with material data, security, architecture, or irreversibilit
 - material product/contract ambiguity that cannot be inferred safely.
 
 Routine implementation risk means proceed; material authority/security/data risk means ask. A failed final verification means the branch is not ready, not that coherent work should be discarded.
+
+## Product ambiguity and inference
+
+Do not turn an unstated assumption into settled product behavior. When a user-facing behavior,
+retention rule, navigation model, domain semantic, lifecycle, or phase boundary has more than one
+plausible interpretation and the canonical documentation does not already decide it, stop and ask the
+human before implementing or documenting one interpretation as the product contract.
+
+Do not treat nearby features, historical behavior, analogy with another product, implementation
+convenience, or a likely user preference as authorization. During phase definition, surface uncertain
+choices explicitly as **open decisions** and resolve them with the human before opening an
+implementation PR when the user has asked to define the phase first. Routine mechanical choices
+inside an already approved contract remain autonomous.
+
+The fail-closed principle applies to product definition as well as mutation safety: when the product
+contract is genuinely unknown, preserve the uncertainty rather than filling the gap with a guess.
 
 ## Significant functional phases
 

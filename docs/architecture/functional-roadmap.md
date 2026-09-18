@@ -24,15 +24,15 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current phase — UI-1 request detail / advanced inspector
+## Current functional phase — UI-2 read-only Notes
 
-Goal: expose one request's existing bounded operational evidence through a closed-by-default detail
-surface without turning the normal chat into a technical console.
+UI-0 durable main conversation/continuity is merged and human-verified on the isolated DEV/mobile
+path. Its explicit production promotion remains a separate operational adoption gate; merging `main`
+does not itself deploy PROD. The next functional phase is **UI-2 read-only Notes**: expose the same
+canonical Markdown through a simple browse/search/read surface without creating a second knowledge
+authority. See [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
-Phase 23 is closed. Retained human-authenticated production browser evidence showed `¿Dónde trabajo?`
-returning `Trabajas en Alten para Airbus.`, proving real production SELF READ behavior. Codex did not
-reproduce the user's Cloudflare Access session. UI-1 is implemented in the current PR and reuses
-existing bounded request evidence without changing planner or routing semantics.
+Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 
 Phase 22/23 identity adoption remains governed by the explicit production contract: trusted
 production identity projection, real-user/person binding, and an explicit commit-selected
@@ -69,7 +69,15 @@ Phase 21 production/development isolation                    ✅ complete
 23C  explicit production self binding                             ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
-UI-1 request detail / advanced inspector                         ✅ complete in isolated DEV
+UI-1 request detail / advanced inspector                         ✅ complete in PROD
+UI-0 durable main conversation/continuity                        ✅ merged + DEV/mobile verified
+UI-0 explicit production promotion                              ⬜ operational gate
+UI-2 read-only Notes                                              ➡️ next functional feature
+Tasks — first real application + minimal app routing              ⬜ planned
+Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
+Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
+Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
+Projects — compose over Tasks                                     ⬜ planned after checkpoint
 ```
 
 Latency optimization remains intentionally deferred: provider/model time dominates measured latency,
@@ -124,7 +132,10 @@ Complete and merged in PR #103. The protected Cloudflare boundary, disposable mo
 
 20.3D initialized `/data/odyssey/vault` as the exact production Git repository root with empty baseline commit `465773757427597b1f6036e94e670c8dd360d882`, reset only the guarded rebuildable `context.sqlite3` and `semantic.sqlite3` indexes, rebuilt them from the empty canonical vault, and started the private production runtime. Post-start evidence showed HTTP 200 on `172.18.0.1:8765/healthz`, with no listener on `127.0.0.1:8765`. No synthetic personal WRITE was used for activation.
 
-The first mobile E2E also exposed a product requirement: the visible chat currently does not carry conversation context into the planner, so a follow-up such as `¿Dónde vive?` safely abstains even after discussing one person. That future requirement is now owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+The first mobile E2E exposed the need for bounded immediate conversation continuity: a follow-up such
+as `¿Dónde vive?` safely abstained after discussing one person. UI-0 later implemented that need with
+one bounded recent-turn window while keeping canonical notes/facts authoritative. The durable
+conversation/context contract is owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md) and [UI-0 durable main conversation](ui-0-durable-conversations.md).
 
 ## Phase 21 status — production and development isolation
 
@@ -139,21 +150,36 @@ first real personal use                               ✅ complete
 production / development isolation                    ✅ complete
         |
         v
-user self-identity binding to ordinary person note    ✅ isolated DEV implementation complete
+user self-identity binding to ordinary person note    ✅ complete
         |
         v
-request feedback / advanced inspector + note access
+UI-1 request feedback / advanced inspector            ✅ complete in PROD
         |
         v
-conversation persistence / continuity
+UI-0 durable main conversation / continuity           ✅ merged + DEV/mobile verified
         |
         v
-real-usage-driven UI / capability work
+UI-2 read-only Notes                                   ➡️ next
+        |
+        v
+Tasks — first application contract
+        |
+        v
+Events / Calendar — prioritized time-aware capability
+        |
+        v
+Reminders as needed by Tasks / Events
+        |
+        v
+bounded maintainability checkpoint
+        |
+        v
+Projects / Activity / editing / analytics by real use
 ```
 
 The production/development split now precedes substantial new feature development so future disposable tests cannot affect real personal knowledge. See the [Phase 21 evidence](phase-21-development-isolation.md).
 
-The self-identity implementation is complete in isolated DEV, and Phase 23B now projects the validated production Access principal through n8n into the private runtime's existing-only mapping boundary. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. The real production mapping and self binding remain explicit Phase 23C gates. The tracked reboot-safe `odyssey-prod` operator is human-gated, and cloudflared lifecycle remains outside it. See [Phase 22 contract](phase-22-self-identity.md), [Phase 23 production adoption](phase-23-production-self-identity-adoption.md), and [Future user self-identity binding](future-user-self-identity.md).
+The self-identity implementation is complete and Phase 23 production adoption is closed. The person note stays in the normal vault/search/statistics surface; only the account/actor binding is separate identity state. The tracked reboot-safe `odyssey-prod` operator is human-gated, and cloudflared lifecycle remains outside it. See [Phase 22 contract](phase-22-self-identity.md), [Phase 23 production adoption](phase-23-production-self-identity-adoption.md), and [Future user self-identity binding](future-user-self-identity.md).
 
 ## Committed post-MVP directions
 
@@ -173,42 +199,64 @@ Phase 21 production/development isolation                   ✅ complete
 
 The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
 database/container. It is not a permanent Git branch. The fixed protected endpoint and human
-browser checkpoint are complete; self-identity production adoption is now the explicit post-merge gate.
+browser checkpoint are complete; ordinary feature work should continue through isolated DEV before
+explicit human-gated production promotion.
 
 ### Natural conversation and history
 
-Conversation continuity is now a concrete post-MVP requirement, not only a speculative idea. The intended architecture is **context on demand**, not a hard-coded “always send the last N messages” window.
-
-```text
-current request
-      |
-      v
-same Luna-first planner
-      |
-      +--> self-contained -> execute normally
-      |
-      `--> context needed
-               |
-               v
-       retrieve relevant conversation evidence
-               |
-               v
-       same planner, bounded second pass
-```
-
-Conversation/history must remain a source/authority distinction, not an ordinary canonical note type. Visible conversation records should be durable Markdown-like non-knowledge state; historical retrieval must remain logically isolated from current personal-knowledge retrieval. Later coarse-to-fine navigation may use derived conversation/daily/weekly/monthly/yearly summaries that point back to raw conversations. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+Conversation continuity is a concrete post-MVP requirement, delivered first as one persistent main
+chat rather than chat management. A deterministic bounded recent-turn window accompanies the current
+request in the existing Luna-first planner call. It may resolve conversational wording but never
+becomes a current-fact source or retrieval expansion; the validated plan continues to route to
+canonical Markdown only. Historical knowledge questions belong to canonical notes, fact-capture
+chronology, and canonical Git/request history. Transcript search, summaries, topic splitting, and
+multiple-chat UX are not UI-0 follow-on roadmap work; any such product would require separate
+justification. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 
 ### Composable applications and capabilities
 
 Applications should reuse shared Odyssey knowledge and lower-level capabilities rather than creating isolated stores or duplicate semantics. A useful target is composition such as:
 
 ```text
-Reminders <- Tasks <- Projects
+Projects -> Tasks
+             |
+             v
+         Reminders
+
+Events ------+
 ```
 
-Planner/model extensibility must stay configuration-driven where semantics are already supported. The current planner derives note-type/property capabilities from `config/note-schema.json`; downstream model boundaries are generic with respect to concrete note types. The remaining application gap is executable manifest/registry routing for `DelegateAction`, not hard-coded app selection in the base planner. See [Architecture Overview](overview.md#configuration-driven-model-boundaries), [Future Extension Points](future-extension-points.md), and [Odyssey Platform Direction](odyssey-platform-direction.md).
+The approved user interaction model is **automatic routing by default, explicit routing when useful**. Ordinary users should speak naturally in the main conversation; the relevant capability is selected internally and only that selected capability should execute/respond. Optional syntax such as `@Tasks` may direct or disambiguate a request but must never be required. A capability-specific surface may exist only when a concrete need justifies it, while reusing the same knowledge, identity, and application state rather than becoming a silo. Applications may show a small capability identity in the UI, but should not become independent personalities that all listen to every message. Nested threads and branching chat management are not committed directions.
+
+The first real application is **Tasks**, chosen to prove the smallest practical manifest/routing/state
+contract. Once that contract is proven, **Events / Calendar** is the next prioritized application
+area because time-aware personal behavior is unusually useful in everyday Odyssey use. **Reminders**
+should provide only the lower-level notification/delivery semantics that Tasks and Events actually
+need; it must not collapse tasks and events into one model. **Projects** remains a committed consumer
+of Tasks but can follow the calendar path and the bounded maintainability checkpoint rather than
+blocking Events. See [Future Events / Calendar capability](future-events-calendar.md).
+
+Do not build a generic plugin platform before Tasks proves what the common application contract actually needs.
+
+Planner/model extensibility must stay configuration-driven where semantics are already supported. The current planner derives note-type/property capabilities from `config/note-schema.json`; downstream model boundaries are generic with respect to concrete note types. The remaining application gap is executable manifest/registry routing for `DelegateAction`, not hard-coded app selection in the base planner. See [Architecture Overview](overview.md#configuration-driven-model-boundaries), [Future Odyssey product interface](future-product-interface.md#application-interaction--automatic-by-default-explicit-when-useful), [Future Extension Points](future-extension-points.md), [Future Events / Calendar capability](future-events-calendar.md), and [Odyssey Platform Direction](odyssey-platform-direction.md).
 
 Once application work becomes repetitive, evaluate a bounded **agent-assisted delivery loop**: human + assistant approve a feature contract and validation criteria, an implementation agent works only in isolated DEV, deterministic checks run first, an independent validation agent reviews from fresh context, and only a final evidence-backed PR returns to the human for acceptance. This automation should not be introduced during Core architecture work and must never autonomously merge/promote production. Detailed guardrails and scheduling direction live in [Future Extension Points](future-extension-points.md#agent-assisted-application-delivery).
+
+### Maintainability checkpoint after the calendar/application foundation
+
+Maintainability is a continuous acceptance concern during every phase, but Odyssey should not pause
+useful product work now for speculative restructuring. The near-term priority is UI-2 Notes, then
+Tasks, then Events / Calendar with the minimum Reminder semantics those capabilities need.
+
+After that path has exercised the application boundary in real code, schedule a **bounded
+maintainability checkpoint** before substantial secondary-app expansion. The checkpoint should use
+actual change pain and duplication as evidence: retire proven legacy, consolidate genuinely repeated
+contracts, split modules that have accumulated unrelated responsibilities, and strengthen fragile
+contract tests. It is explicitly **not** a rewrite, architecture reset, or demand to DRY across
+intentional trust-boundary validation.
+
+Current watchpoints and the per-phase reuse/refactor discipline are owned by the
+[Development Pipeline](development-pipeline.md#maintainability-guard-during-feature-work).
 
 ### Multi-user shared knowledge
 
@@ -222,7 +270,7 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 
 - 💡 **Retrieval refinement from real misses:** first test query-decomposed multi-fact/entity-coverage retrieval; only then add candidate reduction or compact evidence if measured cost/volume justifies it. See [Future retrieval refinements](future-query-decomposed-retrieval.md).
 - 💡 **Pending-reference evolution / schema coaching:** safely relink exact attributable occurrences and use repeated unresolved patterns only as advisory evidence for future schema proposals. See [Future pending-reference evolution](future-pending-reference-evolution.md).
-- 💡 **Hierarchical conversation summaries:** conversation/day/week/month/year derived summaries may later narrow historical search before drilling down to raw supporting turns; they remain rebuildable navigation aids, never authority. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
+- 💡 **Historical canonical-knowledge retrieval:** extend note/fact chronology and canonical Git/request-history access only when a concrete historical knowledge question requires it; do not substitute chat-history search. See [Future Odyssey help and conversation context](future-help-and-conversation-context.md).
 - 💡 **Usage/cost observability:** project already-collected safe operational/provider evidence into simple and advanced product views without creating a second tracing authority. This now explicitly includes integration/deployment provenance and a `MATCH | DRIFT | UNKNOWN` view of checked-in workflow source versus the active deployed workflow. See [Future product usage observability](future-product-usage-observability.md).
 - 💡 **Capture-context provenance:** optional location/context belongs to fact/request provenance, not entity properties. See [Future capture-context provenance](future-capture-context-provenance.md).
 - 💡 **Platform/local-first portability:** keep Core/data contracts usable by self-hosted, future local/mobile, app, and agent clients without making a central Odyssey server semantically mandatory. See [Odyssey Platform Direction](odyssey-platform-direction.md).

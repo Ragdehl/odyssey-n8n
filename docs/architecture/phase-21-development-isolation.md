@@ -245,9 +245,18 @@ exact deployed commit. Normal operation remains `odyssey-dev deploy`, `start`, `
 Cloudflare uses the existing healthy tunnel. The DEV CNAME points only to that tunnel, and a
 distinct `Odyssey DEV` Access application/policy follows the production authorized-identity
 principle without altering the production application or policy. The DEV tunnel ingress is
-limited to the six product routes (`/api/odyssey`, static assets, and `/api/request`) and targets
-only `172.18.0.1:28780`; this prevents the DEV n8n editor/admin root from being reachable through
-the DEV hostname. DNS, public TLS, and Access control-plane/data-plane postconditions passed. An
+limited to these seven explicit product paths, all targeting only `172.18.0.1:28780`:
+
+- `/api/odyssey`
+- `/api/styles.css`
+- `/api/app.js`
+- `/api/client.js`
+- `/api/environment.js`
+- `/api/request`
+- `/api/conversation`
+
+The narrow allowlist prevents the DEV n8n editor/admin root from being reachable through the DEV
+hostname. DNS, public TLS, and Access control-plane/data-plane postconditions passed. An
 authenticated browser recheck of the rendered page remains the final mobile checkpoint after the
 CSP correction below.
 
@@ -307,6 +316,22 @@ recheck remains the final presentation checkpoint. Reusable lesson: asset existe
 correctness do not prove tunnel routing—test every generated product path through the external
 boundary and inspect the live regex for escaping before closing the browser checkpoint.
 
+### UI-0 conversation-route ingress correction
+
+UI-0 added the browser's `/api/conversation` continuity endpoint to the published `odyssey-online`
+workflow, but the pre-existing narrow DEV tunnel expression still allowed only the first six product
+paths. A browser could therefore receive a valid `/api/request` product result and then fail while
+persisting the visible assistant turn through the missing public route. The active remotely managed
+tunnel configuration was updated only by adding `conversation` to the explicit expression; it still
+targets the same DEV n8n listener and contains no `/api/*` wildcard.
+
+The DEV operator now keeps a seven-path browser/workflow inventory and rejects a render whose
+published webhook paths differ from that list. Reusable lesson: workflow registration and internal
+n8n success do not prove that a newly added browser endpoint is present in the public tunnel
+allowlist. Keep browser, workflow, operator inventory, and the narrow external route expression in
+sync, then verify the endpoint through the authenticated external boundary before accepting a
+mobile checkpoint.
+
 Capacity remains intentionally on-demand. A settled 4 GiB host observation was:
 
 | State | Available RAM | Swap free | Relevant RSS |
@@ -321,8 +346,13 @@ DEV stop/restart sequence, the production health endpoint stayed HTTP 200.
 
 Reusable operational learning: n8n imports/publishes an active workflow reliably only while the
 same DEV database is not owned by a running n8n process; publish before DEV startup, then verify
-active version metadata after startup. The operator codifies that sequence and fails closed on
-missing source/deployment identity or DEV credential contamination. A cold DEV semantic runtime
+the active version after startup. In n8n 2.x, `activeVersionId` and its matching
+`workflow_history` record—not the legacy `active` flag—identify that published version. Process
+`/healthz` does not prove trigger registration has completed: the DEV operator waits for the
+published active-version webhook definitions and for a deliberately invalid `POST /api/request` to
+return the deterministic validation response. That probe cannot reach runtime or a provider. The
+deployment record is written only after this route readiness succeeds. The operator fails closed
+on missing source/deployment identity or DEV credential contamination. A cold DEV semantic runtime
 initialization observed during redeploy needed about 46 seconds, so the DEV-only health wait allows
 60 seconds before failing closed rather than treating normal cold startup as a deployment failure.
 

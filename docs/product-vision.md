@@ -6,6 +6,12 @@ Its enduring promise is:
 
 > **Capture without friction, organize automatically, and retrieve the right information when it becomes useful.**
 
+Its product mantra is:
+
+> **Odyssey is a personal memory based on local notes, consultable and modifiable through natural language.**
+
+This mantra is a scope guard, not marketing decoration. When a proposed feature primarily makes Odyssey a more general chat, messaging, or assistant product without materially improving how users capture, retrieve, understand, or maintain their note-based memory, it needs strong evidence before it belongs in Core or the main product roadmap. Conversational UX should make the note memory easier to use; it must not become a competing product goal or a second knowledge authority.
+
 ## Product principles
 
 ### Capture first
@@ -33,15 +39,19 @@ Similarity alone is never proof of identity. When evidence is insufficient, an e
 
 ### Human-readable knowledge stays authoritative
 
-Canonical personal knowledge is Markdown owned by the user/workspace. SQLite indexes, embeddings, caches, model outputs, Git audit information, and application views may help Odyssey operate, but they do not replace the canonical knowledge.
+Canonical personal knowledge is Markdown owned by the user/workspace. SQLite indexes, embeddings, caches, model outputs, Git audit information, application views, and conversation transcripts may help Odyssey operate, but they do not replace the canonical knowledge.
 
 The user should remain able to inspect, back up, synchronize, and use the Markdown independently of Odyssey.
+
+Conversation context may help interpret an elliptical request such as “¿y dónde vive?”, but it must not silently promote old chat wording or assistant output into current personal truth. Current-fact answers remain grounded in canonical notes. Exact historical transcript wording is not a core Odyssey memory capability; any separate transcript product would need explicit justification.
 
 ### Structure must earn its complexity
 
 Odyssey does not maximize schema. A type or property is useful when it enables a repeatable capability such as filtering, comparison, calculation, reminders, analytics, or application behavior.
 
 Ordinary facts stay ordinary facts when no such capability requires structure. Future applications may contribute validated domain structure without turning Core into one large business ontology.
+
+The same test applies to product machinery: multiple chats, conversation indexing, summaries, extra model stages, routers, and background state should be added only when a concrete user need cannot be met cleanly by a smaller design.
 
 ### Safe automation behind bounded contracts
 
@@ -54,6 +64,8 @@ Additional model stages and infrastructure are optimizations to justify with evi
 Odyssey is not tied to one chat product. A mobile/web client, ChatGPT, another assistant, or a domain application may consume the same Core knowledge through trusted integration boundaries.
 
 The current product work is a minimal mobile web MVP so real usage can reveal which improvements are valuable before adding richer interfaces, collaboration, applications, or local/mobile runtimes.
+
+The default conversational surface should remain simple: enough recent conversation context to let the user speak naturally, while the notes remain the actual memory and knowledge authority. Historical knowledge questions belong to canonical notes, fact-capture chronology, and canonical Git/request history—not to conversation-history retrieval.
 
 ## Longer-term direction
 
