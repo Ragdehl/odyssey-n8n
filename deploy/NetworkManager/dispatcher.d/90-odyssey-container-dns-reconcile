@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+# NetworkManager passes the interface name as $1 and the event action as $2.
+# Submit the existing bounded production guard asynchronously; recovery remains
+# exclusively owned by odyssey-container-dns-reconcile.service.
+action=${2:-}
+
+case "$action" in
+    up|dhcp4-change|dhcp6-change|dns-change|connectivity-change|vpn-up)
+        systemctl start --no-block odyssey-container-dns-reconcile.service
+        ;;
+    *)
+        exit 0
+        ;;
+esac

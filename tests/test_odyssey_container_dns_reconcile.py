@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "odyssey-container-dns-reconcile"
 SERVICE = Path(__file__).parents[1] / "deploy" / "odyssey-container-dns-reconcile.service"
+DISPATCHER = (
+    Path(__file__).parents[1]
+    / "deploy"
+    / "NetworkManager"
+    / "dispatcher.d"
+    / "90-odyssey-container-dns-reconcile"
+)
 
 
 def run_bash(script: str) -> subprocess.CompletedProcess[str]:
@@ -73,6 +81,37 @@ def test_both_stale_recreate_each_once_independently() -> None:
     result = run_bash(guard_harness(cloudflared_assessment="10", n8n_assessment="10"))
     assert result.returncode == 0
     assert result.stdout.splitlines() == ["recreate:cloudflared", "recreate:n8n"]
+    assert "[RECOVERED] service=cloudflared" in result.stderr
+    assert "[RECOVERED] service=n8n" in result.stderr
+
+
+def test_delayed_cloudflared_recovery_does_not_skip_n8n() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+wait_for_startup_readiness() { :; }
+n8n_mount_fingerprint() { printf 'volume|n8n_data|/home/node/.n8n|true\\n'; }
+assess_target() { REASON='stale test state'; return 10; }
+compose_recreate() { printf 'recreate:%s\\n' "$1"; }
+cloudflared_ready=0
+wait_for_target() {
+  if [ "$1" = cloudflared ]; then
+    sleep 1
+    cloudflared_ready=1
+  else
+    [ "$cloudflared_ready" -eq 1 ]
+  fi
+}
+sleep() { [ "$1" -eq 1 ]; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ["recreate:cloudflared", "recreate:n8n"]
+    assert result.stderr.index("service=cloudflared") < result.stderr.index("service=n8n")
+    assert "[RECOVERED] service=cloudflared" in result.stderr
+    assert "[RECOVERED] service=n8n" in result.stderr
 
 
 def test_unhealthy_host_dns_recreates_nothing() -> None:
@@ -310,6 +349,69 @@ def test_boot_unit_orders_after_network_and_docker_without_restart_loop() -> Non
     assert "Restart=no" in source
     assert "TimeoutStartSec=180" in source
     assert "odyssey-container-dns-reconcile" in source
+
+
+def run_dispatcher(interface: str, action: str, tmp_path: Path) -> list[str]:
+    """Run the dispatcher with a fake systemctl and return submitted arguments."""
+    fake_bin = tmp_path / f"bin-{interface}-{action}"
+    fake_bin.mkdir(parents=True)
+    calls = tmp_path / f"calls-{interface}-{action}"
+    fake_systemctl = fake_bin / "systemctl"
+    fake_systemctl.write_text(
+        '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$DISPATCHER_CALLS"\n',
+        encoding="utf-8",
+    )
+    fake_systemctl.chmod(0o755)
+    environment = os.environ | {
+        "PATH": str(fake_bin),
+        "DISPATCHER_CALLS": str(calls),
+    }
+    result = subprocess.run(
+        [str(DISPATCHER), interface, action],
+        check=False,
+        env=environment,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+
+
+def test_dispatcher_submits_only_existing_guard_asynchronously(tmp_path: Path) -> None:
+    calls = run_dispatcher("wlan0", "dns-change", tmp_path)
+    assert calls == ["start --no-block odyssey-container-dns-reconcile.service"]
+    source = DISPATCHER.read_text(encoding="utf-8")
+    assert "docker" not in source.lower()
+    assert "nmcli" not in source.lower()
+    assert "resolv" not in source.lower()
+    assert "timeout" not in source.lower()
+
+
+def test_dispatcher_repeated_relevant_events_are_guard_only(tmp_path: Path) -> None:
+    first = run_dispatcher("wlan0", "up", tmp_path)
+    second = run_dispatcher("wlan0", "dhcp4-change", tmp_path)
+    assert first == ["start --no-block odyssey-container-dns-reconcile.service"]
+    assert second == ["start --no-block odyssey-container-dns-reconcile.service"]
+
+
+def test_dispatcher_ignores_irrelevant_events(tmp_path: Path) -> None:
+    assert run_dispatcher("wlan0", "down", tmp_path) == []
+    assert run_dispatcher("eth0", "pre-up", tmp_path) == []
+
+
+def test_dispatcher_covers_future_wired_and_resolver_events(tmp_path: Path) -> None:
+    for action in ("up", "dhcp6-change", "connectivity-change", "vpn-up"):
+        assert run_dispatcher("eth0", action, tmp_path) == [
+            "start --no-block odyssey-container-dns-reconcile.service"
+        ]
+
+
+def test_dispatcher_preserves_guard_execution_bound() -> None:
+    service = SERVICE.read_text(encoding="utf-8")
+    dispatcher = DISPATCHER.read_text(encoding="utf-8")
+    assert "TimeoutStartSec=180" in service
+    assert "--no-block" in dispatcher
+    assert "timeout" not in dispatcher.lower()
 
 
 def test_n8n_stale_resolver_still_reaches_existing_single_service_recovery() -> None:
