@@ -87,6 +87,49 @@ def test_health_contract_is_private_production_endpoint() -> None:
     assert '"http://$PROD_HOST:$PROD_PORT/healthz"' in source
 
 
+def test_bind_address_wait_succeeds_when_address_appears_during_bounded_wait() -> None:
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source {SCRIPT}; BIND_ADDRESS_ATTEMPTS=3; bind_checks=0; "
+            'bind_address_available() { bind_checks=$((bind_checks + 1)); [ "$bind_checks" -ge 2 ]; }; '
+            "sleep() { :; }; wait_for_bind_address; printf 'checks=%s\\n' \"$bind_checks\"",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0
+    assert result.stdout == "checks=2\n"
+
+
+def test_bind_address_wait_fails_bounded_without_network_mutation() -> None:
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"source {SCRIPT}; BIND_ADDRESS_ATTEMPTS=2; bind_address_available() {{ return 1; }}; "
+            "sleep() { :; }; wait_for_bind_address",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode != 0
+    assert "did not become available within bounded startup wait" in result.stderr
+
+
+def test_runtime_unit_waits_for_actual_bind_address_before_start() -> None:
+    source = SERVICE.read_text(encoding="utf-8")
+    assert (
+        "ExecStartPre=/home/ragdehl/projects/odyssey-prod-release/scripts/odyssey-prod "
+        "wait-for-bind-address" in source
+    )
+    assert "Restart=on-failure" in source
+    assert "docker" not in source.lower()
+
+
 def test_source_contract_uses_the_established_explicit_worktree() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     assert 'git --git-dir="$git_dir" worktree add --detach "$release" "$resolved"' in source

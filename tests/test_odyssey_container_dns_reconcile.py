@@ -115,6 +115,7 @@ cloudflared_registered() {
   registration_checks=$((registration_checks + 1))
   [ "$registration_checks" -ge 2 ]
 }
+n8n_service_ready() { return 0; }
 sleep() { :; }
 assess_target() { REASON='healthy test state'; return 0; }
 compose_recreate() { printf 'recreate:%s\n' "$1"; }
@@ -125,6 +126,131 @@ run_guard
     assert result.stdout == ""
     assert "recreate:" not in result.stdout
     assert "HEALTHY" in result.stderr
+
+
+def test_n8n_health_appears_during_startup_grace_without_recreation() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+container_running() { return 0; }
+resolvers_match_host() { return 0; }
+cloudflared_started_at() { printf 'started\n'; }
+cloudflared_registered() { return 0; }
+n8n_service_ready() {
+  n8n_checks=$((n8n_checks + 1))
+  [ "$n8n_checks" -ge 2 ]
+}
+n8n_checks=0
+sleep() { :; }
+assess_target() { REASON='healthy test state'; return 0; }
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert "service=n8n awaiting resolver, DNS, and health readiness" in result.stderr
+    assert "[HEALTHY] service=n8n" in result.stderr
+
+
+def test_n8n_transient_dns_or_health_failure_then_ready_has_no_recreation() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+container_running() { return 0; }
+resolvers_match_host() { return 0; }
+cloudflared_started_at() { printf 'started\n'; }
+cloudflared_registered() { return 0; }
+dns_checks=0
+n8n_dns_ready() {
+  dns_checks=$((dns_checks + 1))
+  [ "$dns_checks" -ge 2 ]
+}
+health_checks=0
+curl() {
+  health_checks=$((health_checks + 1))
+  [ "$health_checks" -ge 2 ]
+}
+sleep() { :; }
+assess_target() { REASON='healthy test state'; return 0; }
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert "recreate:" not in result.stdout
+    assert "[HEALTHY] service=n8n" in result.stderr
+
+
+def test_stale_cloudflared_does_not_suppress_n8n_startup_grace() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+container_running() { return 0; }
+resolvers_match_host() {
+  [ "$1" = cloudflared ] && return 1
+  return 0
+}
+cloudflared_started_at() { printf 'started\n'; }
+cloudflared_registered() { return 0; }
+n8n_service_ready() {
+  n8n_checks=$((n8n_checks + 1))
+  [ "$n8n_checks" -ge 2 ]
+}
+n8n_checks=0
+sleep() { :; }
+assess_target() {
+  if [ "$1" = cloudflared ]; then
+    REASON='stale cloudflared test state'
+    return 10
+  fi
+  REASON='healthy n8n test state'
+  return 0
+}
+n8n_mount_fingerprint() { printf 'volume|n8n_data|/home/node/.n8n|true\n'; }
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+wait_for_target() { return 0; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout == "recreate:cloudflared\n"
+    assert "recreate:n8n" not in result.stdout
+    assert "[HEALTHY] service=n8n" in result.stderr
+
+
+def test_n8n_startup_grace_timeout_fails_without_stale_dns_recreation() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+container_running() { return 0; }
+resolvers_match_host() { return 0; }
+cloudflared_started_at() { printf 'started\n'; }
+cloudflared_registered() { return 0; }
+n8n_service_ready() { return 1; }
+STARTUP_GRACE_ATTEMPTS=3
+sleep() { :; }
+assess_target() {
+  if [ "$1" = n8n ]; then
+    printf 'unexpected-assessment:%s\n' "$1"
+    return 10
+  fi
+  return 0
+}
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+run_guard
+"""
+    )
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "unexpected-assessment:n8n" not in result.stdout
+    assert "service=n8n" in result.stderr
+    assert "without stale DNS proof; no recreation" in result.stderr
 
 
 def test_transient_cloudflared_dns_error_before_registration_is_healthy() -> None:
@@ -184,6 +310,24 @@ def test_boot_unit_orders_after_network_and_docker_without_restart_loop() -> Non
     assert "Restart=no" in source
     assert "TimeoutStartSec=180" in source
     assert "odyssey-container-dns-reconcile" in source
+
+
+def test_n8n_stale_resolver_still_reaches_existing_single_service_recovery() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+wait_for_startup_readiness() { N8N_STARTUP_STATE=stale; :; }
+assess_target() { REASON='stale test state'; [ "$1" = n8n ] && return 10 || return 0; }
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+wait_for_target() { return 0; }
+n8n_mount_fingerprint() { printf 'volume|n8n_data|/home/node/.n8n|true\n'; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout == "recreate:n8n\n"
+    assert result.stdout.count("recreate:") == 1
 
 
 def test_recreate_command_is_narrow_and_never_pulls() -> None:

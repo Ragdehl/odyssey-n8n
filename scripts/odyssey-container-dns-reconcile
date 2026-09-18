@@ -12,6 +12,8 @@ MAX_READINESS_ATTEMPTS=30
 READINESS_DELAY_SECONDS=2
 STARTUP_GRACE_ATTEMPTS=30
 STARTUP_GRACE_DELAY_SECONDS=2
+CLOUDFLARED_STARTUP_STATE=ready
+N8N_STARTUP_STATE=ready
 
 ASSESS_HEALTHY=0
 ASSESS_STALE=10
@@ -105,8 +107,8 @@ n8n_dns_ready() {
 }
 
 n8n_service_ready() {
-  curl --fail --silent --show-error --max-time 3 "$N8N_HEALTH_URL" >/dev/null 2>&1 \
-    && n8n_dns_ready
+  n8n_dns_ready \
+    && curl --fail --silent --show-error --max-time 3 "$N8N_HEALTH_URL" >/dev/null 2>&1
 }
 
 n8n_mount_fingerprint() {
@@ -226,32 +228,52 @@ wait_for_target() {
 }
 
 wait_for_startup_readiness() {
-  local attempt service all_running started_at
+  local attempt started_at
+  CLOUDFLARED_STARTUP_STATE=waiting
+  N8N_STARTUP_STATE=waiting
   for attempt in $(seq 1 "$STARTUP_GRACE_ATTEMPTS"); do
-    all_running=1
-    for service in "${TARGET_SERVICES[@]}"; do
-      if ! container_running "$service"; then
-        all_running=0
-        log WAITING "service=$service container is still starting (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
-      fi
-    done
-    if [ "$all_running" -eq 1 ]; then
-      # A resolver match means cloudflared is still in ordinary tunnel startup;
-      # give its first registration a bounded window. A mismatch is already
-      # actionable stale DNS, so return and let assessment recover it.
-      if resolvers_match_host cloudflared; then
+    # A target's terminal state must not suppress the other target's evidence.
+    if [ "$CLOUDFLARED_STARTUP_STATE" = waiting ]; then
+      if ! container_running cloudflared; then
+        log WAITING "service=cloudflared container is still starting (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      elif ! resolvers_match_host cloudflared; then
+        CLOUDFLARED_STARTUP_STATE=stale
+      else
         started_at=$(cloudflared_started_at)
         if cloudflared_registered "$started_at"; then
-          return 0
+          CLOUDFLARED_STARTUP_STATE=ready
+        else
+          log WAITING "service=cloudflared awaiting initial tunnel registration (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
         fi
-        log WAITING "service=cloudflared awaiting initial tunnel registration (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
-      else
-        return 0
       fi
+    fi
+
+    if [ "$N8N_STARTUP_STATE" = waiting ]; then
+      if ! container_running n8n; then
+        log WAITING "service=n8n container is still starting (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      elif ! resolvers_match_host n8n; then
+        N8N_STARTUP_STATE=stale
+      elif n8n_service_ready; then
+        N8N_STARTUP_STATE=ready
+      else
+        log WAITING "service=n8n awaiting resolver, DNS, and health readiness (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      fi
+    fi
+
+    if [ "$CLOUDFLARED_STARTUP_STATE" != waiting ] \
+      && [ "$N8N_STARTUP_STATE" != waiting ]; then
+      return 0
     fi
     [ "$attempt" -lt "$STARTUP_GRACE_ATTEMPTS" ] && sleep "$STARTUP_GRACE_DELAY_SECONDS"
   done
-  return 1
+
+  if [ "$CLOUDFLARED_STARTUP_STATE" = waiting ]; then
+    CLOUDFLARED_STARTUP_STATE=timeout
+  fi
+  if [ "$N8N_STARTUP_STATE" = waiting ]; then
+    N8N_STARTUP_STATE=timeout
+  fi
+  return 0
 }
 
 run_guard() {
@@ -270,6 +292,16 @@ run_guard() {
   fi
 
   for service in "${TARGET_SERVICES[@]}"; do
+    if [ "$service" = cloudflared ] && [ "$CLOUDFLARED_STARTUP_STATE" = timeout ]; then
+      log FAILED 'service=cloudflared reason=cloudflared startup readiness grace expired; no recreation'
+      overall=1
+      continue
+    fi
+    if [ "$service" = n8n ] && [ "$N8N_STARTUP_STATE" = timeout ]; then
+      log FAILED 'service=n8n reason=n8n startup readiness grace expired without stale DNS proof; no recreation'
+      overall=1
+      continue
+    fi
     if assess_target "$service"; then
       log HEALTHY "service=$service"
       continue

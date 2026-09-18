@@ -24,6 +24,8 @@ OPERATOR_SOURCE=${BASH_SOURCE[0]}
 # PROD dependencies live outside both the release worktree and the human checkout.
 PYTHON=/home/ragdehl/projects/odyssey-prod-venv/bin/python
 DEPLOYED_COMMIT=$PROD_RUNTIME/deployed-commit
+BIND_ADDRESS_ATTEMPTS=30
+BIND_ADDRESS_DELAY_SECONDS=2
 
 fail() {
   echo "odyssey-prod: $*" >&2
@@ -145,6 +147,26 @@ assert_reboot_persistence() {
 health_once() {
   curl --fail --silent --show-error --max-time 5 \
     "http://$PROD_HOST:$PROD_PORT/healthz" >/dev/null
+}
+
+bind_address_available() {
+  ip -4 -o addr show \
+    | awk -v expected="$PROD_HOST" '{ split($4, address, "/"); if (address[1] == expected) found = 1 } END { exit !found }'
+}
+
+wait_for_bind_address() {
+  local attempt
+  for attempt in $(seq 1 "$BIND_ADDRESS_ATTEMPTS"); do
+    if bind_address_available; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$BIND_ADDRESS_ATTEMPTS" ]; then
+      printf 'odyssey-prod: waiting for production bind address %s (attempt=%s/%s)\n' \
+        "$PROD_HOST" "$attempt" "$BIND_ADDRESS_ATTEMPTS" >&2
+      sleep "$BIND_ADDRESS_DELAY_SECONDS"
+    fi
+  done
+  fail "production bind address $PROD_HOST did not become available within bounded startup wait"
 }
 
 wait_health() {
@@ -298,8 +320,9 @@ main() {
     prepare) prepare "$@" ;;
     deploy) deploy "$@" ;;
     restart) [ "$#" -eq 0 ] || fail "restart does not accept arguments"; restart ;;
+    wait-for-bind-address) [ "$#" -eq 0 ] || fail "wait-for-bind-address does not accept arguments"; wait_for_bind_address ;;
     runtime) [ "$#" -eq 0 ] || fail "runtime does not accept arguments"; runtime ;;
-    *) fail "usage: odyssey-prod {status|prepare FULL_SHA|deploy FULL_SHA|restart}" ;;
+    *) fail "usage: odyssey-prod {status|prepare FULL_SHA|deploy FULL_SHA|restart|wait-for-bind-address}" ;;
   esac
 }
 

@@ -17,6 +17,7 @@ PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/data/odyssey
+ExecStartPre=/home/ragdehl/projects/odyssey-prod-release/scripts/odyssey-prod wait-for-bind-address
 Environment=ODYSSEY_VAULT_ROOT=/data/odyssey/vault
 Environment=ODYSSEY_STATE_ROOT=/data/odyssey/state
 Environment=ODYSSEY_PENDING_ROOT=/data/odyssey/state/pending
