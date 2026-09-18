@@ -107,6 +107,7 @@ def test_boot_unit_orders_after_network_and_docker_without_restart_loop() -> Non
     assert "After=network-online.target docker.service" in source
     assert "Requires=docker.service" in source
     assert "User=ragdehl" in source
+    assert "ExecStart=/home/ragdehl/.local/libexec/odyssey-container-dns-reconcile" in source
     assert "Restart=no" in source
     assert "TimeoutStartSec=180" in source
     assert "odyssey-container-dns-reconcile" in source
