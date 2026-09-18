@@ -1,0 +1,18 @@
+[Unit]
+Description=Odyssey production container DNS reconciliation
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ragdehl
+WorkingDirectory=/home/ragdehl/projects/odyssey
+ExecStart=/home/ragdehl/projects/odyssey/scripts/odyssey-container-dns-reconcile
+TimeoutStartSec=180
+Restart=no
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
