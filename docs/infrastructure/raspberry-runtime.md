@@ -70,6 +70,31 @@ checkout's `.venv` cannot affect PROD. The stable rollback operator is installed
 release at `/home/ragdehl/.local/libexec/odyssey-prod` and is promoted only after candidate health
 verification. The release worktree is not a vault or data store.
 
+## Hot network handoff reconciliation
+
+A live NetworkManager handoff is a known trigger for the production container DNS failure class.
+Wi-Fi, DHCP, or resolver changes can update the host resolver while Docker containers retain the
+external resolver captured when they were created. On 2026-09-18, the host resolver changed from
+`10.235.35.170` to `192.168.1.254`; the existing bounded guard successfully recovered both
+production `cloudflared` and n8n in one invocation.
+
+The tracked
+`deploy/NetworkManager/dispatcher.d/90-odyssey-container-dns-reconcile` hook is the automatic
+trigger design. NetworkManager invokes it for connection-up, DHCP, resolver, connectivity, and
+VPN-up events; it asynchronously submits
+`systemctl start --no-block odyssey-container-dns-reconcile.service`. The dispatcher performs no
+Docker, DNS, or recovery work itself, does not wait for the guard, does not identify a Wi-Fi SSID
+or hardcode a resolver, and supports future wired handoffs. Repeated events are harmless because
+they only request the same fixed-scope oneshot guard; the guard remains the sole authority and
+retains host-DNS validation, production-only scope, one-attempt-per-target recovery, and fail-closed
+behavior. Irrelevant NetworkManager events do nothing.
+
+Installation and activation of the dispatcher hook on the Raspberry are separate live operations
+requiring human approval after the repository change is merged. The guard's systemd execution bound
+is 180 seconds; any caller or operational wrapper must preserve that bound and must not impose a
+shorter timeout such as 30 seconds. Partial output or an intermediate observation before the guard
+completes is not terminal recovery evidence; verify the per-target terminal result and post-state.
+
 Post-merge Raspberry migration (separate controlled operation; not performed by this repository
 change):
 
