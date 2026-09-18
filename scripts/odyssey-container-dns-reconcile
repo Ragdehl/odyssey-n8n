@@ -10,6 +10,8 @@ HOST_DNS_PROBES=(cloudflare.com api.openai.com)
 N8N_HEALTH_URL=http://127.0.0.1:18780/healthz
 MAX_READINESS_ATTEMPTS=30
 READINESS_DELAY_SECONDS=2
+STARTUP_GRACE_ATTEMPTS=30
+STARTUP_GRACE_DELAY_SECONDS=2
 
 ASSESS_HEALTHY=0
 ASSESS_STALE=10
@@ -74,6 +76,11 @@ container_identity_valid() {
   [ "$service_label" = "$service" ] \
     && [ "$project_label" = "$COMPOSE_PROJECT" ] \
     && [ "$compose_label" = "$COMPOSE_FILE" ]
+}
+
+container_running() {
+  local service=$1
+  [ "$(docker_cmd inspect --format '{{.State.Status}}' "$service" 2>/dev/null)" = running ]
 }
 
 validate_scope() {
@@ -200,6 +207,35 @@ wait_for_target() {
   return 1
 }
 
+wait_for_startup_readiness() {
+  local attempt service all_running started_at
+  for attempt in $(seq 1 "$STARTUP_GRACE_ATTEMPTS"); do
+    all_running=1
+    for service in "${TARGET_SERVICES[@]}"; do
+      if ! container_running "$service"; then
+        all_running=0
+        log WAITING "service=$service container is still starting (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      fi
+    done
+    if [ "$all_running" -eq 1 ]; then
+      # A resolver match means cloudflared is still in ordinary tunnel startup;
+      # give its first registration a bounded window. A mismatch is already
+      # actionable stale DNS, so return and let assessment recover it.
+      if resolvers_match_host cloudflared; then
+        started_at=$(cloudflared_started_at)
+        if cloudflared_registered "$started_at"; then
+          return 0
+        fi
+        log WAITING "service=cloudflared awaiting initial tunnel registration (attempt=$attempt/$STARTUP_GRACE_ATTEMPTS)"
+      else
+        return 0
+      fi
+    fi
+    [ "$attempt" -lt "$STARTUP_GRACE_ATTEMPTS" ] && sleep "$STARTUP_GRACE_DELAY_SECONDS"
+  done
+  return 1
+}
+
 run_guard() {
   local service code overall=0 n8n_mount_before
   declare -A recover=()
@@ -208,6 +244,10 @@ run_guard() {
   validate_scope || return 1
   if ! host_dns_healthy; then
     log FAILED 'host DNS is unhealthy; no service will be recreated'
+    return 1
+  fi
+  if ! wait_for_startup_readiness; then
+    log FAILED 'expected production containers did not reach bounded startup readiness; no service will be recreated'
     return 1
   fi
 

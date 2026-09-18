@@ -187,8 +187,11 @@ The repository-owned prevention is the fixed-scope
 `n8n` independently, and performs at most one `--no-deps --force-recreate --pull never` recovery
 per affected service. It performs no provider/model request: n8n readiness uses a DNS lookup and
 the private `/healthz`; cloudflared readiness uses its resolver and bounded tunnel-registration
-evidence. Healthy services are untouched; failed recovery is logged visibly and stops without
-escalation. The guard is independent of `odyssey-prod` and cannot touch DEV, Odyssey runtime,
+evidence. Before assessment it also applies a bounded startup grace: both expected containers
+must be running, and a resolver-matching cloudflared container may finish its initial tunnel
+registration. A container still being restored by Docker therefore receives no premature
+recreation decision. Healthy services are untouched; failed recovery is logged visibly and stops
+without escalation. The guard is independent of `odyssey-prod` and cannot touch DEV, Odyssey runtime,
 vault/state/indexes, workflows, credentials, Git deployment state, or Cloudflare configuration.
 
 This guard is repository code only until a separate human-authorized production installation and

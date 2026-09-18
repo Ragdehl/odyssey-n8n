@@ -33,6 +33,7 @@ def guard_harness(
     return f"""
 validate_scope() {{ :; }}
 host_dns_healthy() {{ {host_result}; }}
+wait_for_startup_readiness() {{ :; }}
 n8n_mount_fingerprint() {{ printf 'volume|n8n_data|/home/node/.n8n|true\\n'; }}
 assess_target() {{
   case "$1" in
@@ -83,11 +84,55 @@ def test_unhealthy_host_dns_recreates_nothing() -> None:
     assert "host DNS is unhealthy" in result.stderr
 
 
+def test_container_not_running_during_startup_grace_waits_without_recreation() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+wait_for_startup_readiness() { printf 'startup-grace\n'; return 1; }
+assess_target() { printf 'unexpected-assessment:%s\n' "$1"; return 10; }
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+run_guard
+"""
+    )
+    assert result.returncode != 0
+    assert result.stdout == "startup-grace\n"
+    assert "unexpected-assessment" not in result.stdout
+    assert "RECOVERING" not in result.stderr
+    assert "bounded startup readiness" in result.stderr
+
+
+def test_cloudflared_registration_appears_during_startup_grace() -> None:
+    result = run_bash(
+        """
+validate_scope() { :; }
+host_dns_healthy() { return 0; }
+container_running() { return 0; }
+resolvers_match_host() { return 0; }
+cloudflared_started_at() { printf 'started\n'; }
+registration_checks=0
+cloudflared_registered() {
+  registration_checks=$((registration_checks + 1))
+  [ "$registration_checks" -ge 2 ]
+}
+sleep() { :; }
+assess_target() { REASON='healthy test state'; return 0; }
+compose_recreate() { printf 'recreate:%s\n' "$1"; }
+run_guard
+"""
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert "recreate:" not in result.stdout
+    assert "HEALTHY" in result.stderr
+
+
 def test_failed_recovery_has_no_second_attempt_or_escalation() -> None:
     result = run_bash(
         """
 validate_scope() { :; }
 host_dns_healthy() { return 0; }
+wait_for_startup_readiness() { :; }
 n8n_mount_fingerprint() { printf 'volume|n8n_data|/home/node/.n8n|true\\n'; }
 assess_target() { REASON='stale test state'; [ "$1" = cloudflared ] && return 10 || return 0; }
 compose_recreate() { printf 'recreate:%s\\n' "$1"; return 0; }
