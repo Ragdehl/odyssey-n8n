@@ -35,6 +35,7 @@ curl() {{ return 99; }}
 getent() {{ return 99; }}
 bounded_command() {{ shift; "$@"; }}
 host_resolvers() {{ printf '192.168.1.254\\n'; }}
+RESOLVER_STABILIZATION_DELAY_SECONDS=0
 {script}
 """,
         ],
@@ -68,6 +69,23 @@ assess_target() {{
 compose_recreate() {{ printf 'recreate:%s\\n' "$1"; {recovery_result}; }}
 wait_for_target() {{ {recovery_result}; }}
 run_guard
+"""
+
+
+def resolver_stabilization_harness(container_resolvers: str) -> str:
+    """Return real assessment fixtures around synthetic host resolver observations."""
+    return f"""
+validate_scope() {{ :; }}
+getent() {{ return 0; }}
+wait_for_startup_readiness() {{ :; }}
+container_external_resolvers() {{ printf '%b\\n' {shlex.quote(container_resolvers)}; }}
+cloudflared_started_at() {{ printf 'fixture-start\\n'; }}
+cloudflared_logs() {{ printf 'Registered tunnel connection\\n'; }}
+n8n_dns_ready() {{ return 0; }}
+curl() {{ return 0; }}
+n8n_mount_fingerprint() {{ printf 'fixture-mount\\n'; }}
+compose_recreate() {{ printf 'recreate:%s\\n' "$1"; }}
+wait_for_target() {{ return 0; }}
 """
 
 
@@ -133,7 +151,155 @@ def test_unhealthy_host_dns_recreates_nothing() -> None:
     )
     assert result.returncode != 0
     assert result.stdout == ""
-    assert "host DNS is unhealthy" in result.stderr
+    assert "host resolver evidence did not stabilize with healthy DNS" in result.stderr
+
+
+def test_already_stable_resolvers_follow_normal_healthy_path() -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.53")
+        + """
+host_resolvers() { printf '192.0.2.53\n'; }
+run_guard
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "recreate:" not in result.stdout
+    assert "host_resolvers_stable samples=3" in result.stderr
+    assert result.stderr.count("[HEALTHY]") == 2
+
+
+def test_real_stable_resolver_change_can_recover_stale_targets() -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.1")
+        + """
+host_resolvers() { printf '192.0.2.53\n'; }
+run_guard
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["recreate:cloudflared", "recreate:n8n"]
+    assert result.stderr.count("[RECOVERED]") == 2
+
+
+def test_resolver_change_after_assessment_blocks_every_recreation() -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.1")
+        + """
+phase=stable
+host_resolvers() {
+  if [ "$phase" = stable ]; then printf '192.0.2.53\n'; else printf '192.0.2.54\n'; fi
+}
+assess_target() { REASON='stale test state'; phase=changed; return 10; }
+run_guard
+"""
+    )
+    assert result.returncode == 1
+    assert "recreate:" not in result.stdout
+    assert result.stderr.count("stable host resolver evidence changed") == 2
+
+
+def test_transient_a_b_c_waits_for_c_and_never_recovers_from_b() -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.3")
+        + """
+RESOLVER_STABILIZATION_DELAY_SECONDS=1
+host_resolvers() {
+  case "$SECONDS" in
+    0) printf '192.0.2.1\n' ;;
+    1) printf '192.0.2.2\n' ;;
+    *) printf '192.0.2.3\n' ;;
+  esac
+}
+sleep() { SECONDS=$((SECONDS + $1)); }
+SECONDS=0
+run_guard
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "recreate:" not in result.stdout
+    assert "observed=192.0.2.2" in result.stderr
+    assert "host_resolvers_stable samples=3 observed=192.0.2.3" in result.stderr
+
+
+def test_oscillating_resolvers_fail_closed_without_recreation() -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.1")
+        + """
+RESOLVER_STABILIZATION_DELAY_SECONDS=1
+RESOLVER_STABILIZATION_ATTEMPTS=6
+host_resolvers() {
+  if [ $((SECONDS % 2)) -eq 0 ]; then printf '192.0.2.1\n'; else printf '192.0.2.2\n'; fi
+}
+sleep() { SECONDS=$((SECONDS + $1)); }
+SECONDS=0
+run_guard
+"""
+    )
+    assert result.returncode == 1
+    assert "recreate:" not in result.stdout
+    assert "did not stabilize" in result.stderr
+
+
+def test_ipv4_then_ipv6_waits_for_complete_stable_set() -> None:
+    complete = "192.0.2.53\\n2001:db8::53"
+    result = run_bash(
+        resolver_stabilization_harness(complete)
+        + """
+RESOLVER_STABILIZATION_DELAY_SECONDS=1
+host_resolvers() {
+  if [ "$SECONDS" -eq 0 ]; then
+    printf '192.0.2.53\n'
+  else
+    printf '192.0.2.53\n2001:db8::53\n'
+  fi
+}
+sleep() { SECONDS=$((SECONDS + $1)); }
+SECONDS=0
+run_guard
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert "recreate:" not in result.stdout
+    assert "host_resolvers_stable samples=3" in result.stderr
+    assert "2001:db8::53" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "resolver_fixture",
+    ["host_resolvers() { return 1; }", "host_resolvers() { printf ''; }"],
+)
+def test_malformed_or_empty_host_resolvers_fail_closed(
+    resolver_fixture: str,
+) -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.53")
+        + resolver_fixture
+        + """
+RESOLVER_STABILIZATION_ATTEMPTS=3
+run_guard
+"""
+    )
+    assert result.returncode == 1
+    assert "recreate:" not in result.stdout
+    assert "observed=unavailable" in result.stderr
+
+
+def test_stabilization_timeout_fails_closed_with_deterministic_diagnostic() -> None:
+    result = run_bash(
+        resolver_stabilization_harness("192.0.2.1")
+        + """
+RESOLVER_STABILIZATION_DELAY_SECONDS=1
+RESOLVER_STABILIZATION_ATTEMPTS=4
+host_resolvers() { printf '192.0.2.%s\n' "$((SECONDS + 1))"; }
+sleep() { SECONDS=$((SECONDS + $1)); }
+SECONDS=0
+run_guard
+"""
+    )
+    assert result.returncode == 1
+    assert "recreate:" not in result.stdout
+    assert "attempt=4/4" in result.stderr
+    assert "host resolver evidence did not stabilize with healthy DNS" in result.stderr
 
 
 def test_container_not_running_during_startup_grace_waits_without_recreation() -> None:
@@ -664,6 +830,10 @@ bounded_command 45 fixture-command
 SECONDS=3
 if bounded_command 5 fixture-command; then exit 1; fi
 [ "$GUARD_WINDOW_SECONDS" -eq 165 ]
+[ "$RESOLVER_STABILIZATION_SAMPLES" -eq 3 ]
+[ "$RESOLVER_STABILIZATION_ATTEMPTS" -eq 8 ]
+[ "$RESOLVER_STABILIZATION_DELAY_SECONDS" -eq 2 ]
+[ $(((RESOLVER_STABILIZATION_ATTEMPTS - 1) * RESOLVER_STABILIZATION_DELAY_SECONDS)) -eq 14 ]
 """,
         ],
         capture_output=True,

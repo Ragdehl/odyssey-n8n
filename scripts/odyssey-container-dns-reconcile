@@ -11,6 +11,10 @@ N8N_HEALTH_URL=http://127.0.0.1:18780/healthz
 # Leave 15 seconds for terminal evidence/systemd cleanup within TimeoutStartSec=180.
 GUARD_WINDOW_SECONDS=165
 GUARD_DEADLINE=0
+RESOLVER_STABILIZATION_SAMPLES=3
+RESOLVER_STABILIZATION_ATTEMPTS=8
+RESOLVER_STABILIZATION_DELAY_SECONDS=2
+STABLE_HOST_RESOLVERS=''
 READINESS_DELAY_SECONDS=2
 STARTUP_GRACE_ATTEMPTS=30
 STARTUP_GRACE_DELAY_SECONDS=2
@@ -59,12 +63,68 @@ host_resolvers() {
 }
 
 host_dns_healthy() {
-  local probe expected
+  local probe expected after
   expected=$(host_resolvers) || return 1
   [ -n "$expected" ] || return 1
   for probe in "${HOST_DNS_PROBES[@]}"; do
     bounded_command 5 getent ahosts "$probe" >/dev/null 2>&1 || return 1
   done
+  after=$(host_resolvers) || return 1
+  [ "$expected" = "$after" ]
+}
+
+stable_host_dns_healthy() {
+  local current
+  [ -n "$STABLE_HOST_RESOLVERS" ] || return 1
+  current=$(host_resolvers) || return 1
+  [ "$current" = "$STABLE_HOST_RESOLVERS" ] || return 1
+  host_dns_healthy || return 1
+  current=$(host_resolvers) || return 1
+  [ "$current" = "$STABLE_HOST_RESOLVERS" ]
+}
+
+stabilize_host_resolvers() {
+  local attempt observed previous='' consecutive=0
+  STABLE_HOST_RESOLVERS=''
+  for attempt in $(seq 1 "$RESOLVER_STABILIZATION_ATTEMPTS"); do
+    [ "$SECONDS" -lt "$GUARD_DEADLINE" ] || break
+    if observed=$(host_resolvers) && [ -n "$observed" ]; then
+      if [ "$observed" = "$previous" ]; then
+        consecutive=$((consecutive + 1))
+      else
+        previous=$observed
+        consecutive=1
+      fi
+      log WAITING "host_resolvers_stabilizing attempt=$attempt/$RESOLVER_STABILIZATION_ATTEMPTS consecutive=$consecutive/$RESOLVER_STABILIZATION_SAMPLES observed=$(printf '%q' "$observed")"
+      if [ "$consecutive" -ge "$RESOLVER_STABILIZATION_SAMPLES" ]; then
+        STABLE_HOST_RESOLVERS=$observed
+        if stable_host_dns_healthy; then
+          log DIAGNOSTIC "host_resolvers_stable samples=$consecutive observed=$(printf '%q' "$STABLE_HOST_RESOLVERS") dns_probes=PASS"
+          return 0
+        fi
+        log WAITING "host_resolvers_stable_candidate_rejected observed=$(printf '%q' "$observed") dns_probes_or_recheck=FAIL"
+        STABLE_HOST_RESOLVERS=''
+        previous=''
+        consecutive=0
+      fi
+    else
+      log WAITING "host_resolvers_stabilizing attempt=$attempt/$RESOLVER_STABILIZATION_ATTEMPTS consecutive=0/$RESOLVER_STABILIZATION_SAMPLES observed=unavailable"
+      previous=''
+      consecutive=0
+    fi
+    [ "$attempt" -lt "$RESOLVER_STABILIZATION_ATTEMPTS" ] \
+      && sleep "$RESOLVER_STABILIZATION_DELAY_SECONDS"
+  done
+  STABLE_HOST_RESOLVERS=''
+  return 1
+}
+
+expected_host_resolvers() {
+  if [ -n "$STABLE_HOST_RESOLVERS" ]; then
+    printf '%s\n' "$STABLE_HOST_RESOLVERS"
+  else
+    host_resolvers
+  fi
 }
 
 container_external_resolvers() {
@@ -90,7 +150,7 @@ print("\n".join(sorted(set(addresses))))
 
 resolvers_match_host() {
   local service=$1 expected actual
-  expected=$(host_resolvers) || return 2
+  expected=$(expected_host_resolvers) || return 2
   actual=$(container_external_resolvers "$service") || return 2
   [ -n "$expected" ] && [ -n "$actual" ] && [ "$expected" = "$actual" ]
 }
@@ -215,7 +275,7 @@ cloudflared_service_ready() {
 target_ready() {
   local service=$1 expected observed match=FAIL dns=FAIL health=000 ordering started_at
   local resolver_rc=0 dns_rc=0 health_rc=0
-  expected=$(host_resolvers) || expected=''
+  expected=$(expected_host_resolvers) || expected=''
   observed=$(container_external_resolvers "$service") || { resolver_rc=$?; observed=''; }
   if [ -n "$expected" ] && [ -n "$observed" ] && [ "$expected" = "$observed" ]; then match=PASS; fi
   READINESS_EVIDENCE="expected=$(printf '%q' "$expected") observed=$(printf '%q' "$observed") resolver_match=$match resolver_read_rc=$resolver_rc"
@@ -255,7 +315,7 @@ assess_target() {
     REASON='container resolver evidence unavailable or unparseable; no stale DNS proof'
     return "$ASSESS_FAILED"
   fi
-  log DIAGNOSTIC "service=$service assessment_resolver_match=$resolver_code expected=$(printf '%q' "$(host_resolvers)") observed=$(printf '%q' "$(container_external_resolvers "$service")")"
+  log DIAGNOSTIC "service=$service assessment_resolver_match=$resolver_code expected=$(printf '%q' "$(expected_host_resolvers)") observed=$(printf '%q' "$(container_external_resolvers "$service")")"
   case "$service" in
     n8n)
       if [ "$resolver_code" -ne 0 ]; then
@@ -377,8 +437,8 @@ run_guard() {
   GUARD_DEADLINE=$((SECONDS + GUARD_WINDOW_SECONDS))
 
   validate_scope || return 1
-  if ! host_dns_healthy; then
-    log FAILED 'host DNS is unhealthy; no service will be recreated'
+  if ! stabilize_host_resolvers; then
+    log FAILED 'host resolver evidence did not stabilize with healthy DNS; no service will be recreated'
     return 1
   fi
   if ! wait_for_startup_readiness; then
@@ -430,8 +490,8 @@ run_guard() {
         continue
       fi
     fi
-    if ! host_dns_healthy; then
-      log FAILED "service=$service host DNS unhealthy before recreation; no recreation"
+    if ! stable_host_dns_healthy; then
+      log FAILED "service=$service stable host resolver evidence changed or DNS is unhealthy before recreation; no recreation"
       overall=1
       continue
     fi
