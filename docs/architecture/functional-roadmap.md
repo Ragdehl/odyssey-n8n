@@ -26,11 +26,12 @@ Canonical/historical detail remains in the phase documents under this directory 
 
 ## Current functional phase — UI-2 read-only Notes
 
-UI-0 durable main conversation/continuity is merged and human-verified on the isolated DEV/mobile
-path. Its explicit production promotion remains a separate operational adoption gate; merging `main`
-does not itself deploy PROD. The next functional phase is **UI-2 read-only Notes**: expose the same
-canonical Markdown through a simple browse/search/read surface without creating a second knowledge
-authority. See [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
+UI-0 durable main conversation/continuity is merged and human-verified in production. The 2026-09-19
+checkpoint confirmed the same durable turns survive a full mobile page reload on the authenticated
+`odyssey.ragdehl.com` path, and the new `/api/conversation` plus existing `/api/environment.js`
+alternate-host paths are intercepted by Cloudflare Access before n8n. The next functional phase is
+**UI-2 read-only Notes**: expose the same canonical Markdown through a simple browse/search/read
+surface without creating a second knowledge authority. See [UI-0 durable main conversation](ui-0-durable-conversations.md) and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 
@@ -70,8 +71,8 @@ Phase 21 production/development isolation                    ✅ complete
 23D  reboot-safe production operator + provenance                ✅ complete
 23E  read-only human-authenticated production SELF E2E            ✅ complete
 UI-1 request detail / advanced inspector                         ✅ complete in PROD
-UI-0 durable main conversation/continuity                        ✅ merged + DEV/mobile verified
-UI-0 explicit production promotion                              ⬜ operational gate
+UI-0 durable main conversation/continuity                        ✅ complete in PROD
+UI-0 explicit production promotion                              ✅ complete
 UI-2 read-only Notes                                              ➡️ next functional feature
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
@@ -126,7 +127,7 @@ Complete and merged in PR #103. The protected Cloudflare boundary, disposable mo
       private production runtime health/listening verified   ✅
 ```
 
-20.3B uses the dedicated `odyssey.ragdehl.com` Access application with the approved user identity, tunnel-side Access JWT validation, and a separate deny-by-default Access application covering only the five Odyssey paths on `n8n.ragdehl.com`; unrelated n8n root/admin behavior remains unchanged. The Cloudflare/certificate/Docker-DNS recovery details belong to the Phase 20.3 deployment document rather than this roadmap.
+20.3B originally established the dedicated `odyssey.ragdehl.com` Access application with the approved user identity, tunnel-side Access JWT validation, and a separate deny-by-default Access application covering the then-current five Odyssey paths on `n8n.ragdehl.com`; unrelated n8n root/admin behavior remained unchanged. UI-0 later expanded that alternate-host Access set to seven by adding `/api/environment.js` and `/api/conversation`, with unauthenticated redirect evidence for both. The Cloudflare/certificate/Docker-DNS recovery details belong to the Phase 20.3 deployment document rather than this roadmap.
 
 20.3C used an isolated disposable vault/runtime/pending root before any real-vault product test. The protected mobile E2E has successful WRITE, READ, and explicit clarification evidence, plus request-correlated Markdown/Git evidence. During clarification testing, a deployment-drift bug was found: the active n8n Odyssey product workflow had fallen behind the checked-in `workflows/odyssey-online.ts` contract. The existing active workflow was reconciled and republished without creating a second active endpoint, and the final protected browser clarification passed. At the 20.3C close the disposable runtime and test state were stopped/removed and port `8765` was free; 20.3D subsequently activated the separate real production runtime after the authorized vault bootstrap.
 
@@ -156,7 +157,7 @@ user self-identity binding to ordinary person note    ✅ complete
 UI-1 request feedback / advanced inspector            ✅ complete in PROD
         |
         v
-UI-0 durable main conversation / continuity           ✅ merged + DEV/mobile verified
+UI-0 durable main conversation / continuity           ✅ complete in PROD
         |
         v
 UI-2 read-only Notes                                   ➡️ next
@@ -192,12 +193,12 @@ Once real use depends on Odyssey, maintain a stable production deployment and a 
 ```text
 21A architecture/isolation decision                         ✅ complete
 21B transient isolated runtime proof                        ✅ complete
-21C persistent isolated DEV runtime/operator workflow       ✅ complete
+21C persistent DEV runtime/operator workflow       ✅ complete
 21D on-demand DEV n8n + fixed protected browser endpoint    ✅ complete
 Phase 21 production/development isolation                   ✅ complete
 ```
 
-The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
+The DEV environment has fixed source/data/runtime identities and an on-demand separate DEV n8n
 database/container. It is not a permanent Git branch. The fixed protected endpoint and human
 browser checkpoint are complete; ordinary feature work should continue through isolated DEV before
 explicit human-gated production promotion.
