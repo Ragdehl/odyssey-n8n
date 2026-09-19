@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -28,7 +29,12 @@ from odyssey_core.request_planning import (  # noqa: E402
     render_request_planner_prompt,
 )
 
-OUTPUT = ROOT / "benchmarks" / ".live-results" / "ui2-notes-presentation-v1.jsonl"
+OUTPUT = Path(
+    os.environ.get(
+        "ODYSSEY_UI2_LIVE_OUTPUT",
+        str(ROOT / "benchmarks" / ".live-results" / "ui2-notes-presentation-v1.jsonl"),
+    )
+)
 BUDGET_USD = 0.15
 CONTEXT = {"date": "2026-09-19", "time": "10:00", "timezone": "Europe/Paris"}
 RATES = {"gpt-5.6-luna": (0.2, 1.2), "gpt-5.6-sol": (4.0, 20.0)}
