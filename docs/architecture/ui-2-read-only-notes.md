@@ -1,6 +1,8 @@
 # UI-2 — read-only Notes product contract
 
-Status: **product behavior defined; architecture challenge complete — ready for implementation**.
+Status: **approved implementation active in Draft PR #124; local deterministic evidence is green.
+Sonar coverage, the cost-bounded live-planner gate, isolated DEV evidence, and human mobile validation
+remain required. Not complete in PROD.**
 
 ## Objective
 
