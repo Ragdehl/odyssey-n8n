@@ -8,7 +8,9 @@ COMPOSE_PROJECT=n8n
 TARGET_SERVICES=(cloudflared n8n)
 HOST_DNS_PROBES=(cloudflare.com api.openai.com)
 N8N_HEALTH_URL=http://127.0.0.1:18780/healthz
-MAX_READINESS_ATTEMPTS=30
+# Leave 15 seconds for terminal evidence/systemd cleanup within TimeoutStartSec=180.
+GUARD_WINDOW_SECONDS=165
+GUARD_DEADLINE=0
 READINESS_DELAY_SECONDS=2
 STARTUP_GRACE_ATTEMPTS=30
 STARTUP_GRACE_DELAY_SECONDS=2
@@ -25,7 +27,18 @@ log() {
 }
 
 docker_cmd() {
-  docker "$@"
+  bounded_command 5 docker "$@"
+}
+
+bounded_command() {
+  local limit=$1 remaining
+  shift
+  if [ "$GUARD_DEADLINE" -gt 0 ]; then
+    remaining=$((GUARD_DEADLINE - SECONDS))
+    [ "$remaining" -gt 0 ] || return 124
+    [ "$limit" -le "$remaining" ] || limit=$remaining
+  fi
+  timeout --signal=TERM --kill-after=1 "$limit" "$@"
 }
 
 compose_cmd() {
@@ -42,14 +55,15 @@ is_target_service() {
 
 host_resolvers() {
   awk '$1 == "nameserver" && $2 !~ /^127\./ && $2 != "::1" { print $2 }' /etc/resolv.conf \
-    | sort -u
+    | python3 -c 'import ipaddress, sys; print("\n".join(sorted({str(ipaddress.ip_address(line.strip())) for line in sys.stdin})))'
 }
 
 host_dns_healthy() {
-  local probe
-  [ -n "$(host_resolvers)" ] || return 1
+  local probe expected
+  expected=$(host_resolvers) || return 1
+  [ -n "$expected" ] || return 1
   for probe in "${HOST_DNS_PROBES[@]}"; do
-    getent ahosts "$probe" >/dev/null 2>&1 || return 1
+    bounded_command 5 getent ahosts "$probe" >/dev/null 2>&1 || return 1
   done
 }
 
@@ -57,24 +71,35 @@ container_external_resolvers() {
   local service=$1
   docker_cmd cp "$service:/etc/resolv.conf" - 2>/dev/null \
     | tar -xOf - 2>/dev/null \
-    | sed -n -E 's/^# ExtServers: \[(.*)\]$/\1/p' \
-    | tr ',' '\n' \
-    | sed -n -E 's/^[[:space:]]*host\((.*)\)[[:space:]]*$/\1/p' \
-    | sort -u
+    | python3 -c '
+import ipaddress, re, sys
+text = sys.stdin.read()
+match = re.search(r"^# ExtServers: \[(.*)\]$", text, re.M)
+if not match:
+    raise SystemExit(1)
+tokens = re.split(r"[,\s]+", match[1].strip())
+addresses = []
+for token in tokens:
+    item = re.fullmatch(r"host\(([^()]+)\)", token)
+    if not item:
+        raise SystemExit(1)
+    addresses.append(str(ipaddress.ip_address(item[1])))
+print("\n".join(sorted(set(addresses))))
+'
 }
 
 resolvers_match_host() {
   local service=$1 expected actual
-  expected=$(host_resolvers)
-  actual=$(container_external_resolvers "$service")
+  expected=$(host_resolvers) || return 2
+  actual=$(container_external_resolvers "$service") || return 2
   [ -n "$expected" ] && [ -n "$actual" ] && [ "$expected" = "$actual" ]
 }
 
 container_identity_valid() {
   local service=$1 service_label project_label compose_label
-  service_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$service")
-  project_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$service")
-  compose_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$service")
+  service_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$service") || return 1
+  project_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$service") || return 1
+  compose_label=$(docker_cmd inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$service") || return 1
   [ "$service_label" = "$service" ] \
     && [ "$project_label" = "$COMPOSE_PROJECT" ] \
     && [ "$compose_label" = "$COMPOSE_FILE" ]
@@ -87,7 +112,10 @@ container_running() {
 
 validate_scope() {
   local services service
-  services=$(compose_cmd config --services | sort)
+  services=$(compose_cmd config --services | sort) || {
+    log FAILED 'compose identity unavailable; no recovery'
+    return 1
+  }
   [ "$services" = $'cloudflared\nn8n' ] || {
     log FAILED "compose identity mismatch services=$(printf '%q' "$services")"
     return 1
@@ -112,9 +140,34 @@ n8n_service_ready() {
 }
 
 n8n_mount_fingerprint() {
-  docker_cmd inspect --format \
-    '{{range .Mounts}}{{printf "%s|%s|%s|%t\\n" .Type .Name .Destination .RW}}{{end}}' n8n \
-    | sort
+  # Include bind sources, volume identity, access and propagation, not environment.
+  # JSON escaping preserves unusual path characters; one actual line per mount.
+  docker_cmd inspect --format '{{json .Mounts}}' n8n | python3 -c '
+import json, sys
+mounts = json.load(sys.stdin)
+if not isinstance(mounts, list) or not mounts:
+    raise SystemExit("missing mount evidence")
+normalized = []
+for mount in mounts:
+    for required in ("Type", "Source", "Destination", "RW"):
+        if required not in mount:
+            raise SystemExit("incomplete mount evidence")
+    for optional in ("Name", "Driver", "Mode", "Propagation"):
+        mount.setdefault(optional, "")
+    mount["Mode"] = ",".join(sorted(filter(None, mount["Mode"].split(","))))
+    normalized.append(json.dumps(mount, sort_keys=True, separators=(",", ":")))
+print("\n".join(sorted(normalized)))
+'
+}
+
+mount_diagnostics() {
+  local before=$1 after=$2 line count=0
+  # At most 16 changed normalized mount records; never dump inspect/env/config.
+  while IFS= read -r line; do
+    count=$((count + 1))
+    [ "$count" -le 16 ] || { log DIAGNOSTIC 'service=n8n mount_diff=truncated'; break; }
+    log DIAGNOSTIC "service=n8n mount_diff=$(printf '%q' "${line:0:1024}")"
+  done < <(diff --label before --label after -u <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true)
 }
 
 cloudflared_started_at() {
@@ -129,7 +182,7 @@ cloudflared_logs() {
 cloudflared_dns_error() {
   local started_at=$1
   cloudflared_logs "$started_at" \
-    | grep -Eqi '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout'
+    | grep -Ei '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout' >/dev/null
 }
 
 cloudflared_registered() {
@@ -138,16 +191,18 @@ cloudflared_registered() {
 }
 
 cloudflared_registered_after_last_dns_error() {
-  local started_at=$1 line saw_dns_error=0 registered_after=0
-  while IFS= read -r line; do
-    if grep -Eqi '127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh DNS|lookup .*i/o timeout' <<<"$line"; then
-      saw_dns_error=1
-      registered_after=0
-    elif grep -q 'Registered tunnel connection' <<<"$line"; then
-      registered_after=1
-    fi
-  done < <(cloudflared_logs "$started_at")
-  [ "$registered_after" -eq 1 ]
+  local ordering
+  ordering=$(cloudflared_event_order "$1") || return 1
+  [[ "$ordering" == *'registration_ready=PASS' ]]
+}
+
+cloudflared_event_order() {
+  cloudflared_logs "$1" | awk '
+    { lower=tolower($0) }
+    lower ~ /127\.0\.0\.11:53.*server misbehaving|lookup .*server misbehaving|failed to refresh dns|lookup .*i\/o timeout/ { dns=NR }
+    /Registered tunnel connection/ { registered=NR }
+    END { printf "last_dns_error=%d last_registration=%d registration_ready=%s\n", dns, registered, (registered > dns ? "PASS" : "FAIL") }
+  '
 }
 
 cloudflared_service_ready() {
@@ -158,18 +213,52 @@ cloudflared_service_ready() {
 }
 
 target_ready() {
-  case "$1" in
-    cloudflared) cloudflared_service_ready ;;
-    n8n) resolvers_match_host n8n && n8n_service_ready ;;
+  local service=$1 expected observed match=FAIL dns=FAIL health=000 ordering started_at
+  local resolver_rc=0 dns_rc=0 health_rc=0
+  expected=$(host_resolvers) || expected=''
+  observed=$(container_external_resolvers "$service") || { resolver_rc=$?; observed=''; }
+  if [ -n "$expected" ] && [ -n "$observed" ] && [ "$expected" = "$observed" ]; then match=PASS; fi
+  READINESS_EVIDENCE="expected=$(printf '%q' "$expected") observed=$(printf '%q' "$observed") resolver_match=$match resolver_read_rc=$resolver_rc"
+  case "$service" in
+    cloudflared)
+      started_at=$(cloudflared_started_at) || started_at=''
+      ordering='logs=unavailable registration_ready=FAIL'
+      if [ -n "$started_at" ]; then
+        ordering=$(cloudflared_event_order "$started_at") || ordering='logs=unavailable registration_ready=FAIL'
+      fi
+      READINESS_EVIDENCE+=" $ordering"
+      [ "$match" = PASS ] && [[ "$ordering" == *'registration_ready=PASS' ]]
+      ;;
+    n8n)
+      if n8n_dns_ready; then dns=PASS; else dns_rc=$?; fi
+      health=$(bounded_command 3 curl --silent --output /dev/null --write-out '%{http_code}' --max-time 3 "$N8N_HEALTH_URL") || { health_rc=$?; health=000; }
+      READINESS_EVIDENCE+=" dns_api_openai=$dns healthz=$health dns_rc=$dns_rc healthz_rc=$health_rc mounts=${MOUNT_RESULT:-not_compared}"
+      [ "$match" = PASS ] && [ "$dns" = PASS ] && [ "$health" = 200 ]
+      ;;
     *) return 1 ;;
   esac
 }
 
+readiness_diagnostics() {
+  target_ready "$1" || true
+  log DIAGNOSTIC "service=$1 $READINESS_EVIDENCE"
+}
+
 assess_target() {
-  local service=$1 started_at
+  local service=$1 started_at resolver_code
+  if resolvers_match_host "$service"; then
+    resolver_code=0
+  else
+    resolver_code=$?
+  fi
+  if [ "$resolver_code" -eq 2 ]; then
+    REASON='container resolver evidence unavailable or unparseable; no stale DNS proof'
+    return "$ASSESS_FAILED"
+  fi
+  log DIAGNOSTIC "service=$service assessment_resolver_match=$resolver_code expected=$(printf '%q' "$(host_resolvers)") observed=$(printf '%q' "$(container_external_resolvers "$service")")"
   case "$service" in
     n8n)
-      if ! resolvers_match_host n8n; then
+      if [ "$resolver_code" -ne 0 ]; then
         REASON="container resolver differs from current host resolver"
         return "$ASSESS_STALE"
       fi
@@ -184,7 +273,7 @@ assess_target() {
       ;;
     cloudflared)
       started_at=$(cloudflared_started_at)
-      if ! resolvers_match_host cloudflared; then
+      if [ "$resolver_code" -ne 0 ]; then
         REASON="container resolver differs from current host resolver"
         return "$ASSESS_STALE"
       fi
@@ -213,17 +302,20 @@ compose_recreate() {
     log FAILED "refusing unexpected service=$service"
     return 1
   }
-  compose_cmd up -d --no-deps --force-recreate --pull never "$service"
+  # Compose gets a longer command allowance, still capped by the shared deadline.
+  bounded_command 45 docker compose --file "$COMPOSE_FILE" up -d --no-deps --force-recreate --pull never "$service"
 }
 
 wait_for_target() {
-  local service=$1 attempt
-  for attempt in $(seq 1 "$MAX_READINESS_ATTEMPTS"); do
+  local service=$1
+  READINESS_EVIDENCE='probe=not_completed'
+  while [ "$SECONDS" -lt "$GUARD_DEADLINE" ]; do
     if target_ready "$service"; then
       return 0
     fi
-    [ "$attempt" -lt "$MAX_READINESS_ATTEMPTS" ] && sleep "$READINESS_DELAY_SECONDS"
+    sleep "$READINESS_DELAY_SECONDS"
   done
+  log DIAGNOSTIC "service=$service readiness=timeout $READINESS_EVIDENCE"
   return 1
 }
 
@@ -232,6 +324,7 @@ wait_for_startup_readiness() {
   CLOUDFLARED_STARTUP_STATE=waiting
   N8N_STARTUP_STATE=waiting
   for attempt in $(seq 1 "$STARTUP_GRACE_ATTEMPTS"); do
+    [ "$SECONDS" -lt "$GUARD_DEADLINE" ] || break
     # A target's terminal state must not suppress the other target's evidence.
     if [ "$CLOUDFLARED_STARTUP_STATE" = waiting ]; then
       if ! container_running cloudflared; then
@@ -277,9 +370,11 @@ wait_for_startup_readiness() {
 }
 
 run_guard() {
-  local service code overall=0 n8n_mount_before
+  local service code overall=0 n8n_mount_before n8n_mount_after
   declare -A recover=()
   declare -A reasons=()
+  declare -A readiness_jobs=()
+  GUARD_DEADLINE=$((SECONDS + GUARD_WINDOW_SECONDS))
 
   validate_scope || return 1
   if ! host_dns_healthy; then
@@ -293,11 +388,13 @@ run_guard() {
 
   for service in "${TARGET_SERVICES[@]}"; do
     if [ "$service" = cloudflared ] && [ "$CLOUDFLARED_STARTUP_STATE" = timeout ]; then
+      readiness_diagnostics "$service"
       log FAILED 'service=cloudflared reason=cloudflared startup readiness grace expired; no recreation'
       overall=1
       continue
     fi
     if [ "$service" = n8n ] && [ "$N8N_STARTUP_STATE" = timeout ]; then
+      readiness_diagnostics "$service"
       log FAILED 'service=n8n reason=n8n startup readiness grace expired without stale DNS proof; no recreation'
       overall=1
       continue
@@ -314,6 +411,7 @@ run_guard() {
         reasons["$service"]=$REASON
         ;;
       *)
+        readiness_diagnostics "$service"
         log FAILED "service=$service reason=$REASON"
         overall=1
         ;;
@@ -324,7 +422,18 @@ run_guard() {
     [ "${recover[$service]:-0}" = 1 ] || continue
     n8n_mount_before=''
     if [ "$service" = n8n ]; then
-      n8n_mount_before=$(n8n_mount_fingerprint)
+      if ! n8n_mount_before=$(n8n_mount_fingerprint); then
+        MOUNT_RESULT=unavailable
+        readiness_diagnostics n8n
+        log FAILED 'service=n8n mounts=unavailable before recreation; no recreation'
+        overall=1
+        continue
+      fi
+    fi
+    if ! host_dns_healthy; then
+      log FAILED "service=$service host DNS unhealthy before recreation; no recreation"
+      overall=1
+      continue
     fi
     log RECOVERING "service=$service reason=${reasons[$service]}"
     if ! compose_recreate "$service"; then
@@ -332,17 +441,40 @@ run_guard() {
       overall=1
       continue
     fi
-    if [ "$service" = n8n ] && [ "$n8n_mount_before" != "$(n8n_mount_fingerprint)" ]; then
-      log FAILED 'service=n8n mount configuration changed after recreation; no retry or escalation'
-      overall=1
-      continue
+    if [ "$service" = n8n ]; then
+      if ! n8n_mount_after=$(n8n_mount_fingerprint); then
+        MOUNT_RESULT=unavailable
+        readiness_diagnostics n8n
+        log FAILED 'service=n8n mounts=unavailable after recreation; no retry or escalation'
+        overall=1
+        continue
+      fi
+      if [ "$n8n_mount_before" != "$n8n_mount_after" ]; then
+        MOUNT_RESULT=FAIL
+        target_ready n8n || true
+        log DIAGNOSTIC "service=n8n $READINESS_EVIDENCE"
+        mount_diagnostics "$n8n_mount_before" "$n8n_mount_after"
+        log FAILED 'service=n8n mount configuration changed after recreation; no retry or escalation'
+        overall=1
+        continue
+      fi
+      MOUNT_RESULT=PASS
     fi
-    if wait_for_target "$service"; then
-      log RECOVERED "service=$service reason=${reasons[$service]}"
-    else
-      log FAILED "service=$service remains unhealthy after one recovery attempt; no retry or escalation"
-      overall=1
-    fi
+    # Only readiness overlaps. Mutations remain sequential and once per target;
+    # a slow cloudflared startup cannot consume n8n's recovery opportunity.
+    (
+      if wait_for_target "$service"; then
+        log RECOVERED "service=$service reason=${reasons[$service]}"
+      else
+        log FAILED "service=$service remains unhealthy after one recovery attempt; no retry or escalation"
+        exit 1
+      fi
+    ) &
+    readiness_jobs["$service"]=$!
+  done
+  for service in "${TARGET_SERVICES[@]}"; do
+    [ -n "${readiness_jobs[$service]:-}" ] || continue
+    wait "${readiness_jobs[$service]}" || overall=1
   done
   return "$overall"
 }
