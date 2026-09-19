@@ -193,12 +193,12 @@ Once real use depends on Odyssey, maintain a stable production deployment and a 
 ```text
 21A architecture/isolation decision                         ✅ complete
 21B transient isolated runtime proof                        ✅ complete
-21C persistent DEV runtime/operator workflow       ✅ complete
+21C persistent isolated DEV runtime/operator workflow       ✅ complete
 21D on-demand DEV n8n + fixed protected browser endpoint    ✅ complete
 Phase 21 production/development isolation                   ✅ complete
 ```
 
-The DEV environment has fixed source/data/runtime identities and an on-demand separate DEV n8n
+The DEV environment has fixed source/data/runtime identities and an on-demand separate n8n
 database/container. It is not a permanent Git branch. The fixed protected endpoint and human
 browser checkpoint are complete; ordinary feature work should continue through isolated DEV before
 explicit human-gated production promotion.
