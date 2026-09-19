@@ -2,9 +2,12 @@
 
 Status: **approved implementation active in Draft PR #124; deterministic evidence, Python CI, and
 Sonar (81.3% new-code coverage) are green. One production Luna→Sol planner case passed within the
-$0.15 hard budget before the next case was safely stopped; direct isolated-DEV Notes runtime evidence
-is green, while n8n publication currently reports an active-version error and the protected public
-route remains Access-gated. Human mobile validation remains required. Not complete in PROD.**
+$0.15 hard budget before the next case was safely stopped. The isolated DEV n8n publication was
+repaired through supported unpublish/inactive-import/explicit-version-publish operations; active
+versions match workflow history, expected webhooks (including `/api/notes`) are registered, direct
+Notes/static routes are healthy, and provenance is `MATCH`. The protected public route remains
+Access-gated for the human checkpoint. Human mobile validation remains required. Not complete in
+PROD.**
 
 ## Objective
 
