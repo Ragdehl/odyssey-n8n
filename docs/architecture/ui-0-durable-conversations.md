@@ -1,6 +1,6 @@
 # UI-0 — durable main conversation and natural continuity
 
-Status: **IMPLEMENTATION IN PROGRESS — simplified architecture re-challenge: PROCEED**
+Status: **IMPLEMENTATION COMPLETE — merged and human-verified in DEV and PROD**
 
 ## Objective
 
@@ -78,6 +78,36 @@ ordinary validated write contract; prior assistant wording is never a fact or mu
    mental model is required.
 10. Isolated DEV deterministic, focused live, and mobile evidence use synthetic data only and leave
     production untouched.
+
+## Production promotion evidence — 2026-09-19
+
+UI-0 was promoted through the existing immutable PROD release/workflow boundary and then verified on
+the authenticated mobile surface. The production browser loaded the durable main conversation, and
+a full page reload restored the same visible turns, demonstrating end-to-end persistence through the
+public route, n8n workflow, private runtime and durable state store.
+
+The public security surface was checked separately before the authenticated browser checkpoint:
+
+- `odyssey.ragdehl.com/api/conversation` returned the expected unauthenticated Cloudflare Access
+  redirect, so the primary same-origin conversation endpoint is intercepted before n8n;
+- the alternate technical host `n8n.ragdehl.com` already routed to the same n8n origin, so no new
+  tunnel ingress was required;
+- the existing deny-by-default Access application for Odyssey paths on `n8n.ragdehl.com` was expanded
+  from the historical five paths to include both `/api/environment.js` and `/api/conversation`;
+- unauthenticated probes to both added alternate-host paths returned Cloudflare Access redirects;
+- unrelated n8n administration routing was not broadened or wrapped.
+
+The Cloudflare control-plane preflight also exposed that the two previously stored local API-token
+candidates were invalid at authentication level. A new account-owned token was created with only the
+required Cloudflare One `cloudflared` connector and Access Apps/Policies permissions, verified
+read-only against the account, tunnel and Access APIs, and stored locally with mode `0600`. The old
+invalid credential was retained under an explicit invalid backup name rather than being silently
+reused. No token value is recorded in repository documentation.
+
+Reusable promotion rule: public routes are part of the release/security surface. Before a live
+promotion that adds a browser endpoint, derive the complete expected public path set, verify the
+control-plane credential before the first mutation, compare expected versus live tunnel/Access
+coverage, and close every alternate-host path before the authenticated human checkpoint.
 
 ## Explicitly deferred
 
