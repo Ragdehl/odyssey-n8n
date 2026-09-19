@@ -31,7 +31,8 @@ checkpoint confirmed the same durable turns survive a full mobile page reload on
 `odyssey.ragdehl.com` path, and the new `/api/conversation` plus existing `/api/environment.js`
 alternate-host paths are intercepted by Cloudflare Access before n8n. The next functional phase is
 **UI-2 read-only Notes**: expose the same canonical Markdown through a simple browse/search/read
-surface without creating a second knowledge authority. See [UI-0 durable main conversation](ui-0-durable-conversations.md) and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
+surface without creating a second knowledge authority. Its product contract and architecture
+challenge are complete; implementation is the next checkpoint. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 
