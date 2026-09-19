@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta name="odyssey-api-endpoint" content="/api/request">
   <meta name="odyssey-conversation-endpoint" content="/api/conversation">
+  <meta name="odyssey-notes-endpoint" content="/api/notes">
   <title>Odyssey</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -19,7 +20,7 @@
       </div>
     </header>
 
-    <section class="workspace" aria-labelledby="composer-title">
+    <section id="chat-surface" class="workspace" aria-labelledby="composer-title">
       <h2 id="composer-title" class="sr-only">Conversación con Odyssey</h2>
       <section id="interaction" class="conversation" aria-live="polite" aria-atomic="false"></section>
 
@@ -39,6 +40,30 @@
         <button id="send-button" type="submit">Enviar</button>
       </form>
     </section>
+    <section id="notes-surface" class="workspace notes-workspace" aria-labelledby="notes-title" hidden>
+      <header class="notes-header">
+        <h2 id="notes-title">Notas</h2>
+        <div class="notes-search-row">
+          <label class="sr-only" for="notes-search">Buscar notas</label>
+          <input id="notes-search" type="search" placeholder="Buscar notas" autocomplete="off">
+          <button id="notes-intelligent" type="button" aria-label="Búsqueda inteligente">✦</button>
+        </div>
+        <label class="sr-only" for="notes-sort">Ordenar notas</label>
+        <select id="notes-sort">
+          <option value="relevance">Relevancia</option>
+          <option value="updated_desc">Actualizadas</option>
+          <option value="created_desc">Creadas recientemente</option>
+          <option value="created_asc">Creadas primero</option>
+        </select>
+        <p id="notes-status" class="notes-status" aria-live="polite"></p>
+      </header>
+      <section id="notes-list" class="notes-list" aria-label="Resultados de notas"></section>
+      <article id="note-detail" class="note-detail" hidden></article>
+    </section>
+    <nav class="surface-nav" aria-label="Superficies principales">
+      <button id="chat-tab" type="button" class="surface-tab" aria-selected="true">Chat</button>
+      <button id="notes-tab" type="button" class="surface-tab" aria-selected="false">Notas</button>
+    </nav>
   </main>
 
   <dialog id="request-detail-sheet" class="request-detail-sheet" aria-labelledby="request-detail-title">

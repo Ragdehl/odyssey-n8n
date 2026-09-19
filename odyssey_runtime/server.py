@@ -15,6 +15,7 @@ from odyssey_core.identity_boundary import (
     ExternalPrincipal,
     IdentityBoundaryError,
 )
+from odyssey_core.note_queries import NotesQueryError, StaleCursorError
 
 from .composition import RuntimeComposition
 from .serialization import application_result_to_response
@@ -128,6 +129,30 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     self._write_json(
                         HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
                     )
+                return
+            if parsed.path == "/notes":
+                try:
+                    payload = self._read_payload()
+                    operation = payload.pop("operation", None)
+                    if operation not in {
+                        "capabilities",
+                        "query",
+                        "intelligent",
+                        "detail",
+                        "backlinks",
+                    }:
+                        raise ValueError("Notes operation is invalid")
+                    actor_payload = {
+                        key: payload.pop(key)
+                        for key in ("authenticated_actor", "external_principal")
+                        if key in payload
+                    }
+                    actor = self._identity_from_payload(actor_payload)
+                    self._write_json(HTTPStatus.OK, runtime.notes(operation, payload, *actor))
+                except StaleCursorError:
+                    self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
+                except (IdentityBoundaryError, NotesQueryError, TypeError, ValueError):
+                    self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid notes request"})
                 return
             if parsed.path != "/execute":
                 self._write_json(HTTPStatus.NOT_FOUND, {"error": "not found"})

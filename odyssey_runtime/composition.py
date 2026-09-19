@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +28,14 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_core.materialization import OpenAILunaWriter
+from odyssey_core.note_queries import (
+    BacklinkPage,
+    NoteCapabilities,
+    NoteDetail,
+    NotePage,
+    NotesQueryError,
+    NotesQueryService,
+)
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalStage,
@@ -35,6 +43,7 @@ from odyssey_core.observability import (
 )
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.persistence import ActorInput
+from odyssey_core.request_planning import PlannerClarification, RequestPlan, RetrieveAction
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
@@ -54,7 +63,73 @@ class RuntimeComposition:
     refresh_indexes: Callable[[], None]
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
+    notes_service: NotesQueryService | None = None
+    notes_embedder: object | None = None
+    intelligent_notes_execute: Callable[[str, Sequence[object]], NotePage] | None = None
     monotonic: Callable[[], float] = perf_counter
+
+    def notes(
+        self,
+        operation: str,
+        payload: dict[str, object],
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Execute one typed read-only Notes operation for the authenticated actor boundary.
+
+        Actor resolution occurs even though current local-first Notes storage is root-bound. This
+        preserves the existing outer isolation contract and prevents a route from bypassing it.
+        """
+        self._resolve_actor(authenticated_actor, external_principal)
+        if self.notes_service is None:
+            raise ValueError("Notes service is unavailable")
+        if operation == "capabilities":
+            if payload:
+                raise ValueError("Notes capabilities payload is invalid")
+            return _notes_to_response(self.notes_service.capabilities())
+        if operation == "query":
+            return _notes_to_response(
+                self.notes_service.query(
+                    mode=str(payload.get("mode", "feed")),
+                    query=str(payload.get("query", "")),
+                    filters=payload.get("filters", ()),
+                    sort=str(payload.get("sort", "relevance")),
+                    page_size=payload.get("page_size", 20),
+                    cursor=payload.get("cursor"),
+                    snapshot_ids=payload.get("snapshot_ids", ()),
+                    as_of=payload.get("as_of"),
+                    embedder=self.notes_embedder if payload.get("mode") == "intelligent" else None,
+                )
+            )
+        if operation == "detail":
+            if set(payload) != {"note_id"} or not isinstance(payload["note_id"], str):
+                raise ValueError("Notes detail payload is invalid")
+            return _notes_to_response(self.notes_service.detail(payload["note_id"]))
+        if operation == "backlinks":
+            allowed = {"note_id", "page_size", "cursor"}
+            if set(payload) - allowed or not isinstance(payload.get("note_id"), str):
+                raise ValueError("Notes backlinks payload is invalid")
+            return _notes_to_response(
+                self.notes_service.backlinks(
+                    payload["note_id"],
+                    page_size=payload.get("page_size", 20),
+                    cursor=payload.get("cursor"),
+                )
+            )
+        if operation == "intelligent":
+            if (
+                self.intelligent_notes_execute is None
+                or set(payload) - {"query", "filters", "page_size", "cursor", "sort"}
+                or not isinstance(payload.get("query"), str)
+                or not isinstance(payload.get("filters", ()), list)
+            ):
+                raise NotesQueryError("Intelligent Notes planning is unavailable")
+            if payload.get("cursor") is not None:
+                raise NotesQueryError("Intelligent Notes pages do not re-plan")
+            return _notes_to_response(
+                self.intelligent_notes_execute(payload["query"], payload.get("filters", ()))
+            )
+        raise ValueError("Notes operation is unsupported")
 
     def execute(
         self,
@@ -362,13 +437,111 @@ def build_runtime_from_environment() -> RuntimeComposition:
         context_index.rebuild(repository, schema, embedder)
         semantic_index.rebuild(repository, schema, embedder)
 
+    def intelligent_notes(query: str, explicit_filters: Sequence[object]) -> NotePage:
+        """Plan one explicit Notes request and accept only a single direct RetrieveAction.
+
+        This keeps planner interpretation singular. Clarifications, writes, delegation,
+        multi-branch plans, and unimplemented graph traversal do not degrade into a lossy search.
+        """
+        clock = _current_time()
+        planner = OpenAIRequestPlanner.from_environment(
+            schema, {key: clock[key] for key in ("date", "time", "timezone")}
+        )
+        result = planner.plan(query)
+        if (
+            isinstance(result, PlannerClarification)
+            or not isinstance(result, RequestPlan)
+            or len(result.actions) != 1
+            or not isinstance(result.actions[0], RetrieveAction)
+            or result.actions[0].plan.link_scope is not None
+        ):
+            raise NotesQueryError("Intelligent Notes request needs clarification")
+        action = result.actions[0]
+        return NotesQueryService(repository, schema, context_index).query(
+            mode="intelligent",
+            query=action.plan.query,
+            filters=[*explicit_filters, *action.plan.filters],
+            embedder=embedder,
+        )
+
     refresh_indexes()
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
+        notes_service=NotesQueryService(repository, schema, context_index),
+        notes_embedder=embedder,
+        intelligent_notes_execute=intelligent_notes,
     )
+
+
+def _notes_to_response(
+    value: NoteCapabilities | NotePage | NoteDetail | BacklinkPage,
+) -> dict[str, object]:
+    """Serialize typed Notes evidence without exposing vault paths or derived index internals."""
+    if isinstance(value, NoteCapabilities):
+        return {"kind": "capabilities", "types": list(value.types), "fields": list(value.fields)}
+    if isinstance(value, NotePage):
+        return {
+            "kind": "page",
+            "mode": value.mode,
+            "sort": value.sort,
+            "ranking_version": value.ranking_version,
+            "as_of": value.as_of,
+            "applied_filters": [
+                {"field": item.field, "op": item.op, "value": item.value}
+                for item in value.applied_filters
+            ],
+            "items": [_summary_to_response(item) for item in value.items],
+            "total": value.total,
+            "next_cursor": value.next_cursor,
+        }
+    if isinstance(value, NoteDetail):
+        return {
+            "kind": "detail",
+            "note": _summary_to_response(value.note),
+            "body": value.body,
+            "links": [
+                {
+                    "target_id": item.target_id,
+                    "target_name": item.target_name,
+                    "target_type": item.target_type,
+                    "label": item.label,
+                    "occurrences": item.occurrences,
+                }
+                for item in value.links
+            ],
+        }
+    if isinstance(value, BacklinkPage):
+        return {
+            "kind": "backlinks",
+            "target_id": value.target_id,
+            "items": [
+                {
+                    "source": _summary_to_response(item.source),
+                    "occurrences": item.occurrences,
+                    "context": item.context,
+                }
+                for item in value.items
+            ],
+            "total": value.total,
+            "next_cursor": value.next_cursor,
+        }
+    raise TypeError("Notes response is invalid")
+
+
+def _summary_to_response(value: object) -> dict[str, object]:
+    """Serialize one typed Notes summary at the runtime response boundary."""
+    return {
+        "id": value.id,
+        "name": value.name,
+        "type": value.type,
+        "tags": list(value.tags),
+        "created_at": value.created_at,
+        "updated_at": value.updated_at,
+        "properties": dict(value.properties),
+    }
 
 
 def _persistence_actor(

@@ -5,6 +5,7 @@ import {
   requestProductResult,
   requestConversation,
 } from "./client.js";
+import {mountNotes} from "./notes.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -16,6 +17,10 @@ const requestDetailTitle = document.querySelector("#request-detail-title");
 const requestDetailContent = document.querySelector("#request-detail-content");
 const conversationEndpoint = document.querySelector('meta[name="odyssey-conversation-endpoint"]')?.content ?? "/api/conversation";
 const MAIN_CONVERSATION_ID = "main";
+const chatSurface = document.querySelector("#chat-surface");
+const notesSurface = document.querySelector("#notes-surface");
+const chatTab = document.querySelector("#chat-tab");
+const notesTab = document.querySelector("#notes-tab");
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
 let olderCursor = null;
@@ -32,6 +37,19 @@ function showDeploymentMarker() {
 }
 
 showDeploymentMarker();
+
+// The controllers remain mounted for the page lifetime. Surface switching only changes visibility,
+// so the Chat draft/scroll and Notes query/detail/navigation state are never reconstructed.
+if (notesSurface) mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
+function selectSurface(surface) {
+  const notes = surface === "notes";
+  if (chatSurface) chatSurface.hidden = notes;
+  if (notesSurface) notesSurface.hidden = !notes;
+  chatTab?.setAttribute("aria-selected", String(!notes));
+  notesTab?.setAttribute("aria-selected", String(notes));
+}
+chatTab?.addEventListener("click", () => selectSurface("chat"));
+notesTab?.addEventListener("click", () => selectSurface("notes"));
 
 function conversationPayload() {
   return conversationId ? {conversation_id: conversationId} : {};

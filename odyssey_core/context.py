@@ -22,11 +22,37 @@ from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note,
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
 
-_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "3"}
+_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "4"}
 _TECHNICAL_METADATA = frozenset(
     {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
 )
 _WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+
+
+def extract_wikilink_targets(markdown: str) -> tuple[tuple[str, str], ...]:
+    """Return literal safe wikilink targets and visible labels from canonical body text.
+
+    The function deliberately does not resolve a target. Resolution needs the complete validated
+    vault path map, and is therefore performed while rebuilding the derived index or serving a
+    current note. Unsafe and empty targets are omitted instead of becoming derived authority.
+    """
+    if not isinstance(markdown, str):
+        raise TypeError("Markdown must be text")
+    links: list[tuple[str, str]] = []
+    for match in _WIKILINK_PATTERN.finditer(markdown):
+        target = match.group(1).strip()
+        label = (match.group(2) or target).strip()
+        if (
+            not target
+            or not label
+            or "\\" in target
+            or "\x00" in target
+            or target.startswith("/")
+            or ".." in target.split("/")
+        ):
+            continue
+        links.append((target, label))
+    return tuple(links)
 
 
 def _humanize_wikilinks(markdown: str) -> str:
@@ -475,6 +501,10 @@ class ContextIndex:
         if repository.contains_filesystem_path(self.path):
             raise ContextIndexError("Context index must be stored outside the Markdown vault")
         projected: list[tuple[str, str, str, str, str, tuple[str, ...], str]] = []
+        note_projections: list[tuple[str, str, str, str, str, str]] = []
+        active_paths: dict[str, str] = {}
+        active_basenames: dict[str, set[str]] = {}
+        bodies: dict[str, str] = {}
         properties: list[tuple[str, str, str | int, str]] = []
         seen_ids: set[str] = set()
         for path in repository.list_markdown_paths():
@@ -491,6 +521,24 @@ class ContextIndex:
             if note.metadata.get("deleted") is True:
                 continue
             note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
+            created_at = _normalize_property_value(
+                {"value_type": "string", "constraints": {"format": "date-time"}},
+                note.metadata["created_at"],
+            )
+            updated_at = _normalize_property_value(
+                {"value_type": "string", "constraints": {"format": "date-time"}},
+                note.metadata["updated_at"],
+            )
+            assert isinstance(created_at, str) and isinstance(updated_at, str)
+            aliases = tuple(cast(list[str], note.metadata.get("aliases", [])))
+            lexical_text = " ".join(
+                (
+                    cast(str, note.metadata["name"]),
+                    *aliases,
+                    *note_tags,
+                    build_context_retrieval_text(note, path),
+                )
+            ).casefold()
             projected.append(
                 (
                     note_id,
@@ -502,6 +550,20 @@ class ContextIndex:
                     build_context_retrieval_text(note, path),
                 )
             )
+            note_projections.append(
+                (
+                    note_id,
+                    created_at,
+                    updated_at,
+                    json.dumps(aliases, ensure_ascii=False),
+                    lexical_text,
+                    note.content,
+                )
+            )
+            stem = path.removesuffix(".md").casefold()
+            active_paths[stem] = note_id
+            active_basenames.setdefault(stem.rsplit("/", 1)[-1], set()).add(note_id)
+            bodies[note_id] = note.content
             for field, definition in filter_definitions.items():
                 value = note.metadata.get(
                     field, note.metadata.get("tags") if field == "tags" else None
@@ -548,6 +610,19 @@ class ContextIndex:
                         value_type TEXT NOT NULL,
                         FOREIGN KEY(note_id) REFERENCES notes(id)
                     );
+                    CREATE TABLE note_projection (
+                        note_id TEXT PRIMARY KEY REFERENCES notes(id),
+                        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                        aliases TEXT NOT NULL, lexical_text TEXT NOT NULL, body_text TEXT NOT NULL
+                    );
+                    CREATE TABLE note_links (
+                        source_id TEXT NOT NULL REFERENCES notes(id),
+                        target_id TEXT NOT NULL REFERENCES notes(id),
+                        target_text TEXT NOT NULL, label TEXT NOT NULL,
+                        occurrence_count INTEGER NOT NULL CHECK(occurrence_count > 0),
+                        context TEXT NOT NULL,
+                        PRIMARY KEY(source_id, target_id, target_text, label)
+                    );
                 """)
                 connection.executemany(
                     "INSERT INTO metadata(key, value) VALUES (?, ?)",
@@ -584,6 +659,25 @@ class ContextIndex:
                     "INSERT INTO properties(note_id, field, value, value_type) VALUES (?, ?, ?, ?)",
                     properties,
                 )
+                connection.executemany(
+                    "INSERT INTO note_projection VALUES (?, ?, ?, ?, ?, ?)", note_projections
+                )
+                links: list[tuple[str, str, str, str, int, str]] = []
+                for source_id, body in bodies.items():
+                    occurrences: dict[tuple[str, str, str], int] = {}
+                    for target, label in extract_wikilink_targets(body):
+                        target_key = target.removesuffix(".md").casefold()
+                        target_id = active_paths.get(target_key)
+                        if target_id is None and "/" not in target_key:
+                            matches = active_basenames.get(target_key, set())
+                            target_id = next(iter(matches)) if len(matches) == 1 else None
+                        if target_id is not None:
+                            key = (target_id, target, label)
+                            occurrences[key] = occurrences.get(key, 0) + 1
+                    for (target_id, target, label), count in occurrences.items():
+                        context = _humanize_wikilinks(body).strip().replace("\n", " ")[:320]
+                        links.append((source_id, target_id, target, label, count, context))
+                connection.executemany("INSERT INTO note_links VALUES (?, ?, ?, ?, ?, ?)", links)
             os.replace(temporary, self.path)
         except (OSError, sqlite3.Error) as error:
             raise ContextIndexError("Unable to rebuild context index") from error
