@@ -96,6 +96,20 @@ is 180 seconds; any caller or operational wrapper must preserve that bound and m
 shorter timeout such as 30 seconds. Partial output or an intermediate observation before the guard
 completes is not terminal recovery evidence; verify the per-target terminal result and post-state.
 
+On 2026-09-19, an enabled dispatcher exposed a resolver-transition race during a real Wi-Fi
+reactivation. NetworkManager installed IPv4 DNS first, invoked the dispatcher, and installed IPv6
+DNS shortly afterwards. The instantaneous host/container mismatch was truthful, but the host set
+was incomplete; immediate comparison unnecessarily authorized recreation of both production
+containers. A mismatch is therefore actionable only after the guard observes the same normalized,
+non-empty host resolver set three times at two-second intervals, confirms its DNS probes, and
+rechecks that exact set before each recreation. Eight observations bound resolver sampling to at
+most 14 seconds; the two existing five-second DNS probe bounds make the complete stabilization gate
+at most 24 seconds inside the existing 165-second guard budget, leaving at least 141 seconds for a
+real stale-DNS recovery. Failure to stabilize, malformed or empty evidence, failed DNS probes, or a
+later resolver change fails closed with zero further recreation.
+The live dispatcher remains disabled at mode `0644` until this change is merged, installed, and a
+human-authorized live verification confirms stable healthy-network behavior with zero recreation.
+
 ### September 19 follow-up: disabled pending hardened guard verification
 
 The real handoff left both production containers with stale external resolvers; classification by
