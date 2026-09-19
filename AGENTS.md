@@ -163,6 +163,19 @@ When preparing a prompt for Codex or another development agent for the user:
 - include the recommended model and reasoning effort, with a short cost/capability rationale when model choice is relevant;
 - do not omit the summary just because the prompt itself is long.
 
+### Codex model-selection guidance
+
+Recommend the **cheapest model and reasoning level that still has comfortable capability margin for the task's risk and complexity**. Do not default habitually either to the cheapest model or to the strongest model. State the recommendation explicitly in each ChatGPT-to-Codex handoff and give a short reason so the human can judge the cost/capability trade-off.
+
+Use task risk, ambiguity, cross-boundary reasoning, and likely change amplification as the main signals. The current practical heuristic is:
+
+- small mechanical edits, bounded documentation/tests, or already-diagnosed fixes -> prefer the cheapest capable tier, typically Luna Low/Medium when available;
+- ordinary implementation with a settled contract and moderate multi-file reasoning -> prefer the middle capability tier, typically Terra Medium/High when available;
+- architecture challenges, ambiguous cross-boundary debugging, security/networking/production incidents, or decisions where a wrong conclusion can amplify into substantial rework -> prefer Sol High;
+- escalate beyond that only when evidence shows the lower recommendation is insufficient.
+
+These model names are examples of the current lineup, not a permanent task-to-model binding. Re-evaluate as model capabilities, pricing, and availability change while preserving the cost/risk principle. Do not downgrade a high-risk task solely to save tokens when error amplification is likely, and do not spend Sol-class capacity on routine work merely by habit.
+
 ### ChatGPT-to-agent handoff communication preference
 
 This is an assistant-facing communication preference for the ChatGPT project assistant,
