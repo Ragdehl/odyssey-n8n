@@ -349,3 +349,32 @@ def test_request_detail_rejects_unbounded_nested_fields(tmp_path: Path, detail: 
             created_at=NOW,
             request_detail={"request_id": "req-invalid", **detail},
         )
+
+
+def test_assistant_snapshot_is_durable_idempotent_and_excluded_from_recent_context(
+    tmp_path: Path,
+) -> None:
+    """Persist result membership beside visible text without entering planner continuity."""
+    store = _store(tmp_path)
+    snapshot = {
+        "version": 1,
+        "query": "people",
+        "filters": [],
+        "sort": "relevance",
+        "ranking_version": "ui2-feed-v1",
+        "executed_at": NOW,
+        "note_ids": ["person-1"],
+        "total": 1,
+        "truncated": False,
+    }
+    kwargs = {
+        "request_id": "snapshot-1",
+        "role": "assistant",
+        "text": "Found notes.",
+        "created_at": NOW,
+        "note_result_snapshot": snapshot,
+    }
+    store.append_turn(**kwargs)
+    store.append_turn(**kwargs)
+    assert store.load_main_page()["turns"][0]["note_result_snapshot"] == snapshot
+    assert store.recent_context() == [{"role": "assistant", "text": "Found notes."}]

@@ -27,6 +27,7 @@ from .conversations import (
     _validate_request_detail,
     _validate_turn,
 )
+from .note_result_snapshots import NoteResultSnapshotError, validate_note_result_snapshot
 
 _MAX_RECORD_BYTES = 256 * 1024
 _MAX_TURN_TEXT_BYTES = 64 * 1024
@@ -114,6 +115,7 @@ class LocalConversationStore:
         created_at: str,
         status: str | None = None,
         request_detail: dict[str, Any] | None = None,
+        note_result_snapshot: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Append one turn using a constant-time operational request-id lookup."""
         _validate_id(request_id, "request_id")
@@ -127,10 +129,21 @@ class LocalConversationStore:
         if status is not None and (not isinstance(status, str) or len(status) > 80):
             raise ConversationError("turn is invalid")
         detail = _validate_request_detail(request_detail, request_id, role)
+        try:
+            snapshot = validate_note_result_snapshot(note_result_snapshot)
+        except NoteResultSnapshotError as error:
+            raise ConversationError("turn snapshot is invalid") from error
+        if snapshot is not None and role != "assistant":
+            raise ConversationError("turn snapshot is invalid")
         self.load_or_create_main(now=created_at)
         existing = self._request_entry(request_id, role)
         if existing is not None:
-            if existing["text"] != text or existing.get("request_detail") != detail:
+            if (
+                existing["text"] != text
+                or existing.get("request_detail") != detail
+                or existing.get("note_result_snapshot")
+                != (snapshot.to_payload() if snapshot else None)
+            ):
                 raise ConversationError("request ID is already bound to another turn")
             return self.load_main_page()
 
@@ -150,9 +163,13 @@ class LocalConversationStore:
         }
         if detail is not None:
             turn["request_detail"] = detail
+        if snapshot is not None:
+            turn["note_result_snapshot"] = snapshot.to_payload()
         chunk["turns"].append(turn)
         self._write(target, chunk)
-        self._write_request_entry(request_id, role, text, detail)
+        self._write_request_entry(
+            request_id, role, text, detail, snapshot.to_payload() if snapshot else None
+        )
         if chunks and target.name == chunks[-1]["name"]:
             chunks[-1]["count"] += 1
         else:
@@ -321,13 +338,18 @@ class LocalConversationStore:
             return None
         entry = self._read_json(path)
         if (
-            set(entry) != {"request_id", "role", "text", "request_detail"}
+            not {"request_id", "role", "text", "request_detail"} <= set(entry)
+            or set(entry) - {"request_id", "role", "text", "request_detail", "note_result_snapshot"}
             or entry.get("request_id") != request_id
             or entry.get("role") != role
             or not isinstance(entry.get("text"), str)
         ):
             raise ConversationError("conversation request index is invalid")
         _validate_request_detail(entry["request_detail"], request_id, role)
+        try:
+            validate_note_result_snapshot(entry.get("note_result_snapshot"))
+        except NoteResultSnapshotError as error:
+            raise ConversationError("conversation request index is invalid") from error
         return entry
 
     def _write_request_entry(
@@ -336,6 +358,7 @@ class LocalConversationStore:
         role: str,
         text: str,
         detail: dict[str, Any] | None,
+        snapshot: dict[str, Any] | None = None,
         *,
         root: Path | None = None,
     ) -> None:
@@ -346,6 +369,7 @@ class LocalConversationStore:
                 "role": role,
                 "text": text,
                 "request_detail": detail,
+                "note_result_snapshot": snapshot,
             },
         )
 
