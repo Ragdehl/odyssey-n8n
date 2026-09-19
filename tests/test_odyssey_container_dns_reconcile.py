@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import subprocess
 from pathlib import Path
+
+import pytest
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "odyssey-container-dns-reconcile"
 SERVICE = Path(__file__).parents[1] / "deploy" / "odyssey-container-dns-reconcile.service"
@@ -21,7 +24,20 @@ DISPATCHER = (
 def run_bash(script: str) -> subprocess.CompletedProcess[str]:
     """Run one isolated guard harness without contacting Docker or production."""
     return subprocess.run(
-        ["bash", "-c", f"source {shlex.quote(str(SCRIPT))}; {script}"],
+        [
+            "bash",
+            "-c",
+            f"""
+source {shlex.quote(str(SCRIPT))}
+# Fail closed if a harness accidentally falls through to a live command.
+docker() {{ return 99; }}
+curl() {{ return 99; }}
+getent() {{ return 99; }}
+bounded_command() {{ shift; "$@"; }}
+host_resolvers() {{ printf '192.168.1.254\\n'; }}
+{script}
+""",
+        ],
         check=False,
         text=True,
         capture_output=True,
@@ -94,14 +110,11 @@ wait_for_startup_readiness() { :; }
 n8n_mount_fingerprint() { printf 'volume|n8n_data|/home/node/.n8n|true\\n'; }
 assess_target() { REASON='stale test state'; return 10; }
 compose_recreate() { printf 'recreate:%s\\n' "$1"; }
-cloudflared_ready=0
 wait_for_target() {
   if [ "$1" = cloudflared ]; then
     sleep 1
-    cloudflared_ready=1
-  else
-    [ "$cloudflared_ready" -eq 1 ]
   fi
+  return 0
 }
 sleep() { [ "$1" -eq 1 ]; }
 run_guard
@@ -435,12 +448,15 @@ run_guard
 def test_recreate_command_is_narrow_and_never_pulls() -> None:
     result = run_bash(
         """
-compose_cmd() { printf '%s\\n' "$*"; }
+bounded_command() { printf '%s\\n' "$*"; }
 compose_recreate cloudflared
 """
     )
     assert result.returncode == 0
-    assert result.stdout == "up -d --no-deps --force-recreate --pull never cloudflared\n"
+    assert result.stdout == (
+        "45 docker compose --file /home/ragdehl/docker/n8n/compose.yaml "
+        "up -d --no-deps --force-recreate --pull never cloudflared\n"
+    )
 
 
 def test_unexpected_service_fails_closed_without_compose_call() -> None:
@@ -466,3 +482,274 @@ run_guard
     assert result.returncode != 0
     assert "compose identity mismatch" in result.stderr
     assert "recreate:" not in result.stdout
+
+
+@pytest.mark.parametrize("separator", [" ", ", ", ",", "  "])
+def test_real_docker_external_resolver_formats(separator: str) -> None:
+    upstream = separator.join(
+        ["host(192.168.1.254)", "host(2001:861:4010:1960:6e15:dbff:fef0:125c)"]
+    )
+    result = run_bash(f"""
+docker_cmd() {{ printf '%s\\n' '# ExtServers: [{upstream}]'; }}
+tar() {{ cat; }}
+container_external_resolvers n8n
+""")
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        "192.168.1.254",
+        "2001:861:4010:1960:6e15:dbff:fef0:125c",
+    ]
+
+
+@pytest.mark.parametrize("upstream", ["", "garbage", "host(192.168.1.254) garbage"])
+def test_unparseable_resolvers_are_unknown_not_stale(upstream: str) -> None:
+    result = run_bash(f"""
+docker_cmd() {{ printf '%s\\n' '# ExtServers: [{upstream}]'; }}
+tar() {{ cat; }}
+assess_target n8n
+""")
+    assert result.returncode == 20
+
+
+def readiness_fixture() -> str:
+    """Provide real predicate evaluation with synthetic time and no live commands."""
+    return """
+validate_scope() { :; }
+host_dns_healthy() { :; }
+wait_for_startup_readiness() { :; }
+assess_target() { REASON=stale; return 10; }
+compose_recreate() { printf 'recreate:%s\\n' "$1"; }
+container_external_resolvers() { host_resolvers; }
+cloudflared_started_at() { printf 'fixture-start\\n'; }
+cloudflared_logs() { printf 'Registered tunnel connection\\n'; }
+n8n_mount_fingerprint() { printf 'fixture-mount\\n'; }
+n8n_dns_ready() { return 0; }
+curl() { printf 200; }
+sleep() { SECONDS=$((SECONDS + $1)); }
+"""
+
+
+def test_both_delayed_targets_have_overlapping_full_readiness_windows() -> None:
+    result = run_bash(
+        readiness_fixture()
+        + """
+SECONDS=0
+cloudflared_logs() {
+  if [ "$SECONDS" -ge 100 ]; then printf 'Registered tunnel connection\\n'; fi
+}
+n8n_dns_ready() { [ "$SECONDS" -ge 110 ]; }
+curl() { if [ "$SECONDS" -ge 130 ]; then printf 200; else printf 503; fi; }
+run_guard
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["recreate:cloudflared", "recreate:n8n"]
+    assert "[RECOVERED] service=cloudflared" in result.stderr
+    assert "[RECOVERED] service=n8n" in result.stderr
+    assert "[FAILED]" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("failure", "diagnostic"),
+    [
+        ("container_external_resolvers() { printf '10.235.35.170\\n'; }", "resolver_match=FAIL"),
+        ("n8n_dns_ready() { return 1; }", "dns_api_openai=FAIL healthz=200"),
+        ("curl() { printf 503; }", "dns_api_openai=PASS healthz=503"),
+        (
+            "cloudflared_logs() { printf 'Registered tunnel connection\\nlookup foo i/o timeout\\n'; }",
+            "last_dns_error=2 last_registration=1 registration_ready=FAIL",
+        ),
+        ("cloudflared_logs() { return 1; }", "logs=unavailable registration_ready=FAIL"),
+    ],
+)
+def test_timeout_identifies_independent_failing_predicate(failure: str, diagnostic: str) -> None:
+    result = run_bash(readiness_fixture() + failure + "\nrun_guard")
+    assert result.returncode == 1
+    assert diagnostic in result.stderr
+    assert "expected=192.168.1.254 observed=" in result.stderr
+    assert "readiness=timeout" in result.stderr
+    assert result.stdout.count("recreate:cloudflared") == 1
+    assert result.stdout.count("recreate:n8n") == 1
+
+
+MOUNTS = [
+    {"Type": "bind", "Source": "/release/web", "Destination": "/odyssey-web", "RW": False},
+    {
+        "Type": "volume",
+        "Name": "n8n_data",
+        "Source": "/volumes/n8n_data/_data",
+        "Destination": "/home/node/.n8n",
+        "RW": True,
+    },
+]
+
+
+def mount_fixture(before: list[dict], after: list[dict]) -> str:
+    """Use actual JSON normalization on synthetic inspect records across recreation."""
+    return f"""
+mounts={shlex.quote(json.dumps(before))}
+docker_cmd() {{ printf '%s\\n' "$mounts"; }}
+compose_recreate() {{
+  printf 'recreate:%s\\n' "$1"
+  mounts={shlex.quote(json.dumps(after))}
+}}
+"""
+
+
+def test_mount_order_and_missing_optional_fields_are_stable() -> None:
+    before = [dict(mount) for mount in MOUNTS]
+    before[0]["Mode"] = "ro,z"
+    after = [dict(mount) for mount in reversed(before)]
+    after[1].update(Mode="z,ro", Name="", Driver="", Propagation="")
+    result = run_bash(
+        mount_fixture(before, after)
+        + """
+before=$(n8n_mount_fingerprint)
+compose_recreate n8n >/dev/null
+after=$(n8n_mount_fingerprint)
+[ "$before" = "$after" ]
+printf '%s\\n' "$after"
+"""
+    )
+    assert result.returncode == 0
+    assert len(result.stdout.splitlines()) == 2
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("Source", "/unexpected/web"),
+        ("RW", True),
+        ("Destination", "/unexpected"),
+        ("Propagation", "rshared"),
+    ],
+)
+def test_actual_mount_drift_fails_closed_and_reports_changed_field(
+    field: str, value: object
+) -> None:
+    after = [dict(mount) for mount in MOUNTS]
+    after[0][field] = value
+    # Keep real fingerprint implementation, while stubbing every external boundary.
+    fixture = readiness_fixture().replace(
+        "n8n_mount_fingerprint() { printf 'fixture-mount\\n'; }", ""
+    )
+    result = run_bash(
+        fixture
+        + mount_fixture(MOUNTS, after)
+        + """
+assess_target() { REASON=stale; [ "$1" = n8n ] && return 10; return 0; }
+run_guard
+"""
+    )
+    assert result.returncode == 1
+    assert result.stdout == "recreate:n8n\n"
+    assert "mounts=FAIL" in result.stderr
+    assert "mount_diff=" in result.stderr
+    assert field in result.stderr
+    assert "mount configuration changed" in result.stderr
+
+
+def test_budget_caps_external_commands_and_leaves_terminal_margin() -> None:
+    # Exercise the real wrapper with a fake timeout; never call an external service.
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"""
+source {shlex.quote(str(SCRIPT))}
+SECONDS=0
+GUARD_DEADLINE=2
+timeout() {{ printf '%s\\n' "$*"; }}
+bounded_command 45 fixture-command
+SECONDS=3
+if bounded_command 5 fixture-command; then exit 1; fi
+[ "$GUARD_WINDOW_SECONDS" -eq 165 ]
+""",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout == "--signal=TERM --kill-after=1 2 fixture-command\n"
+    assert "TimeoutStartSec=180" in SERVICE.read_text()
+
+
+def test_healthy_dual_stack_docker_upstreams_do_not_authorize_recreation() -> None:
+    result = run_bash("""
+host_resolvers() { printf '192.168.1.254\\n2001:db8::1\\n'; }
+docker_cmd() { printf '# ExtServers: [host(192.168.1.254) host(2001:0db8:0:0:0:0:0:1)]\\n'; }
+tar() { cat; }
+n8n_dns_ready() { return 0; }
+curl() { return 0; }
+cloudflared_started_at() { printf fixture; }
+cloudflared_logs() { printf 'Registered tunnel connection\\n'; }
+assess_target cloudflared
+assess_target n8n
+""")
+    assert result.returncode == 0, result.stderr
+
+
+def test_real_stale_upstream_remains_stale() -> None:
+    result = run_bash("""
+docker_cmd() { printf '# ExtServers: [host(10.235.35.170)]\\n'; }
+tar() { cat; }
+assess_target n8n
+""")
+    assert result.returncode == 10
+
+
+def test_stable_reordered_mounts_recover_successfully() -> None:
+    fixture = readiness_fixture().replace(
+        "n8n_mount_fingerprint() { printf 'fixture-mount\\n'; }", ""
+    )
+    result = run_bash(fixture + mount_fixture(MOUNTS, list(reversed(MOUNTS))) + "run_guard")
+    assert result.returncode == 0, result.stderr
+    assert "[RECOVERED] service=n8n" in result.stderr
+    assert "mount_diff" not in result.stderr
+
+
+def test_missing_mount_evidence_prevents_n8n_recreation() -> None:
+    result = run_bash(
+        readiness_fixture()
+        + """
+n8n_mount_fingerprint() { return 1; }
+run_guard
+"""
+    )
+    assert result.returncode == 1
+    assert "recreate:n8n" not in result.stdout
+    assert "mounts=unavailable before recreation" in result.stderr
+
+
+def test_cloudflared_error_order_is_consumed_without_pipefail_sigpipe() -> None:
+    result = run_bash("""
+cloudflared_logs() {
+  printf 'lookup foo server misbehaving\\n'
+  for i in {1..2000}; do printf 'padding line\\n'; done
+  printf 'Registered tunnel connection\\n'
+}
+cloudflared_dns_error fixture
+cloudflared_registered_after_last_dns_error fixture
+""")
+    assert result.returncode == 0
+
+
+def test_failed_scope_inspection_cannot_authorize_recovery_from_partial_output() -> None:
+    result = run_bash("""
+compose_cmd() { printf 'cloudflared\\nn8n\\n'; return 124; }
+container_identity_valid() { return 0; }
+run_guard
+""")
+    assert result.returncode == 1
+    assert "compose identity unavailable" in result.stderr
+    assert "RECOVERING" not in result.stderr
+
+
+def test_failed_host_resolver_read_is_not_healthy_despite_partial_output() -> None:
+    result = run_bash("""
+host_resolvers() { printf '192.168.1.254\\n'; return 1; }
+getent() { return 0; }
+host_dns_healthy
+""")
+    assert result.returncode == 1

@@ -84,8 +84,9 @@ trigger design. NetworkManager invokes it for connection-up, DHCP, resolver, con
 VPN-up events; it asynchronously submits
 `systemctl start --no-block odyssey-container-dns-reconcile.service`. The dispatcher performs no
 Docker, DNS, or recovery work itself, does not wait for the guard, does not identify a Wi-Fi SSID
-or hardcode a resolver, and supports future wired handoffs. Repeated events are harmless because
-they only request the same fixed-scope oneshot guard; the guard remains the sole authority and
+or hardcode a resolver, and supports future wired handoffs. Events submit the same fixed-scope
+oneshot guard (systemd coalesces starts while it is running, but later events can start another
+execution); the guard remains the sole authority and
 retains host-DNS validation, production-only scope, one-attempt-per-target recovery, and fail-closed
 behavior. Irrelevant NetworkManager events do nothing.
 
@@ -94,6 +95,78 @@ requiring human approval after the repository change is merged. The guard's syst
 is 180 seconds; any caller or operational wrapper must preserve that bound and must not impose a
 shorter timeout such as 30 seconds. Partial output or an intermediate observation before the guard
 completes is not terminal recovery evidence; verify the per-target terminal result and post-state.
+
+### September 19 follow-up: disabled pending hardened guard verification
+
+The real handoff left both production containers with stale external resolvers; classification by
+that mismatch was correct and both were recreated. The dispatcher-triggered execution at
+2026-09-19 01:14:15–01:17:13 CEST nevertheless reported `FAILED` for both post-recreation readiness
+checks. The services were subsequently observed healthy without additional recovery being needed
+for those readiness symptoms. Generic `FAILED` output did not record which readiness conjunct
+failed, so the exact historical per-probe failure cannot be reconstructed. These terminal failures
+were not proof of a persistent production outage. A later execution at approximately 05:40 CEST
+also reported an n8n mount-fingerprint mismatch; its before/after mount records were not logged.
+Current observed PROD is healthy. The installed dispatcher is intentionally disabled at mode
+`0644` until the hardened guard is merged, separately installed, and live-verified.
+
+Repository investigation found three concrete defects/gaps:
+
+- Docker's captured `ExtServers` line separates `host(IPv4)` and `host(IPv6)` with spaces. The old
+  comma-only parser greedily combined these into one invalid value. This can falsely classify
+  **already-current** DNS as stale and keep both post-recreation readiness predicates false.
+  It does not invalidate the genuine earlier stale-DNS handoff; it does invalidate attributing
+  every later mismatch/failure to stale DNS or startup timing alone. Parse errors are now unknown
+  evidence and fail closed without authorizing recreation.
+- The old mount format emitted literal `\n` separators, leaving all mounts on one line. Sorting
+  that line did not remove Docker mount-order variation. It also omitted bind sources. This is a
+  reproducible false-mismatch mechanism, not proof of the precise cause of the later live mismatch.
+- Sequential fixed-attempt readiness windows could expire for a delayed target while the other
+  had not yet been recreated. No predicate-level terminal evidence distinguished slow startup,
+  resolver parsing, DNS lookup, health response, or registration ordering.
+
+The guard still assesses both targets before recovery and recreates each at most once, sequentially,
+with `--no-deps --force-recreate --pull never`. Only the read-only post-recreation waits overlap.
+They share a 165-second elapsed-time deadline from guard entry, leaving margin under the unchanged
+180-second systemd limit. External Docker/DNS commands are bounded (5 seconds, Compose recreation
+45 seconds, HTTP 3 seconds), capped by remaining time; command termination has a one-second kill
+grace. Initial startup grace remains bounded and counts toward the same deadline. A slow or hung
+dependency may exhaust the budget and fail closed; there is no second recreation or retry loop.
+Host DNS is revalidated immediately before each recreation. Callers must still allow the full
+180-second service window rather than applying a shorter external timeout.
+
+Terminal diagnostics record normalized expected/observed resolver sets and match/read exit status;
+n8n additionally records the DNS-only lookup result/exit status, `/healthz` HTTP status/exit status,
+and mount comparison. Cloudflared records the last relevant DNS-error and registration line
+positions from the same log snapshot, plus registration readiness. Command exit `124` means the
+probe exhausted its command or remaining execution budget, not proof that the service is broken.
+No raw tunnel logs, environment, credentials, or response bodies are printed. The correct PROD
+private n8n health boundary is `127.0.0.1:18780`; a failed probe at `172.18.0.1:18780` does not prove
+n8n is unhealthy. A public unauthenticated Access redirect proves Access interception only, not
+authenticated origin health.
+
+The mount fingerprint protects volume identity, bind source, destination, read/write mode,
+propagation and the remaining Docker mount metadata. JSON key order, mount order and comma-option
+order are normalized; missing optional empty fields are equivalent. Missing mandatory evidence
+fails closed. Actual drift logs a bounded diff of normalized mount records (up to 16 lines, 1024
+characters per line) and prevents a `RECOVERED` result. A mismatch is evidence to investigate, never
+permission to repair mounts, credentials, workflows or data automatically.
+
+Before re-enabling the dispatcher, a separately approved live operation must:
+
+1. Keep the dispatcher at `0644`; verify the installed guard/service against the exact merged
+   source and `TimeoutStartSec=180`. Install only the approved guard, without promoting runtime or
+   frontend assets, changing Compose, or touching DEV/data.
+2. Capture current host/container resolver sets, container IDs/start times, normalized n8n mount
+   records, runtime PID/health, and private n8n health/readiness. Verify host DNS is healthy.
+3. Authorize one healthy-network guard execution with the full 180-second observation window.
+   Require `HEALTHY` for both targets and unchanged IDs, mounts and runtime PID. No synthetic event
+   or manual rerun should be issued if the result is unexpected.
+4. Validate delayed/stale recovery in disposable fixtures first. Any live handoff/recreation test
+   needs its own explicit approval, once-per-target evidence, terminal `RECOVERED` results, unchanged
+   mount/runtime/workflow boundaries, DNS-only probes and no provider request.
+5. Verify the public Access boundary and an authorized non-provider origin check; only after all
+   required evidence passes may a separate approved `chmod 0755` re-enable the dispatcher.
+   Roll back automatic triggering with `chmod 0644` only; do not restart NetworkManager.
 
 Post-merge Raspberry migration (separate controlled operation; not performed by this repository
 change):
