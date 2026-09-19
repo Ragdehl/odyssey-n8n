@@ -241,6 +241,7 @@ expected = {
     "/api/environment.js",
     "/api/request",
     "/api/conversation",
+    "/api/notes",
 }
 index, *workflow_paths = map(Path, sys.argv[1:])
 if any(route not in index.read_text(encoding="utf-8") for route in {"/api/request", "/api/conversation"}):
