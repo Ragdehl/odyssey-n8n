@@ -12,7 +12,16 @@ from odyssey_core.conversations import MAIN_CONVERSATION_ID
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
-from odyssey_core.note_queries import NotePage, NoteSummary
+from odyssey_core.note_queries import (
+    Backlink,
+    BacklinkPage,
+    NoteCapabilities,
+    NoteDetail,
+    NoteLink,
+    NotePage,
+    NotesQueryError,
+    NoteSummary,
+)
 from odyssey_core.request_planning import SelectionCriteria
 from odyssey_runtime import composition
 from odyssey_runtime import server as runtime_server
@@ -276,6 +285,76 @@ def test_runtime_answer_and_note_set_attaches_membership_without_altering_answer
     assert result.presentation_intent == "answer_and_note_set"
     assert result.note_result_snapshot is not None
     assert result.note_result_snapshot["note_ids"] == ["airbus"]
+
+
+def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
+    """The runtime forwards typed Notes operations without adding filter/ranking semantics."""
+    summary = NoteSummary(
+        "ada", "Ada", "person", ("people",), "2026-01-01T00:00:00Z", "2026-09-01T00:00:00Z", {}
+    )
+    page = NotePage(
+        "feed", "relevance", "ui2-feed-v1", "2026-09-19T00:00:00Z", (), (summary,), 1, None
+    )
+
+    class Notes:
+        def capabilities(self):
+            return NoteCapabilities(({"id": "person", "name": "Person"},), ())
+
+        def query(self, **kwargs):
+            assert kwargs["mode"] == "feed"
+            return page
+
+        def detail(self, note_id):
+            assert note_id == "ada"
+            return NoteDetail(
+                summary, "Current canonical body.", (NoteLink("ada", "Ada", "person", "Ada", 1),)
+            )
+
+        def backlinks(self, note_id, **kwargs):
+            assert note_id == "ada"
+            return BacklinkPage("ada", (Backlink(summary, 1, "context"),), 1, None)
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(), refresh_indexes=lambda: None, notes_service=Notes()
+    )
+    assert runtime.notes("capabilities", {})["kind"] == "capabilities"
+    assert runtime.notes("query", {"mode": "feed"})["items"][0]["id"] == "ada"
+    assert runtime.notes("detail", {"note_id": "ada"})["links"][0]["target_id"] == "ada"
+    assert runtime.notes("backlinks", {"note_id": "ada"})["items"][0]["source"]["id"] == "ada"
+    with pytest.raises(ValueError, match="unsupported"):
+        runtime.notes("unknown", {})
+
+
+def test_runtime_intelligent_notes_rejects_invalid_transport_without_replanning() -> None:
+    """The runtime allows the explicit intelligent operation only through its injected Core seam."""
+    calls: list[tuple[str, object]] = []
+    summary = NoteSummary(
+        "ada", "Ada", "person", (), "2026-01-01T00:00:00Z", "2026-09-01T00:00:00Z", {}
+    )
+
+    def intelligent(query, filters):
+        calls.append((query, filters))
+        return NotePage(
+            "intelligent",
+            "relevance",
+            "ui2-feed-v1",
+            "2026-09-19T00:00:00Z",
+            (),
+            (summary,),
+            1,
+            None,
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),
+        intelligent_notes_execute=intelligent,
+    )
+    assert runtime.notes("intelligent", {"query": "Ada", "filters": []})["mode"] == "intelligent"
+    assert calls == [("Ada", [])]
+    with pytest.raises(NotesQueryError, match="do not re-plan"):
+        runtime.notes("intelligent", {"query": "Ada", "filters": [], "cursor": "forbidden"})
 
 
 def test_runtime_server_rejects_invalid_port() -> None:
