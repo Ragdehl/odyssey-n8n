@@ -1,8 +1,10 @@
 # UI-2 — read-only Notes product contract
 
-Status: **approved implementation active in Draft PR #124; local deterministic evidence is green.
-Sonar coverage, the cost-bounded live-planner gate, isolated DEV evidence, and human mobile validation
-remain required. Not complete in PROD.**
+Status: **approved implementation active in Draft PR #124; deterministic evidence, Python CI, and
+Sonar (81.3% new-code coverage) are green. One production Luna→Sol planner case passed within the
+$0.15 hard budget before the next case was safely stopped; direct isolated-DEV Notes runtime evidence
+is green, while n8n publication currently reports an active-version error and the protected public
+route remains Access-gated. Human mobile validation remains required. Not complete in PROD.**
 
 ## Objective
 

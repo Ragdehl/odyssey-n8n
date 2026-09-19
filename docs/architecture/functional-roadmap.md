@@ -32,9 +32,11 @@ checkpoint confirmed the same durable turns survive a full mobile page reload on
 alternate-host paths are intercepted by Cloudflare Access before n8n. The next functional phase is
 **UI-2 read-only Notes**: expose the same canonical Markdown through a simple browse/search/read
 surface without creating a second knowledge authority. Its approved implementation is active in Draft
-PR #124: deterministic Core/runtime/browser evidence is green locally, while Sonar coverage, the
-cost-bounded live planner gate, isolated DEV evidence, and the human mobile checkpoint remain open.
-It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
+PR #124: deterministic Core/runtime/browser evidence, Python CI, and Sonar are green; the production
+planner evidence is clean but budget-bounded after one Luna→Sol case, and direct isolated-DEV Notes
+runtime evidence is green. n8n workflow publication is blocked by the isolated DEV container's active
+version state, and the protected public route remains Access-gated. Human mobile validation remains
+open. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
