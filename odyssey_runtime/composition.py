@@ -282,6 +282,7 @@ class RuntimeComposition:
         text: str,
         status: str | None = None,
         request_detail: dict[str, object] | None = None,
+        note_result_snapshot: dict[str, object] | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
     ) -> dict[str, object]:
@@ -296,6 +297,7 @@ class RuntimeComposition:
             created_at=_current_time()["timestamp"],
             status=status,
             request_detail=request_detail,
+            note_result_snapshot=note_result_snapshot,
         )
 
     def recent_conversation_context(

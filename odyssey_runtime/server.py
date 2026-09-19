@@ -106,6 +106,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "text",
                         "status",
                         "request_detail",
+                        "note_result_snapshot",
                         "authenticated_actor",
                         "external_principal",
                     }
@@ -122,6 +123,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                             payload["text"],
                             payload.get("status"),
                             payload.get("request_detail"),
+                            payload.get("note_result_snapshot"),
                             *self._identity_from_payload(payload),
                         ),
                     )
