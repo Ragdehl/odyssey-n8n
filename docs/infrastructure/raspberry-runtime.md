@@ -107,10 +107,19 @@ most 14 seconds; the two existing five-second DNS probe bounds make the complete
 at most 24 seconds inside the existing 165-second guard budget, leaving at least 141 seconds for a
 real stale-DNS recovery. Failure to stabilize, malformed or empty evidence, failed DNS probes, or a
 later resolver change fails closed with zero further recreation.
-The live dispatcher remains disabled at mode `0644` until this change is merged, installed, and a
-human-authorized live verification confirms stable healthy-network behavior with zero recreation.
 
-### September 19 follow-up: disabled pending hardened guard verification
+The stabilization hardening merged as `abfa4aab1889122f7143e901136ee0a863b55fb1` and was installed
+on the Raspberry on 2026-09-19 as the exact source bytes for
+`/home/ragdehl/.local/libexec/odyssey-container-dns-reconcile`. A human-authorized healthy-network
+execution observed the same normalized IPv4+IPv6 resolver set for three consecutive samples,
+reported DNS probes `PASS`, and returned `HEALTHY` for both `cloudflared` and `n8n` with service
+result `success`. Post-run evidence confirmed both container IDs/start times were unchanged, the
+production runtime remained on the same PID with private `/healthz` HTTP 200, and no `RECOVERING`
+path ran. The NetworkManager dispatcher was then re-enabled with mode `0755`; enabling it produced
+no immediate guard execution. This closes the temporary `0644` hold described by the earlier
+incident notes below.
+
+### September 19 follow-up: hardened guard verification complete
 
 The real handoff left both production containers with stale external resolvers; classification by
 that mismatch was correct and both were recreated. The dispatcher-triggered execution at
@@ -120,8 +129,9 @@ for those readiness symptoms. Generic `FAILED` output did not record which readi
 failed, so the exact historical per-probe failure cannot be reconstructed. These terminal failures
 were not proof of a persistent production outage. A later execution at approximately 05:40 CEST
 also reported an n8n mount-fingerprint mismatch; its before/after mount records were not logged.
-Current observed PROD is healthy. The installed dispatcher is intentionally disabled at mode
-`0644` until the hardened guard is merged, separately installed, and live-verified.
+These observations motivated the parser, fingerprint, diagnostic/readiness, and resolver-stability
+hardening. The temporary dispatcher-disable state is no longer current: the merged guard has since
+been installed and live-verified as described above.
 
 Repository investigation found three concrete defects/gaps:
 
@@ -165,7 +175,8 @@ fails closed. Actual drift logs a bounded diff of normalized mount records (up t
 characters per line) and prevents a `RECOVERED` result. A mismatch is evidence to investigate, never
 permission to repair mounts, credentials, workflows or data automatically.
 
-Before re-enabling the dispatcher, a separately approved live operation must:
+The completed 2026-09-19 live re-enable followed this sequence, which remains the rollback-safe
+verification pattern for future guard revisions:
 
 1. Keep the dispatcher at `0644`; verify the installed guard/service against the exact merged
    source and `TimeoutStartSec=180`. Install only the approved guard, without promoting runtime or
