@@ -13,7 +13,7 @@ from typing import cast
 from zoneinfo import ZoneInfo
 
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
-from odyssey_core.context import ContextIndex
+from odyssey_core.context import ContextFilter, ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
 from odyssey_core.conversations import MAIN_CONVERSATION_ID
@@ -36,6 +36,7 @@ from odyssey_core.note_queries import (
     NotesQueryError,
     NotesQueryService,
 )
+from odyssey_core.note_result_snapshots import NoteResultSnapshot
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalStage,
@@ -43,7 +44,12 @@ from odyssey_core.observability import (
 )
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.persistence import ActorInput
-from odyssey_core.request_planning import PlannerClarification, RequestPlan, RetrieveAction
+from odyssey_core.request_planning import (
+    PlannerClarification,
+    RequestPlan,
+    RetrieveAction,
+    SelectionCriteria,
+)
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
@@ -218,6 +224,7 @@ class RuntimeComposition:
                     max(0.0, (self.monotonic() - refresh_started) * 1000),
                 )
             )
+        result = self._attach_note_result_snapshot(result)
         return cast(
             ApplicationResult,
             replace(
@@ -229,6 +236,74 @@ class RuntimeComposition:
                 ),
             ),
         )
+
+    def _attach_note_result_snapshot(self, result: ApplicationResult) -> ApplicationResult:
+        """Build bounded durable membership only for an already-authorized note-set plan.
+
+        The Core planner validation has already proved that this is exactly one direct retrieval.
+        This adapter deliberately delegates filtering/ranking to the Notes service rather than
+        recreating its semantics at the request, workflow, or browser boundary.
+        """
+        if (
+            result.presentation_intent == "answer"
+            or result.note_set_selection is None
+            or self.notes_service is None
+            or self.notes_embedder is None
+        ):
+            return result
+        selection = result.note_set_selection
+        try:
+            page = self._note_set_page(selection)
+            snapshot = NoteResultSnapshot(
+                query=selection.query,
+                filters=tuple(
+                    {"field": item.field, "op": item.op, "value": item.value}
+                    for item in [*selection.filters, *self._type_filter(selection)]
+                ),
+                sort=page.sort,
+                ranking_version=page.ranking_version,
+                executed_at=page.as_of,
+                note_ids=tuple(item.id for item in page.items),
+                total=page.total,
+                truncated=page.total > len(page.items),
+            )
+        except (NotesQueryError, ValueError):
+            # A malformed or stale derived projection must never become result-set authority.
+            # The normal Core action evidence remains available, but no affordance is emitted.
+            return result
+        return replace(result, note_result_snapshot=snapshot.to_payload())
+
+    def _note_set_page(self, selection: SelectionCriteria) -> NotePage:
+        """Return up to the snapshot bound using the single canonical Notes query service."""
+        assert self.notes_service is not None
+        filters = [*selection.filters, *self._type_filter(selection)]
+        first = self.notes_service.query(
+            mode="intelligent",
+            query=selection.query,
+            filters=filters,
+            sort="relevance",
+            page_size=40,
+            embedder=cast(object, self.notes_embedder),
+        )
+        if first.total <= len(first.items) or first.next_cursor is None:
+            return first
+        second = self.notes_service.query(
+            mode="intelligent",
+            query=selection.query,
+            filters=filters,
+            sort="relevance",
+            page_size=24,
+            cursor=first.next_cursor,
+            embedder=cast(object, self.notes_embedder),
+        )
+        return replace(first, items=first.items + second.items, next_cursor=second.next_cursor)
+
+    @staticmethod
+    def _type_filter(selection: SelectionCriteria) -> tuple[ContextFilter, ...]:
+        """Project the planner's canonical type criterion into the shared filter contract."""
+        if selection.type is None:
+            return ()
+        return (ContextFilter("type", "eq", selection.type),)
 
     def create_conversation(
         self,
@@ -498,6 +573,8 @@ def _notes_to_response(
             "items": [_summary_to_response(item) for item in value.items],
             "total": value.total,
             "next_cursor": value.next_cursor,
+            "unavailable_ids": list(value.unavailable_ids),
+            "snapshot_offset": value.snapshot_offset,
         }
     if isinstance(value, NoteDetail):
         return {

@@ -63,6 +63,8 @@ def test_application_result_serialization_exposes_only_public_evidence() -> None
         "status": "completed",
         "planning_error": None,
         "clarification_code": None,
+        "presentation_intent": "answer",
+        "note_result_snapshot": None,
         "affected_stable_note_ids": ["note-test"],
         "actions": [],
         "pending_work": {"required": False, "persisted": False, "record_id": None, "error": None},

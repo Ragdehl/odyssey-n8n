@@ -61,6 +61,9 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert "appendDetailButton(message, result.request_detail)" in app
     assert "renderProductResultWithContinuity" in app
     assert "appendContinuityWarning" in app
+    assert "appendNoteSetAffordance(message, result.note_result_snapshot)" in app
+    assert 'selectSurface("notes")' in app
+    assert 'new CustomEvent("odyssey:open-note-snapshot"' in app
     assert "La respuesta se ha obtenido" in app
     assert (
         "The existing chat remains usable if the optional history projection is unavailable." in app
@@ -118,7 +121,9 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     client = (WEB_ROOT / "client.js").read_text(encoding="utf-8")
-    combined = "\n".join((index, app, client))
+    notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
+    notes_client = (WEB_ROOT / "notes-client.js").read_text(encoding="utf-8")
+    combined = "\n".join((index, app, client, notes, notes_client))
 
     assert "https://" not in index
     assert "http://" not in index
@@ -134,6 +139,21 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert "validateEstimatedCost" in client
     assert '"Coste estimado"' in app
     assert '"Base de precios"' in app
+
+
+def test_notes_historical_snapshot_contract_uses_safe_dom_and_explicit_rerun() -> None:
+    """Keep historical membership presentation bounded, explicit, and framework-free."""
+    notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
+    notes_client = (WEB_ROOT / "notes-client.js").read_text(encoding="utf-8")
+    assert "unavailableRow" in notes
+    assert "Nota ya no disponible" in notes
+    assert "Resultado histórico" in notes
+    assert "rerunHistorical" in notes
+    assert 'mode: "intelligent"' in notes
+    assert "state.snapshot = null" in notes
+    assert "snapshot_offset" in notes_client
+    assert "unavailable_ids" in notes_client
+    assert "innerHTML" not in notes
 
 
 def test_static_asset_workflow_forces_revalidation_after_dev_deploy() -> None:

@@ -56,8 +56,16 @@ export function validateNotesResponse(value) {
 
 function validatePage(value) {
   if (!["feed", "local", "intelligent", "snapshot"].includes(value.mode) || !["relevance", "updated_desc", "created_desc", "created_asc"].includes(value.sort) || !isText(value.ranking_version) || !isText(value.as_of) || !Array.isArray(value.applied_filters) || !Array.isArray(value.items) || !Number.isInteger(value.total) || !cursor(value.next_cursor)) throw new NotesRequestError("Página de notas inválida.");
+  const unavailable = value.unavailable_ids === undefined ? [] : value.unavailable_ids;
+  const snapshotOffset = value.snapshot_offset === undefined ? null : value.snapshot_offset;
+  if (!Array.isArray(unavailable) || unavailable.some((id) => !isText(id)) ||
+      (snapshotOffset !== null && (!Number.isInteger(snapshotOffset) || snapshotOffset < 0)) ||
+      (value.mode !== "snapshot" && (unavailable.length || snapshotOffset !== null))) {
+    throw new NotesRequestError("Página histórica de notas inválida.");
+  }
   return {kind: "page", mode: value.mode, sort: value.sort, ranking_version: value.ranking_version, as_of: value.as_of,
-    applied_filters: value.applied_filters.map(validateFilter), items: value.items.map(validateSummary), total: value.total, next_cursor: value.next_cursor};
+    applied_filters: value.applied_filters.map(validateFilter), items: value.items.map(validateSummary), total: value.total, next_cursor: value.next_cursor,
+    unavailable_ids: unavailable, snapshot_offset: snapshotOffset};
 }
 function validateSummary(value) { if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.name) || !isText(value.type) || !Array.isArray(value.tags) || !isText(value.created_at) || !isText(value.updated_at) || !value.properties || typeof value.properties !== "object" || Array.isArray(value.properties)) throw new NotesRequestError("Nota inválida."); return {id: value.id, name: value.name, type: value.type, tags: value.tags.filter(isText), created_at: value.created_at, updated_at: value.updated_at, properties: value.properties}; }
 function validateType(value) { if (!value || !isText(value.id) || !isText(value.name)) throw new NotesRequestError("Tipo inválido."); return {id: value.id, name: value.name}; }

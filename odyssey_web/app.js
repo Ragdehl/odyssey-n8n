@@ -157,6 +157,7 @@ function appendNoteSetAffordance(article, snapshot) {
   const visible = snapshot.truncated ? `${snapshot.note_ids.length} de ${snapshot.total}` : snapshot.total;
   button.textContent = `Ver ${visible} notas`;
   button.addEventListener("click", () => {
+    selectSurface("notes");
     document.dispatchEvent(new CustomEvent("odyssey:open-note-snapshot", {detail: snapshot}));
   });
   article.append(button);
@@ -275,6 +276,7 @@ function resultLabel(result) {
   return {
     acknowledgement: "Hecho",
     clarification: "Aclara tu solicitud",
+    note_set: "Notas encontradas",
     empty: "Sin resultados",
     error: "No completado",
   }[result.kind] ?? "Odyssey";

@@ -75,6 +75,8 @@ class NotePage:
     items: tuple[NoteSummary, ...]
     total: int
     next_cursor: str | None
+    unavailable_ids: tuple[str, ...] = ()
+    snapshot_offset: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +242,17 @@ class NotesQueryService:
             or (cursor_as_of if isinstance(cursor_as_of, str) else None)
             or datetime.now(UTC).isoformat(timespec="microseconds")
         )
+        if mode == "snapshot":
+            return self._historical_snapshot_page(
+                query=query,
+                filters=applied,
+                sort=sort,
+                page_size=page_size,
+                cursor=cursor,
+                snapshot_ids=snapshot_ids,
+                as_of=current_as_of,
+                fingerprint=fingerprint,
+            )
         generation, notes = self._grounded_index_notes()
         offset = 0
         if saved_cursor is not None:
@@ -255,9 +268,7 @@ class NotesQueryService:
                 raise StaleCursorError("STALE_CURSOR")
             offset = saved["offset"]
         selected = [note for note in notes if self._matches(note, normalized_filters)]
-        if mode == "snapshot":
-            selected = self._ordered_snapshot(selected, snapshot_ids)
-        elif mode == "local":
+        if mode == "local":
             selected = self._local_rank(selected, query)
         elif mode == "intelligent":
             selected = self._intelligent_rank(selected, query, embedder)
@@ -288,6 +299,79 @@ class NotesQueryService:
             tuple(item.summary for item in page),
             len(selected),
             next_cursor,
+        )
+
+    def _historical_snapshot_page(
+        self,
+        *,
+        query: str,
+        filters: tuple[ContextFilter, ...],
+        sort: str,
+        page_size: int,
+        cursor: str | None,
+        snapshot_ids: Sequence[str],
+        as_of: str,
+        fingerprint: str,
+    ) -> NotePage:
+        """Replay durable stable-ID membership from current Markdown without recomputation.
+
+        A saved result set is not a current search. It therefore bypasses index ranking and filters
+        entirely, retaining missing IDs as unavailable positions while only current canonical
+        Markdown supplies details for members that still exist.
+        """
+        del query
+        if (
+            len(snapshot_ids) > 64
+            or len(set(snapshot_ids)) != len(snapshot_ids)
+            or not all(isinstance(item, str) and item for item in snapshot_ids)
+        ):
+            raise NotesQueryError("Historical result snapshot is invalid")
+        notes = self._grounded_vault_notes()
+        generation = hashlib.sha256(
+            "".join(f"{item.summary.id}:{item.source_hash}" for item in notes.values()).encode()
+        ).hexdigest()
+        offset = 0
+        if cursor is not None:
+            saved = _decode_cursor(cursor)
+            if (
+                saved.get("v") != 1
+                or saved.get("generation") != generation
+                or saved.get("fingerprint") != fingerprint
+                or saved.get("as_of") != as_of
+                or not isinstance(saved.get("offset"), int)
+                or saved["offset"] < 0
+            ):
+                raise StaleCursorError("STALE_CURSOR")
+            offset = saved["offset"]
+        ids = tuple(snapshot_ids)
+        position_ids = ids[offset : offset + page_size]
+        available = tuple(notes[item].summary for item in position_ids if item in notes)
+        unavailable = tuple(item for item in position_ids if item not in notes)
+        next_offset = offset + len(position_ids)
+        next_cursor = (
+            _json_cursor(
+                {
+                    "v": 1,
+                    "generation": generation,
+                    "fingerprint": fingerprint,
+                    "as_of": as_of,
+                    "offset": next_offset,
+                }
+            )
+            if next_offset < len(ids)
+            else None
+        )
+        return NotePage(
+            "snapshot",
+            sort,
+            _RANKING_VERSION,
+            as_of,
+            filters,
+            available,
+            len(ids),
+            next_cursor,
+            unavailable,
+            offset,
         )
 
     def detail(self, note_id: str) -> NoteDetail:
@@ -674,20 +758,6 @@ class NotesQueryService:
                 note.summary.id,
             ),
         )
-
-    @staticmethod
-    def _ordered_snapshot(
-        notes: list[_GroundedNote], snapshot_ids: Sequence[str]
-    ) -> list[_GroundedNote]:
-        """Keep a validated historical stable-ID order without replacing unavailable members."""
-        if (
-            len(snapshot_ids) > 64
-            or len(set(snapshot_ids)) != len(snapshot_ids)
-            or not all(isinstance(item, str) and item for item in snapshot_ids)
-        ):
-            raise NotesQueryError("Historical result snapshot is invalid")
-        by_id = {note.summary.id: note for note in notes}
-        return [by_id[item] for item in snapshot_ids if item in by_id]
 
     @staticmethod
     def _fingerprint(

@@ -5,33 +5,52 @@ const TYPE_TOKENS = Object.freeze({concept: "◈", person: "●", project: "◆"
 
 /** Mount a read-only Notes surface that preserves its controller state while hidden. */
 export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
-  const state = {query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false, current: null, back: [], forward: [], feedScroll: 0, historical: false};
+  const state = {query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false, current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed", snapshot: null};
   const search = root.querySelector("#notes-search");
   const list = root.querySelector("#notes-list");
   const detail = root.querySelector("#note-detail");
   const sort = root.querySelector("#notes-sort");
   const status = root.querySelector("#notes-status");
 
-  async function load({reset = false, mode = "feed", snapshotIds = []} = {}) {
+  async function load({reset = false, mode = state.mode, snapshotIds = state.snapshot?.note_ids ?? [], throwOnError = false} = {}) {
     if (state.loading || (!reset && !state.cursor)) return;
     state.loading = true;
     status.textContent = "Cargando…";
     try {
       const page = await requestNotes({endpoint, operation: "query", payload: {mode, query: state.query, filters: state.filters, sort: state.sort, cursor: reset ? null : state.cursor, snapshot_ids: snapshotIds}});
       if (reset) state.items = [];
-      state.items.push(...page.items);
+      if (page.mode === "snapshot" && state.snapshot) {
+        const available = new Map(page.items.map((item) => [item.id, item]));
+        const ids = state.snapshot.note_ids.slice(page.snapshot_offset ?? 0, (page.snapshot_offset ?? 0) + 40);
+        state.items.push(...ids.map((id) => available.get(id) ?? {id, unavailable: true}));
+      } else state.items.push(...page.items);
       state.cursor = page.next_cursor;
       state.historical = page.mode === "snapshot";
+      state.mode = page.mode;
       renderList();
-      status.textContent = page.total ? `${page.total} notas` : "No hay notas";
+      renderStatus(page.total);
     } catch (error) {
       if (error instanceof NotesRequestError && error.code === "STALE_CURSOR") { state.cursor = null; status.textContent = "Las notas cambiaron. Actualiza la búsqueda."; }
       else status.textContent = "No se han podido cargar las notas.";
+      if (throwOnError) throw error;
     } finally { state.loading = false; }
   }
+  function renderStatus(total) {
+    if (!state.historical || !state.snapshot) { status.textContent = total ? `${total} notas` : "No hay notas"; return; }
+    status.replaceChildren(document.createTextNode(`Resultado histórico · ${state.snapshot.truncated ? `${state.snapshot.note_ids.length} de ${state.snapshot.total}` : state.snapshot.total} notas`));
+    const rerun = button("Actualizar búsqueda", () => void rerunHistorical()); rerun.className = "notes-rerun"; status.append(document.createTextNode(" · "), rerun);
+  }
   function renderList() {
-    list.replaceChildren(...state.items.map((note) => noteRow(note, () => open(note.id))));
+    list.replaceChildren(...state.items.map((note) => note.unavailable ? unavailableRow(note.id) : noteRow(note, () => open(note.id))));
     if (state.cursor) { const more = button("Cargar más", () => void load()); more.className = "notes-more"; list.append(more); }
+  }
+  async function rerunHistorical() {
+    if (!state.snapshot) return;
+    const saved = state.snapshot;
+    state.query = saved.query; state.filters = saved.filters; state.historical = false; state.snapshot = null; state.mode = "intelligent";
+    search.value = state.query;
+    try { await load({reset: true, mode: "intelligent", throwOnError: true}); }
+    catch { status.textContent = "No se pueden reutilizar estos filtros históricos."; }
   }
   async function open(id, {history = true} = {}) {
     try {
@@ -61,16 +80,14 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     detail.replaceChildren(header, controls, properties, tags, body, links, backlinks);
   }
   async function appendBacklinks(target, id) { try { const value = await requestNotes({endpoint, operation: "backlinks", payload: {note_id: id}}); if (!value.items.length) { target.append(document.createTextNode("Sin enlaces entrantes.")); return; } for (const item of value.items) { const row = button(`${item.source.name} · ${item.occurrences}`, () => void open(item.source.id)); row.className = "backlink"; target.append(row); const context = document.createElement("p"); context.className = "backlink-context"; context.textContent = item.context; target.append(context); } } catch { target.append(document.createTextNode("No se han podido cargar los enlaces entrantes.")); } }
-  function searchLocal() { state.query = search.value; state.current = null; detail.hidden = true; list.hidden = false; void load({reset: true, mode: state.query.trim() ? "local" : "feed"}); }
+  function searchLocal() { state.query = search.value; state.current = null; state.historical = false; state.snapshot = null; detail.hidden = true; list.hidden = false; void load({reset: true, mode: state.query.trim() ? "local" : "feed"}); }
   search.addEventListener("input", searchLocal);
-  root.querySelector("#notes-intelligent")?.addEventListener("click", () => { state.query = search.value; void load({reset: true, mode: "intelligent"}); });
+  root.querySelector("#notes-intelligent")?.addEventListener("click", () => { state.query = search.value; state.historical = false; state.snapshot = null; void load({reset: true, mode: "intelligent"}); });
   sort.addEventListener("change", () => { state.sort = sort.value; void load({reset: true, mode: state.query.trim() ? "local" : "feed"}); });
   document.addEventListener("odyssey:open-note-snapshot", (event) => {
     const snapshot = event.detail;
     if (!snapshot || !Array.isArray(snapshot.note_ids)) return;
-    state.query = snapshot.query;
-    state.filters = snapshot.filters;
-    state.historical = true;
+    state.query = snapshot.query; state.filters = snapshot.filters; state.sort = snapshot.sort; state.historical = true; state.snapshot = snapshot; state.current = null; detail.hidden = true; list.hidden = false; sort.value = state.sort;
     search.value = state.query;
     void load({reset: true, mode: "snapshot", snapshotIds: snapshot.note_ids});
   });
@@ -79,6 +96,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   return {state, refresh: () => load({reset: true, mode: state.query.trim() ? "local" : "feed"})};
 }
 function noteRow(note, action) { const row = button("", action); row.className = "note-row"; const title = document.createElement("strong"); title.append(typeBadge(note.type), document.createTextNode(note.name)); const meta = document.createElement("span"); meta.textContent = `Actualizada ${readableDate(note.updated_at)}`; row.append(title, meta); return row; }
+function unavailableRow(id) { const row = document.createElement("div"); row.className = "note-row note-unavailable"; const title = document.createElement("strong"); title.textContent = "Nota ya no disponible"; const meta = document.createElement("span"); meta.textContent = "Resultado histórico"; row.append(title, meta); row.dataset.noteId = id; return row; }
 function typeBadge(type) { const badge = document.createElement("span"); badge.className = "note-type type-" + type; badge.textContent = TYPE_TOKENS[type] ?? "○"; badge.setAttribute("aria-label", type); return badge; }
 function property(parent, key, value) { const term = document.createElement("dt"); term.textContent = key.replaceAll("_", " "); const description = document.createElement("dd"); description.textContent = Array.isArray(value) ? value.join(", ") : String(value); parent.append(term, description); }
 function button(label, action) { const value = document.createElement("button"); value.type = "button"; value.textContent = label; value.addEventListener("click", action); return value; }

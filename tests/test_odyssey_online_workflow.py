@@ -13,7 +13,11 @@ def _answerer_key(request_id: str) -> str:
 def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "const { request_id, status, kind, message, request_detail }" in source
+    assert (
+        "const { request_id, status, kind, message, request_detail, note_result_snapshot }"
+        in source
+    )
+    assert "...(note_result_snapshot ? { note_result_snapshot } : {})" in source
     assert "Return deterministic product response" in source
 
 
@@ -98,8 +102,18 @@ def test_completed_response_and_answerer_failure_keep_existing_detail_contract()
     source = SOURCE.read_text(encoding="utf-8")
     assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
     assert (
-        "request_detail } }]; } catch { return [{ json: { request_id: source.request_id" in source
+        "request_detail, note_result_snapshot: source.note_result_snapshot } }]; } catch" in source
     )
+
+
+def test_note_set_routes_without_answerer_and_preserves_only_valid_snapshot() -> None:
+    """Keep Notes affordances on the direct route and reject malformed runtime snapshots."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const safeSnapshot = value =>" in source
+    assert "if (intent !== 'answer' && !snapshot)" in source
+    assert "if (intent === 'note_set') return" in source
+    assert "kind: 'note_set'" in source
+    assert "route: 'answer'" in source
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:

@@ -1,5 +1,5 @@
 const ALLOWED_STATUSES = new Set(["completed", "partial", "needs_attention", "failed"]);
-const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "empty", "error"]);
+const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "empty", "error", "note_set"]);
 // The private runtime has a 120-second n8n deadline. Leave five seconds for
 // n8n to shape its bounded response before treating delivery as uncertain.
 export const PRODUCT_REQUEST_TIMEOUT_MS = 125_000;
@@ -127,6 +127,9 @@ function validateNoteResultSnapshot(value) {
       typeof value.truncated !== "boolean" || typeof value.sort !== "string" ||
       typeof value.ranking_version !== "string" || typeof value.executed_at !== "string" ||
       value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
+      value.query.length > 512 || value.filters.length > 16 ||
+      value.filters.some((filter) => !filter || typeof filter !== "object" || Array.isArray(filter) ||
+        Object.keys(filter).length !== 3 || typeof filter.field !== "string" || typeof filter.op !== "string" || !("value" in filter)) ||
       value.note_ids.some((id) => typeof id !== "string" || !id) ||
       value.truncated !== (value.total > value.note_ids.length)) {
     throw new ProductRequestError("Odyssey returned an invalid Notes result set.");

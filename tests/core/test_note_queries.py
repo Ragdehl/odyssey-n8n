@@ -163,3 +163,23 @@ def test_shared_filters_apply_to_current_markdown(tmp_path: Path, schema: dict) 
     notes = service(tmp_path, schema)
     page = notes.query(filters=[ContextFilter("tags", "contains", "project")])
     assert [item.id for item in page.items] == ["odyssey"]
+
+
+def test_historical_snapshot_keeps_deleted_member_position_without_recomputing(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Replay saved IDs from Markdown and expose a missing member instead of dropping it."""
+    notes = service(tmp_path, schema)
+    (tmp_path / "vault" / "people" / "ada.md").unlink()
+
+    page = notes.query(
+        mode="snapshot",
+        query="Ada",
+        snapshot_ids=["ada", "odyssey"],
+        page_size=2,
+    )
+
+    assert [item.id for item in page.items] == ["odyssey"]
+    assert page.unavailable_ids == ("ada",)
+    assert page.total == 2
+    assert page.snapshot_offset == 0
