@@ -29,6 +29,7 @@ from odyssey_core.identity_boundary import (
     OdysseyUser,
 )
 from odyssey_core.local_conversations import ConversationRootResolver
+from odyssey_core.note_queries import StaleCursorError
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -372,6 +373,68 @@ def test_http_boundary_rejects_invalid_input_without_calling_core() -> None:
         assert response.status == 400
         assert json.loads(response.read()) == {"error": "invalid request"}
         assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_notes_boundary_projects_one_typed_operation_and_actor() -> None:
+    """The private Notes route forwards only the operation payload and typed actor context."""
+    user = OdysseyUser.new()
+    calls: list[tuple[object, ...]] = []
+
+    class NotesRuntime:
+        def notes(self, operation, payload, actor, principal):
+            calls.append((operation, payload, actor.stable_user_id, principal))
+            return {"kind": "page", "items": [], "total": 0}
+
+    server = _test_server(NotesRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(
+                {
+                    "operation": "query",
+                    "mode": "feed",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "page", "items": [], "total": 0}
+        assert calls == [("query", {"mode": "feed"}, user.stable_user_id, None)]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_notes_boundary_fails_closed_for_stale_or_malformed_operations() -> None:
+    """Notes transport distinguishes only the safe stale-cursor condition from invalid input."""
+    calls: list[str] = []
+
+    class NotesRuntime:
+        def notes(self, operation, payload, actor, principal):
+            calls.append(operation)
+            if operation == "query":
+                raise StaleCursorError("STALE_CURSOR")
+            return {}
+
+    server = _test_server(NotesRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/notes", body=json.dumps({"operation": "query"}))
+        response = connection.getresponse()
+        assert response.status == 409
+        assert json.loads(response.read()) == {"error": "STALE_CURSOR"}
+
+        connection.request("POST", "/notes", body=json.dumps({"operation": "unknown"}))
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid notes request"}
+        assert calls == ["query"]
     finally:
         server.shutdown()
         server.server_close()
