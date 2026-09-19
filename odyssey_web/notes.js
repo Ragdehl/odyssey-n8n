@@ -12,12 +12,12 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   const sort = root.querySelector("#notes-sort");
   const status = root.querySelector("#notes-status");
 
-  async function load({reset = false, mode = "feed"} = {}) {
+  async function load({reset = false, mode = "feed", snapshotIds = []} = {}) {
     if (state.loading || (!reset && !state.cursor)) return;
     state.loading = true;
     status.textContent = "Cargando…";
     try {
-      const page = await requestNotes({endpoint, operation: "query", payload: {mode, query: state.query, filters: state.filters, sort: state.sort, cursor: reset ? null : state.cursor}});
+      const page = await requestNotes({endpoint, operation: "query", payload: {mode, query: state.query, filters: state.filters, sort: state.sort, cursor: reset ? null : state.cursor, snapshot_ids: snapshotIds}});
       if (reset) state.items = [];
       state.items.push(...page.items);
       state.cursor = page.next_cursor;
@@ -65,6 +65,15 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   search.addEventListener("input", searchLocal);
   root.querySelector("#notes-intelligent")?.addEventListener("click", () => { state.query = search.value; void load({reset: true, mode: "intelligent"}); });
   sort.addEventListener("change", () => { state.sort = sort.value; void load({reset: true, mode: state.query.trim() ? "local" : "feed"}); });
+  document.addEventListener("odyssey:open-note-snapshot", (event) => {
+    const snapshot = event.detail;
+    if (!snapshot || !Array.isArray(snapshot.note_ids)) return;
+    state.query = snapshot.query;
+    state.filters = snapshot.filters;
+    state.historical = true;
+    search.value = state.query;
+    void load({reset: true, mode: "snapshot", snapshotIds: snapshot.note_ids});
+  });
   list.addEventListener("scroll", () => { if (list.scrollTop + list.clientHeight >= list.scrollHeight - 80) void load(); });
   void load({reset: true});
   return {state, refresh: () => load({reset: true, mode: state.query.trim() ? "local" : "feed"})};

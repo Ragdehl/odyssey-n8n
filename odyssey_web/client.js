@@ -114,7 +114,26 @@ export function validateProductResponse(value) {
   if (value.request_detail !== undefined) {
     result.request_detail = validateRequestDetail(value.request_detail, request_id);
   }
+  if (value.note_result_snapshot !== undefined) {
+    result.note_result_snapshot = validateNoteResultSnapshot(value.note_result_snapshot);
+  }
   return result;
+}
+
+function validateNoteResultSnapshot(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1 ||
+      typeof value.query !== "string" || value.query.length === 0 || !Array.isArray(value.filters) ||
+      !Array.isArray(value.note_ids) || !Number.isInteger(value.total) ||
+      typeof value.truncated !== "boolean" || typeof value.sort !== "string" ||
+      typeof value.ranking_version !== "string" || typeof value.executed_at !== "string" ||
+      value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
+      value.note_ids.some((id) => typeof id !== "string" || !id) ||
+      value.truncated !== (value.total > value.note_ids.length)) {
+    throw new ProductRequestError("Odyssey returned an invalid Notes result set.");
+  }
+  return {version: 1, query: value.query, filters: value.filters, sort: value.sort,
+    ranking_version: value.ranking_version, executed_at: value.executed_at,
+    note_ids: value.note_ids, total: value.total, truncated: value.truncated};
 }
 
 /**

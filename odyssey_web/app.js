@@ -63,7 +63,10 @@ async function loadMainConversation() {
   conversation.replaceChildren();
   for (const turn of data.turns ?? []) {
     const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
-    if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
+    if (turn.role === "assistant") {
+      appendDetailButton(message, turn.request_detail);
+      appendNoteSetAffordance(message, turn.note_result_snapshot);
+    }
   }
   conversation.scrollTop = conversation.scrollHeight;
 }
@@ -142,6 +145,21 @@ function appendDetailButton(article, detail) {
   button.textContent = "ⓘ";
   button.addEventListener("click", () => openRequestDetail(detail));
   article.querySelector(".message-header")?.append(button);
+}
+
+function appendNoteSetAffordance(article, snapshot) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
+      !Array.isArray(snapshot.note_ids) || !Number.isInteger(snapshot.total) ||
+      typeof snapshot.query !== "string" || typeof snapshot.truncated !== "boolean") return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "note-set-button";
+  const visible = snapshot.truncated ? `${snapshot.note_ids.length} de ${snapshot.total}` : snapshot.total;
+  button.textContent = `Ver ${visible} notas`;
+  button.addEventListener("click", () => {
+    document.dispatchEvent(new CustomEvent("odyssey:open-note-snapshot", {detail: snapshot}));
+  });
+  article.append(button);
 }
 
 function appendDetailLine(parent, label, value) {
@@ -250,6 +268,7 @@ function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
   message.querySelector(".eyebrow").textContent = resultLabel(result);
   appendDetailButton(message, result.request_detail);
+  appendNoteSetAffordance(message, result.note_result_snapshot);
 }
 
 function resultLabel(result) {
@@ -284,6 +303,7 @@ async function sendSubmission(submission, isRetry = false) {
             text: result.message,
             status: result.status,
             request_detail: result.request_detail,
+            note_result_snapshot: result.note_result_snapshot,
           },
         });
       },
