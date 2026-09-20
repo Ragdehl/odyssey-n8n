@@ -15,10 +15,11 @@ the old seven-path contract and omitted `/api/notes.js`, `/api/notes-client.js`,
 The DEV-only tunnel rule now uses the canonical ten-path inventory at version 10; production ingress,
 the hostname-wide DEV Access application, CSP, DNS, origin, and 404 fallback remained unchanged.
 The recursive module/workflow inventory and live public-route preflight now share that checked-in
-contract. Python CI and Sonar (81.3% new-code coverage) were green before this routing correction;
-fresh PR CI is required. One production Luna→Sol planner case passed within the $0.15 hard live-gate
-budget before the next case was safely stopped. All public routes remain Access-gated; the third
-authenticated human mobile checkpoint remains pending. Not complete in PROD.**
+contract. Fresh Python CI and Sonar are green at 81.3% new-code coverage. One production Luna→Sol
+planner case passed within the $0.15 hard live-gate budget before the next case was safely stopped.
+All public routes remain Access-gated, direct DEV provenance is `MATCH`, and UI-2 is ready for the
+third authenticated human mobile checkpoint. That checkpoint remains pending. Not complete in
+PROD.**
 
 ## Objective
 

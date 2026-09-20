@@ -47,7 +47,8 @@ DNS, CSP, and the 404 fallback remained unchanged. A canonical ten-route invento
 deployment validation and a live public-route preflight, so an Access redirect alone is no longer
 treated as public readiness. The third authenticated human mobile checkpoint remains pending. The
 previous production planner evidence is clean but budget-bounded after one Luna→Sol case; Python
-CI/Sonar must be rerun for this correction. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
+CI and Sonar are green at 81.3% new-code coverage, direct DEV provenance is `MATCH`, and the protected
+application is ready for that third human checkpoint. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
