@@ -1,13 +1,19 @@
 # UI-2 — read-only Notes product contract
 
-Status: **approved implementation active in Draft PR #124; deterministic evidence, Python CI, and
-Sonar (81.3% new-code coverage) are green. One production Luna→Sol planner case passed within the
-$0.15 hard budget before the next case was safely stopped. The isolated DEV n8n publication was
-repaired through supported unpublish/inactive-import/explicit-version-publish operations; active
-versions match workflow history, expected webhooks (including `/api/notes`) are registered, direct
-Notes/static routes are healthy, and provenance is `MATCH`. The protected public route remains
-Access-gated for the human checkpoint. Human mobile validation remains required. Not complete in
-PROD.**
+Status: **corrective implementation active in Draft PR #124. The first authenticated mobile
+checkpoint failed: the n8n static workflow omitted reachable `notes.js` / `notes-client.js` modules,
+so `app.js` never bootstrapped; CSS also allowed the hidden Notes view to stack below Chat. The
+correction makes Chat and Notes mutually exclusive application-level views, moves Notes search to
+the mobile bottom interaction zone, adds a schema-capability-driven filter sheet, derives/serves the
+complete local module graph, and adds deployment/browser regression guards. Direct isolated-DEV
+runtime/n8n/static checks now pass with provenance `MATCH`; capabilities, feed/local/intelligent
+search, filters, detail, backlinks, and historical unavailable-slot transport have synthetic
+evidence. The n8n DEV operator now publishes the current imported workflow version, avoiding a
+stale active-history pointer. Python CI and Sonar (81.3% new-code coverage) were green before this
+correction; fresh PR CI is required. One production Luna→Sol planner case passed within the $0.15
+hard live-gate budget before the next case was safely stopped. The protected public DEV path is
+still Access-gated, and the corrected authenticated browser smoke plus the replacement human mobile
+checkpoint remain pending. Not complete in PROD.**
 
 ## Objective
 
