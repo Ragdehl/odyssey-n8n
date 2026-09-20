@@ -1,0 +1,11 @@
+# method	path	kind
+GET	/api/odyssey	static
+GET	/api/styles.css	static
+GET	/api/environment.js	static
+GET	/api/app.js	static
+GET	/api/client.js	static
+GET	/api/notes.js	static
+GET	/api/notes-client.js	static
+POST	/api/request	api
+POST	/api/conversation	api
+POST	/api/notes	api

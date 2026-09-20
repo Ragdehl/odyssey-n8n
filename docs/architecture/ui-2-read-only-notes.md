@@ -9,11 +9,16 @@ complete local module graph, and adds deployment/browser regression guards. Dire
 runtime/n8n/static checks now pass with provenance `MATCH`; capabilities, feed/local/intelligent
 search, filters, detail, backlinks, and historical unavailable-slot transport have synthetic
 evidence. The n8n DEV operator now publishes the current imported workflow version, avoiding a
-stale active-history pointer. Python CI and Sonar (81.3% new-code coverage) were green before this
-correction; fresh PR CI is required. One production Luna→Sol planner case passed within the $0.15
-hard live-gate budget before the next case was safely stopped. The protected public DEV path is
-still Access-gated, and the corrected authenticated browser smoke plus the replacement human mobile
-checkpoint remain pending. Not complete in PROD.**
+stale active-history pointer. The second authenticated checkpoint rendered the corrected layout but
+again could not bootstrap JavaScript: Cloudflare tunnel configuration version 9 still exposed only
+the old seven-path contract and omitted `/api/notes.js`, `/api/notes-client.js`, and `/api/notes`.
+The DEV-only tunnel rule now uses the canonical ten-path inventory at version 10; production ingress,
+the hostname-wide DEV Access application, CSP, DNS, origin, and 404 fallback remained unchanged.
+The recursive module/workflow inventory and live public-route preflight now share that checked-in
+contract. Python CI and Sonar (81.3% new-code coverage) were green before this routing correction;
+fresh PR CI is required. One production Luna→Sol planner case passed within the $0.15 hard live-gate
+budget before the next case was safely stopped. All public routes remain Access-gated; the third
+authenticated human mobile checkpoint remains pending. Not complete in PROD.**
 
 ## Objective
 

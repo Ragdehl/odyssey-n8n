@@ -244,16 +244,20 @@ exact deployed commit. Normal operation remains `odyssey-dev deploy`, `start`, `
 
 Cloudflare uses the existing healthy tunnel. The DEV CNAME points only to that tunnel, and a
 distinct `Odyssey DEV` Access application/policy follows the production authorized-identity
-principle without altering the production application or policy. The DEV tunnel ingress is
-limited to these seven explicit product paths, all targeting only `172.18.0.1:28780`:
+principle without altering the production application or policy. The DEV tunnel ingress is limited
+to the explicit product paths in `deploy/odyssey-dev-product-routes.tsv`, all targeting only
+`172.18.0.1:28780`. The current UI-2 inventory contains ten paths:
 
 - `/api/odyssey`
 - `/api/styles.css`
 - `/api/app.js`
 - `/api/client.js`
+- `/api/notes.js`
+- `/api/notes-client.js`
 - `/api/environment.js`
 - `/api/request`
 - `/api/conversation`
+- `/api/notes`
 
 The narrow allowlist prevents the DEV n8n editor/admin root from being reachable through the DEV
 hostname. DNS, public TLS, and Access control-plane/data-plane postconditions passed. An
@@ -325,12 +329,48 @@ persisting the visible assistant turn through the missing public route. The acti
 tunnel configuration was updated only by adding `conversation` to the explicit expression; it still
 targets the same DEV n8n listener and contains no `/api/*` wildcard.
 
-The DEV operator now keeps a seven-path browser/workflow inventory and rejects a render whose
-published webhook paths differ from that list. Reusable lesson: workflow registration and internal
+At that checkpoint the DEV operator kept a seven-path browser/workflow inventory and rejected a
+render whose published webhook paths differed from that list. Reusable lesson: workflow registration and internal
 n8n success do not prove that a newly added browser endpoint is present in the public tunnel
 allowlist. Keep browser, workflow, operator inventory, and the narrow external route expression in
 sync, then verify the endpoint through the authenticated external boundary before accepting a
 mobile checkpoint.
+
+### UI-2 public module/API ingress correction
+
+The first UI-2 mobile checkpoint had already exposed an incomplete n8n static-module graph. After
+that graph and the mobile navigation were corrected, the second authenticated checkpoint rendered
+the corrected HTML/CSS but still behaved like a page without JavaScript: conversation history did
+not load, forms navigated normally, and neither Chat nor Notes controls worked. Direct DEV n8n
+checks were green, so they did not locate the public-boundary fault.
+
+Read-only control-plane inspection found the shared tunnel at configuration version 9. Its unique
+`odyssey-dev.ragdehl.com` rule still allowed only the prior seven paths and sent everything else to
+the explicit `http_status:404` fallback. It omitted both new relative ES-module imports and the Notes
+API: `/api/notes.js`, `/api/notes-client.js`, and `/api/notes`.
+
+Because `app.js` imports `notes.js`, an authenticated browser could fetch the entry module but could
+not complete module evaluation. The tunnel rule was changed only by adding those three paths to the
+existing anchored expression. Configuration version 10 was read back from the control plane and
+observed by the running connector. The production ingress entry, DEV Access application/policy,
+origin target, warp setting, and final 404 fallback compared unchanged. Unauthenticated probes for
+all ten product paths continued to reach the hostname-wide Access login boundary. No DNS, Access,
+CSP/Transform Rule, credential, production route, or n8n admin route was changed.
+
+`deploy/odyssey-dev-product-routes.tsv` is now the canonical explicit route inventory used by the
+DEV workflow/publication checks, static probes, and Cloudflare preflight. The recursive browser
+module graph must be a subset of that inventory, and published webhooks must match it exactly.
+`odyssey-dev status` reports public-route provenance separately from simple public reachability; an
+Access redirect alone can no longer be mistaken for a complete public deployment. The bounded live
+preflight reads only the fixed DEV tunnel and hostname-wide DEV Access application, reports
+`MATCH`/`DRIFT`/`UNKNOWN`, and refuses an update that would change the origin, add an unapproved
+route, open the fallback, or alter production/Access state. Cloudflare control-plane credentials
+remain an explicit deployment prerequisite rather than an ordinary CI dependency.
+
+Reusable lesson: direct n8n health and webhook evidence are necessary but insufficient for a
+browser checkpoint. Every relative browser import and same-origin API must also exist in the narrow
+public tunnel contract, and public readiness must compare the effective control plane with the same
+route inventory used by deployment.
 
 Capacity remains intentionally on-demand. A settled 4 GiB host observation was:
 

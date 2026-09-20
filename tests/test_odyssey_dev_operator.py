@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "odyssey-dev"
+ROUTE_INVENTORY = Path(__file__).parents[1] / "deploy" / "odyssey-dev-product-routes.tsv"
 CURRENT = "a" * 40
 OTHER = "b" * 40
 
@@ -68,7 +69,9 @@ def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> Non
 def publication_result(rows: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
     """Run the DEV operator's pure active-version publication validator."""
     command = (
-        f"source {SCRIPT}; PYTHON={shlex.quote(sys.executable)}; workflow_publication_is_valid"
+        f"source {SCRIPT}; PYTHON={shlex.quote(sys.executable)}; "
+        f"DEV_ROUTE_INVENTORY={shlex.quote(str(ROUTE_INVENTORY))}; "
+        "workflow_publication_is_valid"
     )
     return subprocess.run(
         ["bash", "-c", command],
@@ -141,6 +144,18 @@ def test_publication_rejects_active_version_without_request_webhook() -> None:
     assert publication_result(rows).returncode != 0
 
 
+def test_publication_rejects_an_uninventoried_active_webhook() -> None:
+    """Keep public readiness fail-closed when deployed n8n exposes an extra route."""
+    rows = valid_publication_rows()
+    rows[0]["activeVersionNodes"] = active_version_nodes(
+        ("POST", "request"),
+        ("POST", "conversation"),
+        ("POST", "notes"),
+        ("POST", "admin"),
+    )
+    assert publication_result(rows).returncode != 0
+
+
 def test_readiness_waits_for_route_not_only_n8n_health() -> None:
     """Keep process health distinct from deterministic product-route readiness."""
     source = SCRIPT.read_text(encoding="utf-8")
@@ -170,6 +185,9 @@ def test_deployment_record_follows_workflow_readiness() -> None:
 def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> None:
     """Keep new UI routes from silently falling outside the explicit DEV route inventory."""
     source = SCRIPT.read_text(encoding="utf-8")
+    inventory = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-product-routes.tsv").read_text(
+        encoding="utf-8"
+    )
     expected = (
         "/api/odyssey",
         "/api/styles.css",
@@ -180,9 +198,11 @@ def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> 
         "/api/environment.js",
         "/api/request",
         "/api/conversation",
+        "/api/notes",
     )
     for route in expected:
-        assert route in source
+        assert route in inventory
+    assert "DEV_ROUTE_INVENTORY" in source
     assert "assert_dev_product_route_inventory" in source
     assert source.index("assert_dev_product_route_inventory") < source.index("publish_workflows")
 
@@ -191,13 +211,24 @@ def test_publication_and_readiness_require_the_notes_and_complete_module_routes(
     """Do not declare DEV healthy while a Notes browser import or product route is absent."""
 
     source = SCRIPT.read_text(encoding="utf-8")
-    assert '("POST", "notes")' in source
+    inventory = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-product-routes.tsv").read_text(
+        encoding="utf-8"
+    )
     for route in ("notes.js", "notes-client.js"):
-        assert f'("GET", "{route}")' in source
-        assert route in source
+        assert route in inventory
     assert '"http://$N8N_HOST:$N8N_PORT/api/notes"' in source
-    assert "DEV_STATIC_PATHS=(/api/odyssey" in source
-    assert 'for path in "${DEV_STATIC_PATHS[@]}"' in source
+    assert "dev_static_paths" in source
+    assert 'for path in "${static_paths[@]}"' in source
+
+
+def test_status_distinguishes_public_route_provenance_from_access_reachability() -> None:
+    """An Access redirect alone must never be reported as complete public-route readiness."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    status = source[source.index("status() {") : source.index("deploy() {")]
+    assert "public_route_provenance" in status
+    assert "public_endpoint" in status
+    assert "public-status" in source
+    assert "odyssey_dev_public_routes.py" in source
 
 
 def test_publish_uses_n8n_current_imported_version_not_a_stale_history_pointer() -> None:

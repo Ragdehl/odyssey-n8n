@@ -39,10 +39,15 @@ implementation now serves and fingerprints the reachable module graph, fail-safe
 implements exclusive mobile app navigation, bottom Notes search, and capability-driven filters. The
 isolated DEV operator was hardened to publish the current imported n8n version rather than a stale
 history pointer. Direct synthetic DEV runtime/n8n/static checks are green, including capabilities,
-feed/local/intelligent search, filters, detail, backlinks, and historical transport; authenticated
-browser smoke and the replacement human mobile checkpoint remain pending. The previous production
-planner evidence is clean but budget-bounded after one Luna→Sol case; Python CI/Sonar must be rerun
-for the correction. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
+feed/local/intelligent search, filters, detail, backlinks, and historical transport. The second
+authenticated checkpoint rendered the corrected layout but still could not bootstrap because the
+Cloudflare DEV tunnel remained on the prior seven-route allowlist. The missing Notes modules and API
+were added to the same narrow DEV origin as configuration version 10; production ingress, Access,
+DNS, CSP, and the 404 fallback remained unchanged. A canonical ten-route inventory now drives both
+deployment validation and a live public-route preflight, so an Access redirect alone is no longer
+treated as public readiness. The third authenticated human mobile checkpoint remains pending. The
+previous production planner evidence is clean but budget-bounded after one Luna→Sol case; Python
+CI/Sonar must be rerun for this correction. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
