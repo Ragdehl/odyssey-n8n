@@ -62,7 +62,7 @@ def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> Non
     assert "web_deployment_marker" in source
     assert "mounted_web_asset_fingerprint" in source
     assert 'web_assets_coherent "$current"' in source
-    assert "/odyssey-web/environment.js" in source
+    assert "mounted_paths=$(printf '/odyssey-web/%s '" in source
 
 
 def publication_result(rows: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
@@ -101,7 +101,7 @@ def valid_publication_rows() -> list[dict[str, object]]:
             "active": 0,
             "activeVersionId": "online-version",
             "activeVersionNodes": active_version_nodes(
-                ("POST", "request"), ("POST", "conversation")
+                ("POST", "request"), ("POST", "conversation"), ("POST", "notes")
             ),
         },
         {
@@ -109,7 +109,15 @@ def valid_publication_rows() -> list[dict[str, object]]:
             "name": "Odyssey — DEV Online static assets",
             "active": 0,
             "activeVersionId": "static-version",
-            "activeVersionNodes": active_version_nodes(("GET", "odyssey")),
+            "activeVersionNodes": active_version_nodes(
+                ("GET", "odyssey"),
+                ("GET", "styles.css"),
+                ("GET", "environment.js"),
+                ("GET", "app.js"),
+                ("GET", "client.js"),
+                ("GET", "notes.js"),
+                ("GET", "notes-client.js"),
+            ),
         },
     ]
 
@@ -139,6 +147,7 @@ def test_readiness_waits_for_route_not_only_n8n_health() -> None:
     assert "wait_n8n_health" in source
     assert "wait_workflow_readiness" in source
     assert "route_readiness_once" in source
+    assert "static_route_readiness_once" in source
     assert '"http://$N8N_HOST:$N8N_PORT/api/request"' in source
 
 
@@ -166,6 +175,8 @@ def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> 
         "/api/styles.css",
         "/api/app.js",
         "/api/client.js",
+        "/api/notes.js",
+        "/api/notes-client.js",
         "/api/environment.js",
         "/api/request",
         "/api/conversation",
@@ -174,3 +185,16 @@ def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> 
         assert route in source
     assert "assert_dev_product_route_inventory" in source
     assert source.index("assert_dev_product_route_inventory") < source.index("publish_workflows")
+
+
+def test_publication_and_readiness_require_the_notes_and_complete_module_routes() -> None:
+    """Do not declare DEV healthy while a Notes browser import or product route is absent."""
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert '("POST", "notes")' in source
+    for route in ("notes.js", "notes-client.js"):
+        assert f'("GET", "{route}")' in source
+        assert route in source
+    assert '"http://$N8N_HOST:$N8N_PORT/api/notes"' in source
+    assert "DEV_STATIC_PATHS=(/api/odyssey" in source
+    assert 'for path in "${DEV_STATIC_PATHS[@]}"' in source

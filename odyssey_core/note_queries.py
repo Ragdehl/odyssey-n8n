@@ -191,6 +191,7 @@ class NotesQueryService:
                     "value_type": definition["value_type"],
                     "operators": supported_filter_operators(definition),
                     "applies_to": applies_to,
+                    "format": definition.get("constraints", {}).get("format"),
                 }
             )
         return NoteCapabilities(

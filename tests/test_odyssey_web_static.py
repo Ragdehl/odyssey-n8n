@@ -1,5 +1,6 @@
 """Static contract checks for the framework-free Odyssey Online browser surface."""
 
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -12,6 +13,7 @@ class _IndexParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.ids: set[str] = set()
+        self.elements: dict[str, dict[str, str | None]] = {}
         self.links: list[str] = []
         self.scripts: list[tuple[str | None, str | None]] = []
         self.api_endpoint: str | None = None
@@ -21,6 +23,7 @@ class _IndexParser(HTMLParser):
         element_id = values.get("id")
         if element_id:
             self.ids.add(element_id)
+            self.elements[element_id] = values
         if tag == "link" and values.get("href"):
             self.links.append(values["href"] or "")
         if tag == "script":
@@ -100,7 +103,7 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'id="conversation-list"' not in index
 
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
-    assert ".workspace { display: grid; grid-template-rows: minmax(0, 1fr) auto;" in styles
+    assert ".app-view { display: grid; height: 100%; min-height: 0;" in styles
     assert ".conversation { display: flex; flex-direction: column;" in styles
     assert ".message-header { display: flex; align-items: center;" in styles
     assert (
@@ -113,6 +116,114 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
 
     environment = (WEB_ROOT / "environment.js").read_text(encoding="utf-8")
     assert 'environment: "PROD"' in environment
+
+
+def test_chat_and_notes_are_exclusive_application_views_with_safe_no_js_fallback() -> None:
+    """Keep the inactive application fully absent even when module bootstrap fails."""
+
+    parser = _IndexParser()
+    index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    parser.feed(index)
+
+    assert "hidden" in parser.elements["notes-surface"]
+    assert "chat-surface" in parser.ids
+    assert "notes-surface" in parser.ids
+    assert "surface-nav" not in index
+    assert index.index('id="chat-surface"') < index.index('id="notes-surface"')
+    assert index.index('id="odyssey-form"') < index.index('id="notes-surface"')
+    assert index.index('id="notes-search-form"') > index.index('id="notes-surface"')
+
+    app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    assert "function selectSurface(surface)" in app
+    assert "chatSurface.hidden = !chat" in app
+    assert "notesSurface.hidden = chat" in app
+    assert 'dataset.activeView = chat ? "chat" : "notes"' in app
+    assert 'selectSurface("chat")' in app
+    assert 'selectSurface("notes");\n    document.dispatchEvent' in app
+
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+    assert "[hidden] { display: none !important; }" in styles
+    assert ".chat-view, .notes-workspace { grid-template-rows:" in styles
+    assert ".surface-nav" not in styles
+
+
+def test_notes_mobile_controls_keep_filtering_sorting_and_search_in_separate_roles() -> None:
+    """Keep mobile Notes controls usable without making local typing a provider action."""
+
+    parser = _IndexParser()
+    parser.feed((WEB_ROOT / "index.html").read_text(encoding="utf-8"))
+    assert {
+        "notes-filters",
+        "notes-sort",
+        "notes-filter-chips",
+        "notes-filter-sheet",
+        "notes-filter-form",
+        "notes-search-form",
+        "notes-search",
+        "notes-intelligent",
+    } <= parser.ids
+
+    notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
+    assert "loadCapabilities" in notes
+    assert "renderFilterFields" in notes
+    assert "renderTypeSpecificFields" in notes
+    assert "applyFilters" in notes
+    assert "renderFilterChips" in notes
+    assert '"datetime-local"' in notes
+    assert "timezoneAwareDateTime" in notes
+    assert 'search.addEventListener("input", searchLocal)' in notes
+    assert 'mode: state.query.trim() ? "local" : "feed"' in notes
+    assert 'mode: "intelligent"' in notes
+    assert 'filterButton?.addEventListener("click", openFilterSheet)' in notes
+    assert "state.filters.splice(index, 1)" in notes
+    assert "innerHTML" not in notes
+
+    index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert "Ordenar" in index
+    assert "Filtros" in index
+    assert index.index('id="notes-search-form"') > index.index('id="notes-list-view"')
+
+
+def _reachable_local_modules(entry: Path) -> set[Path]:
+    """Return the local ES-module closure rooted at the checked-in browser entrypoint."""
+
+    pattern = re.compile(r'^\s*import\s+(?:[^"\']+?\s+from\s+)?["\'](\./[^"\']+)["\']', re.M)
+    root = WEB_ROOT.resolve()
+    seen: set[Path] = set()
+
+    def visit(path: Path) -> None:
+        resolved = path.resolve()
+        assert root in resolved.parents
+        assert resolved.is_file(), f"missing browser module: {resolved.relative_to(root)}"
+        if resolved in seen:
+            return
+        seen.add(resolved)
+        for relative in pattern.findall(resolved.read_text(encoding="utf-8")):
+            visit(resolved.parent / relative)
+
+    visit(entry)
+    return seen
+
+
+def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> None:
+    """Prevent one unserved ES-module import from disabling the whole browser application."""
+
+    root = WEB_ROOT.resolve()
+    modules = _reachable_local_modules(WEB_ROOT / "app.js")
+    routes = {path.relative_to(root).as_posix() for path in modules}
+    assert routes == {"app.js", "client.js", "notes.js", "notes-client.js"}
+
+    workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")
+    for route in routes:
+        assert f"path: '{route}'" in workflow
+        assert f"/odyssey-web/{route}" in workflow
+        assert "text/javascript; charset=utf-8" in workflow
+
+    operator = Path("scripts/odyssey-dev").read_text(encoding="utf-8")
+    assert "browser_assets()" in operator
+    assert "browser module is unavailable" in operator
+    assert "module_routes" in operator
+    assert "assert_dev_product_route_inventory" in operator
 
 
 def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:

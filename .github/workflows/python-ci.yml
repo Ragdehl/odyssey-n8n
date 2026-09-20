@@ -41,6 +41,8 @@ jobs:
         run: |
           node --check odyssey_web/client.js
           node --check odyssey_web/app.js
+          node --check odyssey_web/notes.js
+          node --check odyssey_web/notes-client.js
           node --test --experimental-test-coverage --test-coverage-lines=80 tests/odyssey_web_client.test.mjs
 
       - name: Validate canonical note schema

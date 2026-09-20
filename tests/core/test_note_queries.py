@@ -112,6 +112,9 @@ def test_capabilities_and_local_search_are_schema_grounded_and_zero_provider(
     assert next(item for item in capabilities.fields if item["id"] == "tags")["operators"] == (
         "contains",
     )
+    assert next(item for item in capabilities.fields if item["id"] == "created_at")["format"] == (
+        "date-time"
+    )
     page = notes.query(mode="local", query="Ada Lovelace")
     assert [item.id for item in page.items] == ["ada"]
 

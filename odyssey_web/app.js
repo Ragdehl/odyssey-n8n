@@ -38,18 +38,22 @@ function showDeploymentMarker() {
 
 showDeploymentMarker();
 
-// The controllers remain mounted for the page lifetime. Surface switching only changes visibility,
-// so the Chat draft/scroll and Notes query/detail/navigation state are never reconstructed.
-if (notesSurface) mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
+// Both application controllers remain mounted for the page lifetime. Navigation changes the one
+// visible application view, so Chat draft/scroll and Notes query/detail/navigation state persist.
+if (notesSurface) {
+  mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
+}
 function selectSurface(surface) {
-  const notes = surface === "notes";
-  if (chatSurface) chatSurface.hidden = notes;
-  if (notesSurface) notesSurface.hidden = !notes;
-  chatTab?.setAttribute("aria-selected", String(!notes));
-  notesTab?.setAttribute("aria-selected", String(notes));
+  const chat = surface === "chat";
+  if (chatSurface) chatSurface.hidden = !chat;
+  if (notesSurface) notesSurface.hidden = chat;
+  document.documentElement.dataset.activeView = chat ? "chat" : "notes";
+  chatTab?.setAttribute("aria-current", chat ? "page" : "false");
+  notesTab?.setAttribute("aria-current", chat ? "false" : "page");
 }
 chatTab?.addEventListener("click", () => selectSurface("chat"));
 notesTab?.addEventListener("click", () => selectSurface("notes"));
+selectSurface("chat");
 
 function conversationPayload() {
   return conversationId ? {conversation_id: conversationId} : {};
