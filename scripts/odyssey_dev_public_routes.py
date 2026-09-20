@@ -18,10 +18,11 @@ from typing import Any
 ACCOUNT_ID = "224a4945cdca213494403f1e84673e2e"
 TUNNEL_ID = "0b99a438-fdb8-4978-9035-ef48df039bc4"
 DEV_HOSTNAME = "odyssey-dev.ragdehl.com"
-DEV_ORIGIN = "http://172.18.0.1:28780"
+DEV_ORIGIN = "http://172.18.0.1:28780"  # NOSONAR - same-host Docker bridge behind edge TLS.
 PRODUCTION_HOSTNAME = "odyssey.ragdehl.com"
 TOKEN_FILE = Path("/home/ragdehl/.config/odyssey/secrets/cloudflare-api-token")
 API_ROOT = "https://api.cloudflare.com/client/v4"
+INVENTORY_FILE = Path(__file__).resolve().parents[1] / "deploy" / "odyssey-dev-product-routes.tsv"
 
 
 class ContractError(RuntimeError):
@@ -234,9 +235,9 @@ def _production_ingress(config: dict[str, Any]) -> dict[str, Any]:
     return matches[0]
 
 
-def inspect_live(inventory: Path) -> dict[str, Any]:
+def inspect_live() -> dict[str, Any]:
     """Inspect and validate the live DEV tunnel plus hostname-wide Access boundary."""
-    routes = load_inventory(inventory)
+    routes = load_inventory(INVENTORY_FILE)
     token = _read_token(TOKEN_FILE)
     tunnel = _fetch_tunnel(token)
     config = tunnel["config"]
@@ -251,9 +252,9 @@ def inspect_live(inventory: Path) -> dict[str, Any]:
     }
 
 
-def update_live(inventory: Path) -> dict[str, Any]:
+def update_live() -> dict[str, Any]:
     """Add only missing canonical DEV paths and verify all other live state is unchanged."""
-    routes = load_inventory(inventory)
+    routes = load_inventory(INVENTORY_FILE)
     token = _read_token(TOKEN_FILE)
     before_tunnel = _fetch_tunnel(token)
     before_config = before_tunnel["config"]
@@ -294,7 +295,6 @@ def _parser() -> argparse.ArgumentParser:
     """Build the bounded command-line interface for status and authorized reconciliation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("status", "update"))
-    parser.add_argument("--inventory", required=True, type=Path)
     parser.add_argument("--machine", action="store_true")
     parser.add_argument(
         "--authorized-dev-change",
@@ -314,11 +314,7 @@ def main() -> int:
         )
         return 2
     try:
-        result = (
-            inspect_live(arguments.inventory)
-            if arguments.action == "status"
-            else update_live(arguments.inventory)
-        )
+        result = inspect_live() if arguments.action == "status" else update_live()
     except (ContractError, OSError) as error:
         if arguments.machine:
             print("UNKNOWN" if isinstance(error, (ControlPlaneUnavailable, OSError)) else "DRIFT")

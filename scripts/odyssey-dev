@@ -468,8 +468,7 @@ static_route_readiness_once() {
 
 public_route_provenance() {
   local result
-  result=$("$PYTHON" "$DEV_PUBLIC_ROUTE_CHECK" status \
-    --inventory "$DEV_ROUTE_INVENTORY" --machine 2>/dev/null) || true
+  result=$("$PYTHON" "$DEV_PUBLIC_ROUTE_CHECK" status --machine 2>/dev/null) || true
   case "$result" in
     MATCH|DRIFT|UNKNOWN) printf '%s\n' "$result" ;;
     *) printf 'UNKNOWN\n' ;;
@@ -599,7 +598,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     stop) stop ;;
     restart) stop; start ;;
     status) status ;;
-    public-status) guard; "$PYTHON" "$DEV_PUBLIC_ROUTE_CHECK" status --inventory "$DEV_ROUTE_INVENTORY" ;;
+    public-status) guard; "$PYTHON" "$DEV_PUBLIC_ROUTE_CHECK" status ;;
     deploy) deploy ;;
     runtime) runtime ;;
     *) fail "usage: odyssey-dev {start|stop|restart|status|public-status|deploy}" ;;

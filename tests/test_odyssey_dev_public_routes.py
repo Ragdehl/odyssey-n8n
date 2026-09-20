@@ -158,13 +158,13 @@ def test_machine_status_distinguishes_unavailable_control_plane_from_drift(
 ) -> None:
     """Keep missing credentials/network distinct from an authoritative live mismatch."""
 
-    def fail_inspection(_inventory: Path) -> dict[str, object]:
+    def fail_inspection() -> dict[str, object]:
         raise failure
 
     monkeypatch.setattr(public_routes, "inspect_live", fail_inspection)
     monkeypatch.setattr(
         "sys.argv",
-        ["odyssey_dev_public_routes.py", "status", "--inventory", str(INVENTORY), "--machine"],
+        ["odyssey_dev_public_routes.py", "status", "--machine"],
     )
     assert public_routes.main() == 1
     assert capsys.readouterr().out.strip() == expected
@@ -176,7 +176,7 @@ def test_live_update_requires_explicit_human_authorization_flag(
     """Prevent the checked-in repair command from becoming routine implicit authority."""
     monkeypatch.setattr(
         "sys.argv",
-        ["odyssey_dev_public_routes.py", "update", "--inventory", str(INVENTORY)],
+        ["odyssey_dev_public_routes.py", "update"],
     )
     assert public_routes.main() == 2
     assert "requires --authorized-dev-change" in capsys.readouterr().err
