@@ -316,7 +316,7 @@ PY
 }
 
 publish_workflows() {
-  local credential_inventory workflow_id version_id
+  local credential_inventory workflow_id
   n8n_compose stop >/dev/null 2>&1 || true
   for workflow_id in odyssey-online odyssey-online-static; do
     docker run --rm --network none \
@@ -328,19 +328,10 @@ publish_workflows() {
       -v "$N8N_RENDER:/import:ro" \
       --entrypoint /bin/sh "$N8N_IMAGE" -lc \
       "n8n import:workflow --input=/import/$workflow_id.json --activeState=false >/dev/null"
-    version_id=$(docker run --rm --network none \
-      -v "$N8N_VOLUME:/home/node/.n8n:ro" \
-      --entrypoint node "$N8N_IMAGE" -e \
-      'const { DatabaseSync } = require("node:sqlite");
-       const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
-       const row = db.prepare("SELECT versionId FROM workflow_entity WHERE id = ?").get(process.argv[1]);
-       if (!row?.versionId) process.exit(1);
-       process.stdout.write(row.versionId);' "$workflow_id")
-    [ -n "$version_id" ] || fail "DEV workflow import did not produce a version: $workflow_id"
     docker run --rm --network none \
       -v "$N8N_VOLUME:/home/node/.n8n" \
       --entrypoint /bin/sh "$N8N_IMAGE" -lc \
-      "n8n publish:workflow --id=$workflow_id --versionId=$version_id >/dev/null"
+      "n8n publish:workflow --id=$workflow_id >/dev/null"
   done
   credential_inventory=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
     const { DatabaseSync } = require("node:sqlite");

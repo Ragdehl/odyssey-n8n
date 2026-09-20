@@ -198,3 +198,13 @@ def test_publication_and_readiness_require_the_notes_and_complete_module_routes(
     assert '"http://$N8N_HOST:$N8N_PORT/api/notes"' in source
     assert "DEV_STATIC_PATHS=(/api/odyssey" in source
     assert 'for path in "${DEV_STATIC_PATHS[@]}"' in source
+
+
+def test_publish_uses_n8n_current_imported_version_not_a_stale_history_pointer() -> None:
+    """n8n 2.33 creates the current history version during publish, not import."""
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    publish = source[source.index("publish_workflows() {") : source.index("workflow_metadata() {")]
+    assert "n8n import:workflow" in publish
+    assert "n8n publish:workflow --id=$workflow_id >/dev/null" in publish
+    assert "n8n publish:workflow --id=$workflow_id --versionId=" not in publish
