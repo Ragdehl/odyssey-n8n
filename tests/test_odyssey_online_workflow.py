@@ -127,6 +127,17 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
     assert "if (operation === 'detail') forwarded.note_id = note_id;" in source
 
 
+def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
+    """Return a typed NoteDetail object intact even though it contains canonical body text."""
+
+    source = SOURCE.read_text(encoding="utf-8")
+    notes_response = source[
+        source.index("const notesRespond") : source.index("const notesInvalidRespond")
+    ]
+    assert "responseBody: expr('{{ $json }}')" in notes_response
+    assert "$json.body || $json" not in notes_response
+
+
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
     """Recognize Core's bounded succeeded unit status without changing Core semantics."""
     source = SOURCE.read_text(encoding="utf-8")
