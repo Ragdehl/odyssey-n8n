@@ -116,6 +116,17 @@ def test_note_set_routes_without_answerer_and_preserves_only_valid_snapshot() ->
     assert "route: 'answer'" in source
 
 
+def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
+    """Keep the empty capabilities operation distinct from query-shaped Notes payloads."""
+
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const shapes = { capabilities: new Set(['operation'])" in source
+    assert "Object.keys(body).every(key => allowed.has(key))" in source
+    assert "const forwarded = { operation };" in source
+    assert "if (operation === 'query')" in source
+    assert "if (operation === 'detail') forwarded.note_id = note_id;" in source
+
+
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
     """Recognize Core's bounded succeeded unit status without changing Core semantics."""
     source = SOURCE.read_text(encoding="utf-8")
