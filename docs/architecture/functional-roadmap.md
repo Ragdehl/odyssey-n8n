@@ -49,10 +49,19 @@ treated as public readiness. The third authenticated checkpoint confirmed exclus
 navigation, feed, filters, sorting, populated details, link/backlink infrastructure, and public DEV
 bootstrap. It also exposed the final closure items: empty-body details, explicit planner-backed Notes
 search, visible inferred filters, human-readable Markdown/link/backlink presentation, complete type
-cues, and historical affordances in older Chat pages. Those corrections have deterministic and direct
-isolated-DEV evidence at `03d644c`; mounted browser assets and the zero-provider local Notes path
-pass, and DEV provenance is `MATCH`. The next small authenticated check is therefore the **final
-UI-2 human mobile checkpoint**, not a production-completion claim. The previous production planner
+cues, and historical affordances in older Chat pages. A subsequent authenticated long write exposed
+a final delivery/retry reliability defect: the serial runtime blocked read-only Notes/conversation
+traffic, and a lost browser response followed by same-ID retries could rerun an already committed
+multi-note plan while leaving the assistant turn absent. The bounded correction introduced at `044d6c9` makes
+the HTTP boundary concurrent, retains one serialized product-execution lane, stores completed
+mutation results in bounded actor-local operational state before delivery, replays them for the same
+request fingerprint, and offers explicit recovery for an unmatched durable user turn. The full
+deterministic suite is green (`962 passed`, `79 skipped`, `52 subtests passed`); direct isolated DEV
+health, Notes capabilities, conversation reload, mounted browser commit, and source/workflow/
+public-route provenance all pass at that commit. The next small authenticated check is therefore the
+**narrow final UI-2 human reliability checkpoint**, not a production-completion claim: one ordinary
+DEV write, optional Chat/Notes navigation while pending, acknowledgement, reload, and confirmation
+that Chat outcome and Notes mutation remain consistent. The previous production planner
 evidence is clean but budget-bounded after one Luna→Sol case; Python CI and Sonar are green at 81.3%
 new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).

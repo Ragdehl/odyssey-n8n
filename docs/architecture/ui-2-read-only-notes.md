@@ -1,7 +1,8 @@
 # UI-2 — read-only Notes product contract
 
-Status: **corrective implementation and reliability closure are active in Draft PR #124; NOT READY
-FOR MERGE. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
+Status: **the bounded reliability correction introduced at `044d6c9` is deployed in isolated DEV and is READY
+FOR THE NARROW FINAL HUMAN RELIABILITY CHECK; Draft PR #124 remains NOT READY FOR MERGE until that
+check passes. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
 reachable `notes.js` / `notes-client.js` modules, so `app.js` never bootstrapped, and CSS allowed the
 hidden Notes view to stack below Chat. The correction makes Chat and Notes mutually exclusive
 application-level views, moves Notes search to the mobile bottom interaction zone, adds a
@@ -20,7 +21,10 @@ planner case passed within the $0.15 hard live-gate budget before the next case 
 All public routes remain Access-gated; production ingress, Access, CSP, DNS, origin, and fallback
 remain unchanged. A later authenticated write exposed one final reliability defect: same-ID retries
 could rerun a multi-note plan, and the serial runtime made Notes/conversation reads unavailable while
-the write ran. The bounded correction and evidence are recorded below. UI-2 is not complete in PROD.**
+the write ran. The bounded correction and evidence are recorded below. Its deterministic suite is
+green (`962 passed`, `79 skipped`, `52 subtests passed`), the isolated DEV deployment has matching
+source/workflow/public-route provenance, and direct runtime health, Notes capabilities, conversation
+reload, and mounted browser commit checks pass. UI-2 is not complete in PROD.**
 
 ## Long-write reliability closure
 
@@ -74,6 +78,10 @@ and conversation reads return before it is released. Separate tests cover pre-re
 duplicate arriving while the original is running, restart-safe completed-result replay, request-ID
 rebinding/corruption, exactly one Core execution, conversation continuity failure, and explicit reload
 recovery. No provider call or real-vault mutation is required for this gate.
+
+The remaining human check is intentionally narrow: submit one ordinary DEV write, optionally
+navigate between Chat and Notes while it is pending, then confirm the acknowledgement and mutation
+both survive a reload.
 
 ## Objective
 
