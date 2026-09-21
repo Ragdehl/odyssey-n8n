@@ -6,9 +6,13 @@ Status: **planned immediately after UI-2 closes; do not expand UI-2 scope to imp
 
 Once UI-2 makes canonical notes visible, normal DEV use can evaluate not only whether writes succeed, but whether Odyssey creates the *right knowledge shape* from ordinary narrative input and whether that shape remains useful when browsed later.
 
-The first real narrative-style DEV exercises showed promising behavior (one event/journal-style note plus reusable entity notes, and extraction of durable facts belonging to more than one entity), but they also exposed questions that should be investigated deliberately before moving on to broader application work.
+The first real narrative-style DEV exercises showed promising behavior (one event/journal-style note plus reusable entity notes, extraction of durable facts belonging to more than one entity, and useful explicit links), but they also exposed questions that should be investigated deliberately before moving on to broader application work.
 
-A later real DEV exercise sharpened one concrete case: an explicitly stated group-level fact (people belong to the same friend group and attended the same school) was preserved in the journal/event note but was not materialized onto the individual person notes. The information was therefore not lost from canonical knowledge, but entity-centric browsing/retrieval may fail to surface it. The follow-up must decide whether such facts should be projected onto each entity, represented through an explicit shared/group relation, or remain event-scoped with reliable graph retrieval. Do not solve this by blind duplication.
+A later real DEV exercise sharpened one concrete expected behavior: when the user explicitly states a durable fact that applies to a finite, resolvable set of people, that fact must become discoverable from every relevant entity. This does **not** necessarily require copying the same prose into every Markdown note. Prefer one canonical fact occurrence plus explicit links/backlinks and relevant mention context when that is sufficient for both human browsing and retrieval. Materialize duplicate per-entity prose only when there is a demonstrated retrieval/product need that cannot be satisfied by first-class relation context.
+
+Example: after a prior journal entry establishes which named people were present, a follow-up such as “todos los que estaban ayer formamos parte del mismo grupo de amigos; fuimos al colegio juntos en la Escola Laia” should resolve the referenced people and make those facts visible/queryable from each corresponding person. The user must not need to create a separate `group` note merely for the facts to be reachable. This does not authorize inventing friendship or other relations from mere co-occurrence: the propagation rule applies only when the user has explicitly asserted the shared fact.
+
+Likewise, when a fact is explicitly relational, Odyssey should make the relation usable from both relevant viewpoints. This may be achieved through the source note plus incoming/outgoing explicit links and mention context rather than duplicated prose. Retrieval over an entity therefore needs to consider the entity note together with relevant explicit incoming/outgoing relation evidence, subject to bounded ranking so a heavily linked entity does not inject unbounded context.
 
 This follow-up is therefore a bounded product/architecture exploration, not an authorization to redesign the schema or add a second knowledge authority.
 
@@ -19,14 +23,33 @@ Use realistic but disposable/synthetic DEV examples to inspect how one narrative
 Questions to answer:
 
 - When should Odyssey create an event/journal note versus only updating existing entities?
-- Which durable facts should be copied/materialized onto the relevant entity note rather than remaining only in the event/narrative note?
-- When a sentence contains facts about several entities, does Odyssey distribute those facts to the correct canonical notes?
-- Does explicit relational language become durable relation/link knowledge without requiring the user to phrase the input unnaturally?
+- Which durable facts should live directly on an entity note and which can remain once in another canonical note while still being reliably surfaced through explicit links/backlinks?
+- When a sentence contains facts about several entities, does Odyssey make those facts discoverable from the correct canonical entities without unnecessary duplication?
+- When one explicit durable fact applies to several resolvable people, can Odyssey preserve a single canonical occurrence while making it visible/queryable from every affected entity?
+- Does explicit relational language become durable link/relationship knowledge without requiring the user to phrase the input unnaturally?
 - Does Odyssey correctly avoid inventing stronger relations from mere co-occurrence (for example, people attending the same event must not automatically become `friends`)?
-- When an explicitly stated durable relationship is present, does it survive as queryable knowledge rather than only as prose in the source narrative?
-- When one explicit fact applies to several people, should Odyssey duplicate it across entity notes, create/attach a shared relation/group entity, or rely on traversable event evidence? Measure retrieval quality before choosing.
-- Are newly created identity-only notes still useful and readable before they accumulate their own body facts?
+- When an explicitly stated durable relationship is present, does it survive as queryable knowledge from both relevant entity viewpoints rather than only as prose in the source narrative?
+- Does follow-up language such as “todos los que estaban ayer...” correctly resolve the bounded participant set from prior context before attaching the new shared fact?
+- Are newly created identity-only notes still useful and readable before they accumulate their own direct body facts?
 - Can later retrieval answer both entity-centric questions and event-centric questions from the resulting graph of notes/links?
+- Can retrieval include relevant incoming-link context without pulling every backlink or entire source note into the model context?
+
+### Fact deduplication and correction
+
+Real DEV notes also exposed two distinct duplicate patterns that must be handled deliberately:
+
+1. **Exact duplicate** — the same fact text is appended more than once (for example the same partner fact repeated verbatim). Historical unsafe retries can create this, but future writes should also defend against exact duplicate fact insertion.
+2. **Semantic duplicate/paraphrase** — two different strings express the same durable fact (for example “Mi mujer es X” and “Mi mujer se llama X”). Text equality is insufficient here.
+
+The follow-up should define a bounded fact-equivalence policy that:
+
+- prevents exact duplicate insertion deterministically where possible;
+- detects high-confidence semantic equivalence before appending a new durable fact;
+- preserves genuinely different facts even when they share vocabulary;
+- does not collapse time-varying facts that are true at different dates;
+- treats explicit corrections as updates/supersession rather than silently retaining contradictory duplicates;
+- preserves provenance/auditability even when the visible knowledge is deduplicated;
+- does not require broad whole-vault semantic comparison for every write if a cheaper target-note/local comparison is sufficient.
 
 Prefer evidence from realistic narrative inputs over synthetic micro-prompts, but keep this work isolated from the real production vault until the behavior is understood.
 
@@ -93,7 +116,8 @@ finish UI-2 read-only Notes
         v
 bounded note-creation + planner-cost/latency exploration
         |
-        +--> knowledge distribution / relationships / entity-note quality
+        +--> knowledge distribution / relations / backlinks / entity-note quality
+        +--> exact + semantic fact deduplication and correction semantics
         +--> narrative-write planner optimization investigation
         +--> conversational schema-management contract
         |
