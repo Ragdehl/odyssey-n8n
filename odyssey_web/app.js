@@ -1,6 +1,7 @@
 import {
   ProductRequestError,
   createSubmission,
+  findRecoverableSubmission,
   renderProductResultWithContinuity,
   requestProductResult,
   requestConversation,
@@ -72,6 +73,11 @@ async function loadMainConversation() {
       appendNoteSetAffordance(message, turn.note_result_snapshot);
     }
   }
+  const recoverable = findRecoverableSubmission(data.turns, conversationId);
+  if (recoverable) {
+    retrySubmission = recoverable;
+    appendRecoveryControl(recoverable);
+  }
   conversation.scrollTop = conversation.scrollHeight;
 }
 
@@ -79,7 +85,13 @@ void (async () => {
   try {
     await loadMainConversation();
   } catch {
-    // The existing chat remains usable if the optional history projection is unavailable.
+    if (!conversation.children.length) {
+      const message = appendMessage(
+        "odyssey",
+        "No se ha podido cargar la conversación. Puedes seguir usando Odyssey o volver a intentarlo más tarde.",
+      );
+      message.classList.add("message-error");
+    }
   }
 })();
 
@@ -249,11 +261,11 @@ function appendLoading() {
   return loading;
 }
 
-function appendRetryControl(submission) {
+function appendRetryControl(submission, label = "Reintentar") {
   const retry = document.createElement("button");
   retry.type = "button";
   retry.className = "retry-button";
-  retry.textContent = "Reintentar";
+  retry.textContent = label;
   retry.addEventListener("click", () => {
     if (retrySubmission !== submission) return;
     retrySubmission = null;
@@ -262,6 +274,16 @@ function appendRetryControl(submission) {
   });
   conversation.append(retry);
   conversation.scrollTop = conversation.scrollHeight;
+}
+
+function appendRecoveryControl(submission) {
+  const notice = document.createElement("div");
+  notice.className = "recovery-notice";
+  const text = document.createElement("p");
+  text.textContent = "Esta solicitud no tiene una respuesta guardada.";
+  notice.append(text);
+  conversation.append(notice);
+  appendRetryControl(submission, "Recuperar resultado");
 }
 
 function appendContinuityWarning() {

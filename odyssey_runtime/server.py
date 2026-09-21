@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -18,7 +18,7 @@ from odyssey_core.identity_boundary import (
 from odyssey_core.note_queries import NotesQueryError, StaleCursorError
 
 from .composition import RuntimeComposition
-from .serialization import application_result_to_response
+from .delivery_results import DeliveryResultError
 
 MAX_REQUEST_BYTES = 1_048_576
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
@@ -36,9 +36,9 @@ _JSON_HTML_ESCAPES = str.maketrans(
 def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765) -> None:
     """Serve the bounded runtime contract until the process receives a shutdown signal.
 
-    Requests are handled serially because Core write/Git/index-refresh concurrency is not yet an
-    adopted Odyssey contract. This keeps the first runtime fail-simple until later E2E evidence
-    justifies concurrent execution.
+    HTTP requests are handled concurrently so long planning does not block independent Notes,
+    conversation, or health reads. RuntimeComposition separately serializes product executions,
+    preserving the existing single-writer Git/mutation/index-refresh contract.
 
     Args:
         runtime: Long-lived Core composition to invoke.
@@ -51,7 +51,7 @@ def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     handler = _handler_for(runtime)
-    with HTTPServer((host, port), handler) as server:
+    with ThreadingHTTPServer((host, port), handler) as server:
         server.serve_forever()
 
 
@@ -205,16 +205,22 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
                 return
             try:
-                result = runtime.execute(
+                response = runtime.execute_product(
                     request,
                     request_id,
                     conversation_id,
                     authenticated_actor,
                     external_principal,
                 )
-                self._write_json(HTTPStatus.OK, application_result_to_response(result))
+                self._write_json(HTTPStatus.OK, response)
             except IdentityBoundaryError:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
+                return
+            except DeliveryResultError:
+                self._write_json(
+                    HTTPStatus.CONFLICT,
+                    {"error": "delivery result conflict", "request_id": request_id},
+                )
                 return
             except Exception:
                 payload: dict[str, Any] = {"error": "runtime failure"}
@@ -260,7 +266,11 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
-            self.wfile.write(encoded)
+            try:
+                self.wfile.write(encoded)
+            except (BrokenPipeError, ConnectionResetError):
+                # A completed mutation result is already durable before this best-effort delivery.
+                return
 
     return RuntimeHandler
 

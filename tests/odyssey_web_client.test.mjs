@@ -6,6 +6,7 @@ import {
   PRODUCT_REQUEST_TIMEOUT_MS,
   createRequestId,
   createSubmission,
+  findRecoverableSubmission,
   renderProductResultWithContinuity,
   requestConversation,
   requestProductResult,
@@ -39,6 +40,26 @@ test("new submissions trim text and receive a safe web request id", () => {
 
 test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
+});
+
+test("reload offers the newest unmatched logical delivery without resending it", () => {
+  const turns = [
+    {request_id: "web-complete", role: "user", text: "first"},
+    {request_id: "web-complete", role: "assistant", text: "done"},
+    {request_id: "web-recover", role: "user", text: "remember this"},
+  ];
+
+  assert.deepEqual(findRecoverableSubmission(turns), {
+    request: "remember this",
+    requestId: "web-recover",
+    conversationId: "main",
+  });
+  assert.equal(findRecoverableSubmission([...turns, {
+    request_id: "web-recover", role: "assistant", text: "saved",
+  }]), null);
+  assert.equal(findRecoverableSubmission([
+    {request_id: "../unsafe", role: "user", text: "x"},
+  ]), null);
 });
 
 test("a missing secure identifier source fails closed", () => {

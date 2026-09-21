@@ -57,6 +57,13 @@ suffix (at most 4,096 UTF-8 bytes and 16 turns). Request details, pagination cur
 metadata never enter planner context. Shared-note permissions and synchronization remain separate
 from private local transcript storage.
 
+Completed mutation delivery results are also bounded durable operational state. Each actor-local
+conversation root may contain `delivery-results/` records keyed by a hash of `request_id`. A record
+binds the ID to a SHA-256 fingerprint of the visible request plus conversation ID and retains the
+already-bounded runtime result needed to recover from a lost HTTP response. It does not copy the
+request text, does not participate in retrieval/planning, and never replaces canonical Markdown.
+Records are immutable and integrity-checked; malformed state or request-ID rebinding fails closed.
+
 ## Rebuildable runtime state
 
 `runtime/` contains derived state such as SQLite indexes, embeddings/projections, caches, and other artifacts that can be rebuilt from canonical Markdown plus versioned application configuration.

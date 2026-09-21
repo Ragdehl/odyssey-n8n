@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 
@@ -48,6 +49,118 @@ def _result() -> ApplicationResult:
         affected_stable_note_ids=(),
         history=GitHistoryResult.disabled(),
     )
+
+
+def _mutation_result(request_id: str) -> ApplicationResult:
+    """Return completed mutation evidence suitable for durable delivery replay."""
+    return ApplicationResult(
+        request_id=request_id,
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=("note-1",),
+        history=GitHistoryResult.disabled(),
+    )
+
+
+def test_completed_mutation_result_replays_across_runtime_restart(tmp_path: Path) -> None:
+    """A lost response is recoverable without another Core/planner/mutation pass."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    actor = AuthenticatedActorContext(USER_A)
+    calls: list[str] = []
+
+    def execute(request, request_id, authenticated_actor, conversation_id):
+        calls.append(request_id)
+        return _mutation_result(request_id)
+
+    first = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    original = first.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+
+    restarted = RuntimeComposition(
+        core_execute=lambda *args: (_ for _ in ()).throw(AssertionError("must replay")),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    replay = restarted.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+
+    assert calls == ["delivery-1"]
+    assert replay["delivery_replayed"] is True
+    assert {key: value for key, value in replay.items() if key != "delivery_replayed"} == original
+    turns = LocalConversationStore(resolver.resolve(USER_A)).load_main_page()["turns"]
+    assert [(turn["request_id"], turn["role"]) for turn in turns] == [("delivery-1", "user")]
+
+
+def test_duplicate_delivery_waits_for_original_and_executes_core_once(tmp_path: Path) -> None:
+    """A retry arriving while the original runs receives its result without duplicate mutation."""
+    entered = Event()
+    release = Event()
+    calls: list[str] = []
+    responses: list[dict[str, object]] = []
+    resolver = ConversationRootResolver(tmp_path / "state")
+    actor = AuthenticatedActorContext(USER_A)
+
+    def execute(request, request_id, authenticated_actor, conversation_id):
+        calls.append(request_id)
+        entered.set()
+        assert release.wait(2)
+        return _mutation_result(request_id)
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+
+    first = Thread(
+        target=lambda: responses.append(
+            runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+        )
+    )
+    retry = Thread(
+        target=lambda: responses.append(
+            runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+        )
+    )
+    first.start()
+    assert entered.wait(2)
+    retry.start()
+    release.set()
+    first.join(2)
+    retry.join(2)
+
+    assert calls == ["delivery-1"]
+    assert len(responses) == 2
+    assert sum(response.get("delivery_replayed") is True for response in responses) == 1
+
+
+def test_failure_before_result_allows_same_id_retry(tmp_path: Path) -> None:
+    """A pre-result failure records no completion and permits one later safe attempt."""
+    attempts = 0
+    resolver = ConversationRootResolver(tmp_path / "state")
+
+    def execute(request, request_id, authenticated_actor, conversation_id):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("synthetic pre-commit failure")
+        return _mutation_result(request_id)
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    actor = AuthenticatedActorContext(USER_A)
+
+    with pytest.raises(RuntimeError, match="pre-commit"):
+        runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+    result = runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+
+    assert attempts == 2
+    assert result["request_id"] == "delivery-1"
 
 
 def test_persistent_runtime_refreshes_planner_clock_for_each_request(
@@ -128,8 +241,8 @@ def test_persistent_runtime_refreshes_planner_clock_for_each_request(
     assert request_ids == ["delivery-1", "delivery-2"]
 
 
-def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
-    """The initial adapter must not introduce concurrent Core execution implicitly."""
+def test_runtime_server_uses_concurrent_http_execution(monkeypatch) -> None:
+    """The adapter keeps reads responsive while composition serializes product writes."""
     calls: list[tuple[str, int]] = []
 
     class FakeHTTPServer:
@@ -148,7 +261,7 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
         def serve_forever(self):
             return None
 
-    monkeypatch.setattr(runtime_server, "HTTPServer", FakeHTTPServer)
+    monkeypatch.setattr(runtime_server, "ThreadingHTTPServer", FakeHTTPServer)
     runtime = RuntimeComposition(
         core_execute=lambda request, request_id: _result(), refresh_indexes=lambda: None
     )

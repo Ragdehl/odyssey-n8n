@@ -69,9 +69,9 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'selectSurface("notes")' in app
     assert 'new CustomEvent("odyssey:open-note-snapshot"' in app
     assert "La respuesta se ha obtenido" in app
-    assert (
-        "The existing chat remains usable if the optional history projection is unavailable." in app
-    )
+    assert "No se ha podido cargar la conversación" in app
+    assert "findRecoverableSubmission(data.turns, conversationId)" in app
+    assert 'appendRetryControl(submission, "Recuperar resultado")' in app
     success_flow = app[
         app.index("const result = await requestProductResult") : app.index("} catch (error)")
     ]
@@ -114,6 +114,7 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert '.conversation::before { content: ""; flex: 1 0 0; }' in styles
     assert ".deployment-marker" in styles
     assert ".continuity-warning" in styles
+    assert ".recovery-notice" in styles
 
     environment = (WEB_ROOT / "environment.js").read_text(encoding="utf-8")
     assert 'environment: "PROD"' in environment

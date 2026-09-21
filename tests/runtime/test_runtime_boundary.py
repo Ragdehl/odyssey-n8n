@@ -830,6 +830,133 @@ def test_http_boundary_preserves_delivery_identity_for_retries_and_distinguishes
         server.server_close()
 
 
+def test_slow_product_execution_does_not_block_health_notes_or_conversation() -> None:
+    """Threaded delivery keeps read-only product boundaries responsive during slow planning."""
+    entered = threading.Event()
+    release = threading.Event()
+    completed: dict[str, tuple[int, dict[str, object]]] = {}
+
+    class SlowRuntime:
+        def execute_product(self, *args):
+            entered.set()
+            assert release.wait(3)
+            return {"request_id": "delivery-slow", "status": "completed", "actions": []}
+
+        def notes(self, operation, payload, actor, principal):
+            assert operation == "query"
+            return {"kind": "page", "items": [], "total": 0}
+
+        def main_conversation(self, actor, principal, *, limit=None, before=None):
+            return {"conversation_id": "main", "turns": [], "has_older": False, "before": None}
+
+    server = _test_server(SlowRuntime())
+
+    def post(name, path, payload):
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        connection.request("POST", path, body=json.dumps(payload))
+        response = connection.getresponse()
+        completed[name] = (response.status, json.loads(response.read()))
+
+    slow = threading.Thread(
+        target=post,
+        args=(
+            "execute",
+            "/execute",
+            {"request": "synthetic slow write", "request_id": "delivery-slow"},
+        ),
+    )
+    try:
+        slow.start()
+        assert entered.wait(2)
+        actor = {"stable_user_id": OdysseyUser.new().stable_user_id}
+        probes = [
+            threading.Thread(
+                target=post,
+                args=(
+                    "notes",
+                    "/notes",
+                    {"operation": "query", "mode": "feed", "authenticated_actor": actor},
+                ),
+            ),
+            threading.Thread(
+                target=post,
+                args=(
+                    "conversation",
+                    "/conversation/main",
+                    {"operation": "main", "authenticated_actor": actor},
+                ),
+            ),
+        ]
+
+        def health() -> None:
+            connection = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            connection.request("GET", "/healthz")
+            response = connection.getresponse()
+            completed["health"] = (response.status, json.loads(response.read()))
+
+        probes.append(threading.Thread(target=health))
+        for probe in probes:
+            probe.start()
+        for probe in probes:
+            probe.join(2)
+
+        assert not any(probe.is_alive() for probe in probes)
+        assert {name: result[0] for name, result in completed.items()} == {
+            "notes": 200,
+            "conversation": 200,
+            "health": 200,
+        }
+    finally:
+        release.set()
+        slow.join(3)
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_retry_replays_completed_mutation_without_second_core_call(tmp_path: Path) -> None:
+    """The actual execute boundary returns durable mutation evidence on a lost-response retry."""
+    calls: list[str] = []
+    user = OdysseyUser.new()
+
+    def execute(request, request_id, actor, conversation_id):
+        calls.append(request_id)
+        return ApplicationResult(
+            request_id=request_id,
+            status=ApplicationStatus.COMPLETED,
+            action_results=(),
+            affected_stable_note_ids=("note-test",),
+            history=GitHistoryResult.disabled(),
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    server = _test_server(runtime)
+    payload = {
+        "request": "synthetic mutation",
+        "request_id": "delivery-replay",
+        "conversation_id": "main",
+        "authenticated_actor": {"stable_user_id": user.stable_user_id},
+    }
+    try:
+        responses = []
+        for _ in range(2):
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            connection.request("POST", "/execute", body=json.dumps(payload))
+            response = connection.getresponse()
+            assert response.status == 200
+            responses.append(json.loads(response.read()))
+
+        assert calls == ["delivery-replay"]
+        assert "delivery_replayed" not in responses[0]
+        assert responses[1]["delivery_replayed"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_http_boundary_exposes_only_the_actor_main_conversation(tmp_path: Path) -> None:
     """The browser can reopen one durable main transcript but cannot manage arbitrary chats."""
     user = OdysseyUser.new()

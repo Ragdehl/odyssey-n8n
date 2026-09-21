@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
+from threading import Lock, RLock
 from time import perf_counter
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -53,6 +54,9 @@ from odyssey_core.request_planning import (
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
+from .delivery_results import LocalDeliveryResultStore
+from .serialization import application_result_to_response
+
 _VAULT_REPOSITORY_TYPE = VaultRepository
 
 # Preserve the existing runtime composition injection seam while changing its production target.
@@ -73,6 +77,59 @@ class RuntimeComposition:
     notes_embedder: object | None = None
     intelligent_notes_execute: Callable[[str, Sequence[object]], NotePage] | None = None
     monotonic: Callable[[], float] = perf_counter
+    _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+
+    def execute_product(
+        self,
+        user_request: str,
+        request_id: str | None = None,
+        conversation_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Execute one delivery once and replay a durable completed mutation result.
+
+        Product deliveries are serialized because Git and multi-note mutation are not concurrent
+        write authorities. The HTTP adapter remains concurrent, so Notes, conversation, and health
+        reads do not wait behind planning. A completed mutation result is persisted before the
+        response is written, allowing a same-ID retry after a lost connection to recover without
+        another planner or mutation pass.
+        """
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        store: LocalDeliveryResultStore | None = None
+        fingerprint: str | None = None
+        if request_id is not None and conversation_id is not None:
+            if self.conversation_root_resolver is None:
+                raise ValueError("conversation root resolver is unavailable")
+            store = LocalDeliveryResultStore(
+                self.conversation_root_resolver.resolve(actor) / "delivery-results"
+            )
+            fingerprint = store.fingerprint(user_request, conversation_id)
+        with self._execute_lock:
+            if store is not None and fingerprint is not None:
+                replay = store.load(request_id, fingerprint)
+                if replay is not None:
+                    replay["delivery_replayed"] = True
+                    return replay
+            result = self.execute(
+                user_request,
+                request_id,
+                conversation_id,
+                AuthenticatedActorContext(actor)
+                if authenticated_actor is not None or external_principal is not None
+                else None,
+                None,
+            )
+            response = application_result_to_response(result)
+            if store is not None and fingerprint is not None and result.affected_stable_note_ids:
+                store.save(
+                    result.request_id,
+                    fingerprint,
+                    response,
+                    _current_time()["timestamp"],
+                )
+            return response
 
     def notes(
         self,
@@ -174,12 +231,13 @@ class RuntimeComposition:
             request_id = request_id or allocate_request_id()
             if conversation_id != MAIN_CONVERSATION_ID:
                 raise ValueError("only the main conversation is available")
-            self._conversation_store(resolved_actor).append_turn(
-                request_id=request_id,
-                role="user",
-                text=user_request,
-                created_at=_current_time()["timestamp"],
-            )
+            with self._conversation_lock:
+                self._conversation_store(resolved_actor).append_turn(
+                    request_id=request_id,
+                    role="user",
+                    text=user_request,
+                    created_at=_current_time()["timestamp"],
+                )
         started = self.monotonic()
         if conversation_id is None:
             if authenticated_actor is None:
@@ -324,9 +382,10 @@ class RuntimeComposition:
     ) -> dict[str, object]:
         """Return the one durable main conversation for the trusted actor."""
         actor = self._resolve_actor(authenticated_actor, external_principal)
-        store = self._conversation_store(actor)
-        store.load_or_create_main(now=_current_time()["timestamp"])
-        return store.load_main_page(limit=40 if limit is None else limit, before=before)
+        with self._conversation_lock:
+            store = self._conversation_store(actor)
+            store.load_or_create_main(now=_current_time()["timestamp"])
+            return store.load_main_page(limit=40 if limit is None else limit, before=before)
 
     def list_conversations(
         self,
@@ -347,7 +406,8 @@ class RuntimeComposition:
         actor = self._resolve_actor(authenticated_actor, external_principal)
         if conversation_id != MAIN_CONVERSATION_ID:
             raise ValueError("only the main conversation is available")
-        return self._conversation_store(actor).load_main_page()
+        with self._conversation_lock:
+            return self._conversation_store(actor).load_main_page()
 
     def append_conversation_turn(
         self,
@@ -365,15 +425,16 @@ class RuntimeComposition:
         actor = self._resolve_actor(authenticated_actor, external_principal)
         if conversation_id != MAIN_CONVERSATION_ID:
             raise ValueError("only the main conversation is available")
-        return self._conversation_store(actor).append_turn(
-            request_id=request_id,
-            role=role,
-            text=text,
-            created_at=_current_time()["timestamp"],
-            status=status,
-            request_detail=request_detail,
-            note_result_snapshot=note_result_snapshot,
-        )
+        with self._conversation_lock:
+            return self._conversation_store(actor).append_turn(
+                request_id=request_id,
+                role=role,
+                text=text,
+                created_at=_current_time()["timestamp"],
+                status=status,
+                request_detail=request_detail,
+                note_result_snapshot=note_result_snapshot,
+            )
 
     def recent_conversation_context(
         self,
@@ -386,7 +447,8 @@ class RuntimeComposition:
         actor = self._resolve_actor(authenticated_actor, external_principal)
         if conversation_id != MAIN_CONVERSATION_ID:
             raise ValueError("only the main conversation is available")
-        return self._conversation_store(actor).recent_context(exclude_request_id=request_id)
+        with self._conversation_lock:
+            return self._conversation_store(actor).recent_context(exclude_request_id=request_id)
 
     def _conversation_store(self, actor: str) -> LocalConversationStore:
         """Resolve a trusted actor before constructing its root-bound local store."""

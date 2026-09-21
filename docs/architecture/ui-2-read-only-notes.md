@@ -1,7 +1,7 @@
 # UI-2 — read-only Notes product contract
 
-Status: **corrective implementation complete in Draft PR #124; READY FOR FINAL UI-2 HUMAN MOBILE
-CHECKPOINT. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
+Status: **corrective implementation and reliability closure are active in Draft PR #124; NOT READY
+FOR MERGE. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
 reachable `notes.js` / `notes-client.js` modules, so `app.js` never bootstrapped, and CSS allowed the
 hidden Notes view to stack below Chat. The correction makes Chat and Notes mutually exclusive
 application-level views, moves Notes search to the mobile bottom interaction zone, adds a
@@ -18,7 +18,62 @@ the mounted assets, zero-provider local query/detail path, and explicit intellig
 transport pass. Python CI and Sonar are green at 81.3% new-code coverage. One production Luna→Sol
 planner case passed within the $0.15 hard live-gate budget before the next case was safely stopped.
 All public routes remain Access-gated; production ingress, Access, CSP, DNS, origin, and fallback
-remain unchanged. UI-2 is not complete in PROD.**
+remain unchanged. A later authenticated write exposed one final reliability defect: same-ID retries
+could rerun a multi-note plan, and the serial runtime made Notes/conversation reads unavailable while
+the write ran. The bounded correction and evidence are recorded below. UI-2 is not complete in PROD.**
+
+## Long-write reliability closure
+
+The 2026-09-21 authenticated DEV incident crossed three previously separate assumptions:
+
+```text
+browser sends request ID
+        |
+        v
+serial runtime executes Core --------------> canonical mutation + Git commit
+        |                                      (result not durably replayable)
+        v
+n8n returns product result
+        |
+        v
+browser persists assistant turn
+```
+
+The initial user turn was durable before planning, but the assistant turn belonged to a later browser
+request. Losing the product response therefore left an unmatched user turn. Retry preserved the ID,
+but the runtime had no whole-result ledger and planned again. Correlation by that ID found three
+overlapping n8n executions and three substantive Git commits under the same request trailer. While
+the serial runtime processed them, queued Notes calls reached the workflow's exact 30-second timeout
+and a conversation call reached its exact 10-second timeout. The first runtime result itself completed
+in about 91.4 seconds (planner 57.9 seconds, action 27.4 seconds, index refresh 4.9 seconds), so the
+evidence does not identify the configured 120/125-second product deadlines as the first-response
+failure; it establishes a lost browser delivery after a completed backend result.
+
+The correction preserves the synchronous product and conversation ownership contracts:
+
+- the HTTP adapter is concurrent, while `RuntimeComposition` retains a single product-execution lock
+  around planner/mutation/Git/index work;
+- a completed mutation response is atomically stored in actor-local durable state before HTTP
+  delivery and replayed for the same request fingerprint, including after runtime reconstruction;
+- a conflicting request under the same ID, corrupt record, or unsafe identity fails closed;
+- the result record contains no request text and is not available to retrieval or planner continuity;
+- transcript reload recognizes only a newest unmatched user turn and offers an explicit
+  `Recuperar resultado` action with its original ID; it never retries automatically;
+- a dropped assistant-turn persistence call therefore remains recoverable without replanning or
+  mutating canonical knowledge again.
+
+The effective timeout inventory remains intentionally unchanged: browser product fetch 125 seconds;
+n8n private runtime request 120 seconds; Notes request 30 seconds; conversation request 10 seconds;
+answerer 60 seconds; planner SDK read timeout 600 seconds; contextual resolver, fact selector, and
+writer 120 seconds each; no runtime application deadline; Cloudflare's documented default proxied
+origin read timeout 125 seconds. The isolated DEV n8n container has no overriding execution-timeout
+environment setting. Latency/model tuning remains post-UI-2 work.
+
+Deterministic evidence pauses a synthetic write with synchronization events and proves health, Notes,
+and conversation reads return before it is released. Separate tests cover pre-result retry, a
+duplicate arriving while the original is running, restart-safe completed-result replay, request-ID
+rebinding/corruption, exactly one Core execution, conversation continuity failure, and explicit reload
+recovery. No provider call or real-vault mutation is required for this gate.
 
 ## Objective
 

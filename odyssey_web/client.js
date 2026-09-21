@@ -53,6 +53,29 @@ export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, con
   return submission;
 }
 
+/**
+ * Find the newest durable user turn whose same-ID assistant outcome is missing.
+ *
+ * The caller may offer this original logical delivery for explicit recovery after reload, but must
+ * not automatically resend it.
+ */
+export function findRecoverableSubmission(turns, conversationId = "main") {
+  if (!Array.isArray(turns) || typeof conversationId !== "string" || !conversationId) return null;
+  const answered = new Set(
+    turns
+      .filter((turn) => turn && turn.role === "assistant" && typeof turn.request_id === "string")
+      .map((turn) => turn.request_id),
+  );
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn || turn.role !== "user" || typeof turn.request_id !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(turn.request_id) ||
+        typeof turn.text !== "string" || !turn.text.trim() || answered.has(turn.request_id)) continue;
+    return {request: turn.text, requestId: turn.request_id, conversationId};
+  }
+  return null;
+}
+
 /** Send one bounded conversation operation through the existing same-origin boundary. */
 export async function requestConversation({endpoint = "/api/conversation", operation, payload = {}, fetchImpl = globalThis.fetch}) {
   const response = await fetchImpl(endpoint, {
