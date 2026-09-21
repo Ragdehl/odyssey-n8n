@@ -106,10 +106,13 @@ def test_completed_response_and_answerer_failure_keep_existing_detail_contract()
     )
 
 
-def test_note_set_routes_without_answerer_and_preserves_only_valid_snapshot() -> None:
-    """Keep Notes affordances on the direct route and reject malformed runtime snapshots."""
+def test_note_set_routes_without_answerer_and_preserves_closed_snapshot_versions() -> None:
+    """Keep search and mutation affordances on the direct route without accepting hybrids."""
     source = SOURCE.read_text(encoding="utf-8")
+    assert "const safeSearchSnapshot = value =>" in source
+    assert "const safeAffectedSnapshot = value =>" in source
     assert "const safeSnapshot = value =>" in source
+    assert "value.version === 2 && value.kind === 'affected_notes'" in source
     assert "if (intent !== 'answer' && !snapshot)" in source
     assert "if (intent === 'note_set') return" in source
     assert "kind: 'note_set'" in source
