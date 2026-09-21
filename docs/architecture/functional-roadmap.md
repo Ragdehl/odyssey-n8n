@@ -62,7 +62,7 @@ public-route provenance all pass at that commit. The next small authenticated ch
 **narrow final UI-2 human reliability checkpoint**, not a production-completion claim: one ordinary
 DEV write, optional Chat/Notes navigation while pending, acknowledgement, reload, and confirmation
 that Chat outcome and Notes mutation remain consistent. The previous production planner
-evidence is clean but budget-bounded after one Luna→Sol case; Python CI and Sonar are green at 81.3%
+evidence is clean but budget-bounded after one Luna→Sol case; Python CI and Sonar are green at 83.6%
 new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 

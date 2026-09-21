@@ -16,7 +16,7 @@ empty canonical bodies, planner-backed explicit Notes search, visible inferred f
 human-readable Markdown/link/backlink presentation, complete type cues, and historical affordances
 in older Chat pages. Direct isolated-DEV runtime/n8n/static evidence is `MATCH` at commit `03d644c`;
 the mounted assets, zero-provider local query/detail path, and explicit intelligent-operation
-transport pass. Python CI and Sonar are green at 81.3% new-code coverage. One production Luna→Sol
+transport pass. Python CI and Sonar are green at 83.6% new-code coverage. One production Luna→Sol
 planner case passed within the $0.15 hard live-gate budget before the next case was safely stopped.
 All public routes remain Access-gated; production ingress, Access, CSP, DNS, origin, and fallback
 remain unchanged. A later authenticated write exposed one final reliability defect: same-ID retries
