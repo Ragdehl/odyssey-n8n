@@ -8,6 +8,8 @@ Once UI-2 makes canonical notes visible, normal DEV use can evaluate not only wh
 
 The first real narrative-style DEV exercises showed promising behavior (one event/journal-style note plus reusable entity notes, and extraction of durable facts belonging to more than one entity), but they also exposed questions that should be investigated deliberately before moving on to broader application work.
 
+A later real DEV exercise sharpened one concrete case: an explicitly stated group-level fact (people belong to the same friend group and attended the same school) was preserved in the journal/event note but was not materialized onto the individual person notes. The information was therefore not lost from canonical knowledge, but entity-centric browsing/retrieval may fail to surface it. The follow-up must decide whether such facts should be projected onto each entity, represented through an explicit shared/group relation, or remain event-scoped with reliable graph retrieval. Do not solve this by blind duplication.
+
 This follow-up is therefore a bounded product/architecture exploration, not an authorization to redesign the schema or add a second knowledge authority.
 
 ## A. Creation behavior from natural narrative input
@@ -22,6 +24,7 @@ Questions to answer:
 - Does explicit relational language become durable relation/link knowledge without requiring the user to phrase the input unnaturally?
 - Does Odyssey correctly avoid inventing stronger relations from mere co-occurrence (for example, people attending the same event must not automatically become `friends`)?
 - When an explicitly stated durable relationship is present, does it survive as queryable knowledge rather than only as prose in the source narrative?
+- When one explicit fact applies to several people, should Odyssey duplicate it across entity notes, create/attach a shared relation/group entity, or rely on traversable event evidence? Measure retrieval quality before choosing.
 - Are newly created identity-only notes still useful and readable before they accumulate their own body facts?
 - Can later retrieval answer both entity-centric questions and event-centric questions from the resulting graph of notes/links?
 
