@@ -1,31 +1,20 @@
 # UI-2 — read-only Notes product contract
 
-Status: **the bounded reliability correction introduced at `044d6c9` is deployed in isolated DEV and the
-subsequent authenticated reliability checkpoint passed. A final recovery-control presentation correction
-is deterministically verified and READY FOR THE FINAL UI-2 CLOSEOUT CHECK; Draft PR #124 remains NOT
-READY FOR MERGE until that check passes. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
-reachable `notes.js` / `notes-client.js` modules, so `app.js` never bootstrapped, and CSS allowed the
-hidden Notes view to stack below Chat. The correction makes Chat and Notes mutually exclusive
-application-level views, moves Notes search to the mobile bottom interaction zone, adds a
-schema-capability-driven filter sheet, derives/serves the complete local module graph, and adds
-deployment/browser regression guards. The second checkpoint rendered the corrected layout but still
-could not bootstrap because the DEV tunnel retained the old seven-path contract; its DEV-only
-ten-path inventory is now shared by deployment validation and the public-route preflight. The third
-checkpoint confirmed the basic product is usable (exclusive Chat/Notes, feed, filters, sort, details,
-links/backlinks infrastructure, and public bootstrap), and exposed the closure items now addressed:
-empty canonical bodies, planner-backed explicit Notes search, visible inferred filters,
-human-readable Markdown/link/backlink presentation, complete type cues, and historical affordances
-in older Chat pages. Direct isolated-DEV runtime/n8n/static evidence is `MATCH` at commit `03d644c`;
-the mounted assets, zero-provider local query/detail path, and explicit intelligent-operation
-transport pass. Python CI and Sonar are green at 83.6% new-code coverage. One production Luna→Sol
-planner case passed within the $0.15 hard live-gate budget before the next case was safely stopped.
-All public routes remain Access-gated; production ingress, Access, CSP, DNS, origin, and fallback
-remain unchanged. A later authenticated write exposed one final reliability defect: same-ID retries
-could rerun a multi-note plan, and the serial runtime made Notes/conversation reads unavailable while
-the write ran. The bounded correction and evidence are recorded below. Its deterministic suite is
-green (`962 passed`, `79 skipped`, `52 subtests passed`), the isolated DEV deployment has matching
-source/workflow/public-route provenance, and direct runtime health, Notes capabilities, conversation
-reload, and mounted browser commit checks pass. UI-2 is not complete in PROD.**
+Status: **the final bounded UI-2 presentation work is deployed to isolated DEV at
+`f44c74b54e25d3e5b31fbd0764857e270d94ee28`. Successful mutations now retain an exact, bounded
+affected-note membership snapshot (`Guardado` / `Ver N notas`) without a new search; v1 historical
+search snapshots remain rerunnable and v2 affected-note snapshots are explicitly non-rerunnable.
+Backlinks now derive bounded, occurrence-level current-Markdown blocks rather than a whole-note
+prefix, and preserve Core-resolved inline links/type cues. The recovery control remains attached to
+the unmatched user turn and disappears before its recovered assistant result renders. Isolated DEV
+runtime/n8n health, workflow provenance, and public-route provenance are `MATCH`; all seven mounted
+browser asset routes and the zero-provider Notes feed passed direct-origin smoke checks. The full
+deterministic suite passed (`968 passed`, `79 skipped`), the browser coverage gate passed (93.62%
+line coverage), GitHub Python CI is green, and Sonar Quality Gate passed at 84.0% new-code coverage
+with zero Security Hotspots. The existing production planner evidence remains clean but deliberately
+budget-bounded after one Luna→Sol case; no provider call was made for this pass. The remaining gate
+is one final authenticated mobile closeout check. Draft PR #124 remains unmerged and UI-2 is not
+complete in PROD. Production ingress, Access, CSP, DNS, origin, and fallback remain unchanged.**
 
 ## Long-write reliability closure
 
