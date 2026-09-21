@@ -43,8 +43,8 @@ export function validateNotesResponse(value) {
   }
   if (value.kind === "page") return validatePage(value);
   if (value.kind === "detail") {
-    if (!isText(value.body) || !Array.isArray(value.links)) throw new NotesRequestError("Detalle inválido.");
-    return {kind: "detail", note: validateSummary(value.note), body: value.body, links: value.links.map(validateLink)};
+    if (!isString(value.body) || !Array.isArray(value.body_blocks) || !Array.isArray(value.links)) throw new NotesRequestError("Detalle inválido.");
+    return {kind: "detail", note: validateSummary(value.note), body: value.body, body_blocks: value.body_blocks.map(validateBodyBlock), links: value.links.map(validateLink)};
   }
   if (value.kind === "backlinks") {
     if (!isText(value.target_id) || !Array.isArray(value.items) || !Number.isInteger(value.total) || !cursor(value.next_cursor)) throw new NotesRequestError("Enlaces entrantes inválidos.");
@@ -72,7 +72,18 @@ function validateType(value) { if (!value || !isText(value.id) || !isText(value.
 function validateField(value) { if (!value || !isText(value.id) || !isText(value.value_type) || !Array.isArray(value.operators) || !Array.isArray(value.applies_to) || (value.format !== undefined && !isText(value.format) && value.format !== null)) throw new NotesRequestError("Campo inválido."); return {id: value.id, value_type: value.value_type, operators: value.operators.filter(isText), applies_to: value.applies_to.filter(isText), format: value.format ?? null}; }
 function validateFilter(value) { if (!value || !isText(value.field) || !isText(value.op)) throw new NotesRequestError("Filtro inválido."); return {field: value.field, op: value.op, value: value.value}; }
 function validateLink(value) { if (!value || !isText(value.target_id) || !isText(value.target_name) || !isText(value.target_type) || !isText(value.label)) throw new NotesRequestError("Enlace inválido."); return {...value, occurrences: count(value.occurrences)}; }
+function validateBodyBlock(value) {
+  if (!value || !["heading", "paragraph", "list_item"].includes(value.kind) || !Array.isArray(value.segments)) throw new NotesRequestError("Cuerpo de nota inválido.");
+  return {kind: value.kind, segments: value.segments.map(validateBodySegment)};
+}
+function validateBodySegment(value) {
+  if (!value || !isString(value.text)) throw new NotesRequestError("Segmento de nota inválido.");
+  const linked = value.target_id !== undefined || value.target_type !== undefined;
+  if (linked && (!isText(value.target_id) || !isText(value.target_type))) throw new NotesRequestError("Enlace de nota inválido.");
+  return linked ? {text: value.text, target_id: value.target_id, target_type: value.target_type} : {text: value.text};
+}
 function count(value) { if (!Number.isInteger(value) || value < 1) throw new NotesRequestError("Conteo inválido."); return value; }
 function cursor(value) { return value === null || isText(value); }
+function isString(value) { return typeof value === "string"; }
 function isText(value) { return typeof value === "string" && value.length > 0; }
 function text(value) { return typeof value === "string" ? value : ""; }

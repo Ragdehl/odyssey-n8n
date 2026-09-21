@@ -47,6 +47,8 @@ def write(
     updated: str,
     aliases: list[str] | None = None,
     tags: list[str] | None = None,
+    note_type: str = "concept",
+    properties: dict[str, object] | None = None,
 ) -> None:
     """Write a schema-valid disposable canonical note fixture."""
     target = vault / path
@@ -57,7 +59,7 @@ def write(
                 {
                     "id": note_id,
                     "name": name,
-                    "type": "concept",
+                    "type": note_type,
                     "created_at": "2026-01-01T00:00:00Z",
                     "updated_at": updated,
                     "created_by": {"human": None, "app": "test"},
@@ -66,6 +68,7 @@ def write(
                     "schema_version": 3,
                     "aliases": aliases or [],
                     "tags": tags or [],
+                    **(properties or {}),
                 },
                 body,
             )
@@ -115,6 +118,9 @@ def test_capabilities_and_local_search_are_schema_grounded_and_zero_provider(
     assert next(item for item in capabilities.fields if item["id"] == "created_at")["format"] == (
         "date-time"
     )
+    entry_date = next(item for item in capabilities.fields if item["id"] == "entry_date")
+    assert entry_date["applies_to"] == ("journal_entry",)
+    assert {"eq", "gte", "lt", "lte"} <= set(entry_date["operators"])
     page = notes.query(mode="local", query="Ada Lovelace")
     assert [item.id for item in page.items] == ["ada"]
 
@@ -161,11 +167,91 @@ def test_detail_links_backlinks_and_stale_projection_fail_closed(
         notes.query()
 
 
+def test_detail_projects_empty_and_markdown_bodies_without_exposing_storage_syntax(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Render current canonical bodies as safe blocks while keeping resolved IDs in Core."""
+    notes = service(tmp_path, schema)
+    vault = tmp_path / "vault"
+    write(
+        vault,
+        "journal/visit.md",
+        "visit",
+        "Visit",
+        "# Added 21-09-2026\n\n- Visité a [[people/ada|Ada]].\n<!-- odyssey:fact request=x -->",
+        updated="2026-09-19T00:00:00Z",
+    )
+    write(vault, "people/empty.md", "empty", "Empty", "", updated="2026-09-19T00:00:00Z")
+    notes.context_index.rebuild(notes.repository, schema, Embedder())
+
+    detail = notes.detail("visit")
+    assert detail.body == "Added 21-09-2026 Visité a Ada."
+    assert [block.kind for block in detail.body_blocks] == ["heading", "list_item"]
+    link = detail.body_blocks[1].segments[1]
+    assert (link.text, link.target_id, link.target_type) == ("Ada", "ada", "concept")
+    assert "[[" not in detail.body and "<!--" not in detail.body and "# " not in detail.body
+    assert notes.detail("empty").body_blocks == ()
+
+    backlink = next(item for item in notes.backlinks("ada").items if item.source.id == "visit")
+    assert backlink.context == "Added 21-09-2026 Visité a Ada."
+    assert (
+        "[[" not in backlink.context
+        and "<!--" not in backlink.context
+        and "# " not in backlink.context
+    )
+
+
+def test_unresolved_or_unsafe_wikilinks_degrade_to_visible_plain_text(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Never let the browser resolve an ambiguous or unsafe canonical link target."""
+    notes = service(tmp_path, schema)
+    write(
+        tmp_path / "vault",
+        "concepts/plain.md",
+        "plain",
+        "Plain",
+        "[[../unsafe|Visible]] y [[missing|Sin resolver]].",
+        updated="2026-09-19T00:00:00Z",
+    )
+
+    detail = notes.detail("plain")
+    segments = detail.body_blocks[0].segments
+    assert "".join(item.text for item in segments) == "Visible y Sin resolver."
+    assert all(item.target_id is None for item in segments)
+
+
 def test_shared_filters_apply_to_current_markdown(tmp_path: Path, schema: dict) -> None:
     """Reuse ContextFilter validation and current canonical tags rather than UI fields."""
     notes = service(tmp_path, schema)
     page = notes.query(filters=[ContextFilter("tags", "contains", "project")])
     assert [item.id for item in page.items] == ["odyssey"]
+
+
+def test_journal_entry_date_filter_reaches_the_shared_core_contract(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep the currently real type-specific UI filter grounded in canonical capabilities."""
+    notes = service(tmp_path, schema)
+    write(
+        tmp_path / "vault",
+        "journal/entry.md",
+        "entry",
+        "Entrada",
+        "Texto.",
+        updated="2026-09-19T00:00:00Z",
+        note_type="journal_entry",
+        properties={"entry_date": "2026-09-20"},
+    )
+    notes.context_index.rebuild(notes.repository, schema, Embedder())
+    page = notes.query(
+        filters=[
+            ContextFilter("type", "eq", "journal_entry"),
+            ContextFilter("entry_date", "gte", "2026-09-20"),
+            ContextFilter("entry_date", "lt", "2026-09-21"),
+        ]
+    )
+    assert [item.id for item in page.items] == ["entry"]
 
 
 def test_historical_snapshot_keeps_deleted_member_position_without_recomputing(

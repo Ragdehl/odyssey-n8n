@@ -372,14 +372,36 @@ test("Notes transport sends only the allowed same-origin operation envelope", as
   await assert.rejects(requestNotes({operation: "unsupported"}), NotesRequestError);
 });
 
+test("explicit intelligent Notes transport preserves visible user filters", async () => {
+  let captured;
+  await requestNotes({
+    operation: "intelligent",
+    payload: {query: "personas relacionadas con Toulouse", filters: [{field: "type", op: "eq", value: "person"}]},
+    fetchImpl: async (_endpoint, options) => {
+      captured = JSON.parse(options.body);
+      return response({payload: notePage({mode: "intelligent"})});
+    },
+  });
+  assert.deepEqual(captured, {
+    operation: "intelligent",
+    query: "personas relacionadas con Toulouse",
+    filters: [{field: "type", op: "eq", value: "person"}],
+  });
+});
+
 test("Notes browser validation accepts typed pages, detail, and explicit backlinks", () => {
   assert.equal(validateNotesResponse(notePage()).items[0].name, "Marta");
   assert.deepEqual(validateNotesResponse({
     kind: "detail",
     note: noteSummary(),
     body: "Marta trabaja en Thales.",
+    body_blocks: [{kind: "paragraph", segments: [
+      {text: "Marta trabaja en "},
+      {text: "Thales", target_id: "thales", target_type: "project"},
+      {text: "."},
+    ]}],
     links: [{target_id: "project", target_name: "Proyecto", target_type: "project", label: "Proyecto", occurrences: 1}],
-  }).links[0].target_id, "project");
+  }).body_blocks[0].segments[1].target_id, "thales");
   assert.equal(validateNotesResponse({
     kind: "backlinks",
     target_id: "marta",
@@ -387,6 +409,40 @@ test("Notes browser validation accepts typed pages, detail, and explicit backlin
     next_cursor: null,
     items: [{source: noteSummary("alice"), occurrences: 2, context: "[[Marta]]"}],
   }).items[0].occurrences, 2);
+});
+
+test("Notes detail accepts an empty canonical body but rejects unsafe presentation blocks", () => {
+  const detail = validateNotesResponse({
+    kind: "detail",
+    note: noteSummary("empty"),
+    body: "",
+    body_blocks: [],
+    links: [],
+  });
+  assert.equal(detail.body, "");
+  assert.deepEqual(detail.body_blocks, []);
+  assert.throws(() => validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "",
+    body_blocks: [{kind: "paragraph", segments: [{text: "Ada", target_id: "ada"}]}],
+    links: [],
+  }), NotesRequestError);
+});
+
+test("Notes detail retains whitespace between Core-resolved inline links", () => {
+  const detail = validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "Ada y Bruno",
+    body_blocks: [{kind: "paragraph", segments: [
+      {text: "Ada", target_id: "ada", target_type: "person"},
+      {text: " y "},
+      {text: "Bruno", target_id: "bruno", target_type: "person"},
+    ]}],
+    links: [],
+  });
+  assert.equal(detail.body_blocks[0].segments[1].text, " y ");
 });
 
 test("historical Notes pages reject malformed unavailable-slot metadata", () => {

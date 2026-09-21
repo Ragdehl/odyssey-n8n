@@ -15,6 +15,8 @@ from odyssey_core.local_conversations import ConversationRootResolver, LocalConv
 from odyssey_core.note_queries import (
     Backlink,
     BacklinkPage,
+    NoteBodyBlock,
+    NoteBodySegment,
     NoteCapabilities,
     NoteDetail,
     NoteLink,
@@ -22,7 +24,7 @@ from odyssey_core.note_queries import (
     NotesQueryError,
     NoteSummary,
 )
-from odyssey_core.request_planning import SelectionCriteria
+from odyssey_core.request_planning import RequestPlan, RetrieveAction, SelectionCriteria
 from odyssey_runtime import composition
 from odyssey_runtime import server as runtime_server
 from odyssey_runtime.composition import (
@@ -307,7 +309,10 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
         def detail(self, note_id):
             assert note_id == "ada"
             return NoteDetail(
-                summary, "Current canonical body.", (NoteLink("ada", "Ada", "person", "Ada", 1),)
+                summary,
+                "Current canonical body.",
+                (NoteBodyBlock("paragraph", (NoteBodySegment("Current canonical body."),)),),
+                (NoteLink("ada", "Ada", "person", "Ada", 1),),
             )
 
         def backlinks(self, note_id, **kwargs):
@@ -319,7 +324,12 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
     )
     assert runtime.notes("capabilities", {})["kind"] == "capabilities"
     assert runtime.notes("query", {"mode": "feed"})["items"][0]["id"] == "ada"
-    assert runtime.notes("detail", {"note_id": "ada"})["links"][0]["target_id"] == "ada"
+    detail = runtime.notes("detail", {"note_id": "ada"})
+    assert detail["body"] == "Current canonical body."
+    assert detail["body_blocks"] == [
+        {"kind": "paragraph", "segments": [{"text": "Current canonical body."}]}
+    ]
+    assert detail["links"][0]["target_id"] == "ada"
     assert runtime.notes("backlinks", {"note_id": "ada"})["items"][0]["source"]["id"] == "ada"
     with pytest.raises(ValueError, match="unsupported"):
         runtime.notes("unknown", {})
@@ -355,6 +365,98 @@ def test_runtime_intelligent_notes_rejects_invalid_transport_without_replanning(
     assert calls == [("Ada", [])]
     with pytest.raises(NotesQueryError, match="do not re-plan"):
         runtime.notes("intelligent", {"query": "Ada", "filters": [], "cursor": "forbidden"})
+
+
+def test_intelligent_notes_uses_the_injected_planner_and_surfaces_deduplicated_filters(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Keep the explicit Notes action on the one validated planner and Core query path."""
+    captured: list[dict[str, object]] = []
+
+    class FakeIndex:
+        """Accept the derived-index build seam without touching a provider."""
+
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        def rebuild(self, *args, **kwargs):
+            del args, kwargs
+
+    class FakePlanner:
+        """Return one safe planner-backed direct retrieval for the explicit Notes action."""
+
+        @classmethod
+        def from_environment(cls, schema, clock):
+            del schema, clock
+            return cls()
+
+        def plan(self, query):
+            assert query == "personas relacionadas con Toulouse"
+            return RequestPlan(
+                (
+                    RetrieveAction(
+                        SelectionCriteria(
+                            None,
+                            "Toulouse",
+                            "person",
+                            (ContextFilter("type", "eq", "person"),),
+                            None,
+                        )
+                    ),
+                ),
+                (),
+            )
+
+    class FakeNotes:
+        """Record only the Core query selected after the validated plan."""
+
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        def query(self, **kwargs):
+            captured.append(kwargs)
+            return NotePage(
+                "intelligent",
+                "relevance",
+                "ui2-feed-v1",
+                "2026-09-21T10:00:00Z",
+                (ContextFilter("type", "eq", "person"),),
+                (),
+                0,
+                None,
+            )
+
+    monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(tmp_path / "vault"))
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(tmp_path / "runtime"))
+    monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(tmp_path / "pending"))
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(tmp_path / "state"))
+    (tmp_path / "state").mkdir()
+    monkeypatch.setattr(composition, "VaultRepository", lambda root: ("vault", root))
+    monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **kwargs: object())
+    monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
+    monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
+    monkeypatch.setattr(composition, "NotesQueryService", FakeNotes)
+    monkeypatch.setattr(composition, "OpenAIRequestPlanner", FakePlanner)
+    monkeypatch.setattr(composition, "OpenAIContextualReasoner", lambda *args, **kwargs: object())
+    monkeypatch.setattr(composition, "OpenAILunaWriter", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
+    monkeypatch.setattr(composition, "PendingWorkRepository", lambda root: object())
+    monkeypatch.setattr(composition, "GitHistoryRecorder", lambda root: object())
+
+    runtime = composition.build_runtime_from_environment()
+    result = runtime.notes(
+        "intelligent",
+        {
+            "query": "personas relacionadas con Toulouse",
+            "filters": [{"field": "type", "op": "eq", "value": "person"}],
+        },
+    )
+
+    assert result["kind"] == "page"
+    assert len(captured) == 1
+    assert captured[0]["mode"] == "intelligent"
+    assert captured[0]["query"] == "Toulouse"
+    assert captured[0]["filters"] == ({"field": "type", "op": "eq", "value": "person"},)
 
 
 def test_runtime_server_rejects_invalid_port() -> None:

@@ -1,8 +1,18 @@
 /** In-memory presentation/state controller for the dependency-free Notes application view. */
 import {NotesRequestError, requestNotes} from "./notes-client.js";
 
-const TYPE_TOKENS = Object.freeze({concept: "◈", person: "●", project: "◆", task: "✓", document: "▤", journal_entry: "◐"});
-const TYPE_LABELS = Object.freeze({concept: "Concepto", person: "Persona", project: "Proyecto", task: "Tarea", document: "Documento", journal_entry: "Diario"});
+const TYPE_PRESENTATION = Object.freeze({
+  concept: {label: "Concepto", paths: ["M12 3a6 6 0 0 0-3.8 10.6c.8.6 1.3 1.5 1.5 2.4h4.6c.2-.9.7-1.8 1.5-2.4A6 6 0 0 0 12 3Z", "M10 19h4M10.5 22h3"]},
+  project: {label: "Proyecto", paths: ["m12 3 8 4.5-8 4.5L4 7.5 12 3Z", "m4 12.5 8 4.5 8-4.5", "m4 17 8 4.5 8-4.5"]},
+  task: {label: "Tarea", paths: ["M5 4h14v16H5z", "m8 12 2.5 2.5L16 9"]},
+  store: {label: "Tienda", paths: ["M4 10h16v10H4z", "M3 6h18l-1 4H4L3 6Z", "M8 20v-6h5v6"]},
+  product: {label: "Producto", paths: ["m4 7 8-4 8 4v10l-8 4-8-4V7Z", "m4 7 8 4 8-4", "M12 11v10"]},
+  purchase: {label: "Compra", paths: ["M6 3h12v18H6z", "M9 8h6M9 12h6M9 16h4", "M8 3v3m8-3v3"]},
+  recipe: {label: "Receta", paths: ["M4 12h16", "M6 12a6 6 0 0 0 12 0", "M8 5v4m4-5v5m4-4v4"]},
+  document: {label: "Documento", paths: ["M7 3h7l4 4v14H7z", "M14 3v5h4", "M10 12h5M10 16h5"]},
+  person: {label: "Persona", paths: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M5 21a7 7 0 0 1 14 0"]},
+  journal_entry: {label: "Entrada de diario", paths: ["M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 1V4Z", "M8 8h7M8 12h7M8 16h5"]},
+});
 const GENERAL_FIELDS = new Set(["type", "tags", "created_at", "updated_at"]);
 
 /** Mount the read-only Notes application while retaining its state while the view is inactive. */
@@ -109,7 +119,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
 
   function renderFilterChips() {
     chips.replaceChildren(...state.filters.map((filter, index) => {
-      const value = Array.isArray(filter.value) ? filter.value.join(", ") : String(filter.value);
+      const value = filterValueLabel(filter);
       if (state.historical) {
         const chip = document.createElement("span");
         chip.className = "notes-filter-chip";
@@ -132,6 +142,56 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     await load({reset: true, mode: state.query.trim() ? "local" : "feed"});
   }
 
+  async function runIntelligentSearch({throwOnError = false} = {}) {
+    if (state.loading) return;
+    state.loading = true;
+    status.textContent = "Buscando…";
+    const query = state.query;
+    const explicitFilters = uniqueFilters(state.filters);
+    try {
+      const page = await requestNotes({endpoint, operation: "intelligent", payload: {
+        query, filters: explicitFilters,
+      }});
+      if (!filtersAreRepresentable(page.applied_filters)) {
+        throw new NotesRequestError("Odyssey devolvió filtros que no se pueden editar con seguridad.");
+      }
+      state.filters = uniqueFilters(page.applied_filters);
+      state.items = page.items;
+      state.cursor = page.next_cursor;
+      state.current = null;
+      state.historical = false;
+      state.snapshot = null;
+      state.mode = page.mode;
+      state.sort = page.sort;
+      sort.value = page.sort;
+      showList();
+      renderList();
+      renderStatus(page.total);
+    } catch (error) {
+      status.textContent = error instanceof NotesRequestError && error.message.includes("filtros")
+        ? "No se pueden mostrar filtros de esta búsqueda con seguridad."
+        : "No se ha podido completar la búsqueda inteligente.";
+      if (throwOnError) throw error;
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  function filtersAreRepresentable(filters) {
+    const selectedType = filters.find((filter) => filter.field === "type" && filter.op === "eq")?.value;
+    return filters.every((filter) => {
+      if (filter.field === "type") return filter.op === "eq" && state.capabilities.types.some((type) => type.id === filter.value);
+      if (filter.field === "tags") return filter.op === "contains" && typeof filter.value === "string";
+      if (["created_at", "updated_at"].includes(filter.field)) return ["gte", "lt", "lte"].includes(filter.op) && typeof filter.value === "string";
+      const field = state.capabilities.fields.find((candidate) => candidate.id === filter.field);
+      if (!field || !field.operators.includes(filter.op) || !field.applies_to.includes(selectedType)) return false;
+      if (field.value_type === "date") return ["gte", "lt", "lte"].includes(filter.op) && typeof filter.value === "string";
+      if (field.value_type === "integer") return ["gte", "lte"].includes(filter.op) && Number.isInteger(filter.value);
+      if (field.value_type === "array[string]") return filter.op === "contains" && typeof filter.value === "string";
+      return field.value_type === "string" && filter.op === "eq" && typeof filter.value === "string";
+    });
+  }
+
   async function rerunHistorical() {
     if (!state.snapshot) return;
     const saved = state.snapshot;
@@ -149,10 +209,9 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     state.filters = saved.filters;
     state.historical = false;
     state.snapshot = null;
-    state.mode = "intelligent";
     search.value = state.query;
     try {
-      await load({reset: true, mode: "intelligent", throwOnError: true});
+      await runIntelligentSearch({throwOnError: true});
     } catch {
       state.items = historicalState.items;
       state.cursor = historicalState.cursor;
@@ -181,9 +240,10 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
       }
       state.current = value;
       state.feedScroll = list.scrollTop;
+      status.textContent = "";
       renderDetail();
     } catch {
-      status.textContent = "La nota ya no está disponible.";
+      status.textContent = "No se ha podido abrir la nota.";
     }
   }
 
@@ -214,23 +274,26 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     header.append(back, title);
     const controls = document.createElement("p");
     controls.className = "note-history";
-    const previous = button("←", () => {
-      const id = state.back.pop();
-      if (id) {
-        state.forward.push(value.note.id);
-        void open(id, {history: false});
+    if (state.back.length || state.forward.length) {
+      if (state.back.length) {
+        controls.append(button("←", () => {
+          const id = state.back.pop();
+          if (id) {
+            state.forward.push(value.note.id);
+            void open(id, {history: false});
+          }
+        }));
       }
-    });
-    previous.disabled = !state.back.length;
-    const next = button("→", () => {
-      const id = state.forward.pop();
-      if (id) {
-        state.back.push(value.note.id);
-        void open(id, {history: false});
+      if (state.forward.length) {
+        controls.append(button("→", () => {
+          const id = state.forward.pop();
+          if (id) {
+            state.back.push(value.note.id);
+            void open(id, {history: false});
+          }
+        }));
       }
-    });
-    next.disabled = !state.forward.length;
-    controls.append(previous, next);
+    }
     const properties = document.createElement("dl");
     properties.className = "note-properties";
     for (const [key, raw] of Object.entries(value.note.properties).slice(0, 6)) {
@@ -243,30 +306,14 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     tags.textContent = value.note.tags.map((tag) => `#${tag}`).join(" ");
     const body = document.createElement("article");
     body.className = "note-body";
-    for (const line of value.body.split(/\n{2,}/)) {
-      const paragraph = document.createElement("p");
-      paragraph.textContent = line;
-      body.append(paragraph);
-    }
-    const links = document.createElement("section");
-    links.className = "note-links";
-    if (value.links.length) {
-      const heading = document.createElement("h3");
-      heading.textContent = "Enlaces";
-      links.append(heading);
-      for (const link of value.links) {
-        const linkButton = button(`${TYPE_TOKENS[link.target_type] ?? "○"} ${link.label}`, () => void open(link.target_id));
-        linkButton.className = "note-link";
-        links.append(linkButton);
-      }
-    }
+    renderBody(body, value.body_blocks, open);
     const backlinks = document.createElement("section");
     backlinks.className = "note-backlinks";
     const backlinksHeading = document.createElement("h3");
     backlinksHeading.textContent = "Enlazada desde";
     backlinks.append(backlinksHeading);
     void appendBacklinks(backlinks, value.note.id);
-    detail.replaceChildren(header, controls, properties, tags, body, links, backlinks);
+    detail.replaceChildren(header, controls, properties, tags, body, backlinks);
   }
 
   async function appendBacklinks(target, id) {
@@ -342,7 +389,15 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     const fields = state.capabilities.fields.filter((field) => (
       !GENERAL_FIELDS.has(field.id) && field.applies_to.includes(noteType)
     ));
-    if (!fields.length) return;
+    if (!fields.length) {
+      if (noteType) {
+        const message = document.createElement("p");
+        message.className = "notes-type-specific-empty";
+        message.textContent = "Este tipo no tiene propiedades específicas.";
+        container.append(message);
+      }
+      return;
+    }
     const heading = document.createElement("h3");
     heading.textContent = "Propiedades de este tipo";
     container.append(heading);
@@ -433,9 +488,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   searchForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     state.query = search.value;
-    state.historical = false;
-    state.snapshot = null;
-    void load({reset: true, mode: "intelligent"});
+    void runIntelligentSearch();
   });
   sort.addEventListener("change", () => {
     state.sort = sort.value;
@@ -500,14 +553,70 @@ function unavailableRow(id) {
   row.dataset.noteId = id;
   return row;
 }
+function renderBody(parent, blocks, open) {
+  if (!blocks.length) {
+    const empty = document.createElement("p");
+    empty.className = "note-empty-body";
+    empty.textContent = "Todavía no hay información adicional.";
+    parent.append(empty);
+    return;
+  }
+  let list = null;
+  for (const block of blocks) {
+    if (block.kind === "list_item") {
+      if (!list) {
+        list = document.createElement("ul");
+        parent.append(list);
+      }
+      const item = document.createElement("li");
+      appendBodySegments(item, block.segments, open);
+      list.append(item);
+      continue;
+    }
+    list = null;
+    const element = document.createElement(block.kind === "heading" ? "h3" : "p");
+    appendBodySegments(element, block.segments, open);
+    parent.append(element);
+  }
+}
+function appendBodySegments(parent, segments, open) {
+  for (const segment of segments) {
+    if (!segment.target_id) {
+      parent.append(document.createTextNode(segment.text));
+      continue;
+    }
+    const link = document.createElement("a");
+    link.className = `note-inline-link type-${segment.target_type}`;
+    link.href = `#note-${encodeURIComponent(segment.target_id)}`;
+    link.textContent = segment.text;
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      void open(segment.target_id);
+    });
+    parent.append(link);
+  }
+}
 function typeBadge(type) {
   const badge = document.createElement("span");
   badge.className = `note-type type-${type}`;
-  badge.textContent = TYPE_TOKENS[type] ?? "○";
+  badge.append(typeIcon(type));
   badge.setAttribute("aria-label", typeLabel(type));
   return badge;
 }
-function typeLabel(type) { return TYPE_LABELS[type] ?? type.replaceAll("_", " "); }
+function typeIcon(type) {
+  const presentation = TYPE_PRESENTATION[type] ?? {paths: ["M5 5h14v14H5z", "M8 8h8M8 12h8M8 16h5"]};
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("focusable", "false");
+  for (const pathData of presentation.paths) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    icon.append(path);
+  }
+  return icon;
+}
+function typeLabel(type) { return TYPE_PRESENTATION[type]?.label ?? type.replaceAll("_", " "); }
 function property(parent, key, value) {
   const term = document.createElement("dt");
   term.textContent = key.replaceAll("_", " ");
@@ -595,6 +704,19 @@ function numberRangeField(prefix, label, field) {
 }
 function filterLabel(field) {
   return ({type: "Tipo", tags: "Etiqueta", created_at: "Creada", updated_at: "Actualizada", entry_date: "Fecha de la entrada"})[field] ?? field.replaceAll("_", " ");
+}
+function filterValueLabel(filter) {
+  if (filter.field === "type" && typeof filter.value === "string") return typeLabel(filter.value);
+  return Array.isArray(filter.value) ? filter.value.join(", ") : String(filter.value);
+}
+function uniqueFilters(filters) {
+  const seen = new Set();
+  return filters.filter((filter) => {
+    const key = JSON.stringify([filter.field, filter.op, filter.value]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 function lifecycleLabel(field) { return `${filterLabel(field)} · hora local`; }
 function formValue(id) { return document.querySelector(`#${id}`)?.value?.trim() ?? ""; }

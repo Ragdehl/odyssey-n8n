@@ -48,8 +48,9 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .notes-list { display: grid; align-content: start; gap: .45rem; }
 .note-row { display: grid; min-height: 4rem; gap: .25rem; padding: .65rem .75rem; text-align: left; color: inherit; background: rgba(255,255,255,.95); border: 1px solid rgba(23,32,51,.1); box-shadow: 0 .25rem .8rem rgba(34,45,74,.05); }
 .note-row span { color: #6a7287; font-size: .78rem; font-weight: 400; }
-.note-type { display: inline-grid; width: 1.3rem; place-items: center; color: #53629a; }
-.type-person { color: #5c6d98; } .type-project { color: #697552; } .type-task { color: #966341; } .type-document { color: #6f607e; }
+.note-type { display: inline-grid; width: 1.3rem; height: 1.3rem; place-items: center; vertical-align: -.22rem; color: #53629a; }
+.note-type svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.type-person, .type-concept { color: #5c6d98; } .type-project, .type-store { color: #697552; } .type-task, .type-purchase { color: #966341; } .type-document, .type-journal_entry { color: #6f607e; } .type-product, .type-recipe { color: #536d6a; }
 .notes-more { background: #e7e9f4; color: #39445d; }
 .note-detail { background: rgba(255,255,255,.82); border-radius: .85rem; }
 .note-view-header { display: flex; align-items: center; gap: .5rem; }
@@ -59,9 +60,11 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-properties { display: grid; grid-template-columns: minmax(6rem, .8fr) minmax(0, 1.2fr); gap: .3rem .65rem; margin: .8rem 0; font-size: .85rem; }
 .note-properties dt { color: #6a7287; text-transform: capitalize; } .note-properties dd { margin: 0; overflow-wrap: anywhere; }
 .note-tags, .backlink-context { color: #6a7287; font-size: .82rem; overflow-wrap: anywhere; }
-.note-body { line-height: 1.5; overflow-wrap: anywhere; } .note-body p { margin: .8rem 0; white-space: pre-wrap; }
-.note-links, .note-backlinks { display: grid; gap: .4rem; margin-top: 1rem; } .note-links h3, .note-backlinks h3 { margin: 0; font-size: .85rem; }
-.note-link, .backlink { min-height: 2.35rem; text-align: left; color: #39445d; background: #edf0f8; }
+.note-body { line-height: 1.5; overflow-wrap: anywhere; } .note-body p { margin: .8rem 0; } .note-body h3 { margin: 1rem 0 .35rem; font-size: .95rem; } .note-body ul { margin: .7rem 0; padding-left: 1.25rem; } .note-body li + li { margin-top: .35rem; }
+.note-inline-link { color: #394d88; font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
+.note-empty-body { color: #6a7287; font-style: italic; }
+.note-backlinks { display: grid; gap: .4rem; margin-top: 1rem; } .note-backlinks h3 { margin: 0; font-size: .85rem; }
+.backlink { min-height: 2.35rem; text-align: left; color: #39445d; background: #edf0f8; }
 .notes-search-dock { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem; padding: .55rem; border: 1px solid rgba(23,32,51,.1); border-radius: 1rem; background: rgba(255,255,255,.97); box-shadow: 0 .5rem 1.5rem rgba(34,45,74,.1); }
 .notes-search-dock input { min-width: 0; min-height: 2.6rem; border: 0; outline: 0; padding: .45rem .55rem; background: transparent; color: inherit; font: inherit; }
 .notes-search-dock input:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; border-radius: .45rem; }
@@ -107,6 +110,7 @@ button:disabled { opacity: .55; }
 .filter-range label { display: grid; gap: .25rem; font-size: .74rem; }
 .notes-type-specific-filters { padding-top: .75rem; border-top: 1px solid rgba(23,32,51,.1); }
 .notes-type-specific-filters h3 { margin: 0; font-size: .85rem; }
+.notes-type-specific-empty { color: #6a7287; font-size: .82rem; }
 .notes-filter-actions { display: flex; justify-content: end; gap: .55rem; }
 .filter-secondary { background: #e7e9f4; color: #39445d; }
 .detail-section { margin-top: 1rem; }

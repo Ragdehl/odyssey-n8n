@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -534,10 +534,13 @@ def build_runtime_from_environment() -> RuntimeComposition:
         ):
             raise NotesQueryError("Intelligent Notes request needs clarification")
         action = result.actions[0]
+        filters: list[object] = [*explicit_filters, *action.plan.filters]
+        if action.plan.type is not None:
+            filters.append(ContextFilter("type", "eq", action.plan.type))
         return NotesQueryService(repository, schema, context_index).query(
             mode="intelligent",
             query=action.plan.query,
-            filters=[*explicit_filters, *action.plan.filters],
+            filters=_unique_note_filters(filters),
             embedder=embedder,
         )
 
@@ -551,6 +554,29 @@ def build_runtime_from_environment() -> RuntimeComposition:
         notes_embedder=embedder,
         intelligent_notes_execute=intelligent_notes,
     )
+
+
+def _unique_note_filters(filters: Sequence[object]) -> tuple[object, ...]:
+    """Preserve one canonical filter occurrence when explicit and planner criteria agree."""
+    result: list[object] = []
+    seen: set[tuple[object, object, str]] = set()
+    for item in filters:
+        if isinstance(item, ContextFilter):
+            field, op, value = item.field, item.op, item.value
+        elif isinstance(item, Mapping):
+            field, op, value = item.get("field"), item.get("op"), item.get("value")
+        else:
+            result.append(item)
+            continue
+        try:
+            key = (field, op, json.dumps(value, sort_keys=True, separators=(",", ":")))
+        except (TypeError, ValueError):
+            result.append(item)
+            continue
+        if key not in seen:
+            seen.add(key)
+            result.append(item)
+    return tuple(result)
 
 
 def _notes_to_response(
@@ -581,6 +607,26 @@ def _notes_to_response(
             "kind": "detail",
             "note": _summary_to_response(value.note),
             "body": value.body,
+            "body_blocks": [
+                {
+                    "kind": block.kind,
+                    "segments": [
+                        {
+                            "text": segment.text,
+                            **(
+                                {
+                                    "target_id": segment.target_id,
+                                    "target_type": segment.target_type,
+                                }
+                                if segment.target_id is not None
+                                else {}
+                            ),
+                        }
+                        for segment in block.segments
+                    ],
+                }
+                for block in value.body_blocks
+            ],
             "links": [
                 {
                     "target_id": item.target_id,

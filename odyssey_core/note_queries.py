@@ -6,8 +6,9 @@ import base64
 import hashlib
 import json
 import math
+import re
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -19,7 +20,6 @@ from odyssey_core.context import (
     _filter_definitions,
     _metadata_matches_filters,
     _normalize_filters,
-    extract_wikilink_targets,
 )
 from odyssey_core.filtering import supported_filter_operators
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
@@ -30,6 +30,10 @@ _RANKING_VERSION = "ui2-feed-v1"
 _PAGE_SIZE = 20
 _MAX_PAGE_SIZE = 40
 _CONTEXT_LIMIT = 320
+_WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
+_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*$")
+_LIST_ITEM_PATTERN = re.compile(r"^(?:[-*+]\s+|\d+[.)]\s+)(.+?)\s*$")
 
 
 class NotesQueryError(ValueError):
@@ -91,11 +95,29 @@ class NoteLink:
 
 
 @dataclass(frozen=True, slots=True)
+class NoteBodySegment:
+    """Represent safe visible inline content, with an optional Core-resolved note target."""
+
+    text: str
+    target_id: str | None = None
+    target_type: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NoteBodyBlock:
+    """Represent one bounded presentation block from canonical Markdown body content."""
+
+    kind: str
+    segments: tuple[NoteBodySegment, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class NoteDetail:
     """Contain one read-only validated note and its resolved literal links."""
 
     note: NoteSummary
     body: str
+    body_blocks: tuple[NoteBodyBlock, ...]
     links: tuple[NoteLink, ...]
 
 
@@ -163,6 +185,115 @@ def _decode_cursor(cursor: str) -> Mapping[str, Any]:
     if not isinstance(value, dict):
         raise StaleCursorError("STALE_CURSOR")
     return value
+
+
+def _link_resolver(
+    path_map: Mapping[str, _GroundedNote], basenames: Mapping[str, Sequence[_GroundedNote]]
+) -> Callable[[str], _GroundedNote | None]:
+    """Return the current Core-owned resolver for safe literal wikilink targets."""
+
+    def resolve(target: str) -> _GroundedNote | None:
+        target = target.strip()
+        if (
+            not target
+            or "\\" in target
+            or "\x00" in target
+            or target.startswith("/")
+            or ".." in target.split("/")
+        ):
+            return None
+        target_key = target.removesuffix(".md").casefold()
+        resolved = path_map.get(target_key)
+        if resolved is None and "/" not in target:
+            candidates = basenames.get(target_key, ())
+            resolved = candidates[0] if len(candidates) == 1 else None
+        return resolved
+
+    return resolve
+
+
+def _presentation_blocks(
+    body: str, resolve: Callable[[str], _GroundedNote | None]
+) -> tuple[NoteBodyBlock, ...]:
+    """Project the Markdown subset Odyssey writes into safe, readable body blocks.
+
+    Markdown and comments remain canonical storage, but this projection carries only visible text
+    and Core-resolved stable IDs. The browser never receives a vault path or has to resolve a link.
+    """
+    visible = _COMMENT_PATTERN.sub("", body)
+    blocks: list[NoteBodyBlock] = []
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph:
+            return
+        blocks.append(
+            NoteBodyBlock("paragraph", _presentation_segments(" ".join(paragraph), resolve))
+        )
+        paragraph.clear()
+
+    for raw_line in visible.splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush_paragraph()
+            continue
+        if match := _HEADING_PATTERN.fullmatch(line):
+            flush_paragraph()
+            blocks.append(NoteBodyBlock("heading", _presentation_segments(match.group(1), resolve)))
+            continue
+        if match := _LIST_ITEM_PATTERN.fullmatch(line):
+            flush_paragraph()
+            blocks.append(
+                NoteBodyBlock("list_item", _presentation_segments(match.group(1), resolve))
+            )
+            continue
+        paragraph.append(line)
+    flush_paragraph()
+    return tuple(block for block in blocks if block.segments)
+
+
+def _presentation_segments(
+    text: str, resolve: Callable[[str], _GroundedNote | None]
+) -> tuple[NoteBodySegment, ...]:
+    """Replace literal wikilinks with visible labels and only Core-resolved stable targets."""
+    segments: list[NoteBodySegment] = []
+    offset = 0
+    for match in _WIKILINK_PATTERN.finditer(text):
+        if match.start() > offset:
+            segments.append(NoteBodySegment(text[offset : match.start()]))
+        target = match.group(1).strip()
+        label = (match.group(2) or target).strip()
+        resolved = resolve(target)
+        if resolved is None:
+            if label:
+                segments.append(NoteBodySegment(label))
+        elif label:
+            segments.append(NoteBodySegment(label, resolved.summary.id, resolved.summary.type))
+        offset = match.end()
+    if offset < len(text):
+        segments.append(NoteBodySegment(text[offset:]))
+    return tuple(segment for segment in segments if segment.text)
+
+
+def _aggregate_links(blocks: Sequence[NoteBodyBlock]) -> dict[tuple[str, str], int]:
+    """Count presentation-safe resolved link occurrences without reading derived link rows."""
+    result: dict[tuple[str, str], int] = {}
+    for block in blocks:
+        for segment in block.segments:
+            if segment.target_id is not None:
+                key = (segment.target_id, segment.text)
+                result[key] = result.get(key, 0) + 1
+    return result
+
+
+def _presentation_context(body: str, resolve: Callable[[str], _GroundedNote | None]) -> str:
+    """Return bounded, comment-free visible backlink evidence from current Markdown."""
+    return _presentation_text(_presentation_blocks(body, resolve))[:_CONTEXT_LIMIT]
+
+
+def _presentation_text(blocks: Sequence[NoteBodyBlock]) -> str:
+    """Flatten visible presentation blocks for bounded non-Markdown detail metadata."""
+    return " ".join("".join(segment.text for segment in block.segments) for block in blocks).strip()
 
 
 class NotesQueryService:
@@ -376,7 +507,7 @@ class NotesQueryService:
         )
 
     def detail(self, note_id: str) -> NoteDetail:
-        """Return one current note, resolved internal links, and no raw frontmatter/path."""
+        """Return one current note with safe presentation blocks and resolved literal links."""
         notes = self._grounded_vault_notes()
         current = notes.get(note_id)
         if current is None:
@@ -387,19 +518,13 @@ class NotesQueryService:
             basenames.setdefault(
                 note.path.removesuffix(".md").rsplit("/", 1)[-1].casefold(), []
             ).append(note)
-        links: dict[tuple[str, str], int] = {}
-        for target, label in extract_wikilink_targets(current.body):
-            target_key = target.removesuffix(".md").casefold()
-            resolved = path_map.get(target_key)
-            if resolved is None and "/" not in target:
-                candidates = basenames.get(target_key, [])
-                resolved = candidates[0] if len(candidates) == 1 else None
-            if resolved is not None:
-                key = (resolved.summary.id, label)
-                links[key] = links.get(key, 0) + 1
+        resolve = _link_resolver(path_map, basenames)
+        body_blocks = _presentation_blocks(current.body, resolve)
+        links = _aggregate_links(body_blocks)
         return NoteDetail(
             current.summary,
-            current.body,
+            _presentation_text(body_blocks),
+            body_blocks,
             tuple(
                 NoteLink(
                     target_id,
@@ -455,10 +580,17 @@ class NotesQueryService:
         except sqlite3.Error as error:
             raise NotesQueryError("Notes index is unavailable") from error
         by_id = {note.summary.id: note for note in all_notes}
+        path_map = {note.path.removesuffix(".md").casefold(): note for note in all_notes}
+        basenames: dict[str, list[_GroundedNote]] = {}
+        for note in all_notes:
+            basenames.setdefault(
+                note.path.removesuffix(".md").rsplit("/", 1)[-1].casefold(), []
+            ).append(note)
+        resolve = _link_resolver(path_map, basenames)
         ranked = sorted(
             (
-                (by_id[source], count, context)
-                for source, (count, context) in occurrences.items()
+                (by_id[source], count, _presentation_context(by_id[source].body, resolve))
+                for source, (count, _context) in occurrences.items()
                 if source in by_id
             ),
             key=lambda item: (

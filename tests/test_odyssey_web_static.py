@@ -1,5 +1,6 @@
 """Static contract checks for the framework-free Odyssey Online browser surface."""
 
+import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -173,7 +174,10 @@ def test_notes_mobile_controls_keep_filtering_sorting_and_search_in_separate_rol
     assert "timezoneAwareDateTime" in notes
     assert 'search.addEventListener("input", searchLocal)' in notes
     assert 'mode: state.query.trim() ? "local" : "feed"' in notes
-    assert 'mode: "intelligent"' in notes
+    assert 'operation: "intelligent"' in notes
+    assert "runIntelligentSearch" in notes
+    assert "filtersAreRepresentable" in notes
+    assert "uniqueFilters(page.applied_filters)" in notes
     assert 'filterButton?.addEventListener("click", openFilterSheet)' in notes
     assert "state.filters.splice(index, 1)" in notes
     assert "innerHTML" not in notes
@@ -182,6 +186,41 @@ def test_notes_mobile_controls_keep_filtering_sorting_and_search_in_separate_rol
     assert "Ordenar" in index
     assert "Filtros" in index
     assert index.index('id="notes-search-form"') > index.index('id="notes-list-view"')
+
+
+def test_notes_detail_uses_safe_structured_presentation_and_complete_type_icons() -> None:
+    """Keep Markdown storage syntax out of the browser renderer and type cues schema-complete."""
+
+    notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
+    client = (WEB_ROOT / "notes-client.js").read_text(encoding="utf-8")
+    schema = json.loads(Path("config/note-schema.json").read_text(encoding="utf-8"))
+
+    assert "renderBody(body, value.body_blocks, open)" in notes
+    assert "appendBodySegments" in notes
+    assert 'document.createElement("a")' in notes
+    assert "encodeURIComponent(segment.target_id)" in notes
+    assert "note-links" not in notes
+    assert "Todavía no hay información adicional." in notes
+    assert "No se ha podido abrir la nota." in notes
+    assert "La nota ya no está disponible." not in notes
+    assert "innerHTML" not in notes
+    assert "body_blocks" in client
+    assert "isString(value.body)" in client
+    for note_type in schema["types"]:
+        assert f"{note_type['id']}: {{" in notes
+
+
+def test_older_chat_pages_restore_note_snapshot_affordances() -> None:
+    """Preserve durable historical Notes entry points across bounded chat pagination."""
+
+    app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    older = app[
+        app.index("async function loadOlderConversation") : app.index(
+            "conversation.addEventListener"
+        )
+    ]
+    assert "appendDetailButton(message, turn.request_detail);" in older
+    assert "appendNoteSetAffordance(message, turn.note_result_snapshot);" in older
 
 
 def _reachable_local_modules(entry: Path) -> set[Path]:
@@ -260,7 +299,7 @@ def test_notes_historical_snapshot_contract_uses_safe_dom_and_explicit_rerun() -
     assert "Nota ya no disponible" in notes
     assert "Resultado histórico" in notes
     assert "rerunHistorical" in notes
-    assert 'mode: "intelligent"' in notes
+    assert "runIntelligentSearch({throwOnError: true})" in notes
     assert "state.snapshot = null" in notes
     assert "snapshot_offset" in notes_client
     assert "unavailable_ids" in notes_client

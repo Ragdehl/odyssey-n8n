@@ -124,7 +124,10 @@ async function loadOlderConversation() {
     if (cursor !== olderCursor) return;
     for (const turn of [...(data.turns ?? [])].reverse()) {
       const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status, {prepend: true, scroll: false});
-      if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
+      if (turn.role === "assistant") {
+        appendDetailButton(message, turn.request_detail);
+        appendNoteSetAffordance(message, turn.note_result_snapshot);
+      }
     }
     olderCursor = data.before ?? null;
     hasOlder = data.has_older === true;
