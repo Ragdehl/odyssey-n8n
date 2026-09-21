@@ -1,8 +1,9 @@
 # UI-2 — read-only Notes product contract
 
-Status: **the bounded reliability correction introduced at `044d6c9` is deployed in isolated DEV and is READY
-FOR THE NARROW FINAL HUMAN RELIABILITY CHECK; Draft PR #124 remains NOT READY FOR MERGE until that
-check passes. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
+Status: **the bounded reliability correction introduced at `044d6c9` is deployed in isolated DEV and the
+subsequent authenticated reliability checkpoint passed. A final recovery-control presentation correction
+is deterministically verified and READY FOR THE FINAL UI-2 CLOSEOUT CHECK; Draft PR #124 remains NOT
+READY FOR MERGE until that check passes. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
 reachable `notes.js` / `notes-client.js` modules, so `app.js` never bootstrapped, and CSS allowed the
 hidden Notes view to stack below Chat. The correction makes Chat and Notes mutually exclusive
 application-level views, moves Notes search to the mobile bottom interaction zone, adds a
@@ -79,9 +80,14 @@ duplicate arriving while the original is running, restart-safe completed-result 
 rebinding/corruption, exactly one Core execution, conversation continuity failure, and explicit reload
 recovery. No provider call or real-vault mutation is required for this gate.
 
-The remaining human check is intentionally narrow: submit one ordinary DEV write, optionally
-navigate between Chat and Notes while it is pending, then confirm the acknowledgement and mutation
-both survive a reload.
+The subsequent authenticated reliability check confirmed that Chat/Notes reads remain available during
+a long write and that reload recovers the completed logical result without repeating its mutation. It
+exposed only a presentation defect: the recovery notice and its action were separate global nodes,
+leaving stale text after success. The browser now mounts one recovery component inside the specific
+unmatched user turn, shows `Recuperando…` while replay is pending, restores its action on a retryable
+failure, and removes the complete component before rendering the recovered assistant turn. The final
+human closeout check is therefore intentionally narrow: verify that this inline recovery presentation
+remains coherent on the authenticated DEV surface.
 
 ## Objective
 

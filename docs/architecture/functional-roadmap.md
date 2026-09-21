@@ -58,10 +58,14 @@ mutation results in bounded actor-local operational state before delivery, repla
 request fingerprint, and offers explicit recovery for an unmatched durable user turn. The full
 deterministic suite is green (`962 passed`, `79 skipped`, `52 subtests passed`); direct isolated DEV
 health, Notes capabilities, conversation reload, mounted browser commit, and source/workflow/
-public-route provenance all pass at that commit. The next small authenticated check is therefore the
-**narrow final UI-2 human reliability checkpoint**, not a production-completion claim: one ordinary
-DEV write, optional Chat/Notes navigation while pending, acknowledgement, reload, and confirmation
-that Chat outcome and Notes mutation remain consistent. The previous production planner
+public-route provenance all pass at that commit. The subsequent authenticated reliability checkpoint
+passed the important runtime behavior: reads remained usable during a long write, reload exposed
+recovery, and a completed result recovered without repeating its mutation. It exposed one final
+browser presentation defect, now deterministically corrected: the recovery notice/action is one
+component attached to its unmatched user turn, enters a bounded pending state, restores coherently on
+retryable failure, and is removed before the recovered assistant turn. The next small authenticated
+check is therefore the **final UI-2 closeout check**, not a production-completion claim: verify that
+inline recovery presentation on DEV remains coherent. The previous production planner
 evidence is clean but budget-bounded after one Luna→Sol case; Python CI and Sonar are green at 83.6%
 new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).

@@ -27,6 +27,7 @@ let retrySubmission = null;
 let olderCursor = null;
 let hasOlder = false;
 let loadingOlder = false;
+let recoveryControl = null;
 
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
@@ -66,8 +67,13 @@ async function loadMainConversation() {
   olderCursor = data.before ?? null;
   hasOlder = data.has_older === true;
   conversation.replaceChildren();
+  recoveryControl = null;
+  const userMessages = new Map();
   for (const turn of data.turns ?? []) {
     const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
+    if (turn.role === "user" && typeof turn.request_id === "string") {
+      userMessages.set(turn.request_id, message);
+    }
     if (turn.role === "assistant") {
       appendDetailButton(message, turn.request_detail);
       appendNoteSetAffordance(message, turn.note_result_snapshot);
@@ -76,7 +82,7 @@ async function loadMainConversation() {
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
   if (recoverable) {
     retrySubmission = recoverable;
-    appendRecoveryControl(recoverable);
+    appendRecoveryControl(recoverable, userMessages.get(recoverable.requestId));
   }
   conversation.scrollTop = conversation.scrollHeight;
 }
@@ -276,14 +282,48 @@ function appendRetryControl(submission, label = "Reintentar") {
   conversation.scrollTop = conversation.scrollHeight;
 }
 
-function appendRecoveryControl(submission) {
-  const notice = document.createElement("div");
-  notice.className = "recovery-notice";
+function appendRecoveryControl(submission, userMessage) {
+  const control = document.createElement("div");
+  control.className = "recovery-control";
+  control.dataset.requestId = submission.requestId;
   const text = document.createElement("p");
   text.textContent = "Esta solicitud no tiene una respuesta guardada.";
-  notice.append(text);
-  conversation.append(notice);
-  appendRetryControl(submission, "Recuperar resultado");
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "recovery-action";
+  action.textContent = "Recuperar resultado";
+  action.addEventListener("click", () => {
+    if (retrySubmission !== submission || recoveryControl !== control) return;
+    action.disabled = true;
+    action.textContent = "Recuperando…";
+    control.dataset.state = "recovering";
+    void sendSubmission(submission, true, control);
+  });
+  control.append(text, action);
+  (userMessage ?? conversation).append(control);
+  recoveryControl = control;
+  conversation.scrollTop = conversation.scrollHeight;
+}
+
+function restoreRecoveryControl(control) {
+  const action = control.querySelector(".recovery-action");
+  if (!action) return;
+  action.disabled = false;
+  action.textContent = "Recuperar resultado";
+  control.dataset.state = "retryable";
+}
+
+function failRecoveryControl(control) {
+  const text = control.querySelector("p");
+  if (text) text.textContent = "No se ha podido recuperar el resultado.";
+  control.querySelector(".recovery-action")?.remove();
+  control.dataset.state = "failed";
+  recoveryControl = null;
+}
+
+function removeRecoveryControl(control) {
+  if (recoveryControl === control) recoveryControl = null;
+  control?.remove();
 }
 
 function appendContinuityWarning() {
@@ -311,7 +351,7 @@ function resultLabel(result) {
   }[result.kind] ?? "Odyssey";
 }
 
-async function sendSubmission(submission, isRetry = false) {
+async function sendSubmission(submission, isRetry = false, activeRecoveryControl = null) {
   if (!isRetry) appendMessage("user", submission.request);
   const loading = appendLoading();
   setBusy(true);
@@ -319,6 +359,7 @@ async function sendSubmission(submission, isRetry = false) {
     const result = await requestProductResult({endpoint, submission, conversationId});
     retrySubmission = null;
     loading.remove();
+    removeRecoveryControl(activeRecoveryControl);
     await renderProductResultWithContinuity({
       result,
       renderResult: renderProductResult,
@@ -343,6 +384,14 @@ async function sendSubmission(submission, isRetry = false) {
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;
     loading.remove();
+    if (activeRecoveryControl) {
+      if (retrySubmission) {
+        restoreRecoveryControl(activeRecoveryControl);
+      } else {
+        failRecoveryControl(activeRecoveryControl);
+      }
+      return;
+    }
     const message = appendMessage(
       "odyssey",
       retrySubmission
