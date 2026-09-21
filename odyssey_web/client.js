@@ -184,6 +184,7 @@ function validateAffectedNotesSnapshot(value) {
       !Number.isInteger(value.total) || typeof value.truncated !== "boolean" ||
       value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
       value.note_ids.some((id) => typeof id !== "string" || !id) ||
+      value.total < 1 ||
       value.total < value.note_ids.length ||
       value.truncated !== (value.total > value.note_ids.length)) {
     throw new ProductRequestError("Odyssey returned an invalid Notes result set.");

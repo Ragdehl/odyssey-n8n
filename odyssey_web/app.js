@@ -176,8 +176,9 @@ function appendNoteSetAffordance(article, snapshot) {
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
       !Array.isArray(snapshot.note_ids) || !Number.isInteger(snapshot.total) ||
       typeof snapshot.truncated !== "boolean" ||
+      (snapshot.version !== 1 && snapshot.version !== 2) ||
       (snapshot.version === 1 && typeof snapshot.query !== "string") ||
-      (snapshot.version === 2 && snapshot.kind !== "affected_notes")) return;
+      (snapshot.version === 2 && (snapshot.kind !== "affected_notes" || snapshot.total < 1))) return;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "note-set-button";

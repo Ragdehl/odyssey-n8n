@@ -133,7 +133,9 @@ def affected_notes_snapshot(note_ids: object, executed_at: str) -> NoteResultSna
     if not isinstance(note_ids, tuple) or not isinstance(executed_at, str):
         raise NoteResultSnapshotError("Note result snapshot is invalid")
     unique = tuple(dict.fromkeys(note_ids))
-    if not all(isinstance(item, str) and item and len(item) <= 128 for item in unique):
+    if not unique or not all(
+        isinstance(item, str) and item and len(item) <= 128 for item in unique
+    ):
         raise NoteResultSnapshotError("Note result snapshot is invalid")
     snapshot = NoteResultSnapshot(
         None,
@@ -164,6 +166,7 @@ def _validate_affected_notes_snapshot(value: Mapping[str, Any]) -> NoteResultSna
         or len(ids) != len(set(ids))
         or not all(isinstance(item, str) and item and len(item) <= 128 for item in ids)
         or not isinstance(value["total"], int)
+        or value["total"] < 1
         or value["total"] < len(ids)
         or not isinstance(value["truncated"], bool)
         or value["truncated"] != (value["total"] > len(ids))

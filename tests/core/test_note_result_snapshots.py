@@ -84,3 +84,16 @@ def test_affected_note_snapshot_is_closed_and_rejects_search_or_body_fields():
     payload = affected_notes_snapshot(("a",), "2026-09-21T10:00:00Z").to_payload()
     with pytest.raises(NoteResultSnapshotError):
         validate_note_result_snapshot(payload | {"query": "invented"})
+    with pytest.raises(NoteResultSnapshotError):
+        affected_notes_snapshot((), "2026-09-21T10:00:00Z")
+    with pytest.raises(NoteResultSnapshotError):
+        validate_note_result_snapshot(
+            {
+                "version": 2,
+                "kind": "affected_notes",
+                "executed_at": "2026-09-21T10:00:00Z",
+                "note_ids": [],
+                "total": 0,
+                "truncated": False,
+            }
+        )

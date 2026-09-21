@@ -448,6 +448,10 @@ test("product transport accepts the closed v2 affected-note snapshot but rejects
     version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
     note_ids: ["first"], total: 1, truncated: false, query: "not allowed",
   }}), ProductRequestError);
+  assert.throws(() => validateProductResponse({...base, note_result_snapshot: {
+    version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+    note_ids: [], total: 0, truncated: false,
+  }}), ProductRequestError);
 });
 
 test("Notes detail accepts an empty canonical body but rejects unsafe presentation blocks", () => {
