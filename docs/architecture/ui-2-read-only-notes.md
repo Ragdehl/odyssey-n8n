@@ -1,25 +1,24 @@
 # UI-2 — read-only Notes product contract
 
-Status: **corrective implementation active in Draft PR #124. The first authenticated mobile
-checkpoint failed: the n8n static workflow omitted reachable `notes.js` / `notes-client.js` modules,
-so `app.js` never bootstrapped; CSS also allowed the hidden Notes view to stack below Chat. The
-correction makes Chat and Notes mutually exclusive application-level views, moves Notes search to
-the mobile bottom interaction zone, adds a schema-capability-driven filter sheet, derives/serves the
-complete local module graph, and adds deployment/browser regression guards. Direct isolated-DEV
-runtime/n8n/static checks now pass with provenance `MATCH`; capabilities, feed/local/intelligent
-search, filters, detail, backlinks, and historical unavailable-slot transport have synthetic
-evidence. The n8n DEV operator now publishes the current imported workflow version, avoiding a
-stale active-history pointer. The second authenticated checkpoint rendered the corrected layout but
-again could not bootstrap JavaScript: Cloudflare tunnel configuration version 9 still exposed only
-the old seven-path contract and omitted `/api/notes.js`, `/api/notes-client.js`, and `/api/notes`.
-The DEV-only tunnel rule now uses the canonical ten-path inventory at version 10; production ingress,
-the hostname-wide DEV Access application, CSP, DNS, origin, and 404 fallback remained unchanged.
-The recursive module/workflow inventory and live public-route preflight now share that checked-in
-contract. Fresh Python CI and Sonar are green at 81.3% new-code coverage. One production Luna→Sol
+Status: **corrective implementation complete in Draft PR #124; READY FOR FINAL UI-2 HUMAN MOBILE
+CHECKPOINT. The first authenticated mobile checkpoint failed because the n8n static workflow omitted
+reachable `notes.js` / `notes-client.js` modules, so `app.js` never bootstrapped, and CSS allowed the
+hidden Notes view to stack below Chat. The correction makes Chat and Notes mutually exclusive
+application-level views, moves Notes search to the mobile bottom interaction zone, adds a
+schema-capability-driven filter sheet, derives/serves the complete local module graph, and adds
+deployment/browser regression guards. The second checkpoint rendered the corrected layout but still
+could not bootstrap because the DEV tunnel retained the old seven-path contract; its DEV-only
+ten-path inventory is now shared by deployment validation and the public-route preflight. The third
+checkpoint confirmed the basic product is usable (exclusive Chat/Notes, feed, filters, sort, details,
+links/backlinks infrastructure, and public bootstrap), and exposed the closure items now addressed:
+empty canonical bodies, planner-backed explicit Notes search, visible inferred filters,
+human-readable Markdown/link/backlink presentation, complete type cues, and historical affordances
+in older Chat pages. Direct isolated-DEV runtime/n8n/static evidence is `MATCH` at commit `03d644c`;
+the mounted assets, zero-provider local query/detail path, and explicit intelligent-operation
+transport pass. Python CI and Sonar are green at 81.3% new-code coverage. One production Luna→Sol
 planner case passed within the $0.15 hard live-gate budget before the next case was safely stopped.
-All public routes remain Access-gated, direct DEV provenance is `MATCH`, and UI-2 is ready for the
-third authenticated human mobile checkpoint. That checkpoint remains pending. Not complete in
-PROD.**
+All public routes remain Access-gated; production ingress, Access, CSP, DNS, origin, and fallback
+remain unchanged. UI-2 is not complete in PROD.**
 
 ## Objective
 

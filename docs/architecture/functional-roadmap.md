@@ -45,10 +45,16 @@ Cloudflare DEV tunnel remained on the prior seven-route allowlist. The missing N
 were added to the same narrow DEV origin as configuration version 10; production ingress, Access,
 DNS, CSP, and the 404 fallback remained unchanged. A canonical ten-route inventory now drives both
 deployment validation and a live public-route preflight, so an Access redirect alone is no longer
-treated as public readiness. The third authenticated human mobile checkpoint remains pending. The
-previous production planner evidence is clean but budget-bounded after one Luna→Sol case; Python
-CI and Sonar are green at 81.3% new-code coverage, direct DEV provenance is `MATCH`, and the protected
-application is ready for that third human checkpoint. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
+treated as public readiness. The third authenticated checkpoint confirmed exclusive app-level
+navigation, feed, filters, sorting, populated details, link/backlink infrastructure, and public DEV
+bootstrap. It also exposed the final closure items: empty-body details, explicit planner-backed Notes
+search, visible inferred filters, human-readable Markdown/link/backlink presentation, complete type
+cues, and historical affordances in older Chat pages. Those corrections have deterministic and direct
+isolated-DEV evidence at `03d644c`; mounted browser assets and the zero-provider local Notes path
+pass, and DEV provenance is `MATCH`. The next small authenticated check is therefore the **final
+UI-2 human mobile checkpoint**, not a production-completion claim. The previous production planner
+evidence is clean but budget-bounded after one Luna→Sol case; Python CI and Sonar are green at 81.3%
+new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).

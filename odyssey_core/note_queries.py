@@ -6,7 +6,6 @@ import base64
 import hashlib
 import json
 import math
-import re
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -30,10 +29,6 @@ _RANKING_VERSION = "ui2-feed-v1"
 _PAGE_SIZE = 20
 _MAX_PAGE_SIZE = 40
 _CONTEXT_LIMIT = 320
-_WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
-_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
-_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*$")
-_LIST_ITEM_PATTERN = re.compile(r"^(?:[-*+]\s+|\d+[.)]\s+)(.+?)\s*$")
 
 
 class NotesQueryError(ValueError):
@@ -220,7 +215,7 @@ def _presentation_blocks(
     Markdown and comments remain canonical storage, but this projection carries only visible text
     and Core-resolved stable IDs. The browser never receives a vault path or has to resolve a link.
     """
-    visible = _COMMENT_PATTERN.sub("", body)
+    visible = _without_comments(body)
     blocks: list[NoteBodyBlock] = []
     paragraph: list[str] = []
 
@@ -237,15 +232,13 @@ def _presentation_blocks(
         if not line:
             flush_paragraph()
             continue
-        if match := _HEADING_PATTERN.fullmatch(line):
+        if heading := _heading_content(line):
             flush_paragraph()
-            blocks.append(NoteBodyBlock("heading", _presentation_segments(match.group(1), resolve)))
+            blocks.append(NoteBodyBlock("heading", _presentation_segments(heading, resolve)))
             continue
-        if match := _LIST_ITEM_PATTERN.fullmatch(line):
+        if item := _list_item_content(line):
             flush_paragraph()
-            blocks.append(
-                NoteBodyBlock("list_item", _presentation_segments(match.group(1), resolve))
-            )
+            blocks.append(NoteBodyBlock("list_item", _presentation_segments(item, resolve)))
             continue
         paragraph.append(line)
     flush_paragraph()
@@ -258,21 +251,64 @@ def _presentation_segments(
     """Replace literal wikilinks with visible labels and only Core-resolved stable targets."""
     segments: list[NoteBodySegment] = []
     offset = 0
-    for match in _WIKILINK_PATTERN.finditer(text):
-        if match.start() > offset:
-            segments.append(NoteBodySegment(text[offset : match.start()]))
-        target = match.group(1).strip()
-        label = (match.group(2) or target).strip()
+    while (start := text.find("[[", offset)) >= 0:
+        if start > offset:
+            segments.append(NoteBodySegment(text[offset:start]))
+        end = text.find("]]", start + 2)
+        if end < 0:
+            segments.append(NoteBodySegment(text[start + 2 :]))
+            offset = len(text)
+            break
+        target, separator, raw_label = text[start + 2 : end].partition("|")
+        target = target.strip()
+        label = (raw_label if separator else target).strip()
         resolved = resolve(target)
         if resolved is None:
             if label:
                 segments.append(NoteBodySegment(label))
         elif label:
             segments.append(NoteBodySegment(label, resolved.summary.id, resolved.summary.type))
-        offset = match.end()
+        offset = end + 2
     if offset < len(text):
         segments.append(NoteBodySegment(text[offset:]))
     return tuple(segment for segment in segments if segment.text)
+
+
+def _without_comments(body: str) -> str:
+    """Remove storage-only HTML comments without regex backtracking over note text."""
+    visible: list[str] = []
+    offset = 0
+    while (start := body.find("<!--", offset)) >= 0:
+        visible.append(body[offset:start])
+        end = body.find("-->", start + 4)
+        if end < 0:
+            return "".join(visible)
+        offset = end + 3
+    visible.append(body[offset:])
+    return "".join(visible)
+
+
+def _heading_content(line: str) -> str | None:
+    """Return visible ATX heading content for Odyssey's bounded Markdown subset."""
+    count = len(line) - len(line.lstrip("#"))
+    if not 1 <= count <= 6 or len(line) == count or not line[count].isspace():
+        return None
+    return line[count:].strip() or None
+
+
+def _list_item_content(line: str) -> str | None:
+    """Return visible unordered or ordered list content for the supported Markdown subset."""
+    if line[0] in "-*+" and len(line) > 2 and line[1].isspace():
+        return line[2:].strip() or None
+    digits = len(line) - len(line.lstrip("0123456789"))
+    if (
+        not digits
+        or len(line) <= digits + 1
+        or line[digits] not in ".)"
+        or not line[digits + 1].isspace()
+    ):
+        return None
+    return line[digits + 2 :].strip() or None
 
 
 def _aggregate_links(blocks: Sequence[NoteBodyBlock]) -> dict[tuple[str, str], int]:
