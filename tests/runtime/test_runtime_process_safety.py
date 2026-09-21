@@ -335,6 +335,36 @@ def test_runtime_builds_note_set_snapshot_from_the_canonical_notes_service() -> 
     assert calls[0]["mode"] == "intelligent"
 
 
+def test_runtime_builds_exact_affected_note_snapshot_without_a_notes_query() -> None:
+    """A mutation set is derived only from Core action evidence, never a fresh search."""
+    source = ApplicationResult(
+        request_id="write-request",
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=("first", "second", "first", "third"),
+    )
+
+    class Notes:
+        def query(self, **kwargs):
+            raise AssertionError("affected-note membership must not query Notes")
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: source,
+        refresh_indexes=lambda: None,
+        notes_service=Notes(),
+    )
+    result = runtime.execute("Guarda esto", "write-request")
+
+    assert result.note_result_snapshot == {
+        "version": 2,
+        "kind": "affected_notes",
+        "executed_at": result.note_result_snapshot["executed_at"],
+        "note_ids": ["first", "second", "third"],
+        "total": 3,
+        "truncated": False,
+    }
+
+
 def test_runtime_answer_intent_does_not_execute_an_extra_notes_query() -> None:
     """Normal Chat answers retain their existing request path without Notes side effects."""
     calls: list[object] = []
@@ -430,7 +460,7 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
 
         def backlinks(self, note_id, **kwargs):
             assert note_id == "ada"
-            return BacklinkPage("ada", (Backlink(summary, 1, "context"),), 1, None)
+            return BacklinkPage("ada", (Backlink(summary, 1, (), False),), 1, None)
 
     runtime = RuntimeComposition(
         core_execute=lambda *args: _result(), refresh_indexes=lambda: None, notes_service=Notes()

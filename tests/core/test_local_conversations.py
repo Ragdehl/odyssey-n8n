@@ -378,3 +378,28 @@ def test_assistant_snapshot_is_durable_idempotent_and_excluded_from_recent_conte
     store.append_turn(**kwargs)
     assert store.load_main_page()["turns"][0]["note_result_snapshot"] == snapshot
     assert store.recent_context() == [{"role": "assistant", "text": "Found notes."}]
+
+
+def test_affected_note_snapshot_is_durable_and_excluded_from_recent_context(tmp_path: Path) -> None:
+    """Preserve mutation membership across reload without leaking it into planner continuity."""
+    store = _store(tmp_path)
+    snapshot = {
+        "version": 2,
+        "kind": "affected_notes",
+        "executed_at": NOW,
+        "note_ids": ["first", "second"],
+        "total": 2,
+        "truncated": False,
+    }
+    store.append_turn(
+        request_id="affected-1",
+        role="assistant",
+        text="La información se ha guardado.",
+        created_at=NOW,
+        note_result_snapshot=snapshot,
+    )
+
+    assert store.load_main_page()["turns"][0]["note_result_snapshot"] == snapshot
+    assert store.recent_context() == [
+        {"role": "assistant", "text": "La información se ha guardado."}
+    ]

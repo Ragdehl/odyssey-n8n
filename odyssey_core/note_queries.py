@@ -29,6 +29,7 @@ _RANKING_VERSION = "ui2-feed-v1"
 _PAGE_SIZE = 20
 _MAX_PAGE_SIZE = 40
 _CONTEXT_LIMIT = 320
+_BACKLINK_OCCURRENCE_LIMIT = 6
 
 
 class NotesQueryError(ValueError):
@@ -118,11 +119,20 @@ class NoteDetail:
 
 @dataclass(frozen=True, slots=True)
 class Backlink:
-    """Describe one explicit canonical source linking to a current note."""
+    """Describe bounded current occurrence evidence from one explicit source note."""
 
     source: NoteSummary
     occurrences: int
-    context: str
+    snippets: tuple[BacklinkOccurrence, ...]
+    snippets_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class BacklinkOccurrence:
+    """Keep one current body block that explicitly links to the requested target."""
+
+    heading: tuple[NoteBodySegment, ...] | None
+    block: NoteBodyBlock
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,9 +332,31 @@ def _aggregate_links(blocks: Sequence[NoteBodyBlock]) -> dict[tuple[str, str], i
     return result
 
 
-def _presentation_context(body: str, resolve: Callable[[str], _GroundedNote | None]) -> str:
-    """Return bounded, comment-free visible backlink evidence from current Markdown."""
-    return _presentation_text(_presentation_blocks(body, resolve))[:_CONTEXT_LIMIT]
+def _backlink_occurrences(
+    body: str, target_id: str, resolve: Callable[[str], _GroundedNote | None]
+) -> tuple[int, tuple[BacklinkOccurrence, ...], bool]:
+    """Project only current visible blocks that literally resolve to one backlink target.
+
+    The index identifies a source candidate and preserves source ordering, but every displayed
+    occurrence is re-derived from current canonical Markdown. This prevents a flattened index
+    snippet or an unrelated source-note prefix from becoming user-facing knowledge evidence.
+    """
+    heading: tuple[NoteBodySegment, ...] | None = None
+    snippets: list[BacklinkOccurrence] = []
+    count = 0
+    block_count = 0
+    for block in _presentation_blocks(body, resolve):
+        if block.kind == "heading":
+            heading = block.segments
+            continue
+        occurrences = sum(segment.target_id == target_id for segment in block.segments)
+        if not occurrences:
+            continue
+        count += occurrences
+        block_count += 1
+        if len(snippets) < _BACKLINK_OCCURRENCE_LIMIT:
+            snippets.append(BacklinkOccurrence(heading, block))
+    return count, tuple(snippets), block_count > len(snippets)
 
 
 def _presentation_text(blocks: Sequence[NoteBodyBlock]) -> str:
@@ -600,19 +632,14 @@ class NotesQueryService:
             ):
                 raise StaleCursorError("STALE_CURSOR")
             offset = saved["offset"]
-        occurrences: dict[str, tuple[int, str]] = {}
+        source_ids: set[str] = set()
         try:
             with sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True) as connection:
                 rows = connection.execute(
-                    "SELECT source_id, occurrence_count, context FROM note_links WHERE target_id = ?",
+                    "SELECT source_id FROM note_links WHERE target_id = ?",
                     (target_id,),
                 )
-                for source_id, count, context in rows:
-                    previous = occurrences.get(source_id)
-                    occurrences[source_id] = (
-                        (previous[0] if previous else 0) + int(count),
-                        str(context),
-                    )
+                source_ids.update(str(source_id) for (source_id,) in rows)
         except sqlite3.Error as error:
             raise NotesQueryError("Notes index is unavailable") from error
         by_id = {note.summary.id: note for note in all_notes}
@@ -623,12 +650,18 @@ class NotesQueryService:
                 note.path.removesuffix(".md").rsplit("/", 1)[-1].casefold(), []
             ).append(note)
         resolve = _link_resolver(path_map, basenames)
+        evidence = []
+        for source_id in source_ids:
+            source = by_id.get(source_id)
+            if source is None:
+                continue
+            count, snippets, snippets_truncated = _backlink_occurrences(
+                source.body, target_id, resolve
+            )
+            if count:
+                evidence.append((source, count, snippets, snippets_truncated))
         ranked = sorted(
-            (
-                (by_id[source], count, _presentation_context(by_id[source].body, resolve))
-                for source, (count, _context) in occurrences.items()
-                if source in by_id
-            ),
+            evidence,
             key=lambda item: (
                 -_parse_timestamp(item[0].summary.updated_at).timestamp(),
                 _normalized(item[0].summary.name),
@@ -651,7 +684,10 @@ class NotesQueryService:
         )
         return BacklinkPage(
             target_id,
-            tuple(Backlink(note.summary, count, context) for note, count, context in page),
+            tuple(
+                Backlink(note.summary, count, snippets, snippets_truncated)
+                for note, count, snippets, snippets_truncated in page
+            ),
             len(ranked),
             next_cursor,
         )

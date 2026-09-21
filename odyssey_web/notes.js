@@ -93,6 +93,10 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     const count = state.snapshot.truncated
       ? `${state.snapshot.note_ids.length} de ${state.snapshot.total}`
       : state.snapshot.total;
+    if (state.snapshot.kind === "affected_notes") {
+      status.textContent = `${count} notas afectadas`;
+      return;
+    }
     status.replaceChildren(document.createTextNode(`Resultado histórico · ${count} notas`));
     const rerun = button("Actualizar búsqueda", () => void rerunHistorical());
     rerun.className = "notes-rerun";
@@ -193,7 +197,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   }
 
   async function rerunHistorical() {
-    if (!state.snapshot) return;
+    if (!state.snapshot || state.snapshot.kind === "affected_notes") return;
     const saved = state.snapshot;
     const historicalState = {
       items: state.items,
@@ -324,13 +328,32 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
         return;
       }
       for (const item of value.items) {
-        const row = button(`${item.source.name} · ${item.occurrences}`, () => void open(item.source.id));
+        const row = button("", () => void open(item.source.id));
         row.className = "backlink";
+        row.setAttribute("aria-label", `Abrir ${typeLabel(item.source.type)} ${item.source.name}`);
+        row.append(typeIcon(item.source.type), document.createTextNode(`${item.source.name} · ${item.occurrences}`));
         target.append(row);
-        const context = document.createElement("p");
-        context.className = "backlink-context";
-        context.textContent = item.context;
-        target.append(context);
+        for (const snippet of item.snippets) {
+          const occurrence = document.createElement("section");
+          occurrence.className = "backlink-occurrence";
+          if (snippet.heading) {
+            const heading = document.createElement("p");
+            heading.className = "backlink-heading";
+            appendBodySegments(heading, humanizeBacklinkHeading(snippet.heading), open);
+            occurrence.append(heading);
+          }
+          const context = document.createElement("p");
+          context.className = "backlink-context";
+          appendBodySegments(context, snippet.block.segments, open);
+          occurrence.append(context);
+          target.append(occurrence);
+        }
+        if (item.snippets_truncated) {
+          const more = document.createElement("p");
+          more.className = "backlink-more";
+          more.textContent = `Se muestran ${item.snippets.length} de ${item.occurrences} menciones.`;
+          target.append(more);
+        }
       }
     } catch {
       target.append(document.createTextNode("No se han podido cargar los enlaces entrantes."));
@@ -510,9 +533,10 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   document.addEventListener("odyssey:open-note-snapshot", (event) => {
     const snapshot = event.detail;
     if (!snapshot || !Array.isArray(snapshot.note_ids)) return;
-    state.query = snapshot.query;
-    state.filters = snapshot.filters;
-    state.sort = snapshot.sort;
+    const isAffected = snapshot.kind === "affected_notes";
+    state.query = isAffected ? "" : snapshot.query;
+    state.filters = isAffected ? [] : snapshot.filters;
+    state.sort = isAffected ? "relevance" : snapshot.sort;
     state.historical = true;
     state.snapshot = snapshot;
     state.current = null;
@@ -588,13 +612,19 @@ function appendBodySegments(parent, segments, open) {
     const link = document.createElement("a");
     link.className = `note-inline-link type-${segment.target_type}`;
     link.href = `#note-${encodeURIComponent(segment.target_id)}`;
-    link.textContent = segment.text;
+    link.setAttribute("aria-label", `${typeLabel(segment.target_type)}: ${segment.text}`);
+    link.append(typeIcon(segment.target_type), document.createTextNode(segment.text));
     link.addEventListener("click", (event) => {
       event.preventDefault();
       void open(segment.target_id);
     });
     parent.append(link);
   }
+}
+function humanizeBacklinkHeading(segments) {
+  const raw = segments.map((segment) => segment.text).join("");
+  const match = /^Added (\d{2})-(\d{2})-(\d{4})$/.exec(raw);
+  return match ? [{text: `${match[1]}/${match[2]}/${match[3]}`}] : segments;
 }
 function typeBadge(type) {
   const badge = document.createElement("span");

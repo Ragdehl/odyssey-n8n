@@ -19,20 +19,35 @@ class NoteResultSnapshotError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class NoteResultSnapshot:
-    """Represent the versioned, body-free historical membership of one Notes result."""
+    """Represent bounded body-free Notes membership retained on one assistant turn.
 
-    query: str
+    Version 1 records a historical search. Version 2 records the exact stable identities affected
+    by a mutation. Both forms deliberately contain membership evidence only; Markdown remains the
+    source for current titles, types, and bodies when a user opens the set later.
+    """
+
+    query: str | None
     filters: tuple[Mapping[str, Any], ...]
-    sort: str
-    ranking_version: str
+    sort: str | None
+    ranking_version: str | None
     executed_at: str
     note_ids: tuple[str, ...]
     total: int
     truncated: bool
     version: int = 1
+    kind: str = "search"
 
     def to_payload(self) -> dict[str, Any]:
         """Serialize the closed, browser-safe snapshot representation."""
+        if self.version == 2:
+            return {
+                "version": 2,
+                "kind": "affected_notes",
+                "executed_at": self.executed_at,
+                "note_ids": list(self.note_ids),
+                "total": self.total,
+                "truncated": self.truncated,
+            }
         return {
             "version": self.version,
             "query": self.query,
@@ -50,7 +65,11 @@ def validate_note_result_snapshot(value: object) -> NoteResultSnapshot | None:
     """Validate one optional snapshot before durable persistence or public projection."""
     if value is None:
         return None
-    if not isinstance(value, Mapping) or set(value) != {
+    if not isinstance(value, Mapping):
+        raise NoteResultSnapshotError("Note result snapshot is invalid")
+    if value.get("version") == 2:
+        return _validate_affected_notes_snapshot(value)
+    if set(value) != {
         "version",
         "query",
         "filters",
@@ -100,9 +119,76 @@ def validate_note_result_snapshot(value: object) -> NoteResultSnapshot | None:
         value["total"],
         value["truncated"],
     )
+    _validate_encoded_size(snapshot)
+    return snapshot
+
+
+def affected_notes_snapshot(note_ids: object, executed_at: str) -> NoteResultSnapshot:
+    """Create the exact bounded v2 membership set from Core mutation evidence.
+
+    First-occurrence order is preserved while duplicates are collapsed before the fixed durable
+    membership bound is applied. Invalid Core evidence fails closed rather than producing a
+    browser affordance with guessed identities.
+    """
+    if not isinstance(note_ids, tuple) or not isinstance(executed_at, str):
+        raise NoteResultSnapshotError("Note result snapshot is invalid")
+    unique = tuple(dict.fromkeys(note_ids))
+    if not all(isinstance(item, str) and item and len(item) <= 128 for item in unique):
+        raise NoteResultSnapshotError("Note result snapshot is invalid")
+    snapshot = NoteResultSnapshot(
+        None,
+        (),
+        None,
+        None,
+        executed_at,
+        unique[:MAX_NOTE_IDS],
+        len(unique),
+        len(unique) > MAX_NOTE_IDS,
+        version=2,
+        kind="affected_notes",
+    )
+    _validate_encoded_size(snapshot)
+    return snapshot
+
+
+def _validate_affected_notes_snapshot(value: Mapping[str, Any]) -> NoteResultSnapshot:
+    """Validate the closed v2 mutation-membership representation."""
+    if set(value) != {"version", "kind", "executed_at", "note_ids", "total", "truncated"}:
+        raise NoteResultSnapshotError("Note result snapshot is invalid")
+    ids = value["note_ids"]
+    if (
+        value["kind"] != "affected_notes"
+        or not isinstance(value["executed_at"], str)
+        or not isinstance(ids, list)
+        or len(ids) > MAX_NOTE_IDS
+        or len(ids) != len(set(ids))
+        or not all(isinstance(item, str) and item and len(item) <= 128 for item in ids)
+        or not isinstance(value["total"], int)
+        or value["total"] < len(ids)
+        or not isinstance(value["truncated"], bool)
+        or value["truncated"] != (value["total"] > len(ids))
+    ):
+        raise NoteResultSnapshotError("Note result snapshot is invalid")
+    snapshot = NoteResultSnapshot(
+        None,
+        (),
+        None,
+        None,
+        value["executed_at"],
+        tuple(ids),
+        value["total"],
+        value["truncated"],
+        version=2,
+        kind="affected_notes",
+    )
+    _validate_encoded_size(snapshot)
+    return snapshot
+
+
+def _validate_encoded_size(snapshot: NoteResultSnapshot) -> None:
+    """Reject an otherwise-shaped snapshot that exceeds the durable size bound."""
     if (
         len(json.dumps(snapshot.to_payload(), ensure_ascii=False, separators=(",", ":")).encode())
         > MAX_ENCODED_BYTES
     ):
         raise NoteResultSnapshotError("Note result snapshot is too large")
-    return snapshot

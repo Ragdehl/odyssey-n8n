@@ -193,12 +193,14 @@ def test_detail_projects_empty_and_markdown_bodies_without_exposing_storage_synt
     assert notes.detail("empty").body_blocks == ()
 
     backlink = next(item for item in notes.backlinks("ada").items if item.source.id == "visit")
-    assert backlink.context == "Added 21-09-2026 Visité a Ada."
+    assert backlink.occurrences == 1
     assert (
-        "[[" not in backlink.context
-        and "<!--" not in backlink.context
-        and "# " not in backlink.context
+        backlink.snippets[0].heading
+        and "".join(segment.text for segment in backlink.snippets[0].heading) == "Added 21-09-2026"
     )
+    context = backlink.snippets[0].block.segments
+    assert "".join(segment.text for segment in context) == "Visité a Ada."
+    assert context[1].target_id == "ada"
 
 
 def test_unresolved_or_unsafe_wikilinks_degrade_to_visible_plain_text(
@@ -219,6 +221,64 @@ def test_unresolved_or_unsafe_wikilinks_degrade_to_visible_plain_text(
     segments = detail.body_blocks[0].segments
     assert "".join(item.text for item in segments) == "Visible y Sin resolver."
     assert all(item.target_id is None for item in segments)
+
+
+def test_backlinks_project_only_current_occurrence_blocks_with_resolved_inline_links(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep unrelated source facts out while retaining every Core-resolved link in a fact."""
+    notes = service(tmp_path, schema)
+    vault = tmp_path / "vault"
+    write(vault, "people/juan.md", "juan", "Juan Hidalgo", "", updated="2026-09-19T00:00:00Z")
+    write(vault, "people/ana.md", "ana", "Ana López", "", updated="2026-09-19T00:00:00Z")
+    write(
+        vault,
+        "people/source.md",
+        "source",
+        "Odyssey DEV Synthetic User",
+        "# Added 21-09-2026\n\n- Mis padres se llaman [[people/juan|Juan Hidalgo]] y [[people/ana|Ana López]].\n\n# Added 22-09-2026\n\n- Comí con [[people/juan|Juan Hidalgo]].\n\n- Trabajo y té sin enlaces.",
+        updated="2026-09-20T00:00:00Z",
+    )
+    notes.context_index.rebuild(notes.repository, schema, Embedder())
+
+    backlink = next(item for item in notes.backlinks("juan").items if item.source.id == "source")
+
+    assert backlink.occurrences == 2
+    assert backlink.snippets_truncated is False
+    assert [
+        "".join(segment.text for segment in item.heading or ()) for item in backlink.snippets
+    ] == ["Added 21-09-2026", "Added 22-09-2026"]
+    first = backlink.snippets[0].block.segments
+    assert (
+        "".join(segment.text for segment in first)
+        == "Mis padres se llaman Juan Hidalgo y Ana López."
+    )
+    assert [(item.text, item.target_id) for item in first if item.target_id] == [
+        ("Juan Hidalgo", "juan"),
+        ("Ana López", "ana"),
+    ]
+    flattened = " ".join(
+        "".join(segment.text for segment in item.block.segments) for item in backlink.snippets
+    )
+    assert "Trabajo y té" not in flattened
+
+
+def test_backlink_occurrences_are_bounded_without_changing_source_order(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep a dense source readable while disclosing that its occurrence snippets are bounded."""
+    notes = service(tmp_path, schema)
+    vault = tmp_path / "vault"
+    write(vault, "people/target.md", "target", "Target", "", updated="2026-09-19T00:00:00Z")
+    body = "\n\n".join(f"- Mención {index} de [[people/target|Target]]." for index in range(7))
+    write(vault, "concepts/dense.md", "dense", "Dense", body, updated="2026-09-20T00:00:00Z")
+    notes.context_index.rebuild(notes.repository, schema, Embedder())
+
+    backlink = next(item for item in notes.backlinks("target").items if item.source.id == "dense")
+
+    assert backlink.occurrences == 7
+    assert len(backlink.snippets) == 6
+    assert backlink.snippets_truncated is True
 
 
 def test_shared_filters_apply_to_current_markdown(tmp_path: Path, schema: dict) -> None:

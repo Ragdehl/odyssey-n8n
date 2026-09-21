@@ -428,8 +428,26 @@ test("Notes browser validation accepts typed pages, detail, and explicit backlin
     target_id: "marta",
     total: 1,
     next_cursor: null,
-    items: [{source: noteSummary("alice"), occurrences: 2, context: "[[Marta]]"}],
+    items: [{source: noteSummary("alice"), occurrences: 2, snippets_truncated: false, snippets: [{
+      heading: [{text: "21/09/2026"}],
+      block: {kind: "list_item", segments: [
+        {text: "Con "}, {text: "Marta", target_id: "marta", target_type: "person"},
+      ]},
+    }]}],
   }).items[0].occurrences, 2);
+});
+
+test("product transport accepts the closed v2 affected-note snapshot but rejects hybrids", () => {
+  const base = {request_id: "web-affected", status: "completed", kind: "acknowledgement", message: "Guardado."};
+  const payload = {...base, note_result_snapshot: {
+    version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+    note_ids: ["first", "second"], total: 2, truncated: false,
+  }};
+  assert.deepEqual(validateProductResponse(payload).note_result_snapshot.note_ids, ["first", "second"]);
+  assert.throws(() => validateProductResponse({...base, note_result_snapshot: {
+    version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+    note_ids: ["first"], total: 1, truncated: false, query: "not allowed",
+  }}), ProductRequestError);
 });
 
 test("Notes detail accepts an empty canonical body but rejects unsafe presentation blocks", () => {

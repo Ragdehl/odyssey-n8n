@@ -175,12 +175,14 @@ function appendDetailButton(article, detail) {
 function appendNoteSetAffordance(article, snapshot) {
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
       !Array.isArray(snapshot.note_ids) || !Number.isInteger(snapshot.total) ||
-      typeof snapshot.query !== "string" || typeof snapshot.truncated !== "boolean") return;
+      typeof snapshot.truncated !== "boolean" ||
+      (snapshot.version === 1 && typeof snapshot.query !== "string") ||
+      (snapshot.version === 2 && snapshot.kind !== "affected_notes")) return;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "note-set-button";
   const visible = snapshot.truncated ? `${snapshot.note_ids.length} de ${snapshot.total}` : snapshot.total;
-  button.textContent = `Ver ${visible} notas`;
+  button.textContent = snapshot.total === 1 ? "Ver nota" : `Ver ${visible} notas`;
   button.addEventListener("click", () => {
     selectSurface("notes");
     document.dispatchEvent(new CustomEvent("odyssey:open-note-snapshot", {detail: snapshot}));
@@ -337,13 +339,17 @@ function appendContinuityWarning() {
 function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
   message.querySelector(".eyebrow").textContent = resultLabel(result);
+  if (result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
+    message.querySelector(".message-text").textContent = "Guardado";
+    message.classList.add("message-acknowledgement");
+  }
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
 }
 
 function resultLabel(result) {
   return {
-    acknowledgement: "Hecho",
+    acknowledgement: result.note_result_snapshot?.kind === "affected_notes" ? "Guardado" : "Hecho",
     clarification: "Aclara tu solicitud",
     note_set: "Notas encontradas",
     empty: "Sin resultados",

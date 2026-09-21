@@ -48,6 +48,14 @@ class FakeElement {
     }
   }
 
+  prepend(...nodes) {
+    for (const node of [...nodes].reverse()) {
+      if (node.parentNode) node.remove();
+      node.parentNode = this;
+      this.children.unshift(node);
+    }
+  }
+
   replaceChildren(...nodes) {
     for (const child of this.children) child.parentNode = null;
     this.children = [];
@@ -76,6 +84,10 @@ class FakeElement {
 
   click() {
     this._listeners.get("click")?.({preventDefault() {}});
+  }
+
+  emit(type, event = {}) {
+    this._listeners.get(type)?.(event);
   }
 
   setAttribute(name, value) {
@@ -146,7 +158,7 @@ function createPage() {
   return {document, elements};
 }
 
-async function mountApp({turns, requestProductResult}) {
+async function mountApp({turns, olderTurns = [], requestProductResult}) {
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
@@ -160,7 +172,13 @@ async function mountApp({turns, requestProductResult}) {
     findRecoverableSubmission,
     requestProductResult,
     requestConversation: async ({operation, payload}) => {
-      if (operation === "main") return {conversation_id: "main", turns, has_older: false};
+      if (operation === "main" && payload.before) {
+        return {conversation_id: "main", turns: olderTurns, has_older: false, before: null};
+      }
+      if (operation === "main") return {
+        conversation_id: "main", turns, has_older: olderTurns.length > 0,
+        before: olderTurns.length > 0 ? "older-page" : null,
+      };
       persisted.push(payload);
       return {};
     },
@@ -243,4 +261,40 @@ test("retryable recovery failure restores its bounded action without a global er
   assert.equal(action.textContent, "Recuperar resultado");
   assert.equal(action.disabled, false);
   assert.equal(page.elements.conversation.children.length, 1);
+});
+
+test("conversation reload renders the exact durable affected-note affordance", async () => {
+  const page = await mountApp({
+    turns: [
+      {request_id: "web-write", role: "user", text: "Guarda esto"},
+      {request_id: "web-write", role: "assistant", text: "La información se ha guardado.",
+        note_result_snapshot: {
+          version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+          note_ids: ["first", "second"], total: 2, truncated: false,
+        }},
+    ],
+    requestProductResult: async () => { throw new Error("not exercised"); },
+  });
+
+  const affordance = page.elements.conversation.children[1].querySelector(".note-set-button");
+  assert.equal(affordance.textContent, "Ver 2 notas");
+  assert.equal(page.elements.conversation.children[1].textContent.includes("first"), false);
+});
+
+test("older conversation pagination preserves an affected-note affordance", async () => {
+  const page = await mountApp({
+    turns: [{request_id: "web-current", role: "user", text: "Actual"}],
+    olderTurns: [{request_id: "web-old", role: "assistant", text: "Guardado.", note_result_snapshot: {
+      version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+      note_ids: ["only"], total: 1, truncated: false,
+    }}],
+    requestProductResult: async () => { throw new Error("not exercised"); },
+  });
+
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+
+  const affordance = page.elements.conversation.children[0].querySelector(".note-set-button");
+  assert.equal(affordance.textContent, "Ver nota");
 });

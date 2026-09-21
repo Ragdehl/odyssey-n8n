@@ -37,7 +37,7 @@ from odyssey_core.note_queries import (
     NotesQueryError,
     NotesQueryService,
 )
-from odyssey_core.note_result_snapshots import NoteResultSnapshot
+from odyssey_core.note_result_snapshots import NoteResultSnapshot, affected_notes_snapshot
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalStage,
@@ -264,7 +264,7 @@ class RuntimeComposition:
                         error_category=type(error).__name__,
                     )
                 )
-                return cast(
+                failed = cast(
                     ApplicationResult,
                     replace(
                         result,
@@ -275,6 +275,7 @@ class RuntimeComposition:
                         ),
                     ),
                 )
+                return self._attach_note_result_snapshot(failed)
             stages.append(
                 OperationalStage(
                     "index_refresh",
@@ -296,12 +297,20 @@ class RuntimeComposition:
         )
 
     def _attach_note_result_snapshot(self, result: ApplicationResult) -> ApplicationResult:
-        """Build bounded durable membership only for an already-authorized note-set plan.
+        """Build bounded durable membership from Core-authorized search or mutation evidence.
 
-        The Core planner validation has already proved that this is exactly one direct retrieval.
-        This adapter deliberately delegates filtering/ranking to the Notes service rather than
-        recreating its semantics at the request, workflow, or browser boundary.
+        Mutation membership comes directly from the Core application result and must never be
+        re-searched. A note-set plan remains delegated to the Notes service so this adapter does
+        not recreate filtering or ranking at the request, workflow, or browser boundary.
         """
+        if result.affected_stable_note_ids:
+            try:
+                snapshot = affected_notes_snapshot(
+                    result.affected_stable_note_ids, _current_time()["timestamp"]
+                )
+            except ValueError:
+                return result
+            return replace(result, note_result_snapshot=snapshot.to_payload())
         if (
             result.presentation_intent == "answer"
             or result.note_set_selection is None
@@ -708,7 +717,21 @@ def _notes_to_response(
                 {
                     "source": _summary_to_response(item.source),
                     "occurrences": item.occurrences,
-                    "context": item.context,
+                    "snippets": [
+                        {
+                            **(
+                                {"heading": _segments_to_response(occurrence.heading)}
+                                if occurrence.heading is not None
+                                else {}
+                            ),
+                            "block": {
+                                "kind": occurrence.block.kind,
+                                "segments": _segments_to_response(occurrence.block.segments),
+                            },
+                        }
+                        for occurrence in item.snippets
+                    ],
+                    "snippets_truncated": item.snippets_truncated,
                 }
                 for item in value.items
             ],
@@ -716,6 +739,21 @@ def _notes_to_response(
             "next_cursor": value.next_cursor,
         }
     raise TypeError("Notes response is invalid")
+
+
+def _segments_to_response(segments: Sequence[object]) -> list[dict[str, object]]:
+    """Serialize Core-resolved visible text segments without exposing canonical paths."""
+    return [
+        {
+            "text": segment.text,
+            **(
+                {"target_id": segment.target_id, "target_type": segment.target_type}
+                if segment.target_id is not None
+                else {}
+            ),
+        }
+        for segment in segments
+    ]
 
 
 def _summary_to_response(value: object) -> dict[str, object]:

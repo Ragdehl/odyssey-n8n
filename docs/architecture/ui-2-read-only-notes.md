@@ -654,6 +654,15 @@ a new result, leaving the old turn unchanged.
 Snapshot metadata never enters the planner's recent conversation context: the existing UI-0 boundary
 continues to forward only visible role/text turns.
 
+Version 2 is a closed sibling representation for a completed mutation's exact affected-note set. It
+contains only `kind=affected_notes`, execution timestamp, ordered unique stable IDs, total, and
+`truncated`; it has the same 64-ID and 16 KiB bounds. It has no semantic query, filters, ranking, or
+rerun action. The set comes directly from Core `affected_stable_note_ids`, deduplicated in first
+occurrence order before truncation, never from a new search or planner call. It opens the same
+Markdown-grounded snapshot list as a historical search, including unavailable slots, but is labeled
+as affected notes rather than a historical search result. Version 1 search snapshots remain valid and
+retain their explicit current-search rerun behavior.
+
 ### Backlinks and chronology
 
 Derive backlinks only from literal canonical wikilinks. One Core parser extracts safe targets,
@@ -669,6 +678,15 @@ or inferred mention time. Existing Git history was examined but is not the initi
 it has no current per-link chronology contract and is not guaranteed for every note. Adding `git blame`
 or history parsing solely for backlink order would be a new fragile mechanism. UI wording should
 therefore say recently updated sources, not recently linked facts.
+
+The derived index identifies current source candidates and preserves source ordering, but it is not
+read authority for displayed snippets. For each current grounded source note, Core reparses the
+validated canonical body and projects only blocks that actually resolve to the requested target. Each
+source returns at most six separately rendered occurrence blocks, their literal total count, and an
+explicit snippet-truncated flag. The nearest preceding visible heading may label an occurrence (for
+example `Added DD-MM-YYYY` is humanized only as presentation context); it never becomes an invented
+link timestamp. Occurrence blocks retain Core-resolved inline links so sibling entities remain
+clickable, while comments, raw wikilink syntax, paths, and unrelated source-note facts stay absent.
 
 ### Schema-driven filters
 

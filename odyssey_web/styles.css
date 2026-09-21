@@ -62,9 +62,12 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-tags, .backlink-context { color: #6a7287; font-size: .82rem; overflow-wrap: anywhere; }
 .note-body { line-height: 1.5; overflow-wrap: anywhere; } .note-body p { margin: .8rem 0; } .note-body h3 { margin: 1rem 0 .35rem; font-size: .95rem; } .note-body ul { margin: .7rem 0; padding-left: 1.25rem; } .note-body li + li { margin-top: .35rem; }
 .note-inline-link { color: #394d88; font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
+.note-inline-link svg, .backlink svg { width: .88em; height: .88em; margin-right: .16em; vertical-align: -.08em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .note-empty-body { color: #6a7287; font-style: italic; }
 .note-backlinks { display: grid; gap: .4rem; margin-top: 1rem; } .note-backlinks h3 { margin: 0; font-size: .85rem; }
 .backlink { min-height: 2.35rem; text-align: left; color: #39445d; background: #edf0f8; }
+.backlink-occurrence { border-left: 2px solid #d9deef; padding-left: .55rem; }
+.backlink-heading, .backlink-more { margin: 0; color: #6a7287; font-size: .78rem; }
 .notes-search-dock { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem; padding: .55rem; border: 1px solid rgba(23,32,51,.1); border-radius: 1rem; background: rgba(255,255,255,.97); box-shadow: 0 .5rem 1.5rem rgba(34,45,74,.1); }
 .notes-search-dock input { min-width: 0; min-height: 2.6rem; border: 0; outline: 0; padding: .45rem .55rem; background: transparent; color: inherit; font: inherit; }
 .notes-search-dock input:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; border-radius: .45rem; }

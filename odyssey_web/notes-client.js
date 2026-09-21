@@ -49,7 +49,7 @@ export function validateNotesResponse(value) {
   if (value.kind === "backlinks") {
     if (!isText(value.target_id) || !Array.isArray(value.items) || !Number.isInteger(value.total) || !cursor(value.next_cursor)) throw new NotesRequestError("Enlaces entrantes inválidos.");
     return {kind: "backlinks", target_id: value.target_id, total: value.total, next_cursor: value.next_cursor,
-      items: value.items.map((item) => ({source: validateSummary(item?.source), occurrences: count(item?.occurrences), context: text(item?.context)}))};
+      items: value.items.map(validateBacklink)};
   }
   throw new NotesRequestError("Respuesta de notas no compatible.");
 }
@@ -82,8 +82,23 @@ function validateBodySegment(value) {
   if (linked && (!isText(value.target_id) || !isText(value.target_type))) throw new NotesRequestError("Enlace de nota inválido.");
   return linked ? {text: value.text, target_id: value.target_id, target_type: value.target_type} : {text: value.text};
 }
+function validateBacklink(value) {
+  if (!value || typeof value !== "object" || !Array.isArray(value.snippets) ||
+      typeof value.snippets_truncated !== "boolean") {
+    throw new NotesRequestError("Enlaces entrantes inválidos.");
+  }
+  return {source: validateSummary(value.source), occurrences: count(value.occurrences),
+    snippets: value.snippets.map(validateBacklinkSnippet), snippets_truncated: value.snippets_truncated};
+}
+function validateBacklinkSnippet(value) {
+  if (!value || typeof value !== "object" || !value.block || typeof value.block !== "object" ||
+      (value.heading !== undefined && !Array.isArray(value.heading))) {
+    throw new NotesRequestError("Enlace entrante inválido.");
+  }
+  return {heading: value.heading === undefined ? null : value.heading.map(validateBodySegment),
+    block: validateBodyBlock(value.block)};
+}
 function count(value) { if (!Number.isInteger(value) || value < 1) throw new NotesRequestError("Conteo inválido."); return value; }
 function cursor(value) { return value === null || isText(value); }
 function isString(value) { return typeof value === "string"; }
 function isText(value) { return typeof value === "string" && value.length > 0; }
-function text(value) { return typeof value === "string" ? value : ""; }

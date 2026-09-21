@@ -89,7 +89,19 @@ export async function requestConversation({endpoint = "/api/conversation", opera
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
   }
-  return value;
+  if (value.turns === undefined) return value;
+  if (!Array.isArray(value.turns)) {
+    throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
+  }
+  return {...value, turns: value.turns.map(validateConversationTurn)};
+}
+
+function validateConversationTurn(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
+  }
+  if (value.note_result_snapshot === undefined) return value;
+  return {...value, note_result_snapshot: validateNoteResultSnapshot(value.note_result_snapshot)};
 }
 
 /**
@@ -144,13 +156,17 @@ export function validateProductResponse(value) {
 }
 
 function validateNoteResultSnapshot(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1 ||
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey returned an invalid Notes result set.");
+  }
+  if (value.version === 2) return validateAffectedNotesSnapshot(value);
+  if (value.version !== 1 ||
       typeof value.query !== "string" || value.query.length === 0 || !Array.isArray(value.filters) ||
       !Array.isArray(value.note_ids) || !Number.isInteger(value.total) ||
       typeof value.truncated !== "boolean" || typeof value.sort !== "string" ||
       typeof value.ranking_version !== "string" || typeof value.executed_at !== "string" ||
       value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
-      value.query.length > 512 || value.filters.length > 16 ||
+      utf8Bytes(value.query) > 512 || value.filters.length > 16 ||
       value.filters.some((filter) => !filter || typeof filter !== "object" || Array.isArray(filter) ||
         Object.keys(filter).length !== 3 || typeof filter.field !== "string" || typeof filter.op !== "string" || !("value" in filter)) ||
       value.note_ids.some((id) => typeof id !== "string" || !id) ||
@@ -161,6 +177,22 @@ function validateNoteResultSnapshot(value) {
     ranking_version: value.ranking_version, executed_at: value.executed_at,
     note_ids: value.note_ids, total: value.total, truncated: value.truncated};
 }
+
+function validateAffectedNotesSnapshot(value) {
+  if (Object.keys(value).length !== 6 || value.kind !== "affected_notes" ||
+      typeof value.executed_at !== "string" || !Array.isArray(value.note_ids) ||
+      !Number.isInteger(value.total) || typeof value.truncated !== "boolean" ||
+      value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
+      value.note_ids.some((id) => typeof id !== "string" || !id) ||
+      value.total < value.note_ids.length ||
+      value.truncated !== (value.total > value.note_ids.length)) {
+    throw new ProductRequestError("Odyssey returned an invalid Notes result set.");
+  }
+  return {version: 2, kind: "affected_notes", executed_at: value.executed_at,
+    note_ids: value.note_ids, total: value.total, truncated: value.truncated};
+}
+
+function utf8Bytes(value) { return new TextEncoder().encode(value).length; }
 
 /**
  * Validate bounded diagnostic evidence for one logical request.
