@@ -8,7 +8,9 @@ Once UI-2 makes canonical notes visible, normal DEV use can evaluate not only wh
 
 The first real narrative-style DEV exercises showed promising behavior (one event/journal-style note plus reusable entity notes, and extraction of durable facts belonging to more than one entity), but they also exposed questions that should be investigated deliberately before moving on to broader application work.
 
-A later real DEV exercise sharpened one concrete case: an explicitly stated group-level fact (people belong to the same friend group and attended the same school) was preserved in the journal/event note but was not materialized onto the individual person notes. The information was therefore not lost from canonical knowledge, but entity-centric browsing/retrieval may fail to surface it. The follow-up must decide whether such facts should be projected onto each entity, represented through an explicit shared/group relation, or remain event-scoped with reliable graph retrieval. Do not solve this by blind duplication.
+A later real DEV exercise sharpened one concrete expected behavior: when the user explicitly states a durable fact that applies to a finite, resolvable set of people, Odyssey should materialize that fact onto each relevant person note. The user must not need to create a separate `group` note merely to make the fact durable per person. The source journal/event note may retain the narrative/provenance context, but it must not be the only place where an explicitly shared durable fact lives if that would make entity-centric browsing or retrieval miss it.
+
+Example: after a prior journal entry establishes which named people were present, a follow-up such as “todos los que estaban ayer formamos parte del mismo grupo de amigos; fuimos al colegio juntos en la Escola Laia” should resolve the referenced people and update each corresponding person note with the applicable durable facts. This does not authorize inventing friendship or other relations from mere co-occurrence: the distribution rule applies only when the user has explicitly asserted the shared fact.
 
 This follow-up is therefore a bounded product/architecture exploration, not an authorization to redesign the schema or add a second knowledge authority.
 
@@ -21,10 +23,11 @@ Questions to answer:
 - When should Odyssey create an event/journal note versus only updating existing entities?
 - Which durable facts should be copied/materialized onto the relevant entity note rather than remaining only in the event/narrative note?
 - When a sentence contains facts about several entities, does Odyssey distribute those facts to the correct canonical notes?
+- When one explicit durable fact applies to several resolvable people, does Odyssey materialize that fact onto every relevant entity note without requiring a separate group note?
 - Does explicit relational language become durable relation/link knowledge without requiring the user to phrase the input unnaturally?
 - Does Odyssey correctly avoid inventing stronger relations from mere co-occurrence (for example, people attending the same event must not automatically become `friends`)?
 - When an explicitly stated durable relationship is present, does it survive as queryable knowledge rather than only as prose in the source narrative?
-- When one explicit fact applies to several people, should Odyssey duplicate it across entity notes, create/attach a shared relation/group entity, or rely on traversable event evidence? Measure retrieval quality before choosing.
+- Does follow-up language such as “todos los que estaban ayer...” correctly resolve the bounded participant set from prior context before distributing the new fact?
 - Are newly created identity-only notes still useful and readable before they accumulate their own body facts?
 - Can later retrieval answer both entity-centric questions and event-centric questions from the resulting graph of notes/links?
 
