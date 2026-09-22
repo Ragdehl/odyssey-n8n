@@ -28,6 +28,10 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
         "status": result.status.value,
         "planning_error": result.planning_error,
         "clarification_code": result.clarification_code,
+        "presentation_intent": result.presentation_intent,
+        "note_result_snapshot": (
+            dict(result.note_result_snapshot) if result.note_result_snapshot is not None else None
+        ),
         "affected_stable_note_ids": list(result.affected_stable_note_ids),
         "actions": [_serialize_action(action) for action in result.action_results],
         "pending_work": {

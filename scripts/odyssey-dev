@@ -30,8 +30,8 @@ N8N_RENDER=$DEV_RUNTIME/n8n-render
 N8N_DEPLOYMENT=$DEV_RUNTIME/n8n-deployment
 DEV_ACTOR_FILE=$DEV_STATE/dev-actor.json
 DEV_FIXTURE_SCRIPT=$DEV_SOURCE/scripts/prepare_odyssey_dev_identity.py
-WEB_ASSETS=(environment.js index.html app.js client.js styles.css)
-DEV_PRODUCT_PATHS=(/api/odyssey /api/styles.css /api/app.js /api/client.js /api/environment.js /api/request /api/conversation)
+DEV_ROUTE_INVENTORY=$DEV_SOURCE/deploy/odyssey-dev-product-routes.tsv
+DEV_PUBLIC_ROUTE_CHECK=$DEV_SOURCE/scripts/odyssey_dev_public_routes.py
 
 fail() {
   echo "odyssey-dev: $*" >&2
@@ -60,6 +60,12 @@ guard() {
   [ -x "$PYTHON" ] || fail "DEV Python environment is missing: $PYTHON"
   [ -f "$N8N_COMPOSE" ] || fail "DEV n8n definition is missing: $N8N_COMPOSE"
   [ -f "$DEV_FIXTURE_SCRIPT" ] || fail "DEV identity fixture script is missing: $DEV_FIXTURE_SCRIPT"
+  [ -f "$DEV_ROUTE_INVENTORY" ] || fail "DEV product route inventory is missing: $DEV_ROUTE_INVENTORY"
+  [ -f "$DEV_PUBLIC_ROUTE_CHECK" ] || fail "DEV public route validator is missing: $DEV_PUBLIC_ROUTE_CHECK"
+}
+
+dev_static_paths() {
+  awk '$1 == "GET" && $3 == "static" { print $2 }' "$DEV_ROUTE_INVENTORY"
 }
 
 source_state() {
@@ -150,13 +156,53 @@ prepare_web_assets() {
   mv -f "$temporary" "$DEV_WEB/environment.js"
 }
 
+browser_assets() {
+  "$PYTHON" - "$DEV_SOURCE/odyssey_web" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+entry = root / "app.js"
+pattern = re.compile(r'^\s*import\s+(?:[^"\']+?\s+from\s+)?["\'](\./[^"\']+)["\']', re.M)
+seen = set()
+
+def visit(path: Path) -> None:
+    path = path.resolve()
+    if path in seen or root not in path.parents:
+        if root not in path.parents:
+            raise SystemExit("browser module import escapes web root")
+        return
+    if not path.is_file():
+        raise SystemExit(f"browser module is missing: {path.relative_to(root)}")
+    seen.add(path)
+    for relative in pattern.findall(path.read_text(encoding="utf-8")):
+        visit((path.parent / relative).resolve())
+
+visit(entry)
+for name in ("environment.js", "index.html", "styles.css"):
+    if not (root / name).is_file():
+        raise SystemExit(f"browser asset is missing: {name}")
+print("environment.js")
+print("index.html")
+print("styles.css")
+for path in sorted(seen, key=lambda item: item.relative_to(root).as_posix()):
+    print(path.relative_to(root).as_posix())
+PY
+}
+
 web_asset_fingerprint() {
-  sha256sum "${WEB_ASSETS[@]/#/$DEV_WEB/}" | awk '{print $1}' | sha256sum | cut -d' ' -f1
+  local asset_paths=()
+  mapfile -t asset_paths < <(browser_assets)
+  sha256sum "${asset_paths[@]/#/$DEV_WEB/}" | awk '{print $1}' | sha256sum | cut -d' ' -f1
 }
 
 mounted_web_asset_fingerprint() {
+  local asset_paths mounted_paths
+  mapfile -t asset_paths < <(browser_assets)
+  mounted_paths=$(printf '/odyssey-web/%s ' "${asset_paths[@]}")
   docker exec "$N8N_CONTAINER" sh -lc \
-    'sha256sum /odyssey-web/environment.js /odyssey-web/index.html /odyssey-web/app.js /odyssey-web/client.js /odyssey-web/styles.css | awk '\''{print $1}'\'' | sha256sum | cut -d" " -f1'
+    "sha256sum $mounted_paths | awk '{print \$1}' | sha256sum | cut -d' ' -f1"
 }
 
 web_assets_coherent() {
@@ -228,22 +274,40 @@ render_workflows() {
 }
 
 assert_dev_product_route_inventory() {
-  "$PYTHON" - "$DEV_SOURCE/odyssey_web/index.html" "$N8N_RENDER/odyssey-online.json" "$N8N_RENDER/odyssey-online-static.json" <<'PY'
+  "$PYTHON" - "$DEV_SOURCE/odyssey_web" "$DEV_ROUTE_INVENTORY" "$N8N_RENDER/odyssey-online.json" "$N8N_RENDER/odyssey-online-static.json" <<'PY'
 import json
+import re
 import sys
 from pathlib import Path
 
-expected = {
-    "/api/odyssey",
-    "/api/styles.css",
-    "/api/app.js",
-    "/api/client.js",
-    "/api/environment.js",
-    "/api/request",
-    "/api/conversation",
-}
-index, *workflow_paths = map(Path, sys.argv[1:])
-if any(route not in index.read_text(encoding="utf-8") for route in {"/api/request", "/api/conversation"}):
+web_root, inventory_path, *workflow_paths = map(Path, sys.argv[1:])
+pattern = re.compile(r'^\s*import\s+(?:[^"\']+?\s+from\s+)?["\'](\./[^"\']+)["\']', re.M)
+seen = set()
+
+def visit(path):
+    path = path.resolve()
+    root = web_root.resolve()
+    if path in seen:
+        return
+    if root not in path.parents or not path.is_file():
+        raise SystemExit(f"browser module is unavailable: {path}")
+    seen.add(path)
+    for relative in pattern.findall(path.read_text(encoding="utf-8")):
+        visit((path.parent / relative).resolve())
+
+visit(web_root / "app.js")
+module_routes = {("GET", f"/api/{path.relative_to(web_root).as_posix()}") for path in seen}
+expected = set()
+for raw_line in inventory_path.read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    method, route, _kind = line.split()
+    expected.add((method, route))
+if not module_routes <= expected:
+    raise SystemExit("browser module graph is absent from the DEV route inventory")
+index = (web_root / "index.html").read_text(encoding="utf-8")
+if any(route not in index for route in {"/api/request", "/api/conversation", "/api/notes"}):
     raise SystemExit("browser product endpoints are absent from the DEV route inventory")
 actual = set()
 for workflow_path in workflow_paths:
@@ -251,26 +315,32 @@ for workflow_path in workflow_paths:
     for node in workflow["nodes"]:
         if node.get("type") == "n8n-nodes-base.webhook":
             path = node.get("parameters", {}).get("path")
-            if isinstance(path, str):
-                actual.add(f"/api/{path}")
+            method = node.get("parameters", {}).get("httpMethod")
+            if isinstance(path, str) and isinstance(method, str):
+                actual.add((method, f"/api/{path}"))
 if actual != expected:
     raise SystemExit(f"DEV workflow route inventory mismatch: {sorted(actual)}")
 PY
 }
 
 publish_workflows() {
-  local credential_inventory
+  local credential_inventory workflow_id
   n8n_compose stop >/dev/null 2>&1 || true
-  docker run --rm --network none \
-    -v "$N8N_VOLUME:/home/node/.n8n" \
-    -v "$N8N_RENDER:/import:ro" \
-    --entrypoint /bin/sh "$N8N_IMAGE" -lc '
-      set -eu
-      n8n import:workflow --input=/import/odyssey-online.json >/dev/null
-      n8n import:workflow --input=/import/odyssey-online-static.json >/dev/null
-      n8n publish:workflow --id=odyssey-online >/dev/null
-      n8n publish:workflow --id=odyssey-online-static >/dev/null
-    '
+  for workflow_id in odyssey-online odyssey-online-static; do
+    docker run --rm --network none \
+      -v "$N8N_VOLUME:/home/node/.n8n" \
+      --entrypoint /bin/sh "$N8N_IMAGE" -lc \
+      "n8n unpublish:workflow --id=$workflow_id >/dev/null 2>&1 || true"
+    docker run --rm --network none \
+      -v "$N8N_VOLUME:/home/node/.n8n" \
+      -v "$N8N_RENDER:/import:ro" \
+      --entrypoint /bin/sh "$N8N_IMAGE" -lc \
+      "n8n import:workflow --input=/import/$workflow_id.json --activeState=false >/dev/null"
+    docker run --rm --network none \
+      -v "$N8N_VOLUME:/home/node/.n8n" \
+      --entrypoint /bin/sh "$N8N_IMAGE" -lc \
+      "n8n publish:workflow --id=$workflow_id >/dev/null"
+  done
   credential_inventory=$(docker run --rm --network none -v "$N8N_VOLUME:/home/node/.n8n" --entrypoint node "$N8N_IMAGE" -e '
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync("/home/node/.n8n/database.sqlite", { readOnly: true });
@@ -303,11 +373,21 @@ workflow_publication_is_valid() {
   "$PYTHON" -c '
 import json
 import sys
+from pathlib import Path
 
 rows = {row["id"]: row for row in json.load(sys.stdin)}
+inventory = []
+for raw_line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    method, route, kind = line.split()
+    inventory.append((method, route.removeprefix("/api/"), kind))
 expected = {
-    "odyssey-online": {("POST", "request"), ("POST", "conversation")},
-    "odyssey-online-static": {("GET", "odyssey")},
+    "odyssey-online": {(method, route) for method, route, kind in inventory if kind == "api"},
+    "odyssey-online-static": {
+        (method, route) for method, route, kind in inventory if kind == "static"
+    },
 }
 if set(rows) != set(expected):
     raise SystemExit("missing DEV workflow")
@@ -328,9 +408,9 @@ for workflow_id, expected_webhooks in expected.items():
         for node in nodes
         if node.get("type") == "n8n-nodes-base.webhook"
     }
-    if not expected_webhooks <= actual_webhooks:
-        raise SystemExit("DEV workflow active version lacks an expected webhook")
-'
+    if actual_webhooks != expected_webhooks:
+        raise SystemExit("DEV workflow active version does not match the route inventory")
+' "$DEV_ROUTE_INVENTORY"
 }
 
 assert_published_workflows() {
@@ -340,7 +420,7 @@ assert_published_workflows() {
 }
 
 route_readiness_once() {
-  local response body status
+  local response body status notes_response notes_body notes_status
   response=$(curl --silent --show-error --max-time 10 --write-out $'\n%{http_code}' \
     --request POST "http://$N8N_HOST:$N8N_PORT/api/request" \
     --header 'Content-Type: application/json' \
@@ -360,12 +440,45 @@ if payload != {
 }:
     raise SystemExit(1)
 ' <<<"$body"
+  notes_response=$(curl --silent --show-error --max-time 10 --write-out $'\n%{http_code}' \
+    --request POST "http://$N8N_HOST:$N8N_PORT/api/notes" \
+    --header 'Content-Type: application/json' \
+    --data '{"operation":"query","mode":"feed","query":"","filters":[],"sort":"relevance"}') || return 1
+  notes_status=${notes_response##*$'\n'}
+  notes_body=${notes_response%$'\n'*}
+  [ "$notes_status" = 200 ] || return 1
+  "$PYTHON" -c '
+import json
+import sys
+payload = json.load(sys.stdin)
+if payload.get("kind") != "page" or payload.get("mode") != "feed" or not isinstance(payload.get("items"), list):
+    raise SystemExit(1)
+' <<<"$notes_body"
+}
+
+static_route_readiness_once() {
+  # Verify that every browser asset in the current local module graph is served by DEV n8n.
+  local path static_paths=()
+  mapfile -t static_paths < <(dev_static_paths)
+  for path in "${static_paths[@]}"; do
+    curl --fail --silent --show-error --max-time 10 --output /dev/null \
+      "http://$N8N_HOST:$N8N_PORT$path" || return 1
+  done
+}
+
+public_route_provenance() {
+  local result
+  result=$("$PYTHON" "$DEV_PUBLIC_ROUTE_CHECK" status --machine 2>/dev/null) || true
+  case "$result" in
+    MATCH|DRIFT|UNKNOWN) printf '%s\n' "$result" ;;
+    *) printf 'UNKNOWN\n' ;;
+  esac
 }
 
 wait_workflow_readiness() {
   local attempt
   for attempt in $(seq 1 45); do
-    if assert_published_workflows >/dev/null 2>&1 && route_readiness_once >/dev/null 2>&1; then
+    if assert_published_workflows >/dev/null 2>&1 && route_readiness_once >/dev/null 2>&1 && static_route_readiness_once >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -402,7 +515,7 @@ workflow_provenance() {
   web_assets_coherent "$current" || { echo DRIFT; return; }
   metadata=$(workflow_metadata 2>/dev/null || true)
   [ -n "$metadata" ] || { echo UNKNOWN; return; }
-  workflow_publication_is_valid <<<"$metadata" && route_readiness_once && echo MATCH || echo DRIFT
+  workflow_publication_is_valid <<<"$metadata" && route_readiness_once && static_route_readiness_once && echo MATCH || echo DRIFT
 }
 
 runtime() {
@@ -439,7 +552,7 @@ stop() {
 }
 
 status() {
-  local state commit branch dirty deployed health_state n8n_state n8n_health metadata provenance public_status web_hash web_marker
+  local state commit branch dirty deployed health_state n8n_state n8n_health metadata provenance public_status public_routes web_hash web_marker
   guard
   state=$(systemctl --user is-active "$UNIT" 2>/dev/null || true)
   commit=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null || echo unavailable)
@@ -453,10 +566,11 @@ status() {
   if n8n_health_once >/dev/null 2>&1; then n8n_health=healthy; else n8n_health=unhealthy; fi
   metadata=$(workflow_metadata 2>/dev/null || echo unavailable)
   provenance=$(workflow_provenance)
+  public_routes=$(public_route_provenance)
   if curl --silent --max-time 5 --output /dev/null "$DEV_PRODUCT_URL"; then public_status=reachable; else public_status=unavailable; fi
-  printf 'environment=DEV\ndev_state=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nweb_deployment_marker=%s\nweb_assets_sha256=%s\nn8n_container=%s\nn8n_state=%s\nn8n_address=%s:%s\nn8n_health=%s\nn8n_volume=%s\nworkflow_metadata=%s\nworkflow_source_provenance=%s\npublic_url=%s\npublic_endpoint=%s\n' \
+  printf 'environment=DEV\ndev_state=%s\nruntime_address=%s:%s\nruntime_health=%s\ndata_root=%s\nsource=%s\ndeployed_commit=%s\nchecked_out_commit=%s\nbranch=%s\ncheckout_clean=%s\nweb_deployment_marker=%s\nweb_assets_sha256=%s\nn8n_container=%s\nn8n_state=%s\nn8n_address=%s:%s\nn8n_health=%s\nn8n_volume=%s\nworkflow_metadata=%s\nworkflow_source_provenance=%s\npublic_url=%s\npublic_endpoint=%s\npublic_route_provenance=%s\n' \
     "$state" "$DEV_HOST" "$DEV_PORT" "$health_state" "$DEV_ROOT" "$DEV_SOURCE" "$deployed" "$commit" "$branch" \
-    "$([ -z "$dirty" ] && echo yes || echo no)" "$web_marker" "$web_hash" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PRODUCT_URL" "$public_status"
+    "$([ -z "$dirty" ] && echo yes || echo no)" "$web_marker" "$web_hash" "$N8N_CONTAINER" "$n8n_state" "$N8N_HOST" "$N8N_PORT" "$n8n_health" "$N8N_VOLUME" "$metadata" "$provenance" "$DEV_PRODUCT_URL" "$public_status" "$public_routes"
 }
 
 deploy() {
@@ -484,8 +598,9 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     stop) stop ;;
     restart) stop; start ;;
     status) status ;;
+    public-status) guard; "$PYTHON" "$DEV_PUBLIC_ROUTE_CHECK" status ;;
     deploy) deploy ;;
     runtime) runtime ;;
-    *) fail "usage: odyssey-dev {start|stop|restart|status|deploy}" ;;
+    *) fail "usage: odyssey-dev {start|stop|restart|status|public-status|deploy}" ;;
   esac
 fi

@@ -129,6 +129,30 @@ sufficient for the currently implemented mutation families without a persistent 
 This is bounded replay protection, not blanket semantic deduplication: separate delivery IDs remain
 separate logical requests, and a same-ID plan conflict is not silently accepted by the pending store.
 
+#### UI-2 reliability correction to the Phase 19 conclusion
+
+Real multi-note DEV evidence on 2026-09-21 proved that the conclusion above was too narrow for a
+planner-generated multi-unit request. One browser delivery ID was retried while its original request
+was still running. The three attempts planned independently, produced different affected-note sets,
+and created three Git commits carrying the same `Odyssey-Request` trailer. Per-fact ordinal guards
+protected repeated atomic facts, but they could not make independently regenerated whole plans one
+logical execution. The same trace also showed that the runtime used a serial HTTP server: queued
+Notes calls ended at their 30-second n8n timeout and a conversation read ended at its 10-second
+timeout while the write occupied the server.
+
+The evidence now justifies the bounded ledger that Phase 19 deliberately deferred. The runtime keeps
+one actor-scoped durable completed-result record for a mutation delivery, bound to a non-reversible
+hash of request text plus conversation ID. Product executions remain single-writer, while the HTTP
+adapter serves health, Notes, and conversation reads concurrently. A same-ID retry waits for the
+original in-process execution or replays its completed durable result after a lost connection or
+runtime restart; a conflicting binding or malformed record fails closed. The record is operational
+state, not knowledge authority, and the original request text is not copied into it.
+
+The assistant turn remains the visible conversation projection. If its browser-side persistence did
+not happen, transcript reload exposes an explicit recovery action for the unmatched durable user
+turn; it never auto-resubmits. Recovery uses the original request ID, so a completed mutation result
+returns without another planner or mutation pass and can then persist the missing assistant turn.
+
 The deterministic evidence matrix for this correction is:
 
 | Surface | Evidence and current outcome |
@@ -272,7 +296,11 @@ Those directions remain in their roadmap/future-extension contracts. Phase 20 ha
 
 ## Open decisions
 
-1. **Retry identity / idempotency key:** Phase 19.1 evidence uses a delivery-owned `request_id` propagated through n8n/runtime and durable atomic fact locators for bounded replay protection. A persistent idempotency ledger is not justified by the current evidence; reconsider only if later retry cases escape these canonical guards.
+1. **Retry identity / idempotency key:** Phase 19.1 adopted a delivery-owned `request_id` plus durable
+   atomic fact locators. The later UI-2 multi-note incident escaped those guards, so the actor-scoped
+   completed-mutation delivery-result ledger described above is now required. It complements rather
+   than replaces canonical fact locators: the ledger prevents re-execution of one logical delivery;
+   Markdown remains authoritative for knowledge.
 
 The bounded grounded answerer now applies the same logical-delivery principle at the provider boundary: its non-secret `Idempotency-Key` is deterministically derived from the validated Odyssey `request_id`. Core mutation replay protection remains unchanged; intentional new requests use different request IDs and therefore different provider keys. No request ledger or additional infrastructure is introduced.
 

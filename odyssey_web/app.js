@@ -1,10 +1,12 @@
 import {
   ProductRequestError,
   createSubmission,
+  findRecoverableSubmission,
   renderProductResultWithContinuity,
   requestProductResult,
   requestConversation,
 } from "./client.js";
+import {mountNotes} from "./notes.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -16,11 +18,16 @@ const requestDetailTitle = document.querySelector("#request-detail-title");
 const requestDetailContent = document.querySelector("#request-detail-content");
 const conversationEndpoint = document.querySelector('meta[name="odyssey-conversation-endpoint"]')?.content ?? "/api/conversation";
 const MAIN_CONVERSATION_ID = "main";
+const chatSurface = document.querySelector("#chat-surface");
+const notesSurface = document.querySelector("#notes-surface");
+const chatTab = document.querySelector("#chat-tab");
+const notesTab = document.querySelector("#notes-tab");
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
 let olderCursor = null;
 let hasOlder = false;
 let loadingOlder = false;
+let recoveryControl = null;
 
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
@@ -33,6 +40,23 @@ function showDeploymentMarker() {
 
 showDeploymentMarker();
 
+// Both application controllers remain mounted for the page lifetime. Navigation changes the one
+// visible application view, so Chat draft/scroll and Notes query/detail/navigation state persist.
+if (notesSurface) {
+  mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
+}
+function selectSurface(surface) {
+  const chat = surface === "chat";
+  if (chatSurface) chatSurface.hidden = !chat;
+  if (notesSurface) notesSurface.hidden = chat;
+  document.documentElement.dataset.activeView = chat ? "chat" : "notes";
+  chatTab?.setAttribute("aria-current", chat ? "page" : "false");
+  notesTab?.setAttribute("aria-current", chat ? "false" : "page");
+}
+chatTab?.addEventListener("click", () => selectSurface("chat"));
+notesTab?.addEventListener("click", () => selectSurface("notes"));
+selectSurface("chat");
+
 function conversationPayload() {
   return conversationId ? {conversation_id: conversationId} : {};
 }
@@ -43,9 +67,22 @@ async function loadMainConversation() {
   olderCursor = data.before ?? null;
   hasOlder = data.has_older === true;
   conversation.replaceChildren();
+  recoveryControl = null;
+  const userMessages = new Map();
   for (const turn of data.turns ?? []) {
     const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
-    if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
+    if (turn.role === "user" && typeof turn.request_id === "string") {
+      userMessages.set(turn.request_id, message);
+    }
+    if (turn.role === "assistant") {
+      appendDetailButton(message, turn.request_detail);
+      appendNoteSetAffordance(message, turn.note_result_snapshot);
+    }
+  }
+  const recoverable = findRecoverableSubmission(data.turns, conversationId);
+  if (recoverable) {
+    retrySubmission = recoverable;
+    appendRecoveryControl(recoverable, userMessages.get(recoverable.requestId));
   }
   conversation.scrollTop = conversation.scrollHeight;
 }
@@ -54,7 +91,13 @@ void (async () => {
   try {
     await loadMainConversation();
   } catch {
-    // The existing chat remains usable if the optional history projection is unavailable.
+    if (!conversation.children.length) {
+      const message = appendMessage(
+        "odyssey",
+        "No se ha podido cargar la conversación. Puedes seguir usando Odyssey o volver a intentarlo más tarde.",
+      );
+      message.classList.add("message-error");
+    }
   }
 })();
 
@@ -99,7 +142,10 @@ async function loadOlderConversation() {
     if (cursor !== olderCursor) return;
     for (const turn of [...(data.turns ?? [])].reverse()) {
       const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status, {prepend: true, scroll: false});
-      if (turn.role === "assistant") appendDetailButton(message, turn.request_detail);
+      if (turn.role === "assistant") {
+        appendDetailButton(message, turn.request_detail);
+        appendNoteSetAffordance(message, turn.note_result_snapshot);
+      }
     }
     olderCursor = data.before ?? null;
     hasOlder = data.has_older === true;
@@ -124,6 +170,25 @@ function appendDetailButton(article, detail) {
   button.textContent = "ⓘ";
   button.addEventListener("click", () => openRequestDetail(detail));
   article.querySelector(".message-header")?.append(button);
+}
+
+function appendNoteSetAffordance(article, snapshot) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
+      !Array.isArray(snapshot.note_ids) || !Number.isInteger(snapshot.total) ||
+      typeof snapshot.truncated !== "boolean" ||
+      (snapshot.version !== 1 && snapshot.version !== 2) ||
+      (snapshot.version === 1 && typeof snapshot.query !== "string") ||
+      (snapshot.version === 2 && (snapshot.kind !== "affected_notes" || snapshot.total < 1))) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "note-set-button";
+  const visible = snapshot.truncated ? `${snapshot.note_ids.length} de ${snapshot.total}` : snapshot.total;
+  button.textContent = snapshot.total === 1 ? "Ver nota" : `Ver ${visible} notas`;
+  button.addEventListener("click", () => {
+    selectSurface("notes");
+    document.dispatchEvent(new CustomEvent("odyssey:open-note-snapshot", {detail: snapshot}));
+  });
+  article.append(button);
 }
 
 function appendDetailLine(parent, label, value) {
@@ -205,11 +270,11 @@ function appendLoading() {
   return loading;
 }
 
-function appendRetryControl(submission) {
+function appendRetryControl(submission, label = "Reintentar") {
   const retry = document.createElement("button");
   retry.type = "button";
   retry.className = "retry-button";
-  retry.textContent = "Reintentar";
+  retry.textContent = label;
   retry.addEventListener("click", () => {
     if (retrySubmission !== submission) return;
     retrySubmission = null;
@@ -218,6 +283,50 @@ function appendRetryControl(submission) {
   });
   conversation.append(retry);
   conversation.scrollTop = conversation.scrollHeight;
+}
+
+function appendRecoveryControl(submission, userMessage) {
+  const control = document.createElement("div");
+  control.className = "recovery-control";
+  control.dataset.requestId = submission.requestId;
+  const text = document.createElement("p");
+  text.textContent = "Esta solicitud no tiene una respuesta guardada.";
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "recovery-action";
+  action.textContent = "Recuperar resultado";
+  action.addEventListener("click", () => {
+    if (retrySubmission !== submission || recoveryControl !== control) return;
+    action.disabled = true;
+    action.textContent = "Recuperando…";
+    control.dataset.state = "recovering";
+    void sendSubmission(submission, true, control);
+  });
+  control.append(text, action);
+  (userMessage ?? conversation).append(control);
+  recoveryControl = control;
+  conversation.scrollTop = conversation.scrollHeight;
+}
+
+function restoreRecoveryControl(control) {
+  const action = control.querySelector(".recovery-action");
+  if (!action) return;
+  action.disabled = false;
+  action.textContent = "Recuperar resultado";
+  control.dataset.state = "retryable";
+}
+
+function failRecoveryControl(control) {
+  const text = control.querySelector("p");
+  if (text) text.textContent = "No se ha podido recuperar el resultado.";
+  control.querySelector(".recovery-action")?.remove();
+  control.dataset.state = "failed";
+  recoveryControl = null;
+}
+
+function removeRecoveryControl(control) {
+  if (recoveryControl === control) recoveryControl = null;
+  control?.remove();
 }
 
 function appendContinuityWarning() {
@@ -231,19 +340,25 @@ function appendContinuityWarning() {
 function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
   message.querySelector(".eyebrow").textContent = resultLabel(result);
+  if (result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
+    message.querySelector(".message-text").textContent = "Guardado";
+    message.classList.add("message-acknowledgement");
+  }
   appendDetailButton(message, result.request_detail);
+  appendNoteSetAffordance(message, result.note_result_snapshot);
 }
 
 function resultLabel(result) {
   return {
-    acknowledgement: "Hecho",
+    acknowledgement: result.note_result_snapshot?.kind === "affected_notes" ? "Guardado" : "Hecho",
     clarification: "Aclara tu solicitud",
+    note_set: "Notas encontradas",
     empty: "Sin resultados",
     error: "No completado",
   }[result.kind] ?? "Odyssey";
 }
 
-async function sendSubmission(submission, isRetry = false) {
+async function sendSubmission(submission, isRetry = false, activeRecoveryControl = null) {
   if (!isRetry) appendMessage("user", submission.request);
   const loading = appendLoading();
   setBusy(true);
@@ -251,6 +366,7 @@ async function sendSubmission(submission, isRetry = false) {
     const result = await requestProductResult({endpoint, submission, conversationId});
     retrySubmission = null;
     loading.remove();
+    removeRecoveryControl(activeRecoveryControl);
     await renderProductResultWithContinuity({
       result,
       renderResult: renderProductResult,
@@ -266,6 +382,7 @@ async function sendSubmission(submission, isRetry = false) {
             text: result.message,
             status: result.status,
             request_detail: result.request_detail,
+            note_result_snapshot: result.note_result_snapshot,
           },
         });
       },
@@ -274,6 +391,14 @@ async function sendSubmission(submission, isRetry = false) {
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;
     loading.remove();
+    if (activeRecoveryControl) {
+      if (retrySubmission) {
+        restoreRecoveryControl(activeRecoveryControl);
+      } else {
+        failRecoveryControl(activeRecoveryControl);
+      }
+      return;
+    }
     const message = appendMessage(
       "odyssey",
       retrySubmission

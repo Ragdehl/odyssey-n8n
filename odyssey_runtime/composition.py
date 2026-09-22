@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
+from threading import Lock, RLock
 from time import perf_counter
 from typing import cast
 from zoneinfo import ZoneInfo
 
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
-from odyssey_core.context import ContextIndex
+from odyssey_core.context import ContextFilter, ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
 from odyssey_core.conversations import MAIN_CONVERSATION_ID
@@ -28,6 +29,15 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_core.materialization import OpenAILunaWriter
+from odyssey_core.note_queries import (
+    BacklinkPage,
+    NoteCapabilities,
+    NoteDetail,
+    NotePage,
+    NotesQueryError,
+    NotesQueryService,
+)
+from odyssey_core.note_result_snapshots import NoteResultSnapshot, affected_notes_snapshot
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalStage,
@@ -35,8 +45,17 @@ from odyssey_core.observability import (
 )
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.persistence import ActorInput
+from odyssey_core.request_planning import (
+    PlannerClarification,
+    RequestPlan,
+    RetrieveAction,
+    SelectionCriteria,
+)
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
+
+from .delivery_results import LocalDeliveryResultStore
+from .serialization import application_result_to_response
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
 
@@ -54,7 +73,126 @@ class RuntimeComposition:
     refresh_indexes: Callable[[], None]
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
+    notes_service: NotesQueryService | None = None
+    notes_embedder: object | None = None
+    intelligent_notes_execute: Callable[[str, Sequence[object]], NotePage] | None = None
     monotonic: Callable[[], float] = perf_counter
+    _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+
+    def execute_product(
+        self,
+        user_request: str,
+        request_id: str | None = None,
+        conversation_id: str | None = None,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Execute one delivery once and replay a durable completed mutation result.
+
+        Product deliveries are serialized because Git and multi-note mutation are not concurrent
+        write authorities. The HTTP adapter remains concurrent, so Notes, conversation, and health
+        reads do not wait behind planning. A completed mutation result is persisted before the
+        response is written, allowing a same-ID retry after a lost connection to recover without
+        another planner or mutation pass.
+        """
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        store: LocalDeliveryResultStore | None = None
+        fingerprint: str | None = None
+        if request_id is not None and conversation_id is not None:
+            if self.conversation_root_resolver is None:
+                raise ValueError("conversation root resolver is unavailable")
+            store = LocalDeliveryResultStore(
+                self.conversation_root_resolver.resolve(actor) / "delivery-results"
+            )
+            fingerprint = store.fingerprint(user_request, conversation_id)
+        with self._execute_lock:
+            if store is not None and fingerprint is not None:
+                replay = store.load(request_id, fingerprint)
+                if replay is not None:
+                    replay["delivery_replayed"] = True
+                    return replay
+            result = self.execute(
+                user_request,
+                request_id,
+                conversation_id,
+                AuthenticatedActorContext(actor)
+                if authenticated_actor is not None or external_principal is not None
+                else None,
+                None,
+            )
+            response = application_result_to_response(result)
+            if store is not None and fingerprint is not None and result.affected_stable_note_ids:
+                store.save(
+                    result.request_id,
+                    fingerprint,
+                    response,
+                    _current_time()["timestamp"],
+                )
+            return response
+
+    def notes(
+        self,
+        operation: str,
+        payload: dict[str, object],
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Execute one typed read-only Notes operation for the authenticated actor boundary.
+
+        Actor resolution occurs even though current local-first Notes storage is root-bound. This
+        preserves the existing outer isolation contract and prevents a route from bypassing it.
+        """
+        self._resolve_actor(authenticated_actor, external_principal)
+        if self.notes_service is None:
+            raise ValueError("Notes service is unavailable")
+        if operation == "capabilities":
+            if payload:
+                raise ValueError("Notes capabilities payload is invalid")
+            return _notes_to_response(self.notes_service.capabilities())
+        if operation == "query":
+            return _notes_to_response(
+                self.notes_service.query(
+                    mode=str(payload.get("mode", "feed")),
+                    query=str(payload.get("query", "")),
+                    filters=payload.get("filters", ()),
+                    sort=str(payload.get("sort", "relevance")),
+                    page_size=payload.get("page_size", 20),
+                    cursor=payload.get("cursor"),
+                    snapshot_ids=payload.get("snapshot_ids", ()),
+                    as_of=payload.get("as_of"),
+                    embedder=self.notes_embedder if payload.get("mode") == "intelligent" else None,
+                )
+            )
+        if operation == "detail":
+            if set(payload) != {"note_id"} or not isinstance(payload["note_id"], str):
+                raise ValueError("Notes detail payload is invalid")
+            return _notes_to_response(self.notes_service.detail(payload["note_id"]))
+        if operation == "backlinks":
+            allowed = {"note_id", "page_size", "cursor"}
+            if set(payload) - allowed or not isinstance(payload.get("note_id"), str):
+                raise ValueError("Notes backlinks payload is invalid")
+            return _notes_to_response(
+                self.notes_service.backlinks(
+                    payload["note_id"],
+                    page_size=payload.get("page_size", 20),
+                    cursor=payload.get("cursor"),
+                )
+            )
+        if operation == "intelligent":
+            if (
+                self.intelligent_notes_execute is None
+                or set(payload) - {"query", "filters", "page_size", "cursor", "sort"}
+                or not isinstance(payload.get("query"), str)
+                or not isinstance(payload.get("filters", ()), list)
+            ):
+                raise NotesQueryError("Intelligent Notes planning is unavailable")
+            if payload.get("cursor") is not None:
+                raise NotesQueryError("Intelligent Notes pages do not re-plan")
+            return _notes_to_response(
+                self.intelligent_notes_execute(payload["query"], payload.get("filters", ()))
+            )
+        raise ValueError("Notes operation is unsupported")
 
     def execute(
         self,
@@ -93,12 +231,13 @@ class RuntimeComposition:
             request_id = request_id or allocate_request_id()
             if conversation_id != MAIN_CONVERSATION_ID:
                 raise ValueError("only the main conversation is available")
-            self._conversation_store(resolved_actor).append_turn(
-                request_id=request_id,
-                role="user",
-                text=user_request,
-                created_at=_current_time()["timestamp"],
-            )
+            with self._conversation_lock:
+                self._conversation_store(resolved_actor).append_turn(
+                    request_id=request_id,
+                    role="user",
+                    text=user_request,
+                    created_at=_current_time()["timestamp"],
+                )
         started = self.monotonic()
         if conversation_id is None:
             if authenticated_actor is None:
@@ -125,7 +264,7 @@ class RuntimeComposition:
                         error_category=type(error).__name__,
                     )
                 )
-                return cast(
+                failed = cast(
                     ApplicationResult,
                     replace(
                         result,
@@ -136,6 +275,7 @@ class RuntimeComposition:
                         ),
                     ),
                 )
+                return self._attach_note_result_snapshot(failed)
             stages.append(
                 OperationalStage(
                     "index_refresh",
@@ -143,6 +283,7 @@ class RuntimeComposition:
                     max(0.0, (self.monotonic() - refresh_started) * 1000),
                 )
             )
+        result = self._attach_note_result_snapshot(result)
         return cast(
             ApplicationResult,
             replace(
@@ -154,6 +295,82 @@ class RuntimeComposition:
                 ),
             ),
         )
+
+    def _attach_note_result_snapshot(self, result: ApplicationResult) -> ApplicationResult:
+        """Build bounded durable membership from Core-authorized search or mutation evidence.
+
+        Mutation membership comes directly from the Core application result and must never be
+        re-searched. A note-set plan remains delegated to the Notes service so this adapter does
+        not recreate filtering or ranking at the request, workflow, or browser boundary.
+        """
+        if result.affected_stable_note_ids:
+            try:
+                snapshot = affected_notes_snapshot(
+                    result.affected_stable_note_ids, _current_time()["timestamp"]
+                )
+            except ValueError:
+                return result
+            return replace(result, note_result_snapshot=snapshot.to_payload())
+        if (
+            result.presentation_intent == "answer"
+            or result.note_set_selection is None
+            or self.notes_service is None
+            or self.notes_embedder is None
+        ):
+            return result
+        selection = result.note_set_selection
+        try:
+            page = self._note_set_page(selection)
+            snapshot = NoteResultSnapshot(
+                query=selection.query,
+                filters=tuple(
+                    {"field": item.field, "op": item.op, "value": item.value}
+                    for item in [*selection.filters, *self._type_filter(selection)]
+                ),
+                sort=page.sort,
+                ranking_version=page.ranking_version,
+                executed_at=page.as_of,
+                note_ids=tuple(item.id for item in page.items),
+                total=page.total,
+                truncated=page.total > len(page.items),
+            )
+        except (NotesQueryError, ValueError):
+            # A malformed or stale derived projection must never become result-set authority.
+            # The normal Core action evidence remains available, but no affordance is emitted.
+            return result
+        return replace(result, note_result_snapshot=snapshot.to_payload())
+
+    def _note_set_page(self, selection: SelectionCriteria) -> NotePage:
+        """Return up to the snapshot bound using the single canonical Notes query service."""
+        assert self.notes_service is not None
+        filters = [*selection.filters, *self._type_filter(selection)]
+        first = self.notes_service.query(
+            mode="intelligent",
+            query=selection.query,
+            filters=filters,
+            sort="relevance",
+            page_size=40,
+            embedder=cast(object, self.notes_embedder),
+        )
+        if first.total <= len(first.items) or first.next_cursor is None:
+            return first
+        second = self.notes_service.query(
+            mode="intelligent",
+            query=selection.query,
+            filters=filters,
+            sort="relevance",
+            page_size=24,
+            cursor=first.next_cursor,
+            embedder=cast(object, self.notes_embedder),
+        )
+        return replace(first, items=first.items + second.items, next_cursor=second.next_cursor)
+
+    @staticmethod
+    def _type_filter(selection: SelectionCriteria) -> tuple[ContextFilter, ...]:
+        """Project the planner's canonical type criterion into the shared filter contract."""
+        if selection.type is None:
+            return ()
+        return (ContextFilter("type", "eq", selection.type),)
 
     def create_conversation(
         self,
@@ -174,9 +391,10 @@ class RuntimeComposition:
     ) -> dict[str, object]:
         """Return the one durable main conversation for the trusted actor."""
         actor = self._resolve_actor(authenticated_actor, external_principal)
-        store = self._conversation_store(actor)
-        store.load_or_create_main(now=_current_time()["timestamp"])
-        return store.load_main_page(limit=40 if limit is None else limit, before=before)
+        with self._conversation_lock:
+            store = self._conversation_store(actor)
+            store.load_or_create_main(now=_current_time()["timestamp"])
+            return store.load_main_page(limit=40 if limit is None else limit, before=before)
 
     def list_conversations(
         self,
@@ -197,7 +415,8 @@ class RuntimeComposition:
         actor = self._resolve_actor(authenticated_actor, external_principal)
         if conversation_id != MAIN_CONVERSATION_ID:
             raise ValueError("only the main conversation is available")
-        return self._conversation_store(actor).load_main_page()
+        with self._conversation_lock:
+            return self._conversation_store(actor).load_main_page()
 
     def append_conversation_turn(
         self,
@@ -207,6 +426,7 @@ class RuntimeComposition:
         text: str,
         status: str | None = None,
         request_detail: dict[str, object] | None = None,
+        note_result_snapshot: dict[str, object] | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
     ) -> dict[str, object]:
@@ -214,14 +434,16 @@ class RuntimeComposition:
         actor = self._resolve_actor(authenticated_actor, external_principal)
         if conversation_id != MAIN_CONVERSATION_ID:
             raise ValueError("only the main conversation is available")
-        return self._conversation_store(actor).append_turn(
-            request_id=request_id,
-            role=role,
-            text=text,
-            created_at=_current_time()["timestamp"],
-            status=status,
-            request_detail=request_detail,
-        )
+        with self._conversation_lock:
+            return self._conversation_store(actor).append_turn(
+                request_id=request_id,
+                role=role,
+                text=text,
+                created_at=_current_time()["timestamp"],
+                status=status,
+                request_detail=request_detail,
+                note_result_snapshot=note_result_snapshot,
+            )
 
     def recent_conversation_context(
         self,
@@ -234,7 +456,8 @@ class RuntimeComposition:
         actor = self._resolve_actor(authenticated_actor, external_principal)
         if conversation_id != MAIN_CONVERSATION_ID:
             raise ValueError("only the main conversation is available")
-        return self._conversation_store(actor).recent_context(exclude_request_id=request_id)
+        with self._conversation_lock:
+            return self._conversation_store(actor).recent_context(exclude_request_id=request_id)
 
     def _conversation_store(self, actor: str) -> LocalConversationStore:
         """Resolve a trusted actor before constructing its root-bound local store."""
@@ -362,13 +585,188 @@ def build_runtime_from_environment() -> RuntimeComposition:
         context_index.rebuild(repository, schema, embedder)
         semantic_index.rebuild(repository, schema, embedder)
 
+    def intelligent_notes(query: str, explicit_filters: Sequence[object]) -> NotePage:
+        """Plan one explicit Notes request and accept only a single direct RetrieveAction.
+
+        This keeps planner interpretation singular. Clarifications, writes, delegation,
+        multi-branch plans, and unimplemented graph traversal do not degrade into a lossy search.
+        """
+        clock = _current_time()
+        planner = OpenAIRequestPlanner.from_environment(
+            schema, {key: clock[key] for key in ("date", "time", "timezone")}
+        )
+        result = planner.plan(query)
+        if (
+            isinstance(result, PlannerClarification)
+            or not isinstance(result, RequestPlan)
+            or len(result.actions) != 1
+            or not isinstance(result.actions[0], RetrieveAction)
+            or result.actions[0].plan.link_scope is not None
+        ):
+            raise NotesQueryError("Intelligent Notes request needs clarification")
+        action = result.actions[0]
+        filters: list[object] = [*explicit_filters, *action.plan.filters]
+        if action.plan.type is not None:
+            filters.append(ContextFilter("type", "eq", action.plan.type))
+        return NotesQueryService(repository, schema, context_index).query(
+            mode="intelligent",
+            query=action.plan.query,
+            filters=_unique_note_filters(filters),
+            embedder=embedder,
+        )
+
     refresh_indexes()
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
+        notes_service=NotesQueryService(repository, schema, context_index),
+        notes_embedder=embedder,
+        intelligent_notes_execute=intelligent_notes,
     )
+
+
+def _unique_note_filters(filters: Sequence[object]) -> tuple[object, ...]:
+    """Preserve one canonical filter occurrence when explicit and planner criteria agree."""
+    result: list[object] = []
+    seen: set[tuple[object, object, str]] = set()
+    for item in filters:
+        if isinstance(item, ContextFilter):
+            field, op, value = item.field, item.op, item.value
+        elif isinstance(item, Mapping):
+            field, op, value = item.get("field"), item.get("op"), item.get("value")
+        else:
+            result.append(item)
+            continue
+        try:
+            key = (field, op, json.dumps(value, sort_keys=True, separators=(",", ":")))
+        except (TypeError, ValueError):
+            result.append(item)
+            continue
+        if key not in seen:
+            seen.add(key)
+            result.append(item)
+    return tuple(result)
+
+
+def _notes_to_response(
+    value: NoteCapabilities | NotePage | NoteDetail | BacklinkPage,
+) -> dict[str, object]:
+    """Serialize typed Notes evidence without exposing vault paths or derived index internals."""
+    if isinstance(value, NoteCapabilities):
+        return {"kind": "capabilities", "types": list(value.types), "fields": list(value.fields)}
+    if isinstance(value, NotePage):
+        return {
+            "kind": "page",
+            "mode": value.mode,
+            "sort": value.sort,
+            "ranking_version": value.ranking_version,
+            "as_of": value.as_of,
+            "applied_filters": [
+                {"field": item.field, "op": item.op, "value": item.value}
+                for item in value.applied_filters
+            ],
+            "items": [_summary_to_response(item) for item in value.items],
+            "total": value.total,
+            "next_cursor": value.next_cursor,
+            "unavailable_ids": list(value.unavailable_ids),
+            "snapshot_offset": value.snapshot_offset,
+        }
+    if isinstance(value, NoteDetail):
+        return {
+            "kind": "detail",
+            "note": _summary_to_response(value.note),
+            "body": value.body,
+            "body_blocks": [
+                {
+                    "kind": block.kind,
+                    "segments": [
+                        {
+                            "text": segment.text,
+                            **(
+                                {
+                                    "target_id": segment.target_id,
+                                    "target_type": segment.target_type,
+                                }
+                                if segment.target_id is not None
+                                else {}
+                            ),
+                        }
+                        for segment in block.segments
+                    ],
+                }
+                for block in value.body_blocks
+            ],
+            "links": [
+                {
+                    "target_id": item.target_id,
+                    "target_name": item.target_name,
+                    "target_type": item.target_type,
+                    "label": item.label,
+                    "occurrences": item.occurrences,
+                }
+                for item in value.links
+            ],
+        }
+    if isinstance(value, BacklinkPage):
+        return {
+            "kind": "backlinks",
+            "target_id": value.target_id,
+            "items": [
+                {
+                    "source": _summary_to_response(item.source),
+                    "occurrences": item.occurrences,
+                    "snippets": [
+                        {
+                            **(
+                                {"heading": _segments_to_response(occurrence.heading)}
+                                if occurrence.heading is not None
+                                else {}
+                            ),
+                            "block": {
+                                "kind": occurrence.block.kind,
+                                "segments": _segments_to_response(occurrence.block.segments),
+                            },
+                        }
+                        for occurrence in item.snippets
+                    ],
+                    "snippets_truncated": item.snippets_truncated,
+                }
+                for item in value.items
+            ],
+            "total": value.total,
+            "next_cursor": value.next_cursor,
+        }
+    raise TypeError("Notes response is invalid")
+
+
+def _segments_to_response(segments: Sequence[object]) -> list[dict[str, object]]:
+    """Serialize Core-resolved visible text segments without exposing canonical paths."""
+    return [
+        {
+            "text": segment.text,
+            **(
+                {"target_id": segment.target_id, "target_type": segment.target_type}
+                if segment.target_id is not None
+                else {}
+            ),
+        }
+        for segment in segments
+    ]
+
+
+def _summary_to_response(value: object) -> dict[str, object]:
+    """Serialize one typed Notes summary at the runtime response boundary."""
+    return {
+        "id": value.id,
+        "name": value.name,
+        "type": value.type,
+        "tags": list(value.tags),
+        "created_at": value.created_at,
+        "updated_at": value.updated_at,
+        "properties": dict(value.properties),
+    }
 
 
 def _persistence_actor(

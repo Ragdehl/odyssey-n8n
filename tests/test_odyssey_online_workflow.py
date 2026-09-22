@@ -13,7 +13,11 @@ def _answerer_key(request_id: str) -> str:
 def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "const { request_id, status, kind, message, request_detail }" in source
+    assert (
+        "const { request_id, status, kind, message, request_detail, note_result_snapshot }"
+        in source
+    )
+    assert "...(note_result_snapshot ? { note_result_snapshot } : {})" in source
     assert "Return deterministic product response" in source
 
 
@@ -98,8 +102,43 @@ def test_completed_response_and_answerer_failure_keep_existing_detail_contract()
     source = SOURCE.read_text(encoding="utf-8")
     assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
     assert (
-        "request_detail } }]; } catch { return [{ json: { request_id: source.request_id" in source
+        "request_detail, note_result_snapshot: source.note_result_snapshot } }]; } catch" in source
     )
+
+
+def test_note_set_routes_without_answerer_and_preserves_closed_snapshot_versions() -> None:
+    """Keep search and mutation affordances on the direct route without accepting hybrids."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const safeSearchSnapshot = value =>" in source
+    assert "const safeAffectedSnapshot = value =>" in source
+    assert "const safeSnapshot = value =>" in source
+    assert "value.version === 2 && value.kind === 'affected_notes'" in source
+    assert "if (intent !== 'answer' && !snapshot)" in source
+    assert "if (intent === 'note_set') return" in source
+    assert "kind: 'note_set'" in source
+    assert "route: 'answer'" in source
+
+
+def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
+    """Keep the empty capabilities operation distinct from query-shaped Notes payloads."""
+
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "const shapes = { capabilities: new Set(['operation'])" in source
+    assert "Object.keys(body).every(key => allowed.has(key))" in source
+    assert "const forwarded = { operation };" in source
+    assert "if (operation === 'query')" in source
+    assert "if (operation === 'detail') forwarded.note_id = note_id;" in source
+
+
+def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
+    """Return a typed NoteDetail object intact even though it contains canonical body text."""
+
+    source = SOURCE.read_text(encoding="utf-8")
+    notes_response = source[
+        source.index("const notesRespond") : source.index("const notesInvalidRespond")
+    ]
+    assert "responseBody: expr('{{ $json }}')" in notes_response
+    assert "$json.body || $json" not in notes_response
 
 
 def test_partial_write_unit_success_routes_to_acknowledgement() -> None:

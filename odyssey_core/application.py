@@ -42,6 +42,7 @@ from .request_planning import (
     PlannerResult,
     RequestPlan,
     RetrieveAction,
+    SelectionCriteria,
     WriteAction,
 )
 from .storage import VaultRepository
@@ -163,6 +164,9 @@ class ApplicationResult:
     pending_work: PendingWorkStatus = PendingWorkStatus()
     history: GitHistoryResult = GitHistoryResult.disabled()
     operational: OperationalEvidence = OperationalEvidence()
+    presentation_intent: str = "answer"
+    note_set_selection: SelectionCriteria | None = None
+    note_result_snapshot: Mapping[str, Any] | None = None
 
 
 def allocate_request_id() -> str:
@@ -423,6 +427,12 @@ def execute_request(
             if history_error is not None
             else GitHistoryResult.disabled()
         ),
+        presentation_intent=plan.presentation_intent,
+        note_set_selection=(
+            plan.actions[0].plan
+            if plan.presentation_intent != "answer" and isinstance(plan.actions[0], RetrieveAction)
+            else None
+        ),
     )
     if history_recorder is not None and history_error is None and history_snapshot is not None:
         history_started = monotonic()
@@ -453,25 +463,15 @@ def execute_request(
                 error_category=history_error_category,
             )
         )
-        result = ApplicationResult(
-            result.request_id,
-            result.status,
-            result.action_results,
-            result.affected_stable_note_ids,
-            history=history,
-        )
+        result = replace(result, history=history)
     if not any(action.status is not ActionStatus.COMPLETED for action in actions):
         stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
         return _with_operational(result, stages, started, monotonic)
     if pending_recorder is None:
         stages.append(OperationalStage("pending", OperationalOutcome.UNAVAILABLE))
         return _with_operational(
-            ApplicationResult(
-                result.request_id,
-                result.status,
-                result.action_results,
-                result.affected_stable_note_ids,
-                history=result.history,
+            replace(
+                result,
                 pending_work=PendingWorkStatus(
                     required=True, error="pending recorder is not configured"
                 ),
@@ -490,12 +490,8 @@ def execute_request(
             _stage("pending", OperationalOutcome.FAILED, pending_started, monotonic, error)
         )
         return _with_operational(
-            ApplicationResult(
-                result.request_id,
-                result.status,
-                result.action_results,
-                result.affected_stable_note_ids,
-                history=result.history,
+            replace(
+                result,
                 pending_work=PendingWorkStatus(required=True, error=_safe_reason(error)),
             ),
             stages,
@@ -508,12 +504,8 @@ def execute_request(
         )
     )
     return _with_operational(
-        ApplicationResult(
-            result.request_id,
-            result.status,
-            result.action_results,
-            result.affected_stable_note_ids,
-            history=result.history,
+        replace(
+            result,
             pending_work=PendingWorkStatus(required=True, persisted=True, record_id=record_id),
         ),
         stages,

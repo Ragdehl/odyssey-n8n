@@ -83,6 +83,7 @@ def planner_output(*actions: dict, limitations: list[str] | None = None) -> dict
         "actions": list(actions),
         "limitations": limitations or [],
         "clarification_code": None,
+        "presentation_intent": "answer",
     }
 
 
@@ -773,6 +774,7 @@ def test_planner_result_supports_closed_nonsense_clarification(
         "actions": None,
         "limitations": None,
         "clarification_code": "UNRECOGNIZED_REQUEST",
+        "presentation_intent": None,
     }
 
     result = validate_planner_result(payload, schema)
@@ -852,6 +854,7 @@ def test_context_payload_is_not_a_planner_result(schema: dict) -> None:
             "actions": [retrieve("Marta")],
             "limitations": None,
             "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
         },
         {
             "outcome": "CLARIFY",
@@ -892,6 +895,7 @@ def test_planner_result_schema_rejects_local_invalid_envelope_states(
             "actions": None,
             "limitations": None,
             "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
         },
     ],
 )
@@ -923,6 +927,26 @@ def test_planner_result_schema_preserves_valid_nested_action_contracts(
     """Leave retrieval, write, delegation, and mixed action schemas beneath PLAN unchanged."""
     assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
     assert isinstance(validate_planner_result(payload, schema), RequestPlan)
+
+
+@pytest.mark.parametrize("intent", ["answer", "note_set", "answer_and_note_set"])
+def test_presentation_intent_is_closed_and_note_sets_require_one_direct_retrieval(
+    schema: dict, intent: str
+) -> None:
+    """Keep presentation separate from existing retrieval/write planning authority."""
+    plan = validate_request_plan(
+        {"actions": [retrieve("Marta")], "limitations": [], "presentation_intent": intent}, schema
+    )
+    assert plan.presentation_intent == intent
+    with pytest.raises(RequestPlanningError, match="Note-set presentation"):
+        validate_request_plan(
+            {
+                "actions": [write(schema_unit("Marta", facts=["x"]))],
+                "limitations": [],
+                "presentation_intent": "note_set",
+            },
+            schema,
+        )
 
 
 @pytest.mark.parametrize(

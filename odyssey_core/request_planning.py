@@ -29,6 +29,7 @@ WRITE_INTENTS = ("record", "amend", "remove", "delete")
 _PROPERTY_OPS = ("set", "remove")
 _TAG_CHANGE_OPS = ("add", "remove")
 _LINK_DIRECTIONS = ("incoming", "outgoing", "both")
+PRESENTATION_INTENTS = ("answer", "note_set", "answer_and_note_set")
 SELF_TARGET = "self"
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
@@ -39,6 +40,8 @@ _PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerR
 Bounded recent conversation evidence may resolve a referent or conversational continuity, but it records only what was said and is never current personal truth. Use it only to identify the subject or interaction the user means. Do not turn a prior user statement or assistant response into a current-fact filter, retrieval constraint, or asserted fact. Canonical notes remain the authority for current facts. A follow-up write may reuse an explicit fact from earlier user text only when the ordinary write contract can represent it; assistant text never supplies a fact or mutation target. If the recent evidence still leaves the referent or requested mutation ambiguous, return CLARIFY rather than guessing.
 
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
+
+Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction when the user explicitly asks to see a collection/list/set of matching notes; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, or any link_scope, use `answer`; do not discard or weaken meaning merely to produce a note set.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, and self_target. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. A relational target such as "mi hermano" remains an ordinary target. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
@@ -266,6 +269,7 @@ class RequestPlan:
 
     actions: tuple[RequestAction, ...]
     limitations: tuple[str, ...]
+    presentation_intent: str = "answer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -475,8 +479,9 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                 "type": "array",
                 "items": {"type": "string", "enum": list(LIMITATIONS)},
             },
+            "presentation_intent": {"type": "string", "enum": list(PRESENTATION_INTENTS)},
         },
-        "required": ["actions", "limitations"],
+        "required": ["actions", "limitations", "presentation_intent"],
         "additionalProperties": False,
     }
 
@@ -491,7 +496,7 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         A strict object schema whose PLAN/CLARIFY alternatives mirror local envelope invariants.
     """
     plan_schema = request_plan_json_schema(schema)
-    required = ["outcome", "actions", "limitations", "clarification_code"]
+    required = ["outcome", "actions", "limitations", "clarification_code", "presentation_intent"]
     plan_branch = {
         "type": "object",
         "properties": {
@@ -499,6 +504,7 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
             "actions": plan_schema["properties"]["actions"],
             "limitations": plan_schema["properties"]["limitations"],
             "clarification_code": {"type": "null"},
+            "presentation_intent": plan_schema["properties"]["presentation_intent"],
         },
         "required": required,
         "additionalProperties": False,
@@ -513,6 +519,7 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "enum": list(PLANNER_CLARIFICATION_CODES),
             },
+            "presentation_intent": {"type": "null"},
         },
         "required": required,
         "additionalProperties": False,
@@ -541,32 +548,38 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
     Raises:
         RequestPlanningError: If the discriminator, payload combination, or nested plan is invalid.
     """
-    if not isinstance(payload, dict) or set(payload) != {
-        "outcome",
-        "actions",
-        "limitations",
-        "clarification_code",
-    }:
+    required_fields = {"outcome", "actions", "limitations", "clarification_code"}
+    if (
+        not isinstance(payload, dict)
+        or not required_fields <= set(payload)
+        or set(payload) - (required_fields | {"presentation_intent"})
+    ):
         raise RequestPlanningError("PlannerResult must contain only its required fields")
     outcome = payload["outcome"]
     if outcome == "PLAN":
         if (
-            set(payload) != {"outcome", "actions", "limitations", "clarification_code"}
+            set(payload) - (required_fields | {"presentation_intent"})
             or payload["clarification_code"] is not None
             or not isinstance(payload["actions"], list)
             or not isinstance(payload["limitations"], list)
         ):
             raise RequestPlanningError("PLAN must contain actions and limitations only")
         return validate_request_plan(
-            {"actions": payload["actions"], "limitations": payload["limitations"]}, schema
+            {
+                "actions": payload["actions"],
+                "limitations": payload["limitations"],
+                "presentation_intent": payload.get("presentation_intent", "answer"),
+            },
+            schema,
         )
     if outcome == "CLARIFY":
         code = payload["clarification_code"]
         if (
-            set(payload) != {"outcome", "actions", "limitations", "clarification_code"}
+            set(payload) - (required_fields | {"presentation_intent"})
             or payload["actions"] is not None
             or payload["limitations"] is not None
             or code not in PLANNER_CLARIFICATION_CODES
+            or payload.get("presentation_intent") is not None
         ):
             raise RequestPlanningError("CLARIFY must contain one supported code and no actions")
         return PlannerClarification(code)
@@ -590,9 +603,14 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     """
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
-    if not isinstance(payload, dict) or set(payload) != {"actions", "limitations"}:
-        raise RequestPlanningError("RequestPlan must contain exactly actions and limitations")
-    raw_actions, limitations = payload["actions"], payload["limitations"]
+    if not isinstance(payload, dict) or set(payload) - {
+        "actions",
+        "limitations",
+        "presentation_intent",
+    }:
+        raise RequestPlanningError("RequestPlan contains unsupported fields")
+    raw_actions, limitations = payload.get("actions"), payload.get("limitations")
+    presentation_intent = payload.get("presentation_intent", "answer")
     if not isinstance(raw_actions, list) or not raw_actions:
         raise RequestPlanningError("RequestPlan actions must be a non-empty list")
     if (
@@ -609,7 +627,17 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
         _validate_action(action, schema, retrieval_capabilities, write_capabilities)
         for action in raw_actions
     )
-    return RequestPlan(actions=actions, limitations=tuple(limitations))
+    if presentation_intent not in PRESENTATION_INTENTS:
+        raise RequestPlanningError("RequestPlan presentation intent is invalid")
+    if presentation_intent != "answer" and (
+        len(actions) != 1
+        or not isinstance(actions[0], RetrieveAction)
+        or actions[0].plan.link_scope is not None
+    ):
+        raise RequestPlanningError("Note-set presentation requires one direct retrieval")
+    return RequestPlan(
+        actions=actions, limitations=tuple(limitations), presentation_intent=presentation_intent
+    )
 
 
 class OpenAIRequestPlanner:

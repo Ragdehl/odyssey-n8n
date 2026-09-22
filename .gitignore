@@ -8,5 +8,6 @@ __pycache__/
 .coverage.*
 coverage.xml
 htmlcov/
+/.env.backup
 benchmarks/.live-results/
 answers.json

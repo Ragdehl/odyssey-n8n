@@ -1,5 +1,5 @@
 const ALLOWED_STATUSES = new Set(["completed", "partial", "needs_attention", "failed"]);
-const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "empty", "error"]);
+const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "empty", "error", "note_set"]);
 // The private runtime has a 120-second n8n deadline. Leave five seconds for
 // n8n to shape its bounded response before treating delivery as uncertain.
 export const PRODUCT_REQUEST_TIMEOUT_MS = 125_000;
@@ -53,6 +53,29 @@ export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, con
   return submission;
 }
 
+/**
+ * Find the newest durable user turn whose same-ID assistant outcome is missing.
+ *
+ * The caller may offer this original logical delivery for explicit recovery after reload, but must
+ * not automatically resend it.
+ */
+export function findRecoverableSubmission(turns, conversationId = "main") {
+  if (!Array.isArray(turns) || typeof conversationId !== "string" || !conversationId) return null;
+  const answered = new Set(
+    turns
+      .filter((turn) => turn && turn.role === "assistant" && typeof turn.request_id === "string")
+      .map((turn) => turn.request_id),
+  );
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn || turn.role !== "user" || typeof turn.request_id !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(turn.request_id) ||
+        typeof turn.text !== "string" || !turn.text.trim() || answered.has(turn.request_id)) continue;
+    return {request: turn.text, requestId: turn.request_id, conversationId};
+  }
+  return null;
+}
+
 /** Send one bounded conversation operation through the existing same-origin boundary. */
 export async function requestConversation({endpoint = "/api/conversation", operation, payload = {}, fetchImpl = globalThis.fetch}) {
   const response = await fetchImpl(endpoint, {
@@ -66,7 +89,19 @@ export async function requestConversation({endpoint = "/api/conversation", opera
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
   }
-  return value;
+  if (value.turns === undefined) return value;
+  if (!Array.isArray(value.turns)) {
+    throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
+  }
+  return {...value, turns: value.turns.map(validateConversationTurn)};
+}
+
+function validateConversationTurn(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
+  }
+  if (value.note_result_snapshot === undefined) return value;
+  return {...value, note_result_snapshot: validateNoteResultSnapshot(value.note_result_snapshot)};
 }
 
 /**
@@ -114,8 +149,51 @@ export function validateProductResponse(value) {
   if (value.request_detail !== undefined) {
     result.request_detail = validateRequestDetail(value.request_detail, request_id);
   }
+  if (value.note_result_snapshot !== undefined) {
+    result.note_result_snapshot = validateNoteResultSnapshot(value.note_result_snapshot);
+  }
   return result;
 }
+
+function validateNoteResultSnapshot(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProductRequestError("Odyssey returned an invalid Notes result set.");
+  }
+  if (value.version === 2) return validateAffectedNotesSnapshot(value);
+  if (value.version !== 1 ||
+      typeof value.query !== "string" || value.query.length === 0 || !Array.isArray(value.filters) ||
+      !Array.isArray(value.note_ids) || !Number.isInteger(value.total) ||
+      typeof value.truncated !== "boolean" || typeof value.sort !== "string" ||
+      typeof value.ranking_version !== "string" || typeof value.executed_at !== "string" ||
+      value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
+      utf8Bytes(value.query) > 512 || value.filters.length > 16 ||
+      value.filters.some((filter) => !filter || typeof filter !== "object" || Array.isArray(filter) ||
+        Object.keys(filter).length !== 3 || typeof filter.field !== "string" || typeof filter.op !== "string" || !("value" in filter)) ||
+      value.note_ids.some((id) => typeof id !== "string" || !id) ||
+      value.truncated !== (value.total > value.note_ids.length)) {
+    throw new ProductRequestError("Odyssey returned an invalid Notes result set.");
+  }
+  return {version: 1, query: value.query, filters: value.filters, sort: value.sort,
+    ranking_version: value.ranking_version, executed_at: value.executed_at,
+    note_ids: value.note_ids, total: value.total, truncated: value.truncated};
+}
+
+function validateAffectedNotesSnapshot(value) {
+  if (Object.keys(value).length !== 6 || value.kind !== "affected_notes" ||
+      typeof value.executed_at !== "string" || !Array.isArray(value.note_ids) ||
+      !Number.isInteger(value.total) || typeof value.truncated !== "boolean" ||
+      value.note_ids.length > 64 || new Set(value.note_ids).size !== value.note_ids.length ||
+      value.note_ids.some((id) => typeof id !== "string" || !id) ||
+      value.total < 1 ||
+      value.total < value.note_ids.length ||
+      value.truncated !== (value.total > value.note_ids.length)) {
+    throw new ProductRequestError("Odyssey returned an invalid Notes result set.");
+  }
+  return {version: 2, kind: "affected_notes", executed_at: value.executed_at,
+    note_ids: value.note_ids, total: value.total, truncated: value.truncated};
+}
+
+function utf8Bytes(value) { return new TextEncoder().encode(value).length; }
 
 /**
  * Validate bounded diagnostic evidence for one logical request.

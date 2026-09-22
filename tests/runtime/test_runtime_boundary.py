@@ -29,6 +29,7 @@ from odyssey_core.identity_boundary import (
     OdysseyUser,
 )
 from odyssey_core.local_conversations import ConversationRootResolver
+from odyssey_core.note_queries import StaleCursorError
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -63,6 +64,8 @@ def test_application_result_serialization_exposes_only_public_evidence() -> None
         "status": "completed",
         "planning_error": None,
         "clarification_code": None,
+        "presentation_intent": "answer",
+        "note_result_snapshot": None,
         "affected_stable_note_ids": ["note-test"],
         "actions": [],
         "pending_work": {"required": False, "persisted": False, "record_id": None, "error": None},
@@ -370,6 +373,68 @@ def test_http_boundary_rejects_invalid_input_without_calling_core() -> None:
         assert response.status == 400
         assert json.loads(response.read()) == {"error": "invalid request"}
         assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_notes_boundary_projects_one_typed_operation_and_actor() -> None:
+    """The private Notes route forwards only the operation payload and typed actor context."""
+    user = OdysseyUser.new()
+    calls: list[tuple[object, ...]] = []
+
+    class NotesRuntime:
+        def notes(self, operation, payload, actor, principal):
+            calls.append((operation, payload, actor.stable_user_id, principal))
+            return {"kind": "page", "items": [], "total": 0}
+
+    server = _test_server(NotesRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(
+                {
+                    "operation": "query",
+                    "mode": "feed",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "page", "items": [], "total": 0}
+        assert calls == [("query", {"mode": "feed"}, user.stable_user_id, None)]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_notes_boundary_fails_closed_for_stale_or_malformed_operations() -> None:
+    """Notes transport distinguishes only the safe stale-cursor condition from invalid input."""
+    calls: list[str] = []
+
+    class NotesRuntime:
+        def notes(self, operation, payload, actor, principal):
+            calls.append(operation)
+            if operation == "query":
+                raise StaleCursorError("STALE_CURSOR")
+            return {}
+
+    server = _test_server(NotesRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/notes", body=json.dumps({"operation": "query"}))
+        response = connection.getresponse()
+        assert response.status == 409
+        assert json.loads(response.read()) == {"error": "STALE_CURSOR"}
+
+        connection.request("POST", "/notes", body=json.dumps({"operation": "unknown"}))
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid notes request"}
+        assert calls == ["query"]
     finally:
         server.shutdown()
         server.server_close()
@@ -760,6 +825,133 @@ def test_http_boundary_preserves_delivery_identity_for_retries_and_distinguishes
             ("remember this", "n8n-123"),
             ("remember this", "n8n-124"),
         ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_slow_product_execution_does_not_block_health_notes_or_conversation() -> None:
+    """Threaded delivery keeps read-only product boundaries responsive during slow planning."""
+    entered = threading.Event()
+    release = threading.Event()
+    completed: dict[str, tuple[int, dict[str, object]]] = {}
+
+    class SlowRuntime:
+        def execute_product(self, *args):
+            entered.set()
+            assert release.wait(3)
+            return {"request_id": "delivery-slow", "status": "completed", "actions": []}
+
+        def notes(self, operation, payload, actor, principal):
+            assert operation == "query"
+            return {"kind": "page", "items": [], "total": 0}
+
+        def main_conversation(self, actor, principal, *, limit=None, before=None):
+            return {"conversation_id": "main", "turns": [], "has_older": False, "before": None}
+
+    server = _test_server(SlowRuntime())
+
+    def post(name, path, payload):
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+        connection.request("POST", path, body=json.dumps(payload))
+        response = connection.getresponse()
+        completed[name] = (response.status, json.loads(response.read()))
+
+    slow = threading.Thread(
+        target=post,
+        args=(
+            "execute",
+            "/execute",
+            {"request": "synthetic slow write", "request_id": "delivery-slow"},
+        ),
+    )
+    try:
+        slow.start()
+        assert entered.wait(2)
+        actor = {"stable_user_id": OdysseyUser.new().stable_user_id}
+        probes = [
+            threading.Thread(
+                target=post,
+                args=(
+                    "notes",
+                    "/notes",
+                    {"operation": "query", "mode": "feed", "authenticated_actor": actor},
+                ),
+            ),
+            threading.Thread(
+                target=post,
+                args=(
+                    "conversation",
+                    "/conversation/main",
+                    {"operation": "main", "authenticated_actor": actor},
+                ),
+            ),
+        ]
+
+        def health() -> None:
+            connection = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+            connection.request("GET", "/healthz")
+            response = connection.getresponse()
+            completed["health"] = (response.status, json.loads(response.read()))
+
+        probes.append(threading.Thread(target=health))
+        for probe in probes:
+            probe.start()
+        for probe in probes:
+            probe.join(2)
+
+        assert not any(probe.is_alive() for probe in probes)
+        assert {name: result[0] for name, result in completed.items()} == {
+            "notes": 200,
+            "conversation": 200,
+            "health": 200,
+        }
+    finally:
+        release.set()
+        slow.join(3)
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_retry_replays_completed_mutation_without_second_core_call(tmp_path: Path) -> None:
+    """The actual execute boundary returns durable mutation evidence on a lost-response retry."""
+    calls: list[str] = []
+    user = OdysseyUser.new()
+
+    def execute(request, request_id, actor, conversation_id):
+        calls.append(request_id)
+        return ApplicationResult(
+            request_id=request_id,
+            status=ApplicationStatus.COMPLETED,
+            action_results=(),
+            affected_stable_note_ids=("note-test",),
+            history=GitHistoryResult.disabled(),
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    server = _test_server(runtime)
+    payload = {
+        "request": "synthetic mutation",
+        "request_id": "delivery-replay",
+        "conversation_id": "main",
+        "authenticated_actor": {"stable_user_id": user.stable_user_id},
+    }
+    try:
+        responses = []
+        for _ in range(2):
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            connection.request("POST", "/execute", body=json.dumps(payload))
+            response = connection.getresponse()
+            assert response.status == 200
+            responses.append(json.loads(response.read()))
+
+        assert calls == ["delivery-replay"]
+        assert "delivery_replayed" not in responses[0]
+        assert responses[1]["delivery_replayed"] is True
     finally:
         server.shutdown()
         server.server_close()

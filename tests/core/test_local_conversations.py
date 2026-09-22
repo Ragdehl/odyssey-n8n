@@ -349,3 +349,57 @@ def test_request_detail_rejects_unbounded_nested_fields(tmp_path: Path, detail: 
             created_at=NOW,
             request_detail={"request_id": "req-invalid", **detail},
         )
+
+
+def test_assistant_snapshot_is_durable_idempotent_and_excluded_from_recent_context(
+    tmp_path: Path,
+) -> None:
+    """Persist result membership beside visible text without entering planner continuity."""
+    store = _store(tmp_path)
+    snapshot = {
+        "version": 1,
+        "query": "people",
+        "filters": [],
+        "sort": "relevance",
+        "ranking_version": "ui2-feed-v1",
+        "executed_at": NOW,
+        "note_ids": ["person-1"],
+        "total": 1,
+        "truncated": False,
+    }
+    kwargs = {
+        "request_id": "snapshot-1",
+        "role": "assistant",
+        "text": "Found notes.",
+        "created_at": NOW,
+        "note_result_snapshot": snapshot,
+    }
+    store.append_turn(**kwargs)
+    store.append_turn(**kwargs)
+    assert store.load_main_page()["turns"][0]["note_result_snapshot"] == snapshot
+    assert store.recent_context() == [{"role": "assistant", "text": "Found notes."}]
+
+
+def test_affected_note_snapshot_is_durable_and_excluded_from_recent_context(tmp_path: Path) -> None:
+    """Preserve mutation membership across reload without leaking it into planner continuity."""
+    store = _store(tmp_path)
+    snapshot = {
+        "version": 2,
+        "kind": "affected_notes",
+        "executed_at": NOW,
+        "note_ids": ["first", "second"],
+        "total": 2,
+        "truncated": False,
+    }
+    store.append_turn(
+        request_id="affected-1",
+        role="assistant",
+        text="La información se ha guardado.",
+        created_at=NOW,
+        note_result_snapshot=snapshot,
+    )
+
+    assert store.load_main_page()["turns"][0]["note_result_snapshot"] == snapshot
+    assert store.recent_context() == [
+        {"role": "assistant", "text": "La información se ha guardado."}
+    ]

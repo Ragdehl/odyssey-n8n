@@ -6,11 +6,17 @@ import {
   PRODUCT_REQUEST_TIMEOUT_MS,
   createRequestId,
   createSubmission,
+  findRecoverableSubmission,
   renderProductResultWithContinuity,
   requestConversation,
   requestProductResult,
   validateProductResponse,
 } from "../odyssey_web/client.js";
+import {
+  NotesRequestError,
+  requestNotes,
+  validateNotesResponse,
+} from "../odyssey_web/notes-client.js";
 
 const fakeCrypto = {randomUUID: () => "11111111-2222-4333-8444-555555555555"};
 
@@ -34,6 +40,26 @@ test("new submissions trim text and receive a safe web request id", () => {
 
 test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
+});
+
+test("reload offers the newest unmatched logical delivery without resending it", () => {
+  const turns = [
+    {request_id: "web-complete", role: "user", text: "first"},
+    {request_id: "web-complete", role: "assistant", text: "done"},
+    {request_id: "web-recover", role: "user", text: "remember this"},
+  ];
+
+  assert.deepEqual(findRecoverableSubmission(turns), {
+    request: "remember this",
+    requestId: "web-recover",
+    conversationId: "main",
+  });
+  assert.equal(findRecoverableSubmission([...turns, {
+    request_id: "web-recover", role: "assistant", text: "saved",
+  }]), null);
+  assert.equal(findRecoverableSubmission([
+    {request_id: "../unsafe", role: "user", text: "x"},
+  ]), null);
 });
 
 test("a missing secure identifier source fails closed", () => {
@@ -310,5 +336,190 @@ test("client fails closed if server returns a different request id", async () =>
   await assert.rejects(
     requestProductResult({endpoint: "/api/request", submission, fetchImpl}),
     (error) => error instanceof ProductRequestError && error.retryable === false,
+  );
+});
+
+function noteSummary(id = "marta") {
+  return {
+    id,
+    name: "Marta",
+    type: "person",
+    tags: ["trabajo"],
+    created_at: "2026-09-01T10:00:00Z",
+    updated_at: "2026-09-02T10:00:00Z",
+    properties: {company: "Thales"},
+  };
+}
+
+function notePage({mode = "feed", unavailable_ids = [], snapshot_offset = undefined} = {}) {
+  return {
+    kind: "page",
+    mode,
+    sort: "relevance",
+    ranking_version: "ui2-feed-v1",
+    as_of: "2026-09-03T10:00:00Z",
+    applied_filters: [{field: "type", op: "eq", value: "person"}],
+    items: [noteSummary()],
+    total: 1,
+    next_cursor: null,
+    ...(unavailable_ids.length ? {unavailable_ids} : {}),
+    ...(snapshot_offset === undefined ? {} : {snapshot_offset}),
+  };
+}
+
+test("Notes transport sends only the allowed same-origin operation envelope", async () => {
+  let captured;
+  const result = await requestNotes({
+    operation: "capabilities",
+    fetchImpl: async (endpoint, options) => {
+      captured = {endpoint, options};
+      return response({payload: {
+        kind: "capabilities",
+        types: [{id: "person", name: "Persona"}],
+        fields: [
+          {id: "tags", value_type: "array[string]", operators: ["contains"], applies_to: []},
+          {id: "updated_at", value_type: "string", operators: ["gte", "lte"], applies_to: [], format: "date-time"},
+        ],
+      }});
+    },
+  });
+
+  assert.equal(captured.endpoint, "/api/notes");
+  assert.equal(captured.options.credentials, "same-origin");
+  assert.equal(captured.options.cache, "no-store");
+  assert.deepEqual(JSON.parse(captured.options.body), {operation: "capabilities"});
+  assert.equal(result.types[0].id, "person");
+  assert.equal(result.fields[1].format, "date-time");
+  await assert.rejects(requestNotes({operation: "unsupported"}), NotesRequestError);
+});
+
+test("explicit intelligent Notes transport preserves visible user filters", async () => {
+  let captured;
+  await requestNotes({
+    operation: "intelligent",
+    payload: {query: "personas relacionadas con Toulouse", filters: [{field: "type", op: "eq", value: "person"}]},
+    fetchImpl: async (_endpoint, options) => {
+      captured = JSON.parse(options.body);
+      return response({payload: notePage({mode: "intelligent"})});
+    },
+  });
+  assert.deepEqual(captured, {
+    operation: "intelligent",
+    query: "personas relacionadas con Toulouse",
+    filters: [{field: "type", op: "eq", value: "person"}],
+  });
+});
+
+test("Notes browser validation accepts typed pages, detail, and explicit backlinks", () => {
+  assert.equal(validateNotesResponse(notePage()).items[0].name, "Marta");
+  assert.deepEqual(validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "Marta trabaja en Thales.",
+    body_blocks: [{kind: "paragraph", segments: [
+      {text: "Marta trabaja en "},
+      {text: "Thales", target_id: "thales", target_type: "project"},
+      {text: "."},
+    ]}],
+    links: [{target_id: "project", target_name: "Proyecto", target_type: "project", label: "Proyecto", occurrences: 1}],
+  }).body_blocks[0].segments[1].target_id, "thales");
+  assert.equal(validateNotesResponse({
+    kind: "backlinks",
+    target_id: "marta",
+    total: 1,
+    next_cursor: null,
+    items: [{source: noteSummary("alice"), occurrences: 2, snippets_truncated: false, snippets: [{
+      heading: [{text: "21/09/2026"}],
+      block: {kind: "list_item", segments: [
+        {text: "Con "}, {text: "Marta", target_id: "marta", target_type: "person"},
+      ]},
+    }]}],
+  }).items[0].occurrences, 2);
+});
+
+test("product transport accepts the closed v2 affected-note snapshot but rejects hybrids", () => {
+  const base = {request_id: "web-affected", status: "completed", kind: "acknowledgement", message: "Guardado."};
+  const payload = {...base, note_result_snapshot: {
+    version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+    note_ids: ["first", "second"], total: 2, truncated: false,
+  }};
+  assert.deepEqual(validateProductResponse(payload).note_result_snapshot.note_ids, ["first", "second"]);
+  assert.throws(() => validateProductResponse({...base, note_result_snapshot: {
+    version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+    note_ids: ["first"], total: 1, truncated: false, query: "not allowed",
+  }}), ProductRequestError);
+  assert.throws(() => validateProductResponse({...base, note_result_snapshot: {
+    version: 2, kind: "affected_notes", executed_at: "2026-09-21T10:00:00Z",
+    note_ids: [], total: 0, truncated: false,
+  }}), ProductRequestError);
+});
+
+test("Notes detail accepts an empty canonical body but rejects unsafe presentation blocks", () => {
+  const detail = validateNotesResponse({
+    kind: "detail",
+    note: noteSummary("empty"),
+    body: "",
+    body_blocks: [],
+    links: [],
+  });
+  assert.equal(detail.body, "");
+  assert.deepEqual(detail.body_blocks, []);
+  assert.throws(() => validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "",
+    body_blocks: [{kind: "paragraph", segments: [{text: "Ada", target_id: "ada"}]}],
+    links: [],
+  }), NotesRequestError);
+});
+
+test("Notes detail retains whitespace between Core-resolved inline links", () => {
+  const detail = validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "Ada y Bruno",
+    body_blocks: [{kind: "paragraph", segments: [
+      {text: "Ada", target_id: "ada", target_type: "person"},
+      {text: " y "},
+      {text: "Bruno", target_id: "bruno", target_type: "person"},
+    ]}],
+    links: [],
+  });
+  assert.equal(detail.body_blocks[0].segments[1].text, " y ");
+});
+
+test("historical Notes pages reject malformed unavailable-slot metadata", () => {
+  const valid = notePage({mode: "snapshot", unavailable_ids: ["deleted-note"], snapshot_offset: 0});
+  assert.deepEqual(validateNotesResponse(valid).unavailable_ids, ["deleted-note"]);
+  assert.throws(
+    () => validateNotesResponse(notePage({mode: "feed", unavailable_ids: ["deleted-note"]})),
+    NotesRequestError,
+  );
+  assert.throws(
+    () => validateNotesResponse({...valid, snapshot_offset: -1}),
+    NotesRequestError,
+  );
+  assert.throws(
+    () => validateNotesResponse({...valid, items: [{...noteSummary(), id: ""}]}),
+    NotesRequestError,
+  );
+});
+
+test("Notes transport fails closed for a stale cursor, malformed JSON, and network failure", async () => {
+  await assert.rejects(
+    requestNotes({
+      operation: "query",
+      fetchImpl: async () => response({ok: false, payload: {error: "STALE_CURSOR"}}),
+    }),
+    (error) => error instanceof NotesRequestError && error.code === "STALE_CURSOR",
+  );
+  await assert.rejects(
+    requestNotes({operation: "query", fetchImpl: async () => { throw new Error("offline"); }}),
+    NotesRequestError,
+  );
+  await assert.rejects(
+    requestNotes({operation: "query", fetchImpl: async () => ({ok: true, async json() { throw new Error("bad json"); }}),
+    }),
+    NotesRequestError,
   );
 });

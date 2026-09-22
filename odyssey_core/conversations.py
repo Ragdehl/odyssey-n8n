@@ -477,7 +477,17 @@ def _validate_record(record: Any, actor: str, conversation_id: str) -> None:
 
 
 def _validate_turn(turn: Any) -> None:
-    allowed = {"request_id", "role", "text", "created_at", "status", "request_detail"}
+    from .note_result_snapshots import NoteResultSnapshotError, validate_note_result_snapshot
+
+    allowed = {
+        "request_id",
+        "role",
+        "text",
+        "created_at",
+        "status",
+        "request_detail",
+        "note_result_snapshot",
+    }
     if (
         not isinstance(turn, dict)
         or not set(turn) <= allowed
@@ -489,6 +499,12 @@ def _validate_turn(turn: Any) -> None:
         raise ConversationError("conversation turn is invalid")
     _timestamp(turn["created_at"])
     _validate_request_detail(turn.get("request_detail"), turn["request_id"], turn["role"])
+    try:
+        if turn.get("note_result_snapshot") is not None and turn["role"] != "assistant":
+            raise NoteResultSnapshotError("Snapshot belongs only to an assistant turn")
+        validate_note_result_snapshot(turn.get("note_result_snapshot"))
+    except NoteResultSnapshotError as error:
+        raise ConversationError("conversation turn is invalid") from error
 
 
 def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str, Any] | None:

@@ -6,20 +6,21 @@
   <meta name="color-scheme" content="light">
   <meta name="odyssey-api-endpoint" content="/api/request">
   <meta name="odyssey-conversation-endpoint" content="/api/conversation">
+  <meta name="odyssey-notes-endpoint" content="/api/notes">
   <title>Odyssey</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <main class="shell">
-    <header class="brand" aria-label="Odyssey">
+    <section id="chat-surface" class="app-view chat-view" aria-labelledby="chat-title">
+      <header class="app-header brand" aria-label="Odyssey">
       <div class="brand-mark" aria-hidden="true">O</div>
       <div>
-        <h1>Odyssey</h1>
+        <h1 id="chat-title">Odyssey</h1>
         <p>Tu memoria, cuando la necesitas.</p>
       </div>
-    </header>
-
-    <section class="workspace" aria-labelledby="composer-title">
+      <button id="notes-tab" class="app-nav-button" type="button">Notas →</button>
+      </header>
       <h2 id="composer-title" class="sr-only">Conversación con Odyssey</h2>
       <section id="interaction" class="conversation" aria-live="polite" aria-atomic="false"></section>
 
@@ -39,7 +40,49 @@
         <button id="send-button" type="submit">Enviar</button>
       </form>
     </section>
+    <section id="notes-surface" class="app-view notes-workspace" aria-labelledby="notes-title" hidden>
+      <header class="app-header notes-app-header">
+        <button id="chat-tab" class="app-nav-button" type="button">← Chat</button>
+        <h1 id="notes-title">Notas</h1>
+      </header>
+      <section id="notes-list-view" class="notes-list-view" aria-label="Explorar notas">
+        <div class="notes-controls">
+          <button id="notes-filters" class="notes-filter-button" type="button" disabled>Filtros</button>
+          <label class="notes-sort-label" for="notes-sort">Ordenar
+            <select id="notes-sort">
+              <option value="relevance">Relevancia</option>
+              <option value="updated_desc">Actualizadas recientemente</option>
+              <option value="created_desc">Creadas recientemente</option>
+              <option value="created_asc">Creadas primero</option>
+            </select>
+          </label>
+        </div>
+        <div id="notes-filter-chips" class="notes-filter-chips" aria-label="Filtros activos"></div>
+        <p id="notes-status" class="notes-status" aria-live="polite"></p>
+        <section id="notes-list" class="notes-list" aria-label="Resultados de notas"></section>
+      </section>
+      <article id="note-detail" class="note-detail" hidden></article>
+      <form id="notes-search-form" class="notes-search-dock" role="search" novalidate>
+        <label class="sr-only" for="notes-search">Buscar notas</label>
+        <input id="notes-search" type="search" placeholder="Buscar notas…" autocomplete="off">
+        <button id="notes-intelligent" type="submit" aria-label="Búsqueda inteligente">✦</button>
+      </form>
+    </section>
   </main>
+
+  <dialog id="notes-filter-sheet" class="notes-filter-sheet" aria-labelledby="notes-filter-title">
+    <header class="notes-filter-sheet-header">
+      <h2 id="notes-filter-title">Filtros</h2>
+      <button id="notes-filter-close" class="detail-close" type="button" aria-label="Cerrar filtros">×</button>
+    </header>
+    <form id="notes-filter-form" class="notes-filter-form">
+      <div id="notes-filter-fields"></div>
+      <div class="notes-filter-actions">
+        <button id="notes-filter-clear" class="filter-secondary" type="button">Limpiar</button>
+        <button type="submit">Aplicar filtros</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="request-detail-sheet" class="request-detail-sheet" aria-labelledby="request-detail-title">
     <div class="request-detail-header">

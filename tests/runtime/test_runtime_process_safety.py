@@ -3,14 +3,29 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event, Thread
 
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
+from odyssey_core.context import ContextFilter
 from odyssey_core.conversations import MAIN_CONVERSATION_ID
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
+from odyssey_core.note_queries import (
+    Backlink,
+    BacklinkPage,
+    NoteBodyBlock,
+    NoteBodySegment,
+    NoteCapabilities,
+    NoteDetail,
+    NoteLink,
+    NotePage,
+    NotesQueryError,
+    NoteSummary,
+)
+from odyssey_core.request_planning import RequestPlan, RetrieveAction, SelectionCriteria
 from odyssey_runtime import composition
 from odyssey_runtime import server as runtime_server
 from odyssey_runtime.composition import (
@@ -34,6 +49,118 @@ def _result() -> ApplicationResult:
         affected_stable_note_ids=(),
         history=GitHistoryResult.disabled(),
     )
+
+
+def _mutation_result(request_id: str) -> ApplicationResult:
+    """Return completed mutation evidence suitable for durable delivery replay."""
+    return ApplicationResult(
+        request_id=request_id,
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=("note-1",),
+        history=GitHistoryResult.disabled(),
+    )
+
+
+def test_completed_mutation_result_replays_across_runtime_restart(tmp_path: Path) -> None:
+    """A lost response is recoverable without another Core/planner/mutation pass."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    actor = AuthenticatedActorContext(USER_A)
+    calls: list[str] = []
+
+    def execute(request, request_id, authenticated_actor, conversation_id):
+        calls.append(request_id)
+        return _mutation_result(request_id)
+
+    first = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    original = first.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+
+    restarted = RuntimeComposition(
+        core_execute=lambda *args: (_ for _ in ()).throw(AssertionError("must replay")),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    replay = restarted.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+
+    assert calls == ["delivery-1"]
+    assert replay["delivery_replayed"] is True
+    assert {key: value for key, value in replay.items() if key != "delivery_replayed"} == original
+    turns = LocalConversationStore(resolver.resolve(USER_A)).load_main_page()["turns"]
+    assert [(turn["request_id"], turn["role"]) for turn in turns] == [("delivery-1", "user")]
+
+
+def test_duplicate_delivery_waits_for_original_and_executes_core_once(tmp_path: Path) -> None:
+    """A retry arriving while the original runs receives its result without duplicate mutation."""
+    entered = Event()
+    release = Event()
+    calls: list[str] = []
+    responses: list[dict[str, object]] = []
+    resolver = ConversationRootResolver(tmp_path / "state")
+    actor = AuthenticatedActorContext(USER_A)
+
+    def execute(request, request_id, authenticated_actor, conversation_id):
+        calls.append(request_id)
+        entered.set()
+        assert release.wait(2)
+        return _mutation_result(request_id)
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+
+    first = Thread(
+        target=lambda: responses.append(
+            runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+        )
+    )
+    retry = Thread(
+        target=lambda: responses.append(
+            runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+        )
+    )
+    first.start()
+    assert entered.wait(2)
+    retry.start()
+    release.set()
+    first.join(2)
+    retry.join(2)
+
+    assert calls == ["delivery-1"]
+    assert len(responses) == 2
+    assert sum(response.get("delivery_replayed") is True for response in responses) == 1
+
+
+def test_failure_before_result_allows_same_id_retry(tmp_path: Path) -> None:
+    """A pre-result failure records no completion and permits one later safe attempt."""
+    attempts = 0
+    resolver = ConversationRootResolver(tmp_path / "state")
+
+    def execute(request, request_id, authenticated_actor, conversation_id):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("synthetic pre-commit failure")
+        return _mutation_result(request_id)
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    actor = AuthenticatedActorContext(USER_A)
+
+    with pytest.raises(RuntimeError, match="pre-commit"):
+        runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+    result = runtime.execute_product("remember synthetic fact", "delivery-1", "main", actor)
+
+    assert attempts == 2
+    assert result["request_id"] == "delivery-1"
 
 
 def test_persistent_runtime_refreshes_planner_clock_for_each_request(
@@ -114,8 +241,8 @@ def test_persistent_runtime_refreshes_planner_clock_for_each_request(
     assert request_ids == ["delivery-1", "delivery-2"]
 
 
-def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
-    """The initial adapter must not introduce concurrent Core execution implicitly."""
+def test_runtime_server_uses_concurrent_http_execution(monkeypatch) -> None:
+    """The adapter keeps reads responsive while composition serializes product writes."""
     calls: list[tuple[str, int]] = []
 
     class FakeHTTPServer:
@@ -134,7 +261,7 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
         def serve_forever(self):
             return None
 
-    monkeypatch.setattr(runtime_server, "HTTPServer", FakeHTTPServer)
+    monkeypatch.setattr(runtime_server, "ThreadingHTTPServer", FakeHTTPServer)
     runtime = RuntimeComposition(
         core_execute=lambda request, request_id: _result(), refresh_indexes=lambda: None
     )
@@ -142,6 +269,337 @@ def test_runtime_server_uses_serial_http_execution(monkeypatch) -> None:
     runtime_server.serve(runtime, host="127.0.0.1", port=18765)
 
     assert calls == [("127.0.0.1", 18765)]
+
+
+def test_runtime_builds_note_set_snapshot_from_the_canonical_notes_service() -> None:
+    """A validated note-set request uses Notes ordering and does not need an answerer seam."""
+    selection = SelectionCriteria(
+        entity=None,
+        query="personas en Toulouse",
+        type="person",
+        filters=(ContextFilter("tags", "contains", "people"),),
+        link_scope=None,
+    )
+    source = ApplicationResult(
+        request_id="notes-request",
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=(),
+        presentation_intent="note_set",
+        note_set_selection=selection,
+    )
+    calls: list[dict[str, object]] = []
+
+    class Notes:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            return NotePage(
+                mode="intelligent",
+                sort="relevance",
+                ranking_version="ui2-feed-v1",
+                as_of="2026-09-19T10:00:00+00:00",
+                applied_filters=(),
+                items=(
+                    NoteSummary(
+                        "a", "Ada", "person", (), "2026-01-01T00:00:00Z", "2026-09-01T00:00:00Z", {}
+                    ),
+                    NoteSummary(
+                        "b",
+                        "Beto",
+                        "person",
+                        (),
+                        "2026-01-01T00:00:00Z",
+                        "2026-09-02T00:00:00Z",
+                        {},
+                    ),
+                ),
+                total=2,
+                next_cursor=None,
+            )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: source,
+        refresh_indexes=lambda: None,
+        notes_service=Notes(),
+        notes_embedder=object(),
+    )
+    result = runtime.execute("Muéstrame las personas de Toulouse", "notes-request")
+
+    assert result.note_result_snapshot is not None
+    assert result.note_result_snapshot["note_ids"] == ["a", "b"]
+    assert result.note_result_snapshot["filters"] == [
+        {"field": "tags", "op": "contains", "value": "people"},
+        {"field": "type", "op": "eq", "value": "person"},
+    ]
+    assert len(calls) == 1
+    assert calls[0]["mode"] == "intelligent"
+
+
+def test_runtime_builds_exact_affected_note_snapshot_without_a_notes_query() -> None:
+    """A mutation set is derived only from Core action evidence, never a fresh search."""
+    source = ApplicationResult(
+        request_id="write-request",
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=("first", "second", "first", "third"),
+    )
+
+    class Notes:
+        def query(self, **kwargs):
+            raise AssertionError("affected-note membership must not query Notes")
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: source,
+        refresh_indexes=lambda: None,
+        notes_service=Notes(),
+    )
+    result = runtime.execute("Guarda esto", "write-request")
+
+    assert result.note_result_snapshot == {
+        "version": 2,
+        "kind": "affected_notes",
+        "executed_at": result.note_result_snapshot["executed_at"],
+        "note_ids": ["first", "second", "third"],
+        "total": 3,
+        "truncated": False,
+    }
+
+
+def test_runtime_answer_intent_does_not_execute_an_extra_notes_query() -> None:
+    """Normal Chat answers retain their existing request path without Notes side effects."""
+    calls: list[object] = []
+
+    class Notes:
+        def query(self, **kwargs):
+            calls.append(kwargs)
+            raise AssertionError("answer intent must not query Notes")
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=Notes(),
+        notes_embedder=object(),
+    )
+    assert runtime.execute("¿Dónde trabaja Marta?", "answer-request").note_result_snapshot is None
+    assert calls == []
+
+
+def test_runtime_answer_and_note_set_attaches_membership_without_altering_answer_evidence() -> None:
+    """An answer-plus-set request retains its normal Core result while adding a Notes snapshot."""
+    selection = SelectionCriteria(None, "Airbus", None, (), None)
+    source = ApplicationResult(
+        request_id="answer-and-set",
+        status=ApplicationStatus.COMPLETED,
+        action_results=(),
+        affected_stable_note_ids=(),
+        presentation_intent="answer_and_note_set",
+        note_set_selection=selection,
+    )
+
+    class Notes:
+        def query(self, **kwargs):
+            return NotePage(
+                "intelligent",
+                "relevance",
+                "ui2-feed-v1",
+                "2026-09-19T10:00:00+00:00",
+                (),
+                (
+                    NoteSummary(
+                        "airbus",
+                        "Airbus",
+                        "project",
+                        (),
+                        "2026-01-01T00:00:00Z",
+                        "2026-09-01T00:00:00Z",
+                        {},
+                    ),
+                ),
+                1,
+                None,
+            )
+
+    result = RuntimeComposition(
+        core_execute=lambda *args: source,
+        refresh_indexes=lambda: None,
+        notes_service=Notes(),
+        notes_embedder=object(),
+    ).execute("Explica Airbus y muestra las notas", "answer-and-set")
+
+    assert result is not source
+    assert result.presentation_intent == "answer_and_note_set"
+    assert result.note_result_snapshot is not None
+    assert result.note_result_snapshot["note_ids"] == ["airbus"]
+
+
+def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
+    """The runtime forwards typed Notes operations without adding filter/ranking semantics."""
+    summary = NoteSummary(
+        "ada", "Ada", "person", ("people",), "2026-01-01T00:00:00Z", "2026-09-01T00:00:00Z", {}
+    )
+    page = NotePage(
+        "feed", "relevance", "ui2-feed-v1", "2026-09-19T00:00:00Z", (), (summary,), 1, None
+    )
+
+    class Notes:
+        def capabilities(self):
+            return NoteCapabilities(({"id": "person", "name": "Person"},), ())
+
+        def query(self, **kwargs):
+            assert kwargs["mode"] == "feed"
+            return page
+
+        def detail(self, note_id):
+            assert note_id == "ada"
+            return NoteDetail(
+                summary,
+                "Current canonical body.",
+                (NoteBodyBlock("paragraph", (NoteBodySegment("Current canonical body."),)),),
+                (NoteLink("ada", "Ada", "person", "Ada", 1),),
+            )
+
+        def backlinks(self, note_id, **kwargs):
+            assert note_id == "ada"
+            return BacklinkPage("ada", (Backlink(summary, 1, (), False),), 1, None)
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(), refresh_indexes=lambda: None, notes_service=Notes()
+    )
+    assert runtime.notes("capabilities", {})["kind"] == "capabilities"
+    assert runtime.notes("query", {"mode": "feed"})["items"][0]["id"] == "ada"
+    detail = runtime.notes("detail", {"note_id": "ada"})
+    assert detail["body"] == "Current canonical body."
+    assert detail["body_blocks"] == [
+        {"kind": "paragraph", "segments": [{"text": "Current canonical body."}]}
+    ]
+    assert detail["links"][0]["target_id"] == "ada"
+    assert runtime.notes("backlinks", {"note_id": "ada"})["items"][0]["source"]["id"] == "ada"
+    with pytest.raises(ValueError, match="unsupported"):
+        runtime.notes("unknown", {})
+
+
+def test_runtime_intelligent_notes_rejects_invalid_transport_without_replanning() -> None:
+    """The runtime allows the explicit intelligent operation only through its injected Core seam."""
+    calls: list[tuple[str, object]] = []
+    summary = NoteSummary(
+        "ada", "Ada", "person", (), "2026-01-01T00:00:00Z", "2026-09-01T00:00:00Z", {}
+    )
+
+    def intelligent(query, filters):
+        calls.append((query, filters))
+        return NotePage(
+            "intelligent",
+            "relevance",
+            "ui2-feed-v1",
+            "2026-09-19T00:00:00Z",
+            (),
+            (summary,),
+            1,
+            None,
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),
+        intelligent_notes_execute=intelligent,
+    )
+    assert runtime.notes("intelligent", {"query": "Ada", "filters": []})["mode"] == "intelligent"
+    assert calls == [("Ada", [])]
+    with pytest.raises(NotesQueryError, match="do not re-plan"):
+        runtime.notes("intelligent", {"query": "Ada", "filters": [], "cursor": "forbidden"})
+
+
+def test_intelligent_notes_uses_the_injected_planner_and_surfaces_deduplicated_filters(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Keep the explicit Notes action on the one validated planner and Core query path."""
+    captured: list[dict[str, object]] = []
+
+    class FakeIndex:
+        """Accept the derived-index build seam without touching a provider."""
+
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        def rebuild(self, *args, **kwargs):
+            del args, kwargs
+
+    class FakePlanner:
+        """Return one safe planner-backed direct retrieval for the explicit Notes action."""
+
+        @classmethod
+        def from_environment(cls, schema, clock):
+            del schema, clock
+            return cls()
+
+        def plan(self, query):
+            assert query == "personas relacionadas con Toulouse"
+            return RequestPlan(
+                (
+                    RetrieveAction(
+                        SelectionCriteria(
+                            None,
+                            "Toulouse",
+                            "person",
+                            (ContextFilter("type", "eq", "person"),),
+                            None,
+                        )
+                    ),
+                ),
+                (),
+            )
+
+    class FakeNotes:
+        """Record only the Core query selected after the validated plan."""
+
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        def query(self, **kwargs):
+            captured.append(kwargs)
+            return NotePage(
+                "intelligent",
+                "relevance",
+                "ui2-feed-v1",
+                "2026-09-21T10:00:00Z",
+                (ContextFilter("type", "eq", "person"),),
+                (),
+                0,
+                None,
+            )
+
+    monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(tmp_path / "vault"))
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(tmp_path / "runtime"))
+    monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(tmp_path / "pending"))
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(tmp_path / "state"))
+    (tmp_path / "state").mkdir()
+    monkeypatch.setattr(composition, "VaultRepository", lambda root: ("vault", root))
+    monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **kwargs: object())
+    monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
+    monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
+    monkeypatch.setattr(composition, "NotesQueryService", FakeNotes)
+    monkeypatch.setattr(composition, "OpenAIRequestPlanner", FakePlanner)
+    monkeypatch.setattr(composition, "OpenAIContextualReasoner", lambda *args, **kwargs: object())
+    monkeypatch.setattr(composition, "OpenAILunaWriter", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
+    monkeypatch.setattr(composition, "PendingWorkRepository", lambda root: object())
+    monkeypatch.setattr(composition, "GitHistoryRecorder", lambda root: object())
+
+    runtime = composition.build_runtime_from_environment()
+    result = runtime.notes(
+        "intelligent",
+        {
+            "query": "personas relacionadas con Toulouse",
+            "filters": [{"field": "type", "op": "eq", "value": "person"}],
+        },
+    )
+
+    assert result["kind"] == "page"
+    assert len(captured) == 1
+    assert captured[0]["mode"] == "intelligent"
+    assert captured[0]["query"] == "Toulouse"
+    assert captured[0]["filters"] == ({"field": "type", "op": "eq", "value": "person"},)
 
 
 def test_runtime_server_rejects_invalid_port() -> None:
