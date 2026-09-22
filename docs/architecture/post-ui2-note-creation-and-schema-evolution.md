@@ -34,6 +34,46 @@ Questions to answer:
 - Can later retrieval answer both entity-centric questions and event-centric questions from the resulting graph of notes/links?
 - Can retrieval include relevant incoming-link context without pulling every backlink or entire source note into the model context?
 
+### Reference, kinship and bounded-set resolution
+
+Real mobile use exposed an important class of natural references that Odyssey must resolve before creating new entities or writing durable facts.
+
+Examples include:
+
+- `mis padres` after the user's parent relationships are already known;
+- `mi hija` when a unique known daughter can be resolved;
+- `todos los que estaban ayer`, where a prior event/journal context already identifies the bounded participant set;
+- `todos los del grupo`, when the current/recent context identifies the relevant people;
+- relational phrases such as `sus hijos`, `su pareja`, or `mis compañeros` when the source entity and relation are already grounded.
+
+Expected direction:
+
+1. Resolve the reference against known canonical identities and explicit relationships/context before considering CREATE.
+2. If the reference resolves to one or more stable entities, preserve explicit links to those entities in the durable fact even when the fact remains physically stored on another note.
+3. Do not create generic canonical entities such as `mi hija`, `mis padres`, `todos los del grupo`, or `su pareja` merely because the surface phrase appeared in prose.
+4. If a singular relational phrase is genuinely ambiguous (for example several known daughters and no further evidence), fail closed/clarify rather than guessing.
+5. Plural references may legitimately resolve to a bounded set; the writer/link binder must be able to bind all resolved targets, not just the first one.
+
+Concrete acceptance examples for the exploration:
+
+- With known parents Juan and Ana, `Quiero comprarles unas entradas a mis padres` may remain a fact on the user's own note or another appropriate canonical note, but the fact must link to **both Juan and Ana** so their backlinks/retrieval expose the information.
+- With one uniquely known daughter Chloe, `Quiero comprarle X a mi hija` should resolve `mi hija` to Chloe and must **not** create a new person note named `mi hija`.
+- After an event establishes named attendees, `Todos los que estaban ayer fuimos juntos al colegio Laia` should bind the shared fact to the resolved attendee identities through explicit links/context rather than leaving only unlinked prose.
+
+The objective is not broad commonsense inference. Resolution must remain evidence-grounded, identity-safe, deterministic where possible, and fail closed when the relation/reference is not sufficiently grounded.
+
+### Relational / graph-aware Notes search
+
+The Notes intelligent-search surface also exposed a distinction between semantic text search and relationship traversal.
+
+A query such as:
+
+`Hijos de Lara`
+
+should be able to resolve `Lara` as an entity, inspect explicit grounded relationship/link evidence such as `Sus hijas se llaman [[Aura]] y [[Enia]]`, and return the **target person notes Aura and Enia**. It should not require an artificial schema filter when the user intent is relationship traversal.
+
+The post-UI-2 exploration should therefore define how planner/retrieval represents bounded relation-following queries without turning the browser into a graph engine or making backlinks a second authority. Exact explicit links and canonical relation evidence should be preferred over open-ended inference. The same mechanism should support queries such as spouse/partner, children, parents, collaborators or explicitly stated group membership when the source evidence is present.
+
 ### Fact deduplication and correction
 
 Real DEV notes also exposed two distinct duplicate patterns that must be handled deliberately:
@@ -112,7 +152,30 @@ Before implementation, define explicit mutation semantics for schema changes, in
 
 Natural-language Chat may be the user-facing control surface, but schema mutation must pass through one typed, validated Core capability rather than granting the planner or browser direct authority over `config/note-schema.json`.
 
-## D. Product questions to observe rather than decide now
+## D. Notes presentation and browsing follow-ups
+
+### Controlled tag filtering
+
+The mobile filter review showed that tags should not normally be entered as arbitrary free text. The future Notes filter UX should present **existing canonical tags** as controlled selectable values (for example searchable chips/multiselect when the list is large). Creating a new tag, if supported, is a separate knowledge/schema action and must not happen implicitly merely because a user typed an unknown value into a filter.
+
+### Derived human-readable note view
+
+Canonical Notes intentionally expose atomic facts and backlinks because that representation is precise and useful for editing/retrieval, but it can be visually mechanical for ordinary reading. Explore an optional user-triggered **readable view** that is a derived presentation layer over the canonical facts/relationships.
+
+Desired contract:
+
+- Canonical Markdown/facts/backlinks remain the authority.
+- A button or view toggle may generate a fluent human-readable rendering from the note's own facts plus bounded relevant relationship/backlink evidence.
+- The generated view must preserve Odyssey links/identity navigation rather than flattening entity references into plain text.
+- The generation step must not add new knowledge, make unsupported deductions, or silently mutate canonical facts.
+- The generated presentation may be cached for fast later reads.
+- Cache validity should depend on the effective evidence projection (direct facts/properties plus relevant links/backlinks) and generator/version, not only on the note file's own modification time. A new relevant incoming fact may therefore invalidate the readable cache even if the target Markdown file itself did not change.
+- If evidence changes, the cached readable view becomes stale and should be regenerated lazily or explicitly rather than presented as current.
+- The original fact-oriented view must always remain available.
+
+This should remain a presentation/cache capability, not a second personal-knowledge authority.
+
+## E. Product questions to observe rather than decide now
 
 Do not decide during UI-2 whether Chat or Notes should become Odyssey's primary landing surface.
 
@@ -131,14 +194,18 @@ finish UI-2 read-only Notes
         v
 bounded note-creation + planner-cost/latency exploration
         |
-        +--> knowledge distribution / relations / backlinks / entity-note quality
+        +--> reference/kinship/group resolution before entity creation
+        +--> relationship traversal + graph-aware Notes search
+        +--> knowledge distribution / backlinks / entity-note quality
         +--> exact + semantic fact deduplication and correction semantics
+        +--> planner latency/cost investigation
+        +--> controlled-tag Notes polish
+        +--> readable derived-note presentation/cache contract
         +--> date/day navigation + Daily-note semantics
-        +--> narrative-write planner optimization investigation
         +--> conversational schema-management contract
         |
         v
 only then decide implementation slices and resume broader application roadmap
 ```
 
-This document records the intended immediate follow-up only. It does not authorize schema mutation, production changes, provider/model changes, or planner fast paths by itself.
+This document records the intended immediate follow-up only. It does not authorize schema mutation, production changes, provider/model changes, planner fast paths, relation inference, or generated-readable-note persistence as personal knowledge by itself.
