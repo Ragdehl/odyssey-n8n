@@ -70,7 +70,7 @@ evidence is clean but budget-bounded after one Luna→Sol case; Python CI and So
 new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
-The final bounded UI-2 polish is deployed to isolated DEV at `230ec9c`: successful mutations retain
+The final bounded UI-2 polish is deployed to isolated DEV at `a8d209e`: successful mutations retain
 an exact, bounded affected-note set from Core action evidence (`Guardado · Ver N notas`), and
 backlinks expose only current canonical occurrence blocks that literally resolve to the viewed note.
 Search snapshots remain separately versioned and rerunnable; mutation sets are explicitly non-search
@@ -81,7 +81,9 @@ coverage with zero Security Hotspots, and isolated DEV source/workflow/public-ro
 existing inline recovery behavior before PR #124 can be considered for merge approval. Snapshot
 result sets now provide `Ver todas`, which returns only Notes to the normal relevance feed without
 mutating the durable snapshot; an unsafe intelligent-filter response clears prior rows before its
-bounded error rather than presenting stale results under the failed query.
+bounded error rather than presenting stale results under the failed query. Returning from note detail
+now restores the originating list status and snapshot exit controls without reloading or rerunning a
+query; the remaining gate is one final 30-second authenticated mobile check of that path.
 
 Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
 

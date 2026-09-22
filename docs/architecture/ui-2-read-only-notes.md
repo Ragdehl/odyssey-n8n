@@ -1,7 +1,7 @@
 # UI-2 — read-only Notes product contract
 
 Status: **the final bounded UI-2 presentation work is deployed to isolated DEV at
-`230ec9c531823460b64981c4dae70415e5b3777b`. Successful mutations now retain an exact, bounded
+`a8d209e`. Successful mutations now retain an exact, bounded
 affected-note membership snapshot (`Guardado` / `Ver N notas`) without a new search; v1 historical
 search snapshots remain rerunnable and v2 affected-note snapshots are explicitly non-rerunnable.
 Backlinks now derive bounded, occurrence-level current-Markdown blocks rather than a whole-note
@@ -18,7 +18,9 @@ complete in PROD. The final UX correction adds `Ver todas` to both snapshot mode
 ephemeral Notes snapshot/list state and returns to the normal relevance feed without changing the
 durable Chat snapshot. An intelligent search whose inferred filters cannot be represented now clears
 prior rows before showing its bounded failure, so stale results cannot be attributed to the failed
-query. Production ingress, Access, CSP, DNS, origin, and fallback remain unchanged.**
+query. Returning from note detail restores the originating list status, including `Ver todas` and
+historical rerun controls, without reloading or rerunning a query. Production ingress, Access, CSP,
+DNS, origin, and fallback remain unchanged.**
 
 ## Long-write reliability closure
 
