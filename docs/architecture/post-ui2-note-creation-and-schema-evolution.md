@@ -62,6 +62,20 @@ Concrete acceptance examples for the exploration:
 
 The objective is not broad commonsense inference. Resolution must remain evidence-grounded, identity-safe, deterministic where possible, and fail closed when the relation/reference is not sufficiently grounded.
 
+### Relationship semantics: symmetric, inverse, and non-inferable
+
+The exploration should explicitly distinguish relation semantics instead of relying on the model to rediscover them ad hoc.
+
+Examples:
+
+- **Symmetric relation**: if an explicit fact states that A is married to B, the relationship is usable from B's viewpoint as married to A. Explicit friendship and coworker relationships may also be symmetric when that is the declared relation/context.
+- **Inverse relation**: `A is daughter of B` and `B is parent of A` are two viewpoints over the same grounded relationship, not two unrelated facts.
+- **Non-inferable relation**: `A lives in Calonge` plus `B is A's partner` does **not** establish that B lives in Calonge.
+- **Non-transitive relation**: `A knows B` and `B knows C` does **not** establish that A knows C.
+- **Co-occurrence is not relationship**: being at the same meal/workplace/event does not by itself establish friendship/coworker status unless the user explicitly states it.
+
+The representation may remain textual/link-based initially; a formal relation registry should only be introduced where it materially improves deterministic behavior. Whatever representation is chosen, retrieval and browsing must expose grounded symmetric/inverse viewpoints without forcing duplicated prose that can drift.
+
 ### Relational / graph-aware Notes search
 
 The Notes intelligent-search surface also exposed a distinction between semantic text search and relationship traversal.
@@ -158,6 +172,18 @@ Natural-language Chat may be the user-facing control surface, but schema mutatio
 
 The mobile filter review showed that tags should not normally be entered as arbitrary free text. The future Notes filter UX should present **existing canonical tags** as controlled selectable values (for example searchable chips/multiselect when the list is large). Creating a new tag, if supported, is a separate knowledge/schema action and must not happen implicitly merely because a user typed an unknown value into a filter.
 
+### Negative / exclusion filters
+
+A future Notes filter algebra should support bounded **exclusion** use cases such as `all except February`, `type is not X`, or `tag does not contain Y` without forcing the user to select every allowed value manually.
+
+Product constraints:
+
+- exclusion must remain understandable on mobile (for example an explicit Include/Exclude mode or clear negative chips rather than hidden boolean logic);
+- Core owns the filter semantics; the browser must not invent its own NOT interpretation;
+- define how exclusion combines with multiple values and ranges before implementation;
+- avoid an unrestricted boolean-query builder unless real use demonstrates the need;
+- planner-inferred negative filters must remain visible/editable/removable just like positive inferred filters.
+
 ### Derived human-readable note view
 
 Canonical Notes intentionally expose atomic facts and backlinks because that representation is precise and useful for editing/retrieval, but it can be visually mechanical for ordinary reading. Explore an optional user-triggered **readable view** that is a derived presentation layer over the canonical facts/relationships.
@@ -195,11 +221,12 @@ finish UI-2 read-only Notes
 bounded note-creation + planner-cost/latency exploration
         |
         +--> reference/kinship/group resolution before entity creation
+        +--> symmetric/inverse relationship semantics
         +--> relationship traversal + graph-aware Notes search
         +--> knowledge distribution / backlinks / entity-note quality
         +--> exact + semantic fact deduplication and correction semantics
         +--> planner latency/cost investigation
-        +--> controlled-tag Notes polish
+        +--> controlled tags + negative-filter Notes polish
         +--> readable derived-note presentation/cache contract
         +--> date/day navigation + Daily-note semantics
         +--> conversational schema-management contract
@@ -208,4 +235,4 @@ bounded note-creation + planner-cost/latency exploration
 only then decide implementation slices and resume broader application roadmap
 ```
 
-This document records the intended immediate follow-up only. It does not authorize schema mutation, production changes, provider/model changes, planner fast paths, relation inference, or generated-readable-note persistence as personal knowledge by itself.
+This document records the intended immediate follow-up only. It does not authorize schema mutation, production changes, provider/model changes, planner fast paths, relation inference, unrestricted boolean filtering, or generated-readable-note persistence as personal knowledge by itself.
