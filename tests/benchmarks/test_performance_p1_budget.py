@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -220,3 +221,91 @@ def test_diagnostic_report_preserves_two_attempts_and_unavailable_cost() -> None
     operational["stages"][0]["duration_ms"] = 9100
     with pytest.raises(ValueError, match="does not reconcile"):
         format_request_report("R1", operational, PRICING)
+
+
+def test_exact_full_request_reserve_is_allowed_and_never_released() -> None:
+    """The guard admits equality and retains the full bound after cheaper actual usage."""
+    request = envelope("exact")
+    amount = worst_case_cost(request, PRICING)
+    guard = BudgetGuard(PRICING, amount)
+    assert guard.reserve(request) == amount
+    assert guard.finish(Decimal("0.001")) == amount
+    assert guard.charged == amount
+    with pytest.raises(BudgetError, match="could exceed"):
+        guard.reserve(request)
+
+
+def test_invalid_observed_cost_does_not_release_possible_spend() -> None:
+    """A malformed post-call estimate cannot make already possible billing disappear."""
+    request = envelope("one")
+    amount = worst_case_cost(request, PRICING)
+    guard = BudgetGuard(PRICING, amount)
+    guard.reserve(request)
+    with pytest.raises(BudgetError, match="exceeded"):
+        guard.finish(amount + Decimal("0.001"))
+    assert guard.charged == amount
+    with pytest.raises(BudgetError, match="could exceed"):
+        guard.reserve(request)
+
+
+def test_unknown_model_and_missing_output_bound_refuse() -> None:
+    """An unknown rate or output maximum cannot be priced as zero."""
+    with pytest.raises(BudgetError, match="no dated price"):
+        worst_case_cost(
+            CaseEnvelope("unknown", (CallBound("answerer", "unknown", 100, 100, 1),), True),
+            PRICING,
+        )
+    with pytest.raises(BudgetError, match="invalid"):
+        worst_case_cost(
+            CaseEnvelope("uncapped", (CallBound("answerer", "luna", 100, None, 1),), True),  # type: ignore[arg-type]
+            PRICING,
+        )
+
+
+def test_long_context_without_frozen_uplift_refuses() -> None:
+    """The guard cannot underprice the model's published long-context tier."""
+    frozen = {
+        "models": {
+            "gpt-5.6-sol": {
+                "input_per_million": 4,
+                "output_per_million": 20,
+            }
+        }
+    }
+    with pytest.raises(BudgetError, match="long-context price"):
+        worst_case_cost(
+            CaseEnvelope(
+                "large",
+                (CallBound("planner.sol_fallback", "gpt-5.6-sol", 272_001, 4096, 1),),
+                True,
+            ),
+            frozen,
+        )
+
+
+def test_frozen_case_audit_fails_closed_and_read_witness_exceeds_ceiling() -> None:
+    """Current product paths have no certified per-case envelope under USD 0.20."""
+    root = Path(__file__).resolve().parents[2]
+    audit = json.loads(
+        (root / "benchmarks/performance_p1/envelope_audit.json").read_text(encoding="utf-8")
+    )
+    assert set(audit["cases"]) == {"R1", "R2", "W1", "W2", "W3", "C1", "N1"}
+    assert audit["certified"] is False
+    assert audit["seven_case_max_usd"] is None
+    assert all(case["max_cost_usd"] is None for case in audit["cases"].values())
+    rates = audit["roles"]
+    output_only = sum(
+        (
+            Decimal(
+                str(
+                    rates[name]["configured_max_output_tokens"]
+                    or audit["model_hard_max_output_tokens"]
+                )
+            )
+            * Decimal(rates[name]["frozen_rate_usd_per_million"]["output_including_reasoning"])
+            / Decimal(1_000_000)
+        )
+        for name in ("planner.luna", "planner.sol_fallback", "answerer")
+    )
+    assert output_only == Decimal(audit["output_only_read_fallback_witness_usd"])
+    assert output_only > Decimal(audit["ceiling_usd"])

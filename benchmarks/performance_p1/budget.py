@@ -10,6 +10,7 @@ from typing import Any
 
 PRICING_PATH = Path(__file__).resolve().parents[1] / "phase20_answerer/pricing_snapshot.json"
 INITIAL_CEILING_USD = Decimal("0.20")
+LONG_CONTEXT_PRICE_THRESHOLD_TOKENS = 272_000
 
 
 class BudgetError(ValueError):
@@ -59,10 +60,15 @@ def worst_case_cost(envelope: CaseEnvelope, pricing: dict[str, Any]) -> Decimal:
             or type(bound.max_input_tokens) is not int
             or type(bound.max_output_tokens) is not int
             or type(bound.max_calls) is not int
-            or min(bound.max_input_tokens, bound.max_output_tokens) < 0
+            or min(bound.max_input_tokens, bound.max_output_tokens) <= 0
             or bound.max_calls < 1
         ):
             raise BudgetError("request call bound is invalid")
+        if (
+            bound.model in {"gpt-5.6-luna", "gpt-5.6-sol"}
+            and bound.max_input_tokens > LONG_CONTEXT_PRICE_THRESHOLD_TOKENS
+        ):
+            raise BudgetError("long-context price is absent from the frozen snapshot")
         rates = pricing["models"].get(bound.model)
         if not isinstance(rates, dict):
             raise BudgetError("request model has no dated price")
@@ -116,6 +122,9 @@ class BudgetGuard:
             raise BudgetError("request has no cost reservation")
         reservation = self._reservation
         self._reservation = None
+        # A request may already have billed provider work even when its reported cost is
+        # malformed. Never release that possible spend into a later request's budget.
+        self.charged += reservation
         if measured_cost is not None and (
             not isinstance(measured_cost, Decimal)
             or not measured_cost.is_finite()
@@ -123,5 +132,4 @@ class BudgetGuard:
             or measured_cost > reservation
         ):
             raise BudgetError("observed cost exceeded its reviewed request bound")
-        self.charged += reservation
         return reservation

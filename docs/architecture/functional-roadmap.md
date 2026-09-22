@@ -30,8 +30,8 @@ UI-2 read-only Notes was human-merged in PR #124 at `73289c64c48df926974fe6e78c6
 The immediate next bounded phase is [Performance / Latency / Cost P1](performance-cost-p1.md):
 complete the existing request-path evidence, measure a small synthetic DEV baseline, diagnose the
 dominant avoidable contributor, then select one optimization and verify it against the same cases.
-P1A deterministic observability is on the feature branch for review; no live baseline or
-optimization has run.
+P1A deterministic observability is on Draft PR #125; its whole-request live cost envelope is
+uncertified pending a reviewed product-boundary decision. No live baseline or optimization has run.
 
 After P1 diagnosis and its one evidence-driven optimization, continue the
 [post-UI-2 note creation and schema evolution direction](post-ui2-note-creation-and-schema-evolution.md),
@@ -72,7 +72,7 @@ UI-1 request detail / advanced inspector                         ✅ complete in
 UI-0 durable main conversation/continuity                        ✅ complete in PROD
 UI-0 explicit production promotion                              ✅ complete
 UI-2 read-only Notes                                              ✅ merged in PR #124
-Performance / Latency / Cost P1A (deterministic measurement; review pending) ➡️ current
+Performance / Latency / Cost P1A (cost envelope decision pending; Draft PR #125) ➡️ current
 Performance / Latency / Cost P1B–P1D (baseline → one selected change → comparison) ⬜ after P1A
 Post-UI-2 backlink/context and reference-resolution work        ⬜ planned after P1
 Tasks — first real application + minimal app routing              ⬜ planned

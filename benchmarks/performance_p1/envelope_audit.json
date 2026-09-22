@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "source_head_reviewed": "d1cdaa8bf6cb32024cdc3bea0c9ca920c392b588",
+  "pricing_snapshot": "benchmarks/phase20_answerer/pricing_snapshot.json",
+  "pricing_as_of": "2026-09-07",
+  "ceiling_usd": "0.20",
+  "certified": false,
+  "seven_case_max_usd": null,
+  "classification": "C_UNCERTIFIED",
+  "output_only_read_fallback_witness_usd": "0.2379776",
+  "model_hard_max_output_tokens": 128000,
+  "model_context_tokens": 1050000,
+  "roles": {
+    "planner.luna": {
+      "model": "gpt-5.6-luna",
+      "reasoning": "low",
+      "max_attempts_per_invocation": 1,
+      "configured_max_output_tokens": 2048,
+      "max_input_tokens": null,
+      "frozen_rate_usd_per_million": {
+        "ordinary_input": "0.2",
+        "cached_input": "0.02",
+        "output_including_reasoning": "1.2"
+      },
+      "model_hard_max_output_tokens": 128000
+    },
+    "planner.sol_fallback": {
+      "model": "gpt-5.6-sol",
+      "reasoning": "low",
+      "max_attempts_per_invocation": 1,
+      "configured_max_output_tokens": 4096,
+      "max_input_tokens": null,
+      "condition": "Luna RequestPlanningError after fail-closed validation",
+      "frozen_rate_usd_per_million": {
+        "ordinary_input": "4.0",
+        "cached_input": "0.4",
+        "output_including_reasoning": "20.0"
+      },
+      "model_hard_max_output_tokens": 128000
+    },
+    "contextual_resolution": {
+      "model": null,
+      "default_model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "max_attempts_per_invocation": 1,
+      "configured_max_output_tokens": null,
+      "max_input_tokens": null,
+      "condition": "target resolution has ambiguous candidates; ODYSSEY_CONTEXTUAL_MODEL can override model",
+      "frozen_rate_usd_per_million": {
+        "ordinary_input": "0.2",
+        "cached_input": "0.02",
+        "output_including_reasoning": "1.2"
+      },
+      "model_hard_max_output_tokens": 128000
+    },
+    "writer": {
+      "model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "max_attempts_per_invocation": 1,
+      "configured_max_output_tokens": null,
+      "max_input_tokens": null,
+      "condition": "existing-note update needs bounded writer, including eligible bulk updates",
+      "frozen_rate_usd_per_million": {
+        "ordinary_input": "0.2",
+        "cached_input": "0.02",
+        "output_including_reasoning": "1.2"
+      },
+      "model_hard_max_output_tokens": 128000
+    },
+    "fact_selector": {
+      "model": "gpt-5.6-luna",
+      "reasoning": "medium",
+      "max_attempts_per_invocation": 1,
+      "configured_max_output_tokens": null,
+      "max_input_tokens": null,
+      "condition": "ambiguous atomic fact removal",
+      "frozen_rate_usd_per_million": {
+        "ordinary_input": "0.2",
+        "cached_input": "0.02",
+        "output_including_reasoning": "1.2"
+      },
+      "model_hard_max_output_tokens": 128000
+    },
+    "answerer": {
+      "model": "gpt-5.6-luna",
+      "reasoning": "none",
+      "max_attempts_per_invocation": 1,
+      "configured_max_output_tokens": null,
+      "max_input_tokens": null,
+      "condition": "Chat route has retrieved evidence items",
+      "frozen_rate_usd_per_million": {
+        "ordinary_input": "0.2",
+        "cached_input": "0.02",
+        "output_including_reasoning": "1.2"
+      },
+      "model_hard_max_output_tokens": 128000
+    }
+  },
+  "cases": {
+    "R1": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?",
+        "answerer?"
+      ],
+      "additional_valid_plan_work": "unbounded action/unit count",
+      "max_provider_calls": null,
+      "max_cost_usd": null
+    },
+    "R2": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?",
+        "answerer?"
+      ],
+      "additional_valid_plan_work": "unbounded action/unit count",
+      "max_provider_calls": null,
+      "max_cost_usd": null
+    },
+    "W1": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?",
+        "contextual_resolution? per target",
+        "writer? per eligible unit or bulk note",
+        "fact_selector? per eligible unit",
+        "answerer? if retrieval items"
+      ],
+      "additional_valid_plan_work": "unbounded action/unit and all_matching note count",
+      "max_provider_calls": null,
+      "max_cost_usd": null
+    },
+    "W2": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?",
+        "contextual_resolution? per target",
+        "writer? per eligible unit or bulk note",
+        "fact_selector? per eligible unit",
+        "answerer? if retrieval items"
+      ],
+      "additional_valid_plan_work": "unbounded action/unit and all_matching note count",
+      "max_provider_calls": null,
+      "max_cost_usd": null
+    },
+    "W3": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?",
+        "contextual_resolution? per target",
+        "writer? per eligible unit or bulk note",
+        "fact_selector? per eligible unit",
+        "answerer? if retrieval items"
+      ],
+      "additional_valid_plan_work": "unbounded action/unit and all_matching note count",
+      "max_provider_calls": null,
+      "max_cost_usd": null
+    },
+    "C1": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?"
+      ],
+      "additional_valid_plan_work": "oracle checks clarification after execution; a valid unexpected plan may execute unbounded actions/units",
+      "max_provider_calls": null,
+      "max_cost_usd": null
+    },
+    "N1": {
+      "intended_route": [
+        "planner.luna",
+        "planner.sol_fallback?"
+      ],
+      "additional_valid_plan_work": "Notes route validates one direct RetrieveAction before execution",
+      "max_provider_calls": 2,
+      "max_cost_usd": null
+    }
+  },
+  "blocking_gaps": [
+    "No reviewed pre-call input-token bound for rendered planner, answerer, resolver, writer or fact selector payloads",
+    "No configured output-token ceiling for answerer, contextual resolver, writer or fact selector; model hard maximum is too costly for the requested baseline",
+    "No deterministic maximum action/unit count for Chat RequestPlan or all_matching note fanout",
+    "Contextual resolver model is environment-configurable and must be pinned in isolated DEV",
+    "Frozen pricing snapshot does not encode the model long-context surcharge or cache-write price",
+    "No isolated disposable DEV executor is wired to the currently fail-closed live CLI"
+  ]
+}
