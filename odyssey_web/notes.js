@@ -20,7 +20,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   const state = {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
-    snapshot: null, capabilities: {types: [], fields: []},
+    snapshot: null, total: 0, capabilities: {types: [], fields: []},
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -59,6 +59,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
         state.items.push(...page.items);
       }
       state.cursor = page.next_cursor;
+      state.total = page.total;
       state.historical = page.mode === "snapshot";
       state.mode = page.mode;
       renderList();
@@ -85,7 +86,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     }
   }
 
-  function renderStatus(total) {
+  function renderStatus(total = state.total) {
     if (!state.historical || !state.snapshot) {
       status.textContent = total ? `${total} notas` : "No hay notas";
       return;
@@ -277,7 +278,6 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
       }
       state.current = value;
       state.feedScroll = list.scrollTop;
-      status.textContent = "";
       renderDetail();
     } catch {
       status.textContent = "No se ha podido abrir la nota.";
@@ -304,6 +304,8 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
       state.back = [];
       state.forward = [];
       showList();
+      renderList();
+      renderStatus();
     });
     back.setAttribute("aria-label", "Volver a resultados de notas");
     const title = document.createElement("h2");

@@ -86,6 +86,14 @@ function page({mode = "feed", items = [pageItem("a", "Resultado A")], total = it
   return {mode, items, total, next_cursor: null, sort: "relevance", applied_filters, snapshot_offset: 0};
 }
 
+function detail(id, name = id) {
+  return {
+    kind: "detail",
+    note: {id, name, type: "person", properties: {}, created_at: "2026-09-20", updated_at: "2026-09-22", tags: []},
+    body_blocks: [],
+  };
+}
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -192,6 +200,88 @@ test("historical search snapshots retain rerun and expose Ver todas", async () =
 
   assert.equal(mounted.elements.status.querySelector(".notes-rerun").textContent, "Actualizar búsqueda");
   assert.equal(mounted.elements.status.querySelector(".notes-show-all").textContent, "Ver todas");
+});
+
+test("returning from an affected snapshot detail restores status, exit, and exact list", async () => {
+  const snapshot = {version: 2, kind: "affected_notes", note_ids: ["marta", "elena"], total: 2, truncated: false};
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return detail(payload.note_id, payload.note_id === "marta" ? "Marta" : "Elena");
+      if (operation === "backlinks") return {items: []};
+      if (payload.mode === "snapshot") return page({mode: "snapshot", items: [pageItem("marta", "Marta"), pageItem("elena", "Elena")], total: 2});
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note-snapshot", {detail: snapshot});
+  await flush();
+  mounted.elements.list.children[0].click();
+  await flush();
+  mounted.elements.detail.querySelector("button").click();
+  await flush();
+
+  assert.equal(mounted.elements.status.textContent.includes("2 notas afectadas"), true);
+  assert.equal(mounted.elements.status.querySelector(".notes-show-all").textContent, "Ver todas");
+  assert.equal(mounted.elements.list.textContent, "MartaPersona · actualizada 9/22/2026ElenaPersona · actualizada 9/22/2026");
+  assert.equal(mounted.elements.filters.disabled, true);
+  assert.equal(mounted.elements.sort.disabled, true);
+});
+
+test("returning from a historical snapshot detail restores rerun and exit controls", async () => {
+  const snapshot = {
+    version: 1, query: "personas", filters: [], sort: "relevance", ranking_version: "v1",
+    executed_at: "2026-09-22T10:00:00Z", note_ids: ["old"], total: 4, truncated: true,
+  };
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return detail(payload.note_id, "Histórica");
+      if (operation === "backlinks") return {items: []};
+      if (payload.mode === "snapshot") return page({mode: "snapshot", items: [pageItem("old", "Histórica")], total: 4});
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note-snapshot", {detail: snapshot});
+  await flush();
+  mounted.elements.list.children[0].click();
+  await flush();
+  mounted.elements.detail.querySelector("button").click();
+  await flush();
+
+  assert.equal(mounted.elements.status.textContent.includes("Resultado histórico · 1 de 4 notas"), true);
+  assert.equal(mounted.elements.status.querySelector(".notes-rerun").textContent, "Actualizar búsqueda");
+  assert.equal(mounted.elements.status.querySelector(".notes-show-all").textContent, "Ver todas");
+  assert.equal(mounted.elements.filters.disabled, true);
+  assert.equal(mounted.elements.sort.disabled, true);
+});
+
+test("returning from a normal note detail restores list status without reloading", async () => {
+  let feedQueries = 0;
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "query" && payload.mode === "feed") {
+        feedQueries += 1;
+        return page({items: [pageItem("a", "Resultado A")], total: 1});
+      }
+      if (operation === "detail") return detail(payload.note_id, "Resultado A");
+      if (operation === "backlinks") return {items: []};
+      return page();
+    },
+  });
+  const initialQueries = feedQueries;
+  mounted.controller.state.query = "A";
+  mounted.controller.state.filters = [{field: "type", op: "eq", value: "person"}];
+  mounted.elements.list.children[0].click();
+  await flush();
+  mounted.elements.detail.querySelector("button").click();
+  await flush();
+
+  assert.equal(mounted.elements.status.textContent, "1 notas");
+  assert.equal(mounted.controller.state.query, "A");
+  assert.deepEqual(mounted.controller.state.filters, [{field: "type", op: "eq", value: "person"}]);
+  assert.equal(feedQueries, initialQueries);
+  assert.equal(mounted.elements.list.textContent.includes("Resultado A"), true);
 });
 
 test("an unsafe intelligent-filter response clears stale rows without installing its filters", async () => {
