@@ -1,7 +1,7 @@
 # UI-2 — read-only Notes product contract
 
 Status: **the final bounded UI-2 presentation work is deployed to isolated DEV at
-`f44c74b54e25d3e5b31fbd0764857e270d94ee28`. Successful mutations now retain an exact, bounded
+`230ec9c531823460b64981c4dae70415e5b3777b`. Successful mutations now retain an exact, bounded
 affected-note membership snapshot (`Guardado` / `Ver N notas`) without a new search; v1 historical
 search snapshots remain rerunnable and v2 affected-note snapshots are explicitly non-rerunnable.
 Backlinks now derive bounded, occurrence-level current-Markdown blocks rather than a whole-note
@@ -14,7 +14,11 @@ line coverage), GitHub Python CI is green, and Sonar Quality Gate passed at 84.0
 with zero Security Hotspots. The existing production planner evidence remains clean but deliberately
 budget-bounded after one Luna→Sol case; no provider call was made for this pass. The remaining gate
 is one final authenticated mobile closeout check. Draft PR #124 remains unmerged and UI-2 is not
-complete in PROD. Production ingress, Access, CSP, DNS, origin, and fallback remain unchanged.**
+complete in PROD. The final UX correction adds `Ver todas` to both snapshot modes: it clears only
+ephemeral Notes snapshot/list state and returns to the normal relevance feed without changing the
+durable Chat snapshot. An intelligent search whose inferred filters cannot be represented now clears
+prior rows before showing its bounded failure, so stale results cannot be attributed to the failed
+query. Production ingress, Access, CSP, DNS, origin, and fallback remain unchanged.**
 
 ## Long-write reliability closure
 
