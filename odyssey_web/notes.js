@@ -94,13 +94,41 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
       ? `${state.snapshot.note_ids.length} de ${state.snapshot.total}`
       : state.snapshot.total;
     if (state.snapshot.kind === "affected_notes") {
-      status.textContent = `${count} notas afectadas`;
+      status.replaceChildren(document.createTextNode(`${count} notas afectadas`));
+      appendSnapshotExit();
       return;
     }
     status.replaceChildren(document.createTextNode(`Resultado histórico · ${count} notas`));
     const rerun = button("Actualizar búsqueda", () => void rerunHistorical());
     rerun.className = "notes-rerun";
-    status.append(document.createTextNode(" · "), rerun);
+    status.append(document.createTextNode(" · "), rerun, document.createTextNode(" · "));
+    appendSnapshotExit();
+  }
+
+  function appendSnapshotExit() {
+    const all = button("Ver todas", () => void leaveSnapshot());
+    all.className = "notes-show-all";
+    status.append(all);
+  }
+
+  async function leaveSnapshot() {
+    state.snapshot = null;
+    state.historical = false;
+    state.query = "";
+    state.filters = [];
+    state.sort = "relevance";
+    state.items = [];
+    state.cursor = null;
+    state.current = null;
+    state.back = [];
+    state.forward = [];
+    state.feedScroll = 0;
+    state.mode = "feed";
+    search.value = "";
+    sort.value = state.sort;
+    showList();
+    renderList();
+    await load({reset: true, mode: "feed", snapshotIds: []});
   }
 
   function renderList() {
@@ -172,6 +200,11 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
       renderList();
       renderStatus(page.total);
     } catch (error) {
+      state.items = [];
+      state.cursor = null;
+      state.current = null;
+      showList();
+      renderList();
       status.textContent = error instanceof NotesRequestError && error.message.includes("filtros")
         ? "No se pueden mostrar filtros de esta búsqueda con seguridad."
         : "No se ha podido completar la búsqueda inteligente.";

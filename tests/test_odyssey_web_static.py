@@ -182,9 +182,16 @@ def test_notes_mobile_controls_keep_filtering_sorting_and_search_in_separate_rol
     assert "runIntelligentSearch" in notes
     assert "filtersAreRepresentable" in notes
     assert "uniqueFilters(page.applied_filters)" in notes
+    assert 'button("Ver todas", () => void leaveSnapshot())' in notes
+    assert "async function leaveSnapshot()" in notes
+    assert "state.snapshot = null" in notes
+    assert "state.items = []" in notes
     assert 'filterButton?.addEventListener("click", openFilterSheet)' in notes
     assert "state.filters.splice(index, 1)" in notes
     assert "innerHTML" not in notes
+
+    styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".notes-status .notes-rerun, .notes-status .notes-show-all" in styles
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "Ordenar" in index
