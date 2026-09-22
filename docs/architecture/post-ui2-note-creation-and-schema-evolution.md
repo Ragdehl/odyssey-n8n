@@ -53,6 +53,21 @@ The follow-up should define a bounded fact-equivalence policy that:
 
 Prefer evidence from realistic narrative inputs over synthetic micro-prompts, but keep this work isolated from the real production vault until the behavior is understood.
 
+### Date/day navigation and Daily-note exploration
+
+A later mobile Notes review suggested a more compact temporal navigation model than long generated journal titles such as “entrada de diario de ayer sobre la comida en casa de Meritxell”. Explore whether Odyssey should expose a canonical day-level surface, for example a Daily note or equivalent date view, so date-oriented journal knowledge can be reached through a concise date-first label.
+
+Questions to answer:
+
+- Should one calendar day have one canonical Daily note, a virtual date view, or a lazily materialized Markdown note only when useful?
+- Should journal entries primarily surface through their `entry_date`/day rather than generated narrative titles when displayed in compact lists and backlinks?
+- When a date is navigationally meaningful, can its rendered date become a clickable Odyssey link to that day surface?
+- Can notes/facts explicitly associated with a day link to that day so the day surface's backlinks naturally collect the people, events, journal entries, tasks, and other notes connected to it?
+- How should this interact later with Calendar/Events without conflating `Task`, `Event`, `Reminder`, journal entries, and day navigation?
+- Avoid blindly materializing a Daily note for every literal date appearing in prose or properties (for example a birth date). A date literal may be historical data rather than an intended day-navigation relationship; define the explicit semantics before automatic linking/creation.
+
+The desirable product property is that a user can move naturally between an entity/event and its relevant day, while the same link/backlink machinery remains authoritative and rebuildable. Do not implement this inside UI-2.
+
 ## B. Planner latency and cost for everyday writes
 
 Real narrative input exposed an unacceptable-feeling interaction latency when Luna failed and bounded Sol fallback carried the planning request. This class of input is expected to be common, so planner cost/latency must be investigated after UI-2 instead of remaining indefinitely deferred.
@@ -118,6 +133,7 @@ bounded note-creation + planner-cost/latency exploration
         |
         +--> knowledge distribution / relations / backlinks / entity-note quality
         +--> exact + semantic fact deduplication and correction semantics
+        +--> date/day navigation + Daily-note semantics
         +--> narrative-write planner optimization investigation
         +--> conversational schema-management contract
         |
