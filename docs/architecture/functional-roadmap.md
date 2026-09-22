@@ -70,7 +70,7 @@ evidence is clean but budget-bounded after one Luna→Sol case; Python CI and So
 new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
 conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
 
-The final bounded UI-2 polish is deployed to isolated DEV at `a8d209e`: successful mutations retain
+The final bounded UI-2 polish is deployed to isolated DEV at `e53b666`: successful mutations retain
 an exact, bounded affected-note set from Core action evidence (`Guardado · Ver N notas`), and
 backlinks expose only current canonical occurrence blocks that literally resolve to the viewed note.
 Search snapshots remain separately versioned and rerunnable; mutation sets are explicitly non-search

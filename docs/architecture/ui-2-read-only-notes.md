@@ -1,7 +1,7 @@
 # UI-2 — read-only Notes product contract
 
 Status: **the final bounded UI-2 presentation work is deployed to isolated DEV at
-`a8d209e`. Successful mutations now retain an exact, bounded
+`e53b666`. Successful mutations now retain an exact, bounded
 affected-note membership snapshot (`Guardado` / `Ver N notas`) without a new search; v1 historical
 search snapshots remain rerunnable and v2 affected-note snapshots are explicitly non-rerunnable.
 Backlinks now derive bounded, occurrence-level current-Markdown blocks rather than a whole-note
