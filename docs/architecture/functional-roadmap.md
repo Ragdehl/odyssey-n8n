@@ -24,75 +24,20 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current functional phase — UI-2 read-only Notes
+## Current functional phase — Performance / Latency / Cost P1
 
-UI-0 durable main conversation/continuity is merged and human-verified in production. The 2026-09-19
-checkpoint confirmed the same durable turns survive a full mobile page reload on the authenticated
-`odyssey.ragdehl.com` path, and the new `/api/conversation` plus existing `/api/environment.js`
-alternate-host paths are intercepted by Cloudflare Access before n8n. The next functional phase is
-**UI-2 read-only Notes**: expose the same canonical Markdown through a simple browse/search/read
-surface without creating a second knowledge authority. Its approved implementation is active in Draft
-PR #124. The first authenticated mobile checkpoint failed because the static workflow omitted the
-Notes ES-module imports (blocking all browser bootstrap) and the browser presented Chat/Notes as
-stacked panels instead of exclusive application views; it also lacked usable filters. The corrective
-implementation now serves and fingerprints the reachable module graph, fail-safes hidden views,
-implements exclusive mobile app navigation, bottom Notes search, and capability-driven filters. The
-isolated DEV operator was hardened to publish the current imported n8n version rather than a stale
-history pointer. Direct synthetic DEV runtime/n8n/static checks are green, including capabilities,
-feed/local/intelligent search, filters, detail, backlinks, and historical transport. The second
-authenticated checkpoint rendered the corrected layout but still could not bootstrap because the
-Cloudflare DEV tunnel remained on the prior seven-route allowlist. The missing Notes modules and API
-were added to the same narrow DEV origin as configuration version 10; production ingress, Access,
-DNS, CSP, and the 404 fallback remained unchanged. A canonical ten-route inventory now drives both
-deployment validation and a live public-route preflight, so an Access redirect alone is no longer
-treated as public readiness. The third authenticated checkpoint confirmed exclusive app-level
-navigation, feed, filters, sorting, populated details, link/backlink infrastructure, and public DEV
-bootstrap. It also exposed the final closure items: empty-body details, explicit planner-backed Notes
-search, visible inferred filters, human-readable Markdown/link/backlink presentation, complete type
-cues, and historical affordances in older Chat pages. A subsequent authenticated long write exposed
-a final delivery/retry reliability defect: the serial runtime blocked read-only Notes/conversation
-traffic, and a lost browser response followed by same-ID retries could rerun an already committed
-multi-note plan while leaving the assistant turn absent. The bounded correction introduced at `044d6c9` makes
-the HTTP boundary concurrent, retains one serialized product-execution lane, stores completed
-mutation results in bounded actor-local operational state before delivery, replays them for the same
-request fingerprint, and offers explicit recovery for an unmatched durable user turn. The full
-deterministic suite is green (`962 passed`, `79 skipped`, `52 subtests passed`); direct isolated DEV
-health, Notes capabilities, conversation reload, mounted browser commit, and source/workflow/
-public-route provenance all pass at that commit. The subsequent authenticated reliability checkpoint
-passed the important runtime behavior: reads remained usable during a long write, reload exposed
-recovery, and a completed result recovered without repeating its mutation. It exposed one final
-browser presentation defect, now deterministically corrected: the recovery notice/action is one
-component attached to its unmatched user turn, enters a bounded pending state, restores coherently on
-retryable failure, and is removed before the recovered assistant turn. The next small authenticated
-check is therefore the **final UI-2 closeout check**, not a production-completion claim: verify that
-inline recovery presentation on DEV remains coherent. The previous production planner
-evidence is clean but budget-bounded after one Luna→Sol case; Python CI and Sonar are green at 83.6%
-new-code coverage. It is not complete in PROD. See [UI-2 read-only Notes](ui-2-read-only-notes.md), [UI-0 durable main
-conversation](ui-0-durable-conversations.md), and [Future Odyssey product interface](future-product-interface.md#ui-2--read-only-notes-view).
+UI-2 read-only Notes was human-merged in PR #124 at `73289c64c48df926974fe6e78c6e962814aea91f`.
+The immediate next bounded phase is [Performance / Latency / Cost P1](performance-cost-p1.md):
+complete the existing request-path evidence, measure a small synthetic DEV baseline, diagnose the
+dominant avoidable contributor, then select one optimization and verify it against the same cases.
+The present P1 contract stops before instrumentation, live provider calls, or optimization.
 
-The final bounded UI-2 polish is deployed to isolated DEV at `e53b666`: successful mutations retain
-an exact, bounded affected-note set from Core action evidence (`Guardado · Ver N notas`), and
-backlinks expose only current canonical occurrence blocks that literally resolve to the viewed note.
-Search snapshots remain separately versioned and rerunnable; mutation sets are explicitly non-search
-results and never rerun. Full deterministic verification passed (`968 passed`, `79 skipped`), browser
-coverage passed at 93.62%, GitHub Python CI is green, Sonar Quality Gate passed at 84.0% new-code
-coverage with zero Security Hotspots, and isolated DEV source/workflow/public-route provenance is
-`MATCH`. One final authenticated mobile closeout must verify those affordances together with the
-existing inline recovery behavior before PR #124 can be considered for merge approval. Snapshot
-result sets now provide `Ver todas`, which returns only Notes to the normal relevance feed without
-mutating the durable snapshot; an unsafe intelligent-filter response clears prior rows before its
-bounded error rather than presenting stale results under the failed query. Returning from note detail
-now restores the originating list status and snapshot exit controls without reloading or rerunning a
-query; the remaining gate is one final 30-second authenticated mobile check of that path.
-
-Phase 23 is closed. UI-1 merged in PR #113 and is now fully deployed and human-verified on the authenticated production path. The final production checkpoint showed the request-detail `ⓘ` affordance, bounded execution details, estimated whole-request cost, and dated pricing basis. The promotion also exposed an active n8n workflow-projection drift failure; the bounded correction and reusable deployment rule are retained in [UI-1 production promotion evidence](ui-1-production-promotion.md).
-
-Phase 22/23 identity adoption remains governed by the explicit production contract: trusted
-production identity projection, real-user/person binding, and an explicit commit-selected
-deployment with health/provenance verification. The selected commit is materialized in the
-isolated production release worktree; merging `main` alone never changes PROD. The production
-release-worktree and operator contract merged from PR #112 is preserved.
-See [Phase 22 — self-identity contract](phase-22-self-identity.md) and [Future user self-identity binding](future-user-self-identity.md). The completed deployment/isolation foundation is documented in [Phase 21 — production/development isolation](phase-21-development-isolation.md) and the historical [Phase 20 — Odyssey Online MVP](phase-20-odyssey-online-mvp.md).
+After P1 diagnosis and its one evidence-driven optimization, continue the
+[post-UI-2 note creation and schema evolution direction](post-ui2-note-creation-and-schema-evolution.md),
+beginning with backlink/entity context and reference-resolution contracts. Those semantics do not
+belong in the P1 baseline oracle. The older Tasks/Events application order remains a later direction;
+P1 does not change it. UI-1 request detail is complete in PROD; its production promotion evidence is
+in [UI-1 production promotion](ui-1-production-promotion.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -125,7 +70,9 @@ Phase 21 production/development isolation                    ✅ complete
 UI-1 request detail / advanced inspector                         ✅ complete in PROD
 UI-0 durable main conversation/continuity                        ✅ complete in PROD
 UI-0 explicit production promotion                              ✅ complete
-UI-2 read-only Notes                                              🔄 Draft implementation / gates pending
+UI-2 read-only Notes                                              ✅ merged in PR #124
+Performance / Latency / Cost P1 (A evidence → B diagnosis → C one optimization → D verification) ➡️ next
+Post-UI-2 backlink/context and reference-resolution work        ⬜ planned after P1
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -133,8 +80,7 @@ Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
 Projects — compose over Tasks                                     ⬜ planned after checkpoint
 ```
 
-Latency optimization remains intentionally deferred: provider/model time dominates measured latency,
-and no SELF/general or request-class fast path is authorized.
+Earlier latency observations motivate P1 but do not predetermine its bottleneck or authorize a fast path.
 
 ### 20.1B — answerer adoption gate
 
@@ -212,7 +158,13 @@ UI-1 request feedback / advanced inspector            ✅ complete in PROD
 UI-0 durable main conversation / continuity           ✅ complete in PROD
         |
         v
-UI-2 read-only Notes                                   ➡️ next
+UI-2 read-only Notes                                   ✅ merged
+        |
+        v
+Performance / Latency / Cost P1                       ➡️ next
+        |
+        v
+post-UI-2 backlink/context + reference resolution
         |
         v
 Tasks — first application contract
@@ -298,8 +250,9 @@ Once application work becomes repetitive, evaluate a bounded **agent-assisted de
 ### Maintainability checkpoint after the calendar/application foundation
 
 Maintainability is a continuous acceptance concern during every phase, but Odyssey should not pause
-useful product work now for speculative restructuring. The near-term priority is UI-2 Notes, then
-Tasks, then Events / Calendar with the minimum Reminder semantics those capabilities need.
+useful product work now for speculative restructuring. The near-term priority is P1, then bounded
+post-UI-2 knowledge work, then Tasks and Events / Calendar with the minimum Reminder semantics
+those capabilities need.
 
 After that path has exercised the application boundary in real code, schedule a **bounded
 maintainability checkpoint** before substantial secondary-app expansion. The checkpoint should use
