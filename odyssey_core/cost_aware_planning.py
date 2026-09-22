@@ -7,7 +7,7 @@ Luna ESCALATE does not authorize stronger-model guessing: it becomes a normal us
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from time import perf_counter
 from typing import Any
 
@@ -17,7 +17,9 @@ from odyssey_core.experimental_luna_planning import (
 )
 from odyssey_core.observability import (
     OperationalOutcome,
+    OperationalSpan,
     ProviderCallEvidence,
+    SpanRecorder,
     normalize_provider_usage,
 )
 from odyssey_core.request_planning import (
@@ -41,9 +43,10 @@ class LunaFirstRequestPlanner:
     attempt. Generic provider/network exceptions propagate without a second call.
     """
 
-    def __init__(self, luna: Any, sol: Any) -> None:
+    def __init__(self, luna: Any, sol: Any, monotonic: Callable[[], float] = perf_counter) -> None:
         self._luna = luna
         self._sol = sol
+        self._monotonic = monotonic
         self.model = "luna-first"
         self.reasoning_effort = LUNA_FIRST_REASONING_EFFORT
         self.last_usage: dict[str, int] | None = None
@@ -51,6 +54,8 @@ class LunaFirstRequestPlanner:
         self.last_response_id: str | None = None
         self.last_provider_status: str | None = None
         self.last_provider_calls: tuple[ProviderCallEvidence, ...] = ()
+        self.last_spans: tuple[OperationalSpan, ...] = ()
+        self._recorder: SpanRecorder | None = None
 
     @classmethod
     def from_environment(
@@ -69,8 +74,9 @@ class LunaFirstRequestPlanner:
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
         self._reset_evidence()
+        self._recorder = SpanRecorder(self._monotonic(), self._monotonic)
 
-        luna_started = perf_counter()
+        luna_started = self._monotonic()
         try:
             result = (
                 self._luna.plan(request, conversation_context)
@@ -85,6 +91,10 @@ class LunaFirstRequestPlanner:
                 luna_started,
                 error,
             )
+            decision_started = self._monotonic()
+            assert self._recorder is not None
+            self._recorder.add("fallback_decision", decision_started)
+            self.last_spans = self._recorder.spans
             return self._plan_with_sol(request, conversation_context)
         except Exception as error:
             self._append_call(
@@ -111,7 +121,7 @@ class LunaFirstRequestPlanner:
         self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
     ) -> PlannerResult:
         """Make the single bounded Sol fallback after a fail-closed Luna result."""
-        sol_started = perf_counter()
+        sol_started = self._monotonic()
         try:
             result = (
                 self._sol.plan(request, conversation_context)
@@ -146,6 +156,8 @@ class LunaFirstRequestPlanner:
         self.last_response_id = None
         self.last_provider_status = None
         self.last_provider_calls = ()
+        self.last_spans = ()
+        self._recorder = None
 
     def _append_call(
         self,
@@ -156,17 +168,33 @@ class LunaFirstRequestPlanner:
         error: Exception | None = None,
     ) -> None:
         """Retain bounded per-model evidence without provider payload or prompt content."""
+        assert self._recorder is not None
         evidence = ProviderCallEvidence(
             name=name,
             outcome=outcome,
-            duration_ms=max(0.0, (perf_counter() - started) * 1000),
+            duration_ms=max(0.0, (self._monotonic() - started) * 1000),
             model=getattr(provider, "model", None),
             reasoning_effort=getattr(provider, "reasoning_effort", None),
             usage=normalize_provider_usage(getattr(provider, "last_usage", None)),
-            error_category=type(error).__name__ if error is not None else None,
+            error_category=(
+                getattr(provider, "last_error_category", None)
+                or (type(error).__name__ if error is not None else None)
+            ),
+            validation_stage=getattr(provider, "last_validation_stage", None),
+            validation_code=getattr(provider, "last_validation_code", None),
             attempt_count=getattr(provider, "last_attempt_count", 1),
             response_id=getattr(provider, "last_response_id", None),
             provider_status=getattr(provider, "last_provider_status", None),
+            incomplete_reason=getattr(provider, "last_incomplete_reason", None),
+            output_text_chars=getattr(provider, "last_output_text_chars", None),
+            output_text_bytes=getattr(provider, "last_output_text_bytes", None),
+            parse_status=getattr(provider, "last_parse_status", None),
+            result_kind=getattr(provider, "last_result_kind", None),
+            result_counts=getattr(provider, "last_result_counts", None),
+            start_offset_ms=max(0.0, (started - self._recorder.origin) * 1000),
+            ordinal=len(self.last_provider_calls) + 1,
+            substeps=getattr(provider, "last_spans", ()),
+            input_sizes=getattr(provider, "last_input_sizes", None),
         )
         self.last_provider_calls = (*self.last_provider_calls, evidence)
         self.last_attempt_count = len(self.last_provider_calls)

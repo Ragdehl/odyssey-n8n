@@ -30,6 +30,7 @@ from .observability import (
     OperationalOutcome,
     OperationalStage,
     ProviderCallEvidence,
+    SpanRecorder,
     normalize_provider_usage,
 )
 from .persistence import ActorInput
@@ -243,7 +244,7 @@ def execute_request(
     ):
         raise ValueError("authenticated actor context is invalid")
     planner_started = monotonic()
-    provider_recorder = _ProviderCallRecorder(monotonic)
+    provider_recorder = _ProviderCallRecorder(monotonic, planner_started)
     try:
         plan = (
             provider_recorder.invoke(
@@ -262,7 +263,9 @@ def execute_request(
                 reasoning_effort=getattr(planner, "reasoning_effort", None),
                 usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
                 error_category=type(error).__name__,
-                provider_calls=provider_recorder.calls,
+                provider_calls=_planner_attempts(planner, provider_recorder.calls),
+                start_offset_ms=_elapsed_ms(started, planner_started),
+                substeps=getattr(planner, "last_spans", ()),
             )
         )
         return _with_operational(
@@ -292,7 +295,9 @@ def execute_request(
                 model=getattr(planner, "model", None),
                 reasoning_effort=getattr(planner, "reasoning_effort", None),
                 usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
-                provider_calls=provider_recorder.calls,
+                provider_calls=_planner_attempts(planner, provider_recorder.calls),
+                start_offset_ms=_elapsed_ms(started, planner_started),
+                substeps=getattr(planner, "last_spans", ()),
             )
         )
         stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
@@ -315,6 +320,7 @@ def execute_request(
         )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a PlannerResult")
+    planner_calls = _planner_attempts(planner, provider_recorder.calls)
 
     history_snapshot: GitHistorySnapshot | None = None
     history_error: str | None = None
@@ -325,7 +331,7 @@ def execute_request(
         except Exception as error:
             history_error = _safe_reason(error)
             stages.append(
-                _stage("git", OperationalOutcome.FAILED, history_started, monotonic, error)
+                _stage("git", OperationalOutcome.FAILED, history_started, monotonic, error, started)
             )
 
     actions: list[ActionResult] = []
@@ -334,6 +340,9 @@ def execute_request(
     for action_index, action in enumerate(plan.actions):
         provider_start = len(provider_recorder.calls)
         action_started = monotonic()
+        provider_recorder.origin = action_started
+        action_spans = SpanRecorder(action_started, monotonic)
+        measured_embedder = _MeasuredEmbedder(embedder, action_spans)
         measured_contextual_reasoner = (
             _MeasuredContextualReasoner(contextual_reasoner, provider_recorder)
             if callable(getattr(contextual_reasoner, "resolve", None))
@@ -356,10 +365,11 @@ def execute_request(
                 repository,
                 schema,
                 context_index,
-                embedder,
+                measured_embedder,
                 context_limit,
                 authenticated_actor,
                 self_binding_repository,
+                action_spans,
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -373,7 +383,7 @@ def execute_request(
                 repository,
                 schema,
                 semantic_index,
-                embedder,
+                measured_embedder,
                 measured_contextual_reasoner,
                 actor,
                 now,
@@ -385,6 +395,7 @@ def execute_request(
                 measured_fact_selector,
                 authenticated_actor,
                 self_binding_repository,
+                action_spans,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -405,6 +416,8 @@ def execute_request(
                 _action_operational_outcome(result.status),
                 _elapsed_ms(action_started, monotonic()),
                 provider_calls=tuple(provider_recorder.calls[provider_start:]),
+                start_offset_ms=_elapsed_ms(started, action_started),
+                substeps=action_spans.spans,
             )
         )
     planner_stage = OperationalStage(
@@ -414,7 +427,9 @@ def execute_request(
         model=getattr(planner, "model", None),
         reasoning_effort=getattr(planner, "reasoning_effort", None),
         usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
-        provider_calls=provider_recorder.calls,
+        provider_calls=planner_calls,
+        start_offset_ms=_elapsed_ms(started, planner_started),
+        substeps=getattr(planner, "last_spans", ()),
     )
     stages.insert(0, planner_stage)
     result = ApplicationResult(
@@ -461,6 +476,7 @@ def execute_request(
                 history_outcome,
                 _elapsed_ms(history_started, monotonic()),
                 error_category=history_error_category,
+                start_offset_ms=_elapsed_ms(started, history_started),
             )
         )
         result = replace(result, history=history)
@@ -487,7 +503,7 @@ def execute_request(
         )
     except Exception as error:
         stages.append(
-            _stage("pending", OperationalOutcome.FAILED, pending_started, monotonic, error)
+            _stage("pending", OperationalOutcome.FAILED, pending_started, monotonic, error, started)
         )
         return _with_operational(
             replace(
@@ -500,7 +516,10 @@ def execute_request(
         )
     stages.append(
         OperationalStage(
-            "pending", OperationalOutcome.COMPLETED, _elapsed_ms(pending_started, monotonic())
+            "pending",
+            OperationalOutcome.COMPLETED,
+            _elapsed_ms(pending_started, monotonic()),
+            start_offset_ms=_elapsed_ms(started, pending_started),
         )
     )
     return _with_operational(
@@ -524,6 +543,7 @@ def _execute_retrieve(
     context_limit: int,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
+    spans: SpanRecorder,
 ) -> ActionResult:
     """Execute one ordinary retrieval or preserve unsupported graph intent as deferred evidence."""
     if action.plan.link_scope is not None:
@@ -554,7 +574,9 @@ def _execute_retrieve(
         context_kwargs: dict[str, Any] = {}
         if allowed_note_ids is not None:
             context_kwargs["allowed_note_ids"] = allowed_note_ids
-        context = get_context(
+        context = spans.invoke(
+            "retrieval",
+            get_context,
             repository,
             schema,
             context_index,
@@ -590,6 +612,7 @@ def _execute_write(
     fact_selector: AtomicFactSelector | None,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
+    spans: SpanRecorder,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     cardinalities = {unit.cardinality for unit in action.units}
@@ -620,7 +643,9 @@ def _execute_write(
         kwargs: dict[str, Any] = {}
         if id_allocator is not None:
             kwargs["id_allocator"] = id_allocator
-        preflight = preflight_write_action(
+        preflight = spans.invoke(
+            "preflight",
+            preflight_write_action,
             action,
             repository=repository,
             schema=schema,
@@ -630,9 +655,10 @@ def _execute_write(
             semantic_limit=semantic_limit,
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
+            span_recorder=spans,
             **kwargs,
         )
-        rendering = render_reference_facts(action, preflight)
+        rendering = spans.invoke("reference_render", render_reference_facts, action, preflight)
     except Exception as error:
         return ActionResult(
             action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
@@ -650,6 +676,7 @@ def _execute_write(
         request_id,
         unit_ordinals,
         fact_selector,
+        spans,
     )
     return ActionResult(
         action_index, action.kind, _action_status(results), unit_results=tuple(results)
@@ -708,6 +735,7 @@ def _execute_single_units(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    spans: SpanRecorder,
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
     dependencies = _create_dependencies(action, preflight)
@@ -752,7 +780,9 @@ def _execute_single_units(
         decision = WriteTargetDecision(target.outcome, existing_note_id=target.stable_id)
         try:
             if target.outcome is WriteTargetOutcome.CREATE:
-                persisted = materialize_create(
+                persisted = spans.invoke(
+                    f"unit[{index}].materialize",
+                    materialize_create,
                     unit,
                     target,
                     unit_index=index,
@@ -765,15 +795,31 @@ def _execute_single_units(
                     fact_ordinals=unit_ordinals[index],
                 )
             elif unit.intent == "delete":
-                persisted = materialize_delete(
-                    unit, decision, repository=repository, schema=schema, actor=actor, now=now
+                persisted = spans.invoke(
+                    f"unit[{index}].materialize",
+                    materialize_delete,
+                    unit,
+                    decision,
+                    repository=repository,
+                    schema=schema,
+                    actor=actor,
+                    now=now,
                 )
             elif unit.destination_type is not None:
-                persisted = materialize_type_migration(
-                    unit, decision, repository=repository, schema=schema, actor=actor, now=now
+                persisted = spans.invoke(
+                    f"unit[{index}].materialize",
+                    materialize_type_migration,
+                    unit,
+                    decision,
+                    repository=repository,
+                    schema=schema,
+                    actor=actor,
+                    now=now,
                 )
             else:
-                persisted = materialize_update(
+                persisted = spans.invoke(
+                    f"unit[{index}].materialize",
+                    materialize_update,
                     unit,
                     decision,
                     repository=repository,
@@ -921,6 +967,7 @@ def _stage(
     started: float,
     monotonic: Callable[[], float],
     error: Exception | None = None,
+    origin: float | None = None,
 ) -> OperationalStage:
     """Build one bounded failure-aware stage measurement without exception details."""
     return OperationalStage(
@@ -928,6 +975,7 @@ def _stage(
         outcome,
         _elapsed_ms(started, monotonic()),
         error_category=type(error).__name__ if error is not None else None,
+        start_offset_ms=_elapsed_ms(origin, started) if origin is not None else None,
     )
 
 
@@ -963,6 +1011,7 @@ class _ProviderCallRecorder:
     """Collect bounded evidence for provider calls made during one Core request."""
 
     monotonic: Callable[[], float]
+    origin: float
     calls: tuple[ProviderCallEvidence, ...] = ()
 
     def invoke(self, name: str, provider: Any, operation: Callable[..., Any], *args: Any) -> Any:
@@ -1021,7 +1070,25 @@ class _ProviderCallRecorder:
             parse_status=_bounded_evidence_string(getattr(provider, "last_parse_status", None)),
             result_kind=_bounded_evidence_string(getattr(provider, "last_result_kind", None)),
             result_counts=_bounded_result_counts(getattr(provider, "last_result_counts", None)),
+            start_offset_ms=_elapsed_ms(self.origin, started),
+            ordinal=len(self.calls) + 1,
+            substeps=getattr(provider, "last_spans", ()),
+            input_sizes=getattr(provider, "last_input_sizes", None),
         )
+
+
+def _planner_attempts(
+    planner: Any, recorded: tuple[ProviderCallEvidence, ...]
+) -> tuple[ProviderCallEvidence, ...]:
+    """Prefer the planner's individual provider attempts over its outer invocation wrapper."""
+    attempts = getattr(planner, "last_provider_calls", None)
+    if (
+        isinstance(attempts, tuple)
+        and attempts
+        and all(isinstance(call, ProviderCallEvidence) for call in attempts)
+    ):
+        return attempts
+    return recorded
 
 
 def _bounded_non_negative_int(value: Any) -> int | None:
@@ -1049,6 +1116,36 @@ def _bounded_result_counts(value: Any) -> dict[str, int] | None:
             return None
         counts[key] = bounded
     return counts
+
+
+class _MeasuredEmbedder:
+    """Measure repeated local embedding calls without changing their inputs or results."""
+
+    def __init__(self, embedder: Any, spans: SpanRecorder) -> None:
+        self._embedder = embedder
+        self._spans = spans
+        self._query_count = 0
+        self._document_count = 0
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward model metadata and other read-only embedder attributes."""
+        return getattr(self._embedder, name)
+
+    def embed_queries(self, texts: Any) -> Any:
+        """Retain one span per query embedding invocation."""
+        ordinal = self._query_count
+        self._query_count += 1
+        return self._spans.invoke(
+            f"embedding.query[{ordinal}]", self._embedder.embed_queries, texts
+        )
+
+    def embed_documents(self, texts: Any) -> Any:
+        """Retain one span per document embedding invocation."""
+        ordinal = self._document_count
+        self._document_count += 1
+        return self._spans.invoke(
+            f"embedding.documents[{ordinal}]", self._embedder.embed_documents, texts
+        )
 
 
 class _MeasuredContextualReasoner:

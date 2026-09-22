@@ -11,11 +11,19 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Protocol
 
-from odyssey_core.observability import normalize_provider_usage
+from odyssey_core.observability import (
+    OperationalOutcome,
+    OperationalSpan,
+    SpanRecorder,
+    normalize_provider_usage,
+)
 from odyssey_core.request_planning import (
     PlannerClarification,
+    PlannerValidationCode,
+    PlannerValidationStage,
     RequestPlan,
     RequestPlanningError,
     planner_result_json_schema,
@@ -97,13 +105,21 @@ def validate_luna_experimental_result(
         "limitations",
         "clarification_code",
     }:
-        raise RequestPlanningError("Experimental planner result fields are invalid")
+        raise RequestPlanningError(
+            "Experimental planner result fields are invalid",
+            stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+            code=PlannerValidationCode.INVALID_FIELDS,
+        )
     if payload["outcome"] != "ESCALATE":
         return validate_planner_result(payload, schema)
     if any(
         payload[field] is not None for field in ("actions", "limitations", "clarification_code")
     ):
-        raise RequestPlanningError("ESCALATE must carry no actions or other semantic payload")
+        raise RequestPlanningError(
+            "ESCALATE must carry no actions or other semantic payload",
+            stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+            code=PlannerValidationCode.INVALID_FIELDS,
+        )
     return PlannerEscalation()
 
 
@@ -113,6 +129,7 @@ def render_luna_experimental_prompt(
     *,
     teaching_examples: Sequence[Mapping[str, Any]] | None = None,
     conversation_context: Sequence[Mapping[str, str]] = (),
+    size_components: dict[str, int] | None = None,
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -146,8 +163,10 @@ def render_luna_experimental_prompt(
         f"Lesson: {item['lesson']}"
         for item in examples
     )
-    semantic_prompt = render_request_planner_prompt(schema, current_context, conversation_context)
-    return f"""{semantic_prompt}
+    semantic_prompt = render_request_planner_prompt(
+        schema, current_context, conversation_context, size_components=size_components
+    )
+    prompt = f"""{semantic_prompt}
 
 Choose the outcome before drafting fields:
 1. PLAN only when every material intent is preserved by the inherited RequestPlan semantics without unsafe approximation.
@@ -160,6 +179,11 @@ Teaching examples (not evaluation cases):
 
 {rendered_examples}
 """
+    if size_components is not None:
+        size_components["luna_rules_examples_bytes"] = len(prompt.encode("utf-8")) - len(
+            semantic_prompt.encode("utf-8")
+        )
+    return prompt
 
 
 def load_teaching_examples() -> list[dict[str, Any]]:
@@ -205,10 +229,12 @@ class OpenAILunaExperimentalPlanner:
         client: ResponsesClient,
         schema: Mapping[str, Any],
         current_context: Mapping[str, str],
+        monotonic: Any = perf_counter,
     ) -> None:
         self._client = client
         self._schema = schema
         self._current_context = current_context
+        self._monotonic = monotonic
         self.model = LUNA_EXPERIMENT_MODEL
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
         self.max_output_tokens = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS
@@ -216,6 +242,13 @@ class OpenAILunaExperimentalPlanner:
         self.last_usage: dict[str, int] | None = None
         self.last_response_id: str | None = None
         self.last_provider_status: str | None = None
+        self.last_spans: tuple[OperationalSpan, ...] = ()
+        self.last_input_sizes: dict[str, int] | None = None
+        self.last_error_category: str | None = None
+        self.last_parse_status: str | None = None
+        self.last_validation_stage: str | None = None
+        self.last_validation_code: str | None = None
+        self.last_result_kind: str | None = None
 
     @classmethod
     def from_environment(
@@ -241,43 +274,117 @@ class OpenAILunaExperimentalPlanner:
         self.last_usage = None
         self.last_response_id = None
         self.last_provider_status = None
-        response = self._client.responses.create(
-            model=LUNA_EXPERIMENT_MODEL,
-            reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
-            store=False,
-            max_output_tokens=LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
-            input=[
-                {
-                    "role": "system",
-                    "content": render_luna_experimental_prompt(
-                        self._schema,
-                        self._current_context,
-                        conversation_context=conversation_context,
-                    ),
+        self.last_spans = ()
+        self.last_input_sizes = None
+        self.last_error_category = None
+        self.last_parse_status = None
+        self.last_validation_stage = None
+        self.last_validation_code = None
+        self.last_result_kind = None
+        recorder = SpanRecorder(self._monotonic(), self._monotonic)
+        input_started = self._monotonic()
+        sizes: dict[str, int] = {}
+        try:
+            prompt = render_luna_experimental_prompt(
+                self._schema,
+                self._current_context,
+                conversation_context=conversation_context,
+                size_components=sizes,
+            )
+            output_schema = luna_experimental_result_json_schema(self._schema)
+            sizes["user_request_bytes"] = len(request.encode("utf-8"))
+            sizes["structured_output_schema_bytes"] = len(
+                json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            )
+        except Exception as error:
+            recorder.add("input_build", input_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
+            raise
+        recorder.add("input_build", input_started)
+        self.last_input_sizes = sizes
+        provider_started = self._monotonic()
+        try:
+            response = self._client.responses.create(
+                model=LUNA_EXPERIMENT_MODEL,
+                reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
+                store=False,
+                max_output_tokens=LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
+                input=[
+                    {
+                        "role": "system",
+                        "content": prompt,
+                    },
+                    {"role": "user", "content": request},
+                ],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "odyssey_luna_first_planner_result",
+                        "strict": True,
+                        "schema": output_schema,
+                    }
                 },
-                {"role": "user", "content": request},
-            ],
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "odyssey_luna_first_planner_result",
-                    "strict": True,
-                    "schema": luna_experimental_result_json_schema(self._schema),
-                }
-            },
-        )
+            )
+        except Exception as error:
+            recorder.add("provider", provider_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
+            self.last_error_category = type(error).__name__[:120]
+            raise
+        recorder.add("provider", provider_started)
+        self.last_spans = recorder.spans
         self.last_usage = normalize_provider_usage(response)
         self.last_response_id = _bounded_metadata(getattr(response, "id", None))
         self.last_provider_status = _bounded_metadata(getattr(response, "status", None))
         if self.last_provider_status != "completed":
+            self.last_error_category = "IncompleteProviderResponse"
             raise RequestPlanningError("Luna experiment provider response was not completed")
+        parse_started = self._monotonic()
         try:
             payload = json.loads(response.output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:
+            recorder.add("parse", parse_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
+            self.last_parse_status = "failed"
+            raw_output = getattr(response, "output_text", None)
+            self.last_error_category = (
+                "EmptyPlannerOutput"
+                if not isinstance(raw_output, str) or not raw_output.strip()
+                else "MalformedPlannerJSON"
+            )
             raise RequestPlanningError("Luna experiment returned malformed JSON") from error
+        recorder.add("parse", parse_started)
+        self.last_parse_status = "succeeded"
+        validation_started = self._monotonic()
         if not isinstance(payload, dict) or set(payload) != {"result"}:
+            recorder.add("validate", validation_started, OperationalOutcome.FAILED)
+            self.last_spans = recorder.spans
+            self.last_error_category = "LocalPlannerValidationError"
+            self.last_validation_stage = "PLANNER_RESULT_ENVELOPE"
+            self.last_validation_code = "INVALID_FIELDS"
             raise RequestPlanningError("Luna experiment result wrapper is invalid")
-        return validate_luna_experimental_result(payload["result"], self._schema)
+        try:
+            result = validate_luna_experimental_result(payload["result"], self._schema)
+        except RequestPlanningError as error:
+            recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
+            self.last_error_category = "LocalPlannerValidationError"
+            self.last_validation_stage = (
+                error.validation_stage.value if error.validation_stage is not None else None
+            )
+            self.last_validation_code = (
+                error.validation_code.value if error.validation_code is not None else None
+            )
+            raise
+        recorder.add("validate", validation_started)
+        self.last_spans = recorder.spans
+        self.last_result_kind = (
+            "escalate"
+            if isinstance(result, PlannerEscalation)
+            else "clarify"
+            if isinstance(result, PlannerClarification)
+            else "plan"
+        )
+        return result
 
 
 def _bounded_metadata(value: Any, *, maximum: int = 160) -> str | None:

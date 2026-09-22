@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "environment": "isolated disposable DEV only",
+  "fixture": {
+    "people": ["Marta", "Elena", "Pablo"],
+    "canonical_facts": {
+      "Marta": ["Marta trabaja en Thales.", "Marta vive en Lyon."],
+      "Elena": ["Elena vive en Girona."],
+      "Pablo": ["Pablo vive en Barcelona."]
+    }
+  },
+  "cases": [
+    {
+      "id": "R1",
+      "kind": "chat",
+      "request": "¿Dónde trabaja Marta?",
+      "prior_turns": [],
+      "expected": {"status": "completed", "action": "retrieve", "answer_fact": "Marta trabaja en Thales.", "mutation": false}
+    },
+    {
+      "id": "R2",
+      "kind": "chat",
+      "request": "¿Y dónde vive?",
+      "prior_turns": [{"role": "user", "text": "Hablemos de Marta."}, {"role": "assistant", "text": "De acuerdo, hablemos de Marta."}],
+      "expected": {"status": "completed", "action": "retrieve", "answer_fact": "Marta vive en Lyon.", "mutation": false}
+    },
+    {
+      "id": "W1",
+      "kind": "chat",
+      "request": "Guarda que Marta prefiere el té.",
+      "prior_turns": [],
+      "expected": {"status": "completed", "action": "write", "facts_by_person": {"Marta": ["prefiere el té"]}, "mutation": true}
+    },
+    {
+      "id": "W2",
+      "kind": "chat",
+      "request": "Marta prefiere el té y Elena prefiere el café.",
+      "prior_turns": [],
+      "expected": {"status": "completed", "action": "write", "facts_by_person": {"Marta": ["prefiere el té"], "Elena": ["prefiere el café"]}, "forbidden_cross_assignment": true, "mutation": true}
+    },
+    {
+      "id": "W3",
+      "kind": "chat",
+      "request": "Marta comentó que prefiere el té, Elena dijo que le gusta el café y Pablo contó que trabaja en Thales.",
+      "prior_turns": [],
+      "expected": {"status": "completed", "action": "write", "facts_by_person": {"Marta": ["prefiere el té"], "Elena": ["le gusta el café"], "Pablo": ["trabaja en Thales"]}, "forbidden_cross_assignment": true, "mutation": true}
+    },
+    {
+      "id": "C1",
+      "kind": "chat",
+      "request": "???",
+      "prior_turns": [],
+      "expected": {"status": "needs_attention", "clarification_code": "UNRECOGNIZED_REQUEST", "actions": 0, "mutation": false}
+    },
+    {
+      "id": "N1",
+      "kind": "notes_intelligent",
+      "request": "Busca notas de personas que prefieren el té",
+      "prior_turns": [],
+      "extra_fixture_facts": {"Marta": ["Marta prefiere el té."], "Elena": ["Elena prefiere el café."]},
+      "expected": {"kind": "page", "mode": "intelligent", "contains": ["Marta"], "mutation": false}
+    }
+  ]
+}

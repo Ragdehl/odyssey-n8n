@@ -89,6 +89,29 @@ function safeUsage(value) {
   return result;
 }
 
+const safeMs = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+function safeCoverage(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const fields = ['attributed_ms', 'unattributed_ms', 'coverage_pct', 'overlapping_ms'];
+  if (fields.some(key => safeMs(value[key]) === undefined) || value.coverage_pct > 100) return undefined;
+  return Object.fromEntries(fields.map(key => [key, value[key]]));
+}
+function safeSpans(value) {
+  if (!Array.isArray(value) || value.length > 128) return undefined;
+  const result = value.map(span => {
+    if (!span || typeof span !== 'object' || Array.isArray(span) || typeof span.name !== 'string' || span.name.length > 80 || typeof span.outcome !== 'string' || span.outcome.length > 80 || safeMs(span.start_offset_ms) === undefined || safeMs(span.duration_ms) === undefined) return undefined;
+    const error = span.error_category;
+    if (error !== null && error !== undefined && (typeof error !== 'string' || error.length > 120)) return undefined;
+    return { name: span.name, outcome: span.outcome, start_offset_ms: span.start_offset_ms, duration_ms: span.duration_ms, error_category: error ?? null };
+  });
+  return result.some(item => item === undefined) ? undefined : result;
+}
+function safeInputSizes(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 12) return undefined;
+  const allowed = new Set(['fixed_instructions_bytes', 'retrieval_capabilities_bytes', 'write_capabilities_bytes', 'recent_context_bytes', 'luna_rules_examples_bytes', 'user_request_bytes', 'structured_output_schema_bytes']);
+  if (Object.entries(value).some(([key, number]) => !allowed.has(key) || !Number.isInteger(number) || number < 0)) return undefined;
+  return value;
+}
 function safeDetailStage(value, nested = false) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.name !== 'string' || typeof value.outcome !== 'string') return undefined;
   const text = (key, maximum) => value[key] === null || value[key] === undefined || (typeof value[key] === 'string' && value[key].length <= maximum) ? value[key] ?? null : undefined;
@@ -98,15 +121,33 @@ function safeDetailStage(value, nested = false) {
   const usage = safeUsage(value.usage);
   if (value.usage !== null && value.usage !== undefined && usage === undefined) return undefined;
   const calls = nested ? [] : Array.isArray(value.provider_calls) ? value.provider_calls.map((call) => safeDetailStage(call, true)) : undefined;
-  if (calls === undefined || calls.some((call) => call === undefined) || calls.length > 16) return undefined;
-  return { name: value.name, outcome: value.outcome, duration_ms: duration, model, reasoning_effort: reasoning, error_category: error, ...(usage ? { usage } : {}), provider_calls: calls };
+  if (calls === undefined || calls.some((call) => call === undefined) || calls.length > 32) return undefined;
+  const start = value.start_offset_ms === undefined || value.start_offset_ms === null ? undefined : safeMs(value.start_offset_ms);
+  const spans = value.substeps === undefined ? undefined : safeSpans(value.substeps);
+  const coverage = value.coverage === undefined || value.coverage === null ? undefined : safeCoverage(value.coverage);
+  const sizes = value.input_sizes === undefined || value.input_sizes === null ? undefined : safeInputSizes(value.input_sizes);
+  if ((value.start_offset_ms != null && start === undefined) || (value.substeps !== undefined && spans === undefined) || (value.coverage != null && coverage === undefined) || (value.input_sizes != null && sizes === undefined)) return undefined;
+  const result = { name: value.name, outcome: value.outcome, duration_ms: duration, model, reasoning_effort: reasoning, error_category: error, ...(usage ? { usage } : {}), provider_calls: calls };
+  if (start !== undefined) result.start_offset_ms = start;
+  if (spans !== undefined) result.substeps = spans;
+  if (coverage !== undefined) result.coverage = coverage;
+  if (sizes !== undefined) result.input_sizes = sizes;
+  if (nested) {
+    const fields = ['validation_stage', 'validation_code', 'provider_status', 'incomplete_reason', 'parse_status', 'result_kind'];
+    for (const key of fields) { const item = text(key, 120); if (item === undefined) return undefined; if (item !== null) result[key] = item; }
+    for (const key of ['ordinal', 'attempt_count', 'output_text_chars', 'output_text_bytes']) { const item = value[key]; if (item == null) continue; if (!Number.isInteger(item) || item < 0) return undefined; result[key] = item; }
+  }
+  return result;
 }
 
 function safeOperational(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.stages) || value.stages.length > 16) return { total_duration_ms: null, stages: [] };
   const total = value.total_duration_ms === null || value.total_duration_ms === undefined || (typeof value.total_duration_ms === 'number' && Number.isFinite(value.total_duration_ms) && value.total_duration_ms >= 0) ? value.total_duration_ms ?? null : null;
-  const stages = value.stages.map((stage) => safeDetailStage(stage)).filter((stage) => stage !== undefined);
-  return { total_duration_ms: total, stages };
+  const stages = value.stages.map((stage) => safeDetailStage(stage));
+  if (stages.some(stage => stage === undefined)) return { total_duration_ms: null, stages: [] };
+  const coverage = value.coverage == null ? undefined : safeCoverage(value.coverage);
+  const product = value.product_execution_duration_ms == null ? undefined : safeMs(value.product_execution_duration_ms);
+  return { total_duration_ms: total, stages, ...(coverage ? { coverage } : {}), ...(product !== undefined ? { product_execution_duration_ms: product } : {}) };
 }
 `;
 
@@ -118,9 +159,36 @@ const safeSnapshot = value => safeSearchSnapshot(value) || safeAffectedSnapshot(
 if (!id || !r || r.request_id !== id) return [{ json: error }]; const hasOperationalEvidence = r.operational && typeof r.operational === 'object'; const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions); const request_detail_base = hasOperationalEvidence || hasChangeEvidence ? { request_id: id, operational: hasOperationalEvidence ? safeOperational(r.operational) : { total_duration_ms: null, stages: [] }, changes: { affected_stable_note_ids: Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter((item) => typeof item === 'string' && item.length <= 128).slice(0, 64) : [], units: Array.isArray(r.actions) ? r.actions.flatMap(a => Array.isArray(a.units) ? a.units.map(u => ({ stable_note_id: typeof u.stable_note_id === 'string' && u.stable_note_id.length <= 128 ? u.stable_note_id : null, operation: typeof u.operation === 'string' && u.operation.length <= 80 ? u.operation : null, status: typeof u.status === 'string' && u.status.length <= 80 ? u.status : 'unknown' })) : []).slice(0, 64) : [] } } : undefined; const request_detail = request_detail_base ? { ...request_detail_base, estimated_cost: requestCost(request_detail_base.operational, pricing) } : undefined;
 if (r.status === 'needs_attention' && r.clarification_code === 'UNRECOGNIZED_REQUEST') return [{ json: { route: 'direct', request_id: id, status: 'needs_attention', kind: 'clarification', message: 'No he podido interpretar la solicitud. Reformúlala con más detalle.', request_detail } }]; if (r.status === 'failed') return [{ json: request_detail ? { ...error, request_detail } : error }];
 const snapshot = safeSnapshot(r.note_result_snapshot); const intent = r.presentation_intent === 'note_set' || r.presentation_intent === 'answer_and_note_set' ? r.presentation_intent : 'answer'; if (intent !== 'answer' && !snapshot) return [{ json: request_detail ? { ...error, request_detail } : error }]; if (intent === 'note_set') return [{ json: { route: 'direct', request_id: id, status: r.status === 'partial' ? 'partial' : 'completed', kind: 'note_set', message: snapshot.total ? 'He encontrado notas para revisar.' : 'No hay notas que coincidan.', request_detail, note_result_snapshot: snapshot } }];
-const actions = Array.isArray(r.actions) ? r.actions : []; const items = actions.flatMap(a => Array.isArray(a.retrieval?.items) ? a.retrieval.items : []).filter(i => i && typeof i.id === 'string' && typeof i.type === 'string' && typeof i.path === 'string' && typeof i.content === 'string'); if (items.length) return [{ json: { route: 'answer', request_id: id, status: r.status === 'partial' ? 'partial' : 'completed', request_detail, note_result_snapshot: snapshot, answer_input: { request: $('Odyssey product request').item.json.body.request, status: r.status === 'partial' ? 'partial' : 'completed', retrieval_query: actions.find(a => Array.isArray(a.retrieval?.items))?.retrieval?.query || '', items: items.map(i => ({ id: i.id, type: i.type, path: i.path, content: i.content })) } } }]; const wrote = actions.some(a => Array.isArray(a.units) && a.units.some(u => u.status === 'completed' || u.status === 'succeeded')); return [{ json: { route: 'direct', request_id: id, status: r.status === 'partial' ? 'partial' : 'completed', kind: wrote ? 'acknowledgement' : 'empty', message: wrote ? 'La información se ha guardado.' : 'No hay evidencia suficiente en Odyssey para responder.', request_detail, ...(snapshot ? { note_result_snapshot: snapshot } : {}) } }];`;
+const actions = Array.isArray(r.actions) ? r.actions : []; const items = actions.flatMap(a => Array.isArray(a.retrieval?.items) ? a.retrieval.items : []).filter(i => i && typeof i.id === 'string' && typeof i.type === 'string' && typeof i.path === 'string' && typeof i.content === 'string'); if (items.length) return [{ json: { route: 'answer', request_id: id, status: r.status === 'partial' ? 'partial' : 'completed', request_detail, note_result_snapshot: snapshot, answerer_started_ms: Date.now(), answer_input: { request: $('Odyssey product request').item.json.body.request, status: r.status === 'partial' ? 'partial' : 'completed', retrieval_query: actions.find(a => Array.isArray(a.retrieval?.items))?.retrieval?.query || '', items: items.map(i => ({ id: i.id, type: i.type, path: i.path, content: i.content })) } } }]; const wrote = actions.some(a => Array.isArray(a.units) && a.units.some(u => u.status === 'completed' || u.status === 'succeeded')); return [{ json: { route: 'direct', request_id: id, status: r.status === 'partial' ? 'partial' : 'completed', kind: wrote ? 'acknowledgement' : 'empty', message: wrote ? 'La información se ha guardado.' : 'No hay evidencia suficiente en Odyssey para responder.', request_detail, ...(snapshot ? { note_result_snapshot: snapshot } : {}) } }];`;
 
-const finishCode = `const source = $('Route bounded product result').item.json; const answerResponse = $json.body && typeof $json.body === 'object' ? $json.body : $json; const pricing = ${pricingSnapshotLiteral}; ${costHelpers} function withAnswerer(detail) { if (!detail) return undefined; const usage = providerUsage(answerResponse); const answererCall = { name: 'answerer', outcome: 'completed', model: 'gpt-5.6-luna', reasoning_effort: 'none', usage }; const answererStage = { name: 'answerer', outcome: 'completed', model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, provider_calls: [answererCall] }; const enriched = { ...detail, operational: { ...detail.operational, stages: [...detail.operational.stages, answererStage] } }; return { ...enriched, estimated_cost: requestCost(enriched.operational, pricing) }; } const request_detail = withAnswerer(source.request_detail); const text = answerResponse.output?.flatMap(o => o.content || []).find(c => c.type === 'output_text')?.text; try { const a = JSON.parse(text); const known = new Set(source.answer_input.items.map(i => i.id)); if (!a.answer || !Array.isArray(a.supporting_item_ids) || !Array.isArray(a.limitations) || a.supporting_item_ids.some(i => !known.has(i))) throw new Error(); if (a.outcome === 'INSUFFICIENT_EVIDENCE' && !a.supporting_item_ids.length) return [{ json: { request_id: source.request_id, status: source.status, kind: 'empty', message: a.answer, request_detail, note_result_snapshot: source.note_result_snapshot } }]; if (a.outcome !== 'ANSWER' || !a.supporting_item_ids.length) throw new Error(); return [{ json: { request_id: source.request_id, status: source.status, kind: 'answer', message: a.answer, request_detail, note_result_snapshot: source.note_result_snapshot } }]; } catch { return [{ json: { request_id: source.request_id, status: 'failed', kind: 'error', message: 'Odyssey no ha podido procesar esta solicitud.', request_detail } }]; }`;
+const finishCode = `const source = $('Route bounded product result').item.json;
+const answerResponse = $json.body && typeof $json.body === 'object' ? $json.body : $json;
+const pricing = ${pricingSnapshotLiteral}; ${costHelpers}
+const elapsed = Number.isInteger(source.answerer_started_ms) ? Date.now() - source.answerer_started_ms : null;
+const duration = elapsed !== null && elapsed >= 0 ? elapsed : null;
+function withAnswerer(detail, outcome, errorCategory, parseStatus) {
+  if (!detail) return undefined;
+  const usage = providerUsage(answerResponse);
+  const answererCall = { name: 'answerer', outcome, duration_ms: duration, model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, error_category: errorCategory, parse_status: parseStatus };
+  const answererStage = { name: 'answerer', outcome, duration_ms: duration, model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, error_category: errorCategory, provider_calls: [answererCall] };
+  const enriched = { ...detail, operational: { ...detail.operational, stages: [...detail.operational.stages, answererStage] } };
+  return { ...enriched, estimated_cost: requestCost(enriched.operational, pricing) };
+}
+const text = answerResponse.output?.flatMap(o => o.content || []).find(c => c.type === 'output_text')?.text;
+try {
+  if ($json.statusCode && $json.statusCode >= 400) throw new Error('provider');
+  const a = JSON.parse(text);
+  const known = new Set(source.answer_input.items.map(i => i.id));
+  if (!a.answer || !Array.isArray(a.supporting_item_ids) || !Array.isArray(a.limitations) || a.supporting_item_ids.some(i => !known.has(i))) throw new Error('validation');
+  const request_detail = withAnswerer(source.request_detail, 'completed', null, 'succeeded');
+  if (a.outcome === 'INSUFFICIENT_EVIDENCE' && !a.supporting_item_ids.length) return [{ json: { request_id: source.request_id, status: source.status, kind: 'empty', message: a.answer, request_detail, note_result_snapshot: source.note_result_snapshot } }];
+  if (a.outcome !== 'ANSWER' || !a.supporting_item_ids.length) throw new Error('validation');
+  return [{ json: { request_id: source.request_id, status: source.status, kind: 'answer', message: a.answer, request_detail, note_result_snapshot: source.note_result_snapshot } }];
+} catch (error) {
+  const category = error?.message === 'provider' ? 'AnswerProviderFailure' : error?.message === 'validation' ? 'AnswerValidationError' : 'AnswerParseError';
+  const request_detail = withAnswerer(source.request_detail, 'failed', category, category === 'AnswerParseError' ? 'failed' : category === 'AnswerValidationError' ? 'succeeded' : null);
+  return [{ json: { request_id: source.request_id, status: 'failed', kind: 'error', message: 'Odyssey no ha podido procesar esta solicitud.', request_detail } }];
+}`;
 const authenticatedActor = deploymentEnvironment === 'DEV'
   ? `, authenticated_actor: { stable_user_id: ${JSON.stringify(devStableUserId)} }`
   : '';

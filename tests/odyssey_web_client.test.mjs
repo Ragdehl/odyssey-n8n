@@ -179,6 +179,41 @@ test("request detail accepts estimated cost with a dated pricing basis", () => {
   }), ProductRequestError);
 });
 
+test("intelligent Notes preserves bounded planner attempts through its transport", () => {
+  const page = {
+    kind: "page", mode: "intelligent", sort: "relevance", ranking_version: "ui2-feed-v1",
+    as_of: "2026-09-22T10:00:00Z", applied_filters: [], items: [], total: 0,
+    next_cursor: null,
+    operational: {total_duration_ms: 9000, coverage: {attributed_ms: 8000,
+      unattributed_ms: 1000, coverage_pct: 88.888, overlapping_ms: 0}, stages: [{
+      name: "planner", outcome: "completed", duration_ms: 8000, provider_calls: [{
+        name: "planner.luna", outcome: "failed", duration_ms: 3000, model: "gpt-5.6-luna",
+        reasoning_effort: "low", validation_stage: "SELECTION", validation_code: "EMPTY_QUERY",
+        ordinal: 1, input_sizes: {fixed_instructions_bytes: 100}, provider_calls: [],
+      }, {
+        name: "planner.sol_fallback", outcome: "completed", duration_ms: 5000,
+        model: "gpt-5.6-sol", reasoning_effort: "low", ordinal: 2, provider_calls: [],
+      }],
+    }]},
+  };
+  const result = validateNotesResponse(page);
+  assert.equal(result.operational.stages[0].provider_calls.length, 2);
+  assert.equal(result.operational.stages[0].provider_calls[0].validation_code, "EMPTY_QUERY");
+  assert.equal(result.operational.stages[0].provider_calls[1].ordinal, 2);
+});
+
+test("intelligent Notes measures only its browser product transport wall", async () => {
+  const moments = [100, 135];
+  const value = {
+    kind: "page", mode: "intelligent", sort: "relevance", ranking_version: "ui2-feed-v1",
+    as_of: "2026-09-22T10:00:00Z", applied_filters: [], items: [], total: 0,
+    next_cursor: null, operational: {total_duration_ms: 10, stages: []},
+  };
+  const result = await requestNotes({operation: "intelligent", payload: {query: "Marta"},
+    fetchImpl: async () => response({payload: value}), monotonicImpl: () => moments.shift()});
+  assert.equal(result.operational.browser_product_duration_ms, 35);
+});
+
 test("request detail retains only validated bounded operational evidence", () => {
   const result = validateProductResponse({
     request_id: "web-detail",

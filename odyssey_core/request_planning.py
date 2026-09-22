@@ -9,11 +9,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import wraps
+from time import perf_counter
 from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
 from odyssey_core.notes.validation import NoteValidationError, validate_field_value
-from odyssey_core.observability import normalize_provider_usage
+from odyssey_core.observability import (
+    OperationalOutcome,
+    OperationalSpan,
+    SpanRecorder,
+    normalize_provider_usage,
+)
 from odyssey_core.planner_capabilities import (
     LIMITATIONS,
     build_planner_capabilities,
@@ -305,6 +311,8 @@ def render_request_planner_prompt(
     schema: Mapping[str, Any],
     current_context: Mapping[str, str],
     conversation_context: Sequence[Mapping[str, str]] = (),
+    *,
+    size_components: dict[str, int] | None = None,
 ) -> str:
     """Render the production planner prompt from active schema and runtime context.
 
@@ -327,21 +335,37 @@ def render_request_planner_prompt(
         raise RuntimeError("Request planner write capability placeholder is invalid")
     retrieval = build_planner_capabilities(schema, current_context=current_context)
     writable = build_write_capabilities(schema)
+    retrieval_json = json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))
+    writable_json = json.dumps(writable, ensure_ascii=False, separators=(",", ":"))
     rendered = _PROMPT_TEMPLATE.replace(
         _RETRIEVAL_CAPABILITY_PLACEHOLDER,
-        json.dumps(retrieval, ensure_ascii=False, separators=(",", ":")),
+        retrieval_json,
     )
     prompt = rendered.replace(
         _WRITE_CAPABILITY_PLACEHOLDER,
-        json.dumps(writable, ensure_ascii=False, separators=(",", ":")),
+        writable_json,
     )
+    context_bytes = 0
     if conversation_context:
         bounded = [
             {"role": item.get("role"), "text": item.get("text")} for item in conversation_context
         ]
-        prompt += (
+        context_section = (
             "\n\nBounded active-conversation evidence (what was said, not current truth):\n"
             + json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+        )
+        prompt += context_section
+        context_bytes = len(context_section.encode("utf-8"))
+    if size_components is not None:
+        retrieval_bytes = len(retrieval_json.encode("utf-8"))
+        writable_bytes = len(writable_json.encode("utf-8"))
+        size_components.update(
+            fixed_instructions_bytes=(
+                len(prompt.encode("utf-8")) - retrieval_bytes - writable_bytes - context_bytes
+            ),
+            retrieval_capabilities_bytes=retrieval_bytes,
+            write_capabilities_bytes=writable_bytes,
+            recent_context_bytes=context_bytes,
         )
     return prompt
 
@@ -644,7 +668,11 @@ class OpenAIRequestPlanner:
     """Plan requests with Sol/low while leaving all execution outside this boundary."""
 
     def __init__(
-        self, client: ResponsesClient, schema: Mapping[str, Any], current_context: Mapping[str, str]
+        self,
+        client: ResponsesClient,
+        schema: Mapping[str, Any],
+        current_context: Mapping[str, str],
+        monotonic: Any = perf_counter,
     ) -> None:
         """Initialize a planner with an injected client and runtime schema/context.
 
@@ -660,6 +688,7 @@ class OpenAIRequestPlanner:
         self._client = client
         self._schema = schema
         self._current_context = dict(current_context)
+        self._monotonic = monotonic
         self.model = PLANNER_MODEL
         self.reasoning_effort = PLANNER_REASONING_EFFORT
         self.last_usage: dict[str, int] | None = None
@@ -676,6 +705,8 @@ class OpenAIRequestPlanner:
         self.last_error_category: str | None = None
         self.last_validation_stage: str | None = None
         self.last_validation_code: str | None = None
+        self.last_spans: tuple[OperationalSpan, ...] = ()
+        self.last_input_sizes: dict[str, int] | None = None
 
     @classmethod
     def from_environment(
@@ -732,8 +763,32 @@ class OpenAIRequestPlanner:
         self.last_error_category = None
         self.last_validation_stage = None
         self.last_validation_code = None
+        self.last_spans = ()
+        self.last_input_sizes = None
         self.last_call = True
         self.last_attempt_count = 1
+        recorder = SpanRecorder(self._monotonic(), self._monotonic)
+        input_started = self._monotonic()
+        sizes: dict[str, int] = {}
+        try:
+            prompt = render_request_planner_prompt(
+                self._schema,
+                self._current_context,
+                conversation_context,
+                size_components=sizes,
+            )
+            output_schema = planner_result_json_schema(self._schema)
+            sizes["user_request_bytes"] = len(request.encode("utf-8"))
+            sizes["structured_output_schema_bytes"] = len(
+                json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            )
+        except Exception as error:
+            recorder.add("input_build", input_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
+            raise
+        recorder.add("input_build", input_started)
+        self.last_input_sizes = sizes
+        provider_started = self._monotonic()
         try:
             response = self._client.responses.create(
                 model=PLANNER_MODEL,
@@ -743,9 +798,7 @@ class OpenAIRequestPlanner:
                 input=[
                     {
                         "role": "system",
-                        "content": render_request_planner_prompt(
-                            self._schema, self._current_context, conversation_context
-                        ),
+                        "content": prompt,
                     },
                     {"role": "user", "content": request},
                 ],
@@ -754,13 +807,17 @@ class OpenAIRequestPlanner:
                         "type": "json_schema",
                         "name": "odyssey_planner_result",
                         "strict": True,
-                        "schema": planner_result_json_schema(self._schema),
+                        "schema": output_schema,
                     }
                 },
             )
         except Exception as error:
+            recorder.add("provider", provider_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
             self.last_error_category = _bounded_provider_metadata(type(error).__name__)
             raise RequestPlanningError("Request planner provider call failed") from error
+        recorder.add("provider", provider_started)
+        self.last_spans = recorder.spans
         self.last_usage = normalize_provider_usage(response)
         self.last_response_id = _bounded_provider_metadata(getattr(response, "id", None))
         self.last_provider_status = _bounded_provider_metadata(getattr(response, "status", None))
@@ -778,13 +835,22 @@ class OpenAIRequestPlanner:
         if self.last_provider_status != "completed":
             self.last_error_category = "IncompleteProviderResponse"
             raise RequestPlanningError("Request planner provider response was not completed")
+        parse_started = self._monotonic()
         try:
             payload = json.loads(output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:
+            recorder.add("parse", parse_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
             self.last_parse_status = "failed"
-            self.last_error_category = "MalformedPlannerJSON"
+            self.last_error_category = (
+                "EmptyPlannerOutput"
+                if not isinstance(output_text, str) or not output_text.strip()
+                else "MalformedPlannerJSON"
+            )
             raise RequestPlanningError("Request planner returned malformed JSON") from error
+        recorder.add("parse", parse_started)
         self.last_parse_status = "succeeded"
+        validation_started = self._monotonic()
         if (
             not isinstance(payload, dict)
             or set(payload) != {"result"}
@@ -793,6 +859,8 @@ class OpenAIRequestPlanner:
             self.last_error_category = "LocalPlannerValidationError"
             self.last_validation_stage = PlannerValidationStage.PLANNER_RESULT_ENVELOPE.value
             self.last_validation_code = PlannerValidationCode.INVALID_FIELDS.value
+            recorder.add("validate", validation_started, OperationalOutcome.FAILED)
+            self.last_spans = recorder.spans
             raise RequestPlanningError(
                 "Request planner result wrapper is invalid",
                 stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
@@ -801,6 +869,8 @@ class OpenAIRequestPlanner:
         try:
             result = validate_planner_result(payload["result"], self._schema)
         except RequestPlanningError as error:
+            recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)
+            self.last_spans = recorder.spans
             self.last_error_category = "LocalPlannerValidationError"
             self.last_validation_stage = (
                 error.validation_stage.value if error.validation_stage is not None else None
@@ -809,6 +879,8 @@ class OpenAIRequestPlanner:
                 error.validation_code.value if error.validation_code is not None else None
             )
             raise
+        recorder.add("validate", validation_started)
+        self.last_spans = recorder.spans
         self.last_result_kind = "clarify" if isinstance(result, PlannerClarification) else "plan"
         self.last_result_counts = _planner_result_counts(result)
         return result

@@ -6,6 +6,7 @@ import json
 import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from time import perf_counter
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -17,8 +18,9 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.note_queries import NotesQueryError, StaleCursorError
 
-from .composition import RuntimeComposition
+from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
+from .serialization import operational_to_response
 
 MAX_REQUEST_BYTES = 1_048_576
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
@@ -150,9 +152,33 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         if key in payload
                     }
                     actor = self._identity_from_payload(actor_payload)
-                    self._write_json(HTTPStatus.OK, runtime.notes(operation, payload, *actor))
+                    notes_started = perf_counter()
+                    notes_response = runtime.notes(operation, payload, *actor)
+                    if "operational" in notes_response:
+                        notes_response = {
+                            **notes_response,
+                            "operational": {
+                                **notes_response["operational"],
+                                "product_execution_duration_ms": max(
+                                    0.0, (perf_counter() - notes_started) * 1000
+                                ),
+                            },
+                        }
+                    self._write_json(HTTPStatus.OK, notes_response)
                 except StaleCursorError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
+                except NotesTelemetryError as error:
+                    self._write_json(
+                        HTTPStatus.BAD_REQUEST
+                        if error.bad_request
+                        else HTTPStatus.INTERNAL_SERVER_ERROR,
+                        {
+                            "error": "invalid notes request"
+                            if error.bad_request
+                            else "runtime failure",
+                            "operational": operational_to_response(error.operational),
+                        },
+                    )
                 except (IdentityBoundaryError, NotesQueryError, TypeError, ValueError):
                     self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid notes request"})
                 return
@@ -205,6 +231,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})
                 return
             try:
+                product_started = perf_counter()
                 response = runtime.execute_product(
                     request,
                     request_id,
@@ -212,6 +239,17 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     authenticated_actor,
                     external_principal,
                 )
+                operational = response.get("operational")
+                if isinstance(operational, dict):
+                    response = {
+                        **response,
+                        "operational": {
+                            **operational,
+                            "product_execution_duration_ms": max(
+                                0.0, (perf_counter() - product_started) * 1000
+                            ),
+                        },
+                    }
                 self._write_json(HTTPStatus.OK, response)
             except IdentityBoundaryError:
                 self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid request"})

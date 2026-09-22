@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from .identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+from .observability import SpanRecorder
 from .request_planning import KnowledgeUnit, WriteAction
 from .storage import VaultRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
@@ -49,6 +50,7 @@ def preflight_write_action(
     id_allocator: Callable[[], str] = allocate_stable_id,
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
+    span_recorder: SpanRecorder | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Decide every ordered unit once and preallocate safe CREATE identities without writing.
 
@@ -84,16 +86,22 @@ def preflight_write_action(
             raise ReferencePreflightError(
                 "all_matching units cannot use single-identity reference preflight"
             )
-        decision = decide_write_target(
-            unit,
-            repository=repository,
-            schema=schema,
-            semantic_index=semantic_index,
-            embedder=embedder,
-            contextual_reasoner=contextual_reasoner,
-            semantic_limit=semantic_limit,
-            authenticated_actor=authenticated_actor,
-            self_binding_repository=self_binding_repository,
+        target_kwargs = {
+            "repository": repository,
+            "schema": schema,
+            "semantic_index": semantic_index,
+            "embedder": embedder,
+            "contextual_reasoner": contextual_reasoner,
+            "semantic_limit": semantic_limit,
+            "authenticated_actor": authenticated_actor,
+            "self_binding_repository": self_binding_repository,
+        }
+        decision = (
+            span_recorder.invoke(
+                f"preflight.unit[{unit_index}].target", decide_write_target, unit, **target_kwargs
+            )
+            if span_recorder is not None
+            else decide_write_target(unit, **target_kwargs)
         )
         results.append(
             _materialize_decision(
