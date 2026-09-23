@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Reference & Relationship Resolution v1 is defined with human-approved decisions; implementation is next.**
+Status: **Reference & Relationship Resolution v1 Slice 1 is implemented; safe write integration is next.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -183,10 +183,13 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
 
 ### Proposed implementation slices
 
-1. **Evidence and contract slice.** Define the backward-compatible relational-reference intent and
-   deterministic canonical-evidence projection for one source identity and one literal-link hop.
-   Provider-free fixtures prove one unique singular target, one complete finite set, and the
-   bounded-current-Markdown retrieval projection (direct entity facts/properties plus a relevant
+1. **Evidence and contract slice.** ✅ Implemented provider-free as a bounded Core projection over
+   current validated Markdown. It returns a source-hash-bound fact locator, source/target stable
+   identity and path provenance, literal-link target evidence, complete-or-empty finite sets, and
+   bounded direct/incoming/outgoing entity snippets. It deliberately does not modify `RequestPlan`,
+   planner prompts, `ContextPackage`, Notes search, or writes. Its contract covers one source
+   identity and one literal-link hop. Provider-free fixtures prove one unique singular target, one
+   complete finite set, and the bounded-current-Markdown retrieval projection (direct entity facts/properties plus a relevant
    incoming snippet and an outgoing snippet only when needed). This slice has no general graph query
    or Notes search traversal.
 2. **Safe write integration.** Connect resolved targets to the existing write-target preflight and
