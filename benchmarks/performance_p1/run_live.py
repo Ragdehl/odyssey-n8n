@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -36,6 +37,8 @@ from .dev_fixture import (
 from .report import _estimated_call_cost
 
 P1_N8N_URL_ENV = "ODYSSEY_P1_N8N_URL"
+P1_CF_ACCESS_CLIENT_ID_ENV = "ODYSSEY_P1_CF_ACCESS_CLIENT_ID"
+P1_CF_ACCESS_CLIENT_SECRET_ENV = "ODYSSEY_P1_CF_ACCESS_CLIENT_SECRET"
 P1_RUNTIME_SERVICE = "odyssey-p1-fixture-runtime.service"
 _FORBIDDEN_N8N_HOSTS = {
     "n8n.ragdehl.com",
@@ -43,6 +46,7 @@ _FORBIDDEN_N8N_HOSTS = {
     "odyssey.ragdehl.com",
 }
 _MAX_PROVIDER_CALLS = 64
+_P1_REQUEST_PATHS = frozenset({"/api/request", "/api/conversation", "/api/notes"})
 _BASELINE_FACTS = {
     "Marta": ("Marta trabaja en Thales.", "Marta vive en Lyon."),
     "Elena": ("Elena vive en Girona.",),
@@ -52,6 +56,21 @@ _BASELINE_FACTS = {
 
 class LiveRunError(RuntimeError):
     """Raised when a live baseline cannot safely retain trustworthy evidence."""
+
+
+@dataclass(frozen=True)
+class _P1AccessCredentials:
+    """Keep the P1-only Cloudflare Access service token out of runner evidence and reprs."""
+
+    client_id: str = field(repr=False)
+    client_secret: str = field(repr=False)
+
+    def headers(self) -> dict[str, str]:
+        """Return the Cloudflare Access headers only for an already-validated P1 request."""
+        return {
+            "CF-Access-Client-Id": self.client_id,
+            "CF-Access-Client-Secret": self.client_secret,
+        }
 
 
 def _validated_p1_n8n_url(value: object) -> str:
@@ -87,7 +106,42 @@ def _validated_p1_n8n_url(value: object) -> str:
     return f"https://{authority}"
 
 
-HttpPost = Callable[[str, dict[str, object], float], dict[str, Any]]
+def _p1_access_credentials() -> _P1AccessCredentials:
+    """Load the required P1 Cloudflare Access token only from its process environment.
+
+    Raises:
+        LiveRunError: If either required environment variable is absent or contains only whitespace.
+    """
+    client_id = os.environ.get(P1_CF_ACCESS_CLIENT_ID_ENV)
+    client_secret = os.environ.get(P1_CF_ACCESS_CLIENT_SECRET_ENV)
+    if not isinstance(client_id, str) or not client_id.strip():
+        raise LiveRunError("P1 Cloudflare Access client ID is required")
+    if not isinstance(client_secret, str) or not client_secret.strip():
+        raise LiveRunError("P1 Cloudflare Access client secret is required")
+    return _P1AccessCredentials(client_id=client_id, client_secret=client_secret)
+
+
+def _validated_p1_request_url(value: object, p1_n8n_url: str) -> str:
+    """Require a fixed P1 webhook path on the already-validated dedicated origin."""
+    origin = _validated_p1_n8n_url(p1_n8n_url)
+    if not isinstance(value, str):
+        raise LiveRunError("P1 request target is malformed")
+    try:
+        parsed = urlsplit(value)
+        candidate_origin = _validated_p1_n8n_url(f"{parsed.scheme}://{parsed.netloc}")
+    except (LiveRunError, ValueError) as error:
+        raise LiveRunError("P1 request target is outside the dedicated origin") from error
+    if (
+        candidate_origin != origin
+        or parsed.path not in _P1_REQUEST_PATHS
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise LiveRunError("P1 request target is outside the dedicated origin")
+    return value
+
+
+HttpPost = Callable[[str, dict[str, object], float, _P1AccessCredentials, str], dict[str, Any]]
 FixtureReset = Callable[[dict[str, Any]], dict[str, object]]
 RuntimeRestart = Callable[[], None]
 
@@ -110,17 +164,24 @@ def _safe_json(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
-def post_json(url: str, payload: dict[str, object], timeout_s: float) -> dict[str, Any]:
+def post_json(
+    url: str,
+    payload: dict[str, object],
+    timeout_s: float,
+    credentials: _P1AccessCredentials,
+    p1_n8n_url: str,
+) -> dict[str, Any]:
     """Perform exactly one JSON POST with no retry behavior.
 
     Raises:
-        LiveRunError: If the DEV endpoint is unavailable, rejects the request, or returns a
-            malformed JSON object.
+        LiveRunError: If the target is outside the dedicated P1 origin, the endpoint is unavailable,
+            rejects the request, or returns a malformed JSON object.
     """
+    url = _validated_p1_request_url(url, p1_n8n_url)
     request = urllib.request.Request(
         url,
         data=_safe_json(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", **credentials.headers()},
         method="POST",
     )
     try:
@@ -190,7 +251,13 @@ def _reset_case_fixture(case: dict[str, Any]) -> dict[str, object]:
 
 
 def _append_prior_turns(
-    case: dict[str, Any], run_id: str, post: HttpPost, timeout_s: float, conversation_url: str
+    case: dict[str, Any],
+    run_id: str,
+    post: HttpPost,
+    timeout_s: float,
+    conversation_url: str,
+    credentials: _P1AccessCredentials,
+    p1_n8n_url: str,
 ) -> None:
     """Persist frozen conversational context through the regular P1 n8n boundary."""
     turns = case.get("prior_turns", [])
@@ -207,6 +274,8 @@ def _append_prior_turns(
             conversation_url,
             {"operation": "turn", "request_id": request_id, "role": turn["role"], "text": text},
             timeout_s,
+            credentials,
+            p1_n8n_url,
         )
         if response.get("conversation_id") != "main":
             raise LiveRunError("P1 conversation setup did not confirm the main conversation")
@@ -374,6 +443,7 @@ def run_live_cases(
     if not confirmed:
         raise LiveRunError("live provider calls require explicit confirmation")
     n8n_url = _validated_p1_n8n_url(n8n_url)
+    credentials = _p1_access_credentials()
     if evidence_path.exists():
         raise FileExistsError("Refusing to overwrite existing P1 evidence")
     expected_ids = ["R1", "R2", "W1", "W2", "W3", "C1", "N1"]
@@ -401,12 +471,18 @@ def run_live_cases(
                 fixture = reset(case)
                 restart()
                 _append_prior_turns(
-                    case, identity, post, timeout_s, f"{n8n_url.rstrip('/')}/api/conversation"
+                    case,
+                    identity,
+                    post,
+                    timeout_s,
+                    f"{n8n_url.rstrip('/')}/api/conversation",
+                    credentials,
+                    n8n_url,
                 )
                 request_id = f"p1-{identity}-{case_id}-{uuid4().hex[:12]}"
                 url, payload = _request_payload(case, request_id, n8n_url.rstrip("/"))
                 request_started = time.perf_counter()
-                response = post(url, payload, timeout_s)
+                response = post(url, payload, timeout_s, credentials, n8n_url)
                 client_product_duration_ms = (time.perf_counter() - request_started) * 1000
                 if case.get("kind") == "chat" and response.get("request_id") != request_id:
                     raise LiveRunError(
@@ -476,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Refusing live calls without --confirm-live-provider-calls")
     try:
         n8n_url = _validated_p1_n8n_url(args.p1_n8n_url)
+        _p1_access_credentials()
         _require_exact_p1_roots(P1_VAULT, P1_STATE)
         payload = json.loads(args.cases_path.read_text(encoding="utf-8"))
         cases = payload.get("cases") if isinstance(payload, dict) else None

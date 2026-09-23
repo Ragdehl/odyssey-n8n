@@ -15,6 +15,13 @@ from benchmarks.performance_p1.dev_fixture import FixtureError, fixture_notes
 from odyssey_core.notes import validate_note
 
 
+@pytest.fixture(autouse=True)
+def _p1_access_service_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply non-sensitive process-only token values to the provider-free runner tests."""
+    monkeypatch.setenv(run_live.P1_CF_ACCESS_CLIENT_ID_ENV, "p1-test-client-id")
+    monkeypatch.setenv(run_live.P1_CF_ACCESS_CLIENT_SECRET_ENV, "p1-test-client-secret")
+
+
 def _cases() -> list[dict[str, Any]]:
     """Load the frozen registry used by the real executor."""
     path = Path(__file__).parents[2] / "benchmarks/performance_p1/cases.json"
@@ -236,6 +243,107 @@ def test_live_http_client_rejects_redirects_to_unvalidated_origins() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("environment_name", "message"),
+    [
+        (run_live.P1_CF_ACCESS_CLIENT_ID_ENV, "client ID"),
+        (run_live.P1_CF_ACCESS_CLIENT_SECRET_ENV, "client secret"),
+    ],
+)
+def test_live_runner_rejects_missing_access_token_before_any_side_effect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    environment_name: str,
+    message: str,
+) -> None:
+    """Missing Access credentials stop before evidence, fixture, runtime, or HTTP work."""
+    secret = "p1-secret-never-in-error"
+    monkeypatch.setenv(run_live.P1_CF_ACCESS_CLIENT_SECRET_ENV, secret)
+    monkeypatch.delenv(environment_name)
+    evidence = tmp_path / "must-not-exist.jsonl"
+
+    with pytest.raises(run_live.LiveRunError, match=message) as error:
+        run_live.run_live_cases(
+            _cases(),
+            evidence_path=evidence,
+            pricing={},
+            provenance={},
+            confirmed=True,
+            n8n_url="https://p1-fixture.test:28781",
+            post=lambda *_args: pytest.fail("missing token must not send a request"),
+            reset=lambda _case: pytest.fail("missing token must not reset the fixture"),
+            restart=lambda: pytest.fail("missing token must not restart the runtime"),
+        )
+
+    assert not evidence.exists()
+    assert secret not in str(error.value)
+
+
+def test_live_http_client_sends_access_headers_without_exposing_the_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The actual P1 HTTP request carries both Access headers and no credential is repr-visible."""
+    secret = "p1-secret-never-in-evidence"
+    monkeypatch.setenv(run_live.P1_CF_ACCESS_CLIENT_SECRET_ENV, secret)
+    captured: dict[str, str] = {}
+
+    class Response:
+        """Return one minimal JSON product response from a no-network fake opener."""
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    class Opener:
+        """Capture the constructed request without sending it anywhere."""
+
+        def open(self, request: Any, *, timeout: float) -> Response:
+            del timeout
+            captured.update({key.casefold(): value for key, value in request.header_items()})
+            return Response()
+
+    monkeypatch.setattr(run_live.urllib.request, "build_opener", lambda *_handlers: Opener())
+    credentials = run_live._p1_access_credentials()
+    response = run_live.post_json(
+        "https://p1-fixture.test:28781/api/request",
+        {"request": "synthetic"},
+        1.0,
+        credentials,
+        "https://p1-fixture.test:28781",
+    )
+
+    assert response == {}
+    assert captured["cf-access-client-id"] == "p1-test-client-id"
+    assert captured["cf-access-client-secret"] == secret
+    assert secret not in repr(credentials)
+
+
+def test_live_http_client_refuses_to_attach_access_headers_outside_p1_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A direct request target mismatch stops before the HTTP client can receive credentials."""
+    credentials = run_live._p1_access_credentials()
+    monkeypatch.setattr(
+        run_live.urllib.request,
+        "build_opener",
+        lambda *_handlers: pytest.fail("outside target must not construct an HTTP request"),
+    )
+
+    with pytest.raises(run_live.LiveRunError, match="outside the dedicated origin"):
+        run_live.post_json(
+            "https://not-p1-fixture.test/api/request",
+            {"request": "synthetic"},
+            1.0,
+            credentials,
+            "https://p1-fixture.test",
+        )
+
+
 def test_live_runner_rejects_unsafe_url_before_creating_evidence_or_requesting(
     tmp_path: Path,
 ) -> None:
@@ -280,7 +388,13 @@ def test_live_runner_flushes_every_case_and_keeps_semantic_failures_independent(
             state[person] += " " + " ".join(facts).casefold()
         return {"fixture_version": 1, "fixture_git_commit": f"fixture-{case['id']}"}
 
-    def post(_url: str, payload: dict[str, object], _timeout: float) -> dict[str, Any]:
+    def post(
+        _url: str,
+        payload: dict[str, object],
+        _timeout: float,
+        _credentials: object,
+        _p1_n8n_url: str,
+    ) -> dict[str, Any]:
         requests.append(payload)
         if payload.get("operation") == "turn":
             return {"conversation_id": "main"}
@@ -357,13 +471,20 @@ def test_live_runner_flushes_every_case_and_keeps_semantic_failures_independent(
     ]
     assert len(persisted) == 8 and persisted[0]["record_type"] == "run"
     assert all(row["record_type"] == "case" for row in persisted[1:])
+    assert "p1-test-client-secret" not in (tmp_path / "baseline.jsonl").read_text()
 
 
 def test_live_runner_stops_after_persisting_an_unsafe_transport_failure(tmp_path: Path) -> None:
     """A malformed product reply writes its stop record and performs no later request or retry."""
     calls = 0
 
-    def post(_url: str, _payload: dict[str, object], _timeout: float) -> dict[str, Any]:
+    def post(
+        _url: str,
+        _payload: dict[str, object],
+        _timeout: float,
+        _credentials: object,
+        _p1_n8n_url: str,
+    ) -> dict[str, Any]:
         nonlocal calls
         calls += 1
         return {"request_id": "wrong"}
@@ -383,6 +504,7 @@ def test_live_runner_stops_after_persisting_an_unsafe_transport_failure(tmp_path
         )
     rows = [json.loads(line) for line in (tmp_path / "stopped.jsonl").read_text().splitlines()]
     assert calls == 1 and rows[-1]["record_type"] == "unsafe_stop" and len(rows) == 2
+    assert "p1-test-client-secret" not in (tmp_path / "stopped.jsonl").read_text()
 
 
 def test_live_runner_refuses_existing_evidence_without_reset_or_request(tmp_path: Path) -> None:
