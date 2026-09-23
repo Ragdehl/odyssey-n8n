@@ -192,6 +192,24 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     assert purchase.facts == ("Bought {{ref:0}}.",)
 
 
+def test_ordinary_preflight_exposes_no_exact_id_override(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep raw exact stable-ID injection out of the ordinary public preflight contract."""
+    write_existing(tmp_path, "people/Marta.md")
+    with pytest.raises(TypeError, match="pre_resolved_reference_targets"):
+        preflight_write_action(
+            action(unit("Marta", entity="Marta", facts=("must not be retargeted",))),
+            repository=VaultRepository(tmp_path),
+            schema=schema,
+            semantic_index=EmptyIndex(),
+            embedder=EmptyEmbedder(),
+            contextual_reasoner=NoReasoner(),
+            semantic_limit=5,
+            pre_resolved_reference_targets={0: "existing-marta"},  # type: ignore[call-arg]
+        )
+
+
 def test_mixed_update_and_create_preflight_is_ordered(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:

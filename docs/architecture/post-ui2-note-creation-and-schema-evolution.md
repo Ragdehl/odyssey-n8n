@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Reference & Relationship Resolution v1 Slice 1 is implemented; safe write integration is next.**
+Status: **Reference & Relationship Resolution v1 Slices 1–2 are implemented; the focused model gate is next.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -144,12 +144,13 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    member evidence produces clarification and no CREATE.
 4. The shared-fact result has one canonical fact occurrence plus explicit links to all members; UI-2
    backlinks and existing retrieval can discover it without repeated per-person fact prose.
-5. Entity retrieval may use direct note facts/properties and bounded relevant incoming or outgoing
-   linked-fact snippets. Every snippet is re-grounded against current canonical Markdown, selected
-   under a deterministic bound, and returned without whole source notes by default; tests prove a
-   single canonical fact remains discoverable from the linked entity without copying it.
-6. Backlink/index projections are candidate/transport aids only; stale, missing, malformed, ambiguous,
-   or over-bound evidence cannot establish identity or enter final context.
+5. Entity retrieval may receive direct note facts/properties and every valid one-hop incoming or
+   outgoing linked-fact candidate in the supplied scope. Every candidate is re-grounded against
+   current canonical Markdown and returned without whole source notes by default. Later
+   request-aware retrieval selects the final bounded context; tests prove a single canonical fact
+   remains discoverable from the linked entity without copying it.
+6. Backlink/index projections are candidate/transport aids only; stale, missing, malformed, or
+   ambiguous evidence cannot establish identity or enter the candidate set or final context.
 7. Direct current-fact retrieval, ordinary exact/semantic identity resolution, self binding,
    `KnowledgeReference` marker validation, link binding, pending-reference behavior, and UI-2 Notes
    detail/backlinks retain their existing fail-closed contracts.
@@ -198,10 +199,14 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    (direct entity facts/properties plus a relevant incoming snippet and an outgoing snippet only when
    needed). This slice has no general graph query
    or Notes search traversal.
-2. **Safe write integration.** Connect resolved targets to the existing write-target preflight and
-   `KnowledgeReference` rendering path; prove one shared fact remains on the natural existing source,
-   links once to every member, and clarifies without mutation when no natural source exists or any
-   member is unresolved.
+2. **Safe write integration.** ✅ Implemented provider-free with one Core-internal binding that
+   re-grounds the source-hash-bound fact locator during write preparation, then admits only the
+   exact complete current member-ID set into the ordinary preflight table as structurally
+   reference-only no-write units. Each member binding pairs its unit index with a Core-grounded
+   stable ID, so the new fact's reference order can differ from the evidence fact's literal-link
+   order. The fact-bearing natural source must independently preflight as that exact existing note.
+   Rendering and materialization therefore write one linked fact on that source only; stale,
+   incomplete, mismatched, or source-less preparation raises before mutation.
 3. **Focused model gate.** After deterministic approval, run frozen relational read/write/clarify
    sentinels with the production planner model/reasoning and the unchanged semantic validator/fallback
    contract. Do not broaden graph behavior from a successful small gate.
@@ -251,11 +256,11 @@ details remain subject to the existing tests and safety contracts.
 4. **Universal/bounded sets:** use all-or-clarify. A universal reference succeeds only when its
    complete bounded grounded set resolves; never attach a fact to only the resolvable subset. An
    explicit reviewed partial-set UX is outside v1.
-5. **Backlink-enriched retrieval:** entity context may contain direct canonical facts/properties,
-   bounded relevant incoming linked-fact snippets, and bounded relevant outgoing relational snippets
-   when needed. Re-ground each snippet against current Markdown, use bounded selection, and do not
-   inject entire backlink source notes by default or include backlinks without limit. A single linked
-   canonical fact remains sufficient; do not copy it to another note only to make it retrievable.
+5. **Backlink-enriched retrieval:** entity evidence may contain direct canonical facts/properties and
+   every valid one-hop incoming/outgoing linked-fact candidate in the supplied scope. Re-ground each
+   candidate against current Markdown and do not inject entire backlink source notes by default.
+   Later request-aware retrieval selects the final bounded context. A single linked canonical fact
+   remains sufficient; do not copy it to another note only to make it retrievable.
 
 No open product decision remains before implementation of this v1 scope. Any proposed expansion beyond
 these approved decisions returns for human review. The following sections remain broader post-UI-2
