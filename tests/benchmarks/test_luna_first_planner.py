@@ -81,6 +81,7 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RequestPlanningError,
     RetrieveAction,
+    compact_planner_result_json_schema,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -268,12 +269,25 @@ def test_obsolete_context_field_is_rejected_by_the_luna_validator(schema: dict[s
         )
 
 
-def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
+def _schema_accepts(
+    instance: Any, schema: dict[str, Any], root: dict[str, Any] | None = None
+) -> bool:
     """Evaluate the restricted Structured Outputs subset used by this provider contract test."""
+    root = schema if root is None else root
+    reference = schema.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        definition = root.get("$defs", {}).get(reference.removeprefix("#/$defs/"))
+        return isinstance(definition, dict) and _schema_accepts(instance, definition, root)
     variants = schema.get("anyOf")
-    if variants is not None and not any(_schema_accepts(instance, branch) for branch in variants):
+    if variants is not None and not any(
+        _schema_accepts(instance, branch, root) for branch in variants
+    ):
         return False
     expected_type = schema.get("type")
+    if isinstance(expected_type, list) and not any(
+        _schema_accepts(instance, {"type": item}, root) for item in expected_type
+    ):
+        return False
     if expected_type == "null" and instance is not None:
         return False
     if expected_type == "string" and not isinstance(instance, str):
@@ -286,7 +300,7 @@ def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
     if "enum" in schema and instance not in schema["enum"]:
         return False
     if expected_type == "array":
-        return all(_schema_accepts(item, schema["items"]) for item in instance)
+        return all(_schema_accepts(item, schema["items"], root) for item in instance)
     if not is_object:
         return True
     required = schema.get("required", [])
@@ -296,7 +310,7 @@ def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
     if schema.get("additionalProperties") is False and set(instance) - set(properties):
         return False
     return all(
-        field not in instance or _schema_accepts(value, properties[field])
+        field not in instance or _schema_accepts(value, properties[field], root)
         for field, value in instance.items()
         if field in properties
     )
@@ -363,11 +377,15 @@ def test_structured_outputs_schema_uses_supported_nested_closed_subset(
     assert result_schema["required"] == ["result"]
     assert result_schema["additionalProperties"] is False
     branches = result_schema["properties"]["result"]["anyOf"]
-    assert [branch["properties"]["outcome"]["enum"][0] for branch in branches] == [
-        "PLAN",
-        "CLARIFY",
-        "ESCALATE",
+    assert [branch["$ref"] for branch in branches] == [
+        "#/$defs/plan_result",
+        "#/$defs/clarify_result",
+        "#/$defs/escalate_result",
     ]
+    assert [
+        result_schema["$defs"][name]["properties"]["outcome"]["enum"][0]
+        for name in ("plan_result", "clarify_result", "escalate_result")
+    ] == ["PLAN", "CLARIFY", "ESCALATE"]
     _assert_provider_objects_closed(result_schema)
 
 
@@ -488,17 +506,21 @@ def test_prompt_and_teaching_registry_fail_closed_on_malformed_inputs(
 def test_experimental_schema_helpers_reuse_production_contract(
     schema: dict[str, Any],
 ) -> None:
-    """Expose identical nested production schemas without defining another planner language."""
+    """Reuse the production planner language while sharing Luna-only schema subtrees."""
     production = production_result_contract_unchanged(schema)
     experimental = luna_experimental_result_json_schema(schema)
+    compact = compact_planner_result_json_schema(schema)
     assert (
-        experimental["properties"]["result"]["anyOf"][:2]
-        == production["properties"]["result"]["anyOf"]
+        production["properties"]["result"]["anyOf"][0]["properties"]["actions"]
+        == (embedded_request_plan_contract(schema)["properties"]["actions"])
     )
-    plan_branch = production["properties"]["result"]["anyOf"][0]
+    assert experimental["$defs"]["plan_result"] == compact["$defs"]["plan_result"]
+    assert experimental["$defs"]["clarify_result"] == compact["$defs"]["clarify_result"]
     request_plan = embedded_request_plan_contract(schema)
-    assert plan_branch["properties"]["actions"] == request_plan["properties"]["actions"]
-    assert plan_branch["properties"]["limitations"] == request_plan["properties"]["limitations"]
+    assert (
+        production["properties"]["result"]["anyOf"][0]["properties"]["limitations"]
+        == (request_plan["properties"]["limitations"])
+    )
 
 
 def test_environment_and_provider_failures_remain_closed(

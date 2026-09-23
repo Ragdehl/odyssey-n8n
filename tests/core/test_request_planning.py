@@ -28,6 +28,7 @@ from odyssey_core.request_planning import (
     RequestPlanningError,
     RetrieveAction,
     WriteAction,
+    compact_planner_result_json_schema,
     planner_result_json_schema,
     render_request_planner_prompt,
     request_plan_json_schema,
@@ -129,12 +130,25 @@ def schema_unit(*args: Any, **kwargs: Any) -> dict:
     return result
 
 
-def schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
+def schema_accepts(
+    instance: Any, schema: dict[str, Any], root: dict[str, Any] | None = None
+) -> bool:
     """Evaluate the conservative Structured Outputs subset used by PlannerResult tests."""
+    root = schema if root is None else root
+    reference = schema.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        definition = root.get("$defs", {}).get(reference.removeprefix("#/$defs/"))
+        return isinstance(definition, dict) and schema_accepts(instance, definition, root)
     variants = schema.get("anyOf")
-    if variants is not None and not any(schema_accepts(instance, variant) for variant in variants):
+    if variants is not None and not any(
+        schema_accepts(instance, variant, root) for variant in variants
+    ):
         return False
     expected_type = schema.get("type")
+    if isinstance(expected_type, list) and not any(
+        schema_accepts(instance, {"type": item}, root) for item in expected_type
+    ):
+        return False
     if expected_type == "null" and instance is not None:
         return False
     if expected_type == "string" and not isinstance(instance, str):
@@ -147,7 +161,7 @@ def schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
     if "enum" in schema and instance not in schema["enum"]:
         return False
     if expected_type == "array":
-        return all(schema_accepts(item, schema["items"]) for item in instance)
+        return all(schema_accepts(item, schema["items"], root) for item in instance)
     if not is_object:
         return True
     required = schema.get("required", [])
@@ -157,7 +171,7 @@ def schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
     if schema.get("additionalProperties") is False and set(instance) - set(properties):
         return False
     return all(
-        field not in instance or schema_accepts(value, properties[field])
+        field not in instance or schema_accepts(value, properties[field], root)
         for field, value in instance.items()
         if field in properties
     )
@@ -816,6 +830,40 @@ def test_planner_result_schema_is_closed_and_discriminated(schema: dict) -> None
     }
     with pytest.raises(RequestPlanningError, match="CLARIFY must"):
         validate_planner_result(invalid_clarification, schema)
+
+
+def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict) -> None:
+    """Share Structured Outputs subtrees without broadening the validated planner language."""
+    compact = compact_planner_result_json_schema(schema)
+    read = provider_output(planner_output(retrieve("Odyssey")))
+    write_plan = provider_output(planner_output(write(schema_unit("Marta"))))
+    mixed = provider_output(planner_output(retrieve("Odyssey"), write(schema_unit("Marta"))))
+    clarify = provider_output(
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
+        }
+    )
+    assert all(schema_accepts(payload, compact) for payload in (read, write_plan, mixed, clarify))
+    assert not schema_accepts(
+        provider_output(
+            {
+                "outcome": "CLARIFY",
+                "actions": [],
+                "limitations": None,
+                "clarification_code": "UNRECOGNIZED_REQUEST",
+                "presentation_intent": None,
+            }
+        ),
+        compact,
+    )
+    assert "filter_array" in compact["$defs"]
+    assert compact["$defs"]["retrieve_action"]["properties"]["plan"] == {
+        "$ref": "#/$defs/selection"
+    }
 
 
 def test_context_payload_is_not_a_planner_result(schema: dict) -> None:
