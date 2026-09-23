@@ -74,7 +74,8 @@ UI-0 durable main conversation/continuity                        ✅ complete in
 UI-0 explicit production promotion                              ✅ complete
 UI-2 read-only Notes                                              ✅ merged in PR #124
 Performance / Latency / Cost P1A/P1B (baseline measured; Draft PR #125) ✅ complete
-Performance / Latency / Cost P1C–P1D (one selected change → comparison) ➡️ next after review
+Performance / Latency / Cost P1C Luna envelope repair (deterministic; live gate pending) ➡️ current
+Performance / Latency / Cost P1D (same cases → comparison) ⬜ planned after P1C live gate
 Post-UI-2 backlink/context and reference-resolution work        ⬜ planned after P1
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks

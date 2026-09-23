@@ -106,16 +106,22 @@ def selection(
         "type": note_type,
         "filters": filters or [],
         "link_scope": None,
+        "self_target": None,
     }
 
 
-def plan_payload(*actions: dict[str, Any], limitations: list[str] | None = None) -> dict[str, Any]:
+def plan_payload(
+    *actions: dict[str, Any],
+    limitations: list[str] | None = None,
+    presentation_intent: str = "answer",
+) -> dict[str, Any]:
     """Build one inner experimental PLAN payload."""
     return {
         "outcome": "PLAN",
         "actions": list(actions),
         "limitations": limitations or [],
         "clarification_code": None,
+        "presentation_intent": presentation_intent,
     }
 
 
@@ -166,6 +172,19 @@ def test_plan_reuses_existing_local_validation(schema: dict[str, Any]) -> None:
         validate_luna_experimental_result(invalid, schema)
 
 
+@pytest.mark.parametrize("presentation_intent", ["answer", "note_set", "answer_and_note_set"])
+def test_plan_accepts_each_production_presentation_intent(
+    schema: dict[str, Any], presentation_intent: str
+) -> None:
+    """Delegate PLAN presentation semantics directly to the production validator."""
+    result = validate_luna_experimental_result(
+        plan_payload(retrieve("Odyssey"), presentation_intent=presentation_intent), schema
+    )
+
+    assert isinstance(result, RequestPlan)
+    assert result.presentation_intent == presentation_intent
+
+
 def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
     """Keep both non-plan outcomes closed and non-executing."""
     clarify = validate_luna_experimental_result(
@@ -174,6 +193,7 @@ def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
             "actions": None,
             "limitations": None,
             "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
         },
         schema,
     )
@@ -190,6 +210,20 @@ def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
     assert asdict(escalate) == {"outcome": "ESCALATE"}
 
 
+def test_escalate_accepts_only_its_closed_luna_payload(schema: dict[str, Any]) -> None:
+    """Keep Luna-only ESCALATE distinct from the production PLAN/CLARIFY envelope."""
+    payload = {
+        "outcome": "ESCALATE",
+        "actions": None,
+        "limitations": None,
+        "clarification_code": None,
+    }
+    assert validate_luna_experimental_result(payload, schema) == PlannerEscalation()
+
+    with pytest.raises(RequestPlanningError, match="fields are invalid"):
+        validate_luna_experimental_result({**payload, "presentation_intent": None}, schema)
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -199,8 +233,15 @@ def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
             "actions": None,
             "limitations": [],
             "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
         },
-        {"outcome": "PLAN", "actions": None, "limitations": None, "clarification_code": None},
+        {
+            "outcome": "PLAN",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+            "presentation_intent": "answer",
+        },
         {"outcome": "ESCALATE", "actions": None, "limitations": None},
     ],
 )
@@ -225,6 +266,91 @@ def test_obsolete_context_field_is_rejected_by_the_luna_validator(schema: dict[s
             },
             schema,
         )
+
+
+def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
+    """Evaluate the restricted Structured Outputs subset used by this provider contract test."""
+    variants = schema.get("anyOf")
+    if variants is not None and not any(_schema_accepts(instance, branch) for branch in variants):
+        return False
+    expected_type = schema.get("type")
+    if expected_type == "null" and instance is not None:
+        return False
+    if expected_type == "string" and not isinstance(instance, str):
+        return False
+    if expected_type == "array" and not isinstance(instance, list):
+        return False
+    is_object = expected_type == "object" or "properties" in schema
+    if is_object and not isinstance(instance, dict):
+        return False
+    if "enum" in schema and instance not in schema["enum"]:
+        return False
+    if expected_type == "array":
+        return all(_schema_accepts(item, schema["items"]) for item in instance)
+    if not is_object:
+        return True
+    required = schema.get("required", [])
+    if any(field not in instance for field in required):
+        return False
+    properties = schema.get("properties", {})
+    if schema.get("additionalProperties") is False and set(instance) - set(properties):
+        return False
+    return all(
+        field not in instance or _schema_accepts(value, properties[field])
+        for field, value in instance.items()
+        if field in properties
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        plan_payload(retrieve("Odyssey")),
+        plan_payload(retrieve("Odyssey"), presentation_intent="note_set"),
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
+        },
+        {
+            "outcome": "ESCALATE",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+        },
+    ],
+)
+def test_luna_schema_and_local_validator_accept_same_representative_outcomes(
+    schema: dict[str, Any], payload: dict[str, Any]
+) -> None:
+    """Keep the provider's closed alternatives aligned with local validation."""
+    assert _schema_accepts({"result": payload}, luna_experimental_result_json_schema(schema))
+    assert validate_luna_experimental_result(payload, schema)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {**plan_payload(retrieve("Odyssey")), "unsupported": True},
+        {
+            "outcome": "CLARIFY",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
+            "unsupported": True,
+        },
+    ],
+)
+def test_production_outcomes_reject_unsupported_extra_fields(
+    schema: dict[str, Any], payload: dict[str, Any]
+) -> None:
+    """Do not let Luna add fields outside the inherited production envelope."""
+    assert not _schema_accepts({"result": payload}, luna_experimental_result_json_schema(schema))
+    with pytest.raises(RequestPlanningError):
+        validate_luna_experimental_result(payload, schema)
 
 
 def test_structured_outputs_schema_uses_supported_nested_closed_subset(

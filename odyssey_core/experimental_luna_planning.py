@@ -99,19 +99,20 @@ def validate_luna_experimental_result(
     same closed field set with three null payload fields, so it carries no action or invented user
     knowledge.
     """
-    if not isinstance(payload, dict) or set(payload) != {
-        "outcome",
-        "actions",
-        "limitations",
-        "clarification_code",
-    }:
+    if not isinstance(payload, dict):
         raise RequestPlanningError(
             "Experimental planner result fields are invalid",
             stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
             code=PlannerValidationCode.INVALID_FIELDS,
         )
-    if payload["outcome"] != "ESCALATE":
+    if payload.get("outcome") != "ESCALATE":
         return validate_planner_result(payload, schema)
+    if set(payload) != {"outcome", "actions", "limitations", "clarification_code"}:
+        raise RequestPlanningError(
+            "Experimental planner result fields are invalid",
+            stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+            code=PlannerValidationCode.INVALID_FIELDS,
+        )
     if any(
         payload[field] is not None for field in ("actions", "limitations", "clarification_code")
     ):
