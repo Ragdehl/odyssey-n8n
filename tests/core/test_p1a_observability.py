@@ -18,7 +18,7 @@ from odyssey_core.observability import (
     OperationalStage,
     reconcile_duration,
 )
-from odyssey_core.request_planning import OpenAIRequestPlanner, RequestPlan
+from odyssey_core.request_planning import OpenAIRequestPlanner, PlannerClarification, RequestPlan
 from odyssey_runtime.serialization import operational_to_response
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -75,11 +75,24 @@ def _selection(query: str) -> dict:
                     "type": None,
                     "filters": [],
                     "link_scope": None,
+                    "self_target": None,
                 },
             }
         ],
         "limitations": [],
         "clarification_code": None,
+        "presentation_intent": "answer",
+    }
+
+
+def _clarification() -> dict:
+    """Build the provider-complete inherited CLARIFY payload."""
+    return {
+        "outcome": "CLARIFY",
+        "actions": None,
+        "limitations": None,
+        "clarification_code": "UNRECOGNIZED_REQUEST",
+        "presentation_intent": None,
     }
 
 
@@ -142,6 +155,36 @@ def test_first_attempt_planner_success_keeps_provider_and_validation_phases() ->
     assert attempt.result_kind == "plan"
     assert attempt.input_sizes and attempt.input_sizes["user_request_bytes"] > 0
     assert not any("Marta" in str(value) for value in attempt.input_sizes.values())
+
+
+def test_first_attempt_clarification_skips_sol_with_provider_complete_payload() -> None:
+    """A valid Luna CLARIFY retains its own attempt evidence without fallback."""
+    clock = ManualClock()
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    luna_api = FakeResponses(
+        clock,
+        _clarification(),
+        1200,
+        {"input_tokens": 11800, "cached_input_tokens": 0, "output_tokens": 48},
+    )
+    sol_api = FakeResponses(
+        clock,
+        _selection("Marta"),
+        4200,
+        {"input_tokens": 10800, "cached_input_tokens": 0, "output_tokens": 100},
+    )
+    planner = LunaFirstRequestPlanner(
+        OpenAILunaExperimentalPlanner(SimpleNamespace(responses=luna_api), schema, CONTEXT, clock),
+        OpenAIRequestPlanner(SimpleNamespace(responses=sol_api), schema, CONTEXT, clock),
+        clock,
+    )
+
+    result = planner.plan("...???...")
+
+    assert result == PlannerClarification("UNRECOGNIZED_REQUEST")
+    assert luna_api.calls == 1 and sol_api.calls == 0
+    assert len(planner.last_provider_calls) == 1
+    assert planner.last_provider_calls[0].result_kind == "clarify"
 
 
 def test_luna_validation_failure_then_sol_success_preserves_both_attempts() -> None:

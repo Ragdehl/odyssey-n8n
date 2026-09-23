@@ -168,6 +168,39 @@ Provider-reported planner input is consistently about 11.9k Luna and 10.8k Sol t
 
 The architecture choice remains **PROCEED** with nested request-local evidence in `ApplicationResult.operational` and the existing request-detail projection. This retains Markdown as the sole knowledge authority and adds no telemetry database, tracing service, prompt logging, new planner, model-route change, or optimization. The detailed pre-P1A gap table above is historical inventory; this section records which gaps the implementation closed and the explicit outer-path and live-budget limitations that remain.
 
+## P1C Luna result-envelope repair
+
+P1B isolated one concrete cause before any prompt, model, routing, or performance change: the Luna
+Structured Outputs schema reuses the production PLAN and CLARIFY branches, where
+`presentation_intent` is required. The Luna local validator incorrectly rejected every payload with
+that field before delegating to the production validator, producing
+`PLANNER_RESULT_ENVELOPE / INVALID_FIELDS` after a completed, parsed provider response.
+
+PLAN and CLARIFY now delegate directly to `validate_planner_result`, preserving every production
+envelope, action, presentation, and semantic check. Luna-only ESCALATE still requires exactly its
+four non-executing fields and null payload values. Deterministic fake-provider tests cover valid
+PLAN/CLARIFY no-fallback behavior, closed ESCALATE, unsupported fields, invalid production
+semantics, and one genuine-invalid Luna fallback.
+
+The direct planner-only gate executed source `bbc65a3a0e525d858aa1387650988b0609a0cb29`, canonical
+schema version 3, and synthetic current context. It started no product request, runtime HTTP handler,
+n8n workflow, retrieval, write, answerer, fixture helper, or source deployment. Its immutable safe
+[evidence](../../benchmarks/luna_first_planner/results/p1c-live-20260923-run2.jsonl) contains no
+prompt, raw provider output, hidden reasoning, credential, or planner payload.
+
+| Case | Validated Luna result | Luna duration | Input / cached / output / reasoning | Sol fallback |
+| --- | --- | ---: | ---: | --- |
+| R — simple READ | PLAN | 4.898 s | 11,871 / 0 / 76 / 0 | No |
+| W — planner-only WRITE wording | PLAN; not executed | 4.525 s | 11,874 / 11,859 / 203 / 91 | No |
+| C — clarification | CLARIFY | 2.673 s | 11,872 / 11,859 / 49 / 0 | No |
+
+P1B's before rate was 7/7 Luna → Sol fallbacks, all after provider completion and parsing with
+`PLANNER_RESULT_ENVELOPE / INVALID_FIELDS`. The direct after rate is **0/3**. `INVALID_FIELDS` did
+not occur. The provider duration remains 2.673–4.898 s with roughly 11.9k input tokens, so P1D must
+assess Luna planner latency/input size before any prompt or routing change. The DEV vault Git-status
+fingerprint and non-content state-file metadata fingerprint matched before and after the run. The
+current `/data/odyssey-dev` vault/state was neither reset nor modified.
+
 ## Historical P1A whole-request cost-envelope audit — retired as a live gate
 
 The machine-readable [`envelope_audit.json`](../../benchmarks/performance_p1/envelope_audit.json) records every frozen case, possible provider role, dated rate, known output cap, missing pre-call bound, and the `null` maxima that must remain unavailable. It is an audit of source at `d1cdaa8`; it is **not** a verified `CaseEnvelope`. The configured first-pass planner is Luna/low with `max_output_tokens=2048`, zero automatic retries, and one possible Sol/low fallback with `max_output_tokens=4096`, zero automatic retries. A safe Luna clarification does not fallback. Each contextual resolver, writer, or fact-selector invocation issues one request through its own provider boundary; repeated units and all-matching notes may invoke those boundaries repeatedly. The n8n answerer makes one Luna/none Responses request when a Chat route includes retrieved items. No retry loop was found in the application code; the future isolated DEV executor must also verify effective n8n node retry settings before certification.
