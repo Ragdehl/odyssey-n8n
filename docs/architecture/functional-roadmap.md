@@ -30,9 +30,9 @@ UI-2 read-only Notes was human-merged in PR #124 at `73289c64c48df926974fe6e78c6
 The immediate next bounded phase is [Performance / Latency / Cost P1](performance-cost-p1.md):
 complete the existing request-path evidence, measure a small synthetic DEV baseline, diagnose the
 dominant avoidable contributor, then select one optimization and verify it against the same cases.
-P1A deterministic observability is on Draft PR #125. The earlier theoretical USD 0.20
-whole-request certification was deliberately retired as a benchmark gate; one isolated synthetic
-DEV P1B baseline is authorized, with no optimization authorized yet.
+P1A deterministic observability and one isolated synthetic DEV P1B baseline are on Draft PR
+#125. The baseline measured universal Luna → Sol fallback after bounded local validation failure;
+P1C must first select and review the one evidence-backed correction. No optimization has run.
 
 After P1 diagnosis and its one evidence-driven optimization, continue the
 [post-UI-2 note creation and schema evolution direction](post-ui2-note-creation-and-schema-evolution.md),
@@ -73,8 +73,8 @@ UI-1 request detail / advanced inspector                         ✅ complete in
 UI-0 durable main conversation/continuity                        ✅ complete in PROD
 UI-0 explicit production promotion                              ✅ complete
 UI-2 read-only Notes                                              ✅ merged in PR #124
-Performance / Latency / Cost P1A/P1B (one DEV baseline prepared; Draft PR #125) ➡️ current
-Performance / Latency / Cost P1C–P1D (one selected change → comparison) ⬜ after diagnosis
+Performance / Latency / Cost P1A/P1B (baseline measured; Draft PR #125) ✅ complete
+Performance / Latency / Cost P1C–P1D (one selected change → comparison) ➡️ next after review
 Post-UI-2 backlink/context and reference-resolution work        ⬜ planned after P1
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
