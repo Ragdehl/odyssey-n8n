@@ -1,8 +1,8 @@
 # P1B live baseline — 2026-09-23
 
-Source/deployment: `96a4fe76d9920a5de46a48b15cfda3c2cd44c650`  
-Environment: isolated disposable DEV only (`/data/odyssey-dev`)  
-Pricing: P1 snapshot `2026-09-23`  
+Source/deployment: `96a4fe76d9920a5de46a48b15cfda3c2cd44c650`
+Environment: isolated disposable DEV only (`/data/odyssey-dev`)
+Pricing: P1 snapshot `2026-09-23`
 Machine evidence: [p1b-live-20260923-run2.jsonl](p1b-live-20260923-run2.jsonl)
 
 One sequential execution ran each frozen case with a fixture reset before every case. The runner
