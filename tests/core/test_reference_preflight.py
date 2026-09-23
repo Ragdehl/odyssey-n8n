@@ -192,6 +192,24 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     assert purchase.facts == ("Bought {{ref:0}}.",)
 
 
+def test_pre_resolved_reference_target_rejects_any_mutation_payload(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Prevent the Core-only exact-ID path from retargeting a fact-bearing unit."""
+    write_existing(tmp_path, "people/Marta.md")
+    with pytest.raises(ReferencePreflightError, match="reference-only"):
+        preflight_write_action(
+            action(unit("Marta", entity="Marta", facts=("must not be retargeted",))),
+            repository=VaultRepository(tmp_path),
+            schema=schema,
+            semantic_index=EmptyIndex(),
+            embedder=EmptyEmbedder(),
+            contextual_reasoner=NoReasoner(),
+            semantic_limit=5,
+            pre_resolved_reference_targets={0: "existing-marta"},
+        )
+
+
 def test_mixed_update_and_create_preflight_is_ordered(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:

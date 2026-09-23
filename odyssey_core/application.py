@@ -135,6 +135,7 @@ class UnitResult:
     reason: str | None = None
     candidates: tuple[str, ...] = ()
     dependencies: tuple[DependencyEvidence, ...] = ()
+    materially_affected: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -777,6 +778,15 @@ def _execute_single_units(
             continue
         unit = action.units[index]
         target = preflight[index]
+        if target.reference_only:
+            results[index] = UnitResult(
+                index,
+                UnitStatus.SUCCEEDED,
+                operation="REFERENCE_BOUND",
+                stable_note_id=target.stable_id,
+                materially_affected=False,
+            )
+            continue
         decision = WriteTargetDecision(target.outcome, existing_note_id=target.stable_id)
         try:
             if target.outcome is WriteTargetOutcome.CREATE:
@@ -943,7 +953,7 @@ def _affected_ids(result: ActionResult) -> tuple[str, ...]:
     ids = [
         item.stable_note_id
         for item in result.unit_results
-        if item.status is UnitStatus.SUCCEEDED and item.stable_note_id
+        if item.status is UnitStatus.SUCCEEDED and item.materially_affected and item.stable_note_id
     ]
     if result.bulk_result is not None:
         ids.extend(item.stable_id for item in result.bulk_result.succeeded)

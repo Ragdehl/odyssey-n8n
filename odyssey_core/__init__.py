@@ -105,8 +105,11 @@ from .reference_binding import (
 )
 from .reference_preflight import (
     ReferencePreflightError,
+    RelationshipWriteBinding,
+    RelationshipWritePreflightError,
     UnitTargetPreflight,
     allocate_stable_id,
+    preflight_relationship_write_action,
     preflight_write_action,
 )
 from .relationship_evidence import (
@@ -288,6 +291,9 @@ __all__ = [
     "UnitTargetPreflight",
     "allocate_stable_id",
     "preflight_write_action",
+    "RelationshipWriteBinding",
+    "RelationshipWritePreflightError",
+    "preflight_relationship_write_action",
     "CanonicalFact",
     "CanonicalIdentity",
     "EntityEvidenceCandidateProjection",
