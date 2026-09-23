@@ -28,9 +28,11 @@ from .dev_fixture import DEV_ROOT, DEV_VAULT, FixtureError, reset_fixture
 from .report import _estimated_call_cost
 
 DEV_N8N_URL = "http://172.18.0.1:28780"
-_CHAT_URL = f"{DEV_N8N_URL}/webhook/request"
-_CONVERSATION_URL = f"{DEV_N8N_URL}/webhook/conversation"
-_NOTES_URL = f"{DEV_N8N_URL}/webhook/notes"
+# Phase 21 DEV n8n explicitly sets N8N_ENDPOINT_WEBHOOK=api. These remain the ordinary
+# product webhooks, addressed over the Docker bridge rather than through the public proxy.
+_CHAT_URL = f"{DEV_N8N_URL}/api/request"
+_CONVERSATION_URL = f"{DEV_N8N_URL}/api/conversation"
+_NOTES_URL = f"{DEV_N8N_URL}/api/notes"
 _MAX_PROVIDER_CALLS = 64
 _BASELINE_FACTS = {
     "Marta": ("Marta trabaja en Thales.", "Marta vive en Lyon."),

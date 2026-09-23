@@ -73,6 +73,14 @@ def test_disposable_fixture_is_schema_valid_and_root_guard_rejects_non_dev_paths
         _require_exact_dev_roots(Path("/data/odyssey/vault"), DEV_STATE)
 
 
+def test_live_request_payloads_use_the_configured_dev_webhook_prefix() -> None:
+    """The runner uses DEV's ordinary n8n `api` webhook prefix, never a direct runtime path."""
+    chat_url, _ = run_live._request_payload(_cases()[0], "p1-test")
+    notes_url, _ = run_live._request_payload(_cases()[-1], "p1-test")
+    assert chat_url.endswith("/api/request")
+    assert notes_url.endswith("/api/notes")
+
+
 def test_live_runner_flushes_every_case_and_keeps_semantic_failures_independent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
