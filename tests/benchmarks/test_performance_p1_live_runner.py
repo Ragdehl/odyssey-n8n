@@ -1,22 +1,17 @@
-"""Provider-free behavior tests for P1's isolated-DEV baseline executor."""
+"""Provider-free behavior tests for P1's dedicated-fixture baseline executor."""
 
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from benchmarks.performance_p1 import run_live
-from benchmarks.performance_p1.dev_fixture import (
-    DEV_STATE,
-    DEV_VAULT,
-    DISPOSABLE_MARKER,
-    FixtureError,
-    _require_exact_dev_roots,
-    fixture_notes,
-)
+from benchmarks.performance_p1 import dev_fixture, run_live
+from benchmarks.performance_p1.dev_fixture import FixtureError, fixture_notes
 from odyssey_core.notes import validate_note
 
 
@@ -62,32 +57,146 @@ def _operational() -> dict[str, Any]:
     }
 
 
-def test_disposable_fixture_is_schema_valid_and_root_guard_rejects_non_dev_paths(
-    monkeypatch: pytest.MonkeyPatch,
+def _configure_p1_fixture_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    """Configure a real temporary dedicated fixture identity without host DEV paths."""
+    root = tmp_path / "odyssey-p1-fixture"
+    vault = root / "vault"
+    state = root / "state"
+    vault.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(vault)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(vault),
+            "-c",
+            "user.name=Odyssey test",
+            "-c",
+            "user.email=odyssey-test@localhost",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "baseline",
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    state.mkdir()
+    marker = root / ".p1-disposable-fixture"
+    marker.write_text(dev_fixture.FIXTURE_IDENTITY, encoding="utf-8")
+    monkeypatch.setattr(dev_fixture, "P1_ROOT", root)
+    monkeypatch.setattr(dev_fixture, "P1_VAULT", vault)
+    monkeypatch.setattr(dev_fixture, "P1_STATE", state)
+    monkeypatch.setattr(dev_fixture, "DISPOSABLE_MARKER", marker)
+    monkeypatch.setattr(dev_fixture, "MANUAL_DEV_ROOT", tmp_path / "odyssey-dev")
+    monkeypatch.setattr(dev_fixture, "PRODUCTION_ROOT", tmp_path / "odyssey")
+    return vault, state
+
+
+def test_disposable_fixture_is_schema_valid_and_requires_dedicated_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The frozen fixture is schema-valid and requires the exact marked disposable DEV root."""
+    """The frozen fixture is schema-valid and accepts only its exact marked P1 root."""
     schema = json.loads((Path(__file__).parents[2] / "config/note-schema.json").read_text())
     notes = fixture_notes({"Marta": ["Marta prefiere el té."]})
     assert set(notes) == {"Marta", "Elena", "Pablo", "self"}
     for note in notes.values():
         validate_note(note, schema)
 
-    # CI does not own the fixed DEV filesystem. Simulate only the initialization and
-    # marker checks so this unit test exercises the safety guard without host state.
-    expected_dirs = {DEV_VAULT.parent, DEV_VAULT / ".git", DEV_STATE}
-    monkeypatch.setattr(Path, "is_dir", lambda self: self in expected_dirs)
-    monkeypatch.setattr(Path, "is_file", lambda self: self == DISPOSABLE_MARKER)
-    _require_exact_dev_roots(DEV_VAULT, DEV_STATE)
+    vault, state = _configure_p1_fixture_root(tmp_path, monkeypatch)
+    dev_fixture._require_exact_p1_roots(vault, state)
+    result = dev_fixture.reset_fixture(schema, vault_root=vault, state_root=state)
+    assert result["note_ids"] == ["p1-marta", "p1-elena", "p1-pablo"]
     with pytest.raises(FixtureError):
-        _require_exact_dev_roots(Path("/data/odyssey/vault"), DEV_STATE)
+        dev_fixture._require_exact_p1_roots(tmp_path / "other" / "vault", state)
 
 
-def test_live_request_payloads_use_the_configured_dev_webhook_prefix() -> None:
-    """The runner uses DEV's ordinary n8n `api` webhook prefix, never a direct runtime path."""
-    chat_url, _ = run_live._request_payload(_cases()[0], "p1-test")
-    notes_url, _ = run_live._request_payload(_cases()[-1], "p1-test")
+@pytest.mark.parametrize("protected_name", ["MANUAL_DEV_ROOT", "PRODUCTION_ROOT"])
+def test_fixture_reset_rejects_manual_or_production_roots_before_any_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, protected_name: str
+) -> None:
+    """A protected root retains its sentinel when the reset guard rejects it."""
+    vault, state = _configure_p1_fixture_root(tmp_path, monkeypatch)
+    protected_root = getattr(dev_fixture, protected_name)
+    protected_vault = protected_root / "vault"
+    protected_state = protected_root / "state"
+    protected_vault.mkdir(parents=True)
+    protected_state.mkdir()
+    sentinel = protected_vault / "must-not-delete.md"
+    sentinel.write_text("protected", encoding="utf-8")
+
+    with pytest.raises(FixtureError, match="must not overlap"):
+        dev_fixture.reset_fixture({}, vault_root=protected_vault, state_root=protected_state)
+
+    assert sentinel.read_text(encoding="utf-8") == "protected"
+    dev_fixture._require_exact_p1_roots(vault, state)
+
+
+def test_fixture_reset_rejects_missing_or_invalid_identity_before_any_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bad marker leaves dedicated-fixture content untouched before destructive work."""
+    vault, state = _configure_p1_fixture_root(tmp_path, monkeypatch)
+    sentinel = vault / "must-not-delete.md"
+    sentinel.write_text("fixture", encoding="utf-8")
+
+    dev_fixture.DISPOSABLE_MARKER.unlink()
+    with pytest.raises(FixtureError, match="not explicitly initialized"):
+        dev_fixture.reset_fixture({}, vault_root=vault, state_root=state)
+    assert sentinel.read_text(encoding="utf-8") == "fixture"
+
+    dev_fixture.DISPOSABLE_MARKER.write_text("wrong identity\n", encoding="utf-8")
+    with pytest.raises(FixtureError, match="identity is invalid"):
+        dev_fixture.reset_fixture({}, vault_root=vault, state_root=state)
+    assert sentinel.read_text(encoding="utf-8") == "fixture"
+
+
+def test_fixture_reset_rejects_missing_git_baseline_before_any_deletion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A marker alone cannot authorize deletion without a committed P1 Git baseline."""
+    vault, state = _configure_p1_fixture_root(tmp_path, monkeypatch)
+    sentinel = vault / "must-not-delete.md"
+    sentinel.write_text("fixture", encoding="utf-8")
+    shutil.rmtree(vault / ".git")
+    (vault / ".git").mkdir()
+
+    with pytest.raises(FixtureError, match="Git baseline is unavailable"):
+        dev_fixture.reset_fixture({}, vault_root=vault, state_root=state)
+
+    assert sentinel.read_text(encoding="utf-8") == "fixture"
+
+
+def test_live_request_payloads_use_the_explicit_p1_webhook_prefix() -> None:
+    """The runner uses its supplied dedicated P1 n8n URL, never the manual DEV default."""
+    p1_url = "http://p1-fixture.test:28781"
+    chat_url, _ = run_live._request_payload(_cases()[0], "p1-test", p1_url)
+    notes_url, _ = run_live._request_payload(_cases()[-1], "p1-test", p1_url)
+    assert chat_url.startswith(p1_url)
+    assert notes_url.startswith(p1_url)
     assert chat_url.endswith("/api/request")
     assert notes_url.endswith("/api/notes")
+
+
+def test_live_entry_refuses_to_select_an_implicit_manual_dev_endpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A live command stops before fixture work unless the P1 endpoint is explicit."""
+    monkeypatch.delenv(run_live.P1_N8N_URL_ENV, raising=False)
+    evidence = tmp_path / "must-not-exist.jsonl"
+
+    with pytest.raises(SystemExit, match="dedicated P1 n8n URL"):
+        run_live.main(
+            [
+                "--confirm-live-provider-calls",
+                "--evidence-path",
+                str(evidence),
+            ]
+        )
+
+    assert not evidence.exists()
 
 
 def test_live_runner_flushes_every_case_and_keeps_semantic_failures_independent(
@@ -177,6 +286,7 @@ def test_live_runner_flushes_every_case_and_keeps_semantic_failures_independent(
         post=post,
         reset=reset,
         restart=lambda: restarts.append(None),
+        n8n_url="http://p1-fixture.test:28781",
         run_id="deterministic",
     )
     assert len(rows) == 7 and len(restarts) == 7
@@ -211,6 +321,7 @@ def test_live_runner_stops_after_persisting_an_unsafe_transport_failure(tmp_path
             post=post,
             reset=lambda _case: {},
             restart=lambda: None,
+            n8n_url="http://p1-fixture.test:28781",
             run_id="unsafe",
         )
     rows = [json.loads(line) for line in (tmp_path / "stopped.jsonl").read_text().splitlines()]
@@ -231,4 +342,5 @@ def test_live_runner_refuses_existing_evidence_without_reset_or_request(tmp_path
             post=lambda *_args: pytest.fail("request must not run"),
             reset=lambda _case: pytest.fail("reset must not run"),
             restart=lambda: pytest.fail("restart must not run"),
+            n8n_url="http://p1-fixture.test:28781",
         )
