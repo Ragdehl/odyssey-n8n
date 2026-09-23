@@ -27,7 +27,7 @@ def test_request_detail_projection_excludes_retrieval_payloads() -> None:
     assert "const request_detail =" in source
     assert "r.operational" in source
     assert "affected_stable_note_ids" in source
-    assert "const request_detail = withAnswerer(source.request_detail)" in source
+    assert "const request_detail = withAnswerer(source.request_detail, 'completed'" in source
     assert "function safeOperational(value)" in source
     assert "safeOperational(r.operational)" in source
     assert "provider_payload" not in source
@@ -101,9 +101,8 @@ def test_completed_response_and_answerer_failure_keep_existing_detail_contract()
     """Leave completed responses unchanged and retain detail on bounded answerer failures."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
-    assert (
-        "request_detail, note_result_snapshot: source.note_result_snapshot } }]; } catch" in source
-    )
+    assert "request_detail, note_result_snapshot: source.note_result_snapshot } }];" in source
+    assert "const request_detail = withAnswerer(source.request_detail, 'failed'" in source
 
 
 def test_note_set_routes_without_answerer_and_preserves_closed_snapshot_versions() -> None:

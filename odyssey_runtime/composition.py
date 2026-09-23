@@ -39,6 +39,7 @@ from odyssey_core.note_queries import (
 )
 from odyssey_core.note_result_snapshots import NoteResultSnapshot, affected_notes_snapshot
 from odyssey_core.observability import (
+    OperationalEvidence,
     OperationalOutcome,
     OperationalStage,
     ProviderCallEvidence,
@@ -55,7 +56,7 @@ from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 
 from .delivery_results import LocalDeliveryResultStore
-from .serialization import application_result_to_response
+from .serialization import application_result_to_response, operational_to_response
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
 
@@ -63,6 +64,15 @@ _VAULT_REPOSITORY_TYPE = VaultRepository
 # Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
 # the validated Luna-first planner rather than the former Sol-only planner.
 OpenAIRequestPlanner = LunaFirstRequestPlanner
+
+
+class NotesTelemetryError(RuntimeError):
+    """Carry content-free failed Notes timing while preserving its HTTP failure class."""
+
+    def __init__(self, operational: OperationalEvidence, *, bad_request: bool) -> None:
+        super().__init__("intelligent Notes execution failed")
+        self.operational = operational
+        self.bad_request = bad_request
 
 
 @dataclass(slots=True)
@@ -75,7 +85,9 @@ class RuntimeComposition:
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
     notes_embedder: object | None = None
-    intelligent_notes_execute: Callable[[str, Sequence[object]], NotePage] | None = None
+    intelligent_notes_execute: (
+        Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
+    ) = None
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -189,9 +201,14 @@ class RuntimeComposition:
                 raise NotesQueryError("Intelligent Notes planning is unavailable")
             if payload.get("cursor") is not None:
                 raise NotesQueryError("Intelligent Notes pages do not re-plan")
-            return _notes_to_response(
-                self.intelligent_notes_execute(payload["query"], payload.get("filters", ()))
-            )
+            execution = self.intelligent_notes_execute(payload["query"], payload.get("filters", ()))
+            if isinstance(execution, tuple):
+                page, operational = execution
+                return {
+                    **_notes_to_response(page),
+                    "operational": operational_to_response(operational),
+                }
+            return _notes_to_response(execution)
         raise ValueError("Notes operation is unsupported")
 
     def execute(
@@ -239,6 +256,7 @@ class RuntimeComposition:
                     created_at=_current_time()["timestamp"],
                 )
         started = self.monotonic()
+        core_started = self.monotonic()
         if conversation_id is None:
             if authenticated_actor is None:
                 result = self.core_execute(user_request, request_id)
@@ -250,7 +268,18 @@ class RuntimeComposition:
             result = self.core_execute(
                 user_request, request_id, authenticated_actor, conversation_id
             )
-        stages = list(result.operational.stages)
+        core_offset_ms = max(0.0, (core_started - started) * 1000)
+        stages = [
+            replace(
+                stage,
+                start_offset_ms=(
+                    stage.start_offset_ms + core_offset_ms
+                    if stage.start_offset_ms is not None
+                    else None
+                ),
+            )
+            for stage in result.operational.stages
+        ]
         if result.affected_stable_note_ids:
             refresh_started = self.monotonic()
             try:
@@ -262,6 +291,7 @@ class RuntimeComposition:
                         OperationalOutcome.FAILED,
                         max(0.0, (self.monotonic() - refresh_started) * 1000),
                         error_category=type(error).__name__,
+                        start_offset_ms=max(0.0, (refresh_started - started) * 1000),
                     )
                 )
                 failed = cast(
@@ -281,6 +311,7 @@ class RuntimeComposition:
                     "index_refresh",
                     OperationalOutcome.COMPLETED,
                     max(0.0, (self.monotonic() - refresh_started) * 1000),
+                    start_offset_ms=max(0.0, (refresh_started - started) * 1000),
                 )
             )
         result = self._attach_note_result_snapshot(result)
@@ -585,7 +616,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
         context_index.rebuild(repository, schema, embedder)
         semantic_index.rebuild(repository, schema, embedder)
 
-    def intelligent_notes(query: str, explicit_filters: Sequence[object]) -> NotePage:
+    def intelligent_notes(
+        query: str, explicit_filters: Sequence[object]
+    ) -> tuple[NotePage, OperationalEvidence]:
         """Plan one explicit Notes request and accept only a single direct RetrieveAction.
 
         This keeps planner interpretation singular. Clarifications, writes, delegation,
@@ -595,7 +628,37 @@ def build_runtime_from_environment() -> RuntimeComposition:
         planner = OpenAIRequestPlanner.from_environment(
             schema, {key: clock[key] for key in ("date", "time", "timezone")}
         )
-        result = planner.plan(query)
+        started = perf_counter()
+        planner_started = perf_counter()
+        try:
+            result = planner.plan(query)
+        except Exception as error:
+            planner_duration_ms = max(0.0, (perf_counter() - planner_started) * 1000)
+            failed_stage = OperationalStage(
+                "planner",
+                OperationalOutcome.FAILED,
+                planner_duration_ms,
+                provider_calls=getattr(planner, "last_provider_calls", ()),
+                start_offset_ms=max(0.0, (planner_started - started) * 1000),
+                substeps=getattr(planner, "last_spans", ()),
+                error_category=type(error).__name__,
+            )
+            raise NotesTelemetryError(
+                OperationalEvidence(
+                    total_duration_ms=max(0.0, (perf_counter() - started) * 1000),
+                    stages=(failed_stage,),
+                ),
+                bad_request=isinstance(error, NotesQueryError),
+            ) from error
+        planner_duration_ms = max(0.0, (perf_counter() - planner_started) * 1000)
+        planner_stage = OperationalStage(
+            "planner",
+            OperationalOutcome.COMPLETED,
+            planner_duration_ms,
+            provider_calls=getattr(planner, "last_provider_calls", ()),
+            start_offset_ms=max(0.0, (planner_started - started) * 1000),
+            substeps=getattr(planner, "last_spans", ()),
+        )
         if (
             isinstance(result, PlannerClarification)
             or not isinstance(result, RequestPlan)
@@ -603,16 +666,49 @@ def build_runtime_from_environment() -> RuntimeComposition:
             or not isinstance(result.actions[0], RetrieveAction)
             or result.actions[0].plan.link_scope is not None
         ):
-            raise NotesQueryError("Intelligent Notes request needs clarification")
+            raise NotesTelemetryError(
+                OperationalEvidence(
+                    total_duration_ms=max(0.0, (perf_counter() - started) * 1000),
+                    stages=(planner_stage,),
+                ),
+                bad_request=True,
+            )
         action = result.actions[0]
         filters: list[object] = [*explicit_filters, *action.plan.filters]
         if action.plan.type is not None:
             filters.append(ContextFilter("type", "eq", action.plan.type))
-        return NotesQueryService(repository, schema, context_index).query(
-            mode="intelligent",
-            query=action.plan.query,
-            filters=_unique_note_filters(filters),
-            embedder=embedder,
+        query_started = perf_counter()
+        try:
+            page = NotesQueryService(repository, schema, context_index).query(
+                mode="intelligent",
+                query=action.plan.query,
+                filters=_unique_note_filters(filters),
+                embedder=embedder,
+            )
+        except Exception as error:
+            failed_query = OperationalStage(
+                "notes.query",
+                OperationalOutcome.FAILED,
+                max(0.0, (perf_counter() - query_started) * 1000),
+                start_offset_ms=max(0.0, (query_started - started) * 1000),
+                error_category=type(error).__name__,
+            )
+            raise NotesTelemetryError(
+                OperationalEvidence(
+                    total_duration_ms=max(0.0, (perf_counter() - started) * 1000),
+                    stages=(planner_stage, failed_query),
+                ),
+                bad_request=isinstance(error, NotesQueryError),
+            ) from error
+        query_stage = OperationalStage(
+            "notes.query",
+            OperationalOutcome.COMPLETED,
+            max(0.0, (perf_counter() - query_started) * 1000),
+            start_offset_ms=max(0.0, (query_started - started) * 1000),
+        )
+        return page, OperationalEvidence(
+            total_duration_ms=max(0.0, (perf_counter() - started) * 1000),
+            stages=(planner_stage, query_stage),
         )
 
     refresh_indexes()

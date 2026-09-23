@@ -27,6 +27,7 @@ from odyssey_core import (
     WriteAction,
     WriteTargetOutcome,
 )
+from odyssey_core.observability import OperationalOutcome, ProviderCallEvidence
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 from odyssey_core.reference_binding import PendingReference, ReferenceRenderingResult
 from odyssey_core.reference_preflight import UnitTargetPreflight
@@ -180,7 +181,7 @@ def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
         monotonic=lambda: next(clock),
     )
 
-    assert result.operational.total_duration_ms == pytest.approx(7.0)
+    assert result.operational.total_duration_ms == pytest.approx(9.0)
     planner_stage = result.operational.stages[0]
     assert planner_stage.name == "planner"
     assert planner_stage.outcome.value == "completed"
@@ -196,9 +197,36 @@ def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
     assert planner_stage.provider_calls[0].parse_status == "succeeded"
     assert planner_stage.provider_calls[0].result_kind == "plan"
     assert planner_stage.provider_calls[0].result_counts == {"actions": 1, "units": 0}
+    retrieve_stage = result.operational.stages[1]
+    assert [span.name for span in retrieve_stage.substeps] == ["retrieval"]
+    assert retrieve_stage.substeps[0].duration_ms == pytest.approx(1.0)
     assert all(
         stage.duration_ms is None or stage.duration_ms >= 0 for stage in result.operational.stages
     )
+
+
+def test_application_stage_uses_actual_planner_attempts_instead_of_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Core planner stage retains Luna and Sol independently without a third phantom call."""
+    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
+    planner = FakePlanner(
+        RequestPlan((RetrieveAction(SelectionCriteria(None, "Marta", None, (), None)),), ())
+    )
+    planner.last_provider_calls = (
+        ProviderCallEvidence(
+            "planner.luna", OperationalOutcome.FAILED, 3, model="gpt-5.6-luna", ordinal=1
+        ),
+        ProviderCallEvidence(
+            "planner.sol_fallback", OperationalOutcome.COMPLETED, 4, model="gpt-5.6-sol", ordinal=2
+        ),
+    )
+    result = run(planner.value, monkeypatch, planner=planner)
+    assert [call.name for call in result.operational.stages[0].provider_calls] == [
+        "planner.luna",
+        "planner.sol_fallback",
+    ]
+    assert result.operational.stages[1].provider_calls == ()
 
 
 def test_operational_action_preserves_every_provider_call() -> None:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 from typing import Any
 
 
@@ -16,6 +17,105 @@ class OperationalOutcome(StrEnum):
     SKIPPED = "skipped"
     NOT_CALLED = "not_called"
     UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalSpan:
+    """Measure one bounded child interval relative to its enclosing stage or attempt."""
+
+    name: str
+    outcome: OperationalOutcome
+    start_offset_ms: float
+    duration_ms: float
+    error_category: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DurationCoverage:
+    """Represent the union of known child intervals within one parent wall interval."""
+
+    attributed_ms: float
+    unattributed_ms: float
+    coverage_pct: float
+    overlapping_ms: float
+
+
+@dataclass(slots=True)
+class SpanRecorder:
+    """Collect ordered, request-local child intervals without retaining their inputs."""
+
+    origin: float
+    monotonic: Callable[[], float]
+    spans: tuple[OperationalSpan, ...] = ()
+
+    def add(
+        self,
+        name: str,
+        started: float,
+        outcome: OperationalOutcome = OperationalOutcome.COMPLETED,
+        error: Exception | None = None,
+    ) -> None:
+        """Append one elapsed child interval with a deterministic occurrence ordinal in its name."""
+        finished = self.monotonic()
+        self.spans += (
+            OperationalSpan(
+                name=name,
+                outcome=outcome,
+                start_offset_ms=(started - self.origin) * 1000,
+                duration_ms=(finished - started) * 1000,
+                error_category=type(error).__name__ if error is not None else None,
+            ),
+        )
+
+    def invoke(self, name: str, operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Measure one semantic, I/O, or repeated boundary while preserving its exceptions."""
+        started = self.monotonic()
+        try:
+            result = operation(*args, **kwargs)
+        except Exception as error:
+            self.add(name, started, OperationalOutcome.FAILED, error)
+            raise
+        self.add(name, started)
+        return result
+
+
+def reconcile_duration(
+    total_duration_ms: float,
+    intervals: tuple[tuple[float, float], ...],
+) -> DurationCoverage | None:
+    """Union child wall intervals without double counting overlaps.
+
+    Args:
+        total_duration_ms: Measured parent wall interval in milliseconds.
+        intervals: Child start offsets and durations relative to that parent.
+
+    Returns:
+        Coverage and explicit residual, or ``None`` for impossible or malformed timing.
+    """
+    if not isfinite(total_duration_ms) or total_duration_ms < 0:
+        return None
+    ordered: list[tuple[float, float]] = []
+    sum_durations = 0.0
+    for start, duration in intervals:
+        if not all(isfinite(value) for value in (start, duration)):
+            return None
+        if start < 0 or duration < 0 or start + duration > total_duration_ms + 0.001:
+            return None
+        ordered.append((start, min(total_duration_ms, start + duration)))
+        sum_durations += duration
+    ordered.sort()
+    covered = 0.0
+    end = 0.0
+    for start, finish in ordered:
+        covered += max(0.0, finish - max(start, end))
+        end = max(end, finish)
+    residual = max(0.0, total_duration_ms - covered)
+    return DurationCoverage(
+        attributed_ms=covered,
+        unattributed_ms=residual,
+        coverage_pct=100.0 if total_duration_ms == 0 else 100.0 * covered / total_duration_ms,
+        overlapping_ms=max(0.0, sum_durations - covered),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +140,10 @@ class ProviderCallEvidence:
     parse_status: str | None = None
     result_kind: str | None = None
     result_counts: dict[str, int] | None = None
+    start_offset_ms: float | None = None
+    ordinal: int | None = None
+    substeps: tuple[OperationalSpan, ...] = ()
+    input_sizes: dict[str, int] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +159,8 @@ class OperationalStage:
     estimated_cost_usd: float | None = None
     error_category: str | None = None
     provider_calls: tuple[ProviderCallEvidence, ...] = ()
+    start_offset_ms: float | None = None
+    substeps: tuple[OperationalSpan, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

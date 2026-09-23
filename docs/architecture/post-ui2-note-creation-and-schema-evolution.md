@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **planned immediately after UI-2 closes; do not expand UI-2 scope to implement this work**.
+Status: **planned after Performance / Latency / Cost P1; UI-2 merged in PR #124**.
 
 ## Why this exists
 
@@ -124,19 +124,10 @@ The desirable product property is that a user can move naturally between an enti
 
 ## B. Planner latency and cost for everyday writes
 
-Real narrative input exposed an unacceptable-feeling interaction latency when Luna failed and bounded Sol fallback carried the planning request. This class of input is expected to be common, so planner cost/latency must be investigated after UI-2 instead of remaining indefinitely deferred.
-
-The investigation should separate:
-
-1. prompt/token overhead;
-2. Luna structural/semantic failure rate on long narrative writes;
-3. Sol fallback frequency and incremental cost;
-4. planner time versus downstream contextual-resolution/write/index-refresh time;
-5. whether safe deterministic preprocessing or request-class specialization can reduce planner burden without weakening the single validated planning authority;
-6. whether the planner can consume a smaller schema/capability projection for common write classes;
-7. whether repeated provider work can be eliminated without introducing hidden retries or a second planner.
-
-Do not optimize by silently weakening validation, skipping entity/reference safety, or allowing ambiguous writes. Any fast path must retain the same fail-closed semantics and be justified by measured real-use evidence.
+Real narrative input exposed a Luna→Sol fallback that made an everyday write feel slow. The
+[Performance / Latency / Cost P1 contract](performance-cost-p1.md) owns the measurement gaps, frozen
+cases, budget, and evidence-driven optimization rule. Backlink/context and reference-resolution work
+follows P1 and must not become a performance baseline oracle.
 
 ## C. Conversational schema understanding and management
 
@@ -215,17 +206,19 @@ Collect real-use evidence before changing navigation priority or removing/reduci
 ## Sequence
 
 ```text
-finish UI-2 read-only Notes
+UI-2 read-only Notes merged
         |
         v
-bounded note-creation + planner-cost/latency exploration
+Performance / Latency / Cost P1
+        |
+        v
+bounded note-creation + schema-evolution exploration
         |
         +--> reference/kinship/group resolution before entity creation
         +--> symmetric/inverse relationship semantics
         +--> relationship traversal + graph-aware Notes search
         +--> knowledge distribution / backlinks / entity-note quality
         +--> exact + semantic fact deduplication and correction semantics
-        +--> planner latency/cost investigation
         +--> controlled tags + negative-filter Notes polish
         +--> readable derived-note presentation/cache contract
         +--> date/day navigation + Daily-note semantics

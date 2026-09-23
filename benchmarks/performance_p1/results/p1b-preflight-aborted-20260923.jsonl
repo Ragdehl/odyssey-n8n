@@ -1,0 +1,2 @@
+{"deployed_commit": "f36b47286f159b00f43b3edf3a4048a38b3bcd12", "environment": "isolated-disposable-dev", "pricing_basis": "2026-09-23", "record_type": "run", "run_id": "8c4e2ab97e8446048670f1aa8aec198f", "source_commit": "f36b47286f159b00f43b3edf3a4048a38b3bcd12", "started_at": "2026-09-23T06:38:16.733222+00:00"}
+{"case_id": "R1", "error_category": "CalledProcessError", "message": "P1 baseline stopped before another request; inspect local run evidence.", "record_type": "unsafe_stop", "run_id": "8c4e2ab97e8446048670f1aa8aec198f"}

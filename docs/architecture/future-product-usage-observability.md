@@ -1,16 +1,13 @@
 # Future Odyssey product usage observability
 
-Status: **preserved product direction; UI-1 request-detail implementation is the current next phase**
+Status: **preserved product direction; UI-1 request detail is complete and P1 owns the next measurement contract**
 
 ## Latency decision
 
-Current real response latency is noticeable, and measured evidence shows the Luna planner/provider
-call dominates it. Behavior-preserving local options such as long-lived OpenAI clients and immutable
-planner setup/schema caching were investigated and are expected to save only milliseconds. Latency
-optimization is therefore intentionally deferred until provider behavior/capabilities or future
-measurements justify revisiting it. No SELF/general fast path, phrase/intent/request-class bypass,
-prompt/model/reasoning/example/structured-output/semantic change, or routing/fallback change is part
-of that decision.
+Earlier real-use evidence found noticeable planner/provider latency; local client and setup caching
+were expected to save only milliseconds. [Performance / Latency / Cost P1](performance-cost-p1.md)
+now owns the broader baseline and bottleneck diagnosis before selecting any optimization. The
+earlier observations do not authorize a SELF/general or request-class fast path.
 
 ## Product goal
 

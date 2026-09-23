@@ -207,20 +207,69 @@ export function validateRequestDetail(value, requestId) {
   if (!value || typeof value !== "object" || Array.isArray(value) || value.request_id !== requestId) {
     throw new ProductRequestError("Odyssey returned invalid request details.");
   }
-  const operational = value.operational;
+  const operational = validateOperational(value.operational);
+  const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
+  const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
+  return {request_id: requestId, operational, changes, estimated_cost};
+}
+
+/** Validate the same bounded operational hierarchy for Chat and intelligent Notes. */
+export function validateOperational(operational) {
   if (!operational || typeof operational !== "object" || Array.isArray(operational)) {
     throw new ProductRequestError("Odyssey returned invalid operational details.");
   }
-  if (operational.total_duration_ms !== null && typeof operational.total_duration_ms !== "number") {
+  if (operational.total_duration_ms !== null && !validMs(operational.total_duration_ms)) {
     throw new ProductRequestError("Odyssey returned invalid request timing.");
   }
   if (!Array.isArray(operational.stages)) {
     throw new ProductRequestError("Odyssey returned invalid request stages.");
   }
   const stages = operational.stages.map((stage) => validateDetailStage(stage));
-  const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
-  const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
-  return {request_id: requestId, operational: {total_duration_ms: operational.total_duration_ms, stages}, changes, estimated_cost};
+  const coverage = operational.coverage === undefined ? undefined : validateCoverage(operational.coverage);
+  const productExecution = operational.product_execution_duration_ms;
+  const browserProduct = operational.browser_product_duration_ms;
+  if (productExecution !== undefined && !validMs(productExecution)) {
+    throw new ProductRequestError("Odyssey returned invalid product timing.");
+  }
+  if (browserProduct !== undefined && !validMs(browserProduct)) {
+    throw new ProductRequestError("Odyssey returned invalid product timing.");
+  }
+  return {total_duration_ms: operational.total_duration_ms, stages,
+    ...(coverage ? {coverage} : {}), ...(productExecution !== undefined ? {product_execution_duration_ms: productExecution} : {}),
+    ...(browserProduct !== undefined ? {browser_product_duration_ms: browserProduct} : {})};
+}
+
+function validMs(value) { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+
+function validateCoverage(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      ["attributed_ms", "unattributed_ms", "coverage_pct", "overlapping_ms"].some(key => !validMs(value[key])) ||
+      value.coverage_pct > 100) throw new ProductRequestError("Odyssey returned invalid timing coverage.");
+  return {attributed_ms: value.attributed_ms, unattributed_ms: value.unattributed_ms,
+    coverage_pct: value.coverage_pct, overlapping_ms: value.overlapping_ms};
+}
+
+function validateSpans(value) {
+  if (!Array.isArray(value) || value.length > 128) throw new ProductRequestError("Odyssey returned invalid timing spans.");
+  return value.map(span => {
+    if (!span || typeof span !== "object" || Array.isArray(span) || typeof span.name !== "string" || span.name.length > 80 ||
+        typeof span.outcome !== "string" || !validMs(span.start_offset_ms) || !validMs(span.duration_ms) ||
+        (span.error_category != null && (typeof span.error_category !== "string" || span.error_category.length > 120))) {
+      throw new ProductRequestError("Odyssey returned invalid timing spans.");
+    }
+    return {name: span.name, outcome: span.outcome, start_offset_ms: span.start_offset_ms,
+      duration_ms: span.duration_ms, error_category: span.error_category ?? null};
+  });
+}
+
+function validateInputSizes(value) {
+  const allowed = new Set(["fixed_instructions_bytes", "retrieval_capabilities_bytes", "write_capabilities_bytes",
+    "recent_context_bytes", "luna_rules_examples_bytes", "user_request_bytes", "structured_output_schema_bytes"]);
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length > 12 ||
+      Object.entries(value).some(([key, size]) => !allowed.has(key) || !Number.isInteger(size) || size < 0)) {
+    throw new ProductRequestError("Odyssey returned invalid input-size evidence.");
+  }
+  return {...value};
 }
 
 function validateEstimatedCost(value) {
@@ -256,8 +305,25 @@ function validateDetailStage(value) {
   }
   const usage = value.usage === null || value.usage === undefined ? undefined : validateUsage(value.usage);
   const providerCalls = value.provider_calls.map((call) => validateDetailStage({...call, provider_calls: []}));
+  if (value.start_offset_ms !== undefined && !validMs(value.start_offset_ms)) throw new ProductRequestError("Odyssey returned invalid stage offset.");
+  const substeps = value.substeps === undefined ? undefined : validateSpans(value.substeps);
+  const coverage = value.coverage === undefined ? undefined : validateCoverage(value.coverage);
+  const input_sizes = value.input_sizes === undefined ? undefined : validateInputSizes(value.input_sizes);
+  const diagnostics = {};
+  for (const key of ["validation_stage", "validation_code", "provider_status", "incomplete_reason", "parse_status", "result_kind"]) {
+    if (value[key] == null) continue;
+    if (typeof value[key] !== "string" || value[key].length > 120) throw new ProductRequestError("Odyssey returned invalid provider diagnostics.");
+    diagnostics[key] = value[key];
+  }
+  for (const key of ["ordinal", "attempt_count", "output_text_chars", "output_text_bytes"]) {
+    if (value[key] == null) continue;
+    if (!Number.isInteger(value[key]) || value[key] < 0) throw new ProductRequestError("Odyssey returned invalid provider diagnostics.");
+    diagnostics[key] = value[key];
+  }
   return {name: value.name, outcome: value.outcome, duration_ms: value.duration_ms, model: value.model,
-    reasoning_effort: value.reasoning_effort, usage, error_category: value.error_category, provider_calls: providerCalls};
+    reasoning_effort: value.reasoning_effort, usage, error_category: value.error_category, provider_calls: providerCalls,
+    ...(value.start_offset_ms !== undefined ? {start_offset_ms: value.start_offset_ms} : {}),
+    ...(substeps ? {substeps} : {}), ...(coverage ? {coverage} : {}), ...(input_sizes ? {input_sizes} : {}), ...diagnostics};
 }
 
 function validateUsage(value) {
@@ -313,9 +379,11 @@ export async function requestProductResult({
   AbortControllerImpl = globalThis.AbortController,
   setTimeoutImpl = globalThis.setTimeout,
   clearTimeoutImpl = globalThis.clearTimeout,
+  monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance),
 }) {
   const controller = new AbortControllerImpl();
   const timeout = setTimeoutImpl(() => controller.abort(), timeoutMs);
+  const started = typeof monotonicImpl === "function" ? monotonicImpl() : null;
   let response;
   try {
     response = await fetchImpl(endpoint, {
@@ -354,6 +422,10 @@ export async function requestProductResult({
   const result = validateProductResponse(payload);
   if (result.request_id !== submission.requestId) {
     throw new ProductRequestError("Odyssey returned a mismatched request identifier.");
+  }
+  const finished = typeof monotonicImpl === "function" ? monotonicImpl() : null;
+  if (result.request_detail && validMs(started) && validMs(finished) && finished >= started) {
+    result.request_detail.operational.browser_product_duration_ms = finished - started;
   }
   return result;
 }

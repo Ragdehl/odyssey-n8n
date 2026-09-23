@@ -1,4 +1,5 @@
 /** Narrow, validated same-origin transport for the read-only Notes surface. */
+import {validateOperational} from "./client.js";
 
 export class NotesRequestError extends Error {
   /** Create a bounded Notes transport/contract error. */
@@ -10,11 +11,13 @@ export class NotesRequestError extends Error {
 }
 
 /** Request one typed Notes operation without granting browser-side semantic authority. */
-export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch}) {
+export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
+  monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
   if (!["capabilities", "query", "intelligent", "detail", "backlinks"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
+  const started = typeof monotonicImpl === "function" ? monotonicImpl() : null;
   try {
     response = await fetchImpl(endpoint, {
       method: "POST", credentials: "same-origin", cache: "no-store",
@@ -29,7 +32,13 @@ export async function requestNotes({endpoint = "/api/notes", operation, payload 
   if (!response.ok) {
     throw new NotesRequestError("No se ha podido completar la consulta.", value?.error === "STALE_CURSOR" ? "STALE_CURSOR" : null);
   }
-  return validateNotesResponse(value);
+  const result = validateNotesResponse(value);
+  const finished = typeof monotonicImpl === "function" ? monotonicImpl() : null;
+  if (result.operational && typeof started === "number" && Number.isFinite(started) &&
+      typeof finished === "number" && Number.isFinite(finished) && finished >= started) {
+    result.operational.browser_product_duration_ms = finished - started;
+  }
+  return result;
 }
 
 /** Validate the small public Notes response union before it reaches rendering code. */
@@ -63,9 +72,12 @@ function validatePage(value) {
       (value.mode !== "snapshot" && (unavailable.length || snapshotOffset !== null))) {
     throw new NotesRequestError("Página histórica de notas inválida.");
   }
+  let operational;
+  try { operational = value.operational === undefined ? undefined : validateOperational(value.operational); }
+  catch { throw new NotesRequestError("Página de notas inválida."); }
   return {kind: "page", mode: value.mode, sort: value.sort, ranking_version: value.ranking_version, as_of: value.as_of,
     applied_filters: value.applied_filters.map(validateFilter), items: value.items.map(validateSummary), total: value.total, next_cursor: value.next_cursor,
-    unavailable_ids: unavailable, snapshot_offset: snapshotOffset};
+    unavailable_ids: unavailable, snapshot_offset: snapshotOffset, ...(operational ? {operational} : {})};
 }
 function validateSummary(value) { if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.name) || !isText(value.type) || !Array.isArray(value.tags) || !isText(value.created_at) || !isText(value.updated_at) || !value.properties || typeof value.properties !== "object" || Array.isArray(value.properties)) throw new NotesRequestError("Nota inválida."); return {id: value.id, name: value.name, type: value.type, tags: value.tags.filter(isText), created_at: value.created_at, updated_at: value.updated_at, properties: value.properties}; }
 function validateType(value) { if (!value || !isText(value.id) || !isText(value.name)) throw new NotesRequestError("Tipo inválido."); return {id: value.id, name: value.name}; }

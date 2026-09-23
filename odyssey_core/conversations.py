@@ -20,7 +20,7 @@ _MAX_TURNS = 200
 _PAGE_DEFAULT_TURNS = 40
 _PAGE_MAX_TURNS = 50
 _CHUNK_MAX_TURNS = 50
-_MAX_DETAIL_BYTES = 16 * 1024
+_MAX_DETAIL_BYTES = 64 * 1024
 MAIN_CONVERSATION_ID = "main"
 _RECENT_CONTEXT_MAX_BYTES = 4096
 _RECENT_CONTEXT_MAX_TURNS = 16
@@ -526,7 +526,14 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
     operational = value.get("operational")
     if (
         not isinstance(operational, dict)
-        or set(operational) - {"total_duration_ms", "stages"}
+        or set(operational)
+        - {
+            "total_duration_ms",
+            "product_execution_duration_ms",
+            "browser_product_duration_ms",
+            "coverage",
+            "stages",
+        }
         or not isinstance(operational.get("stages"), list)
         or len(operational["stages"]) > 16
     ):
@@ -535,6 +542,11 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
         operational.get("total_duration_ms")
     ):
         raise ConversationError("request detail is invalid")
+    for key in ("product_execution_duration_ms", "browser_product_duration_ms"):
+        if key in operational and not _safe_number(operational[key]):
+            raise ConversationError("request detail is invalid")
+    if "coverage" in operational:
+        _validate_coverage(operational["coverage"])
     for stage in operational["stages"]:
         _validate_detail_stage(stage, allow_calls=True)
     if "changes" in value:
@@ -553,6 +565,42 @@ def _safe_number(value: Any) -> bool:
     )
 
 
+def _validate_coverage(value: Any) -> None:
+    """Reject malformed child-union timing before persisting request detail."""
+    keys = {"attributed_ms", "unattributed_ms", "coverage_pct", "overlapping_ms"}
+    if (
+        not isinstance(value, dict)
+        or set(value) != keys
+        or any(not _safe_number(value[key]) for key in keys)
+        or value["coverage_pct"] > 100
+    ):
+        raise ConversationError("request detail is invalid")
+
+
+def _validate_detail_spans(value: Any) -> None:
+    """Allow only bounded, content-free repeated operation intervals."""
+    if not isinstance(value, list) or len(value) > 128:
+        raise ConversationError("request detail is invalid")
+    for span in value:
+        if (
+            not isinstance(span, dict)
+            or set(span) - {"name", "outcome", "start_offset_ms", "duration_ms", "error_category"}
+            or not isinstance(span.get("name"), str)
+            or len(span["name"]) > 80
+            or not isinstance(span.get("outcome"), str)
+            or len(span["outcome"]) > 80
+            or not _safe_number(span.get("start_offset_ms"))
+            or not _safe_number(span.get("duration_ms"))
+            or (
+                span.get("error_category") is not None
+                and (
+                    not isinstance(span["error_category"], str) or len(span["error_category"]) > 120
+                )
+            )
+        ):
+            raise ConversationError("request detail is invalid")
+
+
 def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
     allowed = {
         "name",
@@ -563,6 +611,20 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         "error_category",
         "usage",
         "provider_calls",
+        "start_offset_ms",
+        "substeps",
+        "coverage",
+        "input_sizes",
+        "validation_stage",
+        "validation_code",
+        "provider_status",
+        "incomplete_reason",
+        "parse_status",
+        "result_kind",
+        "ordinal",
+        "attempt_count",
+        "output_text_chars",
+        "output_text_bytes",
     }
     if (
         not isinstance(value, dict)
@@ -580,6 +642,50 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
             raise ConversationError("request detail is invalid")
     if value.get("duration_ms") is not None and not _safe_number(value["duration_ms"]):
         raise ConversationError("request detail is invalid")
+    if value.get("start_offset_ms") is not None and not _safe_number(value["start_offset_ms"]):
+        raise ConversationError("request detail is invalid")
+    if "coverage" in value:
+        _validate_coverage(value["coverage"])
+    if "substeps" in value:
+        _validate_detail_spans(value["substeps"])
+    if "input_sizes" in value:
+        sizes = value["input_sizes"]
+        allowed_sizes = {
+            "fixed_instructions_bytes",
+            "retrieval_capabilities_bytes",
+            "write_capabilities_bytes",
+            "recent_context_bytes",
+            "luna_rules_examples_bytes",
+            "user_request_bytes",
+            "structured_output_schema_bytes",
+        }
+        if (
+            not isinstance(sizes, dict)
+            or set(sizes) - allowed_sizes
+            or len(sizes) > 12
+            or any(
+                not isinstance(number, int) or isinstance(number, bool) or number < 0
+                for number in sizes.values()
+            )
+        ):
+            raise ConversationError("request detail is invalid")
+    for key in (
+        "validation_stage",
+        "validation_code",
+        "provider_status",
+        "incomplete_reason",
+        "parse_status",
+        "result_kind",
+    ):
+        if value.get(key) is not None and (
+            not isinstance(value[key], str) or len(value[key]) > 120
+        ):
+            raise ConversationError("request detail is invalid")
+    for key in ("ordinal", "attempt_count", "output_text_chars", "output_text_bytes"):
+        if value.get(key) is not None and (
+            not isinstance(value[key], int) or isinstance(value[key], bool) or value[key] < 0
+        ):
+            raise ConversationError("request detail is invalid")
     if value.get("usage") is not None:
         usage = value["usage"]
         if (
@@ -599,7 +705,7 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         ):
             raise ConversationError("request detail is invalid")
     calls = value.get("provider_calls", [])
-    if not isinstance(calls, list) or len(calls) > 16 or (not allow_calls and calls):
+    if not isinstance(calls, list) or len(calls) > 32 or (not allow_calls and calls):
         raise ConversationError("request detail is invalid")
     for call in calls:
         _validate_detail_stage(call, allow_calls=False)
