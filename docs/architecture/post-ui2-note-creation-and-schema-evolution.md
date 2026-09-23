@@ -1,6 +1,7 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **planned after Performance / Latency / Cost P1; UI-2 merged in PR #124**.
+Status: **Reference & Relationship Resolution v1 is the next bounded phase-definition slice.**
+Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
 
@@ -15,6 +16,203 @@ Example: after a prior journal entry establishes which named people were present
 Likewise, when a fact is explicitly relational, Odyssey should make the relation usable from both relevant viewpoints. This may be achieved through the source note plus incoming/outgoing explicit links and mention context rather than duplicated prose. Retrieval over an entity therefore needs to consider the entity note together with relevant explicit incoming/outgoing relation evidence, subject to bounded ranking so a heavily linked entity does not inject unbounded context.
 
 This follow-up is therefore a bounded product/architecture exploration, not an authorization to redesign the schema or add a second knowledge authority.
+
+## Reference & Relationship Resolution v1
+
+### Objective
+
+Resolve a natural relational reference to one or more existing, canonical stable identities before
+Odyssey considers CREATE. The user should be able to refer naturally to people already grounded by
+explicit canonical relationship or participant evidence, without creating placeholder entities from
+the surface wording. This v1 proves the generic mechanism; it does not introduce a broad social graph
+or change the canonical note schema.
+
+### User-visible behavior
+
+- If canonical evidence establishes two known parents, a request referring to them as a relational
+  plural resolves both people and never creates a note named after that phrase.
+- If exactly one canonical person satisfies a singular relation, the reference resolves to that
+  existing person. If more than one or none safely satisfies it, Odyssey clarifies rather than guess.
+- A pronoun or relational phrase can use a uniquely resolved source entity. Recent conversation may
+  identify that source wording, but the current canonical note/link evidence remains the only authority
+  for the relationship and member set.
+- A universal bounded-set reference resolves only an exact, finite, canonical participant set. The
+  explicitly asserted shared fact is stored once on an appropriate canonical source and carries
+  explicit links to every resolved member, so each member's backlinks and retrieval can expose it.
+  Co-occurrence alone never creates friendship, partnership, kinship, or another relation.
+
+The examples `mis padres`, `mi hija`, `sus hijos`, `su pareja`, and a prior event's participants are
+acceptance illustrations, not a phrase list. The planner and Core contract must accept arbitrary
+natural language and must not hardcode Spanish wording, kinship words, or named relation types.
+
+### Smallest proposed contract
+
+```text
+natural relational mention
+        |
+        v
+planner preserves relation/source/member-set intent
+        |
+        v
+Core resolves a source identity, then enumerates only bounded,
+current literal-link candidates and their explicit canonical fact blocks
+        |
+        +--> one grounded target / complete finite set -> stable IDs
+        |
+        `--> none, multiple, stale, or incomplete evidence -> clarification
+        |
+        v
+existing target preflight + reference binding
+        |
+        v
+one canonical fact occurrence with explicit links/backlinks
+```
+
+The candidate boundary is the existing canonical Markdown graph: validated current source notes,
+literal outgoing/incoming wikilinks, and the exact visible fact blocks that contain them. Core must
+validate paths, stable identities, source freshness, cardinality, and the final links. It must bound
+the first slice to one source identity and one hop of literal evidence; it must not recursively walk a
+graph, union arbitrary semantic candidates, or treat a backlink index as authority.
+
+`KnowledgeReference` and the existing preflight/rendering table remain the preferred write hand-off.
+Reference-only target units may reuse the current safe target-preflight path; the fact-bearing source
+unit links to each already resolved target. This keeps one canonical occurrence and lets the existing
+Notes link/backlink projection make the fact discoverable without mirrored prose or an inverse write.
+
+### Responsibilities
+
+**Planner/model** preserves the relational wording, the source/reference intent, and whether the
+request is singular or a bounded universal set. It may select among a Core-supplied, finite candidate
+set only through the existing fail-closed contextual-resolution boundary. It does not assert a stable
+identity, enumerate arbitrary vault members, decide that a relationship exists, create a placeholder
+entity, choose a physical fact location, materialize Markdown, or infer an inverse/mirrored write.
+
+**Deterministic Core** resolves the source through the existing self/existing-identity boundaries,
+re-reads and validates canonical evidence, constructs the bounded eligible candidate set, enforces
+singular versus complete-set cardinality, validates every resulting stable ID, and blocks CREATE until
+relational resolution has finished. A relational surface phrase with no safe result is clarification,
+not a new canonical name. Core renders only the existing `KnowledgeReference` markers into safe
+wikilinks and preserves the current planner semantic validator and Sol fallback contract.
+
+Recent conversation is referent evidence only: it can help identify which already-grounded source the
+user means, but it cannot supply relationship membership, current facts, or a new relationship. The
+canonical source must independently confirm every candidate before a write can use it.
+
+### Relationship and traversal semantics
+
+V1 treats a relationship as usable only when the relevant current canonical fact explicitly links the
+two identities. A fact expressed from either viewpoint may be supplied as evidence for the same
+relationship query, but v1 does not write an inverse fact, duplicate prose, infer a property of the
+other person, or make relationships transitive. Symmetry/inversion therefore affects candidate
+evidence selection only; it never creates new knowledge. The relation meaning must come from the
+explicit fact and bounded request/candidate evidence, not from co-occurrence or a generic registry.
+
+### Acceptance criteria
+
+1. Deterministic fixtures prove singular and plural relational references resolve only to existing
+   stable IDs backed by current canonical linked evidence.
+2. A two-member parent example links both existing identities and creates no generic relation-named
+   note; a unique child example links the known child and creates no placeholder person.
+3. A source-relative plural example succeeds only when its finite participant set is completely
+   grounded by canonical event/context evidence. Any unknown, ambiguous, duplicate, stale, or partial
+   member evidence produces clarification and no CREATE.
+4. The shared-fact result has one canonical fact occurrence plus explicit links to all members; UI-2
+   backlinks and existing retrieval can discover it without repeated per-person fact prose.
+5. Direct current-fact retrieval, ordinary exact/semantic identity resolution, self binding,
+   `KnowledgeReference` marker validation, link binding, pending-reference behavior, and UI-2 Notes
+   detail/backlinks retain their existing fail-closed contracts.
+6. The planner's semantic validator and Luna-to-Sol fallback behavior remain unchanged except for a
+   separately reviewed, backward-compatible relational-intent extension. Deterministic tests alone do
+   not validate a changed model-facing contract; a later implementation requires focused live evidence.
+
+### Out of scope
+
+- schema mutation, a relationship registry, typed-edge ontology, graph database, service, or second
+  knowledge store;
+- arbitrary-depth graph traversal, transitive/similarity-based relation inference, and automatic
+  relationship or inverse-fact writes;
+- graph-aware Notes search, relationship filters, general plural joins, group-note creation, fact
+  deduplication, Daily notes, or schema management;
+- product UI/clarification redesign, provider/model selection changes, request-type fast paths, and
+  any production/DEV deployment or personal-data use.
+
+### Regression and safety invariants
+
+1. Canonical Markdown remains the sole current-knowledge authority; conversation, indexes, and
+   backlinks remain evidence/projections only.
+2. Exact stable identity is required before a link is rendered. A raw phrase, semantic score, or
+   relation label never authorizes a target.
+3. CREATE is considered only after relational resolution is exhausted. Generic relational wording is
+   never a CREATE name.
+4. Singular resolution is exactly one target. A universal finite set is all grounded members or a
+   clarification; no partial attachment is silently persisted.
+5. One-hop candidate selection is explicit and bounded. No transitive, inverse-write, or
+   co-occurrence inference occurs.
+6. No duplicate durable prose is introduced solely to make a fact discoverable from another entity.
+7. Existing pending-work behavior remains available for unresolved references; no pending artifact is
+   promoted to canonical knowledge.
+
+### Proposed implementation slices
+
+1. **Evidence and contract slice.** Define a backward-compatible relational-reference intent and a
+   deterministic canonical-evidence projection. Exercise one source identity, one-hop literal links,
+   one unique singular target, and one complete finite set with provider-free fixtures. This slice
+   changes no schema and has no general graph query.
+2. **Safe write integration.** Connect resolved targets to the existing write-target preflight and
+   `KnowledgeReference` rendering path; prove one shared fact is linked once to every member and all
+   unsafe cases clarify before CREATE.
+3. **Focused model gate.** After deterministic approval, run frozen relational read/write/clarify
+   sentinels with the production planner model/reasoning and the unchanged semantic validator/fallback
+   contract. Do not broaden graph behavior from a successful small gate.
+4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
+   semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
+   source facts cannot meet a concrete user need.
+
+### Architecture challenge
+
+RECONSIDER
+
+Material concern:
+Existing `KnowledgeReference.role` is an in-plan occurrence label, while canonical Markdown currently
+stores relationships as human-readable linked facts. Treating either as a durable generic relation
+registry would silently add ontology and make model interpretation a second identity authority.
+
+Simpler alternative:
+Keep canonical linked fact blocks and existing stable identity/link binding as the evidence boundary.
+Use a one-source, one-hop, finite-candidate projection and the current fail-closed resolution path;
+persist only the asserted fact and its ordinary links.
+
+Trade-offs:
+This does not support unrestricted graph questions, arbitrary relationship algebra, or automatic
+inverse materialization. It retains a small contextual decision only within a Core-supplied candidate
+set, but preserves canonical Markdown, Notes backlinks, and current validation contracts.
+
+Recommendation:
+Approve the evidence qualification and shared-fact placement decisions below before implementation.
+Then implement only the first slice; do not add a registry, schema field, graph store, or traversal
+engine pre-emptively.
+
+Human decision required: YES
+
+### Open decisions requiring human approval before implementation
+
+1. **Relationship evidence qualification.** Is a current explicit Markdown fact with a literal
+   validated wikilink sufficient v1 evidence for relation resolution, with model choice restricted to
+   its finite linked candidates, or must relation semantics first be made schema-structured? The
+   proposed first slice uses the Markdown/link evidence and does not add schema.
+2. **Shared-fact home.** When a complete set is resolved but no existing event/journal/source note is
+   an obvious fact home, should the fact attach to the authenticated user's person note, require a
+   user-selected/source note, or create a distinct event only with explicit creation authority? V1
+   must not silently choose a new canonical home.
+3. **Inverse/symmetric evidence policy.** May v1 use an explicitly stated linked fact written from
+   the opposite viewpoint as evidence for a relation query, while never writing a mirrored fact? The
+   proposed policy is yes; transitivity and property inheritance remain prohibited.
+4. **Clarification boundary for incomplete sets.** The proposed policy is all-or-clarify for universal
+   set wording. Confirm whether a user ever wants an explicit, reviewable partial-set option; v1 would
+   otherwise reject partial attachment.
+
+The following sections remain the broader post-UI-2 exploration. They do not expand this v1 contract
+until the open decisions above are approved.
 
 ## A. Creation behavior from natural narrative input
 
@@ -124,10 +322,11 @@ The desirable product property is that a user can move naturally between an enti
 
 ## B. Planner latency and cost for everyday writes
 
-Real narrative input exposed a Luna→Sol fallback that made an everyday write feel slow. The
-[Performance / Latency / Cost P1 contract](performance-cost-p1.md) owns the measurement gaps, frozen
-cases, budget, and evidence-driven optimization rule. Backlink/context and reference-resolution work
-follows P1 and must not become a performance baseline oracle.
+P1 closed the observed Luna→Sol fallback as a local validation mismatch and then removed duplicated
+Luna Structured Outputs schema material. The [P1 closeout](performance-cost-p1.md#closeout-decision)
+records the resulting input and latency evidence and the decision to stop optimization. Backlink,
+context, and reference-resolution work follows that decision and must not become a performance
+baseline oracle or introduce a request-specific fast path.
 
 ## C. Conversational schema understanding and management
 
@@ -212,10 +411,15 @@ UI-2 read-only Notes merged
 Performance / Latency / Cost P1
         |
         v
-bounded note-creation + schema-evolution exploration
+Reference & Relationship Resolution v1
         |
         +--> reference/kinship/group resolution before entity creation
-        +--> symmetric/inverse relationship semantics
+        +--> bounded shared-fact links/backlinks
+        |
+        v
+remaining note-creation + schema-evolution exploration
+        |
+        +--> symmetric/inverse relationship semantics beyond v1
         +--> relationship traversal + graph-aware Notes search
         +--> knowledge distribution / backlinks / entity-note quality
         +--> exact + semantic fact deduplication and correction semantics
