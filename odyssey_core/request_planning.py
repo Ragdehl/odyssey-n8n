@@ -6,6 +6,7 @@ import json
 import os
 import re
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import wraps
@@ -555,6 +556,79 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         "properties": {"result": {"anyOf": [plan_branch, clarify_branch]}},
         "required": ["result"],
         "additionalProperties": False,
+    }
+
+
+def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the exact PlannerResult language with shared Structured Outputs definitions.
+
+    The established inline schema remains the production Sol contract. This representation is for
+    callers that need the same accepted payload language without repeatedly serializing the
+    selection/filter subtree. Local validation remains the semantic authority for either form.
+
+    Args:
+        schema: Parsed canonical Odyssey schema used by the existing planner schema generator.
+
+    Returns:
+        A closed PlannerResult envelope whose local ``$defs`` share the otherwise identical PLAN
+        and CLARIFY substructures.
+    """
+    inline = planner_result_json_schema(schema)
+    plan_branch, clarify_branch = deepcopy(inline["properties"]["result"]["anyOf"])
+    actions = plan_branch["properties"]["actions"]
+    retrieve_action, write_action, delegate_action = actions["items"]["anyOf"]
+    selection = retrieve_action["properties"]["plan"]
+    filter_array = selection["properties"]["filters"]
+    link_scope = selection["properties"]["link_scope"]["anyOf"][1]
+    note_selector = link_scope["properties"]["anchor"]
+
+    note_selector["properties"]["filters"] = {"$ref": "#/$defs/filter_array"}
+    link_scope["properties"]["anchor"] = {"$ref": "#/$defs/note_selector"}
+    selection["properties"]["filters"] = {"$ref": "#/$defs/filter_array"}
+    selection["properties"]["link_scope"] = {
+        "anyOf": [{"type": "null"}, {"$ref": "#/$defs/link_scope"}]
+    }
+    write_action["properties"]["units"]["items"]["properties"]["target"] = {
+        "$ref": "#/$defs/selection"
+    }
+    delegate_action["properties"]["selection"] = {
+        "anyOf": [{"type": "null"}, {"$ref": "#/$defs/selection"}]
+    }
+    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/selection"}
+    actions["items"]["anyOf"] = [
+        {"$ref": "#/$defs/retrieve_action"},
+        {"$ref": "#/$defs/write_action"},
+        {"$ref": "#/$defs/delegate_action"},
+    ]
+    plan_branch["properties"]["actions"] = {"$ref": "#/$defs/actions"}
+    plan_branch["properties"]["limitations"] = {"$ref": "#/$defs/limitations"}
+
+    definitions = {
+        "filter_array": filter_array,
+        "note_selector": note_selector,
+        "link_scope": link_scope,
+        "selection": selection,
+        "retrieve_action": retrieve_action,
+        "write_action": write_action,
+        "delegate_action": delegate_action,
+        "actions": actions,
+        "limitations": inline["properties"]["result"]["anyOf"][0]["properties"]["limitations"],
+        "plan_result": plan_branch,
+        "clarify_result": clarify_branch,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "result": {
+                "anyOf": [
+                    {"$ref": "#/$defs/plan_result"},
+                    {"$ref": "#/$defs/clarify_result"},
+                ]
+            }
+        },
+        "required": ["result"],
+        "additionalProperties": False,
+        "$defs": definitions,
     }
 
 

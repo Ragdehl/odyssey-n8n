@@ -81,6 +81,7 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RequestPlanningError,
     RetrieveAction,
+    compact_planner_result_json_schema,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -363,11 +364,15 @@ def test_structured_outputs_schema_uses_supported_nested_closed_subset(
     assert result_schema["required"] == ["result"]
     assert result_schema["additionalProperties"] is False
     branches = result_schema["properties"]["result"]["anyOf"]
-    assert [branch["properties"]["outcome"]["enum"][0] for branch in branches] == [
-        "PLAN",
-        "CLARIFY",
-        "ESCALATE",
+    assert [branch["$ref"] for branch in branches] == [
+        "#/$defs/plan_result",
+        "#/$defs/clarify_result",
+        "#/$defs/escalate_result",
     ]
+    assert [
+        result_schema["$defs"][name]["properties"]["outcome"]["enum"][0]
+        for name in ("plan_result", "clarify_result", "escalate_result")
+    ] == ["PLAN", "CLARIFY", "ESCALATE"]
     _assert_provider_objects_closed(result_schema)
 
 
@@ -488,17 +493,21 @@ def test_prompt_and_teaching_registry_fail_closed_on_malformed_inputs(
 def test_experimental_schema_helpers_reuse_production_contract(
     schema: dict[str, Any],
 ) -> None:
-    """Expose identical nested production schemas without defining another planner language."""
+    """Reuse the production planner language while sharing Luna-only schema subtrees."""
     production = production_result_contract_unchanged(schema)
     experimental = luna_experimental_result_json_schema(schema)
+    compact = compact_planner_result_json_schema(schema)
     assert (
-        experimental["properties"]["result"]["anyOf"][:2]
-        == production["properties"]["result"]["anyOf"]
+        production["properties"]["result"]["anyOf"][0]["properties"]["actions"]
+        == (embedded_request_plan_contract(schema)["properties"]["actions"])
     )
-    plan_branch = production["properties"]["result"]["anyOf"][0]
+    assert experimental["$defs"]["plan_result"] == compact["$defs"]["plan_result"]
+    assert experimental["$defs"]["clarify_result"] == compact["$defs"]["clarify_result"]
     request_plan = embedded_request_plan_contract(schema)
-    assert plan_branch["properties"]["actions"] == request_plan["properties"]["actions"]
-    assert plan_branch["properties"]["limitations"] == request_plan["properties"]["limitations"]
+    assert (
+        production["properties"]["result"]["anyOf"][0]["properties"]["limitations"]
+        == (request_plan["properties"]["limitations"])
+    )
 
 
 def test_environment_and_provider_failures_remain_closed(

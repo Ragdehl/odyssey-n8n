@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -26,6 +27,7 @@ from odyssey_core.request_planning import (
     PlannerValidationStage,
     RequestPlan,
     RequestPlanningError,
+    compact_planner_result_json_schema,
     planner_result_json_schema,
     render_request_planner_prompt,
     request_plan_json_schema,
@@ -69,7 +71,7 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
     is appended. The root remains a closed object and the union stays beneath ``result`` for the
     supported Structured Outputs subset.
     """
-    production_schema = planner_result_json_schema(schema)
+    production_schema = compact_planner_result_json_schema(schema)
     existing_branches = production_schema["properties"]["result"]["anyOf"]
     escalate_branch = {
         "type": "object",
@@ -82,11 +84,16 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
         "required": ["outcome", "actions", "limitations", "clarification_code"],
         "additionalProperties": False,
     }
+    definitions = deepcopy(production_schema["$defs"])
+    definitions["escalate_result"] = escalate_branch
     return {
         "type": "object",
-        "properties": {"result": {"anyOf": [*existing_branches, escalate_branch]}},
+        "properties": {
+            "result": {"anyOf": [*existing_branches, {"$ref": "#/$defs/escalate_result"}]}
+        },
         "required": ["result"],
         "additionalProperties": False,
+        "$defs": definitions,
     }
 
 
