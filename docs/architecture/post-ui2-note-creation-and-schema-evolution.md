@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Reference & Relationship Resolution v1 Slices 1–2 are implemented; the focused model gate is next.**
+Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; its production model gate remains pending on cost authorization.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -207,9 +207,28 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    order. The fact-bearing natural source must independently preflight as that exact existing note.
    Rendering and materialization therefore write one linked fact on that source only; stale,
    incomplete, mismatched, or source-less preparation raises before mutation.
-3. **Focused model gate.** After deterministic approval, run frozen relational read/write/clarify
-   sentinels with the production planner model/reasoning and the unchanged semantic validator/fallback
-   contract. Do not broaden graph behavior from a successful small gate.
+3. **Relational planner contract, Core bridge, and focused model gate.** The Draft bridge adds an
+   optional `SelectionCriteria.relational_reference` with only source-relative wording, source kind
+   (`self` or `existing`), source query (`null` for self), and `one` versus `complete_set` semantics. It carries no
+   stable ID, path, filename, relation type, or enumerated member set. Core resolves the source
+   through existing self/existing-entity boundaries, selects one current outgoing or incoming fact
+   from bounded one-hop evidence through the existing contextual candidate validator, and reprojects
+   current Markdown.
+   Singular READ restricts retrieval to the exact member and uses answer presentation only;
+   singular fact-bearing WRITE passes only
+   through a relationship-specific re-grounded preflight. Complete-set WRITE expands one planner
+   fact into the existing Slice 2 source plus exact reference-only member binding; one source fact
+   is written, and members remain unchanged. Ordinary preflight always clarifies on relational
+   intent, preventing fallback CREATE. A complete-set READ is deferred in v1 because it lacks a
+   request-aware set retrieval contract. The planner's general `all_matching` remains separate.
+
+   The Slice 3 architecture challenge returned **PROCEED**: an optional selection value plus a
+   Core-owned resolver is the smallest fit; a new action type, relation ontology, or generic stable-ID
+   override would add unnecessary authority. Synthetic deterministic tests cover singular read/write,
+   complete-set source write, ambiguity, stale member, and ordinary regressions. The frozen focused
+   model gate is [owned here](../../benchmarks/reference_relationship_v1/README.md). Its conservative
+   ten-case, 20-call ceiling is $3.590590, so the authorized $0.15 gate made **zero** provider calls.
+   There is no live semantic evidence yet; Slice 3 remains Draft and v1 is not complete.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

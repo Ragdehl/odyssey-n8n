@@ -40,11 +40,13 @@ PR #129 merged at `1c2f0c45672e8d1d917cf6abd271a85123100b8e` and was explicitly 
 DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was untouched.
 
 The provider-free [Reference & Relationship Resolution v1 Slices 1–2](post-ui2-note-creation-and-schema-evolution.md#proposed-implementation-slices)
-are implemented. They establish the current-Markdown, one-source, one-hop evidence projection and
-safe shared-fact writing through the existing preflight/reference-rendering path, without planner or
-model changes. The next bounded work is Slice 3's focused model gate. Its evidence boundary, shared-fact home,
-inverse/symmetric evidence policy, all-or-clarify rule, and bounded backlink-enriched entity context
-are defined; no open v1 product decision remains. Tasks and Events remain later directions. UI-1 request detail is complete in PROD;
+are implemented. Slice 3 now has a Draft implementation of the relational planner contract and
+minimal Core read/write bridge on a feature branch; its frozen ten-case production model gate is
+**pending** because the conservative no-cache ceiling is $3.590590, above the explicitly authorized
+$0.15. No live calls were made, so Slice 3 and v1 are not yet validated or complete. The existing
+current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
+evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
+directions. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
 ```text
@@ -82,7 +84,7 @@ UI-2 read-only Notes                                              ✅ merged in 
 Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
-Reference & Relationship Resolution v1 Slice 3                    ➡️ next: focused model gate
+Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; live gate blocked by cost ceiling
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -176,7 +178,7 @@ Performance / Latency / Cost P1                       ✅ complete
         v
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
-Reference & Relationship Resolution v1 Slice 3        ➡️ next: focused model gate
+Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; live gate blocked by cost ceiling
         |
         v
 Tasks — first application contract

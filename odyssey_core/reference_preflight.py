@@ -11,11 +11,13 @@ from uuid import uuid4
 from .identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .observability import SpanRecorder
+from .relational_resolution import ResolvedRelationalReference
 from .relationship_evidence import (
+    EvidenceDirection,
     RelationshipEvidenceProjector,
     TargetProjectionStatus,
 )
-from .request_planning import KnowledgeUnit, WriteAction
+from .request_planning import KnowledgeReference, KnowledgeUnit, SelectionCriteria, WriteAction
 from .storage import VaultRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
@@ -138,14 +140,16 @@ def _preflight_write_action(
     self_binding_repository: SelfBindingRepository | None,
     span_recorder: SpanRecorder | None,
     _validated_reference_targets: Mapping[int, str] | None = None,
+    _validated_relationship_targets: Mapping[int, str] | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
-    """Implement ordinary preflight with private relationship-validated no-write targets only."""
+    """Implement preflight with private, relationship-validated target bindings."""
     if not isinstance(action, WriteAction):
         raise ValueError("Reference preflight requires a WriteAction")
     results: list[UnitTargetPreflight] = []
     allocated_paths: set[str] = set()
     existing_paths = set(repository.list_markdown_paths())
     resolved_targets = dict(_validated_reference_targets or {})
+    relationship_targets = dict(_validated_relationship_targets or {})
     if any(
         not isinstance(index, int)
         or isinstance(index, bool)
@@ -155,6 +159,15 @@ def _preflight_write_action(
         for index, stable_id in resolved_targets.items()
     ) or any(index >= len(action.units) for index in resolved_targets):
         raise ReferencePreflightError("Validated relationship reference targets are invalid")
+    if any(
+        not isinstance(index, int)
+        or isinstance(index, bool)
+        or not 0 <= index < len(action.units)
+        or not isinstance(stable_id, str)
+        or not stable_id
+        for index, stable_id in relationship_targets.items()
+    ) or set(relationship_targets).intersection(resolved_targets):
+        raise ReferencePreflightError("Validated relationship write targets are invalid")
     for unit_index, unit in enumerate(action.units):
         if unit.cardinality == "all_matching":
             raise ReferencePreflightError(
@@ -174,6 +187,22 @@ def _preflight_write_action(
                     name,
                     path,
                     reference_only=True,
+                )
+            )
+            continue
+        if unit_index in relationship_targets:
+            if unit.target.relational_reference is None or _is_reference_only_unit(unit):
+                raise ReferencePreflightError("Relationship write target is invalid")
+            path, name = _find_existing_identity(
+                repository, schema, relationship_targets[unit_index]
+            )
+            results.append(
+                UnitTargetPreflight(
+                    unit_index,
+                    WriteTargetOutcome.UPDATE,
+                    relationship_targets[unit_index],
+                    name,
+                    path,
                 )
             )
             continue
@@ -207,6 +236,137 @@ def _preflight_write_action(
             )
         )
     return tuple(results)
+
+
+def preflight_relational_target_write_action(
+    action: WriteAction,
+    resolved: ResolvedRelationalReference,
+    *,
+    target_unit_index: int,
+    relationship_projector: RelationshipEvidenceProjector,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    semantic_index: Any,
+    embedder: Any,
+    contextual_reasoner: Any,
+    semantic_limit: int,
+    id_allocator: Callable[[], str] = allocate_stable_id,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
+    span_recorder: SpanRecorder | None = None,
+) -> tuple[UnitTargetPreflight, ...]:
+    """Re-ground one fact-bearing relational target before admitting its existing ID.
+
+    This relationship-specific entry point is the sole authorization for the private preflight
+    target binding. Ordinary target preflight never accepts a raw stable-ID override.
+    """
+    if (
+        not isinstance(resolved, ResolvedRelationalReference)
+        or not isinstance(target_unit_index, int)
+        or isinstance(target_unit_index, bool)
+        or not 0 <= target_unit_index < len(action.units)
+        or sum(unit.target.relational_reference is not None for unit in action.units) != 1
+    ):
+        raise RelationshipWritePreflightError("Singular relationship write shape is invalid")
+    unit = action.units[target_unit_index]
+    relation = unit.target.relational_reference
+    if relation is None or relation.members != "one" or len(resolved.targets) != 1:
+        raise RelationshipWritePreflightError("Singular relationship write target is invalid")
+    projection = relationship_projector.project_targets(
+        resolved.evidence_source.id, resolved.fact_locator
+    )
+    if (
+        projection.status is not TargetProjectionStatus.COMPLETE
+        or projection.source is None
+        or projection.source.source_hash != resolved.evidence_source.source_hash
+    ):
+        raise RelationshipWritePreflightError("Relationship evidence changed before write")
+    if resolved.direction is EvidenceDirection.OUTGOING:
+        current_target_ids = tuple(target.id for target in projection.targets)
+        valid = current_target_ids == (resolved.targets[0].id,)
+    elif resolved.direction is EvidenceDirection.INCOMING:
+        valid = projection.source.id == resolved.targets[0].id and any(
+            target.id == resolved.source.id for target in projection.targets
+        )
+    else:
+        valid = False
+    if not valid:
+        raise RelationshipWritePreflightError("Relationship evidence changed before write")
+    return _preflight_write_action(
+        action,
+        repository=repository,
+        schema=schema,
+        semantic_index=semantic_index,
+        embedder=embedder,
+        contextual_reasoner=contextual_reasoner,
+        semantic_limit=semantic_limit,
+        id_allocator=id_allocator,
+        authenticated_actor=authenticated_actor,
+        self_binding_repository=self_binding_repository,
+        span_recorder=span_recorder,
+        _validated_relationship_targets={target_unit_index: resolved.targets[0].id},
+    )
+
+
+def prepare_relationship_shared_fact_action(
+    unit: KnowledgeUnit, resolved: ResolvedRelationalReference
+) -> tuple[WriteAction, RelationshipWriteBinding]:
+    """Expand one complete-set assertion into Slice 2's source and no-write member units.
+
+    The planner supplies neither member identities nor a physical write target. Core derives both
+    from the re-groundable source fact and retains the user's fact as one canonical occurrence.
+    """
+    relation = unit.target.relational_reference
+    if (
+        relation is None
+        or relation.members != "complete_set"
+        or unit.intent != "record"
+        or unit.cardinality != "one"
+        or unit.properties
+        or unit.tag_changes
+        or unit.references
+        or unit.destination_type is not None
+        or len(unit.facts) != 1
+        or not resolved.targets
+        or resolved.direction is not EvidenceDirection.OUTGOING
+    ):
+        raise RelationshipWritePreflightError("Shared relationship fact shape is unsupported")
+    references = tuple(
+        KnowledgeReference(index + 1, "member", target.name)
+        for index, target in enumerate(resolved.targets)
+    )
+    markers = ", ".join(f"{{{{ref:{index}}}}}" for index in range(len(references)))
+    source = KnowledgeUnit(
+        SelectionCriteria(
+            resolved.source.name, resolved.source.name, resolved.source.type, (), None
+        ),
+        "record",
+        (),
+        (),
+        (f"{unit.facts[0]} ({markers})",),
+        references,
+    )
+    members = tuple(
+        KnowledgeUnit(
+            SelectionCriteria(target.name, target.name, target.type, (), None),
+            "record",
+            (),
+            (),
+            (),
+            (),
+        )
+        for target in resolved.targets
+    )
+    binding = RelationshipWriteBinding(
+        0,
+        resolved.source.id,
+        resolved.fact_locator,
+        tuple(
+            ResolvedRelationshipMember(index, target.id)
+            for index, target in enumerate(resolved.targets, start=1)
+        ),
+    )
+    return WriteAction((source, *members)), binding
 
 
 def preflight_relationship_write_action(

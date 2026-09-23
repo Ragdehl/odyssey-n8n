@@ -42,15 +42,19 @@ _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
+_STABLE_ID_PATTERN = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I
+)
 _PROMPT_TEMPLATE = """You convert one user request into one strict JSON PlannerResult. Use the supplied current date, time, and timezone.
 
 Bounded recent conversation evidence may resolve a referent or conversational continuity, but it records only what was said and is never current personal truth. Use it only to identify the subject or interaction the user means. Do not turn a prior user statement or assistant response into a current-fact filter, retrieval constraint, or asserted fact. Canonical notes remain the authority for current facts. A follow-up write may reuse an explicit fact from earlier user text only when the ordinary write contract can represent it; assistant text never supplies a fact or mutation target. If the recent evidence still leaves the referent or requested mutation ambiguous, return CLARIFY rather than guessing.
 
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
-Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction when the user explicitly asks to see a collection/list/set of matching notes; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, or any link_scope, use `answer`; do not discard or weaken meaning merely to produce a note set.
+Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction when the user explicitly asks to see a collection/list/set of matching notes; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, or relational_reference, use `answer`; do not discard or weaken meaning merely to produce a note set.
 
-Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, and self_target. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. A relational target such as "mi hermano" remains an ordinary target. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
@@ -76,7 +80,7 @@ Decompose write knowledge semantically: group changes for the same logical targe
 
 When a fact semantically refers to another KnowledgeUnit, replace that occurrence in the fact with `{{ref:N}}`, where N is the zero-based index in that KnowledgeUnit's own `references` array. Preserve the original human-readable wording in that reference's `mention` field. The marker may occur repeatedly for repeated mentions. Do not emit Markdown `[[wikilinks]]`. Do not create a reference merely because another entity name appears: use a marker only for a semantic relationship that needs a KnowledgeReference. A name used only to identify the write target is not automatically a fact reference. References never authorize an inverse or mirrored write into the referenced unit.
 
-Example: for "La amiga de Marta ahora trabaja en Airbus", use target query "la amiga de Marta", fact "Ahora trabaja en {{ref:0}}.", and reference 0 with mention "Airbus". Do not create a reference to Marta because Marta only identifies the target. A reference-only target unit may have empty facts when another unit points to it.
+Example: for "La amiga de Marta ahora trabaja en Airbus", use target query "la amiga de Marta" with relational_reference preserving that wording, source_kind=existing, source_query="Marta", and members=one. Use fact "Ahora trabaja en {{ref:0}}." and reference 0 with mention "Airbus". Do not create a reference to Marta because Marta only identifies the relational source. The ordinary named-target example "Marta trabaja en Airbus" uses no relational_reference and retains its explicit Airbus KnowledgeReference. A reference-only target unit may have empty facts when another unit points to it.
 
 Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval, persistence, or entity resolution. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
@@ -177,6 +181,17 @@ class SelectionCriteria:
     filters: tuple[ContextFilter, ...]
     link_scope: LinkScope | None
     self_target: str | None = None
+    relational_reference: RelationalReference | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RelationalReference:
+    """Preserve one source-relative identity request without asserting canonical members."""
+
+    reference: str
+    source_kind: str
+    source_query: str | None
+    members: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -731,6 +746,7 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
         len(actions) != 1
         or not isinstance(actions[0], RetrieveAction)
         or actions[0].plan.link_scope is not None
+        or actions[0].plan.relational_reference is not None
     ):
         raise RequestPlanningError("Note-set presentation requires one direct retrieval")
     return RequestPlan(
@@ -1061,8 +1077,32 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                 ]
             },
             "self_target": {"type": ["string", "null"], "enum": [SELF_TARGET, None]},
+            "relational_reference": {
+                "anyOf": [
+                    {"type": "null"},
+                    {
+                        "type": "object",
+                        "properties": {
+                            "reference": {"type": "string"},
+                            "source_kind": {"type": "string", "enum": ["self", "existing"]},
+                            "source_query": {"type": ["string", "null"]},
+                            "members": {"type": "string", "enum": ["one", "complete_set"]},
+                        },
+                        "required": ["reference", "source_kind", "source_query", "members"],
+                        "additionalProperties": False,
+                    },
+                ]
+            },
         },
-        "required": ["entity", "query", "type", "filters", "link_scope", "self_target"],
+        "required": [
+            "entity",
+            "query",
+            "type",
+            "filters",
+            "link_scope",
+            "self_target",
+            "relational_reference",
+        ],
         "additionalProperties": False,
     }
 
@@ -1293,11 +1333,23 @@ def _validate_selection(
     Raises:
         RequestPlanningError: If query, type, filter shape, or filter semantics are invalid.
     """
-    required = {"entity", "query", "type", "filters", "link_scope", "self_target"}
+    required = {
+        "entity",
+        "query",
+        "type",
+        "filters",
+        "link_scope",
+        "self_target",
+        "relational_reference",
+    }
+    previous_required = required - {"relational_reference"}
     legacy_required = {"entity", "query", "type", "filters", "link_scope"}
     legacy_minimum = {"query", "type", "filters"}
     if not isinstance(raw, dict) or (
-        set(raw) != required and set(raw) != legacy_required and set(raw) != legacy_minimum
+        set(raw) != required
+        and set(raw) != previous_required
+        and set(raw) != legacy_required
+        and set(raw) != legacy_minimum
     ):
         raise RequestPlanningError(f"{label} fields are invalid")
     entity, query, note_type, raw_filters = (
@@ -1337,6 +1389,11 @@ def _validate_selection(
         raise RequestPlanningError(f"{label} self_target is invalid")
     if self_target == SELF_TARGET and (entity is not None or note_type not in (None, "person")):
         raise RequestPlanningError(f"{label} self_target must select the direct person target")
+    relational = _validate_relational_reference(raw.get("relational_reference"), label=label)
+    if relational is not None and (
+        entity is not None or self_target is not None or link_scope is not None or raw_filters
+    ):
+        raise RequestPlanningError(f"{label} relational reference conflicts with direct selection")
     return SelectionCriteria(
         entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
@@ -1346,6 +1403,53 @@ def _validate_selection(
         ),
         link_scope=link_scope,
         self_target=self_target,
+        relational_reference=relational,
+    )
+
+
+def _validate_relational_reference(raw: Any, *, label: str) -> RelationalReference | None:
+    """Accept only bounded source-relative wording, never a model-supplied identity."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {
+        "reference",
+        "source_kind",
+        "source_query",
+        "members",
+    }:
+        raise RequestPlanningError(f"{label} relational reference fields are invalid")
+    if (
+        not isinstance(raw["reference"], str)
+        or not raw["reference"].strip()
+        or raw["source_kind"] not in {"self", "existing"}
+        or raw["members"] not in {"one", "complete_set"}
+        or (raw["source_kind"] == "self" and raw["source_query"] is not None)
+        or (
+            raw["source_kind"] == "existing"
+            and (not isinstance(raw["source_query"], str) or not raw["source_query"].strip())
+        )
+    ):
+        raise RequestPlanningError(f"{label} relational reference is invalid")
+    for value in (raw["reference"], raw["source_query"]):
+        if value is None:
+            continue
+        if (
+            len(value) > 256
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            or _STABLE_ID_PATTERN.search(value)
+            or "[[" in value
+        ):
+            raise RequestPlanningError(f"{label} relational wording is unsafe")
+    if raw["source_query"] is not None and (
+        ".md" in raw["source_query"].casefold()
+        or any(character in raw["source_query"] for character in ("/", "\\"))
+    ):
+        raise RequestPlanningError(f"{label} relational source cannot be a path")
+    return RelationalReference(
+        raw["reference"].strip(),
+        raw["source_kind"],
+        raw["source_query"].strip() if raw["source_query"] is not None else None,
+        raw["members"],
     )
 
 
@@ -1525,6 +1629,8 @@ def _validate_knowledge_unit(
         raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
     if cardinality == "all_matching" and target.self_target is not None:
         raise RequestPlanningError("self_target requires one direct target")
+    if cardinality == "all_matching" and target.relational_reference is not None:
+        raise RequestPlanningError("relational member sets use one source unit")
     intent = unit["intent"]
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
