@@ -10,7 +10,7 @@ import pytest
 from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.relationship_evidence import (
-    EntityContextLimits,
+    EntityEvidenceCandidateLimits,
     EvidenceDirection,
     RelationshipEvidenceProjector,
     TargetProjectionStatus,
@@ -141,7 +141,7 @@ def test_complete_finite_set_preserves_literal_order_and_rejects_partial_members
     assert incomplete.evidence == ()
 
 
-def test_entity_context_regrounds_bounded_incoming_outgoing_and_stale_discovery(
+def test_entity_evidence_candidates_keep_later_relevant_backlinks_and_reground_discovery(
     tmp_path: Path, schema: dict
 ) -> None:
     """Surface fact snippets, never whole source notes, and reject stale backlink candidates."""
@@ -172,37 +172,75 @@ def test_entity_context_regrounds_bounded_incoming_outgoing_and_stale_discovery(
             fact(f"Mención {index} de [[Oriol]].", f"many-{index}"),
         )
 
-    bounded = projector(vault, schema).project_entity_context(
-        "oriol", limits=EntityContextLimits(max_direct=2, max_incoming=3, max_outgoing=2)
+    bounded = projector(vault, schema).project_entity_evidence_candidates(
+        "oriol", limits=EntityEvidenceCandidateLimits(max_direct=2, max_incoming=3, max_outgoing=2)
     )
     assert bounded is not None
     assert len(bounded.incoming) == 3
     assert bounded.incoming_truncated is True
 
-    context = projector(vault, schema).project_entity_context(
-        "oriol", limits=EntityContextLimits(max_direct=2, max_incoming=9, max_outgoing=2)
-    )
-    assert context is not None
-    assert context.entity.path == "people/oriol.md"
-    assert [(item.direction, item.fact.text, item.target) for item in context.direct] == [
+    candidates = projector(vault, schema).project_entity_evidence_candidates("oriol")
+    assert candidates is not None
+    assert candidates.entity.path == "people/oriol.md"
+    assert [(item.direction, item.fact.text, item.target) for item in candidates.direct] == [
         (EvidenceDirection.DIRECT, "Oriol vive en Barcelona.", None)
     ]
-    assert len(context.incoming) == 9
-    assert context.incoming_truncated is True
+    assert len(candidates.incoming) == 10
+    assert candidates.incoming_truncated is False
     assert all(
-        "Prosa que no debe entrar completa" not in item.fact.text for item in context.incoming
+        "Prosa que no debe entrar completa" not in item.fact.text for item in candidates.incoming
     )
-    meritxell = next(item for item in context.incoming if item.fact.source.id == "meritxell")
+    meritxell_index = next(
+        index
+        for index, item in enumerate(candidates.incoming)
+        if item.fact.source.id == "meritxell"
+    )
+    assert meritxell_index > 6
+    meritxell = candidates.incoming[meritxell_index]
     assert meritxell.fact.text == "Mi hermano [[Oriol]] trabaja en Airbus."
     assert meritxell.fact.source.path == "people/meritxell.md"
     assert meritxell.fact.source.source_hash
-    assert [(item.direction, item.target.id) for item in context.outgoing] == [
+    assert [(item.direction, item.target.id) for item in candidates.outgoing] == [
         (EvidenceDirection.OUTGOING, "airbus")
     ]
 
     write(vault, "people/stale.md", "stale", "Stale", fact("Ya no enlaza a [[Airbus]]."))
-    stale_only = projector(vault, schema).project_entity_context(
+    stale_only = projector(vault, schema).project_entity_evidence_candidates(
         "oriol", discovered_backlink_source_ids=("stale",)
     )
     assert stale_only is not None
     assert stale_only.incoming == ()
+
+
+def test_entity_evidence_candidate_ceiling_is_deterministic_and_never_returns_whole_notes(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep a broad but finite safe backlink pool for a later request-aware selector."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/target.md", "target", "Target", "")
+    for index in range(65):
+        write(
+            vault,
+            f"people/source-{index:02d}.md",
+            f"source-{index:02d}",
+            f"Source {index:02d}",
+            fact(f"Hecho {index:02d} sobre [[Target]].", f"source-{index:02d}")
+            + "\n\nTexto de nota completa que no es un snippet.",
+        )
+
+    evidence = projector(vault, schema)
+    first = evidence.project_entity_evidence_candidates("target")
+    second = evidence.project_entity_evidence_candidates("target")
+
+    assert first is not None and second is not None
+    assert len(first.incoming) == 64
+    assert first.incoming_truncated is True
+    assert [item.fact.source.id for item in first.incoming] == [
+        f"source-{index:02d}" for index in range(64)
+    ]
+    assert [item.fact.source.id for item in second.incoming] == [
+        f"source-{index:02d}" for index in range(64)
+    ]
+    assert all("Texto de nota completa" not in item.fact.text for item in first.incoming)
+    assert all(item.target and item.target.id == "target" for item in first.incoming)

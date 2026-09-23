@@ -109,8 +109,9 @@ Core evidence projection over current Markdown, not a new authority or an unrest
 - Do not inject whole backlink source notes by default or include every backlink without a bound.
 - Ground every selected snippet by re-reading and validating its current canonical Markdown source
   and confirming its literal wikilink resolves to the requested stable identity.
-- Use deterministic relevance/selection limits so a highly linked entity cannot expand context
-  without bound. Derived link indexes may identify candidates only; they do not prove current facts.
+- Slice 1 returns a broader bounded safe candidate pool. Later request-aware retrieval, not the
+  projector, selects final snippets for the actual `ContextPackage`; candidate-pool and final-context
+  bounds are separate. Derived link indexes may identify candidates only; they do not prove current facts.
 - Keep one canonical fact occurrence sufficient when a linked snippet makes it discoverable from the
   related entity. For example, a linked employment fact in one person's note can support retrieval
   about the linked person without copying that sentence into the target person's note.
@@ -186,11 +187,13 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
 1. **Evidence and contract slice.** ✅ Implemented provider-free as a bounded Core projection over
    current validated Markdown. It returns a source-hash-bound fact locator, source/target stable
    identity and path provenance, literal-link target evidence, complete-or-empty finite sets, and
-   bounded direct/incoming/outgoing entity snippets. It deliberately does not modify `RequestPlan`,
-   planner prompts, `ContextPackage`, Notes search, or writes. Its contract covers one source
-   identity and one literal-link hop. Provider-free fixtures prove one unique singular target, one
-   complete finite set, and the bounded-current-Markdown retrieval projection (direct entity facts/properties plus a relevant
-   incoming snippet and an outgoing snippet only when needed). This slice has no general graph query
+   bounded direct/incoming/outgoing entity candidate pool. A later request-aware retrieval layer must
+   select final `ContextPackage` snippets; Slice 1 deliberately does not rank candidates. It does not
+   modify `RequestPlan`, planner prompts, `ContextPackage`, Notes search, or writes. Its contract
+   covers one source identity and one literal-link hop. Provider-free fixtures prove one unique
+   singular target, one complete finite set, and the bounded-current-Markdown retrieval projection
+   (direct entity facts/properties plus a relevant incoming snippet and an outgoing snippet only when
+   needed). This slice has no general graph query
    or Notes search traversal.
 2. **Safe write integration.** Connect resolved targets to the existing write-target preflight and
    `KnowledgeReference` rendering path; prove one shared fact remains on the natural existing source,
