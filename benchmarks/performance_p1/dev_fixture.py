@@ -1,8 +1,9 @@
 """Reset the explicitly isolated DEV data root to P1's disposable note fixture.
 
-This helper intentionally accepts only the fixed Phase 21 DEV roots.  It is benchmark setup,
-not an Odyssey request path: callers must restart the DEV runtime afterwards so its rebuildable
-indexes reflect the new canonical Markdown before timing a case.
+This helper intentionally accepts only the fixed Phase 21 DEV roots and now also requires an
+explicit disposable marker created outside this program. It is benchmark setup, not an Odyssey
+request path: callers must restart the DEV runtime afterwards so its rebuildable indexes reflect
+the new canonical Markdown before timing a case.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from odyssey_core.notes import Note, serialize_note, validate_note
 DEV_ROOT = Path("/data/odyssey-dev")
 DEV_VAULT = DEV_ROOT / "vault"
 DEV_STATE = DEV_ROOT / "state"
+DISPOSABLE_MARKER = DEV_ROOT / ".p1-disposable-fixture"
 FIXTURE_VERSION = 1
 _FIXTURE_APP = "odyssey-p1-disposable-fixture"
 _STAMP = "2026-01-01T00:00:00+00:00"
@@ -30,11 +32,18 @@ class FixtureError(RuntimeError):
 
 
 def _require_exact_dev_roots(vault_root: Path, state_root: Path) -> None:
-    """Reject every root except the fixed Phase 21 DEV vault and state directories."""
+    """Reject roots that are not the fixed, explicitly marked disposable P1 DEV fixture."""
     if vault_root.resolve() != DEV_VAULT or state_root.resolve() != DEV_STATE:
         raise FixtureError("P1 fixture reset is restricted to the fixed isolated DEV roots")
-    if not (DEV_ROOT.is_dir() and (DEV_VAULT / ".git").is_dir() and DEV_STATE.is_dir()):
-        raise FixtureError("isolated DEV vault/state roots are not initialized")
+    if not (
+        DEV_ROOT.is_dir()
+        and (DEV_VAULT / ".git").is_dir()
+        and DEV_STATE.is_dir()
+        and DISPOSABLE_MARKER.is_file()
+    ):
+        raise FixtureError(
+            "isolated DEV fixture is not explicitly initialized and marked disposable"
+        )
 
 
 def _note(note_id: str, name: str, facts: tuple[str, ...]) -> Note:
@@ -149,11 +158,12 @@ def reset_fixture(
     state_root: Path = DEV_STATE,
     extra_facts: dict[str, list[str]] | None = None,
 ) -> dict[str, object]:
-    """Replace only isolated DEV fixture content and transient benchmark state.
+    """Replace only explicitly marked disposable DEV fixture content and transient state.
 
-    The persistent DEV actor and self-binding files remain in place.  All prior Markdown,
-    delivery replay records, conversation turns, and pending records are disposable DEV state.
-    A caller must restart the existing DEV runtime after this function returns.
+    The persistent DEV actor and self-binding files remain in place. All prior Markdown,
+    delivery replay records, conversation turns, and pending records are disposable only when
+    the external marker precondition has been deliberately established. A caller must restart
+    the existing DEV runtime after this function returns.
     """
     _require_exact_dev_roots(vault_root, state_root)
     notes = fixture_notes(extra_facts)
@@ -182,7 +192,7 @@ def reset_fixture(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Reset the fixed DEV root after an explicit disposable-fixture confirmation."""
+    """Reset the fixed DEV root after explicit disposable-fixture confirmation and marker."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-disposable-dev-fixture", action="store_true")
     parser.add_argument("--schema", required=True, type=Path)
