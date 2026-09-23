@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from .budget import load_pricing
@@ -36,6 +37,11 @@ from .report import _estimated_call_cost
 
 P1_N8N_URL_ENV = "ODYSSEY_P1_N8N_URL"
 P1_RUNTIME_SERVICE = "odyssey-p1-fixture-runtime.service"
+_FORBIDDEN_N8N_HOSTS = {
+    "n8n.ragdehl.com",
+    "odyssey-dev.ragdehl.com",
+    "odyssey.ragdehl.com",
+}
 _MAX_PROVIDER_CALLS = 64
 _BASELINE_FACTS = {
     "Marta": ("Marta trabaja en Thales.", "Marta vive en Lyon."),
@@ -48,9 +54,50 @@ class LiveRunError(RuntimeError):
     """Raised when a live baseline cannot safely retain trustworthy evidence."""
 
 
+def _validated_p1_n8n_url(value: object) -> str:
+    """Validate and normalize the dedicated P1 HTTPS base URL.
+
+    Raises:
+        LiveRunError: If the value is malformed, uses insecure transport, includes URL
+            credentials, or targets a known Odyssey DEV, production, or shared n8n host.
+    """
+    if not isinstance(value, str) or not value:
+        raise LiveRunError("a dedicated P1 n8n HTTPS URL is required")
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as error:
+        raise LiveRunError("dedicated P1 n8n URL is malformed") from error
+    normalized_host = hostname.lower().rstrip(".") if hostname else ""
+    if (
+        parsed.scheme != "https"
+        or not normalized_host
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or normalized_host in _FORBIDDEN_N8N_HOSTS
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise LiveRunError("dedicated P1 n8n URL must be an isolated HTTPS origin")
+    host_literal = f"[{normalized_host}]" if ":" in normalized_host else normalized_host
+    authority = host_literal if port is None else f"{host_literal}:{port}"
+    return f"https://{authority}"
+
+
 HttpPost = Callable[[str, dict[str, object], float], dict[str, Any]]
 FixtureReset = Callable[[dict[str, Any]], dict[str, object]]
 RuntimeRestart = Callable[[], None]
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevent a configured P1 origin from redirecting requests to another target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Reject redirects so origin validation remains effective for every POST."""
+        return None
 
 
 def _project_root() -> Path:
@@ -77,7 +124,8 @@ def post_json(url: str, payload: dict[str, object], timeout_s: float) -> dict[st
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310
+        opener = urllib.request.build_opener(_NoRedirectHandler)
+        with opener.open(request, timeout=timeout_s) as response:  # noqa: S310
             decoded = json.loads(response.read().decode("utf-8"))
     except (
         urllib.error.HTTPError,
@@ -314,7 +362,7 @@ def run_live_cases(
     post: HttpPost = post_json,
     reset: FixtureReset = _reset_case_fixture,
     restart: RuntimeRestart = _restart_runtime,
-    n8n_url: str = "http://p1-fixture.invalid",
+    n8n_url: str | None = None,
     timeout_s: float = 130.0,
     run_id: str | None = None,
 ) -> list[dict[str, object]]:
@@ -325,6 +373,7 @@ def run_live_cases(
     """
     if not confirmed:
         raise LiveRunError("live provider calls require explicit confirmation")
+    n8n_url = _validated_p1_n8n_url(n8n_url)
     if evidence_path.exists():
         raise FileExistsError("Refusing to overwrite existing P1 evidence")
     expected_ids = ["R1", "R2", "W1", "W2", "W3", "C1", "N1"]
@@ -425,9 +474,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if not args.confirm_live_provider_calls:
         raise SystemExit("Refusing live calls without --confirm-live-provider-calls")
-    if not isinstance(args.p1_n8n_url, str) or not args.p1_n8n_url.startswith("http"):
-        raise SystemExit("Refusing live calls without a dedicated P1 n8n URL")
     try:
+        n8n_url = _validated_p1_n8n_url(args.p1_n8n_url)
         _require_exact_p1_roots(P1_VAULT, P1_STATE)
         payload = json.loads(args.cases_path.read_text(encoding="utf-8"))
         cases = payload.get("cases") if isinstance(payload, dict) else None
@@ -441,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
             pricing=pricing,
             provenance=provenance,
             confirmed=True,
-            n8n_url=args.p1_n8n_url,
+            n8n_url=n8n_url,
         )
     except (LiveRunError, FixtureError, OSError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(f"P1 live baseline stopped: {error}") from error

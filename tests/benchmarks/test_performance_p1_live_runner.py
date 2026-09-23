@@ -171,7 +171,7 @@ def test_fixture_reset_rejects_missing_git_baseline_before_any_deletion(
 
 def test_live_request_payloads_use_the_explicit_p1_webhook_prefix() -> None:
     """The runner uses its supplied dedicated P1 n8n URL, never the manual DEV default."""
-    p1_url = "http://p1-fixture.test:28781"
+    p1_url = "https://p1-fixture.test:28781"
     chat_url, _ = run_live._request_payload(_cases()[0], "p1-test", p1_url)
     notes_url, _ = run_live._request_payload(_cases()[-1], "p1-test", p1_url)
     assert chat_url.startswith(p1_url)
@@ -187,7 +187,7 @@ def test_live_entry_refuses_to_select_an_implicit_manual_dev_endpoint(
     monkeypatch.delenv(run_live.P1_N8N_URL_ENV, raising=False)
     evidence = tmp_path / "must-not-exist.jsonl"
 
-    with pytest.raises(SystemExit, match="dedicated P1 n8n URL"):
+    with pytest.raises(SystemExit, match="dedicated P1 n8n HTTPS URL"):
         run_live.main(
             [
                 "--confirm-live-provider-calls",
@@ -196,6 +196,63 @@ def test_live_entry_refuses_to_select_an_implicit_manual_dev_endpoint(
             ]
         )
 
+    assert not evidence.exists()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://p1-fixture.test",
+        "https://odyssey-dev.ragdehl.com",
+        "https://odyssey.ragdehl.com",
+        "https://n8n.ragdehl.com",
+        "https://user:password@p1-fixture.test",
+        "https://p1-fixture.test/api",
+        "https://p1-fixture.test/?target=other",
+        "https://p1-fixture.test:99999",
+    ],
+)
+def test_p1_url_rejects_insecure_or_nonisolated_targets(url: str) -> None:
+    """Reject insecure transport and known non-P1 destinations before requests can run."""
+    with pytest.raises(run_live.LiveRunError):
+        run_live._validated_p1_n8n_url(url)
+
+
+def test_p1_url_normalizes_only_an_isolated_https_origin() -> None:
+    """An isolated HTTPS origin is normalized before fixed webhook paths are appended."""
+    assert (
+        run_live._validated_p1_n8n_url("HTTPS://P1-Fixture.Test:28781/")
+        == "https://p1-fixture.test:28781"
+    )
+
+
+def test_live_http_client_rejects_redirects_to_unvalidated_origins() -> None:
+    """A validated P1 origin cannot redirect provider-bearing requests elsewhere."""
+    handler = run_live._NoRedirectHandler()
+    request = run_live.urllib.request.Request("https://p1-fixture.test/api/request")
+    assert (
+        handler.redirect_request(request, None, 307, "Temporary Redirect", {}, "http://target")
+        is None
+    )
+
+
+def test_live_runner_rejects_unsafe_url_before_creating_evidence_or_requesting(
+    tmp_path: Path,
+) -> None:
+    """An unsafe configured target is rejected before any runner side effect."""
+    evidence = tmp_path / "must-not-exist.jsonl"
+    with pytest.raises(run_live.LiveRunError, match="isolated HTTPS origin"):
+        run_live.run_live_cases(
+            _cases(),
+            evidence_path=evidence,
+            pricing={},
+            provenance={},
+            confirmed=True,
+            n8n_url="http://odyssey-dev.ragdehl.com",
+            post=lambda *_args: pytest.fail("unsafe target must not receive a request"),
+            reset=lambda _case: pytest.fail("unsafe target must be rejected before fixture work"),
+            restart=lambda: pytest.fail("unsafe target must be rejected before runtime restart"),
+        )
     assert not evidence.exists()
 
 
@@ -286,7 +343,7 @@ def test_live_runner_flushes_every_case_and_keeps_semantic_failures_independent(
         post=post,
         reset=reset,
         restart=lambda: restarts.append(None),
-        n8n_url="http://p1-fixture.test:28781",
+        n8n_url="https://p1-fixture.test:28781",
         run_id="deterministic",
     )
     assert len(rows) == 7 and len(restarts) == 7
@@ -321,7 +378,7 @@ def test_live_runner_stops_after_persisting_an_unsafe_transport_failure(tmp_path
             post=post,
             reset=lambda _case: {},
             restart=lambda: None,
-            n8n_url="http://p1-fixture.test:28781",
+            n8n_url="https://p1-fixture.test:28781",
             run_id="unsafe",
         )
     rows = [json.loads(line) for line in (tmp_path / "stopped.jsonl").read_text().splitlines()]
@@ -342,5 +399,5 @@ def test_live_runner_refuses_existing_evidence_without_reset_or_request(tmp_path
             post=lambda *_args: pytest.fail("request must not run"),
             reset=lambda _case: pytest.fail("reset must not run"),
             restart=lambda: pytest.fail("restart must not run"),
-            n8n_url="http://p1-fixture.test:28781",
+            n8n_url="https://p1-fixture.test:28781",
         )
