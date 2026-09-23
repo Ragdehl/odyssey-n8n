@@ -43,17 +43,27 @@ class UnitTargetPreflight:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolvedRelationshipMember:
+    """Bind one no-write member unit to a stable ID from deterministic relationship evidence."""
+
+    unit_index: int
+    stable_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class RelationshipWriteBinding:
-    """Describe one current source fact and its ordered reference-only member units.
+    """Describe one current source fact and its exact reference-only member bindings.
 
     This is Core-internal write preparation data. The source ID and locator are re-grounded against
-    current Markdown before any target ID is admitted to the ordinary preflight table.
+    current Markdown before any target ID is admitted to the ordinary preflight table. Member stable
+    IDs must exactly match the re-grounded complete target set; their unit order is independent of
+    literal-link order in the source fact.
     """
 
     source_unit_index: int
     evidence_source_id: str
     fact_locator: str
-    member_unit_indices: tuple[int, ...]
+    members: tuple[ResolvedRelationshipMember, ...]
 
 
 def allocate_stable_id() -> str:
@@ -74,7 +84,6 @@ def preflight_write_action(
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
     span_recorder: SpanRecorder | None = None,
-    pre_resolved_reference_targets: Mapping[int, str] | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Decide every ordered unit once and preallocate safe CREATE identities without writing.
 
@@ -100,12 +109,43 @@ def preflight_write_action(
         ValueError: If the action or allocator contract is malformed.
         ReferencePreflightError: If an allocated ID/path is unsafe or collides.
     """
+    return _preflight_write_action(
+        action,
+        repository=repository,
+        schema=schema,
+        semantic_index=semantic_index,
+        embedder=embedder,
+        contextual_reasoner=contextual_reasoner,
+        semantic_limit=semantic_limit,
+        id_allocator=id_allocator,
+        authenticated_actor=authenticated_actor,
+        self_binding_repository=self_binding_repository,
+        span_recorder=span_recorder,
+    )
+
+
+def _preflight_write_action(
+    action: WriteAction,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    semantic_index: Any,
+    embedder: Any,
+    contextual_reasoner: Any,
+    semantic_limit: int,
+    id_allocator: Callable[[], str],
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
+    span_recorder: SpanRecorder | None,
+    _validated_reference_targets: Mapping[int, str] | None = None,
+) -> tuple[UnitTargetPreflight, ...]:
+    """Implement ordinary preflight with private relationship-validated no-write targets only."""
     if not isinstance(action, WriteAction):
         raise ValueError("Reference preflight requires a WriteAction")
     results: list[UnitTargetPreflight] = []
     allocated_paths: set[str] = set()
     existing_paths = set(repository.list_markdown_paths())
-    resolved_targets = dict(pre_resolved_reference_targets or {})
+    resolved_targets = dict(_validated_reference_targets or {})
     if any(
         not isinstance(index, int)
         or isinstance(index, bool)
@@ -114,7 +154,7 @@ def preflight_write_action(
         or not stable_id
         for index, stable_id in resolved_targets.items()
     ) or any(index >= len(action.units) for index in resolved_targets):
-        raise ReferencePreflightError("Pre-resolved reference targets are invalid")
+        raise ReferencePreflightError("Validated relationship reference targets are invalid")
     for unit_index, unit in enumerate(action.units):
         if unit.cardinality == "all_matching":
             raise ReferencePreflightError(
@@ -123,7 +163,7 @@ def preflight_write_action(
         if unit_index in resolved_targets:
             if not _is_reference_only_unit(unit):
                 raise ReferencePreflightError(
-                    "Pre-resolved target must be a structurally reference-only unit"
+                    "Validated relationship target must be a structurally reference-only unit"
                 )
             path, name = _find_existing_identity(repository, schema, resolved_targets[unit_index])
             results.append(
@@ -193,18 +233,36 @@ def preflight_relationship_write_action(
     """
     if not isinstance(action, WriteAction) or not isinstance(binding, RelationshipWriteBinding):
         raise ValueError("Relationship write preflight requires validated action and binding")
-    if not 0 <= binding.source_unit_index < len(action.units):
-        raise RelationshipWritePreflightError("Relationship write has no natural source unit")
     if (
-        len(binding.member_unit_indices) == 0
-        or len(set(binding.member_unit_indices)) != len(binding.member_unit_indices)
-        or binding.source_unit_index in binding.member_unit_indices
+        not isinstance(binding.source_unit_index, int)
+        or isinstance(binding.source_unit_index, bool)
+        or not 0 <= binding.source_unit_index < len(action.units)
+        or not isinstance(binding.evidence_source_id, str)
+        or not binding.evidence_source_id
+        or not isinstance(binding.fact_locator, str)
+        or not binding.fact_locator
+    ):
+        raise RelationshipWritePreflightError("Relationship write has no natural source unit")
+    if not binding.members or not all(
+        isinstance(member, ResolvedRelationshipMember) for member in binding.members
+    ):
+        raise RelationshipWritePreflightError("Relationship member bindings are invalid")
+    member_indices = tuple(member.unit_index for member in binding.members)
+    member_ids = tuple(member.stable_id for member in binding.members)
+    if (
+        len(set(member_indices)) != len(member_indices)
+        or len(set(member_ids)) != len(member_ids)
+        or binding.source_unit_index in member_indices
         or any(
-            not isinstance(index, int) or not 0 <= index < len(action.units)
-            for index in binding.member_unit_indices
+            not isinstance(index, int)
+            or isinstance(index, bool)
+            or not 0 <= index < len(action.units)
+            or not isinstance(stable_id, str)
+            or not stable_id
+            for index, stable_id in zip(member_indices, member_ids, strict=True)
         )
     ):
-        raise RelationshipWritePreflightError("Relationship member unit indexes are invalid")
+        raise RelationshipWritePreflightError("Relationship member bindings are invalid")
     projection = relationship_projector.project_targets(
         binding.evidence_source_id, binding.fact_locator
     )
@@ -212,7 +270,12 @@ def preflight_relationship_write_action(
         raise RelationshipWritePreflightError(
             "Relationship evidence is stale, unavailable, or incomplete"
         )
-    if len(projection.targets) != len(binding.member_unit_indices):
+    projected_ids = tuple(target.id for target in projection.targets)
+    if (
+        len(projected_ids) != len(member_ids)
+        or len(set(projected_ids)) != len(projected_ids)
+        or frozenset(projected_ids) != frozenset(member_ids)
+    ):
         raise RelationshipWritePreflightError(
             "Relationship member set does not match current evidence"
         )
@@ -222,11 +285,13 @@ def preflight_relationship_write_action(
     referenced_member_indexes = tuple(
         reference.target_index for reference in source_unit.references
     )
-    if set(referenced_member_indexes) != set(binding.member_unit_indices):
+    if len(referenced_member_indexes) != len(set(referenced_member_indexes)) or set(
+        referenced_member_indexes
+    ) != set(member_indices):
         raise RelationshipWritePreflightError(
             "Relationship source references do not match member units"
         )
-    preflight = preflight_write_action(
+    preflight = _preflight_write_action(
         action,
         repository=repository,
         schema=schema,
@@ -238,13 +303,7 @@ def preflight_relationship_write_action(
         authenticated_actor=authenticated_actor,
         self_binding_repository=self_binding_repository,
         span_recorder=span_recorder,
-        pre_resolved_reference_targets=dict(
-            zip(
-                binding.member_unit_indices,
-                (target.id for target in projection.targets),
-                strict=True,
-            )
-        ),
+        _validated_reference_targets=dict(zip(member_indices, member_ids, strict=True)),
     )
     source = preflight[binding.source_unit_index]
     if source.outcome is not WriteTargetOutcome.UPDATE or source.stable_id != projection.source.id:

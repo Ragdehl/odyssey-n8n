@@ -192,12 +192,12 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     assert purchase.facts == ("Bought {{ref:0}}.",)
 
 
-def test_pre_resolved_reference_target_rejects_any_mutation_payload(
+def test_ordinary_preflight_exposes_no_exact_id_override(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:
-    """Prevent the Core-only exact-ID path from retargeting a fact-bearing unit."""
+    """Keep raw exact stable-ID injection out of the ordinary public preflight contract."""
     write_existing(tmp_path, "people/Marta.md")
-    with pytest.raises(ReferencePreflightError, match="reference-only"):
+    with pytest.raises(TypeError, match="pre_resolved_reference_targets"):
         preflight_write_action(
             action(unit("Marta", entity="Marta", facts=("must not be retargeted",))),
             repository=VaultRepository(tmp_path),
@@ -206,7 +206,7 @@ def test_pre_resolved_reference_target_rejects_any_mutation_payload(
             embedder=EmptyEmbedder(),
             contextual_reasoner=NoReasoner(),
             semantic_limit=5,
-            pre_resolved_reference_targets={0: "existing-marta"},
+            pre_resolved_reference_targets={0: "existing-marta"},  # type: ignore[call-arg]
         )
 
 

@@ -14,6 +14,7 @@ from odyssey_core import (
     RelationshipEvidenceProjector,
     RelationshipWriteBinding,
     RelationshipWritePreflightError,
+    ResolvedRelationshipMember,
     SelectionCriteria,
     WriteAction,
     preflight_relationship_write_action,
@@ -130,6 +131,21 @@ def relationship_action(source_name: str, members: tuple[str, ...]) -> WriteActi
     return WriteAction((source, *(reference_only(name) for name in members)))
 
 
+def relationship_binding(
+    source_id: str, locator: str, member_ids: tuple[str, ...]
+) -> RelationshipWriteBinding:
+    """Bind ordered no-write units to the Core-grounded relationship target IDs."""
+    return RelationshipWriteBinding(
+        0,
+        source_id,
+        locator,
+        tuple(
+            ResolvedRelationshipMember(index, stable_id)
+            for index, stable_id in enumerate(member_ids, start=1)
+        ),
+    )
+
+
 def preflight(
     vault: Path,
     schema: dict,
@@ -175,7 +191,7 @@ def test_shared_fact_mutates_only_existing_natural_source(tmp_path: Path, schema
     projector = RelationshipEvidenceProjector(repository, schema)
     locator = projector.facts_for_source("visit")[0].locator
     action = relationship_action("Visita", ("Marta", "Juan", "Pedro"))
-    binding = RelationshipWriteBinding(0, "visit", locator, (1, 2, 3))
+    binding = relationship_binding("visit", locator, ("marta", "juan", "pedro"))
     before = {
         name: (vault / "people" / f"{name}.md").read_bytes() for name in ("marta", "juan", "pedro")
     }
@@ -242,10 +258,107 @@ def test_unique_singular_target_is_pre_resolved_without_create(
         .locator
     )
     action = relationship_action("Source", ("Chloe",))
-    table = preflight(vault, schema, action, RelationshipWriteBinding(0, "source", locator, (1,)))
+    table = preflight(vault, schema, action, relationship_binding("source", locator, ("chloe",)))
     assert table[1].stable_id == "chloe"
     assert table[1].reference_only is True
     assert all(item.outcome.value != "CREATE" for item in table)
+
+
+def test_member_bindings_are_independent_of_evidence_link_order(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Render each member unit with its exact Core-grounded ID, regardless of fact ordering."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    shared_fixture(vault)
+    locator = (
+        RelationshipEvidenceProjector(VaultRepository(vault), schema)
+        .facts_for_source("visit")[0]
+        .locator
+    )
+    action = relationship_action("Visita", ("Pedro", "Marta", "Juan"))
+    binding = relationship_binding("visit", locator, ("pedro", "marta", "juan"))
+
+    rendering = render_reference_facts(action, preflight(vault, schema, action, binding))
+
+    assert rendering.rendered_facts[0] == (
+        "[[people/pedro|Pedro]], [[people/marta|Marta]], [[people/juan|Juan]] "
+        "formamos parte del mismo grupo.",
+    )
+
+
+def test_forged_relationship_member_id_fails_closed(tmp_path: Path, schema: dict) -> None:
+    """Reject a binding ID that is not part of the freshly complete relationship projection."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    shared_fixture(vault)
+    write(vault, "people/chloe.md", "chloe", "Chloe", "")
+    locator = (
+        RelationshipEvidenceProjector(VaultRepository(vault), schema)
+        .facts_for_source("visit")[0]
+        .locator
+    )
+    action = relationship_action("Visita", ("Marta", "Juan", "Chloe"))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    with pytest.raises(RelationshipWritePreflightError, match="member set"):
+        preflight(
+            vault,
+            schema,
+            action,
+            relationship_binding("visit", locator, ("marta", "juan", "chloe")),
+        )
+
+    assert {path: path.read_bytes() for path in vault.rglob("*.md")} == before
+
+
+def test_duplicate_relationship_member_binding_fails_closed(tmp_path: Path, schema: dict) -> None:
+    """Reject two no-write units that claim the same member in a distinct complete set."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    shared_fixture(vault)
+    locator = (
+        RelationshipEvidenceProjector(VaultRepository(vault), schema)
+        .facts_for_source("visit")[0]
+        .locator
+    )
+    action = relationship_action("Visita", ("Marta", "Marta", "Pedro"))
+    binding = relationship_binding("visit", locator, ("marta", "marta", "pedro"))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    with pytest.raises(RelationshipWritePreflightError, match="member bindings"):
+        preflight(vault, schema, action, binding)
+
+    assert {path: path.read_bytes() for path in vault.rglob("*.md")} == before
+
+
+@pytest.mark.parametrize(
+    ("members", "member_ids"),
+    (
+        (("Marta", "Juan"), ("marta", "juan")),
+        (("Marta", "Juan", "Pedro", "Chloe"), ("marta", "juan", "pedro", "chloe")),
+    ),
+)
+def test_missing_or_extra_relationship_member_binding_fails_closed(
+    tmp_path: Path, schema: dict, members: tuple[str, ...], member_ids: tuple[str, ...]
+) -> None:
+    """Require binding IDs to equal the complete current set, with no subset or addition."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    shared_fixture(vault)
+    write(vault, "people/chloe.md", "chloe", "Chloe", "")
+    locator = (
+        RelationshipEvidenceProjector(VaultRepository(vault), schema)
+        .facts_for_source("visit")[0]
+        .locator
+    )
+    action = relationship_action("Visita", members)
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    with pytest.raises(RelationshipWritePreflightError, match="member set"):
+        preflight(vault, schema, action, relationship_binding("visit", locator, member_ids))
+
+    assert {path: path.read_bytes() for path in vault.rglob("*.md")} == before
 
 
 @pytest.mark.parametrize("failure", ("stale", "incomplete"))
@@ -259,7 +372,7 @@ def test_stale_or_incomplete_relationship_evidence_blocks_all_write_preparation(
     projector = RelationshipEvidenceProjector(VaultRepository(vault), schema)
     locator = projector.facts_for_source("visit")[0].locator
     action = relationship_action("Visita", ("Marta", "Juan", "Pedro"))
-    binding = RelationshipWriteBinding(0, "visit", locator, (1, 2, 3))
+    binding = relationship_binding("visit", locator, ("marta", "juan", "pedro"))
     before = {path: path.read_bytes() for path in vault.rglob("*.md")}
     if failure == "stale":
         write(
@@ -295,4 +408,9 @@ def test_missing_natural_source_never_authorizes_create(tmp_path: Path, schema: 
     )
     action = relationship_action("No existe", ("Marta", "Juan", "Pedro"))
     with pytest.raises(RelationshipWritePreflightError, match="Natural relationship source"):
-        preflight(vault, schema, action, RelationshipWriteBinding(0, "visit", locator, (1, 2, 3)))
+        preflight(
+            vault,
+            schema,
+            action,
+            relationship_binding("visit", locator, ("marta", "juan", "pedro")),
+        )

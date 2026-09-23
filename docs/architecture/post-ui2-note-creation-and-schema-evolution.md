@@ -200,11 +200,13 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    needed). This slice has no general graph query
    or Notes search traversal.
 2. **Safe write integration.** ✅ Implemented provider-free with one Core-internal binding that
-   re-grounds the source-hash-bound fact locator during write preparation, then admits only complete
-   existing member IDs into the ordinary preflight table as structurally reference-only no-write
-   units. The fact-bearing natural source must independently preflight as that exact existing note.
+   re-grounds the source-hash-bound fact locator during write preparation, then admits only the
+   exact complete current member-ID set into the ordinary preflight table as structurally
+   reference-only no-write units. Each member binding pairs its unit index with a Core-grounded
+   stable ID, so the new fact's reference order can differ from the evidence fact's literal-link
+   order. The fact-bearing natural source must independently preflight as that exact existing note.
    Rendering and materialization therefore write one linked fact on that source only; stale,
-   incomplete, or source-less preparation raises before mutation.
+   incomplete, mismatched, or source-less preparation raises before mutation.
 3. **Focused model gate.** After deterministic approval, run frozen relational read/write/clarify
    sentinels with the production planner model/reasoning and the unchanged semantic validator/fallback
    contract. Do not broaden graph behavior from a successful small gate.
