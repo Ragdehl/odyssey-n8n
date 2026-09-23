@@ -1,15 +1,43 @@
 # Performance / Latency / Cost P1 — measurement and decision contract
 
-Status: **P1A deterministic observability and one P1B isolated DEV baseline are complete on Draft PR #125.** P1C has one evidence-backed recommended target but is not authorized or implemented. The [Functional Roadmap](functional-roadmap.md) owns current status and order.
+Status: **complete.** The [Functional Roadmap](functional-roadmap.md) owns current status and order;
+this document retains the measurement contract and evidence that closed P1.
 
-## Objective and sequence
+## Closeout decision
+
+P1's baseline exposed universal Luna → Sol fallback, but every Luna provider response had completed
+and parsed successfully. The cause was a local Luna planner-result envelope mismatch: its validator
+rejected current valid `presentation_intent` output before the unchanged production semantic validator
+could run. The repair restored direct valid Luna planning.
+
+The remaining planner-only investigation isolated duplicated Structured Outputs schema material as the
+dominant avoidable input contributor. PR #129 compacted the Luna schema with shared local `$defs` /
+`$ref` definitions while retaining the same planner language and semantic validation. Its serialized
+size fell from 35,662 to 9,694 bytes (72.8%); representative planner input moved from roughly 11.87k
+to 7.15k tokens.
+
+| Representative Luna-only gate after compaction | Luna duration | Sol fallback |
+| --- | ---: | --- |
+| READ | 2.963 s | No |
+| WRITE | 2.143 s | No |
+| CLARIFY | 1.934 s | No |
+
+Subsequent small, controlled prompt/capability reductions did not establish a reliable remaining
+input-size/latency relationship. Provider/model base latency and variance now explain the remaining
+roughly 2–3 seconds more plausibly than Odyssey prompt construction. The decision is to stop P1 here:
+do not add request-type-specific schemas or fast paths. PR #129 merged at
+`1c2f0c45672e8d1d917cf6abd271a85123100b8e` and was explicitly deployed to isolated DEV, where the
+runtime and DEV n8n were healthy and provenance was `MATCH`; PROD was not changed.
+
+## Original objective and sequence
 
 Answer where an end-to-end request spends time, which individual provider calls cost money, how often and why Luna falls back to Sol, how much input each call receives, and which measured contributor is the best first optimization. Provider time and Odyssey overhead must be distinguishable before choosing a change. No universal latency SLA is set before baseline evidence.
 
 1. **P1A — observability completeness:** preserve existing bounded evidence, close only diagnosis-blocking gaps, and freeze the cases, environment, pricing snapshot, and report format.
 2. **P1B — baseline and bottleneck diagnosis:** run the approved synthetic DEV cases and identify dominant latency, cost, fallback, and input-token contributors. Record unavailable values honestly.
-3. **P1C — one optimization:** select exactly one primary target from P1B evidence. This contract does not authorize its implementation now.
-4. **P1D — before/after verification:** rerun the same frozen cases and semantic oracles with enough repetitions to distinguish a change from provider variance, within a separately approved budget.
+3. **P1C — one optimization:** select exactly one primary target from P1B evidence.
+4. **P1D — before/after verification:** compare the selected change against the same semantic
+   contracts without treating one provider response as a latency conclusion.
 
 ## Actual request paths and current evidence
 
@@ -206,8 +234,8 @@ prompt, raw provider output, hidden reasoning, credential, or planner payload.
 
 P1B's before rate was 7/7 Luna → Sol fallbacks, all after provider completion and parsing with
 `PLANNER_RESULT_ENVELOPE / INVALID_FIELDS`. The direct after rate is **0/3**. `INVALID_FIELDS` did
-not occur. The provider duration remains 2.673–4.898 s with roughly 11.9k input tokens, so P1D must
-assess Luna planner latency/input size before any prompt or routing change. The DEV vault Git-status
+not occur. Provider duration at this checkpoint remained 2.673–4.898 s with roughly 11.9k input
+tokens; the later completed schema investigation supersedes its planned next measurement. The DEV vault Git-status
 fingerprint and non-content state-file metadata fingerprint matched before and after the run. The
 current `/data/odyssey-dev` vault/state was neither reset nor modified.
 

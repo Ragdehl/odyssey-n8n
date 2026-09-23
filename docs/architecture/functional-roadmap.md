@@ -24,22 +24,26 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current functional phase — Performance / Latency / Cost P1
+## Current functional phase — Reference & Relationship Resolution v1
 
-UI-2 read-only Notes was human-merged in PR #124 at `73289c64c48df926974fe6e78c6e962814aea91f`.
-The immediate next bounded phase is [Performance / Latency / Cost P1](performance-cost-p1.md):
-complete the existing request-path evidence, measure a small synthetic DEV baseline, diagnose the
-dominant avoidable contributor, then select one optimization and verify it against the same cases.
-P1A deterministic observability and one synthetic DEV P1B baseline merged in PR #125. The baseline
-measured universal Luna → Sol fallback after bounded local validation failure. Draft PR #126 contains
-the selected P1C envelope repair and its planner-only live gate; no latency optimization has run.
+[Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
+universal Luna → Sol route was a local Luna planner-result validation mismatch after successful
+provider completion, not a provider failure. The envelope repair restored direct valid Luna planning.
+The one measured avoidable contributor was duplicated Structured Outputs schema material: PR #129
+reused local `$defs` / `$ref` definitions without changing the planner language or semantic validators.
+The Luna schema fell from 35,662 to 9,694 serialized bytes (72.8%), planner input from roughly 11.87k
+to 7.15k tokens, and the representative Luna-only READ / WRITE / CLARIFY gates took 2.963 s / 2.143 s
+/ 1.934 s with no Sol fallback. Small later prompt/capability probes did not establish a reliable
+input-size/latency relationship; provider/model base latency and variance now dominate the remaining
+roughly 2–3 seconds. P1 therefore stops here: no request-type-specific schema or fast path is planned.
+PR #129 merged at `1c2f0c45672e8d1d917cf6abd271a85123100b8e` and was explicitly deployed to isolated
+DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was untouched.
 
-After P1 diagnosis and its one evidence-driven optimization, continue the
-[post-UI-2 note creation and schema evolution direction](post-ui2-note-creation-and-schema-evolution.md),
-beginning with backlink/entity context and reference-resolution contracts. Those semantics do not
-belong in the P1 baseline oracle. The older Tasks/Events application order remains a later direction;
-P1 does not change it. UI-1 request detail is complete in PROD; its production promotion evidence is
-in [UI-1 production promotion](ui-1-production-promotion.md).
+The next bounded work is the human-approved [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md#reference--relationship-resolution-v1)
+implementation. Its evidence boundary, shared-fact home, inverse/symmetric evidence policy,
+all-or-clarify rule, and bounded backlink-enriched entity context are defined; no open v1 product
+decision remains. Tasks and Events remain later directions. UI-1 request detail is complete in PROD;
+its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -73,10 +77,8 @@ UI-1 request detail / advanced inspector                         ✅ complete in
 UI-0 durable main conversation/continuity                        ✅ complete in PROD
 UI-0 explicit production promotion                              ✅ complete
 UI-2 read-only Notes                                              ✅ merged in PR #124
-Performance / Latency / Cost P1A/P1B (baseline measured; merged PR #125) ✅ complete
-Performance / Latency / Cost P1C Luna envelope repair (Draft PR #126) ✅ complete
-Performance / Latency / Cost P1D (same cases → comparison) ➡️ next after review
-Post-UI-2 backlink/context and reference-resolution work        ⬜ planned after P1
+Performance / Latency / Cost P1                                  ✅ complete
+Reference & Relationship Resolution v1                            ➡️ next: implementation
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -165,10 +167,10 @@ UI-0 durable main conversation / continuity           ✅ complete in PROD
 UI-2 read-only Notes                                   ✅ merged
         |
         v
-Performance / Latency / Cost P1                       ➡️ next
+Performance / Latency / Cost P1                       ✅ complete
         |
         v
-post-UI-2 backlink/context + reference resolution
+Reference & Relationship Resolution v1                ➡️ next: implementation
         |
         v
 Tasks — first application contract
