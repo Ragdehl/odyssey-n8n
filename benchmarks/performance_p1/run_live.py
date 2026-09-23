@@ -103,9 +103,25 @@ def _source_provenance(source_root: Path) -> dict[str, str]:
 
 
 def _restart_runtime() -> None:
-    """Use the existing guarded DEV runbook to rebuild derived indexes after fixture setup."""
-    source_root = _project_root()
-    subprocess.run([str(source_root / "scripts" / "odyssey-dev"), "restart"], check=True)
+    """Restart only the already deployed DEV runtime and wait for its local health response.
+
+    ``odyssey-dev restart`` deliberately stops both DEV runtime and n8n. Its pre-start web-asset
+    coherence check needs the n8n container mounted, so it is unsuitable for an in-place fixture
+    reset. The complete guarded ``odyssey-dev deploy`` has already established DEV provenance;
+    this narrower restart changes no source, workflow, route, credential, or n8n state.
+    """
+    subprocess.run(["systemctl", "--user", "restart", "odyssey-dev-runtime.service"], check=True)
+    deadline = time.monotonic() + 90.0
+    health_url = "http://127.0.0.1:28765/healthz"
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(health_url, timeout=2.0) as response:  # noqa: S310
+                if response.status == 200:
+                    return
+        except (urllib.error.URLError, TimeoutError):
+            pass
+        time.sleep(1.0)
+    raise LiveRunError("isolated DEV runtime did not become healthy after fixture reset")
 
 
 def _reset_case_fixture(case: dict[str, Any]) -> dict[str, object]:
