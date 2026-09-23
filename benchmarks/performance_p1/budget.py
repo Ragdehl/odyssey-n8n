@@ -8,9 +8,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-PRICING_PATH = Path(__file__).resolve().parents[1] / "phase20_answerer/pricing_snapshot.json"
+PRICING_PATH = Path(__file__).with_name("pricing_snapshot.json")
 INITIAL_CEILING_USD = Decimal("0.20")
-LONG_CONTEXT_PRICE_THRESHOLD_TOKENS = 272_000
 
 
 class BudgetError(ValueError):
@@ -38,21 +37,32 @@ class CaseEnvelope:
 
 
 def load_pricing(path: Path = PRICING_PATH) -> dict[str, Any]:
-    """Load the existing dated benchmark pricing authority without network access."""
+    """Load the dated P1 Standard-tier pricing authority without network access."""
     value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict) or not isinstance(value.get("models"), dict):
+    if (
+        not isinstance(value, dict)
+        or value.get("service_tier") != "standard"
+        or not isinstance(value.get("as_of"), str)
+        or not isinstance(value.get("models"), dict)
+        or value.get("long_context_threshold_input_tokens") != 272_000
+    ):
         raise BudgetError("pricing snapshot is invalid")
     return value
 
 
 def worst_case_cost(envelope: CaseEnvelope, pricing: dict[str, Any]) -> Decimal:
-    """Price uncached maximum input and output for every possible call in a reviewed envelope.
+    """Price each reviewed call at its most expensive permitted input and output tier.
 
     The caller must prove that input-token and call-count bounds are true for the selected
     disposable runtime path. If it cannot, ``verified`` must remain false and execution refuses.
     """
     if not envelope.verified or not envelope.calls:
         raise BudgetError("request cost envelope is unverified")
+    if not isinstance(pricing, dict):
+        raise BudgetError("pricing snapshot is invalid")
+    threshold = pricing.get("long_context_threshold_input_tokens")
+    if type(threshold) is not int or threshold < 1 or not isinstance(pricing.get("models"), dict):
+        raise BudgetError("pricing snapshot has no reviewed context tier")
     total = Decimal(0)
     for bound in envelope.calls:
         if (
@@ -64,25 +74,28 @@ def worst_case_cost(envelope: CaseEnvelope, pricing: dict[str, Any]) -> Decimal:
             or bound.max_calls < 1
         ):
             raise BudgetError("request call bound is invalid")
-        if (
-            bound.model in {"gpt-5.6-luna", "gpt-5.6-sol"}
-            and bound.max_input_tokens > LONG_CONTEXT_PRICE_THRESHOLD_TOKENS
-        ):
-            raise BudgetError("long-context price is absent from the frozen snapshot")
         rates = pricing["models"].get(bound.model)
         if not isinstance(rates, dict):
             raise BudgetError("request model has no dated price")
+        tier = rates.get("long_context") if bound.max_input_tokens > threshold else rates
+        if not isinstance(tier, dict):
+            raise BudgetError("request model has no reviewed long-context price")
         try:
-            input_rate = Decimal(str(rates["input_per_million"]))
-            output_rate = Decimal(str(rates["output_per_million"]))
+            input_rates = tuple(
+                Decimal(str(tier[key]))
+                for key in (
+                    "input_per_million",
+                    "cached_input_per_million",
+                    "cache_write_per_million",
+                )
+            )
+            output_rate = Decimal(str(tier["output_per_million"]))
         except (KeyError, InvalidOperation, TypeError) as error:
             raise BudgetError("request model price is invalid") from error
-        if (
-            not input_rate.is_finite()
-            or not output_rate.is_finite()
-            or min(input_rate, output_rate) < 0
-        ):
+        if any(not rate.is_finite() or rate < 0 for rate in (*input_rates, output_rate)):
             raise BudgetError("request model price is invalid")
+        # Cache savings are not guaranteed. Cache writes can exceed ordinary input pricing.
+        input_rate = max(input_rates)
         total += (
             bound.max_calls
             * (bound.max_input_tokens * input_rate + bound.max_output_tokens * output_rate)

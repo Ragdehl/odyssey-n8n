@@ -13,6 +13,7 @@ from benchmarks.performance_p1.budget import (
     BudgetGuard,
     CallBound,
     CaseEnvelope,
+    load_pricing,
     worst_case_cost,
 )
 from benchmarks.performance_p1.report import format_request_report
@@ -21,9 +22,20 @@ from benchmarks.performance_p1.runner import CaseResult, run_cases
 
 PRICING = {
     "as_of": "2026-09-07",
+    "long_context_threshold_input_tokens": 272_000,
     "models": {
-        "luna": {"input_per_million": 1, "cached_input_per_million": 0.1, "output_per_million": 2},
-        "sol": {"input_per_million": 10, "cached_input_per_million": 1, "output_per_million": 20},
+        "luna": {
+            "input_per_million": 1,
+            "cached_input_per_million": 0.1,
+            "cache_write_per_million": 1,
+            "output_per_million": 2,
+        },
+        "sol": {
+            "input_per_million": 10,
+            "cached_input_per_million": 1,
+            "cache_write_per_million": 10,
+            "output_per_million": 20,
+        },
     },
 }
 EMPTY_OPERATIONAL = {
@@ -260,17 +272,35 @@ def test_unknown_model_and_missing_output_bound_refuse() -> None:
             CaseEnvelope("uncapped", (CallBound("answerer", "luna", 100, None, 1),), True),  # type: ignore[arg-type]
             PRICING,
         )
+    missing_write_rate = {
+        **PRICING,
+        "models": {
+            "luna": {
+                key: value
+                for key, value in PRICING["models"]["luna"].items()
+                if key != "cache_write_per_million"
+            }
+        },
+    }
+    with pytest.raises(BudgetError, match="price is invalid"):
+        worst_case_cost(
+            CaseEnvelope("missing", (CallBound("answerer", "luna", 100, 100, 1),), True),
+            missing_write_rate,
+        )
 
 
 def test_long_context_without_frozen_uplift_refuses() -> None:
     """The guard cannot underprice the model's published long-context tier."""
     frozen = {
+        "long_context_threshold_input_tokens": 272_000,
         "models": {
             "gpt-5.6-sol": {
                 "input_per_million": 4,
+                "cached_input_per_million": 0.4,
+                "cache_write_per_million": 5,
                 "output_per_million": 20,
             }
-        }
+        },
     }
     with pytest.raises(BudgetError, match="long-context price"):
         worst_case_cost(
@@ -281,6 +311,49 @@ def test_long_context_without_frozen_uplift_refuses() -> None:
             ),
             frozen,
         )
+
+
+def test_frozen_pricing_uses_correct_tier_and_no_cache_savings() -> None:
+    """The worst-case reserve includes cache-write and whole-call long-context rates."""
+    pricing = load_pricing()
+    assert pricing["as_of"] == "2026-09-23"
+    at_threshold = CaseEnvelope(
+        "short", (CallBound("planner.sol_fallback", "gpt-5.6-sol", 272_000, 4096, 1),), True
+    )
+    above_threshold = CaseEnvelope(
+        "long", (CallBound("planner.sol_fallback", "gpt-5.6-sol", 272_001, 4096, 1),), True
+    )
+    assert worst_case_cost(at_threshold, pricing) == Decimal("1.44192")
+    assert worst_case_cost(above_threshold, pricing) == Decimal("2.84289")
+
+
+def test_snapshot_with_wrong_tier_or_threshold_refuses(tmp_path) -> None:
+    """A future baseline cannot silently use a different service or threshold."""
+    pricing = load_pricing()
+    path = tmp_path / "wrong-pricing.json"
+    for override in ({"service_tier": "fast"}, {"long_context_threshold_input_tokens": 999_999}):
+        path.write_text(json.dumps({**pricing, **override}), encoding="utf-8")
+        with pytest.raises(BudgetError, match="snapshot is invalid"):
+            load_pricing(path)
+
+
+def test_report_prices_observed_long_context_and_cache_write() -> None:
+    """Observed usage uses its actual tier while preserving missing data as unavailable."""
+    from benchmarks.performance_p1.report import _estimated_call_cost
+
+    pricing = load_pricing()
+    call = {
+        "model": "gpt-5.6-sol",
+        "usage": {
+            "input_tokens": 272_001,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 1,
+            "output_tokens": 100,
+        },
+    }
+    assert _estimated_call_cost(call, pricing) == Decimal("2.17901")
+    del call["usage"]["output_tokens"]
+    assert _estimated_call_cost(call, pricing) is None
 
 
 def test_frozen_case_audit_fails_closed_and_read_witness_exceeds_ceiling() -> None:
@@ -309,3 +382,12 @@ def test_frozen_case_audit_fails_closed_and_read_witness_exceeds_ceiling() -> No
     )
     assert output_only == Decimal(audit["output_only_read_fallback_witness_usd"])
     assert output_only > Decimal(audit["ceiling_usd"])
+    planner_only = sum(
+        (
+            Decimal(rates[name]["configured_max_output_tokens"])
+            * Decimal(rates[name]["frozen_rate_usd_per_million"]["output_including_reasoning"])
+            / Decimal(1_000_000)
+        )
+        for name in ("planner.luna", "planner.sol_fallback")
+    )
+    assert planner_only * 7 == Decimal(audit["seven_case_planner_output_only_witness_usd"])

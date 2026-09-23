@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "source_head_reviewed": "d1cdaa8bf6cb32024cdc3bea0c9ca920c392b588",
-  "pricing_snapshot": "benchmarks/phase20_answerer/pricing_snapshot.json",
-  "pricing_as_of": "2026-09-07",
+  "source_head_reviewed": "29e2d97322610f1c7b2de22333ade3adc3b88474",
+  "pricing_snapshot": "benchmarks/performance_p1/pricing_snapshot.json",
+  "pricing_as_of": "2026-09-23",
   "ceiling_usd": "0.20",
   "certified": false,
   "seven_case_max_usd": null,
@@ -18,11 +18,18 @@
       "configured_max_output_tokens": 2048,
       "max_input_tokens": null,
       "frozen_rate_usd_per_million": {
-        "ordinary_input": "0.2",
+        "ordinary_input": "0.20",
         "cached_input": "0.02",
-        "output_including_reasoning": "1.2"
+        "cache_write_input": "0.25",
+        "output_including_reasoning": "1.20"
       },
-      "model_hard_max_output_tokens": 128000
+      "model_hard_max_output_tokens": 128000,
+      "long_context_rate_usd_per_million": {
+        "input_per_million": "0.40",
+        "cached_input_per_million": "0.04",
+        "cache_write_per_million": "0.50",
+        "output_per_million": "1.80"
+      }
     },
     "planner.sol_fallback": {
       "model": "gpt-5.6-sol",
@@ -32,11 +39,18 @@
       "max_input_tokens": null,
       "condition": "Luna RequestPlanningError after fail-closed validation",
       "frozen_rate_usd_per_million": {
-        "ordinary_input": "4.0",
-        "cached_input": "0.4",
-        "output_including_reasoning": "20.0"
+        "ordinary_input": "4.00",
+        "cached_input": "0.40",
+        "cache_write_input": "5.00",
+        "output_including_reasoning": "20.00"
       },
-      "model_hard_max_output_tokens": 128000
+      "model_hard_max_output_tokens": 128000,
+      "long_context_rate_usd_per_million": {
+        "input_per_million": "8.00",
+        "cached_input_per_million": "0.80",
+        "cache_write_per_million": "10.00",
+        "output_per_million": "30.00"
+      }
     },
     "contextual_resolution": {
       "model": null,
@@ -47,11 +61,18 @@
       "max_input_tokens": null,
       "condition": "target resolution has ambiguous candidates; ODYSSEY_CONTEXTUAL_MODEL can override model",
       "frozen_rate_usd_per_million": {
-        "ordinary_input": "0.2",
+        "ordinary_input": "0.20",
         "cached_input": "0.02",
-        "output_including_reasoning": "1.2"
+        "cache_write_input": "0.25",
+        "output_including_reasoning": "1.20"
       },
-      "model_hard_max_output_tokens": 128000
+      "model_hard_max_output_tokens": 128000,
+      "long_context_rate_usd_per_million": {
+        "input_per_million": "0.40",
+        "cached_input_per_million": "0.04",
+        "cache_write_per_million": "0.50",
+        "output_per_million": "1.80"
+      }
     },
     "writer": {
       "model": "gpt-5.6-luna",
@@ -61,11 +82,18 @@
       "max_input_tokens": null,
       "condition": "existing-note update needs bounded writer, including eligible bulk updates",
       "frozen_rate_usd_per_million": {
-        "ordinary_input": "0.2",
+        "ordinary_input": "0.20",
         "cached_input": "0.02",
-        "output_including_reasoning": "1.2"
+        "cache_write_input": "0.25",
+        "output_including_reasoning": "1.20"
       },
-      "model_hard_max_output_tokens": 128000
+      "model_hard_max_output_tokens": 128000,
+      "long_context_rate_usd_per_million": {
+        "input_per_million": "0.40",
+        "cached_input_per_million": "0.04",
+        "cache_write_per_million": "0.50",
+        "output_per_million": "1.80"
+      }
     },
     "fact_selector": {
       "model": "gpt-5.6-luna",
@@ -75,11 +103,18 @@
       "max_input_tokens": null,
       "condition": "ambiguous atomic fact removal",
       "frozen_rate_usd_per_million": {
-        "ordinary_input": "0.2",
+        "ordinary_input": "0.20",
         "cached_input": "0.02",
-        "output_including_reasoning": "1.2"
+        "cache_write_input": "0.25",
+        "output_including_reasoning": "1.20"
       },
-      "model_hard_max_output_tokens": 128000
+      "model_hard_max_output_tokens": 128000,
+      "long_context_rate_usd_per_million": {
+        "input_per_million": "0.40",
+        "cached_input_per_million": "0.04",
+        "cache_write_per_million": "0.50",
+        "output_per_million": "1.80"
+      }
     },
     "answerer": {
       "model": "gpt-5.6-luna",
@@ -89,11 +124,18 @@
       "max_input_tokens": null,
       "condition": "Chat route has retrieved evidence items",
       "frozen_rate_usd_per_million": {
-        "ordinary_input": "0.2",
+        "ordinary_input": "0.20",
         "cached_input": "0.02",
-        "output_including_reasoning": "1.2"
+        "cache_write_input": "0.25",
+        "output_including_reasoning": "1.20"
       },
-      "model_hard_max_output_tokens": 128000
+      "model_hard_max_output_tokens": 128000,
+      "long_context_rate_usd_per_million": {
+        "input_per_million": "0.40",
+        "cached_input_per_million": "0.04",
+        "cache_write_per_million": "0.50",
+        "output_per_million": "1.80"
+      }
     }
   },
   "cases": {
@@ -180,7 +222,10 @@
     "No configured output-token ceiling for answerer, contextual resolver, writer or fact selector; model hard maximum is too costly for the requested baseline",
     "No deterministic maximum action/unit count for Chat RequestPlan or all_matching note fanout",
     "Contextual resolver model is environment-configurable and must be pinned in isolated DEV",
-    "Frozen pricing snapshot does not encode the model long-context surcharge or cache-write price",
-    "No isolated disposable DEV executor is wired to the currently fail-closed live CLI"
-  ]
+    "No isolated disposable DEV executor is wired to the currently fail-closed live CLI",
+    "Future isolated DEV executor must verify Standard processing tier and exact model identity before reservation",
+    "Current n8n request-detail estimate still uses its deployed injected snapshot and lacks long-context tier handling; P1 report pricing is corrected locally but deployment/configuration is not changed"
+  ],
+  "seven_case_planner_output_only_witness_usd": "0.5906432",
+  "pricing_tiers_available": true
 }

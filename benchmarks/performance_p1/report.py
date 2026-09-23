@@ -23,21 +23,35 @@ def _estimated_call_cost(call: dict[str, Any], pricing: dict[str, Any]) -> Decim
     if any(type(value) is not int or value < 0 for value in counters):
         return None
     input_tokens, cached_tokens, output_tokens = counters
-    if cached_tokens > input_tokens or usage.get("cache_write_tokens", 0) != 0:
+    cache_write = usage.get("cache_write_tokens", 0)
+    if (
+        type(cache_write) is not int
+        or cache_write < 0
+        or cached_tokens + cache_write > input_tokens
+    ):
+        return None
+    threshold = pricing.get("long_context_threshold_input_tokens")
+    if type(threshold) is not int or threshold < 1:
+        return None
+    tier = rates.get("long_context") if input_tokens > threshold else rates
+    if not isinstance(tier, dict):
         return None
     try:
-        ordinary_rate = Decimal(str(rates["input_per_million"]))
-        cached_rate = Decimal(str(rates["cached_input_per_million"]))
-        output_rate = Decimal(str(rates["output_per_million"]))
+        ordinary_rate = Decimal(str(tier["input_per_million"]))
+        cached_rate = Decimal(str(tier["cached_input_per_million"]))
+        cache_write_rate = Decimal(str(tier["cache_write_per_million"]))
+        output_rate = Decimal(str(tier["output_per_million"]))
     except (KeyError, InvalidOperation, TypeError):
         return None
     if not all(
-        rate.is_finite() and rate >= 0 for rate in (ordinary_rate, cached_rate, output_rate)
+        rate.is_finite() and rate >= 0
+        for rate in (ordinary_rate, cached_rate, cache_write_rate, output_rate)
     ):
         return None
     return (
-        (input_tokens - cached_tokens) * ordinary_rate
+        (input_tokens - cached_tokens - cache_write) * ordinary_rate
         + cached_tokens * cached_rate
+        + cache_write * cache_write_rate
         + output_tokens * output_rate
     ) / Decimal(1_000_000)
 
