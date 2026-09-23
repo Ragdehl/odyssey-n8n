@@ -61,13 +61,20 @@ def _operational() -> dict[str, Any]:
     }
 
 
-def test_disposable_fixture_is_schema_valid_and_root_guard_rejects_non_dev_paths() -> None:
+def test_disposable_fixture_is_schema_valid_and_root_guard_rejects_non_dev_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The frozen fixture contains only synthetic schema-valid notes and cannot target production."""
     schema = json.loads((Path(__file__).parents[2] / "config/note-schema.json").read_text())
     notes = fixture_notes({"Marta": ["Marta prefiere el té."]})
     assert set(notes) == {"Marta", "Elena", "Pablo", "self"}
     for note in notes.values():
         validate_note(note, schema)
+
+    # CI does not own the fixed DEV filesystem. Simulate only the three initialization
+    # checks so this unit test exercises the path guard without depending on host state.
+    expected_dirs = {DEV_VAULT.parent, DEV_VAULT / ".git", DEV_STATE}
+    monkeypatch.setattr(Path, "is_dir", lambda self: self in expected_dirs)
     _require_exact_dev_roots(DEV_VAULT, DEV_STATE)
     with pytest.raises(FixtureError):
         _require_exact_dev_roots(Path("/data/odyssey/vault"), DEV_STATE)
