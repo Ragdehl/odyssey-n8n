@@ -39,10 +39,12 @@ roughly 2–3 seconds. P1 therefore stops here: no request-type-specific schema 
 PR #129 merged at `1c2f0c45672e8d1d917cf6abd271a85123100b8e` and was explicitly deployed to isolated
 DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was untouched.
 
-The next bounded work is the human-approved [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md#reference--relationship-resolution-v1)
-implementation. Its evidence boundary, shared-fact home, inverse/symmetric evidence policy,
-all-or-clarify rule, and bounded backlink-enriched entity context are defined; no open v1 product
-decision remains. Tasks and Events remain later directions. UI-1 request detail is complete in PROD;
+The provider-free [Reference & Relationship Resolution v1 Slice 1](post-ui2-note-creation-and-schema-evolution.md#proposed-implementation-slices)
+is implemented. It establishes the current-Markdown, one-source, one-hop evidence projection and
+bounded backlink-enriched entity snippets without changing planner/model or write behavior. The next
+bounded work is Slice 2 safe write integration. Its evidence boundary, shared-fact home,
+inverse/symmetric evidence policy, all-or-clarify rule, and bounded backlink-enriched entity context
+are defined; no open v1 product decision remains. Tasks and Events remain later directions. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
 ```text
@@ -78,7 +80,8 @@ UI-0 durable main conversation/continuity                        ✅ complete in
 UI-0 explicit production promotion                              ✅ complete
 UI-2 read-only Notes                                              ✅ merged in PR #124
 Performance / Latency / Cost P1                                  ✅ complete
-Reference & Relationship Resolution v1                            ➡️ next: implementation
+Reference & Relationship Resolution v1 Slice 1                    ✅ complete
+Reference & Relationship Resolution v1 Slice 2                    ➡️ next: safe write integration
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -170,7 +173,8 @@ UI-2 read-only Notes                                   ✅ merged
 Performance / Latency / Cost P1                       ✅ complete
         |
         v
-Reference & Relationship Resolution v1                ➡️ next: implementation
+Reference & Relationship Resolution v1 Slice 1        ✅ complete
+Reference & Relationship Resolution v1 Slice 2        ➡️ next: safe write integration
         |
         v
 Tasks — first application contract
