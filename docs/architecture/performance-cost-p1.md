@@ -184,12 +184,32 @@ non-executing fields and null payload values. Deterministic fake-provider tests 
 presentation intent; closed ESCALATE; unsupported fields; invalid PLAN/CLARIFY semantics; one
 genuine-invalid Luna fallback; and no Sol call for valid provider-complete PLAN or CLARIFY outputs.
 
-The requested direct live planner check was **not run** in this checkpoint because the current
-process has no provider credential, and no credential or environment access was broadened. It is
-therefore not after-evidence: P1B's measured 7/7 fallback rate remains the before comparison until
-a separately recorded direct planner run succeeds. That run must use synthetic context and the
-repository schema only. It must not invoke the P1 fixture helper or access/reset the current
-`/data/odyssey-dev` vault or state pending the separate DEV recovery/isolation task.
+The direct planner-only live gate ran after the deterministic checkpoint through a transient
+user-systemd process using the existing isolated-DEV runtime EnvironmentFile. It executed source
+`bbc65a3a0e525d858aa1387650988b0609a0cb29`, canonical schema version 3, synthetic current context,
+and exactly the three approved inputs. It did not start a product request, runtime HTTP handler,
+n8n workflow, retrieval, write, answerer, fixture helper, or source deployment. The immutable safe
+[evidence](../../benchmarks/luna_first_planner/results/p1c-live-20260923-run2.jsonl) retains no
+prompt, raw provider output, hidden reasoning, credential, or planner payload.
+
+| Case | Validated Luna result | Luna duration | Input / cached / output / reasoning | Sol fallback |
+| --- | --- | ---: | ---: | --- |
+| R — simple READ | PLAN | 4.898 s | 11,871 / 0 / 76 / 0 | No |
+| W — planner-only WRITE wording | PLAN; not executed | 4.525 s | 11,874 / 11,859 / 203 / 91 | No |
+| C — clarification | CLARIFY | 2.673 s | 11,872 / 11,859 / 49 / 0 | No |
+
+P1B's before rate was 7/7 Luna → Sol fallbacks, all after provider completion and parsing with
+`PLANNER_RESULT_ENVELOPE / INVALID_FIELDS`. The direct after rate is **0/3**. `INVALID_FIELDS` did
+not occur; all Luna calls completed, parsed, and validated locally. This is narrow contract-fix
+evidence, not a claim that Luna will avoid fallback for every supported request. The provider
+duration remains 2.673–4.898 s with roughly 11.9k input tokens, so the next performance target is
+Luna planner latency/input size, subject to P1D comparison against the frozen cases before any
+prompt or routing change.
+
+The DEV vault Git-status fingerprint and non-content state-file metadata fingerprint matched before
+and after the run. The current `/data/odyssey-dev` vault/state was neither reset nor modified.
+Future direct verification must keep the same restriction pending the separate DEV recovery/isolation
+task.
 
 ## Historical P1A whole-request cost-envelope audit — retired as a live gate
 
