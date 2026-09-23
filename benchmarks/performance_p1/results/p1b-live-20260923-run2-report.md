@@ -61,6 +61,33 @@ output schema; Luna adds 4,103 bytes of rules/examples. R2 added only 181 recent
 These are bytes, not billed-token allocations. This single pass establishes payload size and a
 fallback correlation, but does not prove that prompt size causes the observed provider latency.
 
+## Provider-call cost evidence
+
+Each amount below is recalculated from the captured provider usage and the frozen `2026-09-23`
+pricing snapshot. It is unavailable rather than zero if an input, cache, or output counter is
+absent; all calls in this run supplied the required counters. Reasoning tokens are reported above
+for diagnosis; the snapshot prices the provider-reported input and output counters.
+
+| Case | Provider call | Duration | Input / cached / output / reasoning | Observed estimate |
+| --- | --- | ---: | ---: | ---: |
+| R1 | Luna planner #1 | 4.924 s | 11,873 / 0 / 104 / 26 | $0.0024994 |
+| R1 | Sol planner #2 | 4.038 s | 10,829 / 0 / 103 / 29 | $0.0453760 |
+| R1 | answerer | 1.950 s | 398 / 0 / 40 / 0 | $0.0001276 |
+| R2 | Luna planner #1 | 6.038 s | 11,920 / 0 / 118 / 40 | $0.0025256 |
+| R2 | Sol planner #2 | 6.287 s | 10,875 / 0 / 139 / 64 | $0.0462800 |
+| R2 | answerer | 1.789 s | 399 / 0 / 39 / 0 | $0.0001266 |
+| W1 | Luna planner #1 | 3.809 s | 11,878 / 0 / 134 / 21 | $0.0025364 |
+| W1 | Sol planner #2 | 5.685 s | 10,834 / 0 / 170 / 61 | $0.0467360 |
+| W2 | Luna planner #1 | 4.851 s | 11,883 / 0 / 221 / 48 | $0.0026418 |
+| W2 | Sol planner #2 | 7.225 s | 10,839 / 0 / 205 / 35 | $0.0474560 |
+| W3 | Luna planner #1 | 6.058 s | 11,894 / 0 / 292 / 56 | $0.0027292 |
+| W3 | Sol planner #2 | 9.209 s | 10,850 / 0 / 494 / 176 | $0.0532800 |
+| W3 | contextual resolution #2 | 2.051 s | 2,734 / 0 / 89 / 64 | $0.0006536 |
+| C1 | Luna planner #1 | 2.821 s | 11,869 / 0 / 49 / 0 | $0.0024326 |
+| C1 | Sol planner #2 | 3.061 s | 10,825 / 0 / 46 / 0 | $0.0442200 |
+| N1 | Luna planner #1 | 3.928 s | 11,877 / 0 / 134 / 53 | $0.0025362 |
+| N1 | Sol planner #2 | 3.160 s | 10,833 / 0 / 113 / 35 | $0.0455920 |
+
 ## Other measured work and limits
 
 - R1/R2 retrieval was 21.4/19.2 ms, including one separately recorded local query embedding.
