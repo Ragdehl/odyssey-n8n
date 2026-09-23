@@ -112,7 +112,6 @@ from .reference_preflight import (
 from .relationship_evidence import (
     CanonicalFact,
     CanonicalIdentity,
-    EntityEvidenceCandidateLimits,
     EntityEvidenceCandidateProjection,
     EvidenceDirection,
     RelationshipEvidence,
@@ -291,7 +290,6 @@ __all__ = [
     "preflight_write_action",
     "CanonicalFact",
     "CanonicalIdentity",
-    "EntityEvidenceCandidateLimits",
     "EntityEvidenceCandidateProjection",
     "EvidenceDirection",
     "RelationshipEvidence",

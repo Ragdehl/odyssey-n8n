@@ -10,7 +10,6 @@ import pytest
 from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.relationship_evidence import (
-    EntityEvidenceCandidateLimits,
     EvidenceDirection,
     RelationshipEvidenceProjector,
     TargetProjectionStatus,
@@ -141,6 +140,31 @@ def test_complete_finite_set_preserves_literal_order_and_rejects_partial_members
     assert incomplete.evidence == ()
 
 
+def test_malformed_or_ambiguous_literal_links_fail_closed(tmp_path: Path, schema: dict) -> None:
+    """Reject a selected fact when its literal target cannot identify one stable note."""
+    ambiguous_vault = tmp_path / "ambiguous"
+    ambiguous_vault.mkdir()
+    write(ambiguous_vault, "people/chloe.md", "chloe-person", "Chloe", "")
+    write(ambiguous_vault, "projects/chloe.md", "chloe-project", "Chloe project", "")
+    write(ambiguous_vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Chloe]]."))
+    ambiguous_source = projector(ambiguous_vault, schema).facts_for_source("edgar")[0]
+    ambiguous = projector(ambiguous_vault, schema).project_targets(
+        "edgar", ambiguous_source.locator
+    )
+    assert ambiguous.status is TargetProjectionStatus.INCOMPLETE
+    assert ambiguous.targets == ()
+
+    malformed_vault = tmp_path / "malformed"
+    malformed_vault.mkdir()
+    write(malformed_vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Chloe]."))
+    malformed_source = projector(malformed_vault, schema).facts_for_source("edgar")[0]
+    malformed = projector(malformed_vault, schema).project_targets(
+        "edgar", malformed_source.locator
+    )
+    assert malformed.status is TargetProjectionStatus.INCOMPLETE
+    assert malformed.targets == ()
+
+
 def test_entity_evidence_candidates_keep_later_relevant_backlinks_and_reground_discovery(
     tmp_path: Path, schema: dict
 ) -> None:
@@ -172,13 +196,6 @@ def test_entity_evidence_candidates_keep_later_relevant_backlinks_and_reground_d
             fact(f"Mención {index} de [[Oriol]].", f"many-{index}"),
         )
 
-    bounded = projector(vault, schema).project_entity_evidence_candidates(
-        "oriol", limits=EntityEvidenceCandidateLimits(max_direct=2, max_incoming=3, max_outgoing=2)
-    )
-    assert bounded is not None
-    assert len(bounded.incoming) == 3
-    assert bounded.incoming_truncated is True
-
     candidates = projector(vault, schema).project_entity_evidence_candidates("oriol")
     assert candidates is not None
     assert candidates.entity.path == "people/oriol.md"
@@ -186,7 +203,6 @@ def test_entity_evidence_candidates_keep_later_relevant_backlinks_and_reground_d
         (EvidenceDirection.DIRECT, "Oriol vive en Barcelona.", None)
     ]
     assert len(candidates.incoming) == 10
-    assert candidates.incoming_truncated is False
     assert all(
         "Prosa que no debe entrar completa" not in item.fact.text for item in candidates.incoming
     )
@@ -212,14 +228,14 @@ def test_entity_evidence_candidates_keep_later_relevant_backlinks_and_reground_d
     assert stale_only.incoming == ()
 
 
-def test_entity_evidence_candidate_ceiling_is_deterministic_and_never_returns_whole_notes(
+def test_entity_evidence_candidates_preserve_late_backlinks_and_never_return_whole_notes(
     tmp_path: Path, schema: dict
 ) -> None:
-    """Keep a broad but finite safe backlink pool for a later request-aware selector."""
+    """Keep every grounded one-hop backlink for a later request-aware selector."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write(vault, "people/target.md", "target", "Target", "")
-    for index in range(65):
+    for index in range(137):
         write(
             vault,
             f"people/source-{index:02d}.md",
@@ -228,19 +244,30 @@ def test_entity_evidence_candidate_ceiling_is_deterministic_and_never_returns_wh
             fact(f"Hecho {index:02d} sobre [[Target]].", f"source-{index:02d}")
             + "\n\nTexto de nota completa que no es un snippet.",
         )
+    write(
+        vault,
+        "people/zz-relevant.md",
+        "zz-relevant",
+        "Relevant",
+        fact("Mi hermano [[Target]] trabaja en Airbus.", "relevant")
+        + "\n\nTexto de nota completa que no es un snippet.",
+    )
 
     evidence = projector(vault, schema)
     first = evidence.project_entity_evidence_candidates("target")
     second = evidence.project_entity_evidence_candidates("target")
 
     assert first is not None and second is not None
-    assert len(first.incoming) == 64
-    assert first.incoming_truncated is True
-    assert [item.fact.source.id for item in first.incoming] == [
-        f"source-{index:02d}" for index in range(64)
-    ]
-    assert [item.fact.source.id for item in second.incoming] == [
-        f"source-{index:02d}" for index in range(64)
-    ]
+    assert len(first.incoming) == 138
+    expected_ids = sorted([*[f"source-{index:02d}" for index in range(137)], "zz-relevant"])
+    assert [item.fact.source.id for item in first.incoming] == expected_ids
+    assert [item.fact.source.id for item in second.incoming] == expected_ids
+    assert (
+        first.incoming.index(
+            next(item for item in first.incoming if item.fact.source.id == "source-64")
+        )
+        > 64
+    )
+    assert first.incoming[-1].fact.text == "Mi hermano [[Target]] trabaja en Airbus."
     assert all("Texto de nota completa" not in item.fact.text for item in first.incoming)
     assert all(item.target and item.target.id == "target" for item in first.incoming)

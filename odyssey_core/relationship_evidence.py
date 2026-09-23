@@ -107,40 +107,14 @@ class TargetProjection:
 
 
 @dataclass(frozen=True, slots=True)
-class EntityEvidenceCandidateLimits:
-    """Set resource ceilings for safe candidates before request-aware context selection.
-
-    Each direction permits 64 snippets, so one entity can expose at most 192 re-grounded candidate
-    snippets. This stays below Odyssey's established 500-item raw retrieval candidate convention
-    while leaving later retrieval enough evidence to rank for the actual request.
-    """
-
-    max_direct: int = 64
-    max_incoming: int = 64
-    max_outgoing: int = 64
-
-    def __post_init__(self) -> None:
-        """Reject non-positive or unreasonable candidate limits before canonical loading."""
-        for value in (self.max_direct, self.max_incoming, self.max_outgoing):
-            if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 64:
-                raise ValueError("Relationship evidence candidate limits must be between 1 and 64")
-
-
-@dataclass(frozen=True, slots=True)
 class EntityEvidenceCandidateProjection:
-    """Expose bounded safe candidates before later request-aware context selection."""
+    """Expose all valid one-hop candidates in the supplied current canonical scope."""
 
     entity: CanonicalIdentity
     properties: Mapping[str, Any]
     direct: tuple[RelationshipEvidence, ...]
     incoming: tuple[RelationshipEvidence, ...]
     outgoing: tuple[RelationshipEvidence, ...]
-    direct_truncated: bool
-    incoming_truncated: bool
-    outgoing_truncated: bool
-
-
-_DEFAULT_CANDIDATE_LIMITS = EntityEvidenceCandidateLimits()
 
 
 @dataclass(frozen=True, slots=True)
@@ -316,16 +290,16 @@ class RelationshipEvidenceProjector:
         self,
         entity_id: str,
         *,
-        limits: EntityEvidenceCandidateLimits = _DEFAULT_CANDIDATE_LIMITS,
         discovered_backlink_source_ids: Iterable[str] | None = None,
     ) -> EntityEvidenceCandidateProjection | None:
-        """Return bounded safe candidates for later request-aware context selection.
+        """Return all valid one-hop candidates for later request-aware context selection.
 
         ``discovered_backlink_source_ids`` is an optional derived-index candidate set. Each source
         is still loaded from current Markdown and must still contain a literal link to the requested
         entity before it enters the returned evidence. Omitting it scans the current vault snapshot.
-        This method deliberately does not rank candidates against a request or construct a final
-        ``ContextPackage``; truncation is only a resource ceiling.
+        This method deliberately does not rank candidates against a request, reduce their count, or
+        construct a final ``ContextPackage``. The supplied discovery scope and one-hop rule bound
+        candidate topology; later retrieval owns request-aware reduction and final context limits.
         """
         notes = self._load_notes()
         entity = notes.get(entity_id)
@@ -374,12 +348,9 @@ class RelationshipEvidenceProjector:
         return EntityEvidenceCandidateProjection(
             entity.identity,
             entity.properties,
-            direct[: limits.max_direct],
-            incoming[: limits.max_incoming],
-            outgoing[: limits.max_outgoing],
-            len(direct) > limits.max_direct,
-            len(incoming) > limits.max_incoming,
-            len(outgoing) > limits.max_outgoing,
+            direct,
+            incoming,
+            outgoing,
         )
 
     def _load_notes(self) -> dict[str, _GroundedNote]:
