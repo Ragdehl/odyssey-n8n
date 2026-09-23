@@ -128,13 +128,11 @@ def test_runner_requires_confirmation_and_never_overwrites_evidence(tmp_path) ->
     assert evidence.read_text(encoding="utf-8") == "existing" and not called
 
 
-def test_live_entry_point_refuses_unwired_executor_even_with_confirmation(tmp_path) -> None:
-    """The P1A command cannot accidentally reach a provider before envelope review."""
+def test_live_entry_point_requires_explicit_confirmation(tmp_path) -> None:
+    """The live command does not reach the DEV path without an explicit acknowledgement."""
     evidence = tmp_path / "future.jsonl"
     with pytest.raises(SystemExit, match="without --confirm-live-provider-calls"):
         live_main(["--evidence-path", str(evidence)])
-    with pytest.raises(SystemExit, match="not configured"):
-        live_main(["--evidence-path", str(evidence), "--confirm-live-provider-calls"])
     assert not evidence.exists()
 
 
