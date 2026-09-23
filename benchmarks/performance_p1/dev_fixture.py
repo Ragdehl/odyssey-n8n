@@ -1,9 +1,9 @@
-"""Reset the explicitly isolated DEV data root to P1's disposable note fixture.
+"""Reset the dedicated P1 data root to P1's disposable note fixture.
 
-This helper intentionally accepts only the fixed Phase 21 DEV roots and now also requires an
-explicit disposable marker created outside this program. It is benchmark setup, not an Odyssey
-request path: callers must restart the DEV runtime afterwards so its rebuildable indexes reflect
-the new canonical Markdown before timing a case.
+This helper intentionally accepts only the fixed P1 fixture root and requires an explicit identity
+marker created outside this program. It is benchmark setup, not an Odyssey request path: callers
+must restart the dedicated P1 runtime afterwards so its rebuildable indexes reflect the new
+canonical Markdown before timing a case.
 """
 
 from __future__ import annotations
@@ -18,32 +18,80 @@ from typing import Any
 
 from odyssey_core.notes import Note, serialize_note, validate_note
 
-DEV_ROOT = Path("/data/odyssey-dev")
-DEV_VAULT = DEV_ROOT / "vault"
-DEV_STATE = DEV_ROOT / "state"
-DISPOSABLE_MARKER = DEV_ROOT / ".p1-disposable-fixture"
+P1_ROOT = Path("/data/odyssey-p1-fixture")
+P1_VAULT = P1_ROOT / "vault"
+P1_STATE = P1_ROOT / "state"
+MANUAL_DEV_ROOT = Path("/data/odyssey-dev")
+PRODUCTION_ROOT = Path("/data/odyssey")
+DISPOSABLE_MARKER = P1_ROOT / ".p1-disposable-fixture"
+FIXTURE_IDENTITY = "odyssey-p1-disposable-fixture-v1\n"
 FIXTURE_VERSION = 1
 _FIXTURE_APP = "odyssey-p1-disposable-fixture"
 _STAMP = "2026-01-01T00:00:00+00:00"
 
 
 class FixtureError(RuntimeError):
-    """Raised when a fixture reset cannot prove that it is confined to isolated DEV data."""
+    """Raised when a fixture reset cannot prove that it is confined to the P1 fixture root."""
 
 
-def _require_exact_dev_roots(vault_root: Path, state_root: Path) -> None:
-    """Reject roots that are not the fixed, explicitly marked disposable P1 DEV fixture."""
-    if vault_root.resolve() != DEV_VAULT or state_root.resolve() != DEV_STATE:
-        raise FixtureError("P1 fixture reset is restricted to the fixed isolated DEV roots")
+def _is_within(candidate: Path, root: Path) -> bool:
+    """Return whether one resolved path is the protected root or one of its descendants."""
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _require_exact_p1_roots(vault_root: Path, state_root: Path) -> None:
+    """Reject every destructive target except the marked dedicated P1 fixture root."""
+    resolved_vault = vault_root.resolve()
+    resolved_state = state_root.resolve()
+    protected_roots = (MANUAL_DEV_ROOT.resolve(), PRODUCTION_ROOT.resolve())
+    if any(
+        _is_within(candidate, protected)
+        for candidate in (resolved_vault, resolved_state)
+        for protected in protected_roots
+    ):
+        raise FixtureError("P1 fixture reset must not overlap manual DEV or production data")
+    if vault_root != P1_VAULT or state_root != P1_STATE:
+        raise FixtureError("P1 fixture reset is restricted to the dedicated P1 fixture root")
     if not (
-        DEV_ROOT.is_dir()
-        and (DEV_VAULT / ".git").is_dir()
-        and DEV_STATE.is_dir()
+        P1_ROOT.is_dir()
+        and not P1_ROOT.is_symlink()
+        and (P1_VAULT / ".git").is_dir()
+        and not P1_VAULT.is_symlink()
+        and P1_STATE.is_dir()
+        and not P1_STATE.is_symlink()
         and DISPOSABLE_MARKER.is_file()
+        and not DISPOSABLE_MARKER.is_symlink()
     ):
         raise FixtureError(
-            "isolated DEV fixture is not explicitly initialized and marked disposable"
+            "dedicated P1 fixture is not explicitly initialized and marked disposable"
         )
+    try:
+        marker = DISPOSABLE_MARKER.read_text(encoding="utf-8")
+    except OSError as error:
+        raise FixtureError("dedicated P1 fixture identity is unavailable") from error
+    if marker != FIXTURE_IDENTITY:
+        raise FixtureError("dedicated P1 fixture identity is invalid")
+    try:
+        git_root = Path(
+            subprocess.check_output(
+                ["git", "-C", str(P1_VAULT), "rev-parse", "--show-toplevel"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        ).resolve()
+        subprocess.check_output(
+            ["git", "-C", str(P1_VAULT), "rev-parse", "--verify", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise FixtureError("dedicated P1 fixture Git baseline is unavailable") from error
+    if git_root != P1_VAULT.resolve():
+        raise FixtureError("dedicated P1 fixture Git root is invalid")
 
 
 def _note(note_id: str, name: str, facts: tuple[str, ...]) -> Note:
@@ -154,18 +202,18 @@ def _commit_fixture(vault_root: Path) -> str:
 def reset_fixture(
     schema: dict[str, Any],
     *,
-    vault_root: Path = DEV_VAULT,
-    state_root: Path = DEV_STATE,
+    vault_root: Path = P1_VAULT,
+    state_root: Path = P1_STATE,
     extra_facts: dict[str, list[str]] | None = None,
 ) -> dict[str, object]:
-    """Replace only explicitly marked disposable DEV fixture content and transient state.
+    """Replace only explicitly marked dedicated P1 fixture content and transient state.
 
-    The persistent DEV actor and self-binding files remain in place. All prior Markdown,
+    The fixture-local actor and self-binding files remain in place. All prior Markdown,
     delivery replay records, conversation turns, and pending records are disposable only when
     the external marker precondition has been deliberately established. A caller must restart
-    the existing DEV runtime after this function returns.
+    the dedicated P1 runtime after this function returns.
     """
-    _require_exact_dev_roots(vault_root, state_root)
+    _require_exact_p1_roots(vault_root, state_root)
     notes = fixture_notes(extra_facts)
     for note in notes.values():
         validate_note(note, schema)
@@ -192,14 +240,14 @@ def reset_fixture(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Reset the fixed DEV root after explicit disposable-fixture confirmation and marker."""
+    """Reset the fixed P1 root after explicit disposable-fixture confirmation and marker."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--confirm-disposable-dev-fixture", action="store_true")
+    parser.add_argument("--confirm-disposable-p1-fixture", action="store_true")
     parser.add_argument("--schema", required=True, type=Path)
     parser.add_argument("--extra-facts-json", default="{}")
     args = parser.parse_args(argv)
-    if not args.confirm_disposable_dev_fixture:
-        raise SystemExit("Refusing fixture reset without --confirm-disposable-dev-fixture")
+    if not args.confirm_disposable_p1_fixture:
+        raise SystemExit("Refusing fixture reset without --confirm-disposable-p1-fixture")
     try:
         extra_facts = json.loads(args.extra_facts_json)
         schema = json.loads(args.schema.read_text(encoding="utf-8"))

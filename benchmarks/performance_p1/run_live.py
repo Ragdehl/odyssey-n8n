@@ -1,6 +1,6 @@
-"""Run one explicit, sequential P1 baseline against the fixed isolated DEV product boundary.
+"""Run one explicit, sequential P1 baseline against a dedicated P1 product boundary.
 
-The runner measures the ordinary DEV n8n request path. It never calls a provider directly,
+The runner measures the ordinary dedicated P1 n8n request path. It never calls a provider directly,
 never retries a request, resets the disposable fixture before each frozen case, and writes a
 content-free JSONL record after every completed case. The historical whole-run USD 0.20
 reservation code remains available in :mod:`budget`, but is deliberately not a live gate after
@@ -21,18 +21,27 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from .budget import load_pricing
-from .dev_fixture import DEV_ROOT, DEV_VAULT, FixtureError, reset_fixture
+from .dev_fixture import (
+    P1_ROOT,
+    P1_STATE,
+    P1_VAULT,
+    FixtureError,
+    _require_exact_p1_roots,
+    reset_fixture,
+)
 from .report import _estimated_call_cost
 
-DEV_N8N_URL = "http://172.18.0.1:28780"
-# Phase 21 DEV n8n explicitly sets N8N_ENDPOINT_WEBHOOK=api. These remain the ordinary
-# product webhooks, addressed over the Docker bridge rather than through the public proxy.
-_CHAT_URL = f"{DEV_N8N_URL}/api/request"
-_CONVERSATION_URL = f"{DEV_N8N_URL}/api/conversation"
-_NOTES_URL = f"{DEV_N8N_URL}/api/notes"
+P1_N8N_URL_ENV = "ODYSSEY_P1_N8N_URL"
+P1_RUNTIME_SERVICE = "odyssey-p1-fixture-runtime.service"
+_FORBIDDEN_N8N_HOSTS = {
+    "n8n.ragdehl.com",
+    "odyssey-dev.ragdehl.com",
+    "odyssey.ragdehl.com",
+}
 _MAX_PROVIDER_CALLS = 64
 _BASELINE_FACTS = {
     "Marta": ("Marta trabaja en Thales.", "Marta vive en Lyon."),
@@ -45,9 +54,50 @@ class LiveRunError(RuntimeError):
     """Raised when a live baseline cannot safely retain trustworthy evidence."""
 
 
+def _validated_p1_n8n_url(value: object) -> str:
+    """Validate and normalize the dedicated P1 HTTPS base URL.
+
+    Raises:
+        LiveRunError: If the value is malformed, uses insecure transport, includes URL
+            credentials, or targets a known Odyssey DEV, production, or shared n8n host.
+    """
+    if not isinstance(value, str) or not value:
+        raise LiveRunError("a dedicated P1 n8n HTTPS URL is required")
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as error:
+        raise LiveRunError("dedicated P1 n8n URL is malformed") from error
+    normalized_host = hostname.lower().rstrip(".") if hostname else ""
+    if (
+        parsed.scheme != "https"
+        or not normalized_host
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or normalized_host in _FORBIDDEN_N8N_HOSTS
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise LiveRunError("dedicated P1 n8n URL must be an isolated HTTPS origin")
+    host_literal = f"[{normalized_host}]" if ":" in normalized_host else normalized_host
+    authority = host_literal if port is None else f"{host_literal}:{port}"
+    return f"https://{authority}"
+
+
 HttpPost = Callable[[str, dict[str, object], float], dict[str, Any]]
 FixtureReset = Callable[[dict[str, Any]], dict[str, object]]
 RuntimeRestart = Callable[[], None]
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevent a configured P1 origin from redirecting requests to another target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Reject redirects so origin validation remains effective for every POST."""
+        return None
 
 
 def _project_root() -> Path:
@@ -74,7 +124,8 @@ def post_json(url: str, payload: dict[str, object], timeout_s: float) -> dict[st
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310
+        opener = urllib.request.build_opener(_NoRedirectHandler)
+        with opener.open(request, timeout=timeout_s) as response:  # noqa: S310
             decoded = json.loads(response.read().decode("utf-8"))
     except (
         urllib.error.HTTPError,
@@ -91,30 +142,28 @@ def post_json(url: str, payload: dict[str, object], timeout_s: float) -> dict[st
 
 
 def _source_provenance(source_root: Path) -> dict[str, str]:
-    """Verify the runner source is the exact clean commit recorded as deployed to DEV."""
+    """Verify the runner source is the exact clean commit recorded in the P1 fixture root."""
     head = subprocess.check_output(
         ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
     ).strip()
     dirty = subprocess.check_output(
         ["git", "-C", str(source_root), "status", "--porcelain"], text=True
     )
-    deployed = (DEV_ROOT / "runtime" / "deployed-commit").read_text(encoding="utf-8").strip()
+    deployed = (P1_ROOT / "runtime" / "deployed-commit").read_text(encoding="utf-8").strip()
     if dirty or not deployed or deployed != head:
-        raise LiveRunError("DEV source is not the clean commit recorded as deployed")
+        raise LiveRunError("P1 fixture source is not the clean commit recorded as deployed")
     return {"source_commit": head, "deployed_commit": deployed}
 
 
 def _restart_runtime() -> None:
-    """Restart only the already deployed DEV runtime and wait for its local health response.
+    """Restart only the dedicated P1 runtime and wait for its local health response.
 
-    ``odyssey-dev restart`` deliberately stops both DEV runtime and n8n. Its pre-start web-asset
-    coherence check needs the n8n container mounted, so it is unsuitable for an in-place fixture
-    reset. The complete guarded ``odyssey-dev deploy`` has already established DEV provenance;
-    this narrower restart changes no source, workflow, route, credential, or n8n state.
+    The manual DEV runtime is deliberately not a valid target. A dedicated P1 deployment must
+    provide this service and its matching n8n endpoint before a live baseline can start.
     """
-    subprocess.run(["systemctl", "--user", "restart", "odyssey-dev-runtime.service"], check=True)
+    subprocess.run(["systemctl", "--user", "restart", P1_RUNTIME_SERVICE], check=True)
     deadline = time.monotonic() + 90.0
-    health_url = "http://127.0.0.1:28765/healthz"
+    health_url = "http://127.0.0.1:28781/healthz"
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(health_url, timeout=2.0) as response:  # noqa: S310
@@ -123,7 +172,7 @@ def _restart_runtime() -> None:
         except (urllib.error.URLError, TimeoutError):
             pass
         time.sleep(1.0)
-    raise LiveRunError("isolated DEV runtime did not become healthy after fixture reset")
+    raise LiveRunError("dedicated P1 runtime did not become healthy after fixture reset")
 
 
 def _reset_case_fixture(case: dict[str, Any]) -> dict[str, object]:
@@ -137,13 +186,13 @@ def _reset_case_fixture(case: dict[str, Any]) -> dict[str, object]:
     try:
         return reset_fixture(schema, extra_facts=extra)
     except FixtureError as error:
-        raise LiveRunError("disposable DEV fixture could not be reset safely") from error
+        raise LiveRunError("dedicated P1 fixture could not be reset safely") from error
 
 
 def _append_prior_turns(
-    case: dict[str, Any], run_id: str, post: HttpPost, timeout_s: float
+    case: dict[str, Any], run_id: str, post: HttpPost, timeout_s: float, conversation_url: str
 ) -> None:
-    """Persist frozen conversational context through the regular DEV n8n boundary."""
+    """Persist frozen conversational context through the regular P1 n8n boundary."""
     turns = case.get("prior_turns", [])
     if not isinstance(turns, list):
         raise LiveRunError("frozen prior turns are malformed")
@@ -155,24 +204,26 @@ def _append_prior_turns(
             raise LiveRunError("frozen prior turns are malformed")
         request_id = f"p1-{run_id}-{case['id']}-context-{ordinal}"
         response = post(
-            _CONVERSATION_URL,
+            conversation_url,
             {"operation": "turn", "request_id": request_id, "role": turn["role"], "text": text},
             timeout_s,
         )
         if response.get("conversation_id") != "main":
-            raise LiveRunError("DEV conversation setup did not confirm the main conversation")
+            raise LiveRunError("P1 conversation setup did not confirm the main conversation")
 
 
-def _request_payload(case: dict[str, Any], request_id: str) -> tuple[str, dict[str, object]]:
+def _request_payload(
+    case: dict[str, Any], request_id: str, n8n_url: str
+) -> tuple[str, dict[str, object]]:
     """Build one frozen product request without introducing a benchmark-specific path."""
     kind = case.get("kind")
     request = case.get("request")
     if not isinstance(request, str) or not request:
         raise LiveRunError("frozen case request is malformed")
     if kind == "chat":
-        return _CHAT_URL, {"request": request, "request_id": request_id}
+        return f"{n8n_url}/api/request", {"request": request, "request_id": request_id}
     if kind == "notes_intelligent":
-        return _NOTES_URL, {
+        return f"{n8n_url}/api/notes", {
             "operation": "intelligent",
             "query": request,
             "filters": [],
@@ -221,7 +272,7 @@ def _fixture_note_text(person: str) -> str:
         "Pablo": "people/p1-pablo.md",
     }
     try:
-        return (DEV_VAULT / paths[person]).read_text(encoding="utf-8").casefold()
+        return (P1_VAULT / paths[person]).read_text(encoding="utf-8").casefold()
     except (KeyError, OSError) as error:
         raise LiveRunError("synthetic P1 fixture note is unavailable") from error
 
@@ -311,6 +362,7 @@ def run_live_cases(
     post: HttpPost = post_json,
     reset: FixtureReset = _reset_case_fixture,
     restart: RuntimeRestart = _restart_runtime,
+    n8n_url: str | None = None,
     timeout_s: float = 130.0,
     run_id: str | None = None,
 ) -> list[dict[str, object]]:
@@ -321,6 +373,7 @@ def run_live_cases(
     """
     if not confirmed:
         raise LiveRunError("live provider calls require explicit confirmation")
+    n8n_url = _validated_p1_n8n_url(n8n_url)
     if evidence_path.exists():
         raise FileExistsError("Refusing to overwrite existing P1 evidence")
     expected_ids = ["R1", "R2", "W1", "W2", "W3", "C1", "N1"]
@@ -336,7 +389,7 @@ def run_live_cases(
                 "record_type": "run",
                 "run_id": identity,
                 "started_at": datetime.now(UTC).isoformat(),
-                "environment": "isolated-disposable-dev",
+                "environment": "isolated-p1-fixture",
                 "pricing_basis": pricing.get("as_of"),
                 **provenance,
             },
@@ -347,9 +400,11 @@ def run_live_cases(
             try:
                 fixture = reset(case)
                 restart()
-                _append_prior_turns(case, identity, post, timeout_s)
+                _append_prior_turns(
+                    case, identity, post, timeout_s, f"{n8n_url.rstrip('/')}/api/conversation"
+                )
                 request_id = f"p1-{identity}-{case_id}-{uuid4().hex[:12]}"
-                url, payload = _request_payload(case, request_id)
+                url, payload = _request_payload(case, request_id, n8n_url.rstrip("/"))
                 request_started = time.perf_counter()
                 response = post(url, payload, timeout_s)
                 client_product_duration_ms = (time.perf_counter() - request_started) * 1000
@@ -406,15 +461,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--cases-path", type=Path, default=_project_root() / "benchmarks/performance_p1/cases.json"
     )
+    parser.add_argument(
+        "--p1-n8n-url",
+        default=os.environ.get(P1_N8N_URL_ENV),
+        help=f"Dedicated P1 n8n base URL (or set {P1_N8N_URL_ENV}).",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one confirmed P1 baseline through the deployed DEV product boundary."""
+    """Run one confirmed P1 baseline through the deployed dedicated P1 product boundary."""
     args = parse_args(argv)
     if not args.confirm_live_provider_calls:
         raise SystemExit("Refusing live calls without --confirm-live-provider-calls")
     try:
+        n8n_url = _validated_p1_n8n_url(args.p1_n8n_url)
+        _require_exact_p1_roots(P1_VAULT, P1_STATE)
         payload = json.loads(args.cases_path.read_text(encoding="utf-8"))
         cases = payload.get("cases") if isinstance(payload, dict) else None
         if not isinstance(cases, list):
@@ -427,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
             pricing=pricing,
             provenance=provenance,
             confirmed=True,
+            n8n_url=n8n_url,
         )
     except (LiveRunError, FixtureError, OSError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(f"P1 live baseline stopped: {error}") from error
