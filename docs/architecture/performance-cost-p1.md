@@ -168,7 +168,7 @@ Provider-reported planner input is consistently about 11.9k Luna and 10.8k Sol t
 
 The architecture choice remains **PROCEED** with nested request-local evidence in `ApplicationResult.operational` and the existing request-detail projection. This retains Markdown as the sole knowledge authority and adds no telemetry database, tracing service, prompt logging, new planner, model-route change, or optimization. The detailed pre-P1A gap table above is historical inventory; this section records which gaps the implementation closed and the explicit outer-path and live-budget limitations that remain.
 
-## P1C Luna result-envelope repair — deterministic checkpoint
+## P1C Luna result-envelope repair
 
 P1B isolated one concrete cause before any prompt, model, routing, or performance change: the Luna
 Structured Outputs schema reuses the production PLAN and CLARIFY branches, where
@@ -176,20 +176,16 @@ Structured Outputs schema reuses the production PLAN and CLARIFY branches, where
 that field before delegating to the production validator, producing
 `PLANNER_RESULT_ENVELOPE / INVALID_FIELDS` after a completed, parsed provider response.
 
-The P1C repair makes the boundary match its schema without weakening it. PLAN and CLARIFY now
-delegate directly to `validate_planner_result`; this preserves every existing production envelope,
-action, presentation, and semantic check. Luna-only ESCALATE still requires exactly its four
-non-executing fields and null payload values. Deterministic fake-provider tests cover accepted
-`answer`, `note_set`, and `answer_and_note_set` PLAN presentation intents; required-null CLARIFY
-presentation intent; closed ESCALATE; unsupported fields; invalid PLAN/CLARIFY semantics; one
-genuine-invalid Luna fallback; and no Sol call for valid provider-complete PLAN or CLARIFY outputs.
+PLAN and CLARIFY now delegate directly to `validate_planner_result`, preserving every production
+envelope, action, presentation, and semantic check. Luna-only ESCALATE still requires exactly its
+four non-executing fields and null payload values. Deterministic fake-provider tests cover valid
+PLAN/CLARIFY no-fallback behavior, closed ESCALATE, unsupported fields, invalid production
+semantics, and one genuine-invalid Luna fallback.
 
-The direct planner-only live gate ran after the deterministic checkpoint through a transient
-user-systemd process using the existing isolated-DEV runtime EnvironmentFile. It executed source
-`bbc65a3a0e525d858aa1387650988b0609a0cb29`, canonical schema version 3, synthetic current context,
-and exactly the three approved inputs. It did not start a product request, runtime HTTP handler,
-n8n workflow, retrieval, write, answerer, fixture helper, or source deployment. The immutable safe
-[evidence](../../benchmarks/luna_first_planner/results/p1c-live-20260923-run2.jsonl) retains no
+The direct planner-only gate executed source `bbc65a3a0e525d858aa1387650988b0609a0cb29`, canonical
+schema version 3, and synthetic current context. It started no product request, runtime HTTP handler,
+n8n workflow, retrieval, write, answerer, fixture helper, or source deployment. Its immutable safe
+[evidence](../../benchmarks/luna_first_planner/results/p1c-live-20260923-run2.jsonl) contains no
 prompt, raw provider output, hidden reasoning, credential, or planner payload.
 
 | Case | Validated Luna result | Luna duration | Input / cached / output / reasoning | Sol fallback |
@@ -200,16 +196,10 @@ prompt, raw provider output, hidden reasoning, credential, or planner payload.
 
 P1B's before rate was 7/7 Luna → Sol fallbacks, all after provider completion and parsing with
 `PLANNER_RESULT_ENVELOPE / INVALID_FIELDS`. The direct after rate is **0/3**. `INVALID_FIELDS` did
-not occur; all Luna calls completed, parsed, and validated locally. This is narrow contract-fix
-evidence, not a claim that Luna will avoid fallback for every supported request. The provider
-duration remains 2.673–4.898 s with roughly 11.9k input tokens, so the next performance target is
-Luna planner latency/input size, subject to P1D comparison against the frozen cases before any
-prompt or routing change.
-
-The DEV vault Git-status fingerprint and non-content state-file metadata fingerprint matched before
-and after the run. The current `/data/odyssey-dev` vault/state was neither reset nor modified.
-Future direct verification must keep the same restriction pending the separate DEV recovery/isolation
-task.
+not occur. The provider duration remains 2.673–4.898 s with roughly 11.9k input tokens, so P1D must
+assess Luna planner latency/input size before any prompt or routing change. The DEV vault Git-status
+fingerprint and non-content state-file metadata fingerprint matched before and after the run. The
+current `/data/odyssey-dev` vault/state was neither reset nor modified.
 
 ## Historical P1A whole-request cost-envelope audit — retired as a live gate
 
