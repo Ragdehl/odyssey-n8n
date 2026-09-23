@@ -269,12 +269,25 @@ def test_obsolete_context_field_is_rejected_by_the_luna_validator(schema: dict[s
         )
 
 
-def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
+def _schema_accepts(
+    instance: Any, schema: dict[str, Any], root: dict[str, Any] | None = None
+) -> bool:
     """Evaluate the restricted Structured Outputs subset used by this provider contract test."""
+    root = schema if root is None else root
+    reference = schema.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        definition = root.get("$defs", {}).get(reference.removeprefix("#/$defs/"))
+        return isinstance(definition, dict) and _schema_accepts(instance, definition, root)
     variants = schema.get("anyOf")
-    if variants is not None and not any(_schema_accepts(instance, branch) for branch in variants):
+    if variants is not None and not any(
+        _schema_accepts(instance, branch, root) for branch in variants
+    ):
         return False
     expected_type = schema.get("type")
+    if isinstance(expected_type, list) and not any(
+        _schema_accepts(instance, {"type": item}, root) for item in expected_type
+    ):
+        return False
     if expected_type == "null" and instance is not None:
         return False
     if expected_type == "string" and not isinstance(instance, str):
@@ -287,7 +300,7 @@ def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
     if "enum" in schema and instance not in schema["enum"]:
         return False
     if expected_type == "array":
-        return all(_schema_accepts(item, schema["items"]) for item in instance)
+        return all(_schema_accepts(item, schema["items"], root) for item in instance)
     if not is_object:
         return True
     required = schema.get("required", [])
@@ -297,7 +310,7 @@ def _schema_accepts(instance: Any, schema: dict[str, Any]) -> bool:
     if schema.get("additionalProperties") is False and set(instance) - set(properties):
         return False
     return all(
-        field not in instance or _schema_accepts(value, properties[field])
+        field not in instance or _schema_accepts(value, properties[field], root)
         for field, value in instance.items()
         if field in properties
     )

@@ -844,6 +844,7 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
             "actions": None,
             "limitations": None,
             "clarification_code": "UNRECOGNIZED_REQUEST",
+            "presentation_intent": None,
         }
     )
     assert all(schema_accepts(payload, compact) for payload in (read, write_plan, mixed, clarify))
@@ -854,6 +855,7 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
                 "actions": [],
                 "limitations": None,
                 "clarification_code": "UNRECOGNIZED_REQUEST",
+                "presentation_intent": None,
             }
         ),
         compact,
