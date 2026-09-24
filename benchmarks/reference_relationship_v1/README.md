@@ -40,10 +40,20 @@ python -m benchmarks.reference_relationship_v1.run_live --confirm-live-provider-
 
 The deterministic evaluator and cost guard are covered under
 `tests/benchmarks/test_reference_relationship_v1.py`. The runner now refuses a missing
-process-exported `OPENAI_API_KEY` before reserving evidence or constructing a provider. Neither
+process-exported `OPENAI_API_KEY` before reserving evidence or constructing a provider. No retained
 attempt artifact may be overwritten or deleted to create a rerun.
 
-The post-Attempt-2 follow-up adds one non-evaluation Luna teaching example for this exact
+The post-Attempt-2 follow-up added one non-evaluation Luna teaching example for this exact
 complete-set source-write shape, using different English dinner/company wording rather than the W02
-sentence. It leaves cases, oracle, evaluator, Core, and fallback behavior unchanged. **No new live
-evidence has been run**; a fresh separately authorized attempt is required to evaluate the lesson.
+sentence. Attempt 3 at `0c28855f35b39f4429ae2fc60db180a38fe3b9d6` evaluated that lesson through
+the distinct `reference-relationship-v1-attempt-3.jsonl` artifact. R01, W01, W02, C01, P01, S01,
+and S02 passed Luna-only. W02 produced the required one-source complete-set write and carried the
+expected `source_selector_review` flag. On S03, Luna stopped at local `KNOWLEDGE_UNIT` validation
+with `INVALID_FIELDS`; Sol fallback produced a PASS, its row was flushed, and the runner stopped.
+Attempt 3 therefore retained **8 attempted cases, 8 Luna calls, 1 Sol call, 1 fallback, 8 PASS, 0
+FAIL, 0 FAIL_CLOSED, and 1 semantic-review flag**. Luna usage was 63,340 input tokens (47,382
+cached), 1,475 output tokens, and 584 reasoning tokens over 23,709.705 ms. Sol usage was 11,315
+input tokens (0 cached), 328 output tokens, and 130 reasoning tokens over 5,280.293 ms. The frozen
+pricing snapshot calculates **$0.05772924** actual cost. The complete gate remains pending review:
+the fallback is a checkpoint and S04/S05 were not attempted. No retry or further provider call was
+made.

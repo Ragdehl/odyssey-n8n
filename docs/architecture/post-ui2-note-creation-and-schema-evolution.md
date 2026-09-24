@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; Attempt 2 reached the production planner but stopped fail-closed on the complete-set shared-fact case.**
+Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; Attempt 3 passed the complete-set shared-fact case but stopped at the required Sol-fallback review checkpoint on S03.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -230,7 +230,7 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    override would add unnecessary authority. Synthetic deterministic tests cover singular read/write,
    complete-set source write, ambiguity, stale member, and ordinary regressions. The frozen focused
    model gate is [owned here](../../benchmarks/reference_relationship_v1/README.md). Its conservative
-   ten-Luna-plus-one-Sol, 11-call ceiling is $0.455998. Attempt 1 at
+   ten-Luna-plus-one-Sol, 11-call ceiling is $0.458174. Attempt 1 at
    `2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because its
    command environment lacked `OPENAI_API_KEY`, preserving a zero-row artifact. Attempt 2 at
    `e17b5f750573e39aebf8477e933902e083ad7f9f` then used a distinct artifact and verified child
@@ -238,8 +238,12 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    required complete-set shared-fact write. The runner stopped fail-closed after three Luna calls
    ($0.00250944 actual cost), with no Sol fallback. The follow-up adds one non-evaluation Luna
    complete-set source-write teaching example with different wording; frozen cases/oracle and Core
-   remain unchanged, and no further live evidence has run. Slice 3 remains Draft and v1 is not
-   complete.
+   remain unchanged. Attempt 3 at `0c28855f35b39f4429ae2fc60db180a38fe3b9d6` passed R01, W01,
+   W02, C01, P01, S01, and S02 Luna-only, including the required one-unit complete-set write for
+   W02. W02 retained the expected `source_selector_review` flag. S03 reached a local Luna
+   `KNOWLEDGE_UNIT` / `INVALID_FIELDS` validation failure, then passed via one Sol fallback; the
+   runner flushed that row and stopped, leaving S04/S05 unattempted. Actual Attempt-3 cost was
+   $0.05772924. Slice 3 remains Draft and v1 is not complete pending fallback and semantic review.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

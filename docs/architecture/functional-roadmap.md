@@ -42,16 +42,21 @@ DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was unto
 The provider-free [Reference & Relationship Resolution v1 Slices 1–2](post-ui2-note-creation-and-schema-evolution.md#proposed-implementation-slices)
 are implemented. Slice 3 now has a Draft implementation of the relational planner contract and
 minimal Core read/write bridge on a feature branch; its frozen ten-case production model gate is
-**blocked** after two bounded attempts. Attempt 1 at
+**pending review** after three bounded attempts. Attempt 1 at
 `2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because its shell
 had not exported the protected `OPENAI_API_KEY`; its retained evidence has zero rows. Attempt 2 at
 `e17b5f750573e39aebf8477e933902e083ad7f9f` used the verified same-shell export procedure and
 reached three Luna-only cases within the $0.455998 ceiling: R01/W01 passed, then W02 safely clarified
 instead of producing the required complete-set shared-fact write (`FAIL_CLOSED`). It stopped with no
-Sol fallback; actual recorded cost was $0.00250944. Slice 3 and v1 are not yet validated or complete.
-The follow-up adds one non-evaluation Luna complete-set source-write teaching example without
-changing the frozen W02 case/oracle or deterministic Core; no further live call has run, so a fresh
-separately authorized gate remains required. The existing
+Sol fallback; actual recorded cost was $0.00250944. The follow-up added one non-evaluation Luna
+complete-set source-write teaching example without changing the frozen W02 case/oracle or
+deterministic Core. Attempt 3 at `0c28855f35b39f4429ae2fc60db180a38fe3b9d6` then passed R01,
+W01, W02, C01, P01, S01, and S02 Luna-only; W02 used the required complete-set source-write shape.
+S03 required one Sol fallback after Luna's local `KNOWLEDGE_UNIT` / `INVALID_FIELDS` validation
+failure. The runner retained the passing fallback row and stopped as required: 8 attempted cases,
+8 Luna calls, 1 Sol call, $0.05772924 actual cost, and the expected W02 `source_selector_review`
+flag. S04/S05 were not attempted. Slice 3 and v1 are not yet validated or complete pending fallback
+and semantic-review resolution. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;
