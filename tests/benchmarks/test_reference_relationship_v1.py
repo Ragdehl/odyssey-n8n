@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -117,20 +118,21 @@ def test_named_reference_oracle_accepts_either_unit_order() -> None:
     assert evaluate_result(result, oracles["S03"]).classification == "PASS"
 
 
-def test_cost_ceiling_blocks_provider_construction(
+def test_cost_ceiling_blocks_provider_construction_above_authorization(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Refuse the authorized run when every possible Sol fallback exceeds the cap."""
+    """Refuse before construction when the frozen maximum exceeds an authorization cap."""
     registry, _oracles = load_frozen_registry()
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     cost, luna_input, sol_input = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert cost > MAX_COST_USD
+    assert cost <= MAX_COST_USD
     assert luna_input > 0 and sol_input > 0
     import benchmarks.reference_relationship_v1.run_live as runner
 
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "should-not-exist.jsonl")
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.45"))
     monkeypatch.setattr(
         runner.LunaFirstRequestPlanner,
         "from_environment",

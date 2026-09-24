@@ -42,9 +42,11 @@ DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was unto
 The provider-free [Reference & Relationship Resolution v1 Slices 1–2](post-ui2-note-creation-and-schema-evolution.md#proposed-implementation-slices)
 are implemented. Slice 3 now has a Draft implementation of the relational planner contract and
 minimal Core read/write bridge on a feature branch; its frozen ten-case production model gate is
-**pending** because its all-Luna-plus-one-Sol conservative no-cache ceiling is $0.455998, above the
-explicitly authorized $0.15. No live calls were made, so Slice 3 and v1 are not yet validated or
-complete. The existing
+**blocked** after its one authorized $0.46 execution at
+`2405b136fc9abe686efb49599ba6368e479fe71a`: the $0.455998 all-Luna-plus-one-Sol preflight passed,
+but `OPENAI_API_KEY` was unavailable during Luna planner construction. The reserved evidence file
+has zero rows, so no provider calls, cases, usage, fallback, or semantic results occurred. Slice 3
+and v1 are not yet validated or complete. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;
@@ -85,7 +87,7 @@ UI-2 read-only Notes                                              ✅ merged in 
 Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
-Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; live gate blocked by cost ceiling
+Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; gate blocked before provider construction
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -179,7 +181,7 @@ Performance / Latency / Cost P1                       ✅ complete
         v
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
-Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; live gate blocked by cost ceiling
+Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; gate blocked before provider construction
         |
         v
 Tasks — first application contract

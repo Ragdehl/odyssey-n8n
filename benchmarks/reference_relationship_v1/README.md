@@ -16,14 +16,18 @@ automatic rerun. The fallback row is retained before that stop so it can be revi
 The no-cache ceiling counts the inherited production prompts, both Structured Outputs schemas,
 and each model's configured maximum output tokens. Its actual hard exposure is all ten possible
 Luna attempts plus at most one Sol fallback: **$0.455998 for at most 11 calls**. This remains
-above the authorized $0.15 ceiling. Therefore no provider client was constructed and there are
-no live case results or fallback counts. This is a cost gate, not a semantic pass. The exact
-refused command was:
+within the one-run $0.46 authorization used on 2026-09-24 at
+`2405b136fc9abe686efb49599ba6368e479fe71a`. That one command passed frozen preflight, reserved
+its exclusive evidence path, then stopped during Luna planner construction because
+`OPENAI_API_KEY` was unavailable. The reserved JSONL is zero bytes with zero rows: **zero provider
+calls, zero attempted cases, zero fallback, no usage, and no calculable actual cost**. This is not a
+semantic pass; the focused gate remains blocked on provider credentials and a separately authorized
+future execution. The one executed command was:
 
 ```bash
 python -m benchmarks.reference_relationship_v1.run_live --confirm-live-provider-calls
 ```
 
 The deterministic evaluator and cost guard are covered under
-`tests/benchmarks/test_reference_relationship_v1.py`. A later live run needs a separately
-authorized ceiling or a reviewed smaller gate whose full fallback exposure fits its limit.
+`tests/benchmarks/test_reference_relationship_v1.py`. The reserved evidence file must not be
+overwritten or deleted to create a rerun.

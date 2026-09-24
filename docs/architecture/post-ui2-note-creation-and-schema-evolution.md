@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; its production model gate remains pending on cost authorization.**
+Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; its one authorized production model-gate execution stopped before provider construction because credentials were unavailable.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -230,9 +230,11 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    override would add unnecessary authority. Synthetic deterministic tests cover singular read/write,
    complete-set source write, ambiguity, stale member, and ordinary regressions. The frozen focused
    model gate is [owned here](../../benchmarks/reference_relationship_v1/README.md). Its conservative
-   ten-Luna-plus-one-Sol, 11-call ceiling is $0.455998, so it remains above the authorized $0.15
-   gate and this branch made **zero** provider calls. There is no live semantic evidence yet; Slice 3
-   remains Draft and v1 is not complete.
+   ten-Luna-plus-one-Sol, 11-call ceiling is $0.455998. One authorized $0.46 execution at
+   `2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because
+   `OPENAI_API_KEY` was unavailable; its reserved evidence file has zero rows and there were **zero**
+   provider calls. There is no live semantic evidence yet; Slice 3 remains Draft and v1 is not
+   complete.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.
