@@ -7,7 +7,7 @@ recorded, never followed, and no returned action is executable here.
 
 ## Frozen boundary
 
-- `teaching_examples.json` contains seven prompt examples and is not evaluation evidence.
+- `teaching_examples.json` contains eight prompt examples and is not evaluation evidence.
 - `cases.json` contains 24 held-out cases that are not present verbatim in the prompt.
 - `oracle.json` contains one deterministic oracle per held-out case.
 - `frozen_manifest.json` locks those inputs and the dated pricing evidence by SHA-256.

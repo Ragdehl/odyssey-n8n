@@ -49,7 +49,9 @@ had not exported the protected `OPENAI_API_KEY`; its retained evidence has zero 
 reached three Luna-only cases within the $0.455998 ceiling: R01/W01 passed, then W02 safely clarified
 instead of producing the required complete-set shared-fact write (`FAIL_CLOSED`). It stopped with no
 Sol fallback; actual recorded cost was $0.00250944. Slice 3 and v1 are not yet validated or complete.
-The existing
+The follow-up adds one non-evaluation Luna complete-set source-write teaching example without
+changing the frozen W02 case/oracle or deterministic Core; no further live call has run, so a fresh
+separately authorized gate remains required. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;

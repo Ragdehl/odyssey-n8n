@@ -236,7 +236,10 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    `e17b5f750573e39aebf8477e933902e083ad7f9f` then used a distinct artifact and verified child
    export: R01 and W01 passed Luna-only, but W02 returned `UNRECOGNIZED_REQUEST` rather than the
    required complete-set shared-fact write. The runner stopped fail-closed after three Luna calls
-   ($0.00250944 actual cost), with no Sol fallback. Slice 3 remains Draft and v1 is not complete.
+   ($0.00250944 actual cost), with no Sol fallback. The follow-up adds one non-evaluation Luna
+   complete-set source-write teaching example with different wording; frozen cases/oracle and Core
+   remain unchanged, and no further live evidence has run. Slice 3 remains Draft and v1 is not
+   complete.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

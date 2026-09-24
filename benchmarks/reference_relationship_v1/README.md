@@ -40,3 +40,8 @@ The deterministic evaluator and cost guard are covered under
 `tests/benchmarks/test_reference_relationship_v1.py`. The runner now refuses a missing
 process-exported `OPENAI_API_KEY` before reserving evidence or constructing a provider. Neither
 attempt artifact may be overwritten or deleted to create a rerun.
+
+The post-Attempt-2 follow-up adds one non-evaluation Luna teaching example for this exact
+complete-set source-write shape, using different English dinner/company wording rather than the W02
+sentence. It leaves cases, oracle, evaluator, Core, and fallback behavior unchanged. **No new live
+evidence has been run**; a fresh separately authorized attempt is required to evaluate the lesson.

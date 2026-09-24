@@ -50,12 +50,28 @@ def relational_read() -> RequestPlan:
     )
 
 
+def relational_write() -> RequestPlan:
+    """Represent the established singular W01 contract without a model call."""
+    selection = SelectionCriteria(
+        None,
+        "mi hija",
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+    )
+    return RequestPlan(
+        (WriteAction((KnowledgeUnit(selection, "record", (), (), ("Vive en Lyon.",), ()),)),), ()
+    )
+
+
 def test_frozen_registry_and_oracle_align() -> None:
     """Load only the hashed ten-case registry before any provider construction."""
     registry, oracles = load_frozen_registry()
     assert len(registry["cases"]) == len(oracles) == 10
     assert [case["id"] for case in registry["cases"]] == list(oracles)
     assert evaluate_result(relational_read(), oracles["R01"]).classification == "PASS"
+    assert evaluate_result(relational_write(), oracles["W01"]).classification == "PASS"
 
 
 def test_oracle_rejects_relational_identity_loss_and_extra_actions() -> None:

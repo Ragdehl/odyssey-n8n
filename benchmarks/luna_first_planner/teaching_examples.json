@@ -163,6 +163,47 @@
         "clarification_code": null
       },
       "lesson": "One target keeps independent durable facts separate, and target resolution does not add a retrieval action."
+    },
+    {
+      "id": "teach-relational-complete-set-write",
+      "request": "Record that everyone who attended the dinner last night previously worked for the same company.",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "write",
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "everyone who attended the dinner last night",
+                  "type": null,
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "everyone who attended the dinner last night",
+                    "source_kind": "existing",
+                    "source_query": "the dinner last night",
+                    "members": "complete_set"
+                  }
+                },
+                "cardinality": "one",
+                "destination_type": null,
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": ["Everyone who attended the dinner last night previously worked for the same company."],
+                "references": []
+              }
+            ]
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null,
+        "presentation_intent": "answer"
+      },
+      "lesson": "PLAN this understandable finite-set assertion as one natural-source write: relational_reference.members=complete_set carries the member-set meaning, while cardinality=one means one record unit. Core, not the planner, resolves and binds current members; do not invent member units, IDs, or KnowledgeReferences."
     }
   ]
 }
