@@ -14,9 +14,11 @@ on the first failed or fail-closed classification **or the first Sol fallback**,
 automatic rerun. The fallback row is retained before that stop so it can be reviewed.
 
 The no-cache ceiling counts the inherited production prompts, both Structured Outputs schemas,
-and each model's configured maximum output tokens. Its actual hard exposure is all ten possible
-Luna attempts plus at most one Sol fallback: **$0.455998 for at most 11 calls**. This remains
-within the per-attempt $0.46 authorization. Attempt 1 at
+and each model's configured maximum output tokens. After adding the complete-set teaching example,
+the current branch's hard exposure is all ten possible Luna attempts plus at most one Sol fallback:
+**$0.458174 for at most 11 calls** (42,655 Luna input tokens and 66,592 Sol input tokens at the
+conservative bounds). This remains within the existing $0.46 guard. The next possible run has its
+own exclusive `reference-relationship-v1-attempt-3.jsonl` target. Attempt 1 at
 `2405b136fc9abe686efb49599ba6368e479fe71a` passed frozen preflight, reserved its exclusive path,
 then stopped during Luna planner construction because `OPENAI_API_KEY` was unavailable. Its retained
 `reference-relationship-v1.jsonl` is zero bytes with zero rows: **zero provider calls, zero attempted

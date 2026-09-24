@@ -34,7 +34,7 @@ from odyssey_core.request_planning import (  # noqa: E402
     render_request_planner_prompt,
 )
 
-OUTPUT_PATH = ROOT / "benchmarks" / ".live-results" / "reference-relationship-v1-attempt-2.jsonl"
+OUTPUT_PATH = ROOT / "benchmarks" / ".live-results" / "reference-relationship-v1-attempt-3.jsonl"
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
 MAX_COST_USD = Decimal("0.46")

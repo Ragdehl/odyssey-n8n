@@ -177,6 +177,30 @@ def test_missing_provider_environment_refuses_before_evidence_reservation(
     assert not runner.OUTPUT_PATH.exists()
 
 
+def test_attempt_3_uses_a_distinct_exclusive_evidence_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Target a fresh attempt file and preserve any existing evidence at that path."""
+    import benchmarks.reference_relationship_v1.run_live as runner
+
+    assert runner.OUTPUT_PATH.name == "reference-relationship-v1-attempt-3.jsonl"
+    evidence_path = tmp_path / runner.OUTPUT_PATH.name
+    original = b"prior attempt evidence\n"
+    evidence_path.write_bytes(original)
+    monkeypatch.setattr(runner, "OUTPUT_PATH", evidence_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+    monkeypatch.setattr(
+        runner.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed before exclusive open"),
+    )
+
+    with pytest.raises(SystemExit, match="Refusing to overwrite existing evidence"):
+        main(["--confirm-live-provider-calls"])
+
+    assert evidence_path.read_bytes() == original
+
+
 class RecordingEvidence(io.StringIO):
     """Count immediate evidence flushes without opening a live-result file."""
 

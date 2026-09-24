@@ -92,7 +92,7 @@ UI-2 read-only Notes                                              ✅ merged in 
 Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
-Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; gate blocked before provider construction
+Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; model-quality gate pending after W02 failure and teaching fix
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -186,7 +186,7 @@ Performance / Latency / Cost P1                       ✅ complete
         v
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
-Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; gate blocked before provider construction
+Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; model-quality gate pending after W02 failure and teaching fix
         |
         v
 Tasks — first application contract
