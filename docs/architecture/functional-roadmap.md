@@ -55,8 +55,11 @@ W01, W02, C01, P01, S01, and S02 Luna-only; W02 used the required complete-set s
 S03 required one Sol fallback after Luna's local `KNOWLEDGE_UNIT` / `INVALID_FIELDS` validation
 failure. The runner retained the passing fallback row and stopped as required: 8 attempted cases,
 8 Luna calls, 1 Sol call, $0.05772924 actual cost, and the expected W02 `source_selector_review`
-flag. S04/S05 were not attempted. Slice 3 and v1 are not yet validated or complete pending fallback
-and semantic-review resolution. The existing
+flag. Review accepts that W02 selector as natural-language source intent (`ayer`) and accepts S03
+as a passing production fallback: its final Sol plan preserves ordinary Marta/Airbus
+`KnowledgeReference` semantics. S04/S05 were not attempted. A fixed, unexecuted continuation for
+only S04/S05 has a $0.36979880 ceiling for at most three calls and requires separate explicit human
+authorization. Slice 3 and v1 are not yet validated or complete pending that continuation. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;

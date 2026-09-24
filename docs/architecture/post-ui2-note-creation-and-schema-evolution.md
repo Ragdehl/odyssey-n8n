@@ -243,7 +243,11 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    W02. W02 retained the expected `source_selector_review` flag. S03 reached a local Luna
    `KNOWLEDGE_UNIT` / `INVALID_FIELDS` validation failure, then passed via one Sol fallback; the
    runner flushed that row and stopped, leaving S04/S05 unattempted. Actual Attempt-3 cost was
-   $0.05772924. Slice 3 remains Draft and v1 is not complete pending fallback and semantic review.
+   $0.05772924. Review accepts W02's natural-language `ayer` selector and S03's final ordinary
+   Marta/Airbus `KnowledgeReference` plan as a valid production fallback. A fixed, unexecuted
+   continuation selects only S04 then S05, has a $0.36979880 maximum for at most three calls, and
+   requires new explicit authorization. Slice 3 remains Draft and v1 is not complete pending that
+   continuation.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

@@ -57,3 +57,20 @@ input tokens (0 cached), 328 output tokens, and 130 reasoning tokens over 5,280.
 pricing snapshot calculates **$0.05772924** actual cost. The complete gate remains pending review:
 the fallback is a checkpoint and S04/S05 were not attempted. No retry or further provider call was
 made.
+
+Review of the retained Attempt-3 result accepts W02's `source_selector_review`: its source is the
+natural-language `ayer` selector for the existing prior event/context, with no asserted stable ID,
+path, filename, relation type, or member list. The plan preserves one complete-set source-write
+unit and the requested school fact. S03 is a reviewed PASS with the normal production fallback:
+Luna was rejected locally at `KNOWLEDGE_UNIT` / `INVALID_FIELDS`, then one Sol result passed the
+unchanged ordinary named-reference oracle with Marta as a non-relational target and Airbus through
+the established `KnowledgeReference` binding. The fallback remains a Luna quality observation, not
+a Slice 3 semantic regression.
+
+Only S04/S05 remain unevaluated. A fixed continuation entry point
+(`python -m benchmarks.reference_relationship_v1.run_live_continuation`) verifies the original
+ordered ten-case registry, then selects exactly S04 followed by S05 and writes exclusively to
+`reference-relationship-v1-attempt-3-continuation.jsonl`. Its conservative no-cache ceiling is
+**$0.36979880** for two Luna attempts and at most one Sol fallback (three calls; 42,549 Luna input
+tokens and 66,486 Sol input tokens at the bounds). It has a zero-dollar guard until a new explicit
+human authorization is recorded. It has not run.

@@ -17,6 +17,17 @@ from benchmarks.reference_relationship_v1.run_live import (
     main,
     run_cases,
 )
+from benchmarks.reference_relationship_v1.run_live_continuation import (
+    CONTINUATION_CASE_IDS,
+    EXPECTED_FROZEN_CASE_IDS,
+    load_continuation_cases,
+)
+from benchmarks.reference_relationship_v1.run_live_continuation import (
+    MAX_COST_USD as CONTINUATION_MAX_COST_USD,
+)
+from benchmarks.reference_relationship_v1.run_live_continuation import (
+    conservative_cost_ceiling as continuation_cost_ceiling,
+)
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -25,6 +36,7 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
+    TagChange,
     WriteAction,
 )
 
@@ -63,6 +75,33 @@ def relational_write() -> RequestPlan:
     return RequestPlan(
         (WriteAction((KnowledgeUnit(selection, "record", (), (), ("Vive en Lyon.",), ()),)),), ()
     )
+
+
+def all_matching_write() -> RequestPlan:
+    """Represent the frozen S04 bulk-tag sentinel without a provider call."""
+    unit = KnowledgeUnit(
+        SelectionCriteria(None, "todas mis notas de tipo persona", "person", (), None),
+        "record",
+        (),
+        (TagChange("add", "revisado"),),
+        (),
+        (),
+        cardinality="all_matching",
+    )
+    return RequestPlan((WriteAction((unit,)),), ())
+
+
+def atomic_write() -> RequestPlan:
+    """Represent the frozen S05 one-target two-fact sentinel without a provider call."""
+    unit = KnowledgeUnit(
+        SelectionCriteria("Marta", "Marta", "person", (), None),
+        "record",
+        (),
+        (),
+        ("Vive en Lyon.", "Trabaja en Airbus."),
+        (),
+    )
+    return RequestPlan((WriteAction((unit,)),), ())
 
 
 def test_frozen_registry_and_oracle_align() -> None:
@@ -201,6 +240,116 @@ def test_attempt_3_uses_a_distinct_exclusive_evidence_path(
     assert evidence_path.read_bytes() == original
 
 
+def test_continuation_selects_only_the_fixed_unattempted_suffix() -> None:
+    """Keep continuation evidence bound to S04 then S05 from the original registry."""
+    registry, cases, oracles = load_continuation_cases()
+    assert tuple(case["id"] for case in registry["cases"]) == EXPECTED_FROZEN_CASE_IDS
+    assert tuple(case["id"] for case in cases) == CONTINUATION_CASE_IDS == ("S04", "S05")
+    assert tuple(oracles) == EXPECTED_FROZEN_CASE_IDS
+    assert len(cases) + 1 == 3
+
+
+def test_continuation_cost_requires_a_fresh_authorization() -> None:
+    """Price only the two fixed cases plus one fallback without inheriting Attempt 3 approval."""
+    registry, cases, _oracles = load_continuation_cases()
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    cost, luna_input, sol_input = continuation_cost_ceiling(
+        cases, registry["fixed_context"], schema
+    )
+    assert cost > CONTINUATION_MAX_COST_USD
+    assert luna_input > 0 and sol_input > 0
+
+
+def test_continuation_requires_its_confirmation_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject an unconfirmed continuation before evidence reservation or provider construction."""
+    import benchmarks.reference_relationship_v1.run_live_continuation as continuation
+
+    monkeypatch.setattr(continuation, "MAX_COST_USD", Decimal("1"))
+    monkeypatch.setattr(continuation, "OUTPUT_PATH", tmp_path / "continuation.jsonl")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+    monkeypatch.setattr(
+        continuation.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed without confirmation"),
+    )
+    with pytest.raises(SystemExit, match="without --confirm-live-provider-calls"):
+        continuation.main([])
+    assert not continuation.OUTPUT_PATH.exists()
+
+
+def test_continuation_refuses_user_selected_cases() -> None:
+    """Expose no generic case or start-index input that could alter the fixed suffix."""
+    import benchmarks.reference_relationship_v1.run_live_continuation as continuation
+
+    with pytest.raises(SystemExit):
+        continuation.main(["--case", "S03"])
+
+
+def test_continuation_missing_key_refuses_before_evidence_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep process-key validation before continuation evidence or provider construction."""
+    import benchmarks.reference_relationship_v1.run_live_continuation as continuation
+
+    monkeypatch.setattr(continuation, "MAX_COST_USD", Decimal("1"))
+    monkeypatch.setattr(continuation, "OUTPUT_PATH", tmp_path / "continuation.jsonl")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        continuation.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed without process environment"),
+    )
+    with pytest.raises(SystemExit, match="absent from process environment"):
+        continuation.main(["--confirm-live-provider-calls"])
+    assert not continuation.OUTPUT_PATH.exists()
+
+
+def test_continuation_preserves_existing_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse a reused continuation path before constructing a provider."""
+    import benchmarks.reference_relationship_v1.run_live_continuation as continuation
+
+    evidence_path = tmp_path / "continuation.jsonl"
+    original = b"retained continuation evidence\n"
+    evidence_path.write_bytes(original)
+    monkeypatch.setattr(continuation, "MAX_COST_USD", Decimal("1"))
+    monkeypatch.setattr(continuation, "OUTPUT_PATH", evidence_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+    monkeypatch.setattr(
+        continuation.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed before exclusive open"),
+    )
+    with pytest.raises(SystemExit, match="Refusing to overwrite existing evidence"):
+        continuation.main(["--confirm-live-provider-calls"])
+    assert evidence_path.read_bytes() == original
+
+
+def test_continuation_rejects_registry_drift_before_provider_construction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Require the full original order before selecting the fixed suffix."""
+    import benchmarks.reference_relationship_v1.run_live_continuation as continuation
+
+    registry, oracles = load_frozen_registry()
+    drifted = {**registry, "cases": registry["cases"][:-1]}
+    monkeypatch.setattr(continuation, "MAX_COST_USD", Decimal("1"))
+    monkeypatch.setattr(continuation, "OUTPUT_PATH", tmp_path / "continuation.jsonl")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+    monkeypatch.setattr(continuation, "load_frozen_registry", lambda: (drifted, oracles))
+    monkeypatch.setattr(
+        continuation.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed after registry drift"),
+    )
+    with pytest.raises(ValueError, match="original ordered ten-case registry"):
+        continuation.main(["--confirm-live-provider-calls"])
+    assert not continuation.OUTPUT_PATH.exists()
+
+
 class RecordingEvidence(io.StringIO):
     """Count immediate evidence flushes without opening a live-result file."""
 
@@ -271,6 +420,40 @@ def test_runner_flushes_first_fallback_and_stops_before_later_cases() -> None:
     assert [row["classification"] for row in rows] == ["PASS", "PASS"]
     assert planner.requests == ["request-0", "request-1"]
     assert len(evidence.getvalue().splitlines()) == evidence.flush_count == 2
+
+
+def test_continuation_stops_after_its_first_fallback() -> None:
+    """Use the shared production stop rule without allowing S05 after an S04 fallback."""
+    _registry, cases, oracles = load_continuation_cases()
+    planner = StubPlanner([(2, all_matching_write()), (1, atomic_write())])
+    evidence = RecordingEvidence()
+    rows = run_cases(planner, cases, oracles, evidence)
+    assert [row["case_id"] for row in rows] == ["S04"]
+    assert rows[0]["classification"] == "PASS"
+    assert rows[0]["fallback"] is True
+    assert planner.requests == [cases[0]["request"]]
+    assert evidence.flush_count == 1
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        (relational_read(), "FAIL"),
+        (PlannerClarification("clarify"), "FAIL_CLOSED"),
+    ],
+)
+def test_continuation_stops_after_fail_or_fail_closed(
+    outcome: RequestPlan | PlannerClarification, expected: str
+) -> None:
+    """Keep S05 unreachable after a failed S04 continuation result."""
+    _registry, cases, oracles = load_continuation_cases()
+    planner = StubPlanner([(1, outcome), (1, atomic_write())])
+    evidence = RecordingEvidence()
+    rows = run_cases(planner, cases, oracles, evidence)
+    assert [row["case_id"] for row in rows] == ["S04"]
+    assert [row["classification"] for row in rows] == [expected]
+    assert planner.requests == [cases[0]["request"]]
+    assert evidence.flush_count == 1
 
 
 @pytest.mark.parametrize(
