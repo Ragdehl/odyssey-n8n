@@ -143,6 +143,24 @@ def test_cost_ceiling_blocks_provider_construction_above_authorization(
     assert not runner.OUTPUT_PATH.exists()
 
 
+def test_missing_provider_environment_refuses_before_evidence_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Require a process-exported key before reserving evidence or constructing a provider."""
+    import benchmarks.reference_relationship_v1.run_live as runner
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "should-not-exist.jsonl")
+    monkeypatch.setattr(
+        runner.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed without process environment"),
+    )
+    with pytest.raises(SystemExit, match="absent from process environment"):
+        main(["--confirm-live-provider-calls"])
+    assert not runner.OUTPUT_PATH.exists()
+
+
 class RecordingEvidence(io.StringIO):
     """Count immediate evidence flushes without opening a live-result file."""
 

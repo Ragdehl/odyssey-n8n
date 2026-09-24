@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict
 from decimal import Decimal
@@ -33,7 +34,7 @@ from odyssey_core.request_planning import (  # noqa: E402
     render_request_planner_prompt,
 )
 
-OUTPUT_PATH = ROOT / "benchmarks" / ".live-results" / "reference-relationship-v1.jsonl"
+OUTPUT_PATH = ROOT / "benchmarks" / ".live-results" / "reference-relationship-v1-attempt-2.jsonl"
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
 MAX_COST_USD = Decimal("0.46")
@@ -160,7 +161,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.confirm_live_provider_calls:
         raise SystemExit("Refusing live calls without --confirm-live-provider-calls")
     if cost > MAX_COST_USD:
-        raise SystemExit("Refusing live calls: conservative ceiling exceeds $0.15")
+        raise SystemExit(
+            f"Refusing live calls: conservative ceiling exceeds ${MAX_COST_USD:.2f} authorization"
+        )
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise SystemExit("Refusing live calls: OPENAI_API_KEY is absent from process environment")
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         evidence = OUTPUT_PATH.open("x", encoding="utf-8")
