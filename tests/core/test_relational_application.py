@@ -68,6 +68,23 @@ class FactReasoner:
         )
 
 
+class MatchingFactReasoner(FactReasoner):
+    """Select a supplied candidate by visible canonical fact wording for fixture coverage."""
+
+    def __init__(self, wording: str) -> None:
+        """Require the fixture's contextual boundary to receive and choose one later fact."""
+        super().__init__()
+        self.wording = wording.casefold()
+
+    def resolve(self, request: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Resolve only a candidate actually supplied by Core to this test double."""
+        self.requests.append(request)
+        candidate = next(
+            item for item in request.candidates if self.wording in item.evidence.casefold()
+        )
+        return ({"outcome": "RESOLVED", "id": candidate.id}, {})
+
+
 class ForbiddenWriter:
     """Reject unexpected free-form writer use for atomic fixture facts."""
 
@@ -246,6 +263,99 @@ def test_r1_singular_relational_read_uses_current_member_only(
     assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
     assert calls[0]["allowed_note_ids"] == frozenset({"chloe"})
     assert len(list(vault.rglob("*.md"))) == 2
+
+
+def test_relational_resolution_keeps_later_than_32_current_fact_candidates_reachable(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Permit Core's contextual boundary to choose a valid relation after 32 other facts."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    other_facts: list[str] = []
+    for ordinal in range(33):
+        name = f"Persona {ordinal}"
+        note_id = f"persona-{ordinal}"
+        write_note(vault, f"people/{note_id}.md", note_id, name, "")
+        other_facts.append(fact(f"Conoce a [[people/{note_id}|{name}]].", ordinal))
+    write_note(vault, "people/chloe.md", "chloe", "Chloe", "")
+    other_facts.append(fact("Mi hija es [[Chloe]].", 33))
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "\n\n".join(other_facts))
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    reasoner = MatchingFactReasoner("Mi hija es Chloe")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    result = run(vault, schema, plan, reasoner=reasoner)
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert len(reasoner.requests[0].candidates) == 34
+    assert reasoner.requests[0].candidates[-1].evidence == "Mi hija es Chloe."
+    assert calls[0]["allowed_note_ids"] == frozenset({"chloe"})
+
+
+def test_complete_set_relational_read_restricts_retrieval_to_every_current_member(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pass an exact complete parent set to existing retrieval without an aggregate engine."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault, "people/edgar.md", "edgar", "Edgar", fact("Mis padres son [[Ana]] y [[Luis]].")
+    )
+    write_note(vault, "people/ana.md", "ana", "Ana", "")
+    write_note(vault, "people/luis.md", "luis", "Luis", "")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (
+            RetrieveAction(
+                relational_selection(
+                    "mis padres", source_kind="self", source_query=None, members="complete_set"
+                )
+            ),
+        ),
+        (),
+    )
+    result = run(vault, schema, plan)
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert calls[0]["allowed_note_ids"] == frozenset({"ana", "luis"})
+
+
+def test_incomplete_complete_set_read_defers_without_calling_retrieval(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep plural relation retrieval all-or-clarify when a current member is missing."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault, "people/edgar.md", "edgar", "Edgar", fact("Mis padres son [[Ana]] y [[Luis]].")
+    )
+    write_note(vault, "people/ana.md", "ana", "Ana", "")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application,
+        "get_context",
+        lambda *args, **kwargs: calls.append(kwargs) or pytest.fail("partial retrieval invoked"),
+    )
+    plan = RequestPlan(
+        (
+            RetrieveAction(
+                relational_selection(
+                    "mis padres", source_kind="self", source_query=None, members="complete_set"
+                )
+            ),
+        ),
+        (),
+    )
+    result = run(vault, schema, plan)
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].reason == "relational_evidence_incomplete"
+    assert calls == []
 
 
 def test_w1_singular_relational_write_updates_child_and_never_creates(

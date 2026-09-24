@@ -561,7 +561,7 @@ def _execute_retrieve(
     contextual_reasoner: Any = None,
     semantic_limit: int = 10,
 ) -> ActionResult:
-    """Execute one ordinary retrieval or preserve unsupported graph intent as deferred evidence."""
+    """Execute retrieval, restricting relational intent to its exact current member identities."""
     if action.plan.link_scope is not None:
         return ActionResult(
             action_index,
@@ -571,13 +571,6 @@ def _execute_retrieve(
         )
     allowed_note_ids: frozenset[str] | None = None
     if action.plan.relational_reference is not None:
-        if action.plan.relational_reference.members != "one":
-            return ActionResult(
-                action_index,
-                action.kind,
-                ActionStatus.DEFERRED,
-                reason="UNSUPPORTED_RELATIONAL_SET_RETRIEVAL",
-            )
         try:
             resolved = spans.invoke(
                 "relational_resolution",
@@ -598,7 +591,14 @@ def _execute_retrieve(
             return ActionResult(
                 action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
             )
-        allowed_note_ids = frozenset({resolved.targets[0].id})
+        allowed_note_ids = frozenset(target.id for target in resolved.targets)
+        if not allowed_note_ids:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="relational_evidence_incomplete",
+            )
     if action.plan.self_target is not None:
         if action.plan.self_target != "self":
             return ActionResult(

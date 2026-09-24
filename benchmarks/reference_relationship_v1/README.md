@@ -10,14 +10,15 @@ retrieval or mutation.
 it does not require exact prose. `manifest.json` freezes the registry, evaluator, and the
 2026-09-23 pricing snapshot. The runner retains only validated results and bounded provider
 attempt metadata in an exclusive, gitignored JSONL output, flushing after each case. It stops
-on the first failed or fail-closed classification and has no automatic rerun.
+on the first failed or fail-closed classification **or the first Sol fallback**, and has no
+automatic rerun. The fallback row is retained before that stop so it can be reviewed.
 
 The no-cache ceiling counts the inherited production prompts, both Structured Outputs schemas,
-and each model's configured maximum output tokens, allowing all ten logical cases to take both
-provider attempts. With the current frozen registry it is **$3.590590 for at most 20 calls**,
-above the authorized $0.15 ceiling. Therefore the one authorized gate was refused before
-provider construction; there are no live case results or fallback counts. This is a cost gate,
-not a semantic pass. The exact refused command was:
+and each model's configured maximum output tokens. Its actual hard exposure is all ten possible
+Luna attempts plus at most one Sol fallback: **$0.455998 for at most 11 calls**. This remains
+above the authorized $0.15 ceiling. Therefore no provider client was constructed and there are
+no live case results or fallback counts. This is a cost gate, not a semantic pass. The exact
+refused command was:
 
 ```bash
 python -m benchmarks.reference_relationship_v1.run_live --confirm-live-provider-calls

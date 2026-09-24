@@ -43,11 +43,12 @@ INPUT_OVERHEAD_BYTES = 1024
 def conservative_cost_ceiling(
     cases: list[dict[str, Any]], context: dict[str, str], schema: dict[str, Any]
 ) -> tuple[Decimal, int, int]:
-    """Price all possible Luna and Sol attempts with no cache and capped output.
+    """Price all possible Luna attempts and one possible Sol fallback with no cache.
 
     UTF-8 byte count plus fixed envelope allowance bounds ordinary text-token input without
     relying on caching or observed average usage. Both production Structured Outputs schemas and
-    inherited prompts are counted for every case. The higher case input bound is used for all cases.
+    inherited prompts are counted at their higher case input bound. The runner stops immediately
+    after flushing its first Sol fallback row, so one Sol attempt is the hard maximum.
     """
     pricing = json.loads(PRICING_PATH.read_text(encoding="utf-8"))["models"]
     max_luna_bytes = 0
@@ -73,16 +74,13 @@ def conservative_cost_ceiling(
     sol_input = max_sol_bytes + INPUT_OVERHEAD_BYTES
     luna = pricing[LUNA_EXPERIMENT_MODEL]
     sol = pricing[PLANNER_MODEL]
-    cost = (
-        Decimal(len(cases))
-        * (
-            Decimal(luna_input) * Decimal(str(luna["input_per_million"]))
-            + Decimal(LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS) * Decimal(str(luna["output_per_million"]))
-            + Decimal(sol_input) * Decimal(str(sol["input_per_million"]))
-            + Decimal(PLANNER_MAX_OUTPUT_TOKENS) * Decimal(str(sol["output_per_million"]))
-        )
-        / Decimal(1_000_000)
-    )
+    luna_attempt_cost = Decimal(luna_input) * Decimal(str(luna["input_per_million"])) + Decimal(
+        LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS
+    ) * Decimal(str(luna["output_per_million"]))
+    sol_attempt_cost = Decimal(sol_input) * Decimal(str(sol["input_per_million"])) + Decimal(
+        PLANNER_MAX_OUTPUT_TOKENS
+    ) * Decimal(str(sol["output_per_million"]))
+    cost = (Decimal(len(cases)) * luna_attempt_cost + sol_attempt_cost) / Decimal(1_000_000)
     return cost, luna_input, sol_input
 
 
@@ -92,7 +90,7 @@ def run_cases(
     oracles: dict[str, dict[str, Any]],
     evidence: TextIO,
 ) -> list[dict[str, Any]]:
-    """Attempt each frozen case once, flush bounded evidence, and stop on unsafe findings."""
+    """Attempt frozen cases once, stopping after unsafe output or the first Sol fallback."""
     rows: list[dict[str, Any]] = []
     for case in cases:
         try:
@@ -121,7 +119,7 @@ def run_cases(
         rows.append(row)
         evidence.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
         evidence.flush()
-        if row["classification"] in {"FAIL", "FAIL_CLOSED"}:
+        if row["classification"] in {"FAIL", "FAIL_CLOSED"} or row["fallback"]:
             break
     return rows
 
@@ -155,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         cases, registry["fixed_context"], schema
     )
     print(
-        f"logical_cases={len(cases)} provider_call_ceiling={len(cases) * 2} "
+        f"logical_cases={len(cases)} provider_call_ceiling={len(cases) + 1} "
         f"no_cache_max_usd={cost:.6f} luna_input_bound={luna_input} "
         f"sol_input_bound={sol_input}"
     )

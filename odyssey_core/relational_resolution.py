@@ -28,7 +28,6 @@ from odyssey_core.request_planning import SelectionCriteria
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
 from odyssey_core.storage import VaultRepository
 
-MAX_SOURCE_FACT_CANDIDATES = 32
 _WIKILINK_DISPLAY = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
 
@@ -104,7 +103,7 @@ def resolve_relational_reference(
         else ()
     )
     candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...] = (*outgoing, *incoming)
-    if not candidates or len(candidates) > MAX_SOURCE_FACT_CANDIDATES:
+    if not candidates:
         raise RelationalResolutionError("relational_evidence_unavailable")
     repeated_literal_mention = tuple(
         fact

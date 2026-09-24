@@ -218,17 +218,21 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    singular fact-bearing WRITE passes only
    through a relationship-specific re-grounded preflight. Complete-set WRITE expands one planner
    fact into the existing Slice 2 source plus exact reference-only member binding; one source fact
-   is written, and members remain unchanged. Ordinary preflight always clarifies on relational
-   intent, preventing fallback CREATE. A complete-set READ is deferred in v1 because it lacks a
-   request-aware set retrieval contract. The planner's general `all_matching` remains separate.
+   is written, and members remain unchanged. Complete-set READ resolves the same complete current
+   member set and passes its exact stable IDs to existing `get_context(..., allowed_note_ids=...)`;
+   existing retrieval and ranking remain responsible for answer evidence. Incomplete sets defer
+   before retrieval, and relational note-set presentation remains separate. Ordinary preflight
+   always clarifies on relational intent, preventing fallback CREATE. The planner's general
+   `all_matching` remains separate.
 
    The Slice 3 architecture challenge returned **PROCEED**: an optional selection value plus a
    Core-owned resolver is the smallest fit; a new action type, relation ontology, or generic stable-ID
    override would add unnecessary authority. Synthetic deterministic tests cover singular read/write,
    complete-set source write, ambiguity, stale member, and ordinary regressions. The frozen focused
    model gate is [owned here](../../benchmarks/reference_relationship_v1/README.md). Its conservative
-   ten-case, 20-call ceiling is $3.590590, so the authorized $0.15 gate made **zero** provider calls.
-   There is no live semantic evidence yet; Slice 3 remains Draft and v1 is not complete.
+   ten-Luna-plus-one-Sol, 11-call ceiling is $0.455998, so it remains above the authorized $0.15
+   gate and this branch made **zero** provider calls. There is no live semantic evidence yet; Slice 3
+   remains Draft and v1 is not complete.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

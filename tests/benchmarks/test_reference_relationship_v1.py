@@ -19,6 +19,7 @@ from benchmarks.reference_relationship_v1.run_live import (
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    PlannerClarification,
     RelationalReference,
     RequestPlan,
     RetrieveAction,
@@ -140,32 +141,93 @@ def test_cost_ceiling_blocks_provider_construction(
     assert not runner.OUTPUT_PATH.exists()
 
 
-def test_runner_flushes_bounded_rows_and_stops_on_failure() -> None:
-    """Keep at most one production-composed logical attempt per selected case."""
+class RecordingEvidence(io.StringIO):
+    """Count immediate evidence flushes without opening a live-result file."""
+
+    def __init__(self) -> None:
+        """Start with no emitted rows."""
+        super().__init__()
+        self.flush_count = 0
+
+    def flush(self) -> None:
+        """Record the runner's per-row durability boundary."""
+        self.flush_count += 1
+        super().flush()
+
+
+class StubPlanner:
+    """Provide prevalidated local planner outcomes without provider access or retries."""
+
+    last_provider_calls: tuple[Any, ...] = ()
+
+    def __init__(self, outcomes: list[tuple[int, RequestPlan | PlannerClarification]]) -> None:
+        """Consume exactly one configured outcome for each logical case requested."""
+        self.outcomes = iter(outcomes)
+        self.last_attempt_count = 0
+        self.requests: list[str] = []
+
+    def plan(
+        self, request: str, conversation: tuple[Any, ...]
+    ) -> RequestPlan | PlannerClarification:
+        """Return one configured outcome and expose whether the production fallback occurred."""
+        assert not conversation
+        self.requests.append(request)
+        self.last_attempt_count, result = next(self.outcomes)
+        return result
+
+
+def _cases(*identifiers: str) -> list[dict[str, str]]:
+    """Create tiny local frozen-shaped cases for runner control-flow tests."""
+    return [
+        {"id": identifier, "request": f"request-{index}"}
+        for index, identifier in enumerate(identifiers)
+    ]
+
+
+def test_runner_continues_through_multiple_luna_only_passes() -> None:
+    """Continue when validated Luna-only outcomes pass and never retry a logical case."""
     _registry, oracles = load_frozen_registry()
-
-    class Planner:
-        """Expose only validated result and bounded production attempt metadata."""
-
-        last_attempt_count = 1
-        last_provider_calls: tuple[Any, ...] = ()
-
-        def plan(self, request: str, conversation: tuple[Any, ...]) -> RequestPlan:
-            """Return one fixed relational plan for the two selected oracle shapes."""
-            assert request and not conversation
-            return relational_read()
-
-    evidence = io.StringIO()
+    planner = StubPlanner([(1, relational_read()), (1, relational_read()), (1, relational_read())])
+    evidence = RecordingEvidence()
     rows = run_cases(
-        Planner(),
-        [
-            {"id": "R01", "request": "read"},
-            {"id": "S01", "request": "write"},
-            {"id": "S02", "request": "unreached"},
-        ],
+        planner,
+        _cases("R01", "R01", "R01"),
         oracles,
         evidence,
     )
-    assert [row["classification"] for row in rows] == ["PASS", "FAIL"]
-    assert len(evidence.getvalue().splitlines()) == 2
+    assert [row["classification"] for row in rows] == ["PASS", "PASS", "PASS"]
+    assert planner.requests == ["request-0", "request-1", "request-2"]
+    assert evidence.flush_count == 3
     assert all("prompt" not in row and "reasoning" not in row for row in rows)
+
+
+def test_runner_flushes_first_fallback_and_stops_before_later_cases() -> None:
+    """Persist the first Sol fallback for review, then prevent further Sol exposure."""
+    _registry, oracles = load_frozen_registry()
+    planner = StubPlanner([(1, relational_read()), (2, relational_read()), (1, relational_read())])
+    evidence = RecordingEvidence()
+    rows = run_cases(planner, _cases("R01", "R01", "R01"), oracles, evidence)
+    assert [row["fallback"] for row in rows] == [False, True]
+    assert [row["classification"] for row in rows] == ["PASS", "PASS"]
+    assert planner.requests == ["request-0", "request-1"]
+    assert len(evidence.getvalue().splitlines()) == evidence.flush_count == 2
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        (relational_read(), "FAIL"),
+        (PlannerClarification("clarify"), "FAIL_CLOSED"),
+    ],
+)
+def test_runner_stops_immediately_on_fail_or_fail_closed(
+    outcome: RequestPlan | PlannerClarification, expected: str
+) -> None:
+    """Keep existing unsafe-result stops independent of fallback handling."""
+    _registry, oracles = load_frozen_registry()
+    planner = StubPlanner([(1, outcome), (1, relational_read())])
+    evidence = RecordingEvidence()
+    rows = run_cases(planner, _cases("S01", "R01"), oracles, evidence)
+    assert [row["classification"] for row in rows] == [expected]
+    assert planner.requests == ["request-0"]
+    assert evidence.flush_count == 1

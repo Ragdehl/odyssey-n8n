@@ -42,8 +42,9 @@ DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was unto
 The provider-free [Reference & Relationship Resolution v1 Slices 1–2](post-ui2-note-creation-and-schema-evolution.md#proposed-implementation-slices)
 are implemented. Slice 3 now has a Draft implementation of the relational planner contract and
 minimal Core read/write bridge on a feature branch; its frozen ten-case production model gate is
-**pending** because the conservative no-cache ceiling is $3.590590, above the explicitly authorized
-$0.15. No live calls were made, so Slice 3 and v1 are not yet validated or complete. The existing
+**pending** because its all-Luna-plus-one-Sol conservative no-cache ceiling is $0.455998, above the
+explicitly authorized $0.15. No live calls were made, so Slice 3 and v1 are not yet validated or
+complete. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;
