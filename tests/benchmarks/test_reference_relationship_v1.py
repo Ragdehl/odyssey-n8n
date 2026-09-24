@@ -249,15 +249,39 @@ def test_continuation_selects_only_the_fixed_unattempted_suffix() -> None:
     assert len(cases) + 1 == 3
 
 
-def test_continuation_cost_requires_a_fresh_authorization() -> None:
-    """Price only the two fixed cases plus one fallback without inheriting Attempt 3 approval."""
+def test_continuation_cost_fits_the_authorized_ceiling() -> None:
+    """Price only the fixed continuation cases within their explicit authorization."""
     registry, cases, _oracles = load_continuation_cases()
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     cost, luna_input, sol_input = continuation_cost_ceiling(
         cases, registry["fixed_context"], schema
     )
-    assert cost > CONTINUATION_MAX_COST_USD
+    assert cost <= CONTINUATION_MAX_COST_USD == Decimal("0.37")
     assert luna_input > 0 and sol_input > 0
+
+
+def test_continuation_lower_guard_refuses_before_provider_construction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the no-cache bound as an executable pre-provider authorization guard."""
+    import benchmarks.reference_relationship_v1.run_live_continuation as continuation
+
+    registry, cases, _oracles = load_continuation_cases()
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    cost, _luna_input, _sol_input = continuation_cost_ceiling(
+        cases, registry["fixed_context"], schema
+    )
+    monkeypatch.setattr(continuation, "MAX_COST_USD", cost - Decimal("0.0000001"))
+    monkeypatch.setattr(continuation, "OUTPUT_PATH", tmp_path / "continuation.jsonl")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+    monkeypatch.setattr(
+        continuation.LunaFirstRequestPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider constructed despite lower cost guard"),
+    )
+    with pytest.raises(SystemExit, match="requires a fresh explicit cost authorization"):
+        continuation.main(["--confirm-live-provider-calls"])
+    assert not continuation.OUTPUT_PATH.exists()
 
 
 def test_continuation_requires_its_confirmation_flag(

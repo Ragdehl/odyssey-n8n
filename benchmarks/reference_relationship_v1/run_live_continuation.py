@@ -38,8 +38,7 @@ CONTINUATION_CASE_IDS = ("S04", "S05")
 OUTPUT_PATH = (
     ROOT / "benchmarks" / ".live-results" / "reference-relationship-v1-attempt-3-continuation.jsonl"
 )
-# A separate human authorization must set a concrete ceiling in a later reviewable change.
-MAX_COST_USD = Decimal("0")
+MAX_COST_USD = Decimal("0.37")
 
 
 def load_continuation_cases() -> tuple[
