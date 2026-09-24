@@ -70,6 +70,28 @@ checkout's `.venv` cannot affect PROD. The stable rollback operator is installed
 release at `/home/ragdehl/.local/libexec/odyssey-prod` and is promoted only after candidate health
 verification. The release worktree is not a vault or data store.
 
+### Manual provider-command environment
+
+The protected Odyssey OpenAI source is `/home/ragdehl/.config/odyssey/secrets.env`. It is also a
+systemd `EnvironmentFile=`, so its verified current syntax is `OPENAI_API_KEY=...`, not shell
+`export OPENAI_API_KEY=...`. `.bashrc` may source that file, but sourcing a plain assignment alone
+does not export it to a manual Python child process. A Codex or shell process started before an
+export does not retroactively inherit the variable.
+
+For an explicitly authorized manual provider command, load it in the **same shell** that launches
+the child process:
+
+```bash
+set -a
+. /home/ragdehl/.config/odyssey/secrets.env
+set +a
+```
+
+Then verify only that the child process has a non-empty key; never print, hash, echo, copy, commit,
+or otherwise persist the value. The benchmark runner independently refuses a missing process
+environment before reserving evidence or constructing a provider. `/home/ragdehl/docker/n8n/.env`
+is the distinct n8n/Cloudflare source, not the Odyssey OpenAI secret source.
+
 ## Hot network handoff reconciliation
 
 A live NetworkManager handoff is a known trigger for the production container DNS failure class.

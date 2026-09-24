@@ -16,18 +16,27 @@ automatic rerun. The fallback row is retained before that stop so it can be revi
 The no-cache ceiling counts the inherited production prompts, both Structured Outputs schemas,
 and each model's configured maximum output tokens. Its actual hard exposure is all ten possible
 Luna attempts plus at most one Sol fallback: **$0.455998 for at most 11 calls**. This remains
-within the one-run $0.46 authorization used on 2026-09-24 at
-`2405b136fc9abe686efb49599ba6368e479fe71a`. That one command passed frozen preflight, reserved
-its exclusive evidence path, then stopped during Luna planner construction because
-`OPENAI_API_KEY` was unavailable. The reserved JSONL is zero bytes with zero rows: **zero provider
-calls, zero attempted cases, zero fallback, no usage, and no calculable actual cost**. This is not a
-semantic pass; the focused gate remains blocked on provider credentials and a separately authorized
-future execution. The one executed command was:
+within the per-attempt $0.46 authorization. Attempt 1 at
+`2405b136fc9abe686efb49599ba6368e479fe71a` passed frozen preflight, reserved its exclusive path,
+then stopped during Luna planner construction because `OPENAI_API_KEY` was unavailable. Its retained
+`reference-relationship-v1.jsonl` is zero bytes with zero rows: **zero provider calls, zero attempted
+cases, zero fallback, no usage, and no calculable actual cost**.
+
+Attempt 2 at `e17b5f750573e39aebf8477e933902e083ad7f9f` used the distinct exclusive
+`reference-relationship-v1-attempt-2.jsonl` path after the operator loaded the protected source into
+the child-process environment. It made three Luna-only calls: R01 and W01 passed; W02 returned the
+safe `UNRECOGNIZED_REQUEST` clarification and therefore failed closed as `unexpected_clarification`.
+The runner flushed that third row and stopped: **3 attempted cases, 3 Luna calls, 0 Sol calls, 0
+fallbacks, 2 PASS, 1 FAIL_CLOSED, and no semantic-review flags**. Actual Luna usage was 23,076 input
+tokens (15,352 cached), 548 output tokens, and 275 reasoning tokens over 11,432.727 ms. The frozen
+pricing snapshot calculates **$0.00250944** actual cost. The focused gate did not pass; no retry or
+additional provider call was made. The executed command was:
 
 ```bash
 python -m benchmarks.reference_relationship_v1.run_live --confirm-live-provider-calls
 ```
 
 The deterministic evaluator and cost guard are covered under
-`tests/benchmarks/test_reference_relationship_v1.py`. The reserved evidence file must not be
-overwritten or deleted to create a rerun.
+`tests/benchmarks/test_reference_relationship_v1.py`. The runner now refuses a missing
+process-exported `OPENAI_API_KEY` before reserving evidence or constructing a provider. Neither
+attempt artifact may be overwritten or deleted to create a rerun.

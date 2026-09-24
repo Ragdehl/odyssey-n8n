@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; its one authorized production model-gate execution stopped before provider construction because credentials were unavailable.**
+Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; Attempt 2 reached the production planner but stopped fail-closed on the complete-set shared-fact case.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -230,11 +230,13 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    override would add unnecessary authority. Synthetic deterministic tests cover singular read/write,
    complete-set source write, ambiguity, stale member, and ordinary regressions. The frozen focused
    model gate is [owned here](../../benchmarks/reference_relationship_v1/README.md). Its conservative
-   ten-Luna-plus-one-Sol, 11-call ceiling is $0.455998. One authorized $0.46 execution at
-   `2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because
-   `OPENAI_API_KEY` was unavailable; its reserved evidence file has zero rows and there were **zero**
-   provider calls. There is no live semantic evidence yet; Slice 3 remains Draft and v1 is not
-   complete.
+   ten-Luna-plus-one-Sol, 11-call ceiling is $0.455998. Attempt 1 at
+   `2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because its
+   command environment lacked `OPENAI_API_KEY`, preserving a zero-row artifact. Attempt 2 at
+   `e17b5f750573e39aebf8477e933902e083ad7f9f` then used a distinct artifact and verified child
+   export: R01 and W01 passed Luna-only, but W02 returned `UNRECOGNIZED_REQUEST` rather than the
+   required complete-set shared-fact write. The runner stopped fail-closed after three Luna calls
+   ($0.00250944 actual cost), with no Sol fallback. Slice 3 remains Draft and v1 is not complete.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.
