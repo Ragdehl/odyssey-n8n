@@ -35,7 +35,16 @@ from .observability import (
 )
 from .persistence import ActorInput
 from .reference_binding import PendingReference, render_reference_facts
-from .reference_preflight import UnitTargetPreflight, preflight_write_action
+from .reference_preflight import (
+    RelationshipWritePreflightError,
+    UnitTargetPreflight,
+    preflight_relational_target_write_action,
+    preflight_relationship_write_action,
+    preflight_write_action,
+    prepare_relationship_shared_fact_action,
+)
+from .relational_resolution import RelationalResolutionError, resolve_relational_reference
+from .relationship_evidence import RelationshipEvidenceProjector
 from .request_planning import (
     DelegateAction,
     KnowledgeUnit,
@@ -371,6 +380,9 @@ def execute_request(
                 authenticated_actor,
                 self_binding_repository,
                 action_spans,
+                semantic_index=semantic_index,
+                contextual_reasoner=measured_contextual_reasoner,
+                semantic_limit=semantic_limit,
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -545,8 +557,11 @@ def _execute_retrieve(
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
+    semantic_index: Any = None,
+    contextual_reasoner: Any = None,
+    semantic_limit: int = 10,
 ) -> ActionResult:
-    """Execute one ordinary retrieval or preserve unsupported graph intent as deferred evidence."""
+    """Execute retrieval, restricting relational intent to its exact current member identities."""
     if action.plan.link_scope is not None:
         return ActionResult(
             action_index,
@@ -555,6 +570,35 @@ def _execute_retrieve(
             reason="UNSUPPORTED_RETRIEVAL_LINK_SCOPE",
         )
     allowed_note_ids: frozenset[str] | None = None
+    if action.plan.relational_reference is not None:
+        try:
+            resolved = spans.invoke(
+                "relational_resolution",
+                resolve_relational_reference,
+                action.plan,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+            )
+        except RelationalResolutionError as error:
+            return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
+        except Exception as error:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
+            )
+        allowed_note_ids = frozenset(target.id for target in resolved.targets)
+        if not allowed_note_ids:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="relational_evidence_incomplete",
+            )
     if action.plan.self_target is not None:
         if action.plan.self_target != "self":
             return ActionResult(
@@ -616,6 +660,27 @@ def _execute_write(
     spans: SpanRecorder,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
+    if any(unit.target.relational_reference is not None for unit in action.units):
+        return _execute_relational_write(
+            action_index,
+            action,
+            repository,
+            schema,
+            semantic_index,
+            embedder,
+            contextual_reasoner,
+            actor,
+            now,
+            writer,
+            semantic_limit,
+            id_allocator,
+            request_id,
+            unit_ordinals,
+            fact_selector,
+            authenticated_actor,
+            self_binding_repository,
+            spans,
+        )
     cardinalities = {unit.cardinality for unit in action.units}
     if len(cardinalities) != 1:
         return ActionResult(
@@ -681,6 +746,146 @@ def _execute_write(
     )
     return ActionResult(
         action_index, action.kind, _action_status(results), unit_results=tuple(results)
+    )
+
+
+def _execute_relational_write(
+    action_index: int,
+    action: WriteAction,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    semantic_index: Any,
+    embedder: Any,
+    contextual_reasoner: Any,
+    actor: ActorInput,
+    now: str,
+    writer: BoundedNoteWriter | None,
+    semantic_limit: int,
+    id_allocator: Callable[[], str] | None,
+    request_id: str,
+    unit_ordinals: tuple[tuple[int, ...], ...],
+    fact_selector: AtomicFactSelector | None,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
+    spans: SpanRecorder,
+) -> ActionResult:
+    """Route one relational write through current evidence and relationship-only preflight."""
+    relational_indexes = tuple(
+        index
+        for index, candidate in enumerate(action.units)
+        if candidate.target.relational_reference is not None
+    )
+    if len(relational_indexes) != 1 or any(
+        candidate.cardinality != "one" for candidate in action.units
+    ):
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason="UNSUPPORTED_RELATIONAL_WRITE_SHAPE",
+        )
+    relational_index = relational_indexes[0]
+    unit = action.units[relational_index]
+    relation = unit.target.relational_reference
+    if relation is None:
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason="UNSUPPORTED_RELATIONAL_WRITE_SHAPE",
+        )
+    try:
+        resolved = spans.invoke(
+            "relational_resolution",
+            resolve_relational_reference,
+            unit.target,
+            repository=repository,
+            schema=schema,
+            semantic_index=semantic_index,
+            embedder=embedder,
+            contextual_reasoner=contextual_reasoner,
+            semantic_limit=semantic_limit,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
+        )
+        projector = RelationshipEvidenceProjector(repository, schema)
+        kwargs: dict[str, Any] = {}
+        if id_allocator is not None:
+            kwargs["id_allocator"] = id_allocator
+        if relation.members == "complete_set":
+            if len(action.units) != 1:
+                raise RelationshipWritePreflightError("Shared relationship fact must be one unit")
+            executable, binding = prepare_relationship_shared_fact_action(unit, resolved)
+            preflight = spans.invoke(
+                "preflight",
+                preflight_relationship_write_action,
+                executable,
+                binding,
+                relationship_projector=projector,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                span_recorder=spans,
+                **kwargs,
+            )
+            ordinals = (unit_ordinals[0], *(((),) * len(resolved.targets)))
+        else:
+            executable = action
+            ordinals = unit_ordinals
+            preflight = spans.invoke(
+                "preflight",
+                preflight_relational_target_write_action,
+                action,
+                resolved,
+                target_unit_index=relational_index,
+                relationship_projector=projector,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                span_recorder=spans,
+                **kwargs,
+            )
+        rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
+        if rendering.pending_references:
+            raise RelationshipWritePreflightError("Relationship member binding is incomplete")
+    except (RelationalResolutionError, RelationshipWritePreflightError) as error:
+        return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
+    except Exception as error:
+        return ActionResult(
+            action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
+        )
+    results = _execute_single_units(
+        executable,
+        preflight,
+        rendering.pending_references,
+        rendering.rendered_facts,
+        repository,
+        schema,
+        actor,
+        now,
+        writer,
+        request_id,
+        ordinals,
+        fact_selector,
+        spans,
+    )
+    if relation.members == "complete_set":
+        results = results[:1]
+    return ActionResult(
+        action_index,
+        action.kind,
+        _action_status(results),
+        unit_results=tuple(results),
     )
 
 

@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Reference & Relationship Resolution v1 Slices 1–2 are implemented; the focused model gate is next.**
+Status: **Slices 1–2 are implemented. Slice 3 remains Draft: its focused planner gate passed, and its deterministic request-aware one-hop entity-context enrichment is implemented pending DEV human smoke evidence.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -146,9 +146,10 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    backlinks and existing retrieval can discover it without repeated per-person fact prose.
 5. Entity retrieval may receive direct note facts/properties and every valid one-hop incoming or
    outgoing linked-fact candidate in the supplied scope. Every candidate is re-grounded against
-   current canonical Markdown and returned without whole source notes by default. Later
-   request-aware retrieval selects the final bounded context; tests prove a single canonical fact
-   remains discoverable from the linked entity without copying it.
+   current canonical Markdown and returned without whole source notes by default. The Core
+   request-aware layer locally ranks and serializes final bounded source-provenanced snippets for
+   the `ContextPackage`; tests prove a single canonical fact remains discoverable from the linked
+   entity without copying it.
 6. Backlink/index projections are candidate/transport aids only; stale, missing, malformed, or
    ambiguous evidence cannot establish identity or enter the candidate set or final context.
 7. Direct current-fact retrieval, ordinary exact/semantic identity resolution, self binding,
@@ -190,11 +191,11 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
 1. **Evidence and contract slice.** ✅ Implemented provider-free as a bounded Core projection over
    current validated Markdown. It returns a source-hash-bound fact locator, source/target stable
    identity and path provenance, literal-link target evidence, complete-or-empty finite sets, and
-   complete direct/incoming/outgoing entity candidate set for the supplied scope. A later
-   request-aware retrieval layer must select final `ContextPackage` snippets; Slice 1 deliberately
-   does not rank or count-truncate candidates. It does not modify `RequestPlan`, planner prompts,
-   `ContextPackage`, Notes search, or writes. Its contract covers one source identity and one
-   literal-link hop. Provider-free fixtures prove one unique
+   complete direct/incoming/outgoing entity candidate set for the supplied scope. The later
+   request-aware Core layer now locally ranks final source-provenanced `ContextPackage` snippets;
+   Slice 1 itself still does not rank or count-truncate candidates. It does not modify
+   `RequestPlan`, planner prompts, Notes search, or writes. Its contract covers one source identity
+   and one literal-link hop. Provider-free fixtures prove one unique
    singular target, one complete finite set, and the bounded-current-Markdown retrieval projection
    (direct entity facts/properties plus a relevant incoming snippet and an outgoing snippet only when
    needed). This slice has no general graph query
@@ -207,9 +208,52 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    order. The fact-bearing natural source must independently preflight as that exact existing note.
    Rendering and materialization therefore write one linked fact on that source only; stale,
    incomplete, mismatched, or source-less preparation raises before mutation.
-3. **Focused model gate.** After deterministic approval, run frozen relational read/write/clarify
-   sentinels with the production planner model/reasoning and the unchanged semantic validator/fallback
-   contract. Do not broaden graph behavior from a successful small gate.
+3. **Relational planner contract, Core bridge, and focused model gate.** The Draft bridge adds an
+   optional `SelectionCriteria.relational_reference` with only source-relative wording, source kind
+   (`self` or `existing`), source query (`null` for self), and `one` versus `complete_set` semantics. It carries no
+   stable ID, path, filename, relation type, or enumerated member set. Core resolves the source
+   through existing self/existing-entity boundaries, selects one current outgoing or incoming fact
+   from bounded one-hop evidence through the existing contextual candidate validator, and reprojects
+   current Markdown.
+   Singular READ restricts retrieval to the exact member and uses answer presentation only;
+   singular fact-bearing WRITE passes only
+   through a relationship-specific re-grounded preflight. Complete-set WRITE expands one planner
+   fact into the existing Slice 2 source plus exact reference-only member binding; one source fact
+   is written, and members remain unchanged. Complete-set READ resolves the same complete current
+   member set and passes its exact stable IDs to existing `get_context(..., allowed_note_ids=...)`;
+   existing retrieval and ranking remain responsible for answer evidence. Incomplete sets defer
+   before retrieval, and relational note-set presentation remains separate. Ordinary preflight
+   always clarifies on relational intent, preventing fallback CREATE. The planner's general
+   `all_matching` remains separate.
+
+   The Slice 3 architecture challenge returned **PROCEED**: an optional selection value plus a
+   Core-owned resolver is the smallest fit; a new action type, relation ontology, or generic stable-ID
+   override would add unnecessary authority. Synthetic deterministic tests cover singular read/write,
+   complete-set source write, ambiguity, stale member, and ordinary regressions. The frozen focused
+   model gate is [owned here](../../benchmarks/reference_relationship_v1/README.md). Its conservative
+   ten-Luna-plus-one-Sol, 11-call ceiling is $0.458174. Attempt 1 at
+   `2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because its
+   command environment lacked `OPENAI_API_KEY`, preserving a zero-row artifact. Attempt 2 at
+   `e17b5f750573e39aebf8477e933902e083ad7f9f` then used a distinct artifact and verified child
+   export: R01 and W01 passed Luna-only, but W02 returned `UNRECOGNIZED_REQUEST` rather than the
+   required complete-set shared-fact write. The runner stopped fail-closed after three Luna calls
+   ($0.00250944 actual cost), with no Sol fallback. The follow-up adds one non-evaluation Luna
+   complete-set source-write teaching example with different wording; frozen cases/oracle and Core
+   remain unchanged. Attempt 3 at `0c28855f35b39f4429ae2fc60db180a38fe3b9d6` passed R01, W01,
+   W02, C01, P01, S01, and S02 Luna-only, including the required one-unit complete-set write for
+   W02. W02 retained the expected `source_selector_review` flag. S03 reached a local Luna
+   `KNOWLEDGE_UNIT` / `INVALID_FIELDS` validation failure, then passed via one Sol fallback; the
+   runner flushed that row and stopped, leaving S04/S05 unattempted. Actual Attempt-3 cost was
+   $0.05772924. Review accepts W02's natural-language `ayer` selector and S03's final ordinary
+   Marta/Airbus `KnowledgeReference` plan as a valid production fallback. A fixed, unexecuted
+   continuation selects only S04 then S05, has a $0.36979880 maximum for at most three calls, and
+   requires new explicit authorization. The $0.37 authorization was recorded at
+   `828672cc4597c1931853cf32d1fa90330eccf25b`; the continuation ran once at that same HEAD and
+   passed S04/S05 Luna-only. S04 preserved ordinary `all_matching` tag-add semantics, and S05
+   preserved two independent ordinary Marta facts. Its 2 Luna calls used $0.00216274 with no Sol
+   fallback. All ten frozen cases now have reviewed evidence, so the focused Slice 3 model gate
+   passed within the bounded v1 contract. Slice 3 remains Draft and v1 is not complete pending final
+   human review and remote CI.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

@@ -89,6 +89,8 @@ def decide_write_target(
     if not isinstance(unit, KnowledgeUnit):
         raise ValueError("Write target requires a validated KnowledgeUnit")
     target = unit.target
+    if target.relational_reference is not None:
+        return _clarification("relational_resolution_required")
     if target.link_scope is not None:
         return _clarification("unsupported_link_scope")
     if target.self_target is not None:

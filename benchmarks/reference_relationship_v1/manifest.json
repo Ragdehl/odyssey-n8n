@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "frozen_before_provider_calls": true,
+  "sha256": {
+    "benchmarks/reference_relationship_v1/cases.json": "159409ca99a66898a5662f55ab2aad633b16a25139ec56f54c9dd5928c3d6a63",
+    "benchmarks/reference_relationship_v1/oracle.json": "3f52411252f06fb3c1c34d89d3aab84f5f4b66ae7da014694fb7658c079e4df6",
+    "benchmarks/reference_relationship_v1/evaluate.py": "3589acedd9c8d2121ce136233c005a29eff424da43c1fb850d5a64108ed63d42",
+    "benchmarks/performance_p1/pricing_snapshot.json": "cb73365849fa2d16a15c0209edb17214e26cac08bbc1f18222ffb82f283c2bf4"
+  }
+}

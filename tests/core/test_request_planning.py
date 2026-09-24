@@ -62,6 +62,7 @@ def selection(
         "filters": filters or [],
         "link_scope": link_scope,
         "self_target": None,
+        "relational_reference": None,
     }
 
 

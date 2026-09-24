@@ -167,7 +167,7 @@ def render_luna_experimental_prompt(
         validate_luna_experimental_result(item["result"], schema)
     rendered_examples = "\n\n".join(
         f"User: {item['request']}\nSafe result: "
-        f"{json.dumps(item['result'], ensure_ascii=False, separators=(',', ':'))}\n"
+        f"{json.dumps(_complete_example_selections(item['result']), ensure_ascii=False, separators=(',', ':'))}\n"
         f"Lesson: {item['lesson']}"
         for item in examples
     )
@@ -192,6 +192,22 @@ Teaching examples (not evaluation cases):
             semantic_prompt.encode("utf-8")
         )
     return prompt
+
+
+def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Render inherited teaching selections with explicit absent relational intent."""
+    completed = deepcopy(dict(result))
+    for action in completed.get("actions") or []:
+        if action["kind"] == "retrieve":
+            selections = [action["plan"]]
+        elif action["kind"] == "write":
+            selections = [unit["target"] for unit in action["units"]]
+        else:
+            selections = [action.get("selection")]
+        for selection in selections:
+            if isinstance(selection, dict):
+                selection.setdefault("relational_reference", None)
+    return completed
 
 
 def load_teaching_examples() -> list[dict[str, Any]]:

@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "fixed_context": {"date": "2026-09-24", "time": "10:30", "timezone": "Europe/Paris"},
+  "cases": [
+    {"id": "R01", "family": "relational_read", "request": "¿Dónde vive mi hija?"},
+    {"id": "W01", "family": "relational_write", "request": "Apunta que mi hija vive en Lyon."},
+    {"id": "W02", "family": "complete_set_write", "request": "Todos los que estaban ayer fuimos al colegio Laia."},
+    {"id": "C01", "family": "ambiguous_relation", "request": "Apunta que mi hija vive en Lyon, pero no sé si hablo de Chloe o Marta."},
+    {"id": "P01", "family": "source_pronoun", "request": "Where does her partner live?", "conversation_context": [{"role": "user", "text": "We were talking about Marta yesterday."}]},
+    {"id": "S01", "family": "ordinary_named", "request": "Apunta que Marta vive en Lyon."},
+    {"id": "S02", "family": "self", "request": "Apunta que vivo en Toulouse."},
+    {"id": "S03", "family": "named_reference", "request": "Apunta que Marta trabaja en Airbus."},
+    {"id": "S04", "family": "all_matching", "request": "Añade la etiqueta revisado a todas mis notas de tipo persona."},
+    {"id": "S05", "family": "atomicity", "request": "Remember that Marta lives in Lyon and works at Airbus."}
+  ]
+}

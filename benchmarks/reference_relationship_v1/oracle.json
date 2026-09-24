@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "oracles": [
+    {"id": "R01", "action": "retrieve", "relation": "one", "source_kind": "self", "reference_terms": ["hija"]},
+    {"id": "W01", "action": "write", "relation": "one", "source_kind": "self", "reference_terms": ["hija"], "fact_terms": ["lyon"]},
+    {"id": "W02", "action": "write", "relation": "complete_set", "source_kind": "existing", "reference_terms": ["ayer"], "fact_terms": ["colegio", "laia"]},
+    {"id": "C01", "action": "write", "relation": "one", "source_kind": "self", "reference_terms": ["hija"], "fact_terms": ["lyon"], "allow_clarification": true},
+    {"id": "P01", "action": "retrieve", "relation": "one", "source_kind": "existing", "reference_terms": ["partner"], "source_terms": ["marta"]},
+    {"id": "S01", "action": "write", "ordinary": true, "target_terms": ["marta"], "fact_terms": ["lyon"]},
+    {"id": "S02", "action": "write", "self": true, "fact_terms": ["toulouse"]},
+    {"id": "S03", "action": "write", "named_reference": true, "target_terms": ["marta"], "reference_terms": ["airbus"]},
+    {"id": "S04", "action": "write", "all_matching": true, "tag_terms": ["revisado"]},
+    {"id": "S05", "action": "write", "atomicity": true, "target_terms": ["marta"], "fact_terms": ["lyon", "airbus"]}
+  ]
+}

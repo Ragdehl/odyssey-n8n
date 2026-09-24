@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import sys
 from dataclasses import asdict
 from decimal import Decimal
@@ -81,6 +82,7 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RequestPlanningError,
     RetrieveAction,
+    WriteAction,
     compact_planner_result_json_schema,
 )
 
@@ -108,6 +110,7 @@ def selection(
         "filters": filters or [],
         "link_scope": None,
         "self_target": None,
+        "relational_reference": None,
     }
 
 
@@ -448,7 +451,7 @@ def test_teaching_and_held_out_sets_are_exactly_disjoint_and_frozen() -> None:
     teaching = load_teaching_examples()
     teaching_requests = {item["request"].strip().casefold() for item in teaching}
     held_out_requests = {item["request"].strip().casefold() for item in cases_payload["cases"]}
-    assert len(teaching) == 7
+    assert len(teaching) == 8
     assert len(cases_payload["cases"]) == 24
     assert teaching_requests.isdisjoint(held_out_requests)
     assert list(oracles) == [item["id"] for item in cases_payload["cases"]]
@@ -471,6 +474,55 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
+
+
+def test_complete_set_relational_teaching_example_preserves_one_source_write(
+    schema: dict[str, Any],
+) -> None:
+    """Teach Luna the Core-expanded finite-set write without changing bulk mutation semantics."""
+    example = next(
+        item
+        for item in load_teaching_examples()
+        if item["id"] == "teach-relational-complete-set-write"
+    )
+    result = validate_luna_experimental_result(example["result"], schema)
+    assert isinstance(result, RequestPlan)
+    assert len(result.actions) == 1
+    assert isinstance(result.actions[0], WriteAction)
+    assert len(result.actions[0].units) == 1
+    unit = result.actions[0].units[0]
+    relation = unit.target.relational_reference
+    assert relation is not None
+    assert relation.members == "complete_set"
+    assert relation.source_kind == "existing"
+    assert relation.source_query == "the dinner last night"
+    assert unit.target.entity is None
+    assert unit.target.self_target is None
+    assert unit.target.link_scope is None
+    assert unit.cardinality == "one"
+    assert unit.intent == "record"
+    assert unit.facts == (
+        "Everyone who attended the dinner last night previously worked for the same company.",
+    )
+    assert unit.references == ()
+    assert all(candidate.cardinality != "all_matching" for candidate in result.actions[0].units)
+    assert not re.search(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+        json.dumps(example["result"]),
+        re.IGNORECASE,
+    )
+    prompt = render_luna_experimental_prompt(schema, CONTEXT)
+    assert example["request"] in prompt
+    assert "relational_reference.members=complete_set" in prompt
+
+
+def test_every_teaching_example_keeps_the_production_result_contract(
+    schema: dict[str, Any],
+) -> None:
+    """Validate the new lesson alongside every inherited teaching result."""
+    for example in load_teaching_examples():
+        result = validate_luna_experimental_result(example["result"], schema)
+        assert isinstance(result, (RequestPlan, PlannerClarification, PlannerEscalation))
 
 
 def test_prompt_keeps_recent_context_as_non_authoritative_continuity_evidence(

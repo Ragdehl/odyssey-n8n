@@ -40,11 +40,40 @@ PR #129 merged at `1c2f0c45672e8d1d917cf6abd271a85123100b8e` and was explicitly 
 DEV, where runtime and DEV n8n health and provenance were `MATCH`; PROD was untouched.
 
 The provider-free [Reference & Relationship Resolution v1 Slices 1–2](post-ui2-note-creation-and-schema-evolution.md#proposed-implementation-slices)
-are implemented. They establish the current-Markdown, one-source, one-hop evidence projection and
-safe shared-fact writing through the existing preflight/reference-rendering path, without planner or
-model changes. The next bounded work is Slice 3's focused model gate. Its evidence boundary, shared-fact home,
-inverse/symmetric evidence policy, all-or-clarify rule, and bounded backlink-enriched entity context
-are defined; no open v1 product decision remains. Tasks and Events remain later directions. UI-1 request detail is complete in PROD;
+are implemented. Slice 3 now has a Draft implementation of the relational planner contract and
+minimal Core read/write bridge on a feature branch; its frozen ten-case production model gate is
+**pending review** after three bounded attempts. Attempt 1 at
+`2405b136fc9abe686efb49599ba6368e479fe71a` stopped before provider construction because its shell
+had not exported the protected `OPENAI_API_KEY`; its retained evidence has zero rows. Attempt 2 at
+`e17b5f750573e39aebf8477e933902e083ad7f9f` used the verified same-shell export procedure and
+reached three Luna-only cases within the $0.455998 ceiling: R01/W01 passed, then W02 safely clarified
+instead of producing the required complete-set shared-fact write (`FAIL_CLOSED`). It stopped with no
+Sol fallback; actual recorded cost was $0.00250944. The follow-up added one non-evaluation Luna
+complete-set source-write teaching example without changing the frozen W02 case/oracle or
+deterministic Core. Attempt 3 at `0c28855f35b39f4429ae2fc60db180a38fe3b9d6` then passed R01,
+W01, W02, C01, P01, S01, and S02 Luna-only; W02 used the required complete-set source-write shape.
+S03 required one Sol fallback after Luna's local `KNOWLEDGE_UNIT` / `INVALID_FIELDS` validation
+failure. The runner retained the passing fallback row and stopped as required: 8 attempted cases,
+8 Luna calls, 1 Sol call, $0.05772924 actual cost, and the expected W02 `source_selector_review`
+flag. Review accepts that W02 selector as natural-language source intent (`ayer`) and accepts S03
+as a passing production fallback: its final Sol plan preserves ordinary Marta/Airbus
+`KnowledgeReference` semantics. S04/S05 were not attempted. A fixed, unexecuted continuation for
+only S04/S05 has a $0.36979880 ceiling for at most three calls and requires separate explicit human
+authorization. That $0.37 authorization was recorded at
+`828672cc4597c1931853cf32d1fa90330eccf25b`; the continuation ran once at the same HEAD and passed
+S04/S05 Luna-only. S04 preserved ordinary `all_matching` tag-add semantics and S05 preserved two
+independent ordinary Marta facts. It made 2 Luna calls, no Sol calls or fallbacks, and cost
+$0.00216274. All ten frozen cases now have reviewed evidence, so the focused Slice 3 model gate
+passed within the bounded v1 contract. Slice 3 and v1 remain Draft pending final human review and
+remote CI. A subsequent DEV smoke exposed the remaining generic read-path gap: one canonical shared
+fact was visible in UI-2 backlinks but was absent from ordinary entity-answer context. The Draft now
+adds the approved Core request-aware, one-hop source-fact enrichment layer: direct entity notes stay
+primary; current canonical incoming/outgoing snippets are locally ranked and serialized with their
+actual source provenance, without graph traversal or copied member prose. Deterministic coverage is
+green; an isolated DEV human re-test is pending. The existing
+current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
+evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
+directions. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
 ```text
@@ -82,7 +111,7 @@ UI-2 read-only Notes                                              ✅ merged in 
 Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
-Reference & Relationship Resolution v1 Slice 3                    ➡️ next: focused model gate
+Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; focused model gate passed, pending human review
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -176,7 +205,7 @@ Performance / Latency / Cost P1                       ✅ complete
         v
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
-Reference & Relationship Resolution v1 Slice 3        ➡️ next: focused model gate
+Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; focused model gate passed, pending human review
         |
         v
 Tasks — first application contract
