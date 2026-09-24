@@ -165,6 +165,13 @@ def test_provider_reads_only_explicit_route_evidence() -> None:
     )
 
 
+def test_provider_receives_source_grounded_related_fact_snippets() -> None:
+    """Forward bounded related evidence using its true source identity and path."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "a.retrieval?.related_items" in source
+    assert "type: i.source_type, path: i.source_path, content: i.content" in source
+
+
 def test_invalid_browser_request_bypasses_runtime_and_answerer() -> None:
     """Reject malformed browser input through the same narrow direct-response boundary."""
     source = SOURCE.read_text(encoding="utf-8")
@@ -257,7 +264,7 @@ def test_planner_clarification_bypasses_answerer_with_deterministic_text() -> No
     assert "kind: 'clarification'" in source
     assert "Reformúlala con más detalle." in source
     clarification = source.index("r.clarification_code === 'UNRECOGNIZED_REQUEST'")
-    answer_routing = source.index("const items = actions.flatMap")
+    answer_routing = source.index("const directItems = actions.flatMap")
     assert clarification < answer_routing
     assert "route: 'direct', request_id: id, status: 'needs_attention'" in source
 

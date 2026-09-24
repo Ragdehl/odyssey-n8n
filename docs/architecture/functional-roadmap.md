@@ -65,7 +65,12 @@ S04/S05 Luna-only. S04 preserved ordinary `all_matching` tag-add semantics and S
 independent ordinary Marta facts. It made 2 Luna calls, no Sol calls or fallbacks, and cost
 $0.00216274. All ten frozen cases now have reviewed evidence, so the focused Slice 3 model gate
 passed within the bounded v1 contract. Slice 3 and v1 remain Draft pending final human review and
-remote CI. The existing
+remote CI. A subsequent DEV smoke exposed the remaining generic read-path gap: one canonical shared
+fact was visible in UI-2 backlinks but was absent from ordinary entity-answer context. The Draft now
+adds the approved Core request-aware, one-hop source-fact enrichment layer: direct entity notes stay
+primary; current canonical incoming/outgoing snippets are locally ranked and serialized with their
+actual source provenance, without graph traversal or copied member prose. Deterministic coverage is
+green; an isolated DEV human re-test is pending. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;

@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Slices 1–2 are implemented. Slice 3 has a Draft deterministic bridge; Attempt 3 passed the complete-set shared-fact case but stopped at the required Sol-fallback review checkpoint on S03.**
+Status: **Slices 1–2 are implemented. Slice 3 remains Draft: its focused planner gate passed, and its deterministic request-aware one-hop entity-context enrichment is implemented pending DEV human smoke evidence.**
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -146,9 +146,10 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    backlinks and existing retrieval can discover it without repeated per-person fact prose.
 5. Entity retrieval may receive direct note facts/properties and every valid one-hop incoming or
    outgoing linked-fact candidate in the supplied scope. Every candidate is re-grounded against
-   current canonical Markdown and returned without whole source notes by default. Later
-   request-aware retrieval selects the final bounded context; tests prove a single canonical fact
-   remains discoverable from the linked entity without copying it.
+   current canonical Markdown and returned without whole source notes by default. The Core
+   request-aware layer locally ranks and serializes final bounded source-provenanced snippets for
+   the `ContextPackage`; tests prove a single canonical fact remains discoverable from the linked
+   entity without copying it.
 6. Backlink/index projections are candidate/transport aids only; stale, missing, malformed, or
    ambiguous evidence cannot establish identity or enter the candidate set or final context.
 7. Direct current-fact retrieval, ordinary exact/semantic identity resolution, self binding,
@@ -190,11 +191,11 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
 1. **Evidence and contract slice.** ✅ Implemented provider-free as a bounded Core projection over
    current validated Markdown. It returns a source-hash-bound fact locator, source/target stable
    identity and path provenance, literal-link target evidence, complete-or-empty finite sets, and
-   complete direct/incoming/outgoing entity candidate set for the supplied scope. A later
-   request-aware retrieval layer must select final `ContextPackage` snippets; Slice 1 deliberately
-   does not rank or count-truncate candidates. It does not modify `RequestPlan`, planner prompts,
-   `ContextPackage`, Notes search, or writes. Its contract covers one source identity and one
-   literal-link hop. Provider-free fixtures prove one unique
+   complete direct/incoming/outgoing entity candidate set for the supplied scope. The later
+   request-aware Core layer now locally ranks final source-provenanced `ContextPackage` snippets;
+   Slice 1 itself still does not rank or count-truncate candidates. It does not modify
+   `RequestPlan`, planner prompts, Notes search, or writes. Its contract covers one source identity
+   and one literal-link hop. Provider-free fixtures prove one unique
    singular target, one complete finite set, and the bounded-current-Markdown retrieval projection
    (direct entity facts/properties plus a relevant incoming snippet and an outgoing snippet only when
    needed). This slice has no general graph query

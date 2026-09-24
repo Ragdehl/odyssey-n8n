@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.context import (
     ContextFilter,
     ContextIndex,
@@ -52,6 +53,32 @@ class KeywordEmbedder:
         ]
 
 
+class RelationshipEmbedder:
+    """Rank synthetic linked facts by their visible query vocabulary without a provider."""
+
+    model_name = "tests/relationship-embedder"
+    model_version = "1"
+
+    def embed_documents(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+        """Embed fact snippets in the same deterministic keyword space as queries."""
+        return [self._embed(text) for text in texts]
+
+    def embed_queries(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+        """Embed interpreted retrieval questions without contacting a provider."""
+        return [self._embed(text) for text in texts]
+
+    @staticmethod
+    def _embed(text: str) -> list[float]:
+        """Keep school, work, and entity wording independently rankable in fixtures."""
+        lowered = text.casefold()
+        return [
+            float("bruno" in lowered),
+            float("colegio" in lowered or "school" in lowered),
+            float("trabaja" in lowered or "works" in lowered),
+            0.25,
+        ]
+
+
 @pytest.fixture
 def schema() -> dict:
     """Load the canonical schema."""
@@ -84,6 +111,11 @@ def write_note(vault: Path, path: str, value: Note) -> None:
     target.write_text(serialize_note(value), encoding="utf-8")
 
 
+def atomic_fact(text: str, ordinal: int = 0) -> str:
+    """Render one current canonical fact block for relationship-context fixtures."""
+    return render_atomic_facts((text,), "relationship-context", (ordinal,), "2026-09-24")
+
+
 def copy_schema(schema: dict) -> dict:
     """Return an isolated in-memory schema variant for compatibility tests."""
     return deepcopy(schema)
@@ -110,6 +142,213 @@ def test_context_projection_includes_tags_and_excludes_lifecycle() -> None:
     assert "schema_version" not in projection
     assert "[[" not in projection
     assert "Tags:" not in build_semantic_retrieval_text(value, "ideas/Odyssey GUI.md")
+
+
+def test_related_context_exposes_one_linked_shared_fact_with_source_provenance(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Expose a shared school fact from its event source, not by copying it to Bruno."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    bruno = note("bruno", "person", "Bruno Test vive en París.", name="Bruno Test")
+    source = note(
+        "cena",
+        "journal_entry",
+        atomic_fact(
+            "Todos fuimos al colegio Laia con [[people/clara-test|Clara Test]], "
+            "[[people/bruno-test|Bruno Test]] y [[people/marta-test|Marta Test]]."
+        ),
+        name="Cena",
+        entry_date="2026-09-24",
+    )
+    write_note(vault, "people/bruno-test.md", bruno)
+    write_note(vault, "journal/cena.md", source)
+    write_note(vault, "people/clara-test.md", note("clara", "person", "", name="Clara Test"))
+    write_note(vault, "people/marta-test.md", note("marta", "person", "", name="Marta Test"))
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    embedder = RelationshipEmbedder()
+    index.rebuild(repository, schema, embedder)
+
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="¿A qué colegio fue Bruno Test?",
+        limit=1,
+        allowed_note_ids=frozenset({"bruno"}),
+    )
+
+    assert [item.id for item in package.items] == ["bruno"]
+    assert len(package.related_items) == 1
+    related = package.related_items[0]
+    assert related.target_id == "bruno"
+    assert related.direction == "incoming"
+    assert related.source_id == "cena"
+    assert related.source_name == "Cena"
+    assert related.source_path == "journal/cena.md"
+    assert related.content == (
+        "Todos fuimos al colegio Laia con [[people/clara-test|Clara Test]], "
+        "[[people/bruno-test|Bruno Test]] y [[people/marta-test|Marta Test]]."
+    )
+    assert "colegio Laia" in related.content
+    assert "colegio Laia" not in repository.read_text("people/bruno-test.md")
+
+
+def test_related_context_rejects_stale_or_deleted_backlink_sources(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Re-ground candidates from Markdown instead of trusting a previously built link index."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/bruno.md", note("bruno", "person", "", name="Bruno"))
+    source_path = "journal/cena.md"
+    write_note(
+        vault,
+        source_path,
+        note(
+            "cena",
+            "journal_entry",
+            atomic_fact("Bruno fue al colegio Laia con [[Bruno]]."),
+            name="Cena",
+            entry_date="2026-09-24",
+        ),
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    embedder = RelationshipEmbedder()
+    index.rebuild(repository, schema, embedder)
+
+    write_note(
+        vault,
+        source_path,
+        note(
+            "cena",
+            "journal_entry",
+            atomic_fact("La cena ya no enlaza a nadie."),
+            name="Cena",
+            entry_date="2026-09-24",
+        ),
+    )
+    stale = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="¿A qué colegio fue Bruno?",
+        limit=1,
+        allowed_note_ids=frozenset({"bruno"}),
+    )
+    assert stale.related_items == ()
+
+    write_note(
+        vault,
+        source_path,
+        note(
+            "cena",
+            "journal_entry",
+            atomic_fact("Bruno fue al colegio Laia con [[Bruno]]."),
+            name="Cena",
+            entry_date="2026-09-24",
+            deleted=True,
+        ),
+    )
+    deleted = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="¿A qué colegio fue Bruno?",
+        limit=1,
+        allowed_note_ids=frozenset({"bruno"}),
+    )
+    assert deleted.related_items == ()
+
+
+def test_related_context_keeps_direct_items_primary_and_ranks_relevant_backlinks(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep an unrelated linked fact from using the one related-evidence context slot."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/bruno.md", note("bruno", "person", "Bruno es músico.", name="Bruno"))
+    write_note(
+        vault,
+        "journal/relevant.md",
+        note(
+            "relevant",
+            "journal_entry",
+            atomic_fact("Bruno fue al colegio Laia con [[Bruno]]."),
+            name="Visita escolar",
+            entry_date="2026-09-24",
+        ),
+    )
+    write_note(
+        vault,
+        "journal/unrelated.md",
+        note(
+            "unrelated",
+            "journal_entry",
+            atomic_fact("[[Bruno]] asistió a una reunión de música."),
+            name="Reunión",
+            entry_date="2026-09-24",
+        ),
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    embedder = RelationshipEmbedder()
+    index.rebuild(repository, schema, embedder)
+
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="¿A qué colegio fue Bruno?",
+        limit=1,
+        allowed_note_ids=frozenset({"bruno"}),
+    )
+
+    assert [item.content for item in package.items] == ["Bruno es músico."]
+    assert [item.source_id for item in package.related_items] == ["relevant"]
+
+
+def test_related_context_projects_relevant_outgoing_fact_without_traversing(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep a current outgoing literal fact available as one-hop entity evidence."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/bruno.md",
+        note(
+            "bruno",
+            "person",
+            atomic_fact("[[Bruno]] trabaja con [[Airbus]]."),
+            name="Bruno",
+        ),
+    )
+    write_note(vault, "concepts/airbus.md", note("airbus", "concept", "", name="Airbus"))
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    embedder = RelationshipEmbedder()
+    index.rebuild(repository, schema, embedder)
+
+    package = get_context(
+        repository,
+        schema,
+        index,
+        embedder,
+        query="¿Con quién trabaja Bruno?",
+        limit=1,
+        allowed_note_ids=frozenset({"bruno"}),
+    )
+
+    assert [(item.direction, item.source_id, item.content) for item in package.related_items] == [
+        ("outgoing", "bruno", "[[Bruno]] trabaja con [[Airbus]].")
+    ]
 
 
 def test_context_filters_tags_before_limit_and_returns_authoritative_content(

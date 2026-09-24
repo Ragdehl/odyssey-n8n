@@ -20,7 +20,7 @@ from odyssey_core.application import (
     UnitStatus,
 )
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
-from odyssey_core.context import ContextItem, ContextPackage
+from odyssey_core.context import ContextItem, ContextPackage, RelatedContextItem
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
@@ -324,6 +324,45 @@ def test_retrieval_serialization_preserves_grounded_identity_and_all_content() -
     assert "provider" not in encoded
 
 
+def test_retrieval_serialization_keeps_related_fact_source_provenance() -> None:
+    """Expose a linked fact as source evidence rather than pretending it belongs to Bruno."""
+    related = RelatedContextItem(
+        id="related-cena",
+        target_id="bruno",
+        target_name="Bruno",
+        direction="incoming",
+        source_id="cena",
+        source_path="journal/cena.md",
+        source_name="Cena",
+        source_type="journal_entry",
+        content="Bruno fue al colegio Laia con [[Bruno]].",
+        similarity=0.9,
+    )
+    response = application_result_to_response(
+        ApplicationResult(
+            request_id="read-bruno",
+            status=ApplicationStatus.COMPLETED,
+            action_results=(
+                ActionResult(
+                    0,
+                    "retrieve",
+                    ActionStatus.COMPLETED,
+                    retrieval=ContextPackage(
+                        query="¿A qué colegio fue Bruno?", items=(), related_items=(related,)
+                    ),
+                ),
+            ),
+            affected_stable_note_ids=(),
+        )
+    )
+
+    item = response["actions"][0]["retrieval"]["related_items"][0]
+    assert item["source_id"] == "cena"
+    assert item["source_path"] == "journal/cena.md"
+    assert item["target_id"] == "bruno"
+    assert item["content"] == "Bruno fue al colegio Laia con [[Bruno]]."
+
+
 def test_empty_retrieval_serializes_as_completed_evidence_without_items() -> None:
     """Keep a successful no-evidence retrieval distinct from a retrieval containing notes."""
     response = application_result_to_response(
@@ -345,7 +384,7 @@ def test_empty_retrieval_serializes_as_completed_evidence_without_items() -> Non
     retrieval = response["actions"][0]["retrieval"]
     assert response["request_id"] == "read-empty"
     assert response["status"] == "completed"
-    assert retrieval == {"query": "unknown", "items": []}
+    assert retrieval == {"query": "unknown", "items": [], "related_items": []}
     assert response["affected_stable_note_ids"] == []
 
 

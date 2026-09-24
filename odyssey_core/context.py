@@ -19,6 +19,10 @@ from typing import Any, cast
 
 from odyssey_core.filtering import supported_filter_operators
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+from odyssey_core.relationship_evidence import (
+    RelationshipEvidence,
+    RelationshipEvidenceProjector,
+)
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
 
@@ -27,6 +31,7 @@ _TECHNICAL_METADATA = frozenset(
     {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
 )
 _WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+_CONTEXT_TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 def extract_wikilink_targets(markdown: str) -> tuple[tuple[str, str], ...]:
@@ -118,11 +123,34 @@ class ContextItem:
 
 
 @dataclass(frozen=True, slots=True)
+class RelatedContextItem:
+    """Expose one re-grounded one-hop fact with its actual canonical source.
+
+    ``id`` identifies this bounded evidence item for an answerer's support reference. The target
+    fields state the entity through which the fact was discovered, while the source fields retain
+    the note that actually stores the prose. This prevents a backlink fact from being presented as
+    if it were stored on its linked entity.
+    """
+
+    id: str
+    target_id: str
+    target_name: str
+    direction: str
+    source_id: str
+    source_path: str
+    source_name: str
+    source_type: str
+    content: str
+    similarity: float
+
+
+@dataclass(frozen=True, slots=True)
 class ContextPackage:
-    """Contain an interpreted retrieval query and its ranked grounded notes."""
+    """Contain an interpreted query, direct notes, and source-grounded related facts."""
 
     query: str
     items: tuple[ContextItem, ...]
+    related_items: tuple[RelatedContextItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +160,17 @@ class _ContextCandidate:
     type: str
     primary_name: str
     source_hash: str
+    similarity: float
+
+
+@dataclass(frozen=True, slots=True)
+class _RelatedEvidenceCandidate:
+    """Keep one locally ranked relationship fact before bounded context projection."""
+
+    evidence: RelationshipEvidence
+    target_id: str
+    target_name: str
+    lexical_relevance: int
     similarity: float
 
 
@@ -848,6 +887,134 @@ class ContextIndex:
         return tuple(candidates[:limit])
 
 
+def _context_terms(value: str) -> frozenset[str]:
+    """Return language-agnostic visible tokens useful for deterministic relevance ordering."""
+    return frozenset(
+        token.casefold() for token in _CONTEXT_TOKEN_PATTERN.findall(value) if len(token) > 1
+    )
+
+
+def _relationship_relevance(
+    query: str,
+    evidence: tuple[tuple[RelationshipEvidence, str, str], ...],
+    embedder: TextEmbedder,
+) -> tuple[_RelatedEvidenceCandidate, ...]:
+    """Rank current one-hop fact snippets locally without making relationship authority derived.
+
+    Entity-name terms are excluded from the lexical signal because every candidate already links
+    the selected entity. This lets the request's remaining wording distinguish, for example, a
+    school fact from an unrelated mention of the same person. Local embedding similarity supplies
+    a language-independent tie-breaker and semantic fallback; it never resolves identity or
+    authorizes a candidate.
+    """
+    if not evidence:
+        return ()
+    query_terms = _context_terms(query)
+    lexical_scores = tuple(
+        len((query_terms - _context_terms(target_name)) & _context_terms(item.fact.text))
+        for item, _target_id, target_name in evidence
+    )
+    query_vector = _normalized_vector(embedder.embed_queries([f"Query: {query}"])[0])
+    fact_vectors = tuple(
+        _normalized_vector(vector)
+        for vector in embedder.embed_documents(
+            [item.fact.text for item, _target_id, _target_name in evidence]
+        )
+    )
+    if len(fact_vectors) != len(evidence):
+        raise ContextRetrievalError("Relationship evidence ranking returned an invalid result")
+    if any(len(vector) != len(query_vector) for vector in fact_vectors):
+        raise ContextRetrievalError("Relationship evidence ranking dimension mismatch")
+    candidates = tuple(
+        _RelatedEvidenceCandidate(
+            item,
+            target_id,
+            target_name,
+            lexical_scores[index],
+            sum(
+                left * right for left, right in zip(query_vector, fact_vectors[index], strict=True)
+            ),
+        )
+        for index, (item, target_id, target_name) in enumerate(evidence)
+    )
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda item: (
+                -item.lexical_relevance,
+                -item.similarity,
+                item.evidence.direction.value,
+                item.evidence.fact.source.path,
+                item.evidence.fact.locator,
+                item.target_id,
+            ),
+        )
+    )
+
+
+def _related_context_items(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    embedder: TextEmbedder,
+    query: str,
+    items: Sequence[ContextItem],
+    *,
+    limit: int,
+) -> tuple[RelatedContextItem, ...]:
+    """Project and locally rank source-provenanced one-hop facts for selected entities.
+
+    The projector deliberately scans current canonical Markdown rather than trusting the derived
+    link index. It returns every structurally valid candidate; this layer applies only the existing
+    explicit final-context budget after relevance ordering.
+    """
+    if not items:
+        return ()
+    projector = RelationshipEvidenceProjector(repository, schema)
+    evidence: list[tuple[RelationshipEvidence, str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for item in items:
+        projection = projector.project_entity_evidence_candidates(item.id)
+        if projection is None:
+            continue
+        for candidate in (*projection.incoming, *projection.outgoing):
+            if candidate.target is None:
+                continue
+            key = (
+                candidate.direction.value,
+                projection.entity.id,
+                candidate.fact.source.id,
+                candidate.fact.locator,
+            )
+            if key not in seen:
+                seen.add(key)
+                evidence.append((candidate, projection.entity.id, projection.entity.name))
+    ranked = _relationship_relevance(query, tuple(evidence), embedder)
+    return tuple(
+        RelatedContextItem(
+            id="related-"
+            + hashlib.sha256(
+                (
+                    candidate.evidence.direction.value
+                    + "\0"
+                    + candidate.target_id
+                    + "\0"
+                    + candidate.evidence.fact.locator
+                ).encode("utf-8")
+            ).hexdigest(),
+            target_id=candidate.target_id,
+            target_name=candidate.target_name,
+            direction=candidate.evidence.direction.value,
+            source_id=candidate.evidence.fact.source.id,
+            source_path=candidate.evidence.fact.source.path,
+            source_name=candidate.evidence.fact.source.name,
+            source_type=candidate.evidence.fact.source.type,
+            content=candidate.evidence.fact.text,
+            similarity=candidate.similarity,
+        )
+        for candidate in ranked[:limit]
+    )
+
+
 def get_context(
     repository: VaultRepository,
     schema: dict[str, Any],
@@ -943,4 +1110,7 @@ def get_context(
                 candidate.similarity,
             )
         )
-    return ContextPackage(query=query.strip(), items=tuple(items))
+    related_items = _related_context_items(
+        repository, schema, embedder, query.strip(), items, limit=limit
+    )
+    return ContextPackage(query=query.strip(), items=tuple(items), related_items=related_items)

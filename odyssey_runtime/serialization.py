@@ -193,6 +193,21 @@ def _serialize_action(action: ActionResult) -> dict[str, Any]:
                 }
                 for item in action.retrieval.items
             ],
+            "related_items": [
+                {
+                    "id": item.id,
+                    "target_id": item.target_id,
+                    "target_name": item.target_name,
+                    "direction": item.direction,
+                    "source_id": item.source_id,
+                    "source_path": item.source_path,
+                    "source_name": item.source_name,
+                    "source_type": item.source_type,
+                    "content": item.content,
+                    "similarity": item.similarity,
+                }
+                for item in action.retrieval.related_items
+            ],
         }
     if action.bulk_result is not None:
         serialized["bulk"] = {

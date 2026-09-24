@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -46,6 +47,49 @@ class EmptyEmbedder:
 
     model_name = "tests"
     model_version = "1"
+
+
+class RelationshipContextEmbedder:
+    """Provide deterministic local relevance vectors for shared-fact retrieval coverage."""
+
+    model_name = "tests/relationship-context"
+    model_version = "1"
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed canonical fact snippets without using a provider."""
+        return [self._embed(text) for text in texts]
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """Embed ordinary retrieval wording without using a provider."""
+        return [self._embed(text) for text in texts]
+
+    @staticmethod
+    def _embed(text: str) -> list[float]:
+        """Preserve separate entity and school dimensions for the fixture."""
+        lowered = text.casefold()
+        return [float("bruno" in lowered), float("colegio" in lowered), 0.25]
+
+
+class FixedContextIndex:
+    """Return the already-grounded ordinary Bruno target as the normal retrieval candidate."""
+
+    def __init__(self, path: str, source_hash: str) -> None:
+        """Keep current canonical provenance needed by the real context loader."""
+        self.path = path
+        self.source_hash = source_hash
+
+    def find_candidates(self, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
+        """Expose one normal ranked note without granting relationship authority to this stub."""
+        return (
+            SimpleNamespace(
+                id="bruno",
+                path=self.path,
+                type="person",
+                primary_name="Bruno Test",
+                source_hash=self.source_hash,
+                similarity=1.0,
+            ),
+        )
 
 
 class FactReasoner:
@@ -263,6 +307,70 @@ def test_r1_singular_relational_read_uses_current_member_only(
     assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
     assert calls[0]["allowed_note_ids"] == frozenset({"chloe"})
     assert len(list(vault.rglob("*.md"))) == 2
+
+
+def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep a shared school fact once on Cena while exposing it to an ordinary Bruno read."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/clara.md", "clara", "Clara Test", "")
+    write_note(vault, "people/marta.md", "marta", "Marta Test", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno Test", fact("Bruno Test vive en París."))
+    source_fact = (
+        "Todos fuimos al colegio Laia con [[people/clara|Clara Test]], "
+        "[[people/bruno|Bruno Test]] y [[people/marta|Marta Test]]."
+    )
+    write_note(
+        vault,
+        "journal/cena.md",
+        "cena",
+        "Cena",
+        fact(source_fact),
+        note_type="journal_entry",
+    )
+    repository = VaultRepository(vault)
+    bruno_path = "people/bruno.md"
+    bruno_raw = repository.read_text(bruno_path)
+    plan = RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    "Bruno Test", "¿A qué colegio fue Bruno Test?", "person", (), None
+                )
+            ),
+        ),
+        (),
+    )
+
+    result = application.execute_request(
+        "¿A qué colegio fue Bruno Test?",
+        planner=SimpleNamespace(plan=lambda _request: plan),
+        repository=repository,
+        schema=schema,
+        context_index=FixedContextIndex(
+            bruno_path, hashlib.sha256(bruno_raw.encode("utf-8")).hexdigest()
+        ),
+        semantic_index=EmptyIndex(),
+        embedder=RelationshipContextEmbedder(),
+        contextual_reasoner=FactReasoner(),
+        actor="test",
+        now="2026-09-24T12:00:00Z",
+        context_limit=1,
+        writer=ForbiddenWriter(),
+        request_id_factory=lambda: "ordinary-backlink-read",
+    )
+
+    retrieval = result.action_results[0].retrieval
+    assert result.action_results[0].status is application.ActionStatus.COMPLETED
+    assert retrieval is not None
+    assert [item.id for item in retrieval.items] == ["bruno"]
+    assert [(item.target_id, item.source_id, item.content) for item in retrieval.related_items] == [
+        ("bruno", "cena", source_fact)
+    ]
+    assert repository.read_text(bruno_path) == bruno_raw
+    assert "colegio Laia" not in bruno_raw
 
 
 def test_relational_resolution_keeps_later_than_32_current_fact_candidates_reachable(

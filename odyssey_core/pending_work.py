@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .bulk_update import BulkUpdateResult
-from .context import ContextFilter, ContextItem, ContextPackage
+from .context import ContextFilter, ContextItem, ContextPackage, RelatedContextItem
 from .request_planning import (
     DelegateAction,
     KnowledgeUnit,
@@ -371,7 +371,11 @@ def _bulk(value: BulkUpdateResult | None) -> dict[str, Any] | None:
 
 def _context(value: ContextPackage) -> dict[str, Any]:
     """Project public retrieval evidence when an incomplete retrieval supplied it."""
-    return {"query": value.query, "items": [_context_item(item) for item in value.items]}
+    return {
+        "query": value.query,
+        "items": [_context_item(item) for item in value.items],
+        "related_items": [_related_context_item(item) for item in value.related_items],
+    }
 
 
 def _context_item(value: ContextItem) -> dict[str, Any]:
@@ -383,6 +387,22 @@ def _context_item(value: ContextItem) -> dict[str, Any]:
         "type": value.type,
         "tags": list(value.tags),
         "metadata": _json_value(value.metadata),
+        "content": value.content,
+        "similarity": value.similarity,
+    }
+
+
+def _related_context_item(value: RelatedContextItem) -> dict[str, Any]:
+    """Project source-provenanced related-fact context into durable pending evidence."""
+    return {
+        "id": value.id,
+        "target_id": value.target_id,
+        "target_name": value.target_name,
+        "direction": value.direction,
+        "source_id": value.source_id,
+        "source_path": value.source_path,
+        "source_name": value.source_name,
+        "source_type": value.source_type,
         "content": value.content,
         "similarity": value.similarity,
     }
