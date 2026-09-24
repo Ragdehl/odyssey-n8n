@@ -246,8 +246,13 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    $0.05772924. Review accepts W02's natural-language `ayer` selector and S03's final ordinary
    Marta/Airbus `KnowledgeReference` plan as a valid production fallback. A fixed, unexecuted
    continuation selects only S04 then S05, has a $0.36979880 maximum for at most three calls, and
-   requires new explicit authorization. Slice 3 remains Draft and v1 is not complete pending that
-   continuation.
+   requires new explicit authorization. The $0.37 authorization was recorded at
+   `828672cc4597c1931853cf32d1fa90330eccf25b`; the continuation ran once at that same HEAD and
+   passed S04/S05 Luna-only. S04 preserved ordinary `all_matching` tag-add semantics, and S05
+   preserved two independent ordinary Marta facts. Its 2 Luna calls used $0.00216274 with no Sol
+   fallback. All ten frozen cases now have reviewed evidence, so the focused Slice 3 model gate
+   passed within the bounded v1 contract. Slice 3 remains Draft and v1 is not complete pending final
+   human review and remote CI.
 4. **Later, separately approved work.** Consider relationship traversal in Notes, richer relationship
    semantics, or a structured representation only if v1 evidence shows that explicit links and bounded
    source facts cannot meet a concrete user need.

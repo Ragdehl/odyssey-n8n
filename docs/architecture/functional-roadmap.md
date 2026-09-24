@@ -59,7 +59,13 @@ flag. Review accepts that W02 selector as natural-language source intent (`ayer`
 as a passing production fallback: its final Sol plan preserves ordinary Marta/Airbus
 `KnowledgeReference` semantics. S04/S05 were not attempted. A fixed, unexecuted continuation for
 only S04/S05 has a $0.36979880 ceiling for at most three calls and requires separate explicit human
-authorization. Slice 3 and v1 are not yet validated or complete pending that continuation. The existing
+authorization. That $0.37 authorization was recorded at
+`828672cc4597c1931853cf32d1fa90330eccf25b`; the continuation ran once at the same HEAD and passed
+S04/S05 Luna-only. S04 preserved ordinary `all_matching` tag-add semantics and S05 preserved two
+independent ordinary Marta facts. It made 2 Luna calls, no Sol calls or fallbacks, and cost
+$0.00216274. All ten frozen cases now have reviewed evidence, so the focused Slice 3 model gate
+passed within the bounded v1 contract. Slice 3 and v1 remain Draft pending final human review and
+remote CI. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
 evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
 directions. UI-1 request detail is complete in PROD;
@@ -100,7 +106,7 @@ UI-2 read-only Notes                                              ✅ merged in 
 Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
-Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; model-quality gate pending after W02 failure and teaching fix
+Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; focused model gate passed, pending human review
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -194,7 +200,7 @@ Performance / Latency / Cost P1                       ✅ complete
         v
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
-Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; model-quality gate pending after W02 failure and teaching fix
+Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; focused model gate passed, pending human review
         |
         v
 Tasks — first application contract

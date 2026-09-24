@@ -72,5 +72,13 @@ Only S04/S05 remain unevaluated. A fixed continuation entry point
 ordered ten-case registry, then selects exactly S04 followed by S05 and writes exclusively to
 `reference-relationship-v1-attempt-3-continuation.jsonl`. Its conservative no-cache ceiling is
 **$0.36979880** for two Luna attempts and at most one Sol fallback (three calls; 42,549 Luna input
-tokens and 66,486 Sol input tokens at the bounds). It has a zero-dollar guard until a new explicit
-human authorization is recorded. It has not run.
+tokens and 66,486 Sol input tokens at the bounds). The $0.37 authorization was recorded at
+`828672cc4597c1931853cf32d1fa90330eccf25b`, which was also the continuation execution HEAD.
+The continuation ran exactly once and retained two Luna-only PASS rows: S04 preserved one ordinary
+person selection with `cardinality=all_matching` and tag-add `revisado`; S05 preserved one ordinary
+Marta unit with the two independent facts “Lives in Lyon.” and “Works at Airbus.” Both had no
+relational selection, findings, or semantic-review flags. Continuation usage was 15,833 Luna input
+tokens (7,897 cached), 348 output tokens, and 86 reasoning tokens over 11,931.947 ms. The frozen
+pricing snapshot calculates **$0.00216274** actual cost. It made 2 Luna calls, 0 Sol calls, and 0
+fallbacks. All ten frozen cases now have reviewed evidence; the focused Slice 3 model gate passed
+within this bounded v1 contract. The PR remains Draft for final human review and CI.
