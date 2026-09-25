@@ -20,6 +20,9 @@ from benchmarks.semantic_set_planner.run_live_v3 import run_v3_gate
 from benchmarks.semantic_set_planner.run_live_v3_retry1 import (
     OUTPUT_PATH as V3_RETRY1_OUTPUT_PATH,
 )
+from benchmarks.semantic_set_planner.run_live_v3_retry2 import (
+    OUTPUT_PATH as V3_RETRY2_OUTPUT_PATH,
+)
 from benchmarks.semantic_set_planner.v2_gate import (
     evaluate_v2_result,
     load_v2_registry,
@@ -250,6 +253,12 @@ def test_v3_retry1_has_a_fixed_distinct_immutable_evidence_path() -> None:
     assert V3_ATTEMPT1_OUTPUT_PATH.name == "semantic-set-slice1-v3-luna-gate.jsonl"
 
 
+def test_v3_retry2_has_a_fixed_distinct_immutable_evidence_path() -> None:
+    """Keep retry2 separate from both preserved prior v3 attempts."""
+    assert len({V3_ATTEMPT1_OUTPUT_PATH, V3_RETRY1_OUTPUT_PATH, V3_RETRY2_OUTPUT_PATH}) == 3
+    assert V3_RETRY2_OUTPUT_PATH.name == "semantic-set-slice1-v3-luna-gate-retry2.jsonl"
+
+
 def test_v3_retry1_wrapper_reuses_the_exact_v3_execution_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -268,6 +277,26 @@ def test_v3_retry1_wrapper_reuses_the_exact_v3_execution_contract(
 
     assert retry1.main(["--confirm-live-provider-calls"]) == 0
     assert observed == [(V3_RETRY1_OUTPUT_PATH, ["--confirm-live-provider-calls"])]
+
+
+def test_v3_retry2_wrapper_reuses_the_exact_v3_execution_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delegate retry2 to the same reviewed v3 gate rather than copying frozen contracts."""
+    import benchmarks.semantic_set_planner.run_live_v3 as attempt1
+    import benchmarks.semantic_set_planner.run_live_v3_retry2 as retry2
+
+    observed: list[tuple[Path, list[str] | None]] = []
+
+    def shared_gate(output_path: Path, argv: list[str] | None = None) -> int:
+        observed.append((output_path, argv))
+        return 0
+
+    assert retry2.run_v3_gate is attempt1.run_v3_gate
+    monkeypatch.setattr(retry2, "run_v3_gate", shared_gate)
+
+    assert retry2.main(["--confirm-live-provider-calls"]) == 0
+    assert observed == [(V3_RETRY2_OUTPUT_PATH, ["--confirm-live-provider-calls"])]
 
 
 def test_v3_runner_refuses_without_confirmation_before_provider_construction(
@@ -318,3 +347,68 @@ def test_v3_retry1_refuses_an_existing_path_before_provider_construction(
 
     assert constructed is False
     assert output_path.read_text(encoding="utf-8") == original
+
+
+def test_v3_retry2_refuses_existing_evidence_without_altering_prior_attempts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Protect every reserved attempt path before a retry2 client could be built."""
+    import benchmarks.semantic_set_planner.run_live_v3 as runner
+
+    attempt1 = tmp_path / "attempt1.jsonl"
+    retry1 = tmp_path / "retry1.jsonl"
+    retry2 = tmp_path / "retry2.jsonl"
+    attempt1.write_text('{"attempt":1}\n', encoding="utf-8")
+    retry1.write_text('{"attempt":2}\n', encoding="utf-8")
+    retry2.write_text('{"attempt":3}\n', encoding="utf-8")
+    original_attempt1 = attempt1.read_bytes()
+    original_retry1 = retry1.read_bytes()
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+    monkeypatch.setattr(
+        runner.OpenAILunaExperimentalPlanner,
+        "from_environment",
+        lambda *_args, **_kwargs: pytest.fail("provider construction must not occur"),
+    )
+
+    with pytest.raises(SystemExit, match="preflight refused"):
+        run_v3_gate(retry2, ["--confirm-live-provider-calls"])
+
+    assert attempt1.read_bytes() == original_attempt1
+    assert retry1.read_bytes() == original_retry1
+    assert retry2.read_text(encoding="utf-8") == '{"attempt":3}\n'
+
+
+def test_failure_evidence_includes_only_safe_error_type_chain(tmp_path: Path) -> None:
+    """Project planner type-only transport diagnostics without hidden request data."""
+    planner = SimpleNamespace(
+        last_error_category="APIConnectionError",
+        last_error_chain=("APIConnectionError", "ConnectError", "ConnectionResetError"),
+        last_input_sizes=None,
+        last_parse_status=None,
+        last_provider_status=None,
+        last_response_id=None,
+        last_usage=None,
+        last_validation_code=None,
+        last_validation_stage=None,
+    )
+
+    def fail(_request: str):
+        raise RuntimeError("SECRET_PROMPT_OR_REQUEST")
+
+    planner.plan = fail
+    evidence_path = tmp_path / "evidence.jsonl"
+    with evidence_path.open("x", encoding="utf-8") as evidence:
+        rows = run_cases(planner, [{"id": "SSET01", "request": "SECRET_REQUEST"}], {}, evidence)
+
+    assert rows[0]["error_chain"] == (
+        "APIConnectionError",
+        "ConnectError",
+        "ConnectionResetError",
+    )
+    serialized = evidence_path.read_text(encoding="utf-8")
+    assert json.loads(serialized)["error_chain"] == [
+        "APIConnectionError",
+        "ConnectError",
+        "ConnectionResetError",
+    ]
+    assert "SECRET" not in serialized

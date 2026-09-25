@@ -34,6 +34,7 @@ class Planner(Protocol):
     """Describe only the validated Luna planner telemetry retained by the gate."""
 
     last_error_category: str | None
+    last_error_chain: tuple[str, ...] | None
     last_input_sizes: dict[str, int] | None
     last_parse_status: str | None
     last_provider_status: str | None
@@ -126,6 +127,7 @@ def _row(
         "validation_code": planner.last_validation_code,
         "parse_status": planner.last_parse_status,
         "error_category": planner.last_error_category,
+        "error_chain": getattr(planner, "last_error_chain", None),
         "input_sizes": planner.last_input_sizes,
     }
 

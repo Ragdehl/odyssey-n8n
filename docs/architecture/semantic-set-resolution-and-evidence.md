@@ -9,6 +9,16 @@ Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#134](https://github.com/Ragdehl/odyssey-n8n/issues/134) is a compatibility constraint,
 not implementation scope.
 
+### Planner-only live evidence status
+
+The first two frozen v3 planner-only attempts each stopped on the first case with an opaque
+`APIConnectionError`; their one-row evidence artifacts remain immutable and establish no semantic
+or model conclusion. Direct unauthenticated transport diagnostics currently succeed, so no
+persistent connectivity defect is established. The experiment now records a bounded chain of
+exception **type names only** for a future failure; it retains no exception message, request,
+prompt, header, credential, or response content. This changes no semantic/model contract. The
+reviewed retry2 evidence path is prepared but unexecuted; it requires fresh explicit authorization.
+
 ## Objective and acceptance boundary
 
 Answer a request for a finite semantic group from several **current canonical facts**. The semantic
