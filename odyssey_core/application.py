@@ -55,6 +55,13 @@ from .request_planning import (
     SelectionCriteria,
     WriteAction,
 )
+from .resolution import resolve_existing_entity
+from .semantic_sets import (
+    SemanticSetOutcome,
+    SemanticSetResolution,
+    resolve_semantic_set,
+    resolve_semantic_set_anchor,
+)
 from .storage import VaultRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome
 
@@ -160,6 +167,7 @@ class ActionResult:
     delegated_request: str | None = None
     delegated_selection: Any | None = None
     reason: str | None = None
+    semantic_set: SemanticSetResolution | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +213,7 @@ def execute_request(
     self_binding_repository: SelfBindingRepository | None = None,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
+    semantic_set_selector: Any = None,
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
     monotonic: Callable[[], float] = perf_counter,
@@ -230,6 +239,8 @@ def execute_request(
             boundary; raw headers, JWTs, and provider credentials are not accepted.
         preflight_id_allocator: Optional deterministic CREATE ID allocator.
         semantic_limit: Existing bounded semantic-resolution candidate budget.
+        semantic_set_selector: Optional bounded candidate-only semantic-set selector. When absent,
+            semantic-set plans defer rather than falling through to ordinary ranked retrieval.
         pending_recorder: Optional create-only durable pending-work recorder.
         history_recorder: Optional request-level local Git history recorder.
         conversation_context: Bounded visible recent turns used only by the planner to resolve
@@ -383,6 +394,7 @@ def execute_request(
                 semantic_index=semantic_index,
                 contextual_reasoner=measured_contextual_reasoner,
                 semantic_limit=semantic_limit,
+                semantic_set_selector=semantic_set_selector,
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -560,6 +572,7 @@ def _execute_retrieve(
     semantic_index: Any = None,
     contextual_reasoner: Any = None,
     semantic_limit: int = 10,
+    semantic_set_selector: Any = None,
 ) -> ActionResult:
     """Execute retrieval, restricting relational intent to its exact current member identities."""
     if action.plan.link_scope is not None:
@@ -568,6 +581,70 @@ def _execute_retrieve(
             action.kind,
             ActionStatus.DEFERRED,
             reason="UNSUPPORTED_RETRIEVAL_LINK_SCOPE",
+        )
+    if action.plan.semantic_set is not None:
+        if not callable(getattr(semantic_set_selector, "select", None)):
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="semantic_set_selector_unavailable",
+            )
+        intent = action.plan.semantic_set
+
+        def resolve_existing_anchor(query: str):
+            """Resolve an existing semantic-set anchor through the established identity boundary."""
+            return resolve_existing_entity(
+                query,
+                action.plan.query,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+            )
+
+        try:
+            anchor_outcome, anchor_id = resolve_semantic_set_anchor(
+                intent,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                existing_resolver=resolve_existing_anchor,
+            )
+            if anchor_outcome is not SemanticSetOutcome.ANSWERABLE or anchor_id is None:
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    reason=anchor_outcome.value,
+                )
+            semantic_set = spans.invoke(
+                "semantic_set_resolution",
+                resolve_semantic_set,
+                intent,
+                anchor_id=anchor_id,
+                repository=repository,
+                schema=schema,
+                selector=semantic_set_selector,
+            )
+        except Exception as error:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
+            )
+        if semantic_set.outcome is not SemanticSetOutcome.ANSWERABLE:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                semantic_set=semantic_set,
+                reason=semantic_set.outcome.value,
+            )
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.COMPLETED,
+            semantic_set=semantic_set,
         )
     allowed_note_ids: frozenset[str] | None = None
     if action.plan.relational_reference is not None:
