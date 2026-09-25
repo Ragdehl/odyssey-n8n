@@ -55,7 +55,7 @@ Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
-For a finite semantic group, set semantic_set only on RetrieveAction. Use subject_kind=self with subject_query=null when the current human is the semantic subject, otherwise subject_kind=query with bounded subject wording. The subject is user meaning, not a claim that a canonical Note exists. Preserve the requested member wording, explicit qualifiers, and asks_exhaustive. Core alone discovers bounded current fact sources and validates canonical evidence. Set entity=null, self_target=null, link_scope=null, filters=[], and relational_reference=null. Never include stable IDs, paths, fact locators, candidate lists, members, links, mutation authority, or inferred relationship types. Use semantic_set for group members/items even when the group is described only in fact text; use ordinary retrieval for one fact about a subject. Do not use semantic_set for writes or delegate actions.
+For a finite semantic group, set semantic_set only on RetrieveAction. SelectionCriteria.query MUST preserve the complete normalized useful query semantics; structured semantic_set fields supplement it and must never replace a constrained phrase with its broad noun. Preserve every material relation, scope, time, place, state, possession, purpose, context, and exhaustive meaning. Use subject_kind=self with subject_query=null when the current human is the semantic subject, otherwise subject_kind=query with bounded subject wording. When the requested members safely match a canonical schema Note type, set semantic_set.member_type to that schema type; otherwise null. member_type constrains members, never the Note type of evidence sources. For example, "Who did I travel with to Japan?" keeps query="people I travelled with to Japan", member_type="person", and retains both travel and Japan in consumed semantic fields; never reduce it to "people". The subject is user meaning, not a claim that a canonical Note exists. Core alone discovers bounded current fact sources and validates canonical evidence. Set entity=null, self_target=null, link_scope=null, filters=[], and relational_reference=null. Never include stable IDs, paths, fact locators, candidate lists, members, links, mutation authority, or inferred relationship types. Use semantic_set for group members/items even when the group is described only in fact text; use ordinary retrieval for one fact about a subject. Do not use semantic_set for writes or delegate actions.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
@@ -205,6 +205,7 @@ class SemanticSetIntent:
     member_query: str
     explicit_qualifiers: str
     asks_exhaustive: bool
+    member_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1117,6 +1118,12 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                             "member_query": {"type": "string"},
                             "explicit_qualifiers": {"type": "string"},
                             "asks_exhaustive": {"type": "boolean"},
+                            "member_type": {
+                                "anyOf": [
+                                    {"type": "null"},
+                                    {"type": "string", "enum": list(capabilities["types"])},
+                                ]
+                            },
                         },
                         "required": [
                             "subject_kind",
@@ -1124,6 +1131,7 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                             "member_query",
                             "explicit_qualifiers",
                             "asks_exhaustive",
+                            "member_type",
                         ],
                         "additionalProperties": False,
                     },
@@ -1432,7 +1440,9 @@ def _validate_selection(
     if self_target == SELF_TARGET and (entity is not None or note_type not in (None, "person")):
         raise RequestPlanningError(f"{label} self_target must select the direct person target")
     relational = _validate_relational_reference(raw.get("relational_reference"), label=label)
-    semantic_set = _validate_semantic_set_intent(raw.get("semantic_set"), label=label)
+    semantic_set = _validate_semantic_set_intent(
+        raw.get("semantic_set"), label=label, allowed_member_types=capabilities["types"]
+    )
     if relational is not None and (
         entity is not None or self_target is not None or link_scope is not None or raw_filters
     ):
@@ -1457,29 +1467,34 @@ def _validate_selection(
     )
 
 
-def _validate_semantic_set_intent(raw: Any, *, label: str) -> SemanticSetIntent | None:
+def _validate_semantic_set_intent(
+    raw: Any, *, label: str, allowed_member_types: Sequence[str]
+) -> SemanticSetIntent | None:
     """Accept bounded set wording while rejecting planner-supplied canonical authority."""
     if raw is None:
         return None
-    if not isinstance(raw, dict) or set(raw) != {
+    required = {
         "subject_kind",
         "subject_query",
         "member_query",
         "explicit_qualifiers",
         "asks_exhaustive",
-    }:
+    }
+    if not isinstance(raw, dict) or set(raw) not in (required, required | {"member_type"}):
         raise RequestPlanningError(f"{label} semantic set fields are invalid")
     subject_kind = raw["subject_kind"]
     subject_query = raw["subject_query"]
     member_query = raw["member_query"]
     qualifiers = raw["explicit_qualifiers"]
     exhaustive = raw["asks_exhaustive"]
+    member_type = raw.get("member_type")
     if (
         subject_kind not in {"self", "query"}
         or not isinstance(member_query, str)
         or not member_query.strip()
         or not isinstance(qualifiers, str)
         or not isinstance(exhaustive, bool)
+        or (member_type is not None and member_type not in allowed_member_types)
         or (subject_kind == "self" and subject_query is not None)
         or (
             subject_kind == "query"
@@ -1505,6 +1520,7 @@ def _validate_semantic_set_intent(raw: Any, *, label: str) -> SemanticSetIntent 
         member_query=member_query.strip(),
         explicit_qualifiers=qualifiers.strip(),
         asks_exhaustive=exhaustive,
+        member_type=member_type,
     )
 
 

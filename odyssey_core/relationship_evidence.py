@@ -267,6 +267,18 @@ class RelationshipEvidenceProjector:
             for item in note.facts
         )
 
+    def note_ids_of_type(self, note_type: str) -> tuple[str, ...]:
+        """Enumerate every active canonical identity of one schema-defined Note type.
+
+        This is a complete current-Markdown candidate universe for typed semantic-set members;
+        callers still use direct facts and one-hop incoming evidence for admission.
+        """
+        return tuple(
+            note_id
+            for note_id, note in sorted(self._load_notes().items())
+            if note.identity.type == note_type
+        )
+
     def project_targets(self, source_id: str, fact_locator: str) -> TargetProjection:
         """Resolve every literal direct target in one selected canonical fact or fail closed.
 

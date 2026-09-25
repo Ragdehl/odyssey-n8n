@@ -99,8 +99,10 @@ class SetEvidenceSelection:
 class SemanticSetSelectionRequest:
     """Supply a selector with bounded candidate wording and no canonical identity authority."""
 
+    query: str
     intent: SemanticSetIntent
     candidates: tuple[SemanticSetCandidateView, ...]
+    typed_member_count: int | None = None
 
 
 class SemanticSetSelector(Protocol):
@@ -202,6 +204,7 @@ def enumerate_semantic_set_candidates(
 def resolve_semantic_set(
     intent: SemanticSetIntent,
     *,
+    query: str | None = None,
     repository: VaultRepository,
     schema: dict,
     selector: SemanticSetSelector,
@@ -220,6 +223,18 @@ def resolve_semantic_set(
         A grounded set or a fail-closed structured outcome.
     """
     projector = RelationshipEvidenceProjector(repository, schema)
+    typed_member_ids: frozenset[str] | None = None
+    if intent.member_type is not None:
+        try:
+            typed_member_ids = frozenset(projector.note_ids_of_type(intent.member_type))
+        except RelationshipEvidenceError:
+            return SemanticSetResolution(
+                SemanticSetOutcome.OPERATIONAL_FAILURE, reason="typed_scope"
+            )
+        if len(typed_member_ids) > bounds.members:
+            return SemanticSetResolution(
+                SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="typed_member_scope_bound"
+            )
     candidates = enumerate_semantic_set_candidates(projector, bounds=bounds)
     if isinstance(candidates, SemanticSetResolution):
         return candidates
@@ -228,11 +243,13 @@ def resolve_semantic_set(
     try:
         selection = selector.select(
             SemanticSetSelectionRequest(
-                intent,
-                tuple(
+                query=query or _effective_query(intent),
+                intent=intent,
+                candidates=tuple(
                     SemanticSetCandidateView(candidate.id, candidate.fact.text)
                     for candidate in candidates
                 ),
+                typed_member_count=len(typed_member_ids) if typed_member_ids is not None else None,
             )
         )
         _validate_selection(selection, candidates, bounds)
@@ -250,7 +267,9 @@ def resolve_semantic_set(
             SemanticSetOutcome.NO_RELEVANT_EVIDENCE,
             candidate_count=len(candidates),
         )
-    grounded = _ground_selection(projector, intent, candidates, selection, bounds)
+    grounded = _ground_selection(
+        projector, intent, candidates, selection, bounds, typed_member_ids=typed_member_ids
+    )
     if isinstance(grounded, SemanticSetResolution):
         return grounded
     return SemanticSetResolution(
@@ -260,17 +279,24 @@ def resolve_semantic_set(
     )
 
 
+def _effective_query(intent: SemanticSetIntent) -> str:
+    """Provide legacy callers a lossless local query until they pass SelectionCriteria.query."""
+    return " ".join(item for item in (intent.member_query, intent.explicit_qualifiers) if item)
+
+
 def serialize_semantic_set_candidate_payload(
-    intent: SemanticSetIntent, candidates: Sequence[SemanticSetCandidate]
+    intent: SemanticSetIntent, candidates: Sequence[SemanticSetCandidate], *, query: str = ""
 ) -> bytes:
     """Serialize the exact selector-visible candidate payload for deterministic budget evidence."""
     return json.dumps(
         {
+            "query": query,
             "subject_kind": intent.subject_kind,
             "subject_query": intent.subject_query,
             "member_query": intent.member_query,
             "explicit_qualifiers": intent.explicit_qualifiers,
             "asks_exhaustive": intent.asks_exhaustive,
+            "member_type": intent.member_type,
             "candidates": [{"id": item.id, "text": item.fact.text} for item in candidates],
         },
         ensure_ascii=False,
@@ -334,6 +360,8 @@ def _ground_selection(
     candidates: Sequence[SemanticSetCandidate],
     selection: SetEvidenceSelection,
     bounds: SemanticSetBounds,
+    *,
+    typed_member_ids: frozenset[str] | None,
 ) -> GroundedSemanticSet | SemanticSetResolution:
     """Re-read every selected source and construct identity/literal members from exact spans."""
     lookup = {candidate.id: candidate for candidate in candidates}
@@ -375,6 +403,10 @@ def _ground_selection(
         if identity is None:
             return SemanticSetResolution(
                 SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="identity_link"
+            )
+        if typed_member_ids is not None and identity.id not in typed_member_ids:
+            return SemanticSetResolution(
+                SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="member_type_mismatch"
             )
         if identity.id not in identities:
             identities.add(identity.id)

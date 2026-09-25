@@ -34,7 +34,9 @@ def schema() -> dict:
     return json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
 
 
-def write(vault: Path, path: str, note_id: str, name: str, body: str) -> None:
+def write(
+    vault: Path, path: str, note_id: str, name: str, body: str, note_type: str = "person"
+) -> None:
     """Write one schema-valid temporary canonical Note without creating subject Notes."""
     target = vault / path
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +46,7 @@ def write(vault: Path, path: str, note_id: str, name: str, body: str) -> None:
                 {
                     "id": note_id,
                     "name": name,
-                    "type": "person",
+                    "type": note_type,
                     "created_at": "2026-01-01T00:00:00Z",
                     "updated_at": "2026-09-25T00:00:00Z",
                     "created_by": {"human": None, "app": "test"},
@@ -340,3 +342,64 @@ def test_candidate_payload_exposes_text_not_source_identity_and_scans_all_facts(
     payload = json.loads(serialize_semantic_set_candidate_payload(INTENT, candidates))
     assert payload["subject_query"] == "kit básico para la bici"
     assert all(set(item) == {"id", "text"} for item in payload["candidates"])
+
+
+def test_typed_people_use_non_person_one_hop_sources_but_reject_other_member_types(
+    tmp_path: Path,
+) -> None:
+    """Typed members are complete person candidates while any Note type may supply link evidence."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/marta.md", "marta", "Marta", "")
+    write(vault, "people/pedro.md", "pedro", "Pedro", "")
+    write(
+        vault,
+        "projects/italy.md",
+        "italy",
+        "Viaje Italia",
+        fact("Viajé a Italia con [[marta]].", 0),
+        "project",
+    )
+    write(
+        vault,
+        "projects/work.md",
+        "work",
+        "Trabajo",
+        fact("Trabajo para [[italy]] con [[pedro]].", 0),
+        "project",
+    )
+    intent = SemanticSetIntent(
+        "self", None, "personas con las que viajé a Italia", "", True, "person"
+    )
+    result = run(
+        vault,
+        Select(
+            lambda candidate: (
+                [("link", candidate.text.index("[[marta]]"), candidate.text.index("[[marta]]") + 9)]
+                if "[[marta]]" in candidate.text
+                else []
+            )
+        ),
+        intent=intent,
+    )
+    assert result.outcome is SemanticSetOutcome.ANSWERABLE
+    assert result.grounded_set
+    assert [
+        member.stable_id
+        for member in result.grounded_set.members
+        if isinstance(member, IdentitySetMember)
+    ] == ["marta"]
+
+    wrong = run(
+        vault,
+        Select(
+            lambda candidate: (
+                [("link", candidate.text.index("[[italy]]"), candidate.text.index("[[italy]]") + 9)]
+                if "[[italy]]" in candidate.text
+                else []
+            )
+        ),
+        intent=intent,
+    )
+    assert wrong.outcome is SemanticSetOutcome.INCOMPLETE_EVIDENCE
+    assert result.grounded_set.scanned_source_note_count >= 2

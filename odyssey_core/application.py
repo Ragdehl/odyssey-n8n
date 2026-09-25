@@ -593,6 +593,7 @@ def _execute_retrieve(
                 "semantic_set_resolution",
                 resolve_semantic_set,
                 action.plan.semantic_set,
+                query=action.plan.query,
                 repository=repository,
                 schema=schema,
                 selector=semantic_set_selector,

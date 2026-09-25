@@ -17,6 +17,11 @@ from benchmarks.semantic_set_planner.v2_gate import (
     load_v2_registry,
     v2_preflight,
 )
+from benchmarks.semantic_set_planner.v3_gate import (
+    evaluate_v3_result,
+    load_v3_registry,
+    v3_preflight,
+)
 from odyssey_core.experimental_luna_planning import validate_luna_experimental_result
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -180,3 +185,25 @@ def test_runner_flushes_first_failure_and_does_not_call_later_cases(
     assert [row["classification"] for row in rows] == ["FAIL"]
     assert planner.calls == ["uno"]
     assert len(evidence_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_v3_evaluator_requires_lossless_meaning_and_schema_member_type(schema: dict) -> None:
+    """Freeze the next gate's family and travel semantic-preservation sentinels locally."""
+    _cases, oracles = load_v3_registry()
+    family = validated(
+        plan(selection("personas de mi familia", semantic("self", None, "personas de mi familia"))),
+        schema,
+    )
+    assert evaluate_v3_result(family, oracles["SSET01"]).findings == (
+        "member_type_missing_or_wrong",
+    )
+    typed = semantic("self", None, "personas", "mi familia")
+    typed["member_type"] = "person"
+    assert (
+        evaluate_v3_result(
+            validated(plan(selection("personas de mi familia", typed)), schema), oracles["SSET01"]
+        ).classification
+        == "PASS"
+    )
+    cases, _oracles = load_v3_registry()
+    assert float(v3_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10

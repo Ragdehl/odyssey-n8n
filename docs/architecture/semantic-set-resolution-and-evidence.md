@@ -80,6 +80,21 @@ for discoverability; a separate Notes-UI mutation path; and a realtime service. 
 
 ## 1–5. Set selection, grounding, members, and completeness
 
+### Lossless planner and typed-member refinement
+
+`SelectionCriteria.query` is the complete normalized human-readable semantic query passed to the
+semantic selector. `SemanticSetIntent` is supplemental execution information, never a lossy
+replacement: material relation, scope, time, place, state, purpose, possession, context, and
+exhaustiveness survive in fields Core consumes. A schema-derived optional `member_type` narrows
+the universe of possible **members**, not the Note types that may contain evidence. Core enumerates
+the complete bounded current set of that type, then admits a member only through its own applicable
+facts or existing one-hop incoming backlink evidence. Any source Note type may supply that evidence;
+there is no graph recursion, transitive/inverse/co-occurrence inference, generic Note type, or
+automatic creation. Untyped/literal requests retain the bounded canonical fact scan and can return
+literal spans alongside linked typed identities. Every final member is re-read and exact-grounded
+against current Markdown; scope/evidence overflow is `INCOMPLETE_EVIDENCE` rather than Top-K
+truncation or a completeness claim.
+
 An optional `SelectionCriteria.semantic_set` describes the **intent**, not the result: a semantic
 subject (`self` or bounded user wording), requested members in the user's words, explicit qualifiers, and
 whether the request demands an exhaustive set. It is valid initially on `RetrieveAction`; a later
