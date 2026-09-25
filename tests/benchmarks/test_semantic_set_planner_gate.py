@@ -23,6 +23,9 @@ from benchmarks.semantic_set_planner.run_live_v3_retry1 import (
 from benchmarks.semantic_set_planner.run_live_v3_retry2 import (
     OUTPUT_PATH as V3_RETRY2_OUTPUT_PATH,
 )
+from benchmarks.semantic_set_planner.run_live_v4_retry1 import (
+    OUTPUT_PATH as V4_RETRY1_OUTPUT_PATH,
+)
 from benchmarks.semantic_set_planner.v2_gate import (
     evaluate_v2_result,
     load_v2_registry,
@@ -258,6 +261,34 @@ def test_v4_freezes_v3_evaluations_with_possessive_subject_teaching(schema: dict
     assert intent["member_type"] is None
     assert validate_luna_experimental_result(possessive["result"], schema)
     assert float(v4_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10
+
+
+def test_v4_retry1_has_a_fixed_distinct_immutable_evidence_path() -> None:
+    """Keep retry1 evidence separate from the preserved original v4 attempt."""
+    from benchmarks.semantic_set_planner.run_live_v4 import OUTPUT_PATH as v4_attempt1_output_path
+
+    assert V4_RETRY1_OUTPUT_PATH != v4_attempt1_output_path
+    assert V4_RETRY1_OUTPUT_PATH.name == "semantic-set-slice1-v4-luna-gate-retry1.jsonl"
+
+
+def test_v4_retry1_wrapper_delegates_to_the_exact_frozen_v4_logic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse v4 unchanged while substituting only the reserved evidence path."""
+    import benchmarks.semantic_set_planner.run_live_v4 as frozen_v4
+    import benchmarks.semantic_set_planner.run_live_v4_retry1 as retry1
+
+    observed: list[list[str] | None] = []
+
+    def frozen_main(argv: list[str] | None = None) -> int:
+        observed.append(argv)
+        return 0
+
+    monkeypatch.setattr(frozen_v4, "main", frozen_main)
+
+    assert retry1.main(["--confirm-live-provider-calls"]) == 0
+    assert frozen_v4.OUTPUT_PATH != V4_RETRY1_OUTPUT_PATH
+    assert observed == [["--confirm-live-provider-calls"]]
 
 
 def test_v4_subject_contract_distinguishes_human_and_possessive_object(schema: dict) -> None:
