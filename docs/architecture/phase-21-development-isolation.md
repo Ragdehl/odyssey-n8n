@@ -193,6 +193,11 @@ compares both the DEV host files and the `/odyssey-web` container mount. Workflo
 MATCH alone is insufficient evidence that the mounted static product belongs to the recorded
 commit.
 
+`start` and `restart` check clean source, deployment identity, and the generated host assets
+before starting services. The mounted `/odyssey-web` fingerprint is checked only after DEV n8n
+is healthy, and before the command can report readiness. This preserves both fail-closed checks
+while allowing a genuine stopped-to-started DEV lifecycle.
+
 ### DEV provider-runtime precondition
 
 The first UI-1 browser checkpoint exposed one additional deployment precondition: the DEV n8n

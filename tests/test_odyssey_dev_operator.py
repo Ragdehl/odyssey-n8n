@@ -66,6 +66,169 @@ def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> Non
     assert "mounted_paths=$(printf '/odyssey-web/%s '" in source
 
 
+def asset_coherence_result(
+    tmp_path: Path, function: str, host_fingerprint: str, mounted_fingerprint: str
+) -> bool:
+    """Evaluate one real web-asset coherence predicate with controlled fingerprints."""
+    deployment = tmp_path / "n8n-deployment"
+    deployment.write_text(
+        f"web_assets_sha256=recorded\nweb_deployment_marker={CURRENT}\n", encoding="utf-8"
+    )
+    web_root = tmp_path / "web"
+    web_root.mkdir(exist_ok=True)
+    (web_root / "environment.js").write_text(
+        f'globalThis.ODYSSEY_DEPLOYMENT = Object.freeze({{commit: "{CURRENT}"}});\n',
+        encoding="utf-8",
+    )
+    command = f"""
+source {shlex.quote(str(SCRIPT))}
+N8N_DEPLOYMENT={shlex.quote(str(deployment))}
+DEV_WEB={shlex.quote(str(web_root))}
+web_asset_fingerprint() {{ printf '%s\n' {shlex.quote(host_fingerprint)}; }}
+mounted_web_asset_fingerprint() {{ printf '%s\n' {shlex.quote(mounted_fingerprint)}; }}
+{function} {CURRENT}
+"""
+    return subprocess.run(["bash", "-c", command], check=False).returncode == 0
+
+
+def prestart_coherence_result(tmp_path: Path, host_fingerprint: str) -> bool:
+    """Run the real source preflight while making a container mount unavailable."""
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "README").write_text("fixture\n", encoding="utf-8")
+    for command in (
+        ["git", "-C", str(source_root), "init", "-q"],
+        ["git", "-C", str(source_root), "config", "user.email", "test@example.invalid"],
+        ["git", "-C", str(source_root), "config", "user.name", "Test"],
+        ["git", "-C", str(source_root), "add", "README"],
+        ["git", "-C", str(source_root), "commit", "-qm", "fixture"],
+    ):
+        subprocess.run(command, check=True)
+    commit = subprocess.check_output(
+        ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+    ).strip()
+    deployment = tmp_path / "n8n-deployment"
+    deployment.write_text(
+        "\n".join(
+            (
+                f"source_commit={commit}",
+                "web_assets_sha256=recorded",
+                f"web_deployment_marker={commit}",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    deployed_commit = tmp_path / "deployed-commit"
+    deployed_commit.write_text(f"{commit}\n", encoding="utf-8")
+    web_root = tmp_path / "web"
+    web_root.mkdir()
+    (web_root / "environment.js").write_text(
+        f'globalThis.ODYSSEY_DEPLOYMENT = Object.freeze({{commit: "{commit}"}});\n',
+        encoding="utf-8",
+    )
+    command = f"""
+source {shlex.quote(str(SCRIPT))}
+DEV_SOURCE={shlex.quote(str(source_root))}
+N8N_DEPLOYMENT={shlex.quote(str(deployment))}
+DEPLOYED_COMMIT={shlex.quote(str(deployed_commit))}
+DEV_WEB={shlex.quote(str(web_root))}
+web_asset_fingerprint() {{ printf '%s\n' {shlex.quote(host_fingerprint)}; }}
+mounted_web_asset_fingerprint() {{ return 1; }}
+assert_deployed_source_coherent
+"""
+    return subprocess.run(["bash", "-c", command], check=False).returncode == 0
+
+
+def lifecycle_result(
+    tmp_path: Path, action: str, mounted_check_succeeds: bool
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run the DEV lifecycle with deterministic component boundaries and event evidence."""
+    events = tmp_path / "events"
+    deployment = tmp_path / "n8n-deployment"
+    deployed_commit = tmp_path / "deployed-commit"
+    deployment.touch()
+    deployed_commit.touch()
+    mounted_result = "return 0" if mounted_check_succeeds else "return 1"
+    invocation = "stop; start" if action == "restart" else action
+    command = f"""
+source {shlex.quote(str(SCRIPT))}
+EVENTS={shlex.quote(str(events))}
+N8N_DEPLOYMENT={shlex.quote(str(deployment))}
+DEPLOYED_COMMIT={shlex.quote(str(deployed_commit))}
+guard() {{ :; }}
+assert_deployed_source_coherent() {{ printf 'preflight\n' >> "$EVENTS"; }}
+assert_deployed_mounted_web_assets_coherent() {{ printf 'mounted-assets\n' >> "$EVENTS"; {mounted_result}; }}
+systemctl() {{ printf 'systemctl:%s\n' "$*" >> "$EVENTS"; }}
+n8n_compose() {{ printf 'compose:%s\n' "$*" >> "$EVENTS"; }}
+wait_health() {{ printf 'runtime-health\n' >> "$EVENTS"; }}
+wait_n8n_health() {{ printf 'n8n-health\n' >> "$EVENTS"; }}
+wait_workflow_readiness() {{ printf 'workflow-readiness\n' >> "$EVENTS"; }}
+{invocation}
+"""
+    result = subprocess.run(["bash", "-c", command], check=False, capture_output=True, text=True)
+    return result, events.read_text(encoding="utf-8").splitlines()
+
+
+def test_start_checks_host_assets_before_start_and_mounted_assets_after_n8n_health(
+    tmp_path: Path,
+) -> None:
+    """A stopped n8n can start because its mount is verified only after it is available."""
+    result, events = lifecycle_result(tmp_path, "start", mounted_check_succeeds=True)
+    assert result.returncode == 0, result.stderr
+    assert events == [
+        "preflight",
+        "systemctl:--user start odyssey-dev-runtime.service",
+        "runtime-health",
+        "compose:up -d",
+        "n8n-health",
+        "mounted-assets",
+        "workflow-readiness",
+    ]
+
+
+def test_restart_performs_stop_then_start_and_rechecks_the_mounted_assets(tmp_path: Path) -> None:
+    """Restart keeps a genuine DEV stop/start lifecycle while preserving readiness evidence."""
+    result, events = lifecycle_result(tmp_path, "restart", mounted_check_succeeds=True)
+    assert result.returncode == 0, result.stderr
+    assert events == [
+        "compose:stop",
+        "systemctl:--user stop odyssey-dev-runtime.service",
+        "preflight",
+        "systemctl:--user start odyssey-dev-runtime.service",
+        "runtime-health",
+        "compose:up -d",
+        "n8n-health",
+        "mounted-assets",
+        "workflow-readiness",
+    ]
+
+
+def test_host_asset_drift_fails_the_prestart_coherence_check(tmp_path: Path) -> None:
+    """Host assets must still match the recorded deployment before services are started."""
+    assert prestart_coherence_result(tmp_path, "drifted") is False
+
+
+def test_mounted_asset_drift_fails_after_n8n_starts_before_readiness(tmp_path: Path) -> None:
+    """A changed container mount cannot be reported as a successful DEV start."""
+    result, events = lifecycle_result(tmp_path, "start", mounted_check_succeeds=False)
+    assert result.returncode != 0
+    assert events == [
+        "preflight",
+        "systemctl:--user start odyssey-dev-runtime.service",
+        "runtime-health",
+        "compose:up -d",
+        "n8n-health",
+        "mounted-assets",
+    ]
+
+
+def test_host_preflight_does_not_require_a_stopped_n8n_container(tmp_path: Path) -> None:
+    """The pre-start check remains valid without a mounted-container fingerprint."""
+    assert prestart_coherence_result(tmp_path, "recorded") is True
+    assert asset_coherence_result(tmp_path, "web_assets_coherent", "recorded", "drifted") is False
+
+
 def publication_result(rows: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
     """Run the DEV operator's pure active-version publication validator."""
     command = (

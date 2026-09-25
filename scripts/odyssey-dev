@@ -95,7 +95,7 @@ assert_deployed_source_coherent() {
   deployed=$(cat "$DEPLOYED_COMMIT")
   source_is_coherent "$current" "$recorded" "$deployed" "$dirty" \
     || fail "DEV source HEAD does not match the deployed commit; run odyssey-dev deploy"
-  web_assets_coherent "$current" || fail "DEV web assets do not match the deployed commit; run odyssey-dev deploy"
+  host_web_assets_coherent "$current" || fail "DEV host web assets do not match the deployed commit; run odyssey-dev deploy"
 }
 
 health_once() {
@@ -205,15 +205,29 @@ mounted_web_asset_fingerprint() {
     "sha256sum $mounted_paths | awk '{print \$1}' | sha256sum | cut -d' ' -f1"
 }
 
-web_assets_coherent() {
+host_web_assets_coherent() {
   local expected_commit recorded_fingerprint recorded_marker
   expected_commit=$1
   recorded_fingerprint=$(sed -n 's/^web_assets_sha256=//p' "$N8N_DEPLOYMENT")
   recorded_marker=$(sed -n 's/^web_deployment_marker=//p' "$N8N_DEPLOYMENT")
   [ "$recorded_marker" = "$expected_commit" ] || return 1
   [ "$recorded_fingerprint" = "$(web_asset_fingerprint)" ] || return 1
-  [ "$recorded_fingerprint" = "$(mounted_web_asset_fingerprint)" ] || return 1
   grep -Fq "commit: \"$expected_commit\"" "$DEV_WEB/environment.js" || return 1
+}
+
+web_assets_coherent() {
+  local expected_commit recorded_fingerprint
+  expected_commit=$1
+  recorded_fingerprint=$(sed -n 's/^web_assets_sha256=//p' "$N8N_DEPLOYMENT")
+  host_web_assets_coherent "$expected_commit" || return 1
+  [ "$recorded_fingerprint" = "$(mounted_web_asset_fingerprint)" ] || return 1
+}
+
+assert_deployed_mounted_web_assets_coherent() {
+  local current
+  current=$(git -C "$DEV_SOURCE" rev-parse HEAD 2>/dev/null) || fail "DEV source is not a Git checkout"
+  web_assets_coherent "$current" \
+    || fail "DEV mounted web assets do not match the deployed commit; run odyssey-dev deploy"
 }
 
 prepare_dev_identity() {
@@ -542,6 +556,7 @@ start() {
   wait_health || fail "DEV runtime did not become healthy"
   n8n_compose up -d >/dev/null
   wait_n8n_health || fail "DEV n8n did not become healthy"
+  assert_deployed_mounted_web_assets_coherent
   wait_workflow_readiness || fail "DEV n8n workflows did not become ready"
 }
 
