@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -140,6 +140,16 @@ def conservative_preflight(
 
 def evaluate_result(result: ExperimentalPlannerResult, oracle: Mapping[str, Any]) -> Evaluation:
     """Check a locally validated result without execution or a model-as-judge."""
+    return evaluate_planner_result(result, oracle, semantic_evaluator=_evaluate_semantic_set)
+
+
+def evaluate_planner_result(
+    result: ExperimentalPlannerResult,
+    oracle: Mapping[str, Any],
+    *,
+    semantic_evaluator: Callable[[Any, Mapping[str, Any]], Evaluation],
+) -> Evaluation:
+    """Apply shared plan/regression checks with a version-specific semantic intent evaluator."""
     if isinstance(result, (PlannerEscalation, PlannerClarification)):
         return Evaluation("FAIL", ("unexpected_non_plan_outcome",))
     if not isinstance(result, RequestPlan):
@@ -151,7 +161,7 @@ def evaluate_result(result: ExperimentalPlannerResult, oracle: Mapping[str, Any]
     selection = result.actions[0].plan
     kind = oracle["kind"]
     if kind == "semantic_set":
-        return _evaluate_semantic_set(selection, oracle)
+        return semantic_evaluator(selection, oracle)
     if kind == "singular_relational":
         if selection.semantic_set is not None:
             return Evaluation("FAIL", ("semantic_set_on_relational_regression",))
