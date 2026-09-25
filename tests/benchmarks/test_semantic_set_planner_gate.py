@@ -13,6 +13,13 @@ from benchmarks.semantic_set_planner.gate import (
     MAX_LUNA_INPUT_TOKENS,
 )
 from benchmarks.semantic_set_planner.run_live import run_cases
+from benchmarks.semantic_set_planner.run_live_v3 import (
+    OUTPUT_PATH as V3_ATTEMPT1_OUTPUT_PATH,
+)
+from benchmarks.semantic_set_planner.run_live_v3 import run_v3_gate
+from benchmarks.semantic_set_planner.run_live_v3_retry1 import (
+    OUTPUT_PATH as V3_RETRY1_OUTPUT_PATH,
+)
 from benchmarks.semantic_set_planner.v2_gate import (
     evaluate_v2_result,
     load_v2_registry,
@@ -234,3 +241,80 @@ def test_v3_regression_gate_reuses_exact_historical_contracts(schema: dict) -> N
     details = v3_regression_preflight(schema, cases, teaching)
     assert details["maximum_provider_calls"] == 10
     assert float(details["conservative_no_cache_maximum_usd"]) > 0.10
+
+
+def test_v3_retry1_has_a_fixed_distinct_immutable_evidence_path() -> None:
+    """Keep retry1 separate from the preserved original v3 attempt evidence."""
+    assert V3_RETRY1_OUTPUT_PATH != V3_ATTEMPT1_OUTPUT_PATH
+    assert V3_RETRY1_OUTPUT_PATH.name == "semantic-set-slice1-v3-luna-gate-retry1.jsonl"
+    assert V3_ATTEMPT1_OUTPUT_PATH.name == "semantic-set-slice1-v3-luna-gate.jsonl"
+
+
+def test_v3_retry1_wrapper_reuses_the_exact_v3_execution_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delegate retry1 to shared v3 plumbing rather than copy cases, oracles, or model settings."""
+    import benchmarks.semantic_set_planner.run_live_v3 as attempt1
+    import benchmarks.semantic_set_planner.run_live_v3_retry1 as retry1
+
+    observed: list[tuple[Path, list[str] | None]] = []
+
+    def shared_gate(output_path: Path, argv: list[str] | None = None) -> int:
+        observed.append((output_path, argv))
+        return 0
+
+    assert retry1.run_v3_gate is attempt1.run_v3_gate
+    monkeypatch.setattr(retry1, "run_v3_gate", shared_gate)
+
+    assert retry1.main(["--confirm-live-provider-calls"]) == 0
+    assert observed == [(V3_RETRY1_OUTPUT_PATH, ["--confirm-live-provider-calls"])]
+
+
+def test_v3_runner_refuses_without_confirmation_before_provider_construction(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ensure a dry retry cannot create evidence or build the provider client."""
+    import benchmarks.semantic_set_planner.run_live_v3 as runner
+
+    output_path = tmp_path / "retry1.jsonl"
+    constructed = False
+
+    def unexpected_client(*args, **kwargs):
+        nonlocal constructed
+        constructed = True
+        raise AssertionError("provider construction must not happen during dry preflight")
+
+    monkeypatch.setattr(runner.OpenAILunaExperimentalPlanner, "from_environment", unexpected_client)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+
+    with pytest.raises(SystemExit, match="preflight refused"):
+        run_v3_gate(output_path, [])
+
+    assert constructed is False
+    assert output_path.exists() is False
+
+
+def test_v3_retry1_refuses_an_existing_path_before_provider_construction(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prevent a future retry from overwriting either an attempt or partial evidence."""
+    import benchmarks.semantic_set_planner.run_live_v3 as runner
+
+    output_path = tmp_path / "retry1.jsonl"
+    original = '{"attempt":"immutable"}\n'
+    output_path.write_text(original, encoding="utf-8")
+    constructed = False
+
+    def unexpected_client(*args, **kwargs):
+        nonlocal constructed
+        constructed = True
+        raise AssertionError("provider construction must not happen after an output collision")
+
+    monkeypatch.setattr(runner.OpenAILunaExperimentalPlanner, "from_environment", unexpected_client)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+
+    with pytest.raises(SystemExit, match="preflight refused"):
+        run_v3_gate(output_path, ["--confirm-live-provider-calls"])
+
+    assert constructed is False
+    assert output_path.read_text(encoding="utf-8") == original

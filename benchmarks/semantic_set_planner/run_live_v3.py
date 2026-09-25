@@ -26,8 +26,19 @@ OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-set-slice1-v3-luna-gate.
 SCHEMA_PATH = ROOT / "config/note-schema.json"
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run one bounded gate only after all deterministic refusal checks pass."""
+def run_v3_gate(output_path: Path, argv: list[str] | None = None) -> int:
+    """Run frozen v3 contracts once into one reviewed, exclusively reserved evidence path.
+
+    Args:
+        output_path: Fixed wrapper-owned JSONL path that must not already exist.
+        argv: Optional runner arguments, including the explicit live-call confirmation.
+
+    Returns:
+        Zero only when all six frozen cases pass.
+
+    Raises:
+        SystemExit: If a deterministic authorization, environment, or evidence guard refuses.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
     args = parser.parse_args(argv)
@@ -37,12 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     if (
         not args.confirm_live_provider_calls
         or not os.environ.get("OPENAI_API_KEY")
-        or OUTPUT_PATH.exists()
+        or output_path.exists()
         or len(cases["cases"]) != MAX_PROVIDER_CALLS
     ):
         raise SystemExit("Live semantic-set v3 gate preflight refused")
     teaching = json.loads(TEACHING_EXAMPLES_PATH.read_text(encoding="utf-8"))["examples"]
-    with reserve_evidence_path(OUTPUT_PATH) as evidence:
+    with reserve_evidence_path(output_path) as evidence:
         planner = OpenAILunaExperimentalPlanner.from_environment(
             schema, cases["fixed_context"], teaching_examples=teaching
         )
@@ -50,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
     return int(
         not (len(rows) == MAX_PROVIDER_CALLS and all(r["classification"] == "PASS" for r in rows))
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run v3 attempt 1 only after all deterministic refusal checks pass."""
+    return run_v3_gate(OUTPUT_PATH, argv)
 
 
 if __name__ == "__main__":
