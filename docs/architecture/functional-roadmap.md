@@ -75,8 +75,12 @@ evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request de
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
 [Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is underway. Slice
-1 implements only Core set evidence and outcomes: bounded multi-fact linked/literal discovery,
-explicit completeness, and structured resolution outcomes. Staged clarification (#137), answer-source
+1 implements only Core set evidence and outcomes: a user semantic subject may be text-only and is
+separate from its canonical source Notes; bounded multi-fact linked/literal discovery, exact
+grounding, explicit completeness, and structured resolution outcomes remain Core-owned. It adds no
+generic Note or type. The first planner-only gate exposed the former incorrect existing-Note subject
+assumption; its historical evidence remains intact and a corrected future gate is frozen but not run.
+Staged clarification (#137), answer-source
 Note navigation (#138), progress (#136), and direct Notes CRUD (#134) remain later slices. Tasks and
 Events remain later directions.
 

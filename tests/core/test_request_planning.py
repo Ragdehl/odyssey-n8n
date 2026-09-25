@@ -71,9 +71,9 @@ def semantic_set_selection(query: str) -> dict:
     """Build the only planner-visible Slice 1 semantic-set retrieval intent."""
     result = selection(query)
     result["semantic_set"] = {
-        "anchor_kind": "self",
-        "anchor_query": None,
-        "group_query": "personas de mi familia",
+        "subject_kind": "self",
+        "subject_query": None,
+        "member_query": "personas de mi familia",
         "explicit_qualifiers": "",
         "asks_exhaustive": True,
     }
@@ -1425,8 +1425,27 @@ def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(sche
     semantic = {"kind": "retrieve", "plan": semantic_set_selection("¿Quién es mi familia?")}
     plan = validate_request_plan(output(semantic), schema)
     intent = plan.actions[0].plan.semantic_set
-    assert intent and intent.anchor_kind == "self" and intent.anchor_query is None
+    assert intent and intent.subject_kind == "self" and intent.subject_query is None
     assert plan.actions[0].plan.relational_reference is None
+
+    textual = semantic_set_selection("¿Qué piezas incluye mi kit?")
+    textual["semantic_set"].update(
+        {
+            "subject_kind": "query",
+            "subject_query": "mi kit de reparación",
+            "member_query": "piezas",
+        }
+    )
+    textual_intent = (
+        validate_request_plan(output({"kind": "retrieve", "plan": textual}), schema)
+        .actions[0]
+        .plan.semantic_set
+    )
+    assert textual_intent and textual_intent.subject_query == "mi kit de reparación"
+
+    textual["semantic_set"]["subject_query"] = None
+    with pytest.raises(RequestPlanningError, match="semantic set is invalid"):
+        validate_request_plan(output({"kind": "retrieve", "plan": textual}), schema)
 
     legacy = selection("Marta")
     legacy.pop("semantic_set")
@@ -1476,7 +1495,7 @@ def test_semantic_set_rejects_unsafe_or_unbounded_planner_wording(
 ) -> None:
     """Never let planner wording carry a path, link, or unbounded payload into Core selection."""
     selected = semantic_set_selection("¿Quién es mi familia?")
-    selected["semantic_set"]["group_query"] = unsafe
+    selected["semantic_set"]["member_query"] = unsafe
 
     with pytest.raises(RequestPlanningError, match="semantic set wording is unsafe"):
         validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)

@@ -10,11 +10,13 @@ import pytest
 
 from benchmarks.semantic_set_planner.gate import (
     MAX_LUNA_INPUT_TOKENS,
-    conservative_preflight,
-    evaluate_result,
-    load_registry,
 )
 from benchmarks.semantic_set_planner.run_live import run_cases
+from benchmarks.semantic_set_planner.v2_gate import (
+    evaluate_v2_result,
+    load_v2_registry,
+    v2_preflight,
+)
 from odyssey_core.experimental_luna_planning import validate_luna_experimental_result
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,12 +53,14 @@ def plan(selection_value: dict) -> dict:
     }
 
 
-def semantic(anchor_kind: str, anchor_query: str | None, group: str, qualifiers: str = "") -> dict:
+def semantic(
+    subject_kind: str, subject_query: str | None, member_query: str, qualifiers: str = ""
+) -> dict:
     """Build the approved planner-visible semantic-set intent shape."""
     return {
-        "anchor_kind": anchor_kind,
-        "anchor_query": anchor_query,
-        "group_query": group,
+        "subject_kind": subject_kind,
+        "subject_query": subject_query,
+        "member_query": member_query,
         "explicit_qualifiers": qualifiers,
         "asks_exhaustive": True,
     }
@@ -69,13 +73,13 @@ def validated(payload: dict, schema: dict):
 
 def test_frozen_registry_and_conservative_luna_budget(schema: dict) -> None:
     """Lock exactly six cases and reserve less than the approved USD 0.10 before any call."""
-    cases, oracles = load_registry()
-    details = conservative_preflight(schema, cases)
+    cases, oracles = load_v2_registry()
+    details = v2_preflight(schema, cases)
 
     assert list(oracles) == [case["id"] for case in cases["cases"]]
     assert details["logical_cases"] == details["maximum_provider_calls"] == 6
     assert details["maximum_luna_input_bound"] == MAX_LUNA_INPUT_TOKENS
-    assert details["conservative_no_cache_maximum_usd"] == "0.0987456"
+    assert float(details["conservative_no_cache_maximum_usd"]) <= 0.10
 
 
 @pytest.mark.parametrize(
@@ -87,11 +91,11 @@ def test_frozen_registry_and_conservative_luna_budget(schema: dict) -> None:
         ),
         (
             "SSET02",
-            plan(selection("kit", semantic("existing", "kit básico", "piezas"))),
+            plan(selection("kit", semantic("query", "kit básico para la bici", "piezas"))),
         ),
         (
             "SSET03",
-            plan(selection("tortilla", semantic("existing", "receta de tortilla", "ingredientes"))),
+            plan(selection("tortilla", semantic("query", "receta de tortilla", "ingredientes"))),
         ),
         (
             "SSET04",
@@ -118,14 +122,14 @@ def test_evaluator_accepts_frozen_safe_structures(
     case_id: str, payload: dict, schema: dict
 ) -> None:
     """Accept each intended structural outcome with local production validation first."""
-    _cases, oracles = load_registry()
+    _cases, oracles = load_v2_registry()
 
-    assert evaluate_result(validated(payload, schema), oracles[case_id]).classification == "PASS"
+    assert evaluate_v2_result(validated(payload, schema), oracles[case_id]).classification == "PASS"
 
 
 def test_evaluator_rejects_dropped_qualifier_and_semantic_regression(schema: dict) -> None:
     """Fail a material qualifier loss and accidental set semantics on an ordinary named read."""
-    _cases, oracles = load_registry()
+    _cases, oracles = load_v2_registry()
     missing_italy = validated(
         plan(selection("viaje", semantic("self", None, "compañeros de viaje"))), schema
     )
@@ -133,10 +137,10 @@ def test_evaluator_rejects_dropped_qualifier_and_semantic_regression(schema: dic
         plan(selection("Marta", semantic("self", None, "personas de mi familia"))), schema
     )
 
-    assert evaluate_result(missing_italy, oracles["SSET04"]).findings == (
+    assert evaluate_v2_result(missing_italy, oracles["SSET04"]).findings == (
         "material_qualifier_dropped",
     )
-    assert evaluate_result(accidental_set, oracles["REG02"]).findings == (
+    assert evaluate_v2_result(accidental_set, oracles["REG02"]).findings == (
         "semantic_set_on_named_regression",
     )
 
@@ -145,7 +149,7 @@ def test_runner_flushes_first_failure_and_does_not_call_later_cases(
     tmp_path: Path, schema: dict
 ) -> None:
     """Stop after one failed evaluation while retaining a compact JSONL row immediately."""
-    _cases, oracles = load_registry()
+    _cases, oracles = load_v2_registry()
     planner = SimpleNamespace(
         last_error_category=None,
         last_input_sizes={"user_request_bytes": 1},
@@ -170,6 +174,7 @@ def test_runner_flushes_first_failure_and_does_not_call_later_cases(
             [{"id": "REG02", "request": "uno"}, {"id": "REG01", "request": "dos"}],
             oracles,
             evidence,
+            evaluator=evaluate_v2_result,
         )
 
     assert [row["classification"] for row in rows] == ["FAIL"]

@@ -255,10 +255,15 @@ class OpenAILunaExperimentalPlanner:
         schema: Mapping[str, Any],
         current_context: Mapping[str, str],
         monotonic: Any = perf_counter,
+        *,
+        teaching_examples: Sequence[Mapping[str, Any]] | None = None,
     ) -> None:
         self._client = client
         self._schema = schema
         self._current_context = current_context
+        self._teaching_examples = (
+            tuple(teaching_examples) if teaching_examples is not None else None
+        )
         self._monotonic = monotonic
         self.model = LUNA_EXPERIMENT_MODEL
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
@@ -277,7 +282,11 @@ class OpenAILunaExperimentalPlanner:
 
     @classmethod
     def from_environment(
-        cls, schema: Mapping[str, Any], current_context: Mapping[str, str]
+        cls,
+        schema: Mapping[str, Any],
+        current_context: Mapping[str, str],
+        *,
+        teaching_examples: Sequence[Mapping[str, Any]] | None = None,
     ) -> OpenAILunaExperimentalPlanner:
         """Construct the experimental client with automatic SDK retries disabled."""
         if not os.environ.get("OPENAI_API_KEY"):
@@ -288,7 +297,12 @@ class OpenAILunaExperimentalPlanner:
             raise RequestPlanningError(
                 "Install the OpenAI SDK for Luna experiment planning"
             ) from error
-        return cls(OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES), schema, current_context)
+        return cls(
+            OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES),
+            schema,
+            current_context,
+            teaching_examples=teaching_examples,
+        )
 
     def plan(
         self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
@@ -313,6 +327,7 @@ class OpenAILunaExperimentalPlanner:
             prompt = render_luna_experimental_prompt(
                 self._schema,
                 self._current_context,
+                teaching_examples=self._teaching_examples,
                 conversation_context=conversation_context,
                 size_components=sizes,
             )

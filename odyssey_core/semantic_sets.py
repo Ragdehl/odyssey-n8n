@@ -1,32 +1,25 @@
-"""Bounded, Markdown-grounded semantic set selection for one canonical anchor."""
+"""Bounded, Markdown-grounded semantic set selection from current canonical fact blocks."""
 
 from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from odyssey_core.identity_boundary import (
-    AuthenticatedActorContext,
-    SelfBindingError,
-    SelfBindingRepository,
-)
 from odyssey_core.relationship_evidence import (
     CanonicalFact,
-    EvidenceDirection,
     RelationshipEvidenceError,
     RelationshipEvidenceProjector,
 )
 from odyssey_core.request_planning import SemanticSetIntent
-from odyssey_core.resolution import ExistingEntityOutcome, ExistingEntityResolution
 from odyssey_core.storage import VaultRepository
 
-# The candidate payload stays within the established 16 KiB note-result snapshot ceiling.  Sixty-four
-# facts and members bound adversarial fragmentation while still exceeding normal retrieval limits.
-MAX_SEMANTIC_SET_SOURCE_NOTES = 16
+# The candidate payload stays within the established 16 KiB note-result snapshot ceiling. Sixty-four
+# sources, facts, and members align this scan with the existing snapshot's 64-ID budget.
+MAX_SEMANTIC_SET_SOURCE_NOTES = 64
 MAX_SEMANTIC_SET_FACTS = 64
 MAX_SEMANTIC_SET_SOURCE_BYTES = 16 * 1024
 MAX_SEMANTIC_SET_MEMBERS = 64
@@ -73,7 +66,6 @@ class SemanticSetCandidate:
 
     id: str
     fact: CanonicalFact
-    direction: EvidenceDirection
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,9 +143,10 @@ SetMember = IdentitySetMember | LiteralSetMember
 
 @dataclass(frozen=True, slots=True)
 class GroundedSemanticSet:
-    """Return one anchor's re-grounded members and the declared scan completeness."""
+    """Return one semantic subject's re-grounded members and declared scan completeness."""
 
-    anchor_stable_id: str
+    subject_kind: str
+    subject_query: str | None
     members: tuple[SetMember, ...]
     completeness: SemanticSetCompleteness
     scanned_source_note_count: int
@@ -172,43 +165,24 @@ class SemanticSetResolution:
 
 
 def enumerate_semantic_set_candidates(
-    projector: RelationshipEvidenceProjector, anchor_id: str, *, bounds: SemanticSetBounds
+    projector: RelationshipEvidenceProjector, *, bounds: SemanticSetBounds
 ) -> tuple[SemanticSetCandidate, ...] | SemanticSetResolution:
-    """Enumerate every direct and literal one-hop incoming candidate before selection.
+    """Enumerate every current visible fact before selection.
 
-    The projector rereads canonical Markdown. Any exceeded limit returns an incomplete result before
-    a selector can see a truncated scope.
+    A semantic subject is user wording and need not be a Note. The projector rereads all active
+    canonical Markdown facts; any exceeded bound returns incomplete before a selector sees a
+    truncated scope. This does not traverse links or infer a graph relationship.
     """
     try:
-        direct = tuple(
-            SemanticSetCandidate("", fact, EvidenceDirection.DIRECT)
-            for fact in projector.facts_for_source(anchor_id)
-        )
-        projection = projector.project_entity_evidence_candidates(anchor_id)
+        ordered = projector.all_visible_facts()
     except RelationshipEvidenceError:
         return SemanticSetResolution(
             SemanticSetOutcome.OPERATIONAL_FAILURE, reason="canonical_scan"
         )
-    if projection is None:
-        return SemanticSetResolution(
-            SemanticSetOutcome.AMBIGUOUS_REFERENCE, reason="anchor_missing"
-        )
-    incoming = tuple(
-        SemanticSetCandidate("", item.fact, EvidenceDirection.INCOMING)
-        for item in projection.incoming
-    )
-    unique: dict[tuple[str, str], SemanticSetCandidate] = {}
-    for item in (*direct, *incoming):
-        unique.setdefault((item.fact.source.id, item.fact.locator), item)
-    ordered = tuple(
-        sorted(unique.values(), key=lambda item: (item.fact.source.path, item.fact.locator))
-    )
-    sources = {item.fact.source.id for item in ordered}
+    sources = {fact.source.id for fact in ordered}
     serialized = sum(
-        len(
-            (item.fact.source.id + "\0" + item.fact.locator + "\0" + item.fact.text).encode("utf-8")
-        )
-        for item in ordered
+        len((fact.source.id + "\0" + fact.locator + "\0" + fact.text).encode("utf-8"))
+        for fact in ordered
     )
     if (
         len(sources) > bounds.source_notes
@@ -221,25 +195,22 @@ def enumerate_semantic_set_candidates(
             reason="candidate_scope_bound",
         )
     return tuple(
-        SemanticSetCandidate(f"candidate-{index}", item.fact, item.direction)
-        for index, item in enumerate(ordered)
+        SemanticSetCandidate(f"candidate-{index}", fact) for index, fact in enumerate(ordered)
     )
 
 
 def resolve_semantic_set(
     intent: SemanticSetIntent,
     *,
-    anchor_id: str,
     repository: VaultRepository,
     schema: dict,
     selector: SemanticSetSelector,
     bounds: SemanticSetBounds = DEFAULT_SEMANTIC_SET_BOUNDS,
 ) -> SemanticSetResolution:
-    """Select and re-ground one bounded semantic set for an already resolved canonical anchor.
+    """Select and re-ground one bounded semantic set without requiring a subject Note.
 
     Args:
         intent: Planner wording with no canonical IDs or fact locators.
-        anchor_id: Core-resolved stable identity for the one source anchor.
         repository: Authoritative Markdown repository.
         schema: Active canonical note schema.
         selector: Injected candidate-only semantic selection boundary.
@@ -248,10 +219,8 @@ def resolve_semantic_set(
     Returns:
         A grounded set or a fail-closed structured outcome.
     """
-    if not isinstance(anchor_id, str) or not anchor_id:
-        raise ValueError("Semantic-set anchor ID must be non-empty")
     projector = RelationshipEvidenceProjector(repository, schema)
-    candidates = enumerate_semantic_set_candidates(projector, anchor_id, bounds=bounds)
+    candidates = enumerate_semantic_set_candidates(projector, bounds=bounds)
     if isinstance(candidates, SemanticSetResolution):
         return candidates
     if not candidates:
@@ -281,7 +250,7 @@ def resolve_semantic_set(
             SemanticSetOutcome.NO_RELEVANT_EVIDENCE,
             candidate_count=len(candidates),
         )
-    grounded = _ground_selection(projector, anchor_id, candidates, selection, bounds)
+    grounded = _ground_selection(projector, intent, candidates, selection, bounds)
     if isinstance(grounded, SemanticSetResolution):
         return grounded
     return SemanticSetResolution(
@@ -297,9 +266,9 @@ def serialize_semantic_set_candidate_payload(
     """Serialize the exact selector-visible candidate payload for deterministic budget evidence."""
     return json.dumps(
         {
-            "anchor_kind": intent.anchor_kind,
-            "anchor_query": intent.anchor_query,
-            "group_query": intent.group_query,
+            "subject_kind": intent.subject_kind,
+            "subject_query": intent.subject_query,
+            "member_query": intent.member_query,
             "explicit_qualifiers": intent.explicit_qualifiers,
             "asks_exhaustive": intent.asks_exhaustive,
             "candidates": [{"id": item.id, "text": item.fact.text} for item in candidates],
@@ -307,31 +276,6 @@ def serialize_semantic_set_candidate_payload(
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
-
-
-def resolve_semantic_set_anchor(
-    intent: SemanticSetIntent,
-    *,
-    authenticated_actor: AuthenticatedActorContext | None,
-    self_binding_repository: SelfBindingRepository | None,
-    existing_resolver: Callable[[str], ExistingEntityResolution],
-) -> tuple[SemanticSetOutcome, str | None]:
-    """Resolve a self or existing intent anchor through existing identity authority."""
-    if intent.anchor_kind == "self":
-        if authenticated_actor is None or self_binding_repository is None:
-            return SemanticSetOutcome.AMBIGUOUS_REFERENCE, None
-        try:
-            return (
-                SemanticSetOutcome.ANSWERABLE,
-                self_binding_repository.resolve(authenticated_actor.stable_user_id).person_note_id,
-            )
-        except SelfBindingError:
-            return SemanticSetOutcome.AMBIGUOUS_REFERENCE, None
-    assert intent.anchor_query is not None
-    resolution = existing_resolver(intent.anchor_query)
-    if resolution.outcome is not ExistingEntityOutcome.RESOLVED or resolution.id is None:
-        return SemanticSetOutcome.AMBIGUOUS_REFERENCE, None
-    return SemanticSetOutcome.ANSWERABLE, resolution.id
 
 
 def _validate_selection(
@@ -386,7 +330,7 @@ def _validate_selection(
 
 def _ground_selection(
     projector: RelationshipEvidenceProjector,
-    anchor_id: str,
+    intent: SemanticSetIntent,
     candidates: Sequence[SemanticSetCandidate],
     selection: SetEvidenceSelection,
     bounds: SemanticSetBounds,
@@ -439,7 +383,8 @@ def _ground_selection(
         return SemanticSetResolution(SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="member_bound")
     facts = tuple(current_facts.values())
     return GroundedSemanticSet(
-        anchor_id,
+        intent.subject_kind,
+        intent.subject_query,
         tuple(members),
         SemanticSetCompleteness.COMPLETE_WITHIN_SCANNED_SCOPE,
         len({fact.source.id for fact in facts}),

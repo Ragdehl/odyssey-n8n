@@ -83,7 +83,10 @@ def load_registry(
 
 
 def conservative_preflight(
-    schema: Mapping[str, Any], cases_payload: Mapping[str, Any]
+    schema: Mapping[str, Any],
+    cases_payload: Mapping[str, Any],
+    *,
+    teaching_examples: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Calculate a no-cache Luna-only ceiling from the checked-in pricing snapshot."""
     if (
@@ -93,7 +96,9 @@ def conservative_preflight(
         or MAX_PROVIDER_CALLS != LOGICAL_CASE_COUNT
     ):
         raise ValueError("Semantic-set gate provider configuration is unsafe")
-    prompt = render_luna_experimental_prompt(schema, cases_payload["fixed_context"])
+    prompt = render_luna_experimental_prompt(
+        schema, cases_payload["fixed_context"], teaching_examples=teaching_examples
+    )
     output_schema = luna_experimental_result_json_schema(schema)
     serialized_request_bytes = max(
         len(prompt.encode("utf-8"))

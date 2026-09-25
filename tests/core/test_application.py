@@ -28,12 +28,10 @@ from odyssey_core import (
     WriteAction,
     WriteTargetOutcome,
 )
-from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.observability import OperationalOutcome, ProviderCallEvidence
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 from odyssey_core.reference_binding import PendingReference, ReferenceRenderingResult
 from odyssey_core.reference_preflight import UnitTargetPreflight
-from odyssey_core.resolution import ExistingEntityOutcome
 from odyssey_core.semantic_sets import SemanticSetOutcome, SemanticSetResolution
 
 
@@ -81,7 +79,9 @@ def run(plan: RequestPlan, monkeypatch: pytest.MonkeyPatch, **kwargs: Any):
     )
 
 
-def semantic_set_plan(*, anchor_kind: str = "self", anchor_query: str | None = None) -> RequestPlan:
+def semantic_set_plan(
+    *, subject_kind: str = "self", subject_query: str | None = None
+) -> RequestPlan:
     """Build one validated-shaped semantic-set retrieval plan for application routing tests."""
     return RequestPlan(
         (
@@ -93,7 +93,7 @@ def semantic_set_plan(*, anchor_kind: str = "self", anchor_query: str | None = N
                     (),
                     None,
                     semantic_set=SemanticSetIntent(
-                        anchor_kind, anchor_query, "elementos del grupo", "", True
+                        subject_kind, subject_query, "elementos del grupo", "", True
                     ),
                 )
             ),
@@ -113,10 +113,10 @@ def test_execute_request_defers_semantic_set_without_an_injected_selector(
     assert result.action_results[0].reason == "semantic_set_selector_unavailable"
 
 
-def test_execute_request_routes_self_semantic_set_through_core_anchor_binding(
+def test_execute_request_routes_semantic_set_directly_to_core_fact_discovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bind the self anchor before invoking the injected bounded semantic-set selector."""
+    """Do not resolve the semantic subject as a Note before Core discovers fact evidence."""
     calls: list[dict[str, object]] = []
 
     def resolve(*args: object, **kwargs: object) -> SemanticSetResolution:
@@ -127,38 +127,31 @@ def test_execute_request_routes_self_semantic_set_through_core_anchor_binding(
     result = run(
         semantic_set_plan(),
         monkeypatch,
-        authenticated_actor=AuthenticatedActorContext("00000000-0000-4000-8000-000000000000"),
-        self_binding_repository=SimpleNamespace(
-            resolve=lambda stable_user_id: SimpleNamespace(person_note_id="self-note-id")
-        ),
         semantic_set_selector=SimpleNamespace(select=lambda request: request),
     )
 
     assert result.status is ApplicationStatus.COMPLETED
     assert result.action_results[0].status is application.ActionStatus.COMPLETED
-    assert calls[0]["anchor_id"] == "self-note-id"
+    assert "anchor_id" not in calls[0]
 
 
-def test_execute_request_defers_an_ambiguous_existing_semantic_anchor(
+def test_execute_request_passes_textual_semantic_subject_without_existing_entity_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Keep an existing-name collision structured for later clarification instead of guessing."""
+    """Keep textual subjects out of the existing-entity resolver and source topology in Core."""
     monkeypatch.setattr(
         application,
-        "resolve_existing_entity",
-        lambda *args, **kwargs: SimpleNamespace(
-            outcome=ExistingEntityOutcome.AMBIGUOUS,
-            id=None,
-        ),
+        "resolve_semantic_set",
+        lambda *args, **kwargs: SemanticSetResolution(SemanticSetOutcome.ANSWERABLE),
     )
     result = run(
-        semantic_set_plan(anchor_kind="existing", anchor_query="Marta"),
+        semantic_set_plan(subject_kind="query", subject_query="kit básico"),
         monkeypatch,
         semantic_set_selector=SimpleNamespace(select=lambda request: request),
     )
 
-    assert result.status is ApplicationStatus.NEEDS_ATTENTION
-    assert result.action_results[0].reason == SemanticSetOutcome.AMBIGUOUS_REFERENCE.value
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.action_results[0].semantic_set is not None
 
 
 def test_retrieve_uses_existing_context_and_propagates_one_request_id(

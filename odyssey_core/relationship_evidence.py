@@ -254,6 +254,19 @@ class RelationshipEvidenceProjector:
             return ()
         return tuple(item.fact for item in source.facts)
 
+    def all_visible_facts(self) -> tuple[CanonicalFact, ...]:
+        """Return every active current visible fact block in canonical path/locator order.
+
+        This is a discovery primitive only. Callers still impose their own explicit fact, source,
+        and serialized-byte bounds before passing any candidate to a semantic selector.
+        """
+        notes = self._load_notes()
+        return tuple(
+            item.fact
+            for _note_id, note in sorted(notes.items(), key=lambda item: item[1].identity.path)
+            for item in note.facts
+        )
+
     def project_targets(self, source_id: str, fact_locator: str) -> TargetProjection:
         """Resolve every literal direct target in one selected canonical fact or fail closed.
 

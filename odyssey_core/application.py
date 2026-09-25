@@ -55,12 +55,10 @@ from .request_planning import (
     SelectionCriteria,
     WriteAction,
 )
-from .resolution import resolve_existing_entity
 from .semantic_sets import (
     SemanticSetOutcome,
     SemanticSetResolution,
     resolve_semantic_set,
-    resolve_semantic_set_anchor,
 )
 from .storage import VaultRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome
@@ -590,40 +588,11 @@ def _execute_retrieve(
                 ActionStatus.DEFERRED,
                 reason="semantic_set_selector_unavailable",
             )
-        intent = action.plan.semantic_set
-
-        def resolve_existing_anchor(query: str):
-            """Resolve an existing semantic-set anchor through the established identity boundary."""
-            return resolve_existing_entity(
-                query,
-                action.plan.query,
-                repository=repository,
-                schema=schema,
-                semantic_index=semantic_index,
-                embedder=embedder,
-                contextual_reasoner=contextual_reasoner,
-                semantic_limit=semantic_limit,
-            )
-
         try:
-            anchor_outcome, anchor_id = resolve_semantic_set_anchor(
-                intent,
-                authenticated_actor=authenticated_actor,
-                self_binding_repository=self_binding_repository,
-                existing_resolver=resolve_existing_anchor,
-            )
-            if anchor_outcome is not SemanticSetOutcome.ANSWERABLE or anchor_id is None:
-                return ActionResult(
-                    action_index,
-                    action.kind,
-                    ActionStatus.DEFERRED,
-                    reason=anchor_outcome.value,
-                )
             semantic_set = spans.invoke(
                 "semantic_set_resolution",
                 resolve_semantic_set,
-                intent,
-                anchor_id=anchor_id,
+                action.plan.semantic_set,
                 repository=repository,
                 schema=schema,
                 selector=semantic_set_selector,

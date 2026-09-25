@@ -55,7 +55,7 @@ Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
-For a finite semantic group drawn from several current facts on one source, set semantic_set only on RetrieveAction. Use anchor_kind=self with anchor_query=null for the authenticated person, or anchor_kind=existing with a bounded existing-source query. Preserve only the group wording, explicit qualifiers, and asks_exhaustive. Set entity=null, self_target=null, link_scope=null, filters=[], and relational_reference=null. Never include stable IDs, paths, fact locators, candidate lists, members, links, mutation authority, or inferred relationship types. Core alone finds, bounds, and validates canonical evidence. Do not use semantic_set for writes or delegate actions.
+For a finite semantic group, set semantic_set only on RetrieveAction. Use subject_kind=self with subject_query=null when the current human is the semantic subject, otherwise subject_kind=query with bounded subject wording. The subject is user meaning, not a claim that a canonical Note exists. Preserve the requested member wording, explicit qualifiers, and asks_exhaustive. Core alone discovers bounded current fact sources and validates canonical evidence. Set entity=null, self_target=null, link_scope=null, filters=[], and relational_reference=null. Never include stable IDs, paths, fact locators, candidate lists, members, links, mutation authority, or inferred relationship types. Use semantic_set for group members/items even when the group is described only in fact text; use ordinary retrieval for one fact about a subject. Do not use semantic_set for writes or delegate actions.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
@@ -198,11 +198,11 @@ class RelationalReference:
 
 @dataclass(frozen=True, slots=True)
 class SemanticSetIntent:
-    """Preserve a bounded group request without asserting members or canonical identity."""
+    """Preserve a bounded semantic subject and requested members without storage assertions."""
 
-    anchor_kind: str
-    anchor_query: str | None
-    group_query: str
+    subject_kind: str
+    subject_query: str | None
+    member_query: str
     explicit_qualifiers: str
     asks_exhaustive: bool
 
@@ -1112,16 +1112,16 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                     {
                         "type": "object",
                         "properties": {
-                            "anchor_kind": {"type": "string", "enum": ["self", "existing"]},
-                            "anchor_query": {"type": ["string", "null"]},
-                            "group_query": {"type": "string"},
+                            "subject_kind": {"type": "string", "enum": ["self", "query"]},
+                            "subject_query": {"type": ["string", "null"]},
+                            "member_query": {"type": "string"},
                             "explicit_qualifiers": {"type": "string"},
                             "asks_exhaustive": {"type": "boolean"},
                         },
                         "required": [
-                            "anchor_kind",
-                            "anchor_query",
-                            "group_query",
+                            "subject_kind",
+                            "subject_query",
+                            "member_query",
                             "explicit_qualifiers",
                             "asks_exhaustive",
                         ],
@@ -1462,32 +1462,32 @@ def _validate_semantic_set_intent(raw: Any, *, label: str) -> SemanticSetIntent 
     if raw is None:
         return None
     if not isinstance(raw, dict) or set(raw) != {
-        "anchor_kind",
-        "anchor_query",
-        "group_query",
+        "subject_kind",
+        "subject_query",
+        "member_query",
         "explicit_qualifiers",
         "asks_exhaustive",
     }:
         raise RequestPlanningError(f"{label} semantic set fields are invalid")
-    anchor_kind = raw["anchor_kind"]
-    anchor_query = raw["anchor_query"]
-    group_query = raw["group_query"]
+    subject_kind = raw["subject_kind"]
+    subject_query = raw["subject_query"]
+    member_query = raw["member_query"]
     qualifiers = raw["explicit_qualifiers"]
     exhaustive = raw["asks_exhaustive"]
     if (
-        anchor_kind not in {"self", "existing"}
-        or not isinstance(group_query, str)
-        or not group_query.strip()
+        subject_kind not in {"self", "query"}
+        or not isinstance(member_query, str)
+        or not member_query.strip()
         or not isinstance(qualifiers, str)
         or not isinstance(exhaustive, bool)
-        or (anchor_kind == "self" and anchor_query is not None)
+        or (subject_kind == "self" and subject_query is not None)
         or (
-            anchor_kind == "existing"
-            and (not isinstance(anchor_query, str) or not anchor_query.strip())
+            subject_kind == "query"
+            and (not isinstance(subject_query, str) or not subject_query.strip())
         )
     ):
         raise RequestPlanningError(f"{label} semantic set is invalid")
-    for value in (anchor_query, group_query, qualifiers):
+    for value in (subject_query, member_query, qualifiers):
         if value is None:
             continue
         if (
@@ -1500,9 +1500,9 @@ def _validate_semantic_set_intent(raw: Any, *, label: str) -> SemanticSetIntent 
         ):
             raise RequestPlanningError(f"{label} semantic set wording is unsafe")
     return SemanticSetIntent(
-        anchor_kind=anchor_kind,
-        anchor_query=anchor_query.strip() if isinstance(anchor_query, str) else None,
-        group_query=group_query.strip(),
+        subject_kind=subject_kind,
+        subject_query=subject_query.strip() if isinstance(subject_query, str) else None,
+        member_query=member_query.strip(),
         explicit_qualifiers=qualifiers.strip(),
         asks_exhaustive=exhaustive,
     )

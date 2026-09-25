@@ -197,7 +197,6 @@ from .semantic_sets import (
     SetMemberOccurrence,
     enumerate_semantic_set_candidates,
     resolve_semantic_set,
-    resolve_semantic_set_anchor,
     serialize_semantic_set_candidate_payload,
 )
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
@@ -335,7 +334,6 @@ __all__ = [
     "SetMemberOccurrence",
     "enumerate_semantic_set_candidates",
     "resolve_semantic_set",
-    "resolve_semantic_set_anchor",
     "serialize_semantic_set_candidate_payload",
     "WriteTargetDecision",
     "WriteTargetOutcome",

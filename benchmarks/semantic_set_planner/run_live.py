@@ -64,6 +64,8 @@ def run_cases(
     cases: list[dict[str, str]],
     oracles: dict[str, dict[str, Any]],
     evidence: TextIO,
+    *,
+    evaluator=evaluate_result,
 ) -> list[dict[str, Any]]:
     """Make one Luna call per case and stop immediately on any non-pass outcome."""
     rows: list[dict[str, Any]] = []
@@ -82,7 +84,7 @@ def run_cases(
             rows.append(row)
             _write_row(evidence, row)
             break
-        evaluation = evaluate_result(result, oracles[case["id"]])
+        evaluation = evaluator(result, oracles[case["id"]])
         row = _row(
             case["id"],
             evaluation.classification,
