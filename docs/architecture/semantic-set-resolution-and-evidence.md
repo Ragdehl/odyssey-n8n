@@ -16,8 +16,14 @@ The first two frozen v3 planner-only attempts each stopped on the first case wit
 or model conclusion. Direct unauthenticated transport diagnostics currently succeed, so no
 persistent connectivity defect is established. The experiment now records a bounded chain of
 exception **type names only** for a future failure; it retains no exception message, request,
-prompt, header, credential, or response content. This changes no semantic/model contract. The
-reviewed retry2 evidence path is prepared but unexecuted; it requires fresh explicit authorization.
+prompt, header, credential, or response content. This changes no semantic/model contract.
+
+Retry2 subsequently reached semantic evidence: SSET01 passed, while SSET02 retained its complete
+literal-set meaning and exhaustive request but misclassified the contained-object subject as
+`self`. The frozen v3 oracle remains correct: possession by the user does not make the user the
+semantic subject. A narrow generic possessive-object versus self rule and a non-evaluation
+emergency-bag teaching example are frozen in unexecuted v4; no Core semantic behavior changed.
+The separate historical-regression gate remains pending. DEV and PROD remain untouched.
 
 ## Objective and acceptance boundary
 
@@ -104,6 +110,11 @@ automatic creation. Untyped/literal requests retain the bounded canonical fact s
 literal spans alongside linked typed identities. Every final member is re-read and exact-grounded
 against current Markdown; scope/evidence overflow is `INCOMPLETE_EVIDENCE` rather than Top-K
 truncation or a completeness claim.
+
+`subject_kind=self` means the authenticated human directly anchors the membership relation. A
+possessive object or concept is not self-targeting merely because the wording says “my”: when that
+object owns or contains the requested members, use `subject_kind=query` with bounded subject text.
+That subject need not resolve to a Note.
 
 An optional `SelectionCriteria.semantic_set` describes the **intent**, not the result: a semantic
 subject (`self` or bounded user wording), requested members in the user's words, explicit qualifiers, and

@@ -40,6 +40,7 @@ from benchmarks.semantic_set_planner.v3_regression_gate import (
     load_v3_regression_registry,
     v3_regression_preflight,
 )
+from benchmarks.semantic_set_planner.v4_gate import load_v4_registry, v4_preflight
 from odyssey_core.experimental_luna_planning import validate_luna_experimental_result
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -225,6 +226,64 @@ def test_v3_evaluator_requires_lossless_meaning_and_schema_member_type(schema: d
     )
     cases, _oracles = load_v3_registry()
     assert float(v3_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10
+
+
+def test_v4_freezes_v3_evaluations_with_possessive_subject_teaching(schema: dict) -> None:
+    """Version the model-facing correction without rewriting v3 evidence contracts."""
+    v3_cases = json.loads((ROOT / "benchmarks/semantic_set_planner/v3_cases.json").read_text())
+    v3_oracles = json.loads((ROOT / "benchmarks/semantic_set_planner/v3_oracle.json").read_text())
+    cases, oracles = load_v4_registry()
+    teaching = json.loads(
+        (ROOT / "benchmarks/semantic_set_planner/v4_teaching_examples.json").read_text()
+    )["examples"]
+
+    assert cases["cases"] == v3_cases["cases"]
+    assert list(oracles.values()) == v3_oracles["oracles"]
+    assert [case["id"] for case in cases["cases"]] == [
+        "SSET01",
+        "SSET02",
+        "SSET03",
+        "SSET04",
+        "REG01",
+        "REG02",
+    ]
+    assert all(case["request"] not in str(teaching) for case in cases["cases"])
+    possessive = next(
+        item for item in teaching if item["id"] == "semantic-set-possessive-object-subject"
+    )
+    assert possessive["request"] == "What is in my emergency bag?"
+    intent = possessive["result"]["actions"][0]["plan"]["semantic_set"]
+    assert intent["subject_kind"] == "query"
+    assert intent["subject_query"] == "my emergency bag"
+    assert intent["member_type"] is None
+    assert validate_luna_experimental_result(possessive["result"], schema)
+    assert float(v4_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10
+
+
+def test_v4_subject_contract_distinguishes_human_and_possessive_object(schema: dict) -> None:
+    """Keep prompt examples contract-valid without claiming they predict Luna output."""
+    _cases, _oracles = load_v4_registry()
+    self_anchored = semantic("self", None, "people I travelled with", "Japan")
+    self_anchored["member_type"] = "person"
+    possessive_object = semantic("query", "my emergency bag", "items")
+
+    self_intent = (
+        validated(plan(selection("people I travelled with to Japan", self_anchored)), schema)
+        .actions[0]
+        .plan.semantic_set
+    )
+    assert self_intent is not None
+    assert self_intent.subject_kind == "self"
+    assert self_intent.subject_query is None
+    query_intent = (
+        validated(plan(selection("items in my emergency bag", possessive_object)), schema)
+        .actions[0]
+        .plan.semantic_set
+    )
+    assert query_intent is not None
+    assert query_intent.subject_kind == "query"
+    assert query_intent.subject_query == "my emergency bag"
+    assert query_intent.member_type is None
 
 
 def test_v3_regression_gate_reuses_exact_historical_contracts(schema: dict) -> None:
