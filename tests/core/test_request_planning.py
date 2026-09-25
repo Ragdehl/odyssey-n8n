@@ -1501,6 +1501,55 @@ def test_semantic_set_rejects_unsafe_or_unbounded_planner_wording(
         validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
 
 
+@pytest.mark.parametrize(
+    ("mutate", "expected_code"),
+    [
+        (
+            lambda selected: selected["semantic_set"].pop("member_query"),
+            PlannerValidationCode.INVALID_SEMANTIC_SET_FIELDS,
+        ),
+        (
+            lambda selected: selected["semantic_set"].update(
+                {"subject_kind": "self", "subject_query": "mi familia"}
+            ),
+            PlannerValidationCode.INVALID_SEMANTIC_SET_INVARIANT,
+        ),
+        (
+            lambda selected: selected.update({"self_target": "self"}),
+            PlannerValidationCode.SELECTION_MODE_CONFLICT,
+        ),
+        (
+            lambda selected: selected["semantic_set"].update({"member_query": "people/marta.md"}),
+            PlannerValidationCode.UNSAFE_SEMANTIC_SET_WORDING,
+        ),
+    ],
+)
+def test_semantic_set_validation_emits_safe_bounded_reason_codes(
+    schema: dict, mutate, expected_code: PlannerValidationCode
+) -> None:
+    """Retain selection-safe reasons without retaining planner wording or exception text."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    mutate(selected)
+
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+    assert raised.value.validation_stage is PlannerValidationStage.SELECTION
+    assert raised.value.validation_code is expected_code
+
+
+def test_selection_shape_failure_emits_safe_bounded_reason_code(schema: dict) -> None:
+    """Keep generic selection-shape failures distinguishable from semantic-set failures."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    selected["unexpected"] = True
+
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+    assert raised.value.validation_stage is PlannerValidationStage.SELECTION
+    assert raised.value.validation_code is PlannerValidationCode.INVALID_SELECTION_FIELDS
+
+
 def test_semantic_set_is_rejected_from_delegate_selection(schema: dict) -> None:
     """Do not grant a semantic-set intent to a non-retrieval specialized capability."""
     with pytest.raises(RequestPlanningError, match="semantic set requires RetrieveAction"):

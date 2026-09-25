@@ -26,6 +26,12 @@ from benchmarks.semantic_set_planner.run_live_v3_retry2 import (
 from benchmarks.semantic_set_planner.run_live_v4_retry1 import (
     OUTPUT_PATH as V4_RETRY1_OUTPUT_PATH,
 )
+from benchmarks.semantic_set_planner.run_live_v4_retry2 import (
+    CONTINUATION_CASE_IDS,
+)
+from benchmarks.semantic_set_planner.run_live_v4_retry2 import (
+    OUTPUT_PATH as V4_RETRY2_OUTPUT_PATH,
+)
 from benchmarks.semantic_set_planner.v2_gate import (
     evaluate_v2_result,
     load_v2_registry,
@@ -289,6 +295,21 @@ def test_v4_retry1_wrapper_delegates_to_the_exact_frozen_v4_logic(
     assert retry1.main(["--confirm-live-provider-calls"]) == 0
     assert frozen_v4.OUTPUT_PATH != V4_RETRY1_OUTPUT_PATH
     assert observed == [["--confirm-live-provider-calls"]]
+
+
+def test_v4_retry2_continues_only_after_the_two_immutable_pass_prerequisites(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Protect passed cases while retaining the original ordering for remaining cases."""
+    import benchmarks.semantic_set_planner.run_live_v4_retry2 as retry2
+
+    assert V4_RETRY2_OUTPUT_PATH.name == "semantic-set-slice1-v4-luna-gate-retry2.jsonl"
+    assert CONTINUATION_CASE_IDS == ("SSET03", "SSET04", "REG01", "REG02")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert V4_RETRY2_OUTPUT_PATH.exists() is False
+    with pytest.raises(SystemExit, match="preflight refused"):
+        retry2.main(["--confirm-live-provider-calls"])
+    assert V4_RETRY2_OUTPUT_PATH.exists() is False
 
 
 def test_v4_subject_contract_distinguishes_human_and_possessive_object(schema: dict) -> None:

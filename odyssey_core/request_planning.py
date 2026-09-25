@@ -124,6 +124,14 @@ class PlannerValidationCode(StrEnum):
     INVALID_MUTATION = "INVALID_MUTATION"
     INVALID_LIMITATIONS = "INVALID_LIMITATIONS"
     EMPTY_REQUEST = "EMPTY_REQUEST"
+    INVALID_SELECTION_FIELDS = "INVALID_SELECTION_FIELDS"
+    INVALID_ENTITY = "INVALID_ENTITY"
+    INVALID_SELF_TARGET = "INVALID_SELF_TARGET"
+    SELECTION_MODE_CONFLICT = "SELECTION_MODE_CONFLICT"
+    RELATIONAL_REFERENCE_CONFLICT = "RELATIONAL_REFERENCE_CONFLICT"
+    INVALID_SEMANTIC_SET_FIELDS = "INVALID_SEMANTIC_SET_FIELDS"
+    INVALID_SEMANTIC_SET_INVARIANT = "INVALID_SEMANTIC_SET_INVARIANT"
+    UNSAFE_SEMANTIC_SET_WORDING = "UNSAFE_SEMANTIC_SET_WORDING"
 
 
 class RequestPlanningError(ValueError):
@@ -159,7 +167,9 @@ def _validation_boundary(
             except RequestPlanningError as error:
                 if error.validation_stage is not None:
                     raise
-                raise RequestPlanningError(str(error), stage=stage, code=code) from error
+                raise RequestPlanningError(
+                    str(error), stage=stage, code=error.validation_code or code
+                ) from error
 
         return wrapped
 
@@ -1401,7 +1411,9 @@ def _validate_selection(
         and set(raw) != legacy_required
         and set(raw) != legacy_minimum
     ):
-        raise RequestPlanningError(f"{label} fields are invalid")
+        raise RequestPlanningError(
+            f"{label} fields are invalid", code=PlannerValidationCode.INVALID_SELECTION_FIELDS
+        )
     entity, query, note_type, raw_filters = (
         raw.get("entity"),
         raw["query"],
@@ -1409,7 +1421,9 @@ def _validate_selection(
         raw["filters"],
     )
     if entity is not None and (not isinstance(entity, str) or not entity.strip()):
-        raise RequestPlanningError(f"{label} entity must be null or non-empty")
+        raise RequestPlanningError(
+            f"{label} entity must be null or non-empty", code=PlannerValidationCode.INVALID_ENTITY
+        )
     if not isinstance(query, str) or not query.strip():
         raise RequestPlanningError(
             f"{label} query must be non-empty",
@@ -1423,7 +1437,9 @@ def _validate_selection(
             code=PlannerValidationCode.INVALID_TYPE,
         )
     if not isinstance(raw_filters, list):
-        raise RequestPlanningError(f"{label} filters must be a list")
+        raise RequestPlanningError(
+            f"{label} filters must be a list", code=PlannerValidationCode.INVALID_SELECTION_FIELDS
+        )
     _validate_planner_filters(raw_filters, note_type, capabilities)
     try:
         validate_context_filters(dict(schema), raw_filters, note_type=note_type)
@@ -1436,9 +1452,14 @@ def _validate_selection(
     link_scope = _validate_link_scope(raw.get("link_scope"), schema, capabilities, label=label)
     self_target = raw.get("self_target")
     if self_target not in (None, SELF_TARGET):
-        raise RequestPlanningError(f"{label} self_target is invalid")
+        raise RequestPlanningError(
+            f"{label} self_target is invalid", code=PlannerValidationCode.INVALID_SELF_TARGET
+        )
     if self_target == SELF_TARGET and (entity is not None or note_type not in (None, "person")):
-        raise RequestPlanningError(f"{label} self_target must select the direct person target")
+        raise RequestPlanningError(
+            f"{label} self_target must select the direct person target",
+            code=PlannerValidationCode.INVALID_SELF_TARGET,
+        )
     relational = _validate_relational_reference(raw.get("relational_reference"), label=label)
     semantic_set = _validate_semantic_set_intent(
         raw.get("semantic_set"), label=label, allowed_member_types=capabilities["types"]
@@ -1446,13 +1467,22 @@ def _validate_selection(
     if relational is not None and (
         entity is not None or self_target is not None or link_scope is not None or raw_filters
     ):
-        raise RequestPlanningError(f"{label} relational reference conflicts with direct selection")
+        raise RequestPlanningError(
+            f"{label} relational reference conflicts with direct selection",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
     if relational is not None and semantic_set is not None:
-        raise RequestPlanningError(f"{label} semantic set conflicts with relational reference")
+        raise RequestPlanningError(
+            f"{label} semantic set conflicts with relational reference",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
     if semantic_set is not None and (
         entity is not None or self_target is not None or link_scope is not None or raw_filters
     ):
-        raise RequestPlanningError(f"{label} semantic set conflicts with direct selection")
+        raise RequestPlanningError(
+            f"{label} semantic set conflicts with direct selection",
+            code=PlannerValidationCode.SELECTION_MODE_CONFLICT,
+        )
     return SelectionCriteria(
         entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
@@ -1481,7 +1511,10 @@ def _validate_semantic_set_intent(
         "asks_exhaustive",
     }
     if not isinstance(raw, dict) or set(raw) not in (required, required | {"member_type"}):
-        raise RequestPlanningError(f"{label} semantic set fields are invalid")
+        raise RequestPlanningError(
+            f"{label} semantic set fields are invalid",
+            code=PlannerValidationCode.INVALID_SEMANTIC_SET_FIELDS,
+        )
     subject_kind = raw["subject_kind"]
     subject_query = raw["subject_query"]
     member_query = raw["member_query"]
@@ -1501,7 +1534,10 @@ def _validate_semantic_set_intent(
             and (not isinstance(subject_query, str) or not subject_query.strip())
         )
     ):
-        raise RequestPlanningError(f"{label} semantic set is invalid")
+        raise RequestPlanningError(
+            f"{label} semantic set is invalid",
+            code=PlannerValidationCode.INVALID_SEMANTIC_SET_INVARIANT,
+        )
     for value in (subject_query, member_query, qualifiers):
         if value is None:
             continue
@@ -1513,7 +1549,10 @@ def _validate_semantic_set_intent(
             or ".md" in value.casefold()
             or any(character in value for character in ("/", "\\"))
         ):
-            raise RequestPlanningError(f"{label} semantic set wording is unsafe")
+            raise RequestPlanningError(
+                f"{label} semantic set wording is unsafe",
+                code=PlannerValidationCode.UNSAFE_SEMANTIC_SET_WORDING,
+            )
     return SemanticSetIntent(
         subject_kind=subject_kind,
         subject_query=subject_query.strip() if isinstance(subject_query, str) else None,
