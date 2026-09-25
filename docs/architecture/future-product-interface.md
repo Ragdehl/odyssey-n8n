@@ -240,7 +240,14 @@ canonical Markdown write
 Git/request history + index refresh
 ```
 
-Do not implement browser editing as an independent CRUD store. Decide from real use whether simple direct text editing, structured field editing, or conversational correction is the best first editor.
+Do not implement browser editing as an independent CRUD store or expose unrestricted raw Markdown as
+the normal editing surface. Decide from real use how structured fact/property editing and
+conversational correction should share the same Core operations.
+
+Issue #134's future fact edit/delete, multi-select deletion, explicit `@` binding, and stable-ID
+rename must reuse the Core mutation, stale-write and staged-clarification boundaries proposed in
+[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md). UI-4 remains a
+later product stage: no direct Notes mutation behavior is approved by that design challenge.
 
 External Obsidian/filesystem edits remain a related but separate ingestion direction.
 
