@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "frozen_before_provider_calls": true,
+  "oracles": [
+    {
+      "id": "SSET01",
+      "kind": "semantic_set",
+      "anchor_kind": "self",
+      "anchor_terms": [],
+      "group_term_sets": [["familia"], ["persona", "familiar"]],
+      "qualifier_term_sets": []
+    },
+    {
+      "id": "SSET02",
+      "kind": "semantic_set",
+      "anchor_kind": "existing",
+      "anchor_terms": ["kit", "básic"],
+      "group_term_sets": [["pieza", "componente"]],
+      "qualifier_term_sets": []
+    },
+    {
+      "id": "SSET03",
+      "kind": "semantic_set",
+      "anchor_kind": "existing",
+      "anchor_terms": ["receta", "tortilla"],
+      "group_term_sets": [["ingrediente"]],
+      "qualifier_term_sets": []
+    },
+    {
+      "id": "SSET04",
+      "kind": "semantic_set",
+      "anchor_kind": "self",
+      "anchor_terms": [],
+      "group_term_sets": [["compañ", "persona", "viaj"]],
+      "qualifier_term_sets": [["italia"]],
+      "allow_escalate": false
+    },
+    {
+      "id": "REG01",
+      "kind": "singular_relational",
+      "reference_terms": ["ahijad"]
+    },
+    {
+      "id": "REG02",
+      "kind": "ordinary_named",
+      "query_term_sets": [["marta"], ["trabaj"]]
+    }
+  ]
+}
