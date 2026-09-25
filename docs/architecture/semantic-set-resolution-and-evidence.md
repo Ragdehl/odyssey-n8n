@@ -329,6 +329,27 @@ Include family/work/travel/project/recipe/kit, literal/mixed sets, ambiguous nam
 evidence and stale authority; compare unsafe false answers and partial sets, not just pass rate.
 No provider/model call is part of this design challenge.
 
+### Slice 1 approved deterministic bounds
+
+Slice 1 fixes only the evidence-selection ceilings needed before a selector receives candidates:
+
+| Limit | Value | Deterministic rationale |
+| --- | ---: | --- |
+| source Notes | 16 | Caps the number of canonical files admitted for one anchor while leaving room for direct plus several incoming facts. |
+| candidate facts | 64 | Bounds fragmented visible fact blocks without reusing final retrieval Top-K reduction. |
+| serialized candidate bytes | 16 KiB | Matches the existing bounded `note_result_snapshot` encoded-payload ceiling, including Core-owned source ID and locator framing. |
+| proposed members | 64 | Matches the candidate-fact ceiling and rejects output expansion beyond the supplied evidence. |
+
+The resolver performs the complete direct-plus-incoming scan before testing any of these ceilings.
+If any ceiling is exceeded it returns `INCOMPLETE_EVIDENCE`; it does not select from a prefix. The
+later Slice 2/3/4 retention, provenance-row and progress limits remain open as stated below.
+
+The inherited Luna planner prompt/schema grows from 9,932 to 10,358 serialized compact-schema
+bytes for the active registry. The old frozen relationship live-run authorizations therefore fail
+their deterministic pre-provider cost guard (`$0.469024 > $0.46` for the ten-case run and
+`$0.3785896 > $0.37` for its continuation). Slice 1 performs zero provider calls and does not
+replace either authorization; a later focused gate needs fresh explicit cost authority.
+
 ## Open decisions before implementation approval
 
 - Confirm the current issue #140 body and reconcile any additional acceptance rule with this

@@ -207,6 +207,7 @@ def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
         for selection in selections:
             if isinstance(selection, dict):
                 selection.setdefault("relational_reference", None)
+                selection.setdefault("semantic_set", None)
     return completed
 
 

@@ -286,6 +286,47 @@ class RelationshipEvidenceProjector:
             evidence,
         )
 
+    def resolve_link_occurrence(
+        self, source_id: str, fact_locator: str, start: int, end: int
+    ) -> CanonicalIdentity | None:
+        """Resolve one exact current wikilink span to its stable target identity.
+
+        The caller supplies only a current Core candidate locator and exact fact span.  This method
+        rereads the full canonical snapshot and returns ``None`` for stale, malformed, ambiguous,
+        dangling, or non-link occurrences so callers cannot treat display text as identity proof.
+        """
+        if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end <= start:
+            return None
+        notes = self._load_notes()
+        source = notes.get(source_id)
+        if source is None:
+            return None
+        selected = next((item for item in source.facts if item.fact.locator == fact_locator), None)
+        if selected is None or end > len(selected.fact.text):
+            return None
+        link_text = selected.fact.text[start:end]
+        if not (link_text.startswith("[[") and link_text.endswith("]]")):
+            return None
+        target_text = link_text[2:-2].partition("|")[0].partition("#")[0]
+        target = _safe_link_target(target_text)
+        if target is None:
+            return None
+        path_matches = tuple(
+            note.identity
+            for note in notes.values()
+            if note.identity.path.removesuffix(".md").casefold() == target
+        )
+        if len(path_matches) == 1:
+            return path_matches[0]
+        if "/" in target:
+            return None
+        basename_matches = tuple(
+            note.identity
+            for note in notes.values()
+            if note.identity.path.removesuffix(".md").rsplit("/", 1)[-1].casefold() == target
+        )
+        return basename_matches[0] if len(basename_matches) == 1 else None
+
     def project_entity_evidence_candidates(
         self,
         entity_id: str,

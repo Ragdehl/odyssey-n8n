@@ -51,10 +51,11 @@ Bounded recent conversation evidence may resolve a referent or conversational co
 
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
-Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction when the user explicitly asks to see a collection/list/set of matching notes; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, or relational_reference, use `answer`; do not discard or weaken meaning merely to produce a note set.
+Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction when the user explicitly asks to see a collection/list/set of matching notes; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, relational_reference, or semantic_set, use `answer`; do not discard or weaken meaning merely to produce a note set.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
+For a finite semantic group drawn from several current facts on one source, set semantic_set only on RetrieveAction. Use anchor_kind=self with anchor_query=null for the authenticated person, or anchor_kind=existing with a bounded existing-source query. Preserve only the group wording, explicit qualifiers, and asks_exhaustive. Set entity=null, self_target=null, link_scope=null, filters=[], and relational_reference=null. Never include stable IDs, paths, fact locators, candidate lists, members, links, mutation authority, or inferred relationship types. Core alone finds, bounds, and validates canonical evidence. Do not use semantic_set for writes or delegate actions.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
@@ -182,6 +183,7 @@ class SelectionCriteria:
     link_scope: LinkScope | None
     self_target: str | None = None
     relational_reference: RelationalReference | None = None
+    semantic_set: SemanticSetIntent | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +194,17 @@ class RelationalReference:
     source_kind: str
     source_query: str | None
     members: str
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticSetIntent:
+    """Preserve a bounded group request without asserting members or canonical identity."""
+
+    anchor_kind: str
+    anchor_query: str | None
+    group_query: str
+    explicit_qualifiers: str
+    asks_exhaustive: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -1093,6 +1106,29 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                     },
                 ]
             },
+            "semantic_set": {
+                "anyOf": [
+                    {"type": "null"},
+                    {
+                        "type": "object",
+                        "properties": {
+                            "anchor_kind": {"type": "string", "enum": ["self", "existing"]},
+                            "anchor_query": {"type": ["string", "null"]},
+                            "group_query": {"type": "string"},
+                            "explicit_qualifiers": {"type": "string"},
+                            "asks_exhaustive": {"type": "boolean"},
+                        },
+                        "required": [
+                            "anchor_kind",
+                            "anchor_query",
+                            "group_query",
+                            "explicit_qualifiers",
+                            "asks_exhaustive",
+                        ],
+                        "additionalProperties": False,
+                    },
+                ]
+            },
         },
         "required": [
             "entity",
@@ -1102,6 +1138,7 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
             "link_scope",
             "self_target",
             "relational_reference",
+            "semantic_set",
         ],
         "additionalProperties": False,
     }
@@ -1308,6 +1345,8 @@ def _validate_delegate_action(
             raw_selection, schema, capabilities, label="DelegateAction selection"
         )
     )
+    if selection is not None and selection.semantic_set is not None:
+        raise RequestPlanningError("semantic set requires RetrieveAction")
     return DelegateAction(request=request.strip(), selection=selection)
 
 
@@ -1341,13 +1380,16 @@ def _validate_selection(
         "link_scope",
         "self_target",
         "relational_reference",
+        "semantic_set",
     }
-    previous_required = required - {"relational_reference"}
+    previous_required = required - {"semantic_set"}
+    pre_relational_required = required - {"semantic_set", "relational_reference"}
     legacy_required = {"entity", "query", "type", "filters", "link_scope"}
     legacy_minimum = {"query", "type", "filters"}
     if not isinstance(raw, dict) or (
         set(raw) != required
         and set(raw) != previous_required
+        and set(raw) != pre_relational_required
         and set(raw) != legacy_required
         and set(raw) != legacy_minimum
     ):
@@ -1390,10 +1432,17 @@ def _validate_selection(
     if self_target == SELF_TARGET and (entity is not None or note_type not in (None, "person")):
         raise RequestPlanningError(f"{label} self_target must select the direct person target")
     relational = _validate_relational_reference(raw.get("relational_reference"), label=label)
+    semantic_set = _validate_semantic_set_intent(raw.get("semantic_set"), label=label)
     if relational is not None and (
         entity is not None or self_target is not None or link_scope is not None or raw_filters
     ):
         raise RequestPlanningError(f"{label} relational reference conflicts with direct selection")
+    if relational is not None and semantic_set is not None:
+        raise RequestPlanningError(f"{label} semantic set conflicts with relational reference")
+    if semantic_set is not None and (
+        entity is not None or self_target is not None or link_scope is not None or raw_filters
+    ):
+        raise RequestPlanningError(f"{label} semantic set conflicts with direct selection")
     return SelectionCriteria(
         entity=entity.strip() if isinstance(entity, str) else None,
         query=query.strip(),
@@ -1404,6 +1453,58 @@ def _validate_selection(
         link_scope=link_scope,
         self_target=self_target,
         relational_reference=relational,
+        semantic_set=semantic_set,
+    )
+
+
+def _validate_semantic_set_intent(raw: Any, *, label: str) -> SemanticSetIntent | None:
+    """Accept bounded set wording while rejecting planner-supplied canonical authority."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {
+        "anchor_kind",
+        "anchor_query",
+        "group_query",
+        "explicit_qualifiers",
+        "asks_exhaustive",
+    }:
+        raise RequestPlanningError(f"{label} semantic set fields are invalid")
+    anchor_kind = raw["anchor_kind"]
+    anchor_query = raw["anchor_query"]
+    group_query = raw["group_query"]
+    qualifiers = raw["explicit_qualifiers"]
+    exhaustive = raw["asks_exhaustive"]
+    if (
+        anchor_kind not in {"self", "existing"}
+        or not isinstance(group_query, str)
+        or not group_query.strip()
+        or not isinstance(qualifiers, str)
+        or not isinstance(exhaustive, bool)
+        or (anchor_kind == "self" and anchor_query is not None)
+        or (
+            anchor_kind == "existing"
+            and (not isinstance(anchor_query, str) or not anchor_query.strip())
+        )
+    ):
+        raise RequestPlanningError(f"{label} semantic set is invalid")
+    for value in (anchor_query, group_query, qualifiers):
+        if value is None:
+            continue
+        if (
+            len(value) > 256
+            or any(ord(character) < 32 or ord(character) == 127 for character in value)
+            or _STABLE_ID_PATTERN.search(value)
+            or "[[" in value
+            or ".md" in value.casefold()
+            or any(character in value for character in ("/", "\\"))
+        ):
+            raise RequestPlanningError(f"{label} semantic set wording is unsafe")
+    return SemanticSetIntent(
+        anchor_kind=anchor_kind,
+        anchor_query=anchor_query.strip() if isinstance(anchor_query, str) else None,
+        group_query=group_query.strip(),
+        explicit_qualifiers=qualifiers.strip(),
+        asks_exhaustive=exhaustive,
     )
 
 
@@ -1618,6 +1719,8 @@ def _validate_knowledge_unit(
     target = _validate_selection(
         unit["target"], schema, retrieval_capabilities, label="KnowledgeUnit target"
     )
+    if target.semantic_set is not None:
+        raise RequestPlanningError("semantic set requires RetrieveAction")
     cardinality = unit.get("cardinality", "one")
     if cardinality not in {"one", "all_matching"}:
         raise RequestPlanningError(

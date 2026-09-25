@@ -74,11 +74,11 @@ current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inver
 evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
-The next proposed stage is [semantic set resolution and evidence](semantic-set-resolution-and-evidence.md):
-multi-fact linked/literal set discovery, structured resolution outcomes, staged clarification,
-answer-source Note navigation, and real progress. This is a design challenge only; its slices and
-open decisions are not approved production behavior. Future direct Notes CRUD (#134) must use the
-same Core mutation and clarification boundaries. Tasks and Events remain later directions.
+[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is underway. Slice
+1 implements only Core set evidence and outcomes: bounded multi-fact linked/literal discovery,
+explicit completeness, and structured resolution outcomes. Staged clarification (#137), answer-source
+Note navigation (#138), progress (#136), and direct Notes CRUD (#134) remain later slices. Tasks and
+Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete

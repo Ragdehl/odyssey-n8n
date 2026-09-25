@@ -111,6 +111,7 @@ def selection(
         "link_scope": None,
         "self_target": None,
         "relational_reference": None,
+        "semantic_set": None,
     }
 
 

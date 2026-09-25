@@ -63,7 +63,21 @@ def selection(
         "link_scope": link_scope,
         "self_target": None,
         "relational_reference": None,
+        "semantic_set": None,
     }
+
+
+def semantic_set_selection(query: str) -> dict:
+    """Build the only planner-visible Slice 1 semantic-set retrieval intent."""
+    result = selection(query)
+    result["semantic_set"] = {
+        "anchor_kind": "self",
+        "anchor_query": None,
+        "group_query": "personas de mi familia",
+        "explicit_qualifiers": "",
+        "asks_exhaustive": True,
+    }
+    return result
 
 
 def retrieve(
@@ -1404,3 +1418,26 @@ def test_tag_changes_reject_duplicate_or_conflicting_values(schema: dict) -> Non
             ),
             schema,
         )
+
+
+def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(schema: dict) -> None:
+    """Accept the bounded intent without granting a planner canonical evidence authority."""
+    semantic = {"kind": "retrieve", "plan": semantic_set_selection("¿Quién es mi familia?")}
+    plan = validate_request_plan(output(semantic), schema)
+    intent = plan.actions[0].plan.semantic_set
+    assert intent and intent.anchor_kind == "self" and intent.anchor_query is None
+    assert plan.actions[0].plan.relational_reference is None
+
+    legacy = selection("Marta")
+    legacy.pop("semantic_set")
+    assert (
+        validate_request_plan(output({"kind": "retrieve", "plan": legacy}), schema)
+        .actions[0]
+        .plan.semantic_set
+        is None
+    )
+
+    forbidden = unit("Marta")
+    forbidden["target"] = semantic_set_selection("¿Quién es mi familia?")
+    with pytest.raises(RequestPlanningError, match="requires RetrieveAction"):
+        validate_request_plan(output(write(forbidden)), schema)
