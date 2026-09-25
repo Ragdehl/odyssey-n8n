@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from benchmarks.luna_first_planner.evaluate_v2 import load_frozen_registry_v2
 from benchmarks.semantic_set_planner.gate import (
     MAX_LUNA_INPUT_TOKENS,
 )
@@ -21,6 +22,13 @@ from benchmarks.semantic_set_planner.v3_gate import (
     evaluate_v3_result,
     load_v3_registry,
     v3_preflight,
+)
+from benchmarks.semantic_set_planner.v3_regression_gate import (
+    CASE_IDS as V3_REGRESSION_CASE_IDS,
+)
+from benchmarks.semantic_set_planner.v3_regression_gate import (
+    load_v3_regression_registry,
+    v3_regression_preflight,
 )
 from odyssey_core.experimental_luna_planning import validate_luna_experimental_result
 
@@ -207,3 +215,22 @@ def test_v3_evaluator_requires_lossless_meaning_and_schema_member_type(schema: d
     )
     cases, _oracles = load_v3_registry()
     assert float(v3_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10
+
+
+def test_v3_regression_gate_reuses_exact_historical_contracts(schema: dict) -> None:
+    """Keep the compact live regression gate tied to Phase 20.2E evidence."""
+    cases, oracles = load_v3_regression_registry()
+    historical_cases, historical_oracles = load_frozen_registry_v2()
+    historical_by_id = {case["id"]: case for case in historical_cases["cases"]}
+    teaching = json.loads(
+        (ROOT / "benchmarks/semantic_set_planner/v3_teaching_examples.json").read_text()
+    )["examples"]
+
+    assert tuple(case["id"] for case in cases["cases"]) == V3_REGRESSION_CASE_IDS
+    assert all(case == historical_by_id[case["id"]] for case in cases["cases"])
+    assert all(
+        oracles[case_id] == historical_oracles[case_id] for case_id in V3_REGRESSION_CASE_IDS
+    )
+    details = v3_regression_preflight(schema, cases, teaching)
+    assert details["maximum_provider_calls"] == 10
+    assert float(details["conservative_no_cache_maximum_usd"]) > 0.10
