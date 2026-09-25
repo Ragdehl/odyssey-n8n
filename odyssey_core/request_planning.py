@@ -425,7 +425,10 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
-    selection_schema = _selection_json_schema(retrieval_capabilities)
+    direct_selection_schema = _selection_json_schema(retrieval_capabilities)
+    retrieval_selection_schema = _retrieval_selection_json_schema(
+        retrieval_capabilities, direct_selection_schema
+    )
     property_changes_schema = _property_changes_json_schema(write_capabilities)
     return {
         "type": "object",
@@ -439,7 +442,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                             "type": "object",
                             "properties": {
                                 "kind": {"type": "string", "enum": ["retrieve"]},
-                                "plan": selection_schema,
+                                "plan": retrieval_selection_schema,
                             },
                             "required": ["kind", "plan"],
                             "additionalProperties": False,
@@ -453,7 +456,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                     "items": {
                                         "type": "object",
                                         "properties": {
-                                            "target": selection_schema,
+                                            "target": direct_selection_schema,
                                             "cardinality": {
                                                 "type": "string",
                                                 "enum": ["one", "all_matching"],
@@ -531,7 +534,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                             "properties": {
                                 "kind": {"type": "string", "enum": ["delegate"]},
                                 "request": {"type": "string"},
-                                "selection": {"anyOf": [{"type": "null"}, selection_schema]},
+                                "selection": {"anyOf": [{"type": "null"}, direct_selection_schema]},
                             },
                             "required": ["kind", "request", "selection"],
                             "additionalProperties": False,
@@ -616,7 +619,8 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     plan_branch, clarify_branch = deepcopy(inline["properties"]["result"]["anyOf"])
     actions = plan_branch["properties"]["actions"]
     retrieve_action, write_action, delegate_action = actions["items"]["anyOf"]
-    selection = retrieve_action["properties"]["plan"]
+    retrieve_selection = retrieve_action["properties"]["plan"]
+    selection = write_action["properties"]["units"]["items"]["properties"]["target"]
     filter_array = selection["properties"]["filters"]
     link_scope = selection["properties"]["link_scope"]["anyOf"][1]
     note_selector = link_scope["properties"]["anchor"]
@@ -633,7 +637,8 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     delegate_action["properties"]["selection"] = {
         "anyOf": [{"type": "null"}, {"$ref": "#/$defs/selection"}]
     }
-    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/selection"}
+    retrieve_selection["anyOf"][0] = {"$ref": "#/$defs/selection"}
+    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/retrieve_selection"}
     actions["items"]["anyOf"] = [
         {"$ref": "#/$defs/retrieve_action"},
         {"$ref": "#/$defs/write_action"},
@@ -647,6 +652,7 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
         "note_selector": note_selector,
         "link_scope": link_scope,
         "selection": selection,
+        "retrieve_selection": retrieve_selection,
         "retrieve_action": retrieve_action,
         "write_action": write_action,
         "delegate_action": delegate_action,
@@ -1117,36 +1123,7 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                     },
                 ]
             },
-            "semantic_set": {
-                "anyOf": [
-                    {"type": "null"},
-                    {
-                        "type": "object",
-                        "properties": {
-                            "subject_kind": {"type": "string", "enum": ["self", "query"]},
-                            "subject_query": {"type": ["string", "null"]},
-                            "member_query": {"type": "string"},
-                            "explicit_qualifiers": {"type": "string"},
-                            "asks_exhaustive": {"type": "boolean"},
-                            "member_type": {
-                                "anyOf": [
-                                    {"type": "null"},
-                                    {"type": "string", "enum": list(capabilities["types"])},
-                                ]
-                            },
-                        },
-                        "required": [
-                            "subject_kind",
-                            "subject_query",
-                            "member_query",
-                            "explicit_qualifiers",
-                            "asks_exhaustive",
-                            "member_type",
-                        ],
-                        "additionalProperties": False,
-                    },
-                ]
-            },
+            "semantic_set": {"type": "null"},
         },
         "required": [
             "entity",
@@ -1157,6 +1134,50 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
             "self_target",
             "relational_reference",
             "semantic_set",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def _retrieval_selection_json_schema(
+    capabilities: Mapping[str, Any], direct_selection_schema: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Add the retrieval-only semantic-set mode to the direct selection contract."""
+    semantic_selection = deepcopy(direct_selection_schema)
+    properties = semantic_selection["properties"]
+    properties["entity"] = {"type": "null"}
+    properties["filters"] = {"type": "array", "maxItems": 0}
+    properties["link_scope"] = {"type": "null"}
+    properties["self_target"] = {"type": "null"}
+    properties["relational_reference"] = {"type": "null"}
+    properties["semantic_set"] = _semantic_set_json_schema(capabilities)
+    return {"anyOf": [deepcopy(direct_selection_schema), semantic_selection]}
+
+
+def _semantic_set_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the non-null bounded semantic-set intent accepted only by retrieval."""
+    return {
+        "type": "object",
+        "properties": {
+            "subject_kind": {"type": "string", "enum": ["self", "query"]},
+            "subject_query": {"type": ["string", "null"]},
+            "member_query": {"type": "string"},
+            "explicit_qualifiers": {"type": "string"},
+            "asks_exhaustive": {"type": "boolean"},
+            "member_type": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "string", "enum": list(capabilities["types"])},
+                ]
+            },
+        },
+        "required": [
+            "subject_kind",
+            "subject_query",
+            "member_query",
+            "explicit_qualifiers",
+            "asks_exhaustive",
+            "member_type",
         ],
         "additionalProperties": False,
     }

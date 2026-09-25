@@ -246,12 +246,10 @@ def test_model_contract_preserves_relational_intent_and_legacy_selection(schema:
     )
     with pytest.raises(RequestPlanningError):
         validate_request_plan(dict(payload, presentation_intent="note_set"), schema)
-    assert (
-        "relational_reference"
-        in planner_result_json_schema(schema)["properties"]["result"]["anyOf"][0]["properties"][
-            "actions"
-        ]["items"]["anyOf"][0]["properties"]["plan"]["required"]
-    )
+    retrieval_modes = planner_result_json_schema(schema)["properties"]["result"]["anyOf"][0][
+        "properties"
+    ]["actions"]["items"]["anyOf"][0]["properties"]["plan"]["anyOf"]
+    assert "relational_reference" in retrieval_modes[0]["required"]
     assert (
         "relational_reference"
         in compact_planner_result_json_schema(schema)["$defs"]["selection"]["required"]

@@ -170,6 +170,11 @@ def schema_accepts(
         return False
     if expected_type == "array" and not isinstance(instance, list):
         return False
+    if expected_type == "array" and (
+        ("minItems" in schema and len(instance) < schema["minItems"])
+        or ("maxItems" in schema and len(instance) > schema["maxItems"])
+    ):
+        return False
     is_object = expected_type == "object" or "properties" in schema
     if is_object and not isinstance(instance, dict):
         return False
@@ -877,8 +882,59 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
     )
     assert "filter_array" in compact["$defs"]
     assert compact["$defs"]["retrieve_action"]["properties"]["plan"] == {
-        "$ref": "#/$defs/selection"
+        "$ref": "#/$defs/retrieve_selection"
     }
+
+
+def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict) -> None:
+    """Reject every schema-valid/direct-selection conflict that local retrieval rejects."""
+    inline = planner_result_json_schema(schema)
+    compact = compact_planner_result_json_schema(schema)
+    semantic = semantic_set_selection("¿Quién es mi familia?")
+    semantic["semantic_set"]["member_type"] = "person"
+    valid_semantic = provider_output(planner_output({"kind": "retrieve", "plan": semantic}))
+    ordinary = provider_output(planner_output(retrieve("Marta")))
+
+    assert all(schema_accepts(payload, inline) for payload in (ordinary, valid_semantic))
+    assert all(schema_accepts(payload, compact) for payload in (ordinary, valid_semantic))
+    assert validate_request_plan(output({"kind": "retrieve", "plan": semantic}), schema)
+
+    conflicts = []
+    for field, value in (
+        ("entity", "Marta"),
+        ("self_target", "self"),
+        ("link_scope", {"anchor": selection("Marta"), "direction": "outgoing", "max_depth": 1}),
+        ("filters", [{"field": "type", "op": "eq", "value": "person"}]),
+        (
+            "relational_reference",
+            {
+                "reference": "mi familia",
+                "source_kind": "self",
+                "source_query": None,
+                "members": "one",
+            },
+        ),
+    ):
+        invalid = deepcopy(semantic)
+        invalid[field] = value
+        payload = provider_output(planner_output({"kind": "retrieve", "plan": invalid}))
+        conflicts.append((payload, invalid))
+
+    for payload, invalid in conflicts:
+        assert not schema_accepts(payload, inline)
+        assert not schema_accepts(payload, compact)
+        with pytest.raises(RequestPlanningError):
+            validate_request_plan(output({"kind": "retrieve", "plan": invalid}), schema)
+
+    write_target = schema_unit("Marta")
+    write_target["target"] = semantic
+    write_payload = provider_output(planner_output({"kind": "write", "units": [write_target]}))
+    delegate_payload = provider_output(
+        planner_output({"kind": "delegate", "request": "compare", "selection": semantic})
+    )
+    for payload in (write_payload, delegate_payload):
+        assert not schema_accepts(payload, inline)
+        assert not schema_accepts(payload, compact)
 
 
 def test_context_payload_is_not_a_planner_result(schema: dict) -> None:
