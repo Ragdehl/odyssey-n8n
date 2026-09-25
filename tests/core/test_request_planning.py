@@ -1441,3 +1441,57 @@ def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(sche
     forbidden["target"] = semantic_set_selection("¿Quién es mi familia?")
     with pytest.raises(RequestPlanningError, match="requires RetrieveAction"):
         validate_request_plan(output(write(forbidden)), schema)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("entity", "Marta"),
+        ("self_target", "self"),
+        (
+            "relational_reference",
+            {
+                "reference": "mi familia",
+                "source_kind": "self",
+                "source_query": None,
+                "members": "complete_set",
+            },
+        ),
+    ],
+)
+def test_semantic_set_rejects_conflicting_selection_authority(
+    schema: dict, field: str, value: object
+) -> None:
+    """Keep a multi-fact set intent separate from direct and relational retrieval contracts."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    selected[field] = value
+
+    with pytest.raises(RequestPlanningError, match="semantic set conflicts"):
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+
+@pytest.mark.parametrize("unsafe", ["people/marta.md", "[[Marta]]", "x" * 257])
+def test_semantic_set_rejects_unsafe_or_unbounded_planner_wording(
+    schema: dict, unsafe: str
+) -> None:
+    """Never let planner wording carry a path, link, or unbounded payload into Core selection."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    selected["semantic_set"]["group_query"] = unsafe
+
+    with pytest.raises(RequestPlanningError, match="semantic set wording is unsafe"):
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+
+def test_semantic_set_is_rejected_from_delegate_selection(schema: dict) -> None:
+    """Do not grant a semantic-set intent to a non-retrieval specialized capability."""
+    with pytest.raises(RequestPlanningError, match="semantic set requires RetrieveAction"):
+        validate_request_plan(
+            output(
+                {
+                    "kind": "delegate",
+                    "request": "analiza el grupo",
+                    "selection": semantic_set_selection("¿Quién es mi familia?"),
+                }
+            ),
+            schema,
+        )

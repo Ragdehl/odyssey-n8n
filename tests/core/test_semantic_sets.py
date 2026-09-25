@@ -7,7 +7,10 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from odyssey_core.atomic_facts import render_atomic_facts
+from odyssey_core.identity_boundary import SelfBindingError
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.relationship_evidence import RelationshipEvidenceProjector
 from odyssey_core.request_planning import SemanticSetIntent
@@ -285,3 +288,104 @@ def test_ambiguous_existing_anchor_returns_ambiguous_reference() -> None:
     )
     assert outcome is SemanticSetOutcome.AMBIGUOUS_REFERENCE
     assert anchor_id is None
+
+
+def test_self_anchor_binding_returns_the_bound_identity_or_fails_closed() -> None:
+    """Use only the existing self-binding authority for a first-person semantic anchor."""
+    binding = SimpleNamespace(resolve=lambda _user_id: SimpleNamespace(person_note_id="self"))
+    outcome, anchor_id = resolve_semantic_set_anchor(
+        INTENT,
+        authenticated_actor=SimpleNamespace(stable_user_id="actor"),
+        self_binding_repository=binding,
+        existing_resolver=lambda _query: pytest.fail("self anchor must not resolve by name"),
+    )
+    assert (outcome, anchor_id) == (SemanticSetOutcome.ANSWERABLE, "self")
+
+    def unavailable(_user_id: str) -> None:
+        raise SelfBindingError("missing binding")
+
+    outcome, anchor_id = resolve_semantic_set_anchor(
+        INTENT,
+        authenticated_actor=SimpleNamespace(stable_user_id="actor"),
+        self_binding_repository=SimpleNamespace(resolve=unavailable),
+        existing_resolver=lambda _query: pytest.fail("self anchor must not resolve by name"),
+    )
+    assert (outcome, anchor_id) == (SemanticSetOutcome.AMBIGUOUS_REFERENCE, None)
+
+
+@pytest.mark.parametrize(
+    ("selection", "bounds"),
+    [
+        (
+            SetEvidenceSelection(("unknown",), (SetMemberOccurrence("unknown", "literal", 0, 1),)),
+            SemanticSetBounds(),
+        ),
+        (SetEvidenceSelection(("candidate-0", "candidate-0"), ()), SemanticSetBounds()),
+        (
+            SetEvidenceSelection(
+                ("candidate-0",), (SetMemberOccurrence("candidate-0", "literal", 0, 999),)
+            ),
+            SemanticSetBounds(),
+        ),
+        (
+            SetEvidenceSelection(
+                ("candidate-0",),
+                (
+                    SetMemberOccurrence("candidate-0", "literal", 0, 3),
+                    SetMemberOccurrence("candidate-0", "literal", 1, 4),
+                ),
+            ),
+            SemanticSetBounds(),
+        ),
+        (
+            SetEvidenceSelection(
+                ("candidate-0",), (SetMemberOccurrence("candidate-0", "link", 0, 3),)
+            ),
+            SemanticSetBounds(),
+        ),
+        (
+            SetEvidenceSelection(
+                ("candidate-0",), (SetMemberOccurrence("candidate-0", "literal", 0, 1),)
+            ),
+            SemanticSetBounds(members=0),
+        ),
+    ],
+)
+def test_invalid_selector_evidence_never_escapes_candidate_boundaries(
+    tmp_path: Path, selection: SetEvidenceSelection, bounds: SemanticSetBounds
+) -> None:
+    """Reject malformed, duplicate, out-of-fact, overlapping, and oversized proposals."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/self.md", "self", "Self", fact("Elemento visible.", 0))
+    selector = SimpleNamespace(select=lambda _request: selection)
+
+    result = resolve_semantic_set(
+        INTENT,
+        anchor_id="self",
+        repository=VaultRepository(vault),
+        schema=schema(),
+        selector=selector,
+        bounds=bounds,
+    )
+
+    assert result.outcome is SemanticSetOutcome.OPERATIONAL_FAILURE
+    assert result.reason == "invalid_selection"
+
+
+def test_whitespace_literal_is_not_grounded_as_a_set_member(tmp_path: Path) -> None:
+    """Reject a selected whitespace-only literal after canonical re-grounding."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/self.md", "self", "Self", fact("Kit: tornillo.", 0))
+    result = run(
+        vault,
+        Select(
+            lambda candidate: [
+                ("literal", candidate.text.index(" "), candidate.text.index(" ") + 1)
+            ]
+        ),
+    )
+
+    assert result.outcome is SemanticSetOutcome.INCOMPLETE_EVIDENCE
+    assert result.reason == "empty_literal"

@@ -23,14 +23,18 @@ from odyssey_core import (
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
+    SemanticSetIntent,
     UnitStatus,
     WriteAction,
     WriteTargetOutcome,
 )
+from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.observability import OperationalOutcome, ProviderCallEvidence
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 from odyssey_core.reference_binding import PendingReference, ReferenceRenderingResult
 from odyssey_core.reference_preflight import UnitTargetPreflight
+from odyssey_core.resolution import ExistingEntityOutcome
+from odyssey_core.semantic_sets import SemanticSetOutcome, SemanticSetResolution
 
 
 @dataclass
@@ -75,6 +79,86 @@ def run(plan: RequestPlan, monkeypatch: pytest.MonkeyPatch, **kwargs: Any):
         "request",
         **dependencies,
     )
+
+
+def semantic_set_plan(*, anchor_kind: str = "self", anchor_query: str | None = None) -> RequestPlan:
+    """Build one validated-shaped semantic-set retrieval plan for application routing tests."""
+    return RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None,
+                    "elementos del grupo",
+                    None,
+                    (),
+                    None,
+                    semantic_set=SemanticSetIntent(
+                        anchor_kind, anchor_query, "elementos del grupo", "", True
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+
+
+def test_execute_request_defers_semantic_set_without_an_injected_selector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not replace a semantic set with ordinary ranked retrieval when selection is unavailable."""
+    result = run(semantic_set_plan(), monkeypatch)
+
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].status is application.ActionStatus.DEFERRED
+    assert result.action_results[0].reason == "semantic_set_selector_unavailable"
+
+
+def test_execute_request_routes_self_semantic_set_through_core_anchor_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bind the self anchor before invoking the injected bounded semantic-set selector."""
+    calls: list[dict[str, object]] = []
+
+    def resolve(*args: object, **kwargs: object) -> SemanticSetResolution:
+        calls.append(kwargs)
+        return SemanticSetResolution(SemanticSetOutcome.ANSWERABLE)
+
+    monkeypatch.setattr(application, "resolve_semantic_set", resolve)
+    result = run(
+        semantic_set_plan(),
+        monkeypatch,
+        authenticated_actor=AuthenticatedActorContext("00000000-0000-4000-8000-000000000000"),
+        self_binding_repository=SimpleNamespace(
+            resolve=lambda stable_user_id: SimpleNamespace(person_note_id="self-note-id")
+        ),
+        semantic_set_selector=SimpleNamespace(select=lambda request: request),
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.action_results[0].status is application.ActionStatus.COMPLETED
+    assert calls[0]["anchor_id"] == "self-note-id"
+
+
+def test_execute_request_defers_an_ambiguous_existing_semantic_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep an existing-name collision structured for later clarification instead of guessing."""
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: SimpleNamespace(
+            outcome=ExistingEntityOutcome.AMBIGUOUS,
+            id=None,
+        ),
+    )
+    result = run(
+        semantic_set_plan(anchor_kind="existing", anchor_query="Marta"),
+        monkeypatch,
+        semantic_set_selector=SimpleNamespace(select=lambda request: request),
+    )
+
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].reason == SemanticSetOutcome.AMBIGUOUS_REFERENCE.value
 
 
 def test_retrieve_uses_existing_context_and_propagates_one_request_id(
