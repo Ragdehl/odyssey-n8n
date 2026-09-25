@@ -49,7 +49,9 @@ def _verify_prerequisites() -> None:
             json.loads(line) for line in PRIOR_OUTPUT_PATH.read_text(encoding="utf-8").splitlines()
         ]
     except (OSError, json.JSONDecodeError) as error:
-        raise SystemExit("Live semantic-set v4 continuation prerequisites unavailable") from error
+        raise SystemExit(
+            "Live semantic-set v4 continuation preflight refused: prerequisites unavailable"
+        ) from error
     if [(row.get("case_id"), row.get("classification")) for row in rows[:2]] != [
         ("SSET01", "PASS"),
         ("SSET02", "PASS"),
