@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Slices 1–2 are implemented. Slice 3 remains Draft: its focused planner gate passed, and its deterministic request-aware one-hop entity-context enrichment is implemented pending DEV human smoke evidence.**
+Status: **Historical v1 contract; Slices 1–3 merged in PR #133.** Current phase status belongs in the [Functional Roadmap](functional-roadmap.md); the next-stage design belongs in [Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md).
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists

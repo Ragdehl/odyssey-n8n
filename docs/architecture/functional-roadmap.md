@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current functional phase — Reference & Relationship Resolution v1
+## Current functional phase — semantic set resolution and evidence design
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
 universal Luna → Sol route was a local Luna planner-result validation mismatch after successful
@@ -63,18 +63,22 @@ authorization. That $0.37 authorization was recorded at
 `828672cc4597c1931853cf32d1fa90330eccf25b`; the continuation ran once at the same HEAD and passed
 S04/S05 Luna-only. S04 preserved ordinary `all_matching` tag-add semantics and S05 preserved two
 independent ordinary Marta facts. It made 2 Luna calls, no Sol calls or fallbacks, and cost
-$0.00216274. All ten frozen cases now have reviewed evidence, so the focused Slice 3 model gate
-passed within the bounded v1 contract. Slice 3 and v1 remain Draft pending final human review and
-remote CI. A subsequent DEV smoke exposed the remaining generic read-path gap: one canonical shared
-fact was visible in UI-2 backlinks but was absent from ordinary entity-answer context. The Draft now
-adds the approved Core request-aware, one-hop source-fact enrichment layer: direct entity notes stay
-primary; current canonical incoming/outgoing snippets are locally ranked and serialized with their
-actual source provenance, without graph traversal or copied member prose. Deterministic coverage is
-green; an isolated DEV human re-test is pending. The existing
+$0.00216274. All ten frozen cases have reviewed evidence, so the focused Slice 3 model gate
+passed within the bounded v1 contract. Slice 3 and v1 merged in PR #133. A subsequent DEV smoke
+exposed the generic read-path gap: one canonical shared fact was visible in UI-2 backlinks but was
+absent from ordinary entity-answer context. The merged Core request-aware, one-hop source-fact
+enrichment keeps direct entity notes primary; current canonical incoming/outgoing snippets are
+locally ranked and serialized with actual source provenance, without graph traversal or copied
+member prose. The existing
 current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inverse/symmetric
-evidence policy, and all-or-clarify rule remain the approved contract. Tasks and Events remain later
-directions. UI-1 request detail is complete in PROD;
+evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
+
+The next proposed stage is [semantic set resolution and evidence](semantic-set-resolution-and-evidence.md):
+multi-fact linked/literal set discovery, structured resolution outcomes, staged clarification,
+answer-source Note navigation, and real progress. This is a design challenge only; its slices and
+open decisions are not approved production behavior. Future direct Notes CRUD (#134) must use the
+same Core mutation and clarification boundaries. Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -111,7 +115,8 @@ UI-2 read-only Notes                                              ✅ merged in 
 Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
-Reference & Relationship Resolution v1 Slice 3                    ➡️ Draft bridge; focused model gate passed, pending human review
+Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
+Semantic set resolution and evidence architecture challenge        ➡️ design Draft PR
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -205,7 +210,8 @@ Performance / Latency / Cost P1                       ✅ complete
         v
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
-Reference & Relationship Resolution v1 Slice 3        ➡️ Draft bridge; focused model gate passed, pending human review
+Reference & Relationship Resolution v1 Slice 3        ✅ merged in PR #133
+Semantic set resolution and evidence design           ➡️ architecture challenge
         |
         v
 Tasks — first application contract
