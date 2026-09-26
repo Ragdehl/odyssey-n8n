@@ -1739,13 +1739,22 @@ def _validate_write_action(
     for index, unit in enumerate(units):
         for reference in unit.references:
             if reference.target_index >= len(units) or reference.target_index == index:
-                raise RequestPlanningError("KnowledgeUnit reference target is invalid")
+                raise RequestPlanningError(
+                    "KnowledgeUnit reference target is invalid",
+                    code=PlannerValidationCode.INVALID_REFERENCE,
+                )
     bulk_indexes = {index for index, unit in enumerate(units) if unit.cardinality == "all_matching"}
     for _index, unit in enumerate(units):
         if unit.cardinality == "all_matching" and unit.references:
-            raise RequestPlanningError("all_matching KnowledgeUnit cannot contain references")
+            raise RequestPlanningError(
+                "all_matching KnowledgeUnit cannot contain references",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
         if any(reference.target_index in bulk_indexes for reference in unit.references):
-            raise RequestPlanningError("KnowledgeReference cannot target an all_matching unit")
+            raise RequestPlanningError(
+                "KnowledgeReference cannot target an all_matching unit",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
     referenced_targets = {reference.target_index for unit in units for reference in unit.references}
     for index, unit in enumerate(units):
         has_payload = bool(
@@ -1753,11 +1762,13 @@ def _validate_write_action(
         )
         if unit.intent in {"amend", "remove"} and not has_payload:
             raise RequestPlanningError(
-                "KnowledgeUnit amend and remove intents require mutation payload"
+                "KnowledgeUnit amend and remove intents require mutation payload",
+                code=PlannerValidationCode.INVALID_MUTATION,
             )
         if unit.intent == "record" and not has_payload and index not in referenced_targets:
             raise RequestPlanningError(
-                "KnowledgeUnit record intent requires mutation payload unless referenced"
+                "KnowledgeUnit record intent requires mutation payload unless referenced",
+                code=PlannerValidationCode.INVALID_MUTATION,
             )
     return WriteAction(units=units)
 

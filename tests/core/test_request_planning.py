@@ -1333,6 +1333,30 @@ def test_malformed_planner_json_fails_closed_with_bounded_parse_evidence(schema:
         ),
         (
             planner_output(
+                write(
+                    unit(
+                        "Marta",
+                        references=[
+                            {
+                                "target_index": 0,
+                                "role": "self",
+                                "mention": "Marta",
+                            }
+                        ],
+                        facts=["Marta {{ref:0}} has a note."],
+                    )
+                )
+            ),
+            PlannerValidationStage.WRITE_ACTION,
+            PlannerValidationCode.INVALID_REFERENCE,
+        ),
+        (
+            planner_output(write(unit("Marta", intent="record", facts=[]))),
+            PlannerValidationStage.WRITE_ACTION,
+            PlannerValidationCode.INVALID_MUTATION,
+        ),
+        (
+            planner_output(
                 retrieve("Where does Marta work?"),
                 write(unit("", facts=["Marta works at Thales."])),
             ),
