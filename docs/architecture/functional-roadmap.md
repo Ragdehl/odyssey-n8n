@@ -89,10 +89,17 @@ one durable bounded choice for a singular Note read or one write target, with ca
 handling and current-Markdown re-grounding before resume. Broader staged/multi-action continuation
 remains deferred. The v7 combined Luna/low gate ran once across 22 frozen planner/classifier cases
 and completed 19 PASS / 3 safe FAIL: SSET02/SSET03 exposed the generic collection-adoption gap and
-HD03 exposed a stale historical oracle. The deterministic correction is green, and one final
-18-case planner-only Luna/low recheck is prepared but not executed; CLAR01–04 are intentionally not
-rerun because the clarification-classifier contract/code is unchanged. No production readiness is
-claimed. Tasks and Events remain later directions.
+HD03 exposed a stale historical oracle. The deterministic correction was green. The final
+18-case planner-only Luna/low recheck was attempted once on 2026-09-26 at
+`48686b0eff3375d11f8c51a94e0b37b57adb0139`, using
+`benchmarks/.live-results/semantic-set-slice1-v7-final-planner-recheck-luna-gate.jsonl`. It stopped
+at SSET01 with `FAIL_CLOSED` before a validated planner result because the provider connection
+failed during DNS resolution (`APIConnectionError -> ConnectError -> ConnectError -> gaierror`).
+One provider request was attempted; there was no response or token usage, no retry, and the
+remaining 17 planner cases were not reached. CLAR01–04 were not rerun because the
+clarification-classifier contract/code is unchanged. The planner live gate remains incomplete and
+requires review before any further live authorization; no production or DEV readiness is claimed.
+Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
