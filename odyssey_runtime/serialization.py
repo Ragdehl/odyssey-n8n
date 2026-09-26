@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from odyssey_core.application import ActionResult, ApplicationResult, UnitResult
+from odyssey_core.application import (
+    ActionResult,
+    ActionStatus,
+    ApplicationResult,
+    ApplicationStatus,
+    UnitResult,
+)
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalSpan,
     ProviderCallEvidence,
     reconcile_duration,
 )
+from odyssey_core.semantic_sets import IdentitySetMember, SemanticSetOutcome
 
 
 def _span_response(span: OperationalSpan) -> dict[str, Any]:
@@ -142,9 +149,12 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
     """
     if not isinstance(result, ApplicationResult):
         raise TypeError("runtime executor must return ApplicationResult")
+    product_outcome, product_reason = _product_outcome(result)
     return {
         "request_id": result.request_id,
         "status": result.status.value,
+        "product_outcome": product_outcome,
+        "product_reason": product_reason,
         "planning_error": result.planning_error,
         "clarification_code": result.clarification_code,
         "presentation_intent": result.presentation_intent,
@@ -168,6 +178,50 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
     }
 
 
+def _product_outcome(result: ApplicationResult) -> tuple[str, str | None]:
+    """Reduce internal execution outcomes to the three user-facing decisions."""
+    if result.clarification_code is not None:
+        return "CLARIFY", result.clarification_code
+    for action in result.action_results:
+        collection = action.semantic_set
+        if collection is not None:
+            if collection.outcome in {
+                SemanticSetOutcome.AMBIGUOUS_REFERENCE,
+                SemanticSetOutcome.AMBIGUOUS_SET_SCOPE,
+            }:
+                return "CLARIFY", collection.outcome.value
+            if collection.outcome is not SemanticSetOutcome.ANSWERABLE:
+                return "CANNOT_ANSWER", collection.outcome.value
+        if action.reason in {
+            "relational_evidence_ambiguous",
+            "relational_singular_ambiguous",
+            "ambiguous_existing_target",
+        } or any(unit.reason == "ambiguous_existing_target" for unit in action.unit_results):
+            return "CLARIFY", "AMBIGUOUS_REFERENCE"
+    if result.status is not ApplicationStatus.COMPLETED:
+        return (
+            "CANNOT_ANSWER",
+            "OPERATIONAL_FAILURE"
+            if result.status is ApplicationStatus.FAILED
+            else "INCOMPLETE_EVIDENCE",
+        )
+    for action in result.action_results:
+        if action.status is not ActionStatus.COMPLETED:
+            return "CANNOT_ANSWER", "INCOMPLETE_EVIDENCE"
+        if (
+            result.presentation_intent != "note_set"
+            and action.retrieval is not None
+            and not (action.retrieval.items or action.retrieval.related_items)
+        ):
+            return "CANNOT_ANSWER", "NO_RELEVANT_EVIDENCE"
+    if result.presentation_intent != "answer":
+        if result.note_result_snapshot is None:
+            return "CANNOT_ANSWER", "INCOMPLETE_EVIDENCE"
+        if result.note_result_snapshot.get("total") == 0:
+            return "CANNOT_ANSWER", "NO_RELEVANT_EVIDENCE"
+    return "ANSWER", None
+
+
 def _serialize_action(action: ActionResult) -> dict[str, Any]:
     """Serialize one action while retaining only caller-useful semantic evidence."""
     serialized: dict[str, Any] = {
@@ -175,6 +229,7 @@ def _serialize_action(action: ActionResult) -> dict[str, Any]:
         "kind": action.kind,
         "status": action.status.value,
         "reason": action.reason,
+        "candidate_note_ids": list(action.candidate_note_ids),
         "units": [_serialize_unit(unit) for unit in action.unit_results],
     }
     if action.retrieval is not None:
@@ -208,6 +263,30 @@ def _serialize_action(action: ActionResult) -> dict[str, Any]:
                 }
                 for item in action.retrieval.related_items
             ],
+        }
+    if action.semantic_set is not None:
+        grounded = action.semantic_set.grounded_set
+        serialized["collection"] = {
+            "outcome": action.semantic_set.outcome.value,
+            "reason": action.semantic_set.reason,
+            "completeness": grounded.completeness.value if grounded is not None else None,
+            "members": [
+                {
+                    "kind": "identity" if isinstance(member, IdentitySetMember) else "literal",
+                    "value": (
+                        member.display_name
+                        if isinstance(member, IdentitySetMember)
+                        else member.value
+                    ),
+                    "stable_note_id": (
+                        member.stable_id if isinstance(member, IdentitySetMember) else None
+                    ),
+                    "source_note_id": member.evidence.source_note_id,
+                }
+                for member in grounded.members
+            ]
+            if grounded is not None and action.semantic_set.outcome is SemanticSetOutcome.ANSWERABLE
+            else [],
         }
     if action.bulk_result is not None:
         serialized["bulk"] = {

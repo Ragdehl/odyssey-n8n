@@ -1,6 +1,7 @@
 # Semantic set resolution and evidence — architecture challenge
 
-Status: **design proposal; no implementation or model evaluation**. This follows
+Status: **Draft simplification on PR #142; production-model evidence pending**. The earlier
+semantic-intent gates below are historical evidence for their frozen contracts. This follows
 [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md).
 Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#137](https://github.com/Ragdehl/odyssey-n8n/issues/137),
@@ -9,10 +10,69 @@ Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#134](https://github.com/Ragdehl/odyssey-n8n/issues/134) is a compatibility constraint,
 not implementation scope.
 
+## Current approved retrieval boundary (PR #142)
+
+The planner chooses the action, preserves a complete useful `SelectionCriteria.query`, and marks a
+`RetrieveAction` as `result_shape=single` or `result_shape=collection`. It does not produce a
+subject/member ontology, type prediction, member list, identity, or evidence locator. The existing
+`presentation_intent=note_set`/`answer_and_note_set` remains the request for matching **Notes as
+objects**; it is not a semantic-member collection. Several matching Notes or several grounded
+collection members are results, not an ambiguity. Clarification is reserved for a genuinely
+unresolved identity, scope, source, or reference decision.
+
+Core enumerates the complete bounded candidate-fact scope before a collection selector sees it.
+The selector receives only the lossless query and visible supplied fact IDs/text and may propose
+only those IDs and exact occurrences. Core re-reads current Markdown, resolves links into canonical
+identities, retains literal values and source provenance, and fails closed on overflow, stale or
+invalid evidence. Source Notes contain evidence; they need not be the semantic subject. A bound
+overflow or absent/unsafe evidence maps to `CANNOT_ANSWER`, not a fabricated clarification.
+The public outcome vocabulary is `ANSWER`, `CLARIFY`, `CANNOT_ANSWER`; detailed Core outcomes remain
+internal. Ordinary single-note answers continue through the established grounded answerer, while
+complete collection members and note-set snapshots take bounded deterministic presentation paths.
+
+This is a model-facing planner change, so previous v3/v4/v5/v6 live evidence remains immutable
+historical evidence, **not** validation of the new contract. No provider call, DEV deployment, or
+PROD deployment is part of this implementation task. A focused live gate plus regression sentinels
+is required before production readiness. One actor/conversation-scoped clarification decision is
+retained without a wall-clock TTL. Numeric and exact unique displayed labels resolve first;
+explicit cancel clears it. An optional constrained Luna classification can return only a supplied
+option, `CANCEL`, `NEW_REQUEST`, or `UNRESOLVED`. A new request supersedes the decision, while an
+unresolved reply keeps the original request and asks again. The state contains no hidden reasoning.
+For resumed writes, the original explicit request supplies intent, but the selected identity is
+re-resolved and its current canonical Markdown is checked before mutation; no extra confirmation
+is required. Resumed singular reads likewise re-ground the selected Note. A stale or no-longer-safe
+choice cannot authorize a write. The current bounded continuation handles one incomplete
+single-target action; larger staged plans remain fail-closed rather than replaying completed work.
+The prepared, unexecuted v7 combined gate keeps the six historical requests, adds one Note-set and
+one singular-source planner sentinel, then checks four bounded reply-classifier decisions. It is
+Luna/low only, at most 12 calls, zero retries, stops at the first non-PASS, and has a conservative
+no-cache ceiling of `$0.1388288` from the checked-in pricing snapshot. Its new immutable evidence
+path is `benchmarks/.live-results/semantic-set-slice1-v7-combined-luna-gate.jsonl`; fresh explicit
+authorization is required before running it. Deterministic Core/read/write checks remain separate
+from this planner/classifier model evidence.
+
+### Planner-only live evidence status
+
+The first two frozen v3 planner-only attempts each stopped on the first case with an opaque
+`APIConnectionError`; their one-row evidence artifacts remain immutable and establish no semantic
+or model conclusion. Direct unauthenticated transport diagnostics currently succeed, so no
+persistent connectivity defect is established. The experiment now records a bounded chain of
+exception **type names only** for a future failure; it retains no exception message, request,
+prompt, header, credential, or response content. This changes no semantic/model contract.
+
+Retry2 subsequently reached semantic evidence: SSET01 passed, while SSET02 retained its complete
+literal-set meaning and exhaustive request but misclassified the contained-object subject as
+`self`. The frozen v3 oracle remains correct: possession by the user does not make the user the
+semantic subject. A narrow generic possessive-object versus self rule and a non-evaluation
+emergency-bag teaching example are frozen in unexecuted v4; no Core semantic behavior changed.
+The separate historical-regression gate remains pending. DEV and PROD remain untouched.
+
 ## Objective and acceptance boundary
 
-Answer a request for a finite semantic group from several **current canonical facts** attached to
-one resolved subject, including members that are linked Notes, literal values, or both. Preserve
+Answer a request for a finite semantic group from several **current canonical facts**. The semantic
+subject in the request and the canonical Notes that contain supporting facts are distinct: a subject
+may exist only in fact text and need not resolve to a Note. Include members that are linked Notes,
+literal values, or both. Preserve
 the exact fact and source Note used. Ask a focused question when identity, group scope, or required
 evidence remains ambiguous. Carry validated decisions across several clarification turns, while
 re-grounding before every resumed read or write. Show the Notes actually used by a final answer and
@@ -25,7 +85,7 @@ compatibility. These are **contract scenarios**, not evidence that the model fol
 
 | Scenario | Required result and guard |
 | --- | --- |
-| A. Family across facts | One self anchor; choose relevant current facts across spouse, parents, sibling and children; return their exact linked IDs with source pointers, or ask the smallest material scope question. |
+| A. Family across facts | One self semantic subject; choose relevant current facts across spouse, parents, sibling and children; return their exact linked IDs with source pointers, or ask the smallest material scope question. |
 | B. Kit literals | Return `tornillo M4`, `arandela`, `llave Allen` as grounded text spans; create zero Notes. |
 | C. Mixed set | One result may contain a linked stable ID and literal values; every member retains its fact occurrence. |
 | D. Two Martas | `AMBIGUOUS_REFERENCE`; offer bounded identities, preserve request, then resume after a validated answer. |
@@ -57,7 +117,7 @@ make it an alternate knowledge authority. Calling a ranked Top-K context result 
 would silently omit members.
 
 Simpler alternative: keep one `RetrieveAction` and add an optional semantic-set selection intent.
-Core resolves one anchor, enumerates a bounded, complete candidate scope from current Markdown,
+Core receives user semantics only, enumerates a bounded, complete candidate scope from current Markdown,
 accepts only selected candidate fact locators and exact member occurrences, and re-grounds those
 occurrences before presenting them. Use the established contextual candidate/validator pattern, but
 a distinct multi-selection contract because `ContextualResolutionRequest` returns one identity.
@@ -78,8 +138,30 @@ for discoverability; a separate Notes-UI mutation path; and a realtime service. 
 
 ## 1–5. Set selection, grounding, members, and completeness
 
-An optional `SelectionCriteria.semantic_set` describes the **intent**, not the result: source wording
-(`self` or an existing-entity query), requested group in the user's words, explicit qualifiers, and
+### Lossless planner and typed-member refinement
+
+`SelectionCriteria.query` is the complete normalized human-readable semantic query passed to the
+semantic selector. `SemanticSetIntent` is supplemental execution information, never a lossy
+replacement: material relation, scope, time, place, state, purpose, possession, context, and
+exhaustiveness survive in fields Core consumes. A schema-derived optional `member_type` narrows
+the universe of possible **members**, not the Note types that may contain evidence. Core enumerates
+the complete bounded current set of that type, then admits a member only through its own applicable
+facts or existing one-hop incoming backlink evidence. Any source Note type may supply that evidence;
+there is no graph recursion, transitive/inverse/co-occurrence inference, generic Note type, or
+automatic creation. Untyped/literal requests retain the bounded canonical fact scan and can return
+literal spans alongside linked typed identities. Every final member is re-read and exact-grounded
+against current Markdown; scope/evidence overflow is `INCOMPLETE_EVIDENCE` rather than Top-K
+truncation or a completeness claim.
+
+`subject_kind=self` means a direct relationship to the authenticated human defines membership (for
+example, friends, relatives, travel companions, or colleagues met by that human). A possessive
+object, container, or concept is not self-targeting merely because the wording says “my”: when it
+owns or contains the requested members, use `subject_kind=query` with bounded subject text. The
+possessive word alone never selects the subject kind, and a query subject need not resolve to a
+Note.
+
+An optional `SelectionCriteria.semantic_set` describes the **intent**, not the result: a semantic
+subject (`self` or bounded user wording), requested members in the user's words, explicit qualifiers, and
 whether the request demands an exhaustive set. It is valid initially on `RetrieveAction`; a later
 write can reuse the same selection evidence under its ordinary mutation preflight. It is mutually
 exclusive with v1 `relational_reference` until a separately evaluated compatibility migration.
@@ -91,9 +173,9 @@ belong to an implementation review):
 
 ```text
 SemanticSetIntent {
-  anchor_kind: self | existing,
-  anchor_query: null | nonempty_text,
-  group_query: nonempty_text,
+  subject_kind: self | query,
+  subject_query: null | nonempty_text,
+  member_query: nonempty_text,
   explicit_qualifiers: bounded_text,
   asks_exhaustive: bool
 }
@@ -103,7 +185,7 @@ SetEvidenceSelection {
   scope_uncertain: bool
 }
 GroundedSet {
-  anchor_stable_id, declared_scan_scope,
+  semantic_subject, declared_scan_scope,
   members: bounded_list<identity | literal>,
   evidence: bounded_list<source_note_id + fact_locator + source_hash + occurrence>,
   completeness: COMPLETE_WITHIN_SCANNED_SCOPE | INCOMPLETE | UNKNOWN_SCOPE
@@ -116,20 +198,26 @@ model-selected fact nor a selected occurrence proves semantic relevance on its o
 remains constrained to what its current canonical text directly supports, and focused live
 regressions must measure false inclusion as well as omission.
 
-Core resolves exactly one canonical anchor through existing self/existing-entity rules. An ambiguous
-anchor is `AMBIGUOUS_REFERENCE`. It enumerates **all** visible fact blocks in that anchor via
-`facts_for_source()` (including blocks with wikilinks), plus current one-hop incoming fact blocks
-that literally link the anchor. Candidate discovery may use a derived index, but admission always
-re-reads, parses, validates, and checks the canonical Markdown. Dedupe candidates by source Note ID
-and fact locator. Never walk from a member to its neighbors. A project participant or fellow
-traveler must be explicitly supported by a candidate fact; shared employer or co-presence alone
-does not assert a relationship.
+The planner never asserts that a semantic subject resolves to an existing Note. In Slice 1, Core
+enumerates **all current visible fact blocks** from the bounded canonical source scope before
+selection. This permits a request such as “what is in my emergency bag?” to find a fact in an
+unrelated project Note even when neither the bag nor its items has a Note. Candidate discovery may
+use a derived index later, but admission always re-reads, parses, validates, and checks canonical
+Markdown. Dedupe candidates by source Note ID and fact locator. Never walk from a member to its
+neighbors. A project participant or fellow traveler must be explicitly supported by a candidate
+fact; shared employer or co-presence alone does not assert a relationship.
+
+Source Notes are provenance containers, not semantic-subject records. Slice 1 introduces no
+generic or untyped Note, no subject or member promotion, and no automatic CREATE path. Arbitrary
+durable fact text remains queryable as literal evidence under this bounded read-only contract.
 
 The candidate scope has a fixed, measurable limit on source Notes, facts, bytes, and proposed
 members. It must be fully enumerated **before** semantic selection or final context Top-K ranking.
 Overflow returns `INCOMPLETE_EVIDENCE`; truncation must not produce a seemingly complete set.
 The model may propose a subset of supplied fact IDs and exact member occurrences (bounded text
-spans or literal wikilinks), and flag uncertain scope. Core rejects unknown IDs, overlapping or
+spans or literal wikilinks), and flag uncertain scope. Semantic matching may recognize paraphrase
+between the requested subject and fact wording, but it is never canonical proof: only the selected
+exact span or literal wikilink is grounded. Core rejects unknown IDs, overlapping or
 out-of-fact spans, duplicate unsupported proposals, or any output beyond limits. Core then re-reads
 each source and verifies its source hash/revision, fact locator and exact text. Existing
 Odyssey-owned atomic facts can use `(note_id, request_id, ordinal)` as the stable locator with an
@@ -151,7 +239,7 @@ identity set. A literal may later be independently resolved under the usual iden
 without changing its status in the original fact.
 
 Completeness is explicit: `COMPLETE_WITHIN_SCANNED_SCOPE` means every admitted candidate in the
-declared source/one-hop scope was examined and each selected member was grounded. It does **not**
+declared bounded current-fact scope was examined and each selected member was grounded. It does **not**
 claim that the user's real-world group is exhaustive. `INCOMPLETE` means a relevant fact/member
 cannot be safely projected or the scan bound was reached. `UNKNOWN_SCOPE` means materially different
 group interpretations remain plausible. Only an explicit canonical closed-list assertion can
@@ -165,7 +253,7 @@ Core returns a bounded `ResolutionOutcome` independent of final prose:
 | Outcome | Core meaning | Normal presentation |
 | --- | --- | --- |
 | `ANSWERABLE` | Requested members and support are grounded within declared scope | Answer, with scope qualifier when needed. |
-| `AMBIGUOUS_REFERENCE` | More than one safe anchor or linked identity candidate | Ask which named candidate the user means. |
+| `AMBIGUOUS_REFERENCE` | More than one safe identity/reference candidate where a later interaction needs identity binding | Ask which named candidate the user means. |
 | `AMBIGUOUS_SET_SCOPE` | Distinct relevant inclusion rules remain plausible | Ask the smallest scope question, e.g. include in-laws? |
 | `INCOMPLETE_EVIDENCE` | Relevant fact cannot produce a safe full member set, or bound exceeded | Explain the missing/partial basis; ask only if a bounded choice can resolve it. |
 | `NO_RELEVANT_EVIDENCE` | The completed eligible scan found no relevant fact | Say no relevant information was found. |
@@ -329,16 +417,42 @@ Include family/work/travel/project/recipe/kit, literal/mixed sets, ambiguous nam
 evidence and stale authority; compare unsafe false answers and partial sets, not just pass rate.
 No provider/model call is part of this design challenge.
 
+### Slice 1 approved deterministic bounds
+
+Slice 1 fixes only the evidence-selection ceilings needed before a selector receives candidates:
+
+| Limit | Value | Deterministic rationale |
+| --- | ---: | --- |
+| source Notes | 64 | Aligns generic source discovery with the existing 64-ID result budget while keeping a complete snapshot feasible. |
+| candidate facts | 64 | Bounds fragmented visible fact blocks without reusing final retrieval Top-K reduction. |
+| serialized candidate bytes | 16 KiB | Matches the existing bounded `note_result_snapshot` encoded-payload ceiling, including Core-owned source ID and locator framing. |
+| proposed members | 64 | Matches the candidate-fact ceiling and rejects output expansion beyond the supplied evidence. |
+
+The resolver performs the complete all-current-visible-facts scan before testing any of these ceilings.
+If any ceiling is exceeded it returns `INCOMPLETE_EVIDENCE`; it does not select from a prefix. The
+later Slice 2/3/4 retention, provenance-row and progress limits remain open as stated below.
+
+The inherited Luna planner prompt/schema grows from 9,932 to 10,358 serialized compact-schema
+bytes for the active registry. The old frozen relationship live-run authorizations therefore fail
+their deterministic pre-provider cost guard (`$0.469024 > $0.46` for the ten-case run and
+`$0.3785896 > $0.37` for its continuation). Slice 1 performs zero provider calls and does not
+replace either authorization; a later focused gate needs fresh explicit cost authority.
+
+The corrected subject-independent contract measures 25,742 production prompt bytes and 10,361
+compact planner-schema bytes for the fixed context, versus 25,525 and 10,358 before this correction.
+Its dedicated future six-case Luna gate uses one generic textual-subject teaching example, has a
+27,203-byte rendered Luna prompt, a 10,685-byte Luna output schema, and a 37,938-byte maximum
+serialized request. The checked-in pricing snapshot still yields a conservative no-cache ceiling of
+`$0.0987456`; the gate remains unexecuted and requires new explicit authorization.
+
 ## Open decisions before implementation approval
 
 - Confirm the current issue #140 body and reconcile any additional acceptance rule with this
   proposal. The design review could not verify that body under the no-API-call constraint.
 - Choose user wording/confirmation policy for an observed but non-exhaustive set when the question
   implies “all”; never promise real-world completeness from an open-world vault.
-- Set exact candidate, source-byte, member, provenance-row, pending retention and progress TTL
-  ceilings using deterministic budget evidence, not an arbitrary unbounded default.
-- Decide the clarification retention/cancellation UX and the user-visible result when a stored
-  decision expires; this does not affect canonical authority but does affect product behavior.
+- Set exact candidate, source-byte, member, provenance-row, and progress ceilings using
+  deterministic budget evidence, not an arbitrary unbounded default. Clarification v1 has no TTL.
 - Before #134 implementation, decide broken-link preservation, soft versus permanent deletion,
   and the transaction/recovery contract for multi-note mutations.
 

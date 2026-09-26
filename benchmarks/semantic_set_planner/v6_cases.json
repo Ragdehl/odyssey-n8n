@@ -1,0 +1,13 @@
+{
+  "version": "6.0.0",
+  "frozen_before_provider_calls": true,
+  "fixed_context": {"date": "2026-09-25", "time": "10:30", "timezone": "Europe/Paris"},
+  "cases": [
+    {"id": "SSET01", "request": "¿Quiénes son las personas de mi familia?"},
+    {"id": "SSET02", "request": "¿Qué piezas incluye mi kit básico para la bici?"},
+    {"id": "SSET03", "request": "¿Qué ingredientes lleva la receta de tortilla?"},
+    {"id": "SSET04", "request": "¿Con qué compañeros viajé a Italia?"},
+    {"id": "REG01", "request": "¿Dónde vive mi ahijada?"},
+    {"id": "REG02", "request": "¿Dónde trabaja Marta?"}
+  ]
+}

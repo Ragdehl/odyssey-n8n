@@ -254,6 +254,31 @@ class RelationshipEvidenceProjector:
             return ()
         return tuple(item.fact for item in source.facts)
 
+    def all_visible_facts(self) -> tuple[CanonicalFact, ...]:
+        """Return every active current visible fact block in canonical path/locator order.
+
+        This is a discovery primitive only. Callers still impose their own explicit fact, source,
+        and serialized-byte bounds before passing any candidate to a semantic selector.
+        """
+        notes = self._load_notes()
+        return tuple(
+            item.fact
+            for _note_id, note in sorted(notes.items(), key=lambda item: item[1].identity.path)
+            for item in note.facts
+        )
+
+    def note_ids_of_type(self, note_type: str) -> tuple[str, ...]:
+        """Enumerate every active canonical identity of one schema-defined Note type.
+
+        This is a complete current-Markdown candidate universe for typed semantic-set members;
+        callers still use direct facts and one-hop incoming evidence for admission.
+        """
+        return tuple(
+            note_id
+            for note_id, note in sorted(self._load_notes().items())
+            if note.identity.type == note_type
+        )
+
     def project_targets(self, source_id: str, fact_locator: str) -> TargetProjection:
         """Resolve every literal direct target in one selected canonical fact or fail closed.
 
@@ -285,6 +310,47 @@ class RelationshipEvidenceProjector:
             selected.targets,
             evidence,
         )
+
+    def resolve_link_occurrence(
+        self, source_id: str, fact_locator: str, start: int, end: int
+    ) -> CanonicalIdentity | None:
+        """Resolve one exact current wikilink span to its stable target identity.
+
+        The caller supplies only a current Core candidate locator and exact fact span.  This method
+        rereads the full canonical snapshot and returns ``None`` for stale, malformed, ambiguous,
+        dangling, or non-link occurrences so callers cannot treat display text as identity proof.
+        """
+        if not isinstance(start, int) or not isinstance(end, int) or start < 0 or end <= start:
+            return None
+        notes = self._load_notes()
+        source = notes.get(source_id)
+        if source is None:
+            return None
+        selected = next((item for item in source.facts if item.fact.locator == fact_locator), None)
+        if selected is None or end > len(selected.fact.text):
+            return None
+        link_text = selected.fact.text[start:end]
+        if not (link_text.startswith("[[") and link_text.endswith("]]")):
+            return None
+        target_text = link_text[2:-2].partition("|")[0].partition("#")[0]
+        target = _safe_link_target(target_text)
+        if target is None:
+            return None
+        path_matches = tuple(
+            note.identity
+            for note in notes.values()
+            if note.identity.path.removesuffix(".md").casefold() == target
+        )
+        if len(path_matches) == 1:
+            return path_matches[0]
+        if "/" in target:
+            return None
+        basename_matches = tuple(
+            note.identity
+            for note in notes.values()
+            if note.identity.path.removesuffix(".md").rsplit("/", 1)[-1].casefold() == target
+        )
+        return basename_matches[0] if len(basename_matches) == 1 else None
 
     def project_entity_evidence_candidates(
         self,

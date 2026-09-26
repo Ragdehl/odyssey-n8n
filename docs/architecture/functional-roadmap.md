@@ -74,11 +74,23 @@ current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inver
 evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
-The next proposed stage is [semantic set resolution and evidence](semantic-set-resolution-and-evidence.md):
-multi-fact linked/literal set discovery, structured resolution outcomes, staged clarification,
-answer-source Note navigation, and real progress. This is a design challenge only; its slices and
-open decisions are not approved production behavior. Future direct Notes CRUD (#134) must use the
-same Core mutation and clarification boundaries. Tasks and Events remain later directions.
+[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is implemented in Draft
+PR #142. The approved simplification keeps ordinary single-topic answers, matching Notes as objects via
+`presentation_intent=note_set`, and canonical-fact collections via `RetrieveAction.result_shape=collection`
+distinct. The planner preserves a lossless query while Core owns bounded evidence, collection discovery,
+grounding, completeness, ambiguity, stale checks, and fail-closed behavior; no generic Note/type,
+automatic entity promotion, recursive graph inference, or keyword/domain router is introduced. The narrow
+clarification-continuation slice (#137) is included; broader staged/multi-action continuation remains deferred.
+
+The focused Luna/low live-regression gate for PR #142 is **closed**. Collection-shape, Note-set/singular,
+linked-selection, write, clarification, escalation, and mixed-action sentinels now have passing evidence on
+the final behavior-bearing HEAD `8f99a1197cfaaf7c5a640f1749926fa8a2155a96`; the remaining five closeout
+sentinels passed 5/5, and a one-call SM01 diagnostic reproduced the previously reviewed valid plan. Two earlier
+DNS-resolution failures were pre-provider infrastructure evidence only. A real Structured Outputs/Core mismatch
+was also closed by requiring non-empty `WriteAction.units`, and bounded write diagnostics were refined without
+relaxing validation. No additional Luna calls are required. DEV/PROD remain untouched. PR #142 stays Draft
+pending explicit human authorization for readiness/merge. Detailed retry/evidence history is retained in the PR
+and benchmark artifacts rather than duplicated here. Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -116,7 +128,7 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic set resolution and evidence architecture challenge        ➡️ design Draft PR
+Semantic set resolution and evidence                             ➡️ Draft PR; live gate complete, human readiness/merge pending
 Tasks — first real application + minimal app routing              ⬜ planned
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -211,7 +223,7 @@ Performance / Latency / Cost P1                       ✅ complete
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
 Reference & Relationship Resolution v1 Slice 3        ✅ merged in PR #133
-Semantic set resolution and evidence design           ➡️ architecture challenge
+Semantic set resolution and evidence design           ➡️ Draft PR; live gate complete
         |
         v
 Tasks — first application contract
