@@ -264,6 +264,43 @@ def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict
     assert plan.actions[0].plan.query == "What countries have I travelled to?"
 
 
+def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(schema: dict) -> None:
+    """Protect the abstract collection-vs-single rule and keep Note sets separate."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    assert (
+        "use result_shape=collection when the user is asking to enumerate or return multiple "
+        "semantic members or values that together answer the request"
+    ) in prompt
+    assert "use result_shape=single for ordinary fact retrieval or synthesis" in prompt
+    assert "Do not infer collection from grammatical plural alone" in prompt
+    assert "SelectionCriteria.query MUST preserve the complete useful request" in prompt
+    assert "use result_shape=single with presentation_intent=note_set" in prompt
+    assert all(word not in prompt for word in ("ingredients", "emergency bag", "bike kit"))
+
+    schema_shapes: set[str] = set()
+    presentation_intents: set[str] = set()
+
+    def collect_contract_enums(node: Any) -> None:
+        if isinstance(node, dict):
+            properties = node.get("properties", {})
+            if isinstance(properties, dict):
+                shape = properties.get("result_shape")
+                if isinstance(shape, dict):
+                    schema_shapes.update(shape.get("enum", []))
+                intent = properties.get("presentation_intent")
+                if isinstance(intent, dict):
+                    presentation_intents.update(intent.get("enum", []))
+            for value in node.values():
+                collect_contract_enums(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect_contract_enums(value)
+
+    collect_contract_enums(planner_result_json_schema(schema))
+    assert schema_shapes == {"single", "collection"}
+    assert presentation_intents == {"answer", "note_set", "answer_and_note_set"}
+
+
 def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> None:
     """Keep one and all-matching explicit while rejecting unknown cardinality values."""
     one = validate_request_plan(output(write(unit("Marta", cardinality="one"))), schema)

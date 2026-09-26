@@ -17,13 +17,16 @@ from benchmarks.semantic_set_planner.v7_gate import (
     HISTORICAL_CASE_ORDER,
     MAX_PROVIDER_CALLS,
     PLANNER_ORDER,
+    evaluate_historical_result,
     evaluate_v7_result,
     load_classifier_cases,
     load_historical_registry,
     load_v7_registry,
     run_classifier_cases,
+    v7_planner_preflight,
     v7_preflight,
 )
+from odyssey_core.context import ContextFilter
 from odyssey_core.experimental_luna_planning import _complete_example_selections
 from odyssey_core.request_planning import (
     RequestPlan,
@@ -51,6 +54,26 @@ def test_v7_preserves_six_requests_and_adds_two_shape_sentinels() -> None:
 def test_final_v7_gate_contains_every_expected_case_once_in_frozen_order() -> None:
     """The final authorization covers the existing cases, sentinels, and classifier rows once."""
     historical_cases, historical_oracles = load_historical_registry()
+    assert PLANNER_ORDER == (
+        "SSET01",
+        "SSET02",
+        "SSET03",
+        "SSET04",
+        "REG01",
+        "REG02",
+        "NOTE01",
+        "SINGLE01",
+        "HD03",
+        "HO02",
+        "SP02",
+        "SW01",
+        "SW02",
+        "SD02",
+        "SM01",
+        "SC02",
+        "SE01",
+        "SA02",
+    )
     assert tuple(case["id"] for case in historical_cases) == HISTORICAL_CASE_ORDER
     assert tuple(historical_oracles) == HISTORICAL_CASE_ORDER
     assert PLANNER_ORDER == CASE_ORDER + HISTORICAL_CASE_ORDER
@@ -60,7 +83,7 @@ def test_final_v7_gate_contains_every_expected_case_once_in_frozen_order() -> No
 
 
 def test_historical_sentinels_reuse_existing_request_and_oracle_contracts() -> None:
-    """No historical regression request or meaning is rewritten for v7."""
+    """Requests and meanings are reused except the explicit HD03 contract projection."""
     from benchmarks.semantic_set_planner.v3_regression_gate import load_v3_regression_registry
 
     old_cases, old_oracles = load_v3_regression_registry()
@@ -69,7 +92,63 @@ def test_historical_sentinels_reuse_existing_request_and_oracle_contracts() -> N
     assert {case["id"]: case["request"] for case in cases} == {
         case_id: old_requests[case_id] for case_id in HISTORICAL_CASE_ORDER
     }
-    assert oracles == {case_id: old_oracles[case_id] for case_id in HISTORICAL_CASE_ORDER}
+    assert old_oracles["HD03"]["plan"]["required_limitations"] == ["unsupported_domain_date"]
+    for case_id in HISTORICAL_CASE_ORDER:
+        if case_id != "HD03":
+            assert oracles[case_id] == old_oracles[case_id]
+    projected_hd03 = json.loads(json.dumps(old_oracles["HD03"]))
+    projected_hd03["plan"].pop("required_limitations")
+    projected_hd03["guards"] = []
+    assert oracles["HD03"] == projected_hd03
+
+
+def test_hd03_requires_may_in_lossless_query_without_lifecycle_filters() -> None:
+    """Current HD03 accepts domain-date meaning in query, not invented lifecycle filters."""
+    _cases, oracles = load_historical_registry()
+    expected = RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None,
+                    "Show journal entries describing trips I took in May.",
+                    "journal_entry",
+                    (),
+                    None,
+                )
+            ),
+        ),
+        (),
+    )
+    dropped_may = RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None, "Show journal entries describing trips I took.", "journal_entry", (), None
+                )
+            ),
+        ),
+        (),
+    )
+    lifecycle_mapped = RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None,
+                    "Show journal entries describing trips I took in May.",
+                    "journal_entry",
+                    (ContextFilter("entry_date", "eq", "May"),),
+                    None,
+                )
+            ),
+        ),
+        (),
+    )
+    assert evaluate_historical_result("HD03", expected, oracles["HD03"]).classification == "PASS"
+    assert evaluate_historical_result("HD03", dropped_may, oracles["HD03"]).classification == "FAIL"
+    assert (
+        evaluate_historical_result("HD03", lifecycle_mapped, oracles["HD03"]).classification
+        == "FAIL"
+    )
 
 
 def test_preflight_is_luna_low_zero_retry_and_cost_bounded() -> None:
@@ -83,6 +162,21 @@ def test_preflight_is_luna_low_zero_retry_and_cost_bounded() -> None:
     assert preflight["retries"] == 0
     assert preflight["conservative_no_cache_maximum_usd"] == "0.3034048"
     assert preflight["case_order"] == FINAL_CASE_ORDER
+
+
+def test_planner_only_recheck_preflight_is_exactly_18_luna_calls() -> None:
+    """The prepared planner-only successor excludes unchanged classifier work and cost."""
+    cases, _oracles = load_v7_registry()
+    historical_cases, _historical_oracles = load_historical_registry()
+    schema = json.loads((ROOT / "config/note-schema.json").read_text())
+    preflight = v7_planner_preflight(schema, cases)
+    assert tuple(case["id"] for case in [*cases["cases"], *historical_cases]) == PLANNER_ORDER
+    assert preflight["maximum_provider_calls"] == 18
+    assert preflight["model"] == "gpt-5.6-luna"
+    assert preflight["reasoning"] == "low"
+    assert preflight["retries"] == 0
+    assert preflight["conservative_no_cache_maximum_usd"] == "0.2962368"
+    assert preflight["case_order"] == PLANNER_ORDER
 
 
 def test_collection_note_set_and_single_shapes_are_distinct() -> None:

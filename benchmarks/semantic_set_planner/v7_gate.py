@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
@@ -46,6 +47,7 @@ MAX_PLANNER_CALLS = len(PLANNER_ORDER)
 MAX_INPUT_TOKENS = 70_000
 MAX_CLASSIFIER_INPUT_TOKENS = 8_192
 MAX_COST_USD = Decimal("0.3034048")
+MAX_PLANNER_COST_USD = Decimal("0.2962368")
 _UNSAFE_AUTHORITY = re.compile(
     r"(?:\[\[|\.md\b|[\\/]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
     re.IGNORECASE,
@@ -103,15 +105,62 @@ def load_classifier_cases() -> list[dict[str, Any]]:
 
 
 def load_historical_registry() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Reuse the immutable historical requests and oracle meanings verbatim."""
-    payload, oracles = load_v3_regression_registry()
+    """Reuse historical requests while projecting HD03 onto the current planner contract."""
+    payload, source_oracles = load_v3_regression_registry()
+    oracles = deepcopy(source_oracles)
     cases = [{"id": case["id"], "request": case["request"]} for case in payload["cases"]]
     if (
         tuple(case["id"] for case in cases) != HISTORICAL_CASE_ORDER
         or tuple(oracles) != HISTORICAL_CASE_ORDER
     ):
         raise ValueError("v7 historical regression registry drifted")
+    # Domain-date meaning stays in query; current planner contracts do not emit unsupported-date
+    # limitations, and forbidden_filter_fields directly rejects invented lifecycle mappings.
+    oracles["HD03"]["plan"].pop("required_limitations", None)
+    oracles["HD03"]["guards"] = []
     return cases, oracles
+
+
+def v7_planner_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[str, Any]:
+    """Bound the planner-only successor gate before any provider construction."""
+    if (
+        LUNA_EXPERIMENT_MODEL != "gpt-5.6-luna"
+        or LUNA_EXPERIMENT_REASONING_EFFORT != "low"
+        or LUNA_EXPERIMENT_AUTOMATIC_RETRIES != 0
+        or tuple(case["id"] for case in cases["cases"]) != CASE_ORDER
+    ):
+        raise ValueError("v7 planner-only provider configuration is unsafe")
+    historical_cases, _ = load_historical_registry()
+    prompt = render_luna_experimental_prompt(schema, cases["fixed_context"])
+    output_schema = luna_experimental_result_json_schema(schema)
+    maximum_bytes = max(
+        len(prompt.encode("utf-8"))
+        + len(json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode())
+        + len(case["request"].encode("utf-8"))
+        for case in [*cases["cases"], *historical_cases]
+    )
+    if maximum_bytes > MAX_INPUT_TOKENS:
+        raise ValueError("v7 planner-only serialized input exceeds conservative bound")
+    rates = json.loads(PRICING_PATH.read_text(encoding="utf-8"))["models"][LUNA_EXPERIMENT_MODEL]
+    ceiling = (
+        Decimal(MAX_PLANNER_CALLS)
+        * (
+            Decimal(MAX_INPUT_TOKENS) * Decimal(str(rates["input_per_million"]))
+            + Decimal(LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS) * Decimal(str(rates["output_per_million"]))
+        )
+        / Decimal(1_000_000)
+    )
+    if ceiling != MAX_PLANNER_COST_USD:
+        raise ValueError("v7 planner-only conservative ceiling changed")
+    return {
+        "case_order": PLANNER_ORDER,
+        "maximum_provider_calls": MAX_PLANNER_CALLS,
+        "model": LUNA_EXPERIMENT_MODEL,
+        "reasoning": LUNA_EXPERIMENT_REASONING_EFFORT,
+        "retries": LUNA_EXPERIMENT_AUTOMATIC_RETRIES,
+        "serialized_request_bytes": maximum_bytes,
+        "conservative_no_cache_maximum_usd": str(ceiling),
+    }
 
 
 def v7_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[str, Any]:
