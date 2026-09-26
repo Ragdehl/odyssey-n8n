@@ -140,8 +140,8 @@ def test_explicit_teaching_shape_is_not_rewritten_by_legacy_completion() -> None
     assert example["actions"][0]["plan"].get("relational_reference") is None
 
 
-def test_classifier_gate_flushes_and_stops_on_wrong_bounded_choice() -> None:
-    """An incorrect option decision is fail-closed because it could redirect resumed work."""
+def test_classifier_gate_flushes_safe_mismatch_and_continues() -> None:
+    """A valid wrong option is a safe oracle FAIL and later clarification cases still run."""
     cases = load_classifier_cases()
 
     class FakeClassifier:
@@ -155,16 +155,52 @@ def test_classifier_gate_flushes_and_stops_on_wrong_bounded_choice() -> None:
         last_response_id = "fake-response"
 
         def classify(self, reply, original_request, options):
-            """Pass the first case and fail the second without continuing."""
-            return "marta-lyon" if reply == "The one in Lyon." else "UNRESOLVED"
+            """Return a valid but wrong first choice, followed by expected decisions."""
+            if reply == "The one in Lyon.":
+                return "marta-madrid"
+            if reply == "Where is my bike?":
+                return "NEW_REQUEST"
+            if reply == "Maybe that one.":
+                return "UNRESOLVED"
+            return "CANCEL"
 
     evidence = StringIO()
     rows = run_classifier_cases(FakeClassifier(), cases, evidence)
-    assert [row["case_id"] for row in rows] == list(CLASSIFIER_ORDER[:2])
-    assert [row["classification"] for row in rows] == ["PASS", "FAIL_CLOSED"]
-    assert len(evidence.getvalue().splitlines()) == 2
+    assert [row["case_id"] for row in rows] == list(CLASSIFIER_ORDER)
+    assert [row["classification"] for row in rows] == ["FAIL", "PASS", "PASS", "PASS"]
+    assert len(evidence.getvalue().splitlines()) == 4
     assert "Where is my bike?" not in evidence.getvalue()
     assert "Tell me about Marta" not in evidence.getvalue()
+
+
+@pytest.mark.parametrize("failure", ["out_of_bounds", "provider"])
+def test_classifier_gate_stops_on_invalid_decision_or_provider_failure(failure: str) -> None:
+    """Invalid bounded output and provider errors flush FAIL_CLOSED and skip later cases."""
+    cases = load_classifier_cases()
+
+    class FakeClassifier:
+        """Return an invalid choice or raise a provider-like error without network access."""
+
+        model = "gpt-5.6-luna"
+        reasoning_effort = "low"
+        last_called = True
+        last_usage = None
+        last_error_category = None
+        last_response_id = None
+
+        def classify(self, _reply, _original_request, _options):
+            """Simulate only the requested local failure mode."""
+            if failure == "provider":
+                raise TimeoutError("provider detail must not be persisted")
+            return "unlisted-option"
+
+    evidence = StringIO()
+    rows = run_classifier_cases(FakeClassifier(), cases, evidence)
+    assert [row["case_id"] for row in rows] == ["CLAR01"]
+    assert rows[0]["classification"] == "FAIL_CLOSED"
+    assert rows[0]["decision"] == ("INVALID" if failure == "out_of_bounds" else "UNRESOLVED")
+    assert len(evidence.getvalue().splitlines()) == 1
+    assert "provider detail" not in evidence.getvalue()
 
 
 class _FakePlanner:

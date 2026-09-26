@@ -167,7 +167,7 @@ def run_classifier_cases(
     cases: list[dict[str, Any]],
     evidence: TextIO,
 ) -> list[dict[str, Any]]:
-    """Flush every safe classifier mismatch; stop on provider or bounded-output failures."""
+    """Continue after safe oracle mismatches; stop on provider or bounded-output failures."""
     rows: list[dict[str, Any]] = []
     for case in cases:
         options = tuple(ClarificationOption(**item) for item in case["options"])
@@ -204,7 +204,7 @@ def run_classifier_cases(
         rows.append(row)
         evidence.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
         evidence.flush()
-        if classification != "PASS":
+        if classification == "FAIL_CLOSED":
             break
     return rows
 
@@ -216,11 +216,11 @@ def _classify_bounded_decision(
     decision: str,
     expected: str,
 ) -> str:
-    """Accept only the expected supplied choice; any classifier uncertainty fails closed."""
+    """Classify valid oracle mismatches separately from invalid or uncertain decisions."""
     if not called or error_category is not None or not valid_decision:
         return "FAIL_CLOSED"
     if decision != expected:
-        return "FAIL_CLOSED"
+        return "FAIL"
     return "PASS"
 
 
