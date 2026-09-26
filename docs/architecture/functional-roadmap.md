@@ -87,8 +87,12 @@ readiness. No generic Note or type is added. Answer-source Note navigation (#138
 verified. PR #142 now includes a deliberately narrow clarification-continuation (#137) slice:
 one durable bounded choice for a singular Note read or one write target, with cancel/new-request
 handling and current-Markdown re-grounding before resume. Broader staged/multi-action continuation
-remains deferred. The new combined planner-and-reply-classifier gate is prepared but not executed; no production
-readiness is claimed. Tasks and Events remain later directions.
+remains deferred. The v7 combined Luna/low gate ran once across 22 frozen planner/classifier cases
+and completed 19 PASS / 3 safe FAIL: SSET02/SSET03 exposed the generic collection-adoption gap and
+HD03 exposed a stale historical oracle. The deterministic correction is green, and one final
+18-case planner-only Luna/low recheck is prepared but not executed; CLAR01–04 are intentionally not
+rerun because the clarification-classifier contract/code is unchanged. No production readiness is
+claimed. Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
