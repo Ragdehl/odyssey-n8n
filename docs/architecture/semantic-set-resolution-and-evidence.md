@@ -111,10 +111,12 @@ literal spans alongside linked typed identities. Every final member is re-read a
 against current Markdown; scope/evidence overflow is `INCOMPLETE_EVIDENCE` rather than Top-K
 truncation or a completeness claim.
 
-`subject_kind=self` means the authenticated human directly anchors the membership relation. A
-possessive object or concept is not self-targeting merely because the wording says “my”: when that
-object owns or contains the requested members, use `subject_kind=query` with bounded subject text.
-That subject need not resolve to a Note.
+`subject_kind=self` means a direct relationship to the authenticated human defines membership (for
+example, friends, relatives, travel companions, or colleagues met by that human). A possessive
+object, container, or concept is not self-targeting merely because the wording says “my”: when it
+owns or contains the requested members, use `subject_kind=query` with bounded subject text. The
+possessive word alone never selects the subject kind, and a query subject need not resolve to a
+Note.
 
 An optional `SelectionCriteria.semantic_set` describes the **intent**, not the result: a semantic
 subject (`self` or bounded user wording), requested members in the user's words, explicit qualifiers, and

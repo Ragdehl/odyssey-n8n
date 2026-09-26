@@ -33,6 +33,7 @@ from benchmarks.semantic_set_planner.run_live_v4_retry2 import (
     OUTPUT_PATH as V4_RETRY2_OUTPUT_PATH,
 )
 from benchmarks.semantic_set_planner.run_live_v5 import OUTPUT_PATH as V5_OUTPUT_PATH
+from benchmarks.semantic_set_planner.run_live_v6 import OUTPUT_PATH as V6_OUTPUT_PATH
 from benchmarks.semantic_set_planner.v2_gate import (
     evaluate_v2_result,
     load_v2_registry,
@@ -51,7 +52,11 @@ from benchmarks.semantic_set_planner.v3_regression_gate import (
     v3_regression_preflight,
 )
 from benchmarks.semantic_set_planner.v4_gate import load_v4_registry, v4_preflight
-from odyssey_core.experimental_luna_planning import validate_luna_experimental_result
+from benchmarks.semantic_set_planner.v6_gate import load_v6_registry, v6_preflight
+from odyssey_core.experimental_luna_planning import (
+    render_luna_experimental_prompt,
+    validate_luna_experimental_result,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -345,6 +350,96 @@ def test_v4_subject_contract_distinguishes_human_and_possessive_object(schema: d
     assert query_intent.subject_kind == "query"
     assert query_intent.subject_query == "my emergency bag"
     assert query_intent.member_type is None
+
+
+def test_v6_freezes_oracles_while_teaching_the_self_query_membership_boundary(
+    schema: dict,
+) -> None:
+    """Version only the model-facing contrast without relaxing frozen semantic meaning."""
+    v4_cases = json.loads((ROOT / "benchmarks/semantic_set_planner/v4_cases.json").read_text())
+    v4_oracle = json.loads((ROOT / "benchmarks/semantic_set_planner/v4_oracle.json").read_text())
+    cases, oracles = load_v6_registry()
+    teaching = json.loads(
+        (ROOT / "benchmarks/semantic_set_planner/v6_teaching_examples.json").read_text()
+    )["examples"]
+
+    assert cases["cases"] == v4_cases["cases"]
+    assert list(oracles.values()) == v4_oracle["oracles"]
+    assert [case["id"] for case in cases["cases"]] == [
+        "SSET01",
+        "SSET02",
+        "SSET03",
+        "SSET04",
+        "REG01",
+        "REG02",
+    ]
+    assert oracles["SSET01"]["subject_kind"] == "self"
+    assert oracles["SSET02"]["subject_kind"] == "query"
+    assert oracles["SSET04"]["subject_kind"] == "self"
+    assert all(case["request"] not in str(teaching) for case in cases["cases"])
+
+    relationship = next(
+        item for item in teaching if item["id"] == "semantic-set-human-relationship-subject"
+    )
+    container = next(
+        item for item in teaching if item["id"] == "semantic-set-possessive-object-subject"
+    )
+    relationship_intent = relationship["result"]["actions"][0]["plan"]["semantic_set"]
+    container_intent = container["result"]["actions"][0]["plan"]["semantic_set"]
+    assert relationship["request"] == "Who are my close friends?"
+    assert relationship_intent["subject_kind"] == "self"
+    assert relationship_intent["subject_query"] is None
+    assert relationship_intent["member_query"] == "close friends"
+    assert relationship_intent["asks_exhaustive"] is True
+    assert relationship_intent["member_type"] == "person"
+    assert container_intent["subject_kind"] == "query"
+    assert container_intent["subject_query"] == "my emergency bag"
+    assert validate_luna_experimental_result(relationship["result"], schema)
+    assert validate_luna_experimental_result(container["result"], schema)
+    assert float(v6_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10
+
+
+def test_v6_prompt_retains_both_sides_of_generic_subject_kind_contract(schema: dict) -> None:
+    """Prevent prompt edits from reducing membership choice to possessive wording alone."""
+    cases, _oracles = load_v6_registry()
+    teaching = json.loads(
+        (ROOT / "benchmarks/semantic_set_planner/v6_teaching_examples.json").read_text()
+    )["examples"]
+    prompt = render_luna_experimental_prompt(
+        schema, cases["fixed_context"], teaching_examples=teaching
+    )
+
+    assert "what defines membership, not from possessive grammar" in prompt
+    assert "direct relationship to the authenticated human defines the group" in prompt
+    assert "object, container, or concept owns or contains the requested members" in prompt
+    assert "The possessive word itself never decides this" in prompt
+
+
+def test_v6_runner_has_a_new_immutable_path_and_refuses_dry_preflight(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Require confirmation and a fresh path before the clarified gate can construct Luna."""
+    import benchmarks.semantic_set_planner.run_live_v6 as runner
+
+    output_path = tmp_path / V6_OUTPUT_PATH.name
+    constructed = False
+
+    def unexpected_client(*_args, **_kwargs):
+        nonlocal constructed
+        constructed = True
+        raise AssertionError("provider construction must not occur during dry preflight")
+
+    monkeypatch.setattr(runner, "OUTPUT_PATH", output_path)
+    monkeypatch.setattr(runner.OpenAILunaExperimentalPlanner, "from_environment", unexpected_client)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
+
+    with pytest.raises(SystemExit, match="preflight refused"):
+        runner.main([])
+
+    assert V6_OUTPUT_PATH != V5_OUTPUT_PATH
+    assert V6_OUTPUT_PATH.name == "semantic-set-slice1-v6-luna-gate.jsonl"
+    assert output_path.exists() is False
+    assert constructed is False
 
 
 def test_v3_regression_gate_reuses_exact_historical_contracts(schema: dict) -> None:
