@@ -1194,6 +1194,14 @@ def _notes_to_response(
             "body_blocks": [
                 {
                     "kind": block.kind,
+                    **(
+                        {
+                            "fact_locator": block.fact_locator,
+                            "deletable": True,
+                        }
+                        if block.deletable
+                        else {}
+                    ),
                     "segments": [
                         {
                             "text": segment.text,
@@ -1224,9 +1232,6 @@ def _notes_to_response(
             "mutation": {
                 "revision": value.revision,
                 "source_hash": value.source_hash,
-                "atomic_facts": [
-                    {"locator": locator, "text": text} for locator, text in value.atomic_facts
-                ],
             },
         }
     if isinstance(value, BacklinkPage):

@@ -88,10 +88,12 @@ function validateType(value) { if (!value || !isText(value.id) || !isText(value.
 function validateField(value) { if (!value || !isText(value.id) || !isText(value.value_type) || !Array.isArray(value.operators) || !Array.isArray(value.applies_to) || (value.format !== undefined && !isText(value.format) && value.format !== null)) throw new NotesRequestError("Campo inválido."); return {id: value.id, value_type: value.value_type, operators: value.operators.filter(isText), applies_to: value.applies_to.filter(isText), format: value.format ?? null}; }
 function validateFilter(value) { if (!value || !isText(value.field) || !isText(value.op)) throw new NotesRequestError("Filtro inválido."); return {field: value.field, op: value.op, value: value.value}; }
 function validateLink(value) { if (!value || !isText(value.target_id) || !isText(value.target_name) || !isText(value.target_type) || !isText(value.label)) throw new NotesRequestError("Enlace inválido."); return {...value, occurrences: count(value.occurrences)}; }
-function validateMutationMetadata(value) { if (!value || !Number.isInteger(value.revision) || value.revision < 1 || !/^[a-f0-9]{64}$/.test(value.source_hash) || !Array.isArray(value.atomic_facts)) throw new NotesRequestError("Metadatos de edición inválidos."); const facts = value.atomic_facts.map((fact) => { if (!fact || !isText(fact.locator) || !isText(fact.text)) throw new NotesRequestError("Hecho editable inválido."); return {locator: fact.locator, text: fact.text}; }); return {revision: value.revision, source_hash: value.source_hash, atomic_facts: facts}; }
+function validateMutationMetadata(value) { if (!value || !Number.isInteger(value.revision) || value.revision < 1 || !/^[a-f0-9]{64}$/.test(value.source_hash) || Object.keys(value).some((key) => !["revision", "source_hash"].includes(key))) throw new NotesRequestError("Metadatos de edición inválidos."); return {revision: value.revision, source_hash: value.source_hash}; }
 function validateBodyBlock(value) {
   if (!value || !["heading", "paragraph", "list_item"].includes(value.kind) || !Array.isArray(value.segments)) throw new NotesRequestError("Cuerpo de nota inválido.");
-  return {kind: value.kind, segments: value.segments.map(validateBodySegment)};
+  const deletable = value.deletable === true;
+  if (deletable !== (value.fact_locator !== undefined) || (deletable && (!isText(value.fact_locator) || value.kind !== "list_item"))) throw new NotesRequestError("Hecho editable inválido.");
+  return {kind: value.kind, segments: value.segments.map(validateBodySegment), ...(deletable ? {fact_locator: value.fact_locator, deletable: true} : {})};
 }
 function validateBodySegment(value) {
   if (!value || !isString(value.text)) throw new NotesRequestError("Segmento de nota inválido.");

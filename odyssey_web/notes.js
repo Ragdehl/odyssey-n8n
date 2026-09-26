@@ -23,7 +23,7 @@ export function mountNotes(root, {
   const state = {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
-    snapshot: null, total: 0, capabilities: {types: [], fields: []},
+    snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -280,6 +280,7 @@ export function mountNotes(root, {
         state.forward = [];
       }
       state.current = value;
+      state.editing = false;
       state.feedScroll = list.scrollTop;
       renderDetail();
     } catch {
@@ -288,6 +289,7 @@ export function mountNotes(root, {
   }
 
   function showList() {
+    state.editing = false;
     detail.hidden = true;
     listView.hidden = false;
     searchDock.hidden = false;
@@ -313,7 +315,20 @@ export function mountNotes(root, {
     back.setAttribute("aria-label", "Volver a resultados de notas");
     const title = document.createElement("h2");
     title.append(typeBadge(value.note.type), document.createTextNode(value.note.name));
-    header.append(back, title);
+    const headerControls = document.createElement("div");
+    headerControls.className = "note-edit-controls";
+    const edit = button(state.editing ? "Hecho" : "Editar", () => {
+      state.editing = !state.editing;
+      renderDetail();
+    });
+    edit.className = "note-edit-toggle";
+    headerControls.append(edit);
+    if (state.editing && value.mutation) {
+      const removeNote = button("Eliminar nota", () => void deleteNote(value, removeNote));
+      removeNote.className = "note-danger-button note-delete-button";
+      headerControls.append(removeNote);
+    }
+    header.append(back, title, headerControls);
     const controls = document.createElement("p");
     controls.className = "note-history";
     if (state.back.length || state.forward.length) {
@@ -348,47 +363,16 @@ export function mountNotes(root, {
     tags.textContent = value.note.tags.map((tag) => `#${tag}`).join(" ");
     const body = document.createElement("article");
     body.className = "note-body";
-    renderBody(body, value.body_blocks, open);
-    const actions = document.createElement("section");
-    actions.className = "note-actions";
-    const actionsHeading = document.createElement("h3");
-    actionsHeading.textContent = "Acciones";
-    actions.append(actionsHeading);
-    if (!value.mutation) {
-      const message = document.createElement("p");
-      message.textContent = "Las acciones directas no están disponibles para esta nota.";
-      actions.append(message);
-    } else if (value.mutation.atomic_facts.length) {
-      const facts = document.createElement("div");
-      facts.className = "note-fact-actions";
-      for (const fact of value.mutation.atomic_facts) {
-        const row = document.createElement("div");
-        row.className = "note-fact-action";
-        const text = document.createElement("span");
-        text.textContent = fact.text;
-        const remove = button("Eliminar", () => void deleteFact(value, fact, remove));
-        remove.className = "note-danger-button";
-        row.append(text, remove);
-        facts.append(row);
-      }
-      actions.append(facts);
-    } else {
-      const message = document.createElement("p");
-      message.textContent = "No hay hechos añadidos por Odyssey que se puedan eliminar directamente.";
-      actions.append(message);
-    }
-    if (value.mutation) {
-      const removeNote = button("Eliminar nota", () => void deleteNote(value, removeNote));
-      removeNote.className = "note-danger-button note-delete-button";
-      actions.append(removeNote);
-    }
+    renderBody(body, value.body_blocks, open, state.editing && value.mutation
+      ? (locator, control) => void deleteFact(value, locator, control)
+      : null);
     const backlinks = document.createElement("section");
     backlinks.className = "note-backlinks";
     const backlinksHeading = document.createElement("h3");
     backlinksHeading.textContent = "Enlazada desde";
     backlinks.append(backlinksHeading);
     void appendBacklinks(backlinks, value.note.id);
-    detail.replaceChildren(header, controls, properties, tags, body, actions, backlinks);
+    detail.replaceChildren(header, controls, properties, tags, body, backlinks);
   }
 
   function mutationRequestId() {
@@ -398,12 +382,12 @@ export function mountNotes(root, {
     return `notes-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   }
 
-  async function deleteFact(value, fact, control) {
+  async function deleteFact(value, factLocator, control) {
     if (!confirmImpl(`¿Eliminar esta información de ${value.note.name}?`)) return;
     control.disabled = true;
     try {
       await requestNotes({endpoint, operation: "delete_fact", payload: {
-        note_id: value.note.id, fact_locator: fact.locator, expected_revision: value.mutation.revision,
+        note_id: value.note.id, fact_locator: factLocator, expected_revision: value.mutation.revision,
         expected_source_hash: value.mutation.source_hash, request_id: mutationRequestId(),
       }});
       await open(value.note.id, {history: false});
@@ -695,7 +679,7 @@ function unavailableRow(id) {
   row.dataset.noteId = id;
   return row;
 }
-function renderBody(parent, blocks, open) {
+function renderBody(parent, blocks, open, removeFact = null) {
   if (!blocks.length) {
     const empty = document.createElement("p");
     empty.className = "note-empty-body";
@@ -711,7 +695,18 @@ function renderBody(parent, blocks, open) {
         parent.append(list);
       }
       const item = document.createElement("li");
-      appendBodySegments(item, block.segments, open);
+      if (removeFact && block.deletable) {
+        item.className = "note-editable-fact";
+        const content = document.createElement("span");
+        content.className = "note-fact-content";
+        appendBodySegments(content, block.segments, open);
+        const remove = button("Eliminar", () => removeFact(block.fact_locator, remove));
+        remove.className = "note-fact-delete note-danger-button";
+        remove.setAttribute("aria-label", "Eliminar esta información");
+        item.append(content, remove);
+      } else {
+        appendBodySegments(item, block.segments, open);
+      }
       list.append(item);
       continue;
     }

@@ -504,16 +504,31 @@ test("Notes browser validation accepts only bounded direct-mutation metadata", (
     mutation: {
       revision: 3,
       source_hash: "a".repeat(64),
-      atomic_facts: [{locator: "request-1:0", text: "Marta trabaja en Thales."}],
     },
   });
-  assert.equal(detail.mutation.atomic_facts[0].locator, "request-1:0");
+  assert.equal(detail.mutation.revision, 3);
   assert.deepEqual(validateNotesResponse({
     kind: "mutation", operation: "fact_deleted", note_id: "marta", history: {status: "COMMITTED"},
   }).history.status, "COMMITTED");
   assert.throws(() => validateNotesResponse({
     kind: "detail", note: noteSummary(), body: "", body_blocks: [], links: [],
-    mutation: {revision: 3, source_hash: "wrong", atomic_facts: []},
+    mutation: {revision: 3, source_hash: "wrong"},
+  }), NotesRequestError);
+});
+
+test("Notes detail validates a visible atomic locator without exposing canonical fact text", () => {
+  const detail = validateNotesResponse({
+    kind: "detail", note: noteSummary(), body: "Axel y Denis", links: [],
+    body_blocks: [{kind: "list_item", deletable: true, fact_locator: "request-1:0", segments: [
+      {text: "Axel", target_id: "axel", target_type: "person"}, {text: " y "},
+      {text: "Denis", target_id: "denis", target_type: "person"},
+    ]}],
+    mutation: {revision: 3, source_hash: "a".repeat(64)},
+  });
+  assert.equal(detail.body_blocks[0].fact_locator, "request-1:0");
+  assert.equal(detail.body_blocks[0].segments[0].text, "Axel");
+  assert.throws(() => validateNotesResponse({
+    ...detail, body_blocks: [{kind: "paragraph", deletable: true, fact_locator: "request-1:0", segments: [{text: "unsafe"}]}],
   }), NotesRequestError);
 });
 

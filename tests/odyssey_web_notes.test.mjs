@@ -86,11 +86,11 @@ function page({mode = "feed", items = [pageItem("a", "Resultado A")], total = it
   return {mode, items, total, next_cursor: null, sort: "relevance", applied_filters, snapshot_offset: 0};
 }
 
-function detail(id, name = id, mutation = null) {
+function detail(id, name = id, mutation = null, body_blocks = []) {
   return {
     kind: "detail",
     note: {id, name, type: "person", properties: {}, created_at: "2026-09-20", updated_at: "2026-09-22", tags: []},
-    body_blocks: [],
+    body_blocks,
     ...(mutation ? {mutation} : {}),
   };
 }
@@ -146,14 +146,20 @@ async function mountMutationNote({confirmImpl}) {
   const mutation = {
     revision: 7,
     source_hash: "a".repeat(64),
-    atomic_facts: [{locator: "request-1:0", text: "Ada works at Odyssey."}],
   };
+  const bodyBlocks = [
+    {kind: "list_item", deletable: true, fact_locator: "request-1:0", segments: [
+      {text: "Ada conoce a "}, {text: "Axel", target_id: "axel", target_type: "person"},
+      {text: " y "}, {text: "Denis", target_id: "denis", target_type: "person"}, {text: "."},
+    ]},
+    {kind: "list_item", segments: [{text: "Contenido de referencia visible una vez."}]},
+  ];
   const mounted = await mountNotes({
     confirmImpl,
     requestNotes: async ({operation, payload}) => {
       calls.push({operation, payload});
       if (operation === "capabilities") return capabilities();
-      if (operation === "detail") return detail(payload.note_id, "Ada", mutation);
+      if (operation === "detail") return detail(payload.note_id, "Ada", mutation, bodyBlocks);
       if (operation === "backlinks") return {items: []};
       if (operation === "delete_fact" || operation === "delete_note") return {
         kind: "mutation", operation: operation === "delete_fact" ? "fact_deleted" : "note_deleted",
@@ -171,6 +177,43 @@ function capabilities() {
   return {types: [{id: "person", name: "Persona"}], fields: []};
 }
 
+function enterEditMode(mounted) {
+  mounted.elements.detail.querySelector(".note-edit-toggle").click();
+}
+
+test("read mode renders linked facts once without destructive controls or raw Markdown", async () => {
+  const {mounted} = await mountMutationNote({confirmImpl: () => true});
+
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "Editar");
+  assert.equal(mounted.elements.detail.querySelector(".note-delete-button"), null);
+  assert.equal(mounted.elements.detail.querySelector(".note-fact-delete"), null);
+  assert.equal(mounted.elements.detail.querySelector(".note-actions"), null);
+  assert.equal(mounted.elements.detail.textContent.includes("[["), false);
+  assert.equal(mounted.elements.detail.textContent.includes("request-1:0"), false);
+  assert.equal(mounted.elements.detail.textContent.includes("Ada conoce a Axel y Denis."), true);
+  assert.equal(mounted.elements.detail.textContent.split("Contenido de referencia visible una vez.").length, 2);
+  assert.equal(mounted.elements.detail.querySelector(".note-body").querySelector("a").textContent, "Axel");
+});
+
+test("entering and leaving edit mode reveals only safe inline mutation controls", async () => {
+  const {mounted} = await mountMutationNote({confirmImpl: () => true});
+  enterEditMode(mounted);
+
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "Hecho");
+  assert.equal(mounted.elements.detail.querySelector(".note-delete-button").textContent, "Eliminar nota");
+  const factDelete = mounted.elements.detail.querySelector(".note-fact-delete");
+  assert.equal(factDelete.textContent, "Eliminar");
+  assert.equal(factDelete.parentNode.textContent.includes("Axel"), true);
+  assert.equal(factDelete.parentNode.textContent.includes("Denis"), true);
+  assert.equal(mounted.elements.detail.textContent.includes("Contenido de referencia visible una vez.Eliminar"), false);
+
+  mounted.elements.detail.querySelector(".note-edit-toggle").click();
+
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "Editar");
+  assert.equal(mounted.elements.detail.querySelector(".note-delete-button"), null);
+  assert.equal(mounted.elements.detail.querySelector(".note-fact-delete"), null);
+});
+
 test("cancel fact deletion keeps the detail open and sends no mutation request", async () => {
   let confirmation = "";
   const {mounted, calls} = await mountMutationNote({confirmImpl: (message) => {
@@ -178,21 +221,21 @@ test("cancel fact deletion keeps the detail open and sends no mutation request",
     return false;
   }});
   const current = mounted.controller.state.current;
-  const deleteButton = mounted.elements.detail.querySelector(".note-fact-action").querySelector("button");
-
-  deleteButton.click();
+  enterEditMode(mounted);
+  mounted.elements.detail.querySelector(".note-fact-delete").click();
   await flush();
 
   assert.equal(confirmation, "¿Eliminar esta información de Ada?");
   assert.equal(calls.filter(({operation}) => operation.startsWith("delete_")).length, 0);
   assert.strictEqual(mounted.controller.state.current, current);
   assert.equal(mounted.elements.detail.hidden, false);
-  assert.equal(mounted.elements.detail.textContent.includes("Ada works at Odyssey."), true);
+  assert.equal(mounted.elements.detail.textContent.includes("Ada conoce a Axel y Denis."), true);
 });
 
 test("confirm fact deletion sends one bounded request with current stale-state tokens", async () => {
   const {mounted, calls} = await mountMutationNote({confirmImpl: () => true});
-  mounted.elements.detail.querySelector(".note-fact-action").querySelector("button").click();
+  enterEditMode(mounted);
+  mounted.elements.detail.querySelector(".note-fact-delete").click();
   await flush();
 
   const mutations = calls.filter(({operation}) => operation.startsWith("delete_"));
@@ -208,6 +251,7 @@ test("confirm fact deletion sends one bounded request with current stale-state t
   assert.match(mutations[0].payload.request_id, /^notes-[a-f0-9]{32}$/);
   assert.strictEqual(mounted.controller.state.current.note.id, "ada");
   assert.equal(mounted.elements.detail.hidden, false);
+  assert.equal(calls.filter(({operation}) => operation === "detail").length, 2);
 });
 
 test("cancel Note deletion keeps the detail open and sends no mutation request", async () => {
@@ -217,7 +261,7 @@ test("cancel Note deletion keeps the detail open and sends no mutation request",
     return false;
   }});
   const current = mounted.controller.state.current;
-
+  enterEditMode(mounted);
   mounted.elements.detail.querySelector(".note-delete-button").click();
   await flush();
 
@@ -230,6 +274,7 @@ test("cancel Note deletion keeps the detail open and sends no mutation request",
 
 test("confirm Note deletion sends one bounded request with current stale-state tokens", async () => {
   const {mounted, calls} = await mountMutationNote({confirmImpl: () => true});
+  enterEditMode(mounted);
   mounted.elements.detail.querySelector(".note-delete-button").click();
   await flush();
 

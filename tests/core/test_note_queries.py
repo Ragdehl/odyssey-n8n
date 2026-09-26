@@ -203,6 +203,41 @@ def test_detail_projects_empty_and_markdown_bodies_without_exposing_storage_synt
     assert context[1].target_id == "ada"
 
 
+def test_detail_associates_only_rendered_atomic_facts_with_stable_locators(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep the direct-delete locator on its resolved visible list item only."""
+    notes = service(tmp_path, schema)
+    write(
+        tmp_path / "vault",
+        "journal/linked-fact.md",
+        "linked-fact",
+        "Linked fact",
+        "# Added 21-09-2026\n\n"
+        "- Con [[people/ada|Ada]] y [[projects/odyssey|Odyssey]].\n"
+        "  <!-- odyssey:fact request=request-7 ordinal=2 -->\n\n"
+        "- Contenido heredado visible.",
+        updated="2026-09-21T00:00:00Z",
+    )
+    notes.context_index.rebuild(notes.repository, schema, Embedder())
+
+    detail = notes.detail("linked-fact")
+    atomic, legacy = detail.body_blocks[1:]
+
+    assert atomic.kind == "list_item"
+    assert atomic.deletable is True
+    assert atomic.fact_locator == "request-7:2"
+    assert [(segment.text, segment.target_id) for segment in atomic.segments] == [
+        ("Con ", None),
+        ("Ada", "ada"),
+        (" y ", None),
+        ("Odyssey", "odyssey"),
+        (".", None),
+    ]
+    assert legacy.deletable is False
+    assert legacy.fact_locator is None
+
+
 def test_unresolved_or_unsafe_wikilinks_degrade_to_visible_plain_text(
     tmp_path: Path, schema: dict
 ) -> None:

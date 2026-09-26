@@ -454,7 +454,19 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
             return NoteDetail(
                 summary,
                 "Current canonical body.",
-                (NoteBodyBlock("paragraph", (NoteBodySegment("Current canonical body."),)),),
+                (
+                    NoteBodyBlock(
+                        "list_item",
+                        (
+                            NoteBodySegment("Con "),
+                            NoteBodySegment("Ada", "ada", "person"),
+                            NoteBodySegment("."),
+                        ),
+                        "request-1:0",
+                        True,
+                    ),
+                    NoteBodyBlock("paragraph", (NoteBodySegment("Current canonical body."),)),
+                ),
                 (NoteLink("ada", "Ada", "person", "Ada", 1),),
             )
 
@@ -470,8 +482,19 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
     detail = runtime.notes("detail", {"note_id": "ada"})
     assert detail["body"] == "Current canonical body."
     assert detail["body_blocks"] == [
-        {"kind": "paragraph", "segments": [{"text": "Current canonical body."}]}
+        {
+            "kind": "list_item",
+            "fact_locator": "request-1:0",
+            "deletable": True,
+            "segments": [
+                {"text": "Con "},
+                {"text": "Ada", "target_id": "ada", "target_type": "person"},
+                {"text": "."},
+            ],
+        },
+        {"kind": "paragraph", "segments": [{"text": "Current canonical body."}]},
     ]
+    assert detail["mutation"] == {"revision": 1, "source_hash": "0" * 64}
     assert detail["links"][0]["target_id"] == "ada"
     assert runtime.notes("backlinks", {"note_id": "ada"})["items"][0]["source"]["id"] == "ada"
     with pytest.raises(ValueError, match="unsupported"):
