@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
@@ -67,8 +68,10 @@ def run_cases(
     evidence: TextIO,
     *,
     evaluator=evaluate_result,
+    case_evaluator: Callable[[str, ExperimentalPlannerResult, dict[str, Any]], Any] | None = None,
+    continue_on_safe_fail: bool = False,
 ) -> list[dict[str, Any]]:
-    """Make one Luna call per case and stop immediately on any non-pass outcome."""
+    """Make one Luna call per case, optionally continuing after oracle-only failures."""
     rows: list[dict[str, Any]] = []
     for case in cases:
         started = perf_counter()
@@ -85,7 +88,11 @@ def run_cases(
             rows.append(row)
             _write_row(evidence, row)
             break
-        evaluation = evaluator(result, oracles[case["id"]])
+        evaluation = (
+            case_evaluator(case["id"], result, oracles[case["id"]])
+            if case_evaluator is not None
+            else evaluator(result, oracles[case["id"]])
+        )
         row = _row(
             case["id"],
             evaluation.classification,
@@ -96,7 +103,9 @@ def run_cases(
         )
         rows.append(row)
         _write_row(evidence, row)
-        if evaluation.classification != "PASS":
+        if evaluation.classification != "PASS" and not (
+            continue_on_safe_fail and evaluation.classification == "FAIL"
+        ):
             break
     return rows
 

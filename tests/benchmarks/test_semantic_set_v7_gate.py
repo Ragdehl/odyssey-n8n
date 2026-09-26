@@ -8,11 +8,18 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks.semantic_set_planner.gate import Evaluation
+from benchmarks.semantic_set_planner.run_live import run_cases
 from benchmarks.semantic_set_planner.v7_gate import (
     CASE_ORDER,
     CLASSIFIER_ORDER,
+    FINAL_CASE_ORDER,
+    HISTORICAL_CASE_ORDER,
+    MAX_PROVIDER_CALLS,
+    PLANNER_ORDER,
     evaluate_v7_result,
     load_classifier_cases,
+    load_historical_registry,
     load_v7_registry,
     run_classifier_cases,
     v7_preflight,
@@ -41,17 +48,41 @@ def test_v7_preserves_six_requests_and_adds_two_shape_sentinels() -> None:
     assert CASE_ORDER[-2:] == ("NOTE01", "SINGLE01")
 
 
+def test_final_v7_gate_contains_every_expected_case_once_in_frozen_order() -> None:
+    """The final authorization covers the existing cases, sentinels, and classifier rows once."""
+    historical_cases, historical_oracles = load_historical_registry()
+    assert tuple(case["id"] for case in historical_cases) == HISTORICAL_CASE_ORDER
+    assert tuple(historical_oracles) == HISTORICAL_CASE_ORDER
+    assert PLANNER_ORDER == CASE_ORDER + HISTORICAL_CASE_ORDER
+    assert FINAL_CASE_ORDER == PLANNER_ORDER + CLASSIFIER_ORDER
+    assert len(FINAL_CASE_ORDER) == MAX_PROVIDER_CALLS == 22
+    assert len(set(FINAL_CASE_ORDER)) == len(FINAL_CASE_ORDER)
+
+
+def test_historical_sentinels_reuse_existing_request_and_oracle_contracts() -> None:
+    """No historical regression request or meaning is rewritten for v7."""
+    from benchmarks.semantic_set_planner.v3_regression_gate import load_v3_regression_registry
+
+    old_cases, old_oracles = load_v3_regression_registry()
+    cases, oracles = load_historical_registry()
+    old_requests = {case["id"]: case["request"] for case in old_cases["cases"]}
+    assert {case["id"]: case["request"] for case in cases} == {
+        case_id: old_requests[case_id] for case_id in HISTORICAL_CASE_ORDER
+    }
+    assert oracles == {case_id: old_oracles[case_id] for case_id in HISTORICAL_CASE_ORDER}
+
+
 def test_preflight_is_luna_low_zero_retry_and_cost_bounded() -> None:
     """Future provider use remains explicit and limited before any client construction."""
     cases, _oracles = load_v7_registry()
     schema = json.loads((ROOT / "config/note-schema.json").read_text())
     preflight = v7_preflight(schema, cases)
-    assert preflight["maximum_provider_calls"] == 12
+    assert preflight["maximum_provider_calls"] == 22
     assert preflight["model"] == "gpt-5.6-luna"
     assert preflight["reasoning"] == "low"
     assert preflight["retries"] == 0
-    assert preflight["conservative_no_cache_maximum_usd"] == "0.1388288"
-    assert preflight["case_order"] == CASE_ORDER + CLASSIFIER_ORDER
+    assert preflight["conservative_no_cache_maximum_usd"] == "0.3034048"
+    assert preflight["case_order"] == FINAL_CASE_ORDER
 
 
 def test_collection_note_set_and_single_shapes_are_distinct() -> None:
@@ -109,8 +140,8 @@ def test_explicit_teaching_shape_is_not_rewritten_by_legacy_completion() -> None
     assert example["actions"][0]["plan"].get("relational_reference") is None
 
 
-def test_classifier_gate_flushes_and_stops_on_first_non_pass() -> None:
-    """Only bounded decisions reach evidence, never the synthetic reply or provider body."""
+def test_classifier_gate_flushes_and_stops_on_wrong_bounded_choice() -> None:
+    """An incorrect option decision is fail-closed because it could redirect resumed work."""
     cases = load_classifier_cases()
 
     class FakeClassifier:
@@ -129,8 +160,94 @@ def test_classifier_gate_flushes_and_stops_on_first_non_pass() -> None:
 
     evidence = StringIO()
     rows = run_classifier_cases(FakeClassifier(), cases, evidence)
-    assert [row["case_id"] for row in rows] == ["CLAR01", "CLAR02"]
-    assert [row["classification"] for row in rows] == ["PASS", "FAIL"]
+    assert [row["case_id"] for row in rows] == list(CLASSIFIER_ORDER[:2])
+    assert [row["classification"] for row in rows] == ["PASS", "FAIL_CLOSED"]
     assert len(evidence.getvalue().splitlines()) == 2
     assert "Where is my bike?" not in evidence.getvalue()
     assert "Tell me about Marta" not in evidence.getvalue()
+
+
+class _FakePlanner:
+    """Count deterministic local planner invocations for runner-stop behavior."""
+
+    last_usage = None
+    last_response_id = None
+    last_provider_status = "completed"
+    last_validation_stage = None
+    last_validation_code = None
+    last_parse_status = "parsed"
+    last_error_category = None
+    last_error_chain = None
+    last_input_sizes = None
+
+    def __init__(self, result=None, error: Exception | None = None) -> None:
+        self.result = result or RequestPlan((RetrieveAction(_selection("test query")),), ())
+        self.error = error
+        self.calls = 0
+
+    def plan(self, _request: str):
+        """Return a fixed local result or raise the configured provider failure."""
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+def test_safe_semantic_fail_is_flushed_and_continues() -> None:
+    """An oracle-only FAIL does not prevent later cases from being recorded."""
+    planner = _FakePlanner()
+    evidence = StringIO()
+    rows = run_cases(
+        planner,
+        [{"id": f"CASE{i}", "request": "request"} for i in range(3)],
+        {f"CASE{i}": {} for i in range(3)},
+        evidence,
+        evaluator=lambda _result, _oracle: Evaluation("FAIL", ("safe_semantic_mismatch",)),
+        continue_on_safe_fail=True,
+    )
+    assert planner.calls == 3
+    assert [row["classification"] for row in rows] == ["FAIL"] * 3
+    assert len(evidence.getvalue().splitlines()) == 3
+
+
+@pytest.mark.parametrize("classification", ["FAIL_CLOSED", "FAIL"])
+def test_fail_closed_and_unsafe_authority_stop_immediately(classification: str) -> None:
+    """Fail-closed outcomes and authority findings cannot use safe-failure continuation."""
+    planner = _FakePlanner()
+    evidence = StringIO()
+    if classification == "FAIL_CLOSED":
+
+        def evaluator(_result, _oracle):
+            return Evaluation("FAIL_CLOSED", ("closed",))
+
+    else:
+        unsafe_result = RequestPlan((RetrieveAction(_selection("../../../private.md")),), ())
+        planner = _FakePlanner(unsafe_result)
+        evaluator = evaluate_v7_result
+    rows = run_cases(
+        planner,
+        [{"id": "FIRST", "request": "request"}, {"id": "SECOND", "request": "request"}],
+        {"FIRST": {"kind": "single"}, "SECOND": {"kind": "single"}},
+        evidence,
+        evaluator=evaluator,
+        continue_on_safe_fail=True,
+    )
+    assert planner.calls == 1
+    assert len(rows) == len(evidence.getvalue().splitlines()) == 1
+    assert rows[0]["classification"] == "FAIL_CLOSED"
+
+
+def test_provider_error_stops_immediately_even_with_safe_fail_continuation() -> None:
+    """Provider exceptions are flushed as fail-closed and never followed by another call."""
+    planner = _FakePlanner(error=TimeoutError("private provider detail"))
+    evidence = StringIO()
+    rows = run_cases(
+        planner,
+        [{"id": "FIRST", "request": "request"}, {"id": "SECOND", "request": "request"}],
+        {},
+        evidence,
+        continue_on_safe_fail=True,
+    )
+    assert planner.calls == 1
+    assert rows[0]["classification"] == "FAIL_CLOSED"
+    assert "private provider detail" not in evidence.getvalue()

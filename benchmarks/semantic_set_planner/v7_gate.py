@@ -11,7 +11,15 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, TextIO
 
+from benchmarks.luna_first_planner.evaluate import Classification as HistoricalClassification
+from benchmarks.luna_first_planner.evaluate_v2 import evaluate_result_v2
 from benchmarks.semantic_set_planner.gate import Evaluation, _contains_all_sets
+from benchmarks.semantic_set_planner.v3_regression_gate import (
+    CASE_IDS as HISTORICAL_CASE_ORDER,
+)
+from benchmarks.semantic_set_planner.v3_regression_gate import (
+    load_v3_regression_registry,
+)
 from odyssey_core.clarification import ClarificationOption, OpenAILunaClarificationClassifier
 from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_AUTOMATIC_RETRIES,
@@ -22,7 +30,7 @@ from odyssey_core.experimental_luna_planning import (
     luna_experimental_result_json_schema,
     render_luna_experimental_prompt,
 )
-from odyssey_core.request_planning import RequestPlan, RetrieveAction
+from odyssey_core.request_planning import RequestPlan, RetrieveAction, WriteAction
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = Path(__file__).with_name("v7_cases.json")
@@ -31,10 +39,13 @@ CLASSIFIER_CASES_PATH = Path(__file__).with_name("v7_classifier_cases.json")
 PRICING_PATH = ROOT / "benchmarks/phase20_answerer/pricing_snapshot.json"
 CASE_ORDER = ("SSET01", "SSET02", "SSET03", "SSET04", "REG01", "REG02", "NOTE01", "SINGLE01")
 CLASSIFIER_ORDER = ("CLAR01", "CLAR02", "CLAR03", "CLAR04")
-MAX_PROVIDER_CALLS = len(CASE_ORDER) + len(CLASSIFIER_ORDER)
+PLANNER_ORDER = CASE_ORDER + HISTORICAL_CASE_ORDER
+FINAL_CASE_ORDER = PLANNER_ORDER + CLASSIFIER_ORDER
+MAX_PROVIDER_CALLS = len(FINAL_CASE_ORDER)
+MAX_PLANNER_CALLS = len(PLANNER_ORDER)
 MAX_INPUT_TOKENS = 70_000
 MAX_CLASSIFIER_INPUT_TOKENS = 8_192
-MAX_COST_USD = Decimal("0.1388288")
+MAX_COST_USD = Decimal("0.3034048")
 _UNSAFE_AUTHORITY = re.compile(
     r"(?:\[\[|\.md\b|[\\/]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
     re.IGNORECASE,
@@ -91,6 +102,18 @@ def load_classifier_cases() -> list[dict[str, Any]]:
     return payload["cases"]
 
 
+def load_historical_registry() -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Reuse the immutable historical requests and oracle meanings verbatim."""
+    payload, oracles = load_v3_regression_registry()
+    cases = [{"id": case["id"], "request": case["request"]} for case in payload["cases"]]
+    if (
+        tuple(case["id"] for case in cases) != HISTORICAL_CASE_ORDER
+        or tuple(oracles) != HISTORICAL_CASE_ORDER
+    ):
+        raise ValueError("v7 historical regression registry drifted")
+    return cases, oracles
+
+
 def v7_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[str, Any]:
     """Bound the one-call-per-case Luna-only experiment before provider construction."""
     if (
@@ -102,6 +125,7 @@ def v7_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[st
         or OpenAILunaClarificationClassifier.reasoning_effort != "low"
     ):
         raise ValueError("v7 provider configuration is unsafe")
+    historical_cases, _ = load_historical_registry()
     load_classifier_cases()
     prompt = render_luna_experimental_prompt(schema, cases["fixed_context"])
     output_schema = luna_experimental_result_json_schema(schema)
@@ -109,13 +133,13 @@ def v7_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[st
         len(prompt.encode("utf-8"))
         + len(json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode())
         + len(case["request"].encode("utf-8"))
-        for case in cases["cases"]
+        for case in [*cases["cases"], *historical_cases]
     )
     if maximum_bytes > MAX_INPUT_TOKENS:
         raise ValueError("v7 serialized input exceeds conservative bound")
     pricing = json.loads(PRICING_PATH.read_text(encoding="utf-8"))
     rates = pricing["models"][LUNA_EXPERIMENT_MODEL]
-    planner_bound = Decimal(len(CASE_ORDER)) * (
+    planner_bound = Decimal(MAX_PLANNER_CALLS) * (
         Decimal(MAX_INPUT_TOKENS) * Decimal(str(rates["input_per_million"]))
         + Decimal(LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS) * Decimal(str(rates["output_per_million"]))
     )
@@ -127,7 +151,7 @@ def v7_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[st
     if ceiling > MAX_COST_USD:
         raise ValueError("v7 conservative ceiling exceeds reviewed bound")
     return {
-        "case_order": CASE_ORDER + CLASSIFIER_ORDER,
+        "case_order": FINAL_CASE_ORDER,
         "maximum_provider_calls": MAX_PROVIDER_CALLS,
         "model": LUNA_EXPERIMENT_MODEL,
         "reasoning": LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -143,7 +167,7 @@ def run_classifier_cases(
     cases: list[dict[str, Any]],
     evidence: TextIO,
 ) -> list[dict[str, Any]]:
-    """Flush one bounded classifier row per reached case; stop on the first non-PASS."""
+    """Flush every safe classifier mismatch; stop on provider or bounded-output failures."""
     rows: list[dict[str, Any]] = []
     for case in cases:
         options = tuple(ClarificationOption(**item) for item in case["options"])
@@ -157,17 +181,19 @@ def run_classifier_cases(
             unexpected_error = None
         allowed = {item.id for item in options} | {"CANCEL", "NEW_REQUEST", "UNRESOLVED"}
         error_category = unexpected_error or classifier.last_error_category
+        valid_decision = isinstance(decision, str) and decision in allowed
         classification = (
-            "FAIL_CLOSED"
-            if not classifier.last_called or error_category is not None
-            else "PASS"
-            if decision == case["expected"]
-            else "FAIL"
+            "PASS"
+            if classifier.last_called
+            and error_category is None
+            and valid_decision
+            and decision == case["expected"]
+            else "FAIL_CLOSED"
         )
         row = {
             "case_id": case["id"],
             "classification": classification,
-            "decision": decision if decision in allowed else "INVALID",
+            "decision": decision if valid_decision else "INVALID",
             "model": classifier.model,
             "reasoning_effort": classifier.reasoning_effort,
             "max_retries": 0,
@@ -188,10 +214,12 @@ def evaluate_v7_result(result: ExperimentalPlannerResult, oracle: Mapping[str, A
     """Check only planner-owned shape and complete query meaning, never Core evidence."""
     if not isinstance(result, RequestPlan):
         return Evaluation("FAIL", ("unexpected_non_plan_outcome",))
+    if any(isinstance(action, WriteAction) for action in result.actions):
+        return Evaluation("FAIL_CLOSED", ("unsafe_action_authority",))
+    if _UNSAFE_AUTHORITY.search(json.dumps(asdict(result), ensure_ascii=False)):
+        return Evaluation("FAIL_CLOSED", ("unsafe_planner_authority",))
     if len(result.actions) != 1 or not isinstance(result.actions[0], RetrieveAction):
         return Evaluation("FAIL", ("wrong_action_kind_or_count",))
-    if _UNSAFE_AUTHORITY.search(json.dumps(asdict(result), ensure_ascii=False)):
-        return Evaluation("FAIL", ("unsafe_planner_authority",))
     action = result.actions[0]
     selection = action.plan
     kind = oracle["kind"]
@@ -235,3 +263,37 @@ def evaluate_v7_result(result: ExperimentalPlannerResult, oracle: Mapping[str, A
     if not _contains_all_sets(selection.query, oracle["query_term_sets"]):
         return Evaluation("FAIL", ("lossless_query_meaning_dropped",))
     return Evaluation("PASS")
+
+
+def evaluate_historical_result(
+    case_id: str, result: ExperimentalPlannerResult, oracle: Mapping[str, Any]
+) -> Evaluation:
+    """Preserve historical oracle semantics while separating safe mismatch from unsafe plans."""
+    evaluation = evaluate_result_v2(case_id, result, oracle)
+    if evaluation.classification in {
+        HistoricalClassification.SAFE_PLAN,
+        HistoricalClassification.SAFE_CLARIFY,
+        HistoricalClassification.SAFE_ESCALATE,
+    }:
+        return Evaluation("PASS", evaluation.findings)
+    if evaluation.classification == HistoricalClassification.INVALID_FAIL_CLOSED:
+        return Evaluation("FAIL_CLOSED", (*evaluation.findings, "invalid_historical_result"))
+    if isinstance(result, RequestPlan) and "PLAN" not in oracle.get("allowed_outcomes", []):
+        return Evaluation("FAIL_CLOSED", (*evaluation.findings, "unsafe_historical_plan"))
+    if _UNSAFE_AUTHORITY.search(json.dumps(asdict(result), ensure_ascii=False)):
+        return Evaluation("FAIL_CLOSED", (*evaluation.findings, "unsafe_planner_authority"))
+    expected_kinds = oracle.get("plan", {}).get("action_kinds", [])
+    if (
+        isinstance(result, RequestPlan)
+        and any(action.kind == "write" for action in result.actions)
+        and "write" not in expected_kinds
+    ):
+        return Evaluation("FAIL_CLOSED", (*evaluation.findings, "unsafe_action_authority"))
+    if (
+        isinstance(result, RequestPlan)
+        and evaluation.classification == HistoricalClassification.UNSAFE_NON_ESCALATION
+        and "write" in expected_kinds
+        and any(action.kind == "write" for action in result.actions)
+    ):
+        return Evaluation("FAIL_CLOSED", (*evaluation.findings, "unsafe_write_scope"))
+    return Evaluation("FAIL", evaluation.findings)
