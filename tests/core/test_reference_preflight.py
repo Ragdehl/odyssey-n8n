@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+import odyssey_core.reference_preflight as reference_preflight
 from odyssey_core import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -18,8 +19,10 @@ from odyssey_core import (
     find_exact_entity_candidates,
     preflight_write_action,
 )
+from odyssey_core.clarification import ClarificationChoice, evidence_digest
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.storage import VaultRepository
+from odyssey_core.write_target import WriteTargetDecision
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -207,6 +210,70 @@ def test_ordinary_preflight_exposes_no_exact_id_override(
             contextual_reasoner=NoReasoner(),
             semantic_limit=5,
             pre_resolved_reference_targets={0: "existing-marta"},  # type: ignore[call-arg]
+        )
+
+
+def test_clarified_write_regrounds_selected_identity_before_update(
+    tmp_path: Path, schema: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A prior choice is only a hint; fresh resolution and unchanged Markdown authorize it."""
+    write_existing(tmp_path, "people/Marta.md")
+    repository = VaultRepository(tmp_path)
+    guard = evidence_digest(repository.read_text("people/Marta.md"))
+    monkeypatch.setattr(
+        reference_preflight,
+        "decide_write_target",
+        lambda *args, **kwargs: WriteTargetDecision(
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            reason="ambiguous_existing_target",
+            candidate_note_ids=("existing-marta", "other-marta"),
+        ),
+    )
+    kwargs = {
+        "repository": repository,
+        "schema": schema,
+        "semantic_index": EmptyIndex(),
+        "embedder": EmptyEmbedder(),
+        "contextual_reasoner": NoReasoner(),
+        "semantic_limit": 5,
+        "clarification_choice": ClarificationChoice("existing-marta", guard),
+    }
+    result = preflight_write_action(action(unit("Marta", entity="Marta")), **kwargs)
+    assert result[0].outcome is WriteTargetOutcome.UPDATE
+    assert result[0].stable_id == "existing-marta"
+
+    changed = repository.read_text("people/Marta.md").replace("fact", "changed fact")
+    (tmp_path / "people/Marta.md").write_text(changed, encoding="utf-8")
+    with pytest.raises(ReferencePreflightError, match="evidence changed"):
+        preflight_write_action(action(unit("Marta", entity="Marta")), **kwargs)
+
+
+def test_clarified_write_rejects_selection_no_longer_offered(
+    tmp_path: Path, schema: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A changed candidate universe cannot turn a stale choice into mutation authority."""
+    write_existing(tmp_path, "people/Marta.md")
+    repository = VaultRepository(tmp_path)
+    guard = evidence_digest(repository.read_text("people/Marta.md"))
+    monkeypatch.setattr(
+        reference_preflight,
+        "decide_write_target",
+        lambda *args, **kwargs: WriteTargetDecision(
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            reason="ambiguous_existing_target",
+            candidate_note_ids=("different-marta", "another-marta"),
+        ),
+    )
+    with pytest.raises(ReferencePreflightError, match="no longer valid"):
+        preflight_write_action(
+            action(unit("Marta", entity="Marta")),
+            repository=repository,
+            schema=schema,
+            semantic_index=EmptyIndex(),
+            embedder=EmptyEmbedder(),
+            contextual_reasoner=NoReasoner(),
+            semantic_limit=5,
+            clarification_choice=ClarificationChoice("existing-marta", guard),
         )
 
 

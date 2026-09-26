@@ -31,6 +31,7 @@ from odyssey_core import (
     WriteAction,
 )
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
+from odyssey_core.request_planning import RelationalReference
 
 
 def selection(name: str | None = "Laura") -> SelectionCriteria:
@@ -123,6 +124,26 @@ def test_record_round_trip_preserves_whole_action_and_all_dependencies(tmp_path:
             "candidate_stable_ids": ["airbus-1"],
         },
     ]
+
+
+def test_pending_selection_retains_relational_reference_for_safe_future_resume() -> None:
+    """Do not silently erase a validated reference from the durable pending projection."""
+    target = SelectionCriteria(
+        None,
+        "my daughter",
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("my daughter", "self", None, "one"),
+    )
+    projected = pending_work._selection(target)
+    assert projected is not None
+    assert projected["relational_reference"] == {
+        "reference": "my daughter",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
 
 
 def test_same_pending_request_replay_is_an_idempotent_success(tmp_path: Path) -> None:

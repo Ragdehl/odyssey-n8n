@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "examples": [
+    {
+      "id": "semantic-set-textual-subject",
+      "request": "What items do I keep in my emergency bag?",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "retrieve",
+            "plan": {
+              "entity": null,
+              "query": "items in my emergency bag",
+              "type": null,
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": {
+                "subject_kind": "query",
+                "subject_query": "my emergency bag",
+                "member_query": "items",
+                "explicit_qualifiers": "",
+                "asks_exhaustive": true
+              }
+            }
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null,
+        "presentation_intent": "answer"
+      },
+      "lesson": "Use semantic_set when the user asks for members of a semantic group even if the group is only fact text and has no canonical Note. Core discovers source facts. For one fact about the emergency bag, use ordinary retrieval."
+    }
+  ]
+}

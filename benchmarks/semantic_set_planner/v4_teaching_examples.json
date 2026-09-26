@@ -1,0 +1,17 @@
+{
+  "version": "4.0.0",
+  "examples": [
+    {
+      "id": "semantic-set-lossless-typed-members",
+      "request": "Who did I travel with to Japan?",
+      "result": {"outcome":"PLAN","actions":[{"kind":"retrieve","plan":{"entity":null,"query":"people I travelled with to Japan","type":null,"filters":[],"link_scope":null,"self_target":null,"relational_reference":null,"semantic_set":{"subject_kind":"self","subject_query":null,"member_query":"people I travelled with","explicit_qualifiers":"Japan","asks_exhaustive":true,"member_type":"person"}}}],"limitations":[],"clarification_code":null,"presentation_intent":"answer"},
+      "lesson": "Keep every material semantic constraint in SelectionCriteria.query and consumed semantic-set fields. member_type is a schema-derived member hint, never an evidence-source type restriction; Core exact-grounds one-hop canonical evidence."
+    },
+    {
+      "id": "semantic-set-possessive-object-subject",
+      "request": "What is in my emergency bag?",
+      "result": {"outcome":"PLAN","actions":[{"kind":"retrieve","plan":{"entity":null,"query":"items in my emergency bag","type":null,"filters":[],"link_scope":null,"self_target":null,"relational_reference":null,"semantic_set":{"subject_kind":"query","subject_query":"my emergency bag","member_query":"items","explicit_qualifiers":"","asks_exhaustive":true,"member_type":null}}}],"limitations":[],"clarification_code":null,"presentation_intent":"answer"},
+      "lesson": "Possessive wording does not make the human the semantic subject: when an object or concept owns or contains the requested members, use subject_kind=query with that bounded subject wording."
+    }
+  ]
+}

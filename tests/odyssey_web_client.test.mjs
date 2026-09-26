@@ -135,6 +135,28 @@ test("closed planner clarification is a normal bounded product result", () => {
   assert.equal(result.kind, "clarification");
 });
 
+test("bounded collection and cannot-answer results keep grounded public fields", () => {
+  const result = validateProductResponse({
+    request_id: "web-collection",
+    status: "completed",
+    kind: "answer",
+    message: "one, two",
+    collection_members: [
+      {kind: "literal", value: "one", stable_note_id: null, source_note_id: "source-1"},
+      {kind: "literal", value: "two", stable_note_id: null, source_note_id: "source-2"},
+    ],
+  });
+  assert.equal(result.collection_members.length, 2);
+  assert.equal(validateProductResponse({
+    request_id: "web-absent", status: "failed", kind: "cannot_answer",
+    message: "No encuentro información pertinente en tus notas.",
+  }).kind, "cannot_answer");
+  assert.throws(() => validateProductResponse({
+    ...result,
+    collection_members: [{kind: "literal", value: "invented", source_note_id: "", stable_note_id: null}],
+  }), ProductRequestError);
+});
+
 test("product response validation accepts only the narrow browser contract", () => {
   const valid = {
     request_id: "web-1",

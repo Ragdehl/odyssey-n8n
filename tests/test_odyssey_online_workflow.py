@@ -14,7 +14,7 @@ def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
     assert (
-        "const { request_id, status, kind, message, request_detail, note_result_snapshot }"
+        "const { request_id, status, kind, message, request_detail, note_result_snapshot, collection_members, clarification }"
         in source
     )
     assert "...(note_result_snapshot ? { note_result_snapshot } : {})" in source
@@ -100,7 +100,8 @@ def test_failure_without_bounded_evidence_fails_closed() -> None:
 def test_completed_response_and_answerer_failure_keep_existing_detail_contract() -> None:
     """Leave completed responses unchanged and retain detail on bounded answerer failures."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "status: r.status === 'partial' ? 'partial' : 'completed'" in source
+    assert "if (outcome === 'CANNOT_ANSWER')" in source
+    assert "status: 'completed', request_detail, note_result_snapshot: snapshot" in source
     assert "request_detail, note_result_snapshot: source.note_result_snapshot } }];" in source
     assert "const request_detail = withAnswerer(source.request_detail, 'failed'" in source
 
@@ -140,18 +141,28 @@ def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
     assert "$json.body || $json" not in notes_response
 
 
-def test_partial_write_unit_success_routes_to_acknowledgement() -> None:
-    """Recognize Core's bounded succeeded unit status without changing Core semantics."""
+def test_incomplete_write_does_not_masquerade_as_completed_acknowledgement() -> None:
+    """Require Core ANSWER before acknowledging bounded succeeded write units."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "u.status === 'completed' || u.status === 'succeeded'" in source
-    assert "kind: wrote ? 'acknowledgement' : 'empty'" in source
+    assert "if (outcome === 'CANNOT_ANSWER')" in source
+    assert "kind: wrote ? 'acknowledgement' : 'cannot_answer'" in source
+
+
+def test_collection_and_clarification_are_direct_grounded_routes() -> None:
+    """Never send Core collection members or bounded choices to ordinary note synthesis."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "a.collection?.outcome === 'ANSWERABLE'" in source
+    assert "collection_members: members" in source
+    assert "if (outcome === 'CLARIFY')" in source
+    assert "clarification: { request_id:" in source
 
 
 def test_valid_insufficient_evidence_is_a_normal_empty_response() -> None:
-    """Map the frozen answerer insufficient-evidence outcome without exposing its enum."""
+    """Map grounded-answer insufficiency to the same public cannot-answer outcome."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "a.outcome === 'INSUFFICIENT_EVIDENCE' && !a.supporting_item_ids.length" in source
-    assert "kind: 'empty', message: a.answer" in source
+    assert "kind: 'cannot_answer', message: a.answer" in source
 
 
 def test_provider_reads_only_explicit_route_evidence() -> None:

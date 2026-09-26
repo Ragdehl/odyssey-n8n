@@ -66,6 +66,7 @@ from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_REASONING_EFFORT,
     OpenAILunaExperimentalPlanner,
     PlannerEscalation,
+    bounded_exception_type_chain,
     embedded_request_plan_contract,
     load_teaching_examples,
     luna_experimental_result_json_schema,
@@ -136,7 +137,11 @@ def retrieve(
     filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one retrieval action fixture."""
-    return {"kind": "retrieve", "plan": selection(query, note_type=note_type, filters=filters)}
+    return {
+        "kind": "retrieve",
+        "result_shape": "single",
+        "plan": selection(query, note_type=note_type, filters=filters),
+    }
 
 
 def delegate(
@@ -426,6 +431,7 @@ def test_luna_call_has_one_attempt_zero_retries_and_explicit_cap(
     assert calls[0]["reasoning"] == {"effort": "low"}
     assert calls[0]["max_output_tokens"] == 2048
     assert planner.max_retries == 0
+    assert planner.last_error_chain is None
 
 
 def test_environment_client_disables_sdk_retries(
@@ -608,6 +614,60 @@ def test_environment_and_provider_failures_remain_closed(
     with pytest.raises(RequestPlanningError, match="wrapper"):
         planner.plan("three")
     assert len(calls) == 3
+
+
+def test_bounded_exception_type_chain_is_outer_first_and_message_free() -> None:
+    """Retain only nested exception class names for safe transport diagnosis."""
+    inner = OSError("SECRET_API_KEY=never-persist-this")
+    middle = ConnectionError("https://api.openai.com/v1/responses")
+    middle.__cause__ = inner
+    outer = RuntimeError("Authorization: Bearer secret")
+    outer.__cause__ = middle
+
+    chain = bounded_exception_type_chain(outer)
+
+    assert chain == ("RuntimeError", "ConnectionError", "OSError")
+    serialized = json.dumps({"error_chain": chain})
+    assert "SECRET_API_KEY" not in serialized
+    assert "api.openai.com" not in serialized
+    assert "Authorization" not in serialized
+
+
+def test_bounded_exception_type_chain_limits_depth_and_breaks_cycles() -> None:
+    """Prevent pathological exception links from growing diagnostic evidence."""
+    errors = [RuntimeError(str(index)) for index in range(6)]
+    for parent, child in zip(errors, errors[1:], strict=False):
+        parent.__cause__ = child
+    assert bounded_exception_type_chain(errors[0]) == ("RuntimeError",) * 5
+
+    first = LookupError("one")
+    second = OSError("two")
+    first.__cause__ = second
+    second.__cause__ = first
+    assert bounded_exception_type_chain(first) == ("LookupError", "OSError")
+
+
+def test_provider_failure_retains_safe_chain_without_changing_category(
+    schema: dict[str, Any],
+) -> None:
+    """Keep outer error classification while exposing no provider exception text."""
+    inner = ConnectionResetError("SECRET_REQUEST_BODY")
+    outer = TimeoutError("https://api.openai.com/v1/responses")
+    outer.__cause__ = inner
+    planner = OpenAILunaExperimentalPlanner(
+        SimpleNamespace(
+            responses=SimpleNamespace(create=lambda **_kwargs: (_ for _ in ()).throw(outer))
+        ),
+        schema,
+        CONTEXT,
+    )
+
+    with pytest.raises(TimeoutError):
+        planner.plan("ordinary request")
+
+    assert planner.last_error_category == "TimeoutError"
+    assert planner.last_error_chain == ("TimeoutError", "ConnectionResetError")
+    assert "SECRET_REQUEST_BODY" not in repr(planner.last_error_chain)
 
 
 def test_evaluator_forces_escalation_for_historical_domain_date_pattern(

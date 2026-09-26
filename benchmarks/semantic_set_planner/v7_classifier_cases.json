@@ -1,0 +1,10 @@
+{
+  "version": "7.0.0",
+  "frozen_before_provider_calls": true,
+  "cases": [
+    {"id":"CLAR01","original_request":"Tell me about Marta.","reply":"The one in Lyon.","options":[{"id":"marta-lyon","label":"Marta in Lyon"},{"id":"marta-madrid","label":"Marta in Madrid"}],"expected":"marta-lyon"},
+    {"id":"CLAR02","original_request":"Tell me about Marta.","reply":"Where is my bike?","options":[{"id":"marta-lyon","label":"Marta in Lyon"},{"id":"marta-madrid","label":"Marta in Madrid"}],"expected":"NEW_REQUEST"},
+    {"id":"CLAR03","original_request":"Tell me about Marta.","reply":"Maybe that one.","options":[{"id":"marta-lyon","label":"Marta in Lyon"},{"id":"marta-madrid","label":"Marta in Madrid"}],"expected":"UNRESOLVED"},
+    {"id":"CLAR04","original_request":"Tell me about Marta.","reply":"Actually, leave it.","options":[{"id":"marta-lyon","label":"Marta in Lyon"},{"id":"marta-madrid","label":"Marta in Madrid"}],"expected":"CANCEL"}
+  ]
+}

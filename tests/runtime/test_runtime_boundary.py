@@ -62,6 +62,8 @@ def test_application_result_serialization_exposes_only_public_evidence() -> None
     assert response == {
         "request_id": "request-test",
         "status": "completed",
+        "product_outcome": "ANSWER",
+        "product_reason": None,
         "planning_error": None,
         "clarification_code": None,
         "presentation_intent": "answer",

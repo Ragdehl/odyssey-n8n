@@ -14,6 +14,7 @@ from typing import Any, Protocol, cast
 from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
+from .clarification import ClarificationChoice
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
@@ -38,6 +39,7 @@ from .reference_binding import PendingReference, render_reference_facts
 from .reference_preflight import (
     RelationshipWritePreflightError,
     UnitTargetPreflight,
+    current_identity_guard,
     preflight_relational_target_write_action,
     preflight_relationship_write_action,
     preflight_write_action,
@@ -54,6 +56,12 @@ from .request_planning import (
     RetrieveAction,
     SelectionCriteria,
     WriteAction,
+)
+from .resolution import ExistingEntityOutcome, resolve_existing_entity
+from .semantic_sets import (
+    SemanticSetOutcome,
+    SemanticSetResolution,
+    resolve_semantic_set,
 )
 from .storage import VaultRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome
@@ -160,6 +168,8 @@ class ActionResult:
     delegated_request: str | None = None
     delegated_selection: Any | None = None
     reason: str | None = None
+    semantic_set: SemanticSetResolution | None = None
+    candidate_note_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,10 +215,12 @@ def execute_request(
     self_binding_repository: SelfBindingRepository | None = None,
     preflight_id_allocator: Callable[[], str] | None = None,
     semantic_limit: int = 10,
+    semantic_set_selector: Any = None,
     pending_recorder: PendingWorkRecorder | None = None,
     history_recorder: HistoryRecorder | None = None,
     monotonic: Callable[[], float] = perf_counter,
     conversation_context: Sequence[Mapping[str, str]] = (),
+    clarification_choice: ClarificationChoice | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -230,6 +242,8 @@ def execute_request(
             boundary; raw headers, JWTs, and provider credentials are not accepted.
         preflight_id_allocator: Optional deterministic CREATE ID allocator.
         semantic_limit: Existing bounded semantic-resolution candidate budget.
+        semantic_set_selector: Optional bounded candidate-only semantic-set selector. When absent,
+            semantic-set plans defer rather than falling through to ordinary ranked retrieval.
         pending_recorder: Optional create-only durable pending-work recorder.
         history_recorder: Optional request-level local Git history recorder.
         conversation_context: Bounded visible recent turns used only by the planner to resolve
@@ -256,13 +270,16 @@ def execute_request(
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic, planner_started)
     try:
-        plan = (
-            provider_recorder.invoke(
-                "planner", planner, planner.plan, user_request, conversation_context
+        if getattr(planner, "is_local_replay", False):
+            plan = planner.plan(user_request)
+        else:
+            plan = (
+                provider_recorder.invoke(
+                    "planner", planner, planner.plan, user_request, conversation_context
+                )
+                if conversation_context
+                else provider_recorder.invoke("planner", planner, planner.plan, user_request)
             )
-            if conversation_context
-            else provider_recorder.invoke("planner", planner, planner.plan, user_request)
-        )
     except Exception as error:
         stages.append(
             OperationalStage(
@@ -368,6 +385,11 @@ def execute_request(
             if callable(getattr(fact_selector, "select", None))
             else fact_selector
         )
+        measured_semantic_set_selector = (
+            _MeasuredSemanticSetSelector(semantic_set_selector, provider_recorder)
+            if callable(getattr(semantic_set_selector, "select", None))
+            else semantic_set_selector
+        )
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
                 action_index,
@@ -383,6 +405,9 @@ def execute_request(
                 semantic_index=semantic_index,
                 contextual_reasoner=measured_contextual_reasoner,
                 semantic_limit=semantic_limit,
+                semantic_set_selector=measured_semantic_set_selector,
+                clarification_choice=clarification_choice,
+                allow_multiple_notes=plan.presentation_intent != "answer",
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -409,6 +434,7 @@ def execute_request(
                 authenticated_actor,
                 self_binding_repository,
                 action_spans,
+                clarification_choice,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -560,6 +586,9 @@ def _execute_retrieve(
     semantic_index: Any = None,
     contextual_reasoner: Any = None,
     semantic_limit: int = 10,
+    semantic_set_selector: Any = None,
+    clarification_choice: ClarificationChoice | None = None,
+    allow_multiple_notes: bool = False,
 ) -> ActionResult:
     """Execute retrieval, restricting relational intent to its exact current member identities."""
     if action.plan.link_scope is not None:
@@ -569,7 +598,121 @@ def _execute_retrieve(
             ActionStatus.DEFERRED,
             reason="UNSUPPORTED_RETRIEVAL_LINK_SCOPE",
         )
+    if action.result_shape == "collection" or action.plan.semantic_set is not None:
+        if not callable(getattr(semantic_set_selector, "select", None)):
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="semantic_set_selector_unavailable",
+            )
+        try:
+            semantic_set = spans.invoke(
+                "semantic_set_resolution",
+                resolve_semantic_set,
+                action.plan.semantic_set,
+                query=action.plan.query,
+                repository=repository,
+                schema=schema,
+                selector=semantic_set_selector,
+            )
+        except Exception as error:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
+            )
+        if semantic_set.outcome is not SemanticSetOutcome.ANSWERABLE:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                semantic_set=semantic_set,
+                reason=semantic_set.outcome.value,
+            )
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.COMPLETED,
+            semantic_set=semantic_set,
+        )
     allowed_note_ids: frozenset[str] | None = None
+    if action.plan.entity is not None and not allow_multiple_notes:
+        try:
+            resolution = spans.invoke(
+                "singular_identity_resolution",
+                resolve_existing_entity,
+                action.plan.entity,
+                action.plan.query,
+                type=action.plan.type,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+            )
+        except Exception as error:
+            return ActionResult(
+                action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
+            )
+        if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS:
+            if clarification_choice is None:
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    reason="ambiguous_existing_target",
+                    candidate_note_ids=resolution.candidate_ids,
+                )
+            still_offered = clarification_choice.stable_id in resolution.candidate_ids
+        elif resolution.outcome is ExistingEntityOutcome.RESOLVED:
+            still_offered = (
+                resolution.id == clarification_choice.stable_id if clarification_choice else True
+            )
+        else:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="unresolved_existing_target",
+            )
+        if not still_offered:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="clarification_scope_changed",
+            )
+        allowed_note_ids = frozenset(
+            {clarification_choice.stable_id if clarification_choice else resolution.id}
+        )
+    if clarification_choice is not None:
+        if (
+            action.result_shape != "single"
+            or action.plan.entity is None
+            or action.plan.relational_reference is not None
+            or action.plan.self_target is not None
+            or action.plan.link_scope is not None
+        ):
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="clarification_scope_changed",
+            )
+        try:
+            if (
+                current_identity_guard(repository, schema, clarification_choice.stable_id)
+                != clarification_choice.evidence_guard
+            ):
+                raise ValueError("clarification evidence changed")
+        except Exception:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="clarification_evidence_changed",
+            )
+        allowed_note_ids = frozenset({clarification_choice.stable_id})
     if action.plan.relational_reference is not None:
         try:
             resolved = spans.invoke(
@@ -658,9 +801,17 @@ def _execute_write(
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
+    clarification_choice: ClarificationChoice | None = None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     if any(unit.target.relational_reference is not None for unit in action.units):
+        if clarification_choice is not None:
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="clarification_scope_changed",
+            )
         return _execute_relational_write(
             action_index,
             action,
@@ -709,6 +860,8 @@ def _execute_write(
         kwargs: dict[str, Any] = {}
         if id_allocator is not None:
             kwargs["id_allocator"] = id_allocator
+        if clarification_choice is not None:
+            kwargs["clarification_choice"] = clarification_choice
         preflight = spans.invoke(
             "preflight",
             preflight_write_action,
@@ -1400,4 +1553,18 @@ class _MeasuredFactSelector:
         """Select one bounded fact locator and record its provider evidence."""
         return self._recorder.invoke(
             "fact_selector", self._provider, self._provider.select, *args, **kwargs
+        )
+
+
+class _MeasuredSemanticSetSelector:
+    """Record one bounded collection-selection call without exposing its candidate text."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def select(self, request: Any) -> Any:
+        """Select supplied fact occurrences and retain usage-only operational evidence."""
+        return self._recorder.invoke(
+            "semantic_set_selector", self._provider, self._provider.select, request
         )

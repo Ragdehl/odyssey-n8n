@@ -74,11 +74,37 @@ current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inver
 evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
-The next proposed stage is [semantic set resolution and evidence](semantic-set-resolution-and-evidence.md):
-multi-fact linked/literal set discovery, structured resolution outcomes, staged clarification,
-answer-source Note navigation, and real progress. This is a design challenge only; its slices and
-open decisions are not approved production behavior. Future direct Notes CRUD (#134) must use the
-same Core mutation and clarification boundaries. Tasks and Events remain later directions.
+[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is underway in Draft
+PR #142. The approved simplification keeps three distinct retrieval shapes: ordinary single-topic
+answers, matching Notes as objects via existing `presentation_intent=note_set`, and canonical-fact
+collections via `RetrieveAction.result_shape=collection`. The planner preserves the lossless query
+without a generated subject/member ontology; Core owns bounded evidence, linked/literal grounding,
+and the decision between answer, genuine clarification, and cannot-answer. Multiple valid results
+are not ambiguity. Previous planner-only gates remain historical evidence for their older frozen
+contracts; the changed model-facing contract still needs focused live regression evidence before
+readiness. No generic Note or type is added. Answer-source Note navigation (#138), progress
+(#136), and direct Notes CRUD (#134) remain separate acceptance boundaries until implemented and
+verified. PR #142 now includes a deliberately narrow clarification-continuation (#137) slice:
+one durable bounded choice for a singular Note read or one write target, with cancel/new-request
+handling and current-Markdown re-grounding before resume. Broader staged/multi-action continuation
+remains deferred. The v7 combined Luna/low gate ran once across 22 frozen planner/classifier cases
+and completed 19 PASS / 3 safe FAIL: SSET02/SSET03 exposed the generic collection-adoption gap and
+HD03 exposed a stale historical oracle. The deterministic correction was green. The final
+18-case planner-only Luna/low recheck was attempted once on 2026-09-26 at
+`48686b0eff3375d11f8c51a94e0b37b57adb0139`, using
+`benchmarks/.live-results/semantic-set-slice1-v7-final-planner-recheck-luna-gate.jsonl`. It stopped
+at SSET01 with `FAIL_CLOSED` before a validated planner result because the provider connection
+failed during DNS resolution (`APIConnectionError -> ConnectError -> ConnectError -> gaierror`).
+One provider request was attempted; there was no response or token usage, no retry, and the
+remaining 17 planner cases were not reached. CLAR01–04 were not rerun because the
+clarification-classifier contract/code is unchanged. The planner live gate remains incomplete and
+requires review before any further live authorization; no production or DEV readiness is claimed.
+The single authorized retry on `89d9c3c82c5bf32d1c2e7f6b49046052a5ac7d5d` also stopped at SSET01
+before a validated response with the same DNS-resolution chain. Its separate immutable artifact
+`benchmarks/.live-results/semantic-set-slice1-v7-final-planner-recheck-luna-gate-retry1.jsonl`
+contains one `FAIL_CLOSED` row; one request was attempted, usage was unavailable, no retry occurred,
+and the other 17 cases were not reached. No further retry is authorized by that attempt. Tasks and
+Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
