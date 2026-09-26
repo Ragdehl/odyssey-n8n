@@ -75,44 +75,22 @@ evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request de
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
 [Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is implemented in Draft
-PR #142 and its focused live-regression requirement is now closed. The approved simplification keeps
-three distinct retrieval shapes: ordinary single-topic answers, matching Notes as objects via existing
-`presentation_intent=note_set`, and canonical-fact collections via `RetrieveAction.result_shape=collection`.
-The planner preserves the lossless query without a generated subject/member ontology; Core owns bounded
-evidence, linked/literal grounding, completeness, ambiguity, stale checks, and the decision between
-answer, genuine clarification, and cannot-answer. Multiple valid results are not ambiguity. No generic
-Note/type, automatic entity promotion, recursive graph inference, or keyword/domain router is added.
-Answer-source Note navigation (#138), progress (#136), and direct Notes CRUD (#134) remain separate
-acceptance boundaries. PR #142 also contains the deliberately narrow clarification-continuation (#137)
-slice: one durable bounded choice for a singular Note read or one write target, with cancel/new-request
-handling and current-Markdown re-grounding before resume; broader staged/multi-action continuation
-remains deferred.
+PR #142. The approved simplification keeps ordinary single-topic answers, matching Notes as objects via
+`presentation_intent=note_set`, and canonical-fact collections via `RetrieveAction.result_shape=collection`
+distinct. The planner preserves a lossless query while Core owns bounded evidence, collection discovery,
+grounding, completeness, ambiguity, stale checks, and fail-closed behavior; no generic Note/type,
+automatic entity promotion, recursive graph inference, or keyword/domain router is introduced. The narrow
+clarification-continuation slice (#137) is included; broader staged/multi-action continuation remains deferred.
 
-The v7 combined Luna/low gate completed 19 PASS / 3 safe FAIL and exposed the generic collection-shape
-adoption gap plus one stale historical oracle. Two subsequent final-recheck attempts failed during DNS
-resolution before any provider response and are infrastructure evidence only; the exact lower-level DNS
-root cause was not proven. Provider-reaching retry2 completed all 18 planner cases with 15 PASS / 3 safe
-FAIL, after which SINGLE01's over-constrained oracle and the generic collection teaching were corrected.
-Retry3 confirmed SSET02/SINGLE01, exposed the remaining SSET03 cardinality tie-breaker, proved HD03's
-provider result was correct current architecture, and fail-closed on SP02 where Note-set presentation
-conflicted with required `link_scope`. Generic cardinality and selection-over-presentation tie-breakers
-plus the HD03 projection correction followed. Retry4 then passed its first 14 cases, including SSET03,
-HD03, and SP02, before a local SM01 write-action rejection.
-
-Final hardening closed a real Structured Outputs/Core mismatch by requiring `WriteAction.units` to have
-`minItems: 1`, matching the existing local validator, and refined bounded write diagnostics to distinguish
-invalid references from invalid mutation payloads without retaining invalid provider content. The empty-write
-schema gap was real but was not proven to be the complete cause of SM01's two recent fail-closed outputs.
-Historical retry2 evidence and a later one-call diagnostic at behavior HEAD
-`8f99a1197cfaaf7c5a640f1749926fa8a2155a96` both produced the same valid SM01 representation: one direct
-n8n retrieval plus one `record` write unit with the ordinary fact `I should review its backup plan.` and
-no `KnowledgeReference`. That diagnostic PASS therefore supports treating the two recent invalid SM01
-outputs as non-deterministic Luna outputs that Core safely rejected, not as evidence for an SM01-specific
-prompt workaround. The remaining SW01, SW02, SC02, SE01, and SA02 sentinels then passed 5/5 at the same
-behavior HEAD with Luna/low, zero retries, and zero Sol calls. CLAR01–04 were intentionally not rerun because
-the clarification-classifier contract did not change after the completed combined v7 gate. No additional
-Luna planner calls are required for PR #142. DEV/PROD were untouched; the PR remains Draft pending explicit
-human authorization for readiness/merge. Tasks and Events remain later directions.
+The focused Luna/low live-regression gate for PR #142 is **closed**. Collection-shape, Note-set/singular,
+linked-selection, write, clarification, escalation, and mixed-action sentinels now have passing evidence on
+the final behavior-bearing HEAD `8f99a1197cfaaf7c5a640f1749926fa8a2155a96`; the remaining five closeout
+sentinels passed 5/5, and a one-call SM01 diagnostic reproduced the previously reviewed valid plan. Two earlier
+DNS-resolution failures were pre-provider infrastructure evidence only. A real Structured Outputs/Core mismatch
+was also closed by requiring non-empty `WriteAction.units`, and bounded write diagnostics were refined without
+relaxing validation. No additional Luna calls are required. DEV/PROD remain untouched. PR #142 stays Draft
+pending explicit human authorization for readiness/merge. Detailed retry/evidence history is retained in the PR
+and benchmark artifacts rather than duplicated here. Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
