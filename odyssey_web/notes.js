@@ -16,7 +16,10 @@ const TYPE_PRESENTATION = Object.freeze({
 const GENERAL_FIELDS = new Set(["type", "tags", "created_at", "updated_at"]);
 
 /** Mount the read-only Notes application while retaining its state while the view is inactive. */
-export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
+export function mountNotes(root, {
+  endpoint = "/api/notes",
+  confirmImpl = (message) => globalThis.confirm?.(message) ?? false,
+} = {}) {
   const state = {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
@@ -396,6 +399,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   }
 
   async function deleteFact(value, fact, control) {
+    if (!confirmImpl(`¿Eliminar esta información de ${value.note.name}?`)) return;
     control.disabled = true;
     try {
       await requestNotes({endpoint, operation: "delete_fact", payload: {
@@ -411,6 +415,7 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
   }
 
   async function deleteNote(value, control) {
+    if (!confirmImpl(`¿Eliminar la nota ${value.note.name}?`)) return;
     control.disabled = true;
     try {
       await requestNotes({endpoint, operation: "delete_note", payload: {

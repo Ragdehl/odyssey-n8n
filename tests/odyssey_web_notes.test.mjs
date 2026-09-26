@@ -86,11 +86,12 @@ function page({mode = "feed", items = [pageItem("a", "Resultado A")], total = it
   return {mode, items, total, next_cursor: null, sort: "relevance", applied_filters, snapshot_offset: 0};
 }
 
-function detail(id, name = id) {
+function detail(id, name = id, mutation = null) {
   return {
     kind: "detail",
     note: {id, name, type: "person", properties: {}, created_at: "2026-09-20", updated_at: "2026-09-22", tags: []},
     body_blocks: [],
+    ...(mutation ? {mutation} : {}),
   };
 }
 
@@ -101,7 +102,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-async function mountNotes({requestNotes}) {
+async function mountNotes({requestNotes, confirmImpl = () => true}) {
   const document = new FakeDocument();
   const root = new FakeElement("section");
   const elements = {
@@ -135,14 +136,116 @@ async function mountNotes({requestNotes}) {
   const {mountNotes: mount} = await import(
     `data:text/javascript;base64,${Buffer.from(`${testable}\n// fixture ${fixtureNumber += 1}`).toString("base64")}`,
   );
-  const controller = mount(root);
+  const controller = mount(root, {confirmImpl});
   await flush();
   return {controller, document, elements};
+}
+
+async function mountMutationNote({confirmImpl}) {
+  const calls = [];
+  const mutation = {
+    revision: 7,
+    source_hash: "a".repeat(64),
+    atomic_facts: [{locator: "request-1:0", text: "Ada works at Odyssey."}],
+  };
+  const mounted = await mountNotes({
+    confirmImpl,
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return detail(payload.note_id, "Ada", mutation);
+      if (operation === "backlinks") return {items: []};
+      if (operation === "delete_fact" || operation === "delete_note") return {
+        kind: "mutation", operation: operation === "delete_fact" ? "fact_deleted" : "note_deleted",
+        note_id: "ada", history: {status: "COMMITTED"},
+      };
+      return page({items: [pageItem("ada", "Ada")]});
+    },
+  });
+  mounted.elements.list.children[0].click();
+  await flush();
+  return {mounted, calls};
 }
 
 function capabilities() {
   return {types: [{id: "person", name: "Persona"}], fields: []};
 }
+
+test("cancel fact deletion keeps the detail open and sends no mutation request", async () => {
+  let confirmation = "";
+  const {mounted, calls} = await mountMutationNote({confirmImpl: (message) => {
+    confirmation = message;
+    return false;
+  }});
+  const current = mounted.controller.state.current;
+  const deleteButton = mounted.elements.detail.querySelector(".note-fact-action").querySelector("button");
+
+  deleteButton.click();
+  await flush();
+
+  assert.equal(confirmation, "¿Eliminar esta información de Ada?");
+  assert.equal(calls.filter(({operation}) => operation.startsWith("delete_")).length, 0);
+  assert.strictEqual(mounted.controller.state.current, current);
+  assert.equal(mounted.elements.detail.hidden, false);
+  assert.equal(mounted.elements.detail.textContent.includes("Ada works at Odyssey."), true);
+});
+
+test("confirm fact deletion sends one bounded request with current stale-state tokens", async () => {
+  const {mounted, calls} = await mountMutationNote({confirmImpl: () => true});
+  mounted.elements.detail.querySelector(".note-fact-action").querySelector("button").click();
+  await flush();
+
+  const mutations = calls.filter(({operation}) => operation.startsWith("delete_"));
+  assert.equal(mutations.length, 1);
+  assert.equal(mutations[0].operation, "delete_fact");
+  assert.deepEqual(Object.keys(mutations[0].payload).sort(), [
+    "expected_revision", "expected_source_hash", "fact_locator", "note_id", "request_id",
+  ]);
+  assert.equal(mutations[0].payload.note_id, "ada");
+  assert.equal(mutations[0].payload.fact_locator, "request-1:0");
+  assert.equal(mutations[0].payload.expected_revision, 7);
+  assert.equal(mutations[0].payload.expected_source_hash, "a".repeat(64));
+  assert.match(mutations[0].payload.request_id, /^notes-[a-f0-9]{32}$/);
+  assert.strictEqual(mounted.controller.state.current.note.id, "ada");
+  assert.equal(mounted.elements.detail.hidden, false);
+});
+
+test("cancel Note deletion keeps the detail open and sends no mutation request", async () => {
+  let confirmation = "";
+  const {mounted, calls} = await mountMutationNote({confirmImpl: (message) => {
+    confirmation = message;
+    return false;
+  }});
+  const current = mounted.controller.state.current;
+
+  mounted.elements.detail.querySelector(".note-delete-button").click();
+  await flush();
+
+  assert.equal(confirmation, "¿Eliminar la nota Ada?");
+  assert.equal(calls.filter(({operation}) => operation.startsWith("delete_")).length, 0);
+  assert.strictEqual(mounted.controller.state.current, current);
+  assert.equal(mounted.elements.detail.hidden, false);
+  assert.equal(mounted.elements.detail.textContent.includes("Ada"), true);
+});
+
+test("confirm Note deletion sends one bounded request with current stale-state tokens", async () => {
+  const {mounted, calls} = await mountMutationNote({confirmImpl: () => true});
+  mounted.elements.detail.querySelector(".note-delete-button").click();
+  await flush();
+
+  const mutations = calls.filter(({operation}) => operation.startsWith("delete_"));
+  assert.equal(mutations.length, 1);
+  assert.equal(mutations[0].operation, "delete_note");
+  assert.deepEqual(Object.keys(mutations[0].payload).sort(), [
+    "expected_revision", "expected_source_hash", "note_id", "request_id",
+  ]);
+  assert.equal(mutations[0].payload.note_id, "ada");
+  assert.equal(mutations[0].payload.expected_revision, 7);
+  assert.equal(mutations[0].payload.expected_source_hash, "a".repeat(64));
+  assert.match(mutations[0].payload.request_id, /^notes-[a-f0-9]{32}$/);
+  assert.equal(mounted.controller.state.current, null);
+  assert.equal(mounted.elements.detail.hidden, true);
+});
 
 test("affected snapshots expose Ver todas and return only Notes to the normal feed", async () => {
   const calls = [];
