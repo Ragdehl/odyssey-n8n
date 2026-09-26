@@ -65,6 +65,14 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-inline-link { color: #394d88; font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
 .note-inline-link svg, .backlink svg { width: .88em; height: .88em; margin-right: .16em; vertical-align: -.08em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .note-empty-body { color: #6a7287; font-style: italic; }
+.note-actions { display: grid; gap: .5rem; margin-top: 1rem; padding: .8rem; border: 1px solid rgba(23,32,51,.1); border-radius: .75rem; background: rgba(248,249,252,.9); }
+.note-actions h3 { margin: 0; font-size: .85rem; }
+.note-actions p { color: #6a7287; font-size: .82rem; }
+.note-fact-actions { display: grid; gap: .4rem; }
+.note-fact-action { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid rgba(23,32,51,.08); font-size: .84rem; }
+.note-fact-action span { overflow-wrap: anywhere; }
+.note-danger-button { min-height: 2.2rem; padding: .4rem .55rem; background: #8b3131; white-space: nowrap; }
+.note-delete-button { justify-self: start; }
 .note-backlinks { display: grid; gap: .4rem; margin-top: 1rem; } .note-backlinks h3 { margin: 0; font-size: .85rem; }
 .backlink { min-height: 2.35rem; text-align: left; color: #39445d; background: #edf0f8; }
 .backlink-occurrence { border-left: 2px solid #d9deef; padding-left: .55rem; }

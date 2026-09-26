@@ -74,7 +74,7 @@ current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inver
 evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
-[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is implemented in Draft
+[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is complete and merged in
 PR #142. The approved simplification keeps ordinary single-topic answers, matching Notes as objects via
 `presentation_intent=note_set`, and canonical-fact collections via `RetrieveAction.result_shape=collection`
 distinct. The planner preserves a lossless query while Core owns bounded evidence, collection discovery,
@@ -88,9 +88,12 @@ the final behavior-bearing HEAD `8f99a1197cfaaf7c5a640f1749926fa8a2155a96`; the 
 sentinels passed 5/5, and a one-call SM01 diagnostic reproduced the previously reviewed valid plan. Two earlier
 DNS-resolution failures were pre-provider infrastructure evidence only. A real Structured Outputs/Core mismatch
 was also closed by requiring non-empty `WriteAction.units`, and bounded write diagnostics were refined without
-relaxing validation. No additional Luna calls are required. DEV/PROD remain untouched. PR #142 stays Draft
-pending explicit human authorization for readiness/merge. Detailed retry/evidence history is retained in the PR
-and benchmark artifacts rather than duplicated here. Tasks and Events remain later directions.
+relaxing validation. No additional Luna calls are required. Detailed retry/evidence history is retained in the PR
+and benchmark artifacts rather than duplicated here.
+
+[UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) is the current bounded phase in Draft PR #144.
+It finishes the existing Chat + Notes product and may expose only direct mutations that retain Core authority.
+Tasks remains the next application phase after this pass.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -128,8 +131,9 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic set resolution and evidence                             ➡️ Draft PR; live gate complete, human readiness/merge pending
-Tasks — first real application + minimal app routing              ⬜ planned
+Semantic set resolution and evidence                             ✅ merged in PR #142
+UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
+Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned

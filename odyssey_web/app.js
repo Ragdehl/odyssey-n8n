@@ -265,7 +265,7 @@ function formatUsage(usage) {
 }
 
 function appendLoading() {
-  const loading = appendMessage("odyssey", "Procesando…");
+  const loading = appendMessage("odyssey", "Odyssey está trabajando…");
   loading.classList.add("message-loading");
   return loading;
 }

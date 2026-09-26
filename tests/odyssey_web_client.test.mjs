@@ -494,6 +494,29 @@ test("Notes browser validation accepts typed pages, detail, and explicit backlin
   }).items[0].occurrences, 2);
 });
 
+test("Notes browser validation accepts only bounded direct-mutation metadata", () => {
+  const detail = validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "Marta trabaja en Thales.",
+    body_blocks: [{kind: "paragraph", segments: [{text: "Marta trabaja en Thales."}]}],
+    links: [],
+    mutation: {
+      revision: 3,
+      source_hash: "a".repeat(64),
+      atomic_facts: [{locator: "request-1:0", text: "Marta trabaja en Thales."}],
+    },
+  });
+  assert.equal(detail.mutation.atomic_facts[0].locator, "request-1:0");
+  assert.deepEqual(validateNotesResponse({
+    kind: "mutation", operation: "fact_deleted", note_id: "marta", history: {status: "COMMITTED"},
+  }).history.status, "COMMITTED");
+  assert.throws(() => validateNotesResponse({
+    kind: "detail", note: noteSummary(), body: "", body_blocks: [], links: [],
+    mutation: {revision: 3, source_hash: "wrong", atomic_facts: []},
+  }), NotesRequestError);
+});
+
 test("product transport accepts the closed v2 affected-note snapshot but rejects hybrids", () => {
   const base = {request_id: "web-affected", status: "completed", kind: "acknowledgement", message: "Guardado."};
   const payload = {...base, note_result_snapshot: {

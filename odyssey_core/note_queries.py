@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from odyssey_core.atomic_facts import AtomicFactError, parse_atomic_facts
 from odyssey_core.context import (
     ContextFilter,
     ContextIndex,
@@ -115,6 +116,9 @@ class NoteDetail:
     body: str
     body_blocks: tuple[NoteBodyBlock, ...]
     links: tuple[NoteLink, ...]
+    revision: int = 1
+    source_hash: str = "0" * 64
+    atomic_facts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -589,6 +593,22 @@ class NotesQueryService:
         resolve = _link_resolver(path_map, basenames)
         body_blocks = _presentation_blocks(current.body, resolve)
         links = _aggregate_links(body_blocks)
+        try:
+            atomic_facts = tuple(
+                (fact.locator, fact.text) for fact in parse_atomic_facts(current.body)
+            )
+        except AtomicFactError:
+            # Existing Markdown may contain historical marker-like comments. Preserve the
+            # read-only projection while withholding every direct mutation affordance.
+            atomic_facts = ()
+        revision = None
+        try:
+            raw = self.repository.read_text(current.path)
+            revision = parse_note(raw).metadata["revision"]
+        except (KeyError, NoteFormatError, NoteUnavailableError) as error:
+            raise NotesQueryError("Canonical note is unavailable") from error
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+            raise NotesQueryError("Canonical note revision is invalid")
         return NoteDetail(
             current.summary,
             _presentation_text(body_blocks),
@@ -610,6 +630,9 @@ class NotesQueryService:
                     ),
                 )
             ),
+            revision,
+            current.source_hash,
+            atomic_facts,
         )
 
     def backlinks(

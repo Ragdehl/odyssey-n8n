@@ -1,6 +1,6 @@
 # UI polish + Notes editing lite
 
-Status: **phase contract approved for bounded implementation; Draft PR work only**.
+Status: **implementation in progress; Draft PR work only**.
 
 ## Objective
 
@@ -108,6 +108,20 @@ If incoming backlinks/references make deletion semantics ambiguous, the UI must 
 None for the first bounded slice.
 
 Potential edit/add controls are conditional implementation outcomes, not product ambiguities: they ship only if the existing Core semantic boundary can be reused safely with a small bridge. Otherwise they remain deferred without blocking the visual polish/fact-delete/eligible soft-delete slice.
+
+## Implementation findings
+
+- Direct deletion is limited to Odyssey-marked atomic facts. Detail projection exposes only the stable
+  locator, current revision, and source hash needed for a re-grounded Core operation; it does not expose
+  raw Markdown editing authority.
+- The implementation reuses revision-guarded materialization, request-correlated Git history, and the
+  existing derived-index refresh. A stale detail, missing fact, malformed marker, or changed revision fails
+  closed before persistence.
+- Soft-delete is available only when the existing current backlink projection reports no incoming references.
+  A reference blocks deletion with no cascade or broken-link policy.
+- Add and amend controls are deferred: their only current reusable route is the provider-backed semantic
+  writer/reference path. A browser bridge would require a material model-facing contract or a parallel
+  mutation authority, neither of which is authorized for this phase.
 
 ## Implementation order
 

@@ -346,13 +346,91 @@ export function mountNotes(root, {endpoint = "/api/notes"} = {}) {
     const body = document.createElement("article");
     body.className = "note-body";
     renderBody(body, value.body_blocks, open);
+    const actions = document.createElement("section");
+    actions.className = "note-actions";
+    const actionsHeading = document.createElement("h3");
+    actionsHeading.textContent = "Acciones";
+    actions.append(actionsHeading);
+    if (!value.mutation) {
+      const message = document.createElement("p");
+      message.textContent = "Las acciones directas no están disponibles para esta nota.";
+      actions.append(message);
+    } else if (value.mutation.atomic_facts.length) {
+      const facts = document.createElement("div");
+      facts.className = "note-fact-actions";
+      for (const fact of value.mutation.atomic_facts) {
+        const row = document.createElement("div");
+        row.className = "note-fact-action";
+        const text = document.createElement("span");
+        text.textContent = fact.text;
+        const remove = button("Eliminar", () => void deleteFact(value, fact, remove));
+        remove.className = "note-danger-button";
+        row.append(text, remove);
+        facts.append(row);
+      }
+      actions.append(facts);
+    } else {
+      const message = document.createElement("p");
+      message.textContent = "No hay hechos añadidos por Odyssey que se puedan eliminar directamente.";
+      actions.append(message);
+    }
+    if (value.mutation) {
+      const removeNote = button("Eliminar nota", () => void deleteNote(value, removeNote));
+      removeNote.className = "note-danger-button note-delete-button";
+      actions.append(removeNote);
+    }
     const backlinks = document.createElement("section");
     backlinks.className = "note-backlinks";
     const backlinksHeading = document.createElement("h3");
     backlinksHeading.textContent = "Enlazada desde";
     backlinks.append(backlinksHeading);
     void appendBacklinks(backlinks, value.note.id);
-    detail.replaceChildren(header, controls, properties, tags, body, backlinks);
+    detail.replaceChildren(header, controls, properties, tags, body, actions, backlinks);
+  }
+
+  function mutationRequestId() {
+    const bytes = new Uint8Array(16);
+    if (!globalThis.crypto?.getRandomValues) throw new NotesRequestError("No se puede preparar la actualización.");
+    globalThis.crypto.getRandomValues(bytes);
+    return `notes-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  async function deleteFact(value, fact, control) {
+    control.disabled = true;
+    try {
+      await requestNotes({endpoint, operation: "delete_fact", payload: {
+        note_id: value.note.id, fact_locator: fact.locator, expected_revision: value.mutation.revision,
+        expected_source_hash: value.mutation.source_hash, request_id: mutationRequestId(),
+      }});
+      await open(value.note.id, {history: false});
+      status.textContent = "La información se ha eliminado.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  async function deleteNote(value, control) {
+    control.disabled = true;
+    try {
+      await requestNotes({endpoint, operation: "delete_note", payload: {
+        note_id: value.note.id, expected_revision: value.mutation.revision,
+        expected_source_hash: value.mutation.source_hash, request_id: mutationRequestId(),
+      }});
+      state.current = null;
+      showList();
+      await refreshCurrentList();
+      status.textContent = "La nota se ha retirado.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  function mutationErrorMessage(error) {
+    if (error instanceof NotesRequestError && error.code === "INCOMING_REFERENCES") return "No se puede eliminar esta nota porque otras notas la enlazan.";
+    if (error instanceof NotesRequestError && ["STALE_NOTE", "FACT_UNAVAILABLE", "NOTE_UNAVAILABLE"].includes(error.code)) return "La nota ha cambiado. Ábrela de nuevo antes de modificarla.";
+    return "No se ha podido actualizar la nota.";
   }
 
   async function appendBacklinks(target, id) {

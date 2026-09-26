@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -30,7 +30,7 @@ export async function requestNotes({endpoint = "/api/notes", operation, payload 
   let value;
   try { value = await response.json(); } catch { throw new NotesRequestError("Odyssey devolvió notas inválidas."); }
   if (!response.ok) {
-    throw new NotesRequestError("No se ha podido completar la consulta.", value?.error === "STALE_CURSOR" ? "STALE_CURSOR" : null);
+    throw new NotesRequestError("No se ha podido completar la consulta.", typeof value?.error === "string" ? value.error : null);
   }
   const result = validateNotesResponse(value);
   const finished = typeof monotonicImpl === "function" ? monotonicImpl() : null;
@@ -53,12 +53,16 @@ export function validateNotesResponse(value) {
   if (value.kind === "page") return validatePage(value);
   if (value.kind === "detail") {
     if (!isString(value.body) || !Array.isArray(value.body_blocks) || !Array.isArray(value.links)) throw new NotesRequestError("Detalle inválido.");
-    return {kind: "detail", note: validateSummary(value.note), body: value.body, body_blocks: value.body_blocks.map(validateBodyBlock), links: value.links.map(validateLink)};
+    return {kind: "detail", note: validateSummary(value.note), body: value.body, body_blocks: value.body_blocks.map(validateBodyBlock), links: value.links.map(validateLink), mutation: value.mutation === undefined ? null : validateMutationMetadata(value.mutation)};
   }
   if (value.kind === "backlinks") {
     if (!isText(value.target_id) || !Array.isArray(value.items) || !Number.isInteger(value.total) || !cursor(value.next_cursor)) throw new NotesRequestError("Enlaces entrantes inválidos.");
     return {kind: "backlinks", target_id: value.target_id, total: value.total, next_cursor: value.next_cursor,
       items: value.items.map(validateBacklink)};
+  }
+  if (value.kind === "mutation") {
+    if (!["fact_deleted", "note_deleted"].includes(value.operation) || !isText(value.note_id) || !value.history || !isText(value.history.status)) throw new NotesRequestError("Mutación de nota inválida.");
+    return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}};
   }
   throw new NotesRequestError("Respuesta de notas no compatible.");
 }
@@ -84,6 +88,7 @@ function validateType(value) { if (!value || !isText(value.id) || !isText(value.
 function validateField(value) { if (!value || !isText(value.id) || !isText(value.value_type) || !Array.isArray(value.operators) || !Array.isArray(value.applies_to) || (value.format !== undefined && !isText(value.format) && value.format !== null)) throw new NotesRequestError("Campo inválido."); return {id: value.id, value_type: value.value_type, operators: value.operators.filter(isText), applies_to: value.applies_to.filter(isText), format: value.format ?? null}; }
 function validateFilter(value) { if (!value || !isText(value.field) || !isText(value.op)) throw new NotesRequestError("Filtro inválido."); return {field: value.field, op: value.op, value: value.value}; }
 function validateLink(value) { if (!value || !isText(value.target_id) || !isText(value.target_name) || !isText(value.target_type) || !isText(value.label)) throw new NotesRequestError("Enlace inválido."); return {...value, occurrences: count(value.occurrences)}; }
+function validateMutationMetadata(value) { if (!value || !Number.isInteger(value.revision) || value.revision < 1 || !/^[a-f0-9]{64}$/.test(value.source_hash) || !Array.isArray(value.atomic_facts)) throw new NotesRequestError("Metadatos de edición inválidos."); const facts = value.atomic_facts.map((fact) => { if (!fact || !isText(fact.locator) || !isText(fact.text)) throw new NotesRequestError("Hecho editable inválido."); return {locator: fact.locator, text: fact.text}; }); return {revision: value.revision, source_hash: value.source_hash, atomic_facts: facts}; }
 function validateBodyBlock(value) {
   if (!value || !["heading", "paragraph", "list_item"].includes(value.kind) || !Array.isArray(value.segments)) throw new NotesRequestError("Cuerpo de nota inválido.");
   return {kind: value.kind, segments: value.segments.map(validateBodySegment)};
