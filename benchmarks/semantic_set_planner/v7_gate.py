@@ -182,13 +182,12 @@ def run_classifier_cases(
         allowed = {item.id for item in options} | {"CANCEL", "NEW_REQUEST", "UNRESOLVED"}
         error_category = unexpected_error or classifier.last_error_category
         valid_decision = isinstance(decision, str) and decision in allowed
-        classification = (
-            "PASS"
-            if classifier.last_called
-            and error_category is None
-            and valid_decision
-            and decision == case["expected"]
-            else "FAIL_CLOSED"
+        classification = _classify_bounded_decision(
+            classifier.last_called,
+            error_category,
+            valid_decision,
+            decision,
+            case["expected"],
         )
         row = {
             "case_id": case["id"],
@@ -210,6 +209,21 @@ def run_classifier_cases(
     return rows
 
 
+def _classify_bounded_decision(
+    called: bool,
+    error_category: str | None,
+    valid_decision: bool,
+    decision: str,
+    expected: str,
+) -> str:
+    """Accept only the expected supplied choice; any classifier uncertainty fails closed."""
+    if not called or error_category is not None or not valid_decision:
+        return "FAIL_CLOSED"
+    if decision != expected:
+        return "FAIL_CLOSED"
+    return "PASS"
+
+
 def evaluate_v7_result(result: ExperimentalPlannerResult, oracle: Mapping[str, Any]) -> Evaluation:
     """Check only planner-owned shape and complete query meaning, never Core evidence."""
     if not isinstance(result, RequestPlan):
@@ -222,46 +236,77 @@ def evaluate_v7_result(result: ExperimentalPlannerResult, oracle: Mapping[str, A
         return Evaluation("FAIL", ("wrong_action_kind_or_count",))
     action = result.actions[0]
     selection = action.plan
-    kind = oracle["kind"]
-    if kind == "collection":
-        if action.result_shape != "collection" or result.presentation_intent != "answer":
-            return Evaluation("FAIL", ("collection_shape_missing",))
-        if (
-            selection.entity is not None
-            or selection.type is not None
-            or selection.filters
-            or selection.link_scope is not None
-            or selection.self_target is not None
-            or selection.relational_reference is not None
-            or selection.semantic_set is not None
-        ):
-            return Evaluation("FAIL", ("collection_direct_selection_conflict",))
-    elif kind == "note_set":
-        if result.presentation_intent != "note_set" or action.result_shape != "single":
-            return Evaluation("FAIL", ("note_set_shape_missing",))
-    elif kind in {"ordinary_named", "single"}:
-        if action.result_shape != "single" or result.presentation_intent != "answer":
-            return Evaluation("FAIL", ("single_shape_missing",))
-        if selection.relational_reference is not None:
-            return Evaluation("FAIL", ("unexpected_relational_reference",))
-        if oracle.get("requires_entity") and selection.entity is None:
-            return Evaluation("FAIL", ("singular_source_identity_missing",))
-    elif kind == "singular_relational":
-        reference = selection.relational_reference
-        if (
-            action.result_shape != "single"
-            or result.presentation_intent != "answer"
-            or reference is None
-            or reference.source_kind != "self"
-            or reference.members != "one"
-            or not any(term in reference.reference.casefold() for term in oracle["reference_terms"])
-        ):
-            return Evaluation("FAIL", ("singular_relational_contract_missing",))
-        return Evaluation("PASS")
-    else:
-        return Evaluation("FAIL_CLOSED", ("unknown_oracle_kind",))
+    shape_evaluation = _evaluate_result_shape(result, action, oracle)
+    if shape_evaluation is not None:
+        return shape_evaluation
     if not _contains_all_sets(selection.query, oracle["query_term_sets"]):
         return Evaluation("FAIL", ("lossless_query_meaning_dropped",))
+    return Evaluation("PASS")
+
+
+def _evaluate_result_shape(
+    result: RequestPlan, action: RetrieveAction, oracle: Mapping[str, Any]
+) -> Evaluation | None:
+    """Return a bounded shape mismatch, or None when the requested retrieval shape matches."""
+    kind = oracle["kind"]
+    if kind == "collection":
+        return _evaluate_collection_shape(result, action)
+    if kind == "note_set":
+        if result.presentation_intent != "note_set" or action.result_shape != "single":
+            return Evaluation("FAIL", ("note_set_shape_missing",))
+        return None
+    if kind in {"ordinary_named", "single"}:
+        return _evaluate_single_shape(result, action, oracle)
+    if kind == "singular_relational":
+        return _evaluate_relational_shape(result, action, oracle)
+    return Evaluation("FAIL_CLOSED", ("unknown_oracle_kind",))
+
+
+def _evaluate_collection_shape(result: RequestPlan, action: RetrieveAction) -> Evaluation | None:
+    """Require a collection mode with no competing direct-selection authority."""
+    selection = action.plan
+    if action.result_shape != "collection" or result.presentation_intent != "answer":
+        return Evaluation("FAIL", ("collection_shape_missing",))
+    if any(
+        (
+            selection.entity is not None,
+            selection.type is not None,
+            bool(selection.filters),
+            selection.link_scope is not None,
+            selection.self_target is not None,
+            selection.relational_reference is not None,
+            selection.semantic_set is not None,
+        )
+    ):
+        return Evaluation("FAIL", ("collection_direct_selection_conflict",))
+    return None
+
+
+def _evaluate_single_shape(
+    result: RequestPlan, action: RetrieveAction, oracle: Mapping[str, Any]
+) -> Evaluation | None:
+    """Check ordinary single-result mode and any frozen source-identity requirement."""
+    selection = action.plan
+    if action.result_shape != "single" or result.presentation_intent != "answer":
+        return Evaluation("FAIL", ("single_shape_missing",))
+    if selection.relational_reference is not None:
+        return Evaluation("FAIL", ("unexpected_relational_reference",))
+    if oracle.get("requires_entity") and selection.entity is None:
+        return Evaluation("FAIL", ("singular_source_identity_missing",))
+    return None
+
+
+def _evaluate_relational_shape(
+    result: RequestPlan, action: RetrieveAction, oracle: Mapping[str, Any]
+) -> Evaluation:
+    """Require one self-rooted relational reference using a frozen meaning term."""
+    reference = action.plan.relational_reference
+    if action.result_shape != "single" or result.presentation_intent != "answer":
+        return Evaluation("FAIL", ("singular_relational_contract_missing",))
+    if reference is None or reference.source_kind != "self" or reference.members != "one":
+        return Evaluation("FAIL", ("singular_relational_contract_missing",))
+    if not any(term in reference.reference.casefold() for term in oracle["reference_terms"]):
+        return Evaluation("FAIL", ("singular_relational_contract_missing",))
     return Evaluation("PASS")
 
 
