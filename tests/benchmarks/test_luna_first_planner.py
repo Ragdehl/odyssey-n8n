@@ -477,6 +477,12 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     assert "CLARIFY only" in prompt
     assert "ESCALATE whenever" in prompt
     assert "Never approximate a fact, event" in prompt
+    assert "cardinality of the requested answer" in prompt
+    assert (
+        "Several semantic members or values of one named subject are still a collection" in prompt
+    )
+    assert "Selection semantics take precedence over presentation" in prompt
+    assert "presentation_intent MUST be answer even when the user asks to show notes" in prompt
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())

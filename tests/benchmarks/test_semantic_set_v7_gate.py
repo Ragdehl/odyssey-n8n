@@ -98,6 +98,7 @@ def test_historical_sentinels_reuse_existing_request_and_oracle_contracts() -> N
             assert oracles[case_id] == old_oracles[case_id]
     projected_hd03 = json.loads(json.dumps(old_oracles["HD03"]))
     projected_hd03["plan"].pop("required_limitations")
+    projected_hd03["plan"]["retrievals"][0].pop("type")
     projected_hd03["guards"] = []
     assert oracles["HD03"] == projected_hd03
 
@@ -111,10 +112,11 @@ def test_hd03_requires_may_in_lossless_query_without_lifecycle_filters() -> None
                 SelectionCriteria(
                     None,
                     "Show journal entries describing trips I took in May.",
-                    "journal_entry",
+                    None,
                     (),
                     None,
-                )
+                ),
+                result_shape="collection",
             ),
         ),
         (),
@@ -123,8 +125,9 @@ def test_hd03_requires_may_in_lossless_query_without_lifecycle_filters() -> None
         (
             RetrieveAction(
                 SelectionCriteria(
-                    None, "Show journal entries describing trips I took.", "journal_entry", (), None
-                )
+                    None, "Show journal entries describing trips I took.", None, (), None
+                ),
+                result_shape="collection",
             ),
         ),
         (),
@@ -135,10 +138,11 @@ def test_hd03_requires_may_in_lossless_query_without_lifecycle_filters() -> None
                 SelectionCriteria(
                     None,
                     "Show journal entries describing trips I took in May.",
-                    "journal_entry",
+                    None,
                     (ContextFilter("entry_date", "eq", "May"),),
                     None,
-                )
+                ),
+                result_shape="collection",
             ),
         ),
         (),

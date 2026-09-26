@@ -185,6 +185,12 @@ Choose the outcome before drafting fields:
 4. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except CLARIFY's UNRECOGNIZED_REQUEST.
 Never approximate a fact, event, decision, purchase, or other domain date with note lifecycle fields; preserve uncertain meaning and ESCALATE rather than guessing.
 
+Retrieval-shape tie-breakers:
+- Choose result_shape=collection by the cardinality of the requested answer, not by the number of named source subjects. Several semantic members or values of one named subject are still a collection; keep that subject only in the lossless query and leave collection direct selectors null or empty.
+- Use result_shape=single only when the requested answer is one fact or a synthesis rather than an enumerated member or value set.
+Presentation tie-breaker:
+- Selection semantics take precedence over presentation. If link_scope or relational_reference is required, presentation_intent MUST be answer even when the user asks to show notes; never weaken the required selection to produce note_set or answer_and_note_set.
+
 Teaching examples (not evaluation cases):
 
 {rendered_examples}

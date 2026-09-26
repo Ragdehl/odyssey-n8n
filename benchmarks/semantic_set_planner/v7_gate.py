@@ -115,8 +115,10 @@ def load_historical_registry() -> tuple[list[dict[str, Any]], dict[str, dict[str
     ):
         raise ValueError("v7 historical regression registry drifted")
     # Domain-date meaning stays in query; current planner contracts do not emit unsupported-date
-    # limitations, and forbidden_filter_fields directly rejects invented lifecycle mappings.
+    # limitations. The current collection contract also keeps subject/type meaning in the lossless
+    # query rather than a direct type selector; forbidden_filter_fields still rejects lifecycle maps.
     oracles["HD03"]["plan"].pop("required_limitations", None)
+    oracles["HD03"]["plan"]["retrievals"][0].pop("type", None)
     oracles["HD03"]["guards"] = []
     return cases, oracles
 
