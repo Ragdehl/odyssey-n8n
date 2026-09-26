@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from odyssey_core.experimental_luna_planning import luna_experimental_result_json_schema
 from odyssey_core.request_planning import (
     PLANNER_AUTOMATIC_RETRIES,
     PLANNER_CLARIFICATION_CODES,
@@ -195,6 +196,18 @@ def schema_accepts(
         for field, value in instance.items()
         if field in properties
     )
+
+
+def assert_all_array_schemas_define_items(value: Any) -> None:
+    """Reject provider schemas that contain a strict array without an item contract."""
+    if isinstance(value, dict):
+        if value.get("type") == "array":
+            assert isinstance(value.get("items"), dict)
+        for child in value.values():
+            assert_all_array_schemas_define_items(child)
+    elif isinstance(value, list):
+        for child in value:
+            assert_all_array_schemas_define_items(child)
 
 
 def prop(field: str, value: object, *, op: str = "set") -> dict:
@@ -899,6 +912,13 @@ def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict
     assert all(schema_accepts(payload, compact) for payload in (ordinary, valid_semantic))
     assert validate_request_plan(output({"kind": "retrieve", "plan": semantic}), schema)
 
+    semantic_filters = inline["properties"]["result"]["anyOf"][0]["properties"]["actions"]["items"][
+        "anyOf"
+    ][0]["properties"]["plan"]["anyOf"][1]["properties"]["filters"]
+    assert semantic_filters["type"] == "array"
+    assert isinstance(semantic_filters["items"], dict)
+    assert semantic_filters["maxItems"] == 0
+
     conflicts = []
     for field, value in (
         ("entity", "Marta"),
@@ -935,6 +955,16 @@ def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict
     for payload in (write_payload, delegate_payload):
         assert not schema_accepts(payload, inline)
         assert not schema_accepts(payload, compact)
+
+
+def test_provider_array_schemas_always_define_items(schema: dict) -> None:
+    """Keep strict provider schemas compatible with Structured Outputs array requirements."""
+    for provider_schema in (
+        planner_result_json_schema(schema),
+        compact_planner_result_json_schema(schema),
+        luna_experimental_result_json_schema(schema),
+    ):
+        assert_all_array_schemas_define_items(provider_schema)
 
 
 def test_context_payload_is_not_a_planner_result(schema: dict) -> None:

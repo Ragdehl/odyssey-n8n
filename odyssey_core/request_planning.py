@@ -1146,7 +1146,9 @@ def _retrieval_selection_json_schema(
     semantic_selection = deepcopy(direct_selection_schema)
     properties = semantic_selection["properties"]
     properties["entity"] = {"type": "null"}
-    properties["filters"] = {"type": "array", "maxItems": 0}
+    empty_filters_schema = deepcopy(direct_selection_schema["properties"]["filters"])
+    empty_filters_schema["maxItems"] = 0
+    properties["filters"] = empty_filters_schema
     properties["link_scope"] = {"type": "null"}
     properties["self_target"] = {"type": "null"}
     properties["relational_reference"] = {"type": "null"}
