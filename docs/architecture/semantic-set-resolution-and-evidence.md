@@ -1,6 +1,7 @@
 # Semantic set resolution and evidence — architecture challenge
 
-Status: **Slice 1 implementation draft; corrected after the first planner-only gate**. This follows
+Status: **Draft simplification on PR #142; production-model evidence pending**. The earlier
+semantic-intent gates below are historical evidence for their frozen contracts. This follows
 [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md).
 Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#137](https://github.com/Ragdehl/odyssey-n8n/issues/137),
@@ -8,6 +9,33 @@ Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#136](https://github.com/Ragdehl/odyssey-n8n/issues/136). Future Notes editing
 [#134](https://github.com/Ragdehl/odyssey-n8n/issues/134) is a compatibility constraint,
 not implementation scope.
+
+## Current approved retrieval boundary (PR #142)
+
+The planner chooses the action, preserves a complete useful `SelectionCriteria.query`, and marks a
+`RetrieveAction` as `result_shape=single` or `result_shape=collection`. It does not produce a
+subject/member ontology, type prediction, member list, identity, or evidence locator. The existing
+`presentation_intent=note_set`/`answer_and_note_set` remains the request for matching **Notes as
+objects**; it is not a semantic-member collection. Several matching Notes or several grounded
+collection members are results, not an ambiguity. Clarification is reserved for a genuinely
+unresolved identity, scope, source, or reference decision.
+
+Core enumerates the complete bounded candidate-fact scope before a collection selector sees it.
+The selector receives only the lossless query and visible supplied fact IDs/text and may propose
+only those IDs and exact occurrences. Core re-reads current Markdown, resolves links into canonical
+identities, retains literal values and source provenance, and fails closed on overflow, stale or
+invalid evidence. Source Notes contain evidence; they need not be the semantic subject. A bound
+overflow or absent/unsafe evidence maps to `CANNOT_ANSWER`, not a fabricated clarification.
+The public outcome vocabulary is `ANSWER`, `CLARIFY`, `CANNOT_ANSWER`; detailed Core outcomes remain
+internal. Ordinary single-note answers continue through the established grounded answerer, while
+complete collection members and note-set snapshots take bounded deterministic presentation paths.
+
+This is a model-facing planner change, so previous v3/v4/v5/v6 live evidence remains immutable
+historical evidence, **not** validation of the new contract. No provider call, DEV deployment, or
+PROD deployment is part of this implementation task. A focused live gate plus regression sentinels
+is required before production readiness. Durable clarification continuation and resumed-write
+authorization remain unimplemented until the human settles pending-choice retention/cancellation
+behavior; displaying an option is not itself mutation authority.
 
 ### Planner-only live evidence status
 

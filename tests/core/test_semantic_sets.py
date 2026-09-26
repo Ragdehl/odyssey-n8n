@@ -20,7 +20,9 @@ from odyssey_core.semantic_sets import (
     SetEvidenceSelection,
     SetMemberOccurrence,
     enumerate_semantic_set_candidates,
+    parse_semantic_set_selection,
     resolve_semantic_set,
+    semantic_set_selection_schema,
     serialize_semantic_set_candidate_payload,
 )
 from odyssey_core.storage import VaultRepository
@@ -97,6 +99,76 @@ def run(vault: Path, selector: Select, *, bounds: SemanticSetBounds | None = Non
         selector=selector,
         bounds=bounds or SemanticSetBounds(),
     )
+
+
+def test_collection_uses_lossless_query_without_planner_ontology(tmp_path: Path) -> None:
+    """Core grounds all supported members from full wording without a generated subject/type."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    values = tuple(f"part-{index}" for index in range(8))
+    wording = "El kit contiene " + ", ".join(values) + "."
+    write(vault, "kit.md", "kit", "Kit", fact(wording, 0))
+
+    class FullQuerySelector(Select):
+        """Assert the only model-facing semantic authority is the complete request."""
+
+        def select(self, request):
+            """Choose every exact visible value from supplied current facts."""
+            assert request.query == "What are all the parts in my kit?"
+            assert request.intent is None
+            return super().select(request)
+
+    selector = FullQuerySelector(
+        lambda candidate: [
+            (
+                "literal",
+                candidate.text.index(value),
+                candidate.text.index(value) + len(value),
+            )
+            for value in values
+        ]
+    )
+    result = resolve_semantic_set(
+        query="What are all the parts in my kit?",
+        repository=VaultRepository(vault),
+        schema=schema(),
+        selector=selector,
+    )
+
+    assert result.outcome is SemanticSetOutcome.ANSWERABLE
+    assert result.grounded_set is not None
+    assert result.grounded_set.subject_kind is None
+    assert [member.value for member in result.grounded_set.members] == list(values)
+
+
+def test_selector_contract_contains_only_supplied_ids_exact_spans_and_uncertainty() -> None:
+    """The provider cannot return canonical identity, path, or invented evidence authority."""
+    selector_schema = semantic_set_selection_schema()
+    assert set(selector_schema["properties"]) == {
+        "supplied_fact_ids",
+        "member_occurrences",
+        "scope_uncertain",
+    }
+    assert selector_schema["additionalProperties"] is False
+    parsed = parse_semantic_set_selection(
+        {
+            "supplied_fact_ids": ["candidate-0"],
+            "member_occurrences": [
+                {"candidate_id": "candidate-0", "kind": "literal", "start": 1, "end": 5}
+            ],
+            "scope_uncertain": False,
+        }
+    )
+    assert parsed.member_occurrences == (SetMemberOccurrence("candidate-0", "literal", 1, 5),)
+    with pytest.raises(ValueError):
+        parse_semantic_set_selection(
+            {
+                "supplied_fact_ids": [],
+                "member_occurrences": [],
+                "scope_uncertain": False,
+                "note_id": "invented",
+            }
+        )
 
 
 def test_text_only_subject_allows_paraphrase_but_grounds_exact_literal_spans(

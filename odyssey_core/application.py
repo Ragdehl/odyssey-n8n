@@ -377,6 +377,11 @@ def execute_request(
             if callable(getattr(fact_selector, "select", None))
             else fact_selector
         )
+        measured_semantic_set_selector = (
+            _MeasuredSemanticSetSelector(semantic_set_selector, provider_recorder)
+            if callable(getattr(semantic_set_selector, "select", None))
+            else semantic_set_selector
+        )
         if isinstance(action, RetrieveAction):
             result = _execute_retrieve(
                 action_index,
@@ -392,7 +397,7 @@ def execute_request(
                 semantic_index=semantic_index,
                 contextual_reasoner=measured_contextual_reasoner,
                 semantic_limit=semantic_limit,
-                semantic_set_selector=semantic_set_selector,
+                semantic_set_selector=measured_semantic_set_selector,
             )
         elif isinstance(action, WriteAction):
             unit_ordinals: tuple[tuple[int, ...], ...] = tuple(
@@ -580,7 +585,7 @@ def _execute_retrieve(
             ActionStatus.DEFERRED,
             reason="UNSUPPORTED_RETRIEVAL_LINK_SCOPE",
         )
-    if action.plan.semantic_set is not None:
+    if action.result_shape == "collection" or action.plan.semantic_set is not None:
         if not callable(getattr(semantic_set_selector, "select", None)):
             return ActionResult(
                 action_index,
@@ -1447,4 +1452,18 @@ class _MeasuredFactSelector:
         """Select one bounded fact locator and record its provider evidence."""
         return self._recorder.invoke(
             "fact_selector", self._provider, self._provider.select, *args, **kwargs
+        )
+
+
+class _MeasuredSemanticSetSelector:
+    """Record one bounded collection-selection call without exposing its candidate text."""
+
+    def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
+        self._provider = provider
+        self._recorder = recorder
+
+    def select(self, request: Any) -> Any:
+        """Select supplied fact occurrences and retain usage-only operational evidence."""
+        return self._recorder.invoke(
+            "semantic_set_selector", self._provider, self._provider.select, request
         )

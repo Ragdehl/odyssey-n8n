@@ -51,11 +51,11 @@ Bounded recent conversation evidence may resolve a referent or conversational co
 
 Return outcome PLAN with a RequestPlan when the request contains safely interpretable Odyssey retrieval, knowledge mutation, or specialized-capability intent. Return outcome CLARIFY with clarification_code UNRECOGNIZED_REQUEST when the input has no safely interpretable or actionable Odyssey intent, including meaningless fragments such as "Bdbd", "asdfgh", or "???". CLARIFY must contain no RequestPlan and never becomes a DelegateAction. Do not invent an action merely to satisfy the schema.
 
-Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction when the user explicitly asks to see a collection/list/set of matching notes; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, relational_reference, or semantic_set, use `answer`; do not discard or weaken meaning merely to produce a note set.
+Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks to see matching notes as objects; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, relational_reference, or result_shape=collection, use `answer`; do not discard or weaken meaning merely to produce a note set.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
-For a finite semantic group, set semantic_set only on RetrieveAction. SelectionCriteria.query MUST preserve the complete normalized useful query semantics; structured semantic_set fields supplement it and must never replace a constrained phrase with its broad noun. Preserve every material relation, scope, time, place, state, possession, purpose, context, and exhaustive meaning. Choose the semantic subject from what defines membership, not from possessive grammar: use subject_kind=self with subject_query=null when a direct relationship to the authenticated human defines the group, such as close friends, relatives, travel companions, or colleagues the human met. Use subject_kind=query with bounded subject wording when an object, container, or concept owns or contains the requested members, such as tools in a toolbox, items in an emergency bag, ingredients in a recipe, or pieces in a kit. The possessive word itself never decides this; a possessed container is not semantic self-targeting. When the requested members safely match a canonical schema Note type, set semantic_set.member_type to that schema type; otherwise null. member_type constrains members, never the Note type of evidence sources. For example, "Who did I travel with to Japan?" keeps query="people I travelled with to Japan", member_type="person", and retains both travel and Japan in consumed semantic fields; never reduce it to "people". The subject is user meaning, not a claim that a canonical Note exists. Core alone discovers bounded current fact sources and validates canonical evidence. Set entity=null, self_target=null, link_scope=null, filters=[], and relational_reference=null. Never include stable IDs, paths, fact locators, candidate lists, members, links, mutation authority, or inferred relationship types. Use semantic_set for group members/items even when the group is described only in fact text; use ordinary retrieval for one fact about a subject. Do not use semantic_set for writes or delegate actions.
+For retrieval, set result_shape=single for an ordinary answer about one topic. Set result_shape=collection only when the user asks for members or values of a semantic collection; plural grammar alone does not decide this. SelectionCriteria.query MUST preserve the complete useful request, including every material relation, scope, time, place, state, possession, purpose, context, and request for completeness. A collection has no direct entity, type, filters, link_scope, self_target, or relational_reference: set those to null or [] as appropriate. Core discovers bounded current canonical fact sources, selects only supplied evidence, and validates exact occurrences. Never provide collection members, IDs, paths, fact locators, candidate lists, links, mutation authority, or inferred relationship types. For an explicit list or set of matching Notes as objects, use result_shape=single with presentation_intent=note_set; multiple matching Notes are expected results, not ambiguity. Use ordinary single retrieval for one fact about a subject. Do not use collection shape for writes or delegate actions.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
@@ -247,6 +247,7 @@ class RetrieveAction:
 
     plan: SelectionCriteria
     kind: str = "retrieve"
+    result_shape: str = "single"
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,9 +427,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
     direct_selection_schema = _selection_json_schema(retrieval_capabilities)
-    retrieval_selection_schema = _retrieval_selection_json_schema(
-        retrieval_capabilities, direct_selection_schema
-    )
+    collection_selection_schema = _collection_selection_json_schema(direct_selection_schema)
     property_changes_schema = _property_changes_json_schema(write_capabilities)
     return {
         "type": "object",
@@ -442,9 +441,20 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                             "type": "object",
                             "properties": {
                                 "kind": {"type": "string", "enum": ["retrieve"]},
-                                "plan": retrieval_selection_schema,
+                                "result_shape": {"type": "string", "enum": ["single"]},
+                                "plan": direct_selection_schema,
                             },
-                            "required": ["kind", "plan"],
+                            "required": ["kind", "result_shape", "plan"],
+                            "additionalProperties": False,
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "kind": {"type": "string", "enum": ["retrieve"]},
+                                "result_shape": {"type": "string", "enum": ["collection"]},
+                                "plan": collection_selection_schema,
+                            },
+                            "required": ["kind", "result_shape", "plan"],
                             "additionalProperties": False,
                         },
                         {
@@ -618,8 +628,8 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     inline = planner_result_json_schema(schema)
     plan_branch, clarify_branch = deepcopy(inline["properties"]["result"]["anyOf"])
     actions = plan_branch["properties"]["actions"]
-    retrieve_action, write_action, delegate_action = actions["items"]["anyOf"]
-    retrieve_selection = retrieve_action["properties"]["plan"]
+    retrieve_action, collection_action, write_action, delegate_action = actions["items"]["anyOf"]
+    collection_selection = collection_action["properties"]["plan"]
     selection = write_action["properties"]["units"]["items"]["properties"]["target"]
     filter_array = selection["properties"]["filters"]
     link_scope = selection["properties"]["link_scope"]["anyOf"][1]
@@ -637,10 +647,11 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     delegate_action["properties"]["selection"] = {
         "anyOf": [{"type": "null"}, {"$ref": "#/$defs/selection"}]
     }
-    retrieve_selection["anyOf"][0] = {"$ref": "#/$defs/selection"}
-    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/retrieve_selection"}
+    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/selection"}
+    collection_action["properties"]["plan"] = {"$ref": "#/$defs/collection_selection"}
     actions["items"]["anyOf"] = [
         {"$ref": "#/$defs/retrieve_action"},
+        {"$ref": "#/$defs/collection_action"},
         {"$ref": "#/$defs/write_action"},
         {"$ref": "#/$defs/delegate_action"},
     ]
@@ -652,8 +663,9 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
         "note_selector": note_selector,
         "link_scope": link_scope,
         "selection": selection,
-        "retrieve_selection": retrieve_selection,
+        "collection_selection": collection_selection,
         "retrieve_action": retrieve_action,
+        "collection_action": collection_action,
         "write_action": write_action,
         "delegate_action": delegate_action,
         "actions": actions,
@@ -775,6 +787,7 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     if presentation_intent != "answer" and (
         len(actions) != 1
         or not isinstance(actions[0], RetrieveAction)
+        or actions[0].result_shape != "single"
         or actions[0].plan.link_scope is not None
         or actions[0].plan.relational_reference is not None
     ):
@@ -1123,7 +1136,6 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                     },
                 ]
             },
-            "semantic_set": {"type": "null"},
         },
         "required": [
             "entity",
@@ -1133,18 +1145,15 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
             "link_scope",
             "self_target",
             "relational_reference",
-            "semantic_set",
         ],
         "additionalProperties": False,
     }
 
 
-def _retrieval_selection_json_schema(
-    capabilities: Mapping[str, Any], direct_selection_schema: Mapping[str, Any]
-) -> dict[str, Any]:
-    """Add the retrieval-only semantic-set mode to the direct selection contract."""
-    semantic_selection = deepcopy(direct_selection_schema)
-    properties = semantic_selection["properties"]
+def _collection_selection_json_schema(direct_selection_schema: Mapping[str, Any]) -> dict[str, Any]:
+    """Restrict collection planning to a lossless query without direct selection authority."""
+    collection_selection = deepcopy(direct_selection_schema)
+    properties = collection_selection["properties"]
     properties["entity"] = {"type": "null"}
     empty_filters_schema = deepcopy(direct_selection_schema["properties"]["filters"])
     empty_filters_schema["maxItems"] = 0
@@ -1152,37 +1161,8 @@ def _retrieval_selection_json_schema(
     properties["link_scope"] = {"type": "null"}
     properties["self_target"] = {"type": "null"}
     properties["relational_reference"] = {"type": "null"}
-    properties["semantic_set"] = _semantic_set_json_schema(capabilities)
-    return {"anyOf": [deepcopy(direct_selection_schema), semantic_selection]}
-
-
-def _semantic_set_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the non-null bounded semantic-set intent accepted only by retrieval."""
-    return {
-        "type": "object",
-        "properties": {
-            "subject_kind": {"type": "string", "enum": ["self", "query"]},
-            "subject_query": {"type": ["string", "null"]},
-            "member_query": {"type": "string"},
-            "explicit_qualifiers": {"type": "string"},
-            "asks_exhaustive": {"type": "boolean"},
-            "member_type": {
-                "anyOf": [
-                    {"type": "null"},
-                    {"type": "string", "enum": list(capabilities["types"])},
-                ]
-            },
-        },
-        "required": [
-            "subject_kind",
-            "subject_query",
-            "member_query",
-            "explicit_qualifiers",
-            "asks_exhaustive",
-            "member_type",
-        ],
-        "additionalProperties": False,
-    }
+    properties["type"] = {"type": "null"}
+    return collection_selection
 
 
 def _note_selector_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
@@ -1338,7 +1318,10 @@ def _validate_action(
         return _validate_write_action(action, schema, retrieval_capabilities, write_capabilities)
     if action.get("kind") == "delegate":
         return _validate_delegate_action(action, schema, retrieval_capabilities)
-    if action.get("kind") != "retrieve" or set(action) != {"kind", "plan"}:
+    if action.get("kind") != "retrieve" or set(action) not in (
+        {"kind", "plan"},
+        {"kind", "plan", "result_shape"},
+    ):
         raise RequestPlanningError("RequestPlan action kind is invalid")
     return _validate_retrieve_action(action, schema, retrieval_capabilities)
 
@@ -1349,7 +1332,26 @@ def _validate_retrieve_action(
 ) -> RetrieveAction:
     """Validate one retrieval action and its shared selection criteria."""
     plan = _validate_selection(action["plan"], schema, capabilities, label="RetrievalPlan")
-    return RetrieveAction(plan=plan)
+    shape = action.get("result_shape", "single")
+    if shape not in {"single", "collection"}:
+        raise RequestPlanningError("RetrieveAction result shape is invalid")
+    if shape == "collection" and (
+        plan.entity is not None
+        or plan.type is not None
+        or plan.filters
+        or plan.link_scope is not None
+        or plan.self_target is not None
+        or plan.relational_reference is not None
+        or plan.semantic_set is not None
+    ):
+        raise RequestPlanningError(
+            "Collection retrieval conflicts with direct selection",
+            code=PlannerValidationCode.SELECTION_MODE_CONFLICT,
+        )
+    if shape == "single" and plan.semantic_set is not None:
+        # Historical validated plans remain readable, but new provider output has no such field.
+        shape = "collection"
+    return RetrieveAction(plan=plan, result_shape=shape)
 
 
 @_validation_boundary(PlannerValidationStage.DELEGATE_ACTION)

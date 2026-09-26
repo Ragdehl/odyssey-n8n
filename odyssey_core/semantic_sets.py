@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import urllib.error
+import urllib.request
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Protocol
 
@@ -100,7 +103,7 @@ class SemanticSetSelectionRequest:
     """Supply a selector with bounded candidate wording and no canonical identity authority."""
 
     query: str
-    intent: SemanticSetIntent
+    intent: SemanticSetIntent | None
     candidates: tuple[SemanticSetCandidateView, ...]
     typed_member_count: int | None = None
 
@@ -110,6 +113,156 @@ class SemanticSetSelector(Protocol):
 
     def select(self, request: SemanticSetSelectionRequest) -> SetEvidenceSelection:
         """Choose supplied candidate occurrences or declare semantic scope uncertainty."""
+
+
+class OpenAILunaSemanticSetSelector:
+    """Select exact occurrences from bounded visible facts without assigning canonical authority."""
+
+    model = "gpt-5.6-luna"
+    reasoning_effort = "low"
+
+    def __init__(self) -> None:
+        """Keep provider telemetry local to the latest selector call."""
+        self.last_call = False
+        self.last_usage: dict[str, int] | None = None
+
+    def select(self, request: SemanticSetSelectionRequest) -> SetEvidenceSelection:
+        """Request only supplied fact IDs and exact text spans for the lossless query."""
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise ValueError("Collection selector credentials are unavailable")
+        self.last_call = True
+        self.last_usage = None
+        payload = {
+            "model": self.model,
+            "store": False,
+            "reasoning": {"effort": self.reasoning_effort},
+            "max_output_tokens": 8192,
+            "input": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Select only members directly supported by the supplied current fact text "
+                        "for the complete user query. Return all supported members, including "
+                        "literal values and exact wikilink occurrences. Use only supplied candidate "
+                        "IDs and zero-based exact character spans. Do not infer relationships, "
+                        "identities, members, or completeness beyond these facts. If the intended "
+                        "scope is genuinely uncertain, set scope_uncertain=true. Multiple supported "
+                        "members are results, not ambiguity."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "query": request.query,
+                            "candidates": [asdict(candidate) for candidate in request.candidates],
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "odyssey_collection_occurrences",
+                    "strict": True,
+                    "schema": semantic_set_selection_schema(),
+                }
+            },
+        }
+        provider_request = urllib.request.Request(
+            "https://api.openai.com/v1/responses",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(provider_request, timeout=120) as response:
+                body = json.loads(response.read().decode("utf-8"))
+            from odyssey_core.observability import normalize_provider_usage
+
+            self.last_usage = normalize_provider_usage(body)
+            text = next(
+                content["text"]
+                for item in body["output"]
+                if item.get("type") == "message"
+                for content in item["content"]
+                if content.get("type") == "output_text"
+            )
+            return parse_semantic_set_selection(json.loads(text))
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            KeyError,
+            StopIteration,
+            json.JSONDecodeError,
+        ) as error:
+            raise ValueError("Collection selector response was unusable") from error
+
+
+def semantic_set_selection_schema() -> dict:
+    """Constrain the selector to bounded candidate IDs and exact occurrence coordinates."""
+    return {
+        "type": "object",
+        "properties": {
+            "supplied_fact_ids": {"type": "array", "items": {"type": "string"}},
+            "member_occurrences": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "candidate_id": {"type": "string"},
+                        "kind": {"type": "string", "enum": ["literal", "link"]},
+                        "start": {"type": "integer"},
+                        "end": {"type": "integer"},
+                    },
+                    "required": ["candidate_id", "kind", "start", "end"],
+                    "additionalProperties": False,
+                },
+            },
+            "scope_uncertain": {"type": "boolean"},
+        },
+        "required": ["supplied_fact_ids", "member_occurrences", "scope_uncertain"],
+        "additionalProperties": False,
+    }
+
+
+def parse_semantic_set_selection(value: object) -> SetEvidenceSelection:
+    """Reject malformed selector output before Core checks candidate membership and spans."""
+    if not isinstance(value, dict) or set(value) != {
+        "supplied_fact_ids",
+        "member_occurrences",
+        "scope_uncertain",
+    }:
+        raise ValueError("Collection selector output fields are invalid")
+    ids, occurrences, uncertain = (
+        value["supplied_fact_ids"],
+        value["member_occurrences"],
+        value["scope_uncertain"],
+    )
+    if (
+        not isinstance(ids, list)
+        or not all(isinstance(item, str) for item in ids)
+        or not isinstance(occurrences, list)
+        or not isinstance(uncertain, bool)
+        or len(ids) > MAX_SEMANTIC_SET_FACTS
+        or len(occurrences) > MAX_SEMANTIC_SET_MEMBERS
+    ):
+        raise ValueError("Collection selector output exceeds its closed bounds")
+    parsed = []
+    for item in occurrences:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"candidate_id", "kind", "start", "end"}
+            or not isinstance(item["candidate_id"], str)
+            or item["kind"] not in {"literal", "link"}
+            or type(item["start"]) is not int
+            or type(item["end"]) is not int
+        ):
+            raise ValueError("Collection selector occurrence fields are invalid")
+        parsed.append(SetMemberOccurrence(**item))
+    return SetEvidenceSelection(tuple(ids), tuple(parsed), uncertain)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +283,7 @@ class IdentitySetMember:
 
     stable_id: str
     evidence: SetEvidenceProvenance
+    display_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,9 +299,9 @@ SetMember = IdentitySetMember | LiteralSetMember
 
 @dataclass(frozen=True, slots=True)
 class GroundedSemanticSet:
-    """Return one semantic subject's re-grounded members and declared scan completeness."""
+    """Return re-grounded members and declared scan completeness."""
 
-    subject_kind: str
+    subject_kind: str | None
     subject_query: str | None
     members: tuple[SetMember, ...]
     completeness: SemanticSetCompleteness
@@ -202,7 +356,7 @@ def enumerate_semantic_set_candidates(
 
 
 def resolve_semantic_set(
-    intent: SemanticSetIntent,
+    intent: SemanticSetIntent | None = None,
     *,
     query: str | None = None,
     repository: VaultRepository,
@@ -210,10 +364,10 @@ def resolve_semantic_set(
     selector: SemanticSetSelector,
     bounds: SemanticSetBounds = DEFAULT_SEMANTIC_SET_BOUNDS,
 ) -> SemanticSetResolution:
-    """Select and re-ground one bounded semantic set without requiring a subject Note.
+    """Select and re-ground one bounded collection from its complete query and current facts.
 
     Args:
-        intent: Planner wording with no canonical IDs or fact locators.
+        intent: Historical planner wording, accepted only for old validated plans.
         repository: Authoritative Markdown repository.
         schema: Active canonical note schema.
         selector: Injected candidate-only semantic selection boundary.
@@ -222,9 +376,13 @@ def resolve_semantic_set(
     Returns:
         A grounded set or a fail-closed structured outcome.
     """
+    if query is None:
+        query = _effective_query(intent) if intent is not None else None
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("Collection query must be non-empty")
     projector = RelationshipEvidenceProjector(repository, schema)
     typed_member_ids: frozenset[str] | None = None
-    if intent.member_type is not None:
+    if intent is not None and intent.member_type is not None:
         try:
             typed_member_ids = frozenset(projector.note_ids_of_type(intent.member_type))
         except RelationshipEvidenceError:
@@ -243,7 +401,7 @@ def resolve_semantic_set(
     try:
         selection = selector.select(
             SemanticSetSelectionRequest(
-                query=query or _effective_query(intent),
+                query=query,
                 intent=intent,
                 candidates=tuple(
                     SemanticSetCandidateView(candidate.id, candidate.fact.text)
@@ -285,20 +443,27 @@ def _effective_query(intent: SemanticSetIntent) -> str:
 
 
 def serialize_semantic_set_candidate_payload(
-    intent: SemanticSetIntent, candidates: Sequence[SemanticSetCandidate], *, query: str = ""
+    intent: SemanticSetIntent | None,
+    candidates: Sequence[SemanticSetCandidate],
+    *,
+    query: str = "",
 ) -> bytes:
     """Serialize the exact selector-visible candidate payload for deterministic budget evidence."""
+    payload = {
+        "query": query,
+        "candidates": [{"id": item.id, "text": item.fact.text} for item in candidates],
+    }
+    if intent is not None:
+        payload.update(
+            subject_kind=intent.subject_kind,
+            subject_query=intent.subject_query,
+            member_query=intent.member_query,
+            explicit_qualifiers=intent.explicit_qualifiers,
+            asks_exhaustive=intent.asks_exhaustive,
+            member_type=intent.member_type,
+        )
     return json.dumps(
-        {
-            "query": query,
-            "subject_kind": intent.subject_kind,
-            "subject_query": intent.subject_query,
-            "member_query": intent.member_query,
-            "explicit_qualifiers": intent.explicit_qualifiers,
-            "asks_exhaustive": intent.asks_exhaustive,
-            "member_type": intent.member_type,
-            "candidates": [{"id": item.id, "text": item.fact.text} for item in candidates],
-        },
+        payload,
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -356,7 +521,7 @@ def _validate_selection(
 
 def _ground_selection(
     projector: RelationshipEvidenceProjector,
-    intent: SemanticSetIntent,
+    intent: SemanticSetIntent | None,
     candidates: Sequence[SemanticSetCandidate],
     selection: SetEvidenceSelection,
     bounds: SemanticSetBounds,
@@ -410,13 +575,13 @@ def _ground_selection(
             )
         if identity.id not in identities:
             identities.add(identity.id)
-            members.append(IdentitySetMember(identity.id, evidence))
+            members.append(IdentitySetMember(identity.id, evidence, identity.name))
     if len(members) > bounds.members:
         return SemanticSetResolution(SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="member_bound")
     facts = tuple(current_facts.values())
     return GroundedSemanticSet(
-        intent.subject_kind,
-        intent.subject_query,
+        intent.subject_kind if intent is not None else None,
+        intent.subject_query if intent is not None else None,
         tuple(members),
         SemanticSetCompleteness.COMPLETE_WITHIN_SCANNED_SCOPE,
         len({fact.source.id for fact in facts}),

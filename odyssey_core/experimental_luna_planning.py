@@ -197,11 +197,14 @@ Teaching examples (not evaluation cases):
 
 
 def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
-    """Render inherited teaching selections with explicit absent relational intent."""
+    """Render inherited examples under the current retrieval-shape provider contract."""
     completed = deepcopy(dict(result))
     for action in completed.get("actions") or []:
         if action["kind"] == "retrieve":
             selections = [action["plan"]]
+            action["result_shape"] = (
+                "collection" if action["plan"].get("semantic_set") is not None else "single"
+            )
         elif action["kind"] == "write":
             selections = [unit["target"] for unit in action["units"]]
         else:
@@ -209,7 +212,7 @@ def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
         for selection in selections:
             if isinstance(selection, dict):
                 selection.setdefault("relational_reference", None)
-                selection.setdefault("semantic_set", None)
+                selection.pop("semantic_set", None)
     return completed
 
 

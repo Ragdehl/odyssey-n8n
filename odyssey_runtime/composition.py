@@ -53,6 +53,7 @@ from odyssey_core.request_planning import (
     SelectionCriteria,
 )
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
+from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.storage import VaultRepository
 
 from .delivery_results import LocalDeliveryResultStore
@@ -134,6 +135,8 @@ class RuntimeComposition:
                 None,
             )
             response = application_result_to_response(result)
+            if response["product_outcome"] == "CLARIFY":
+                response["clarification"] = self._clarification_view(result)
             if store is not None and fingerprint is not None and result.affected_stable_note_ids:
                 store.save(
                     result.request_id,
@@ -142,6 +145,44 @@ class RuntimeComposition:
                     _current_time()["timestamp"],
                 )
             return response
+
+    def _clarification_view(self, result: ApplicationResult) -> dict[str, object]:
+        """Project only current, bounded, actor-local option labels for one unresolved decision."""
+        candidates = next(
+            (
+                unit.candidates
+                for action in result.action_results
+                for unit in action.unit_results
+                if unit.reason == "ambiguous_existing_target" and unit.candidates
+            ),
+            (),
+        )
+        options: list[dict[str, str]] = []
+        if self.notes_service is not None and 1 < len(candidates) <= 4:
+            try:
+                for note_id in candidates:
+                    note = self.notes_service.detail(note_id).note
+                    options.append({"id": note.id, "label": note.name})
+            except (NotesQueryError, ValueError):
+                options = []
+        if len({option["label"].casefold() for option in options}) != len(options):
+            options = []
+        return {
+            "request_id": result.request_id,
+            "reason": "AMBIGUOUS_REFERENCE"
+            if options
+            else "AMBIGUOUS_SET_SCOPE"
+            if any(
+                action.semantic_set is not None
+                and action.semantic_set.outcome.value == "AMBIGUOUS_SET_SCOPE"
+                for action in result.action_results
+            )
+            else result.clarification_code or "AMBIGUOUS_REFERENCE",
+            "options": options,
+            "pending_record_id": result.pending_work.record_id
+            if result.pending_work.persisted
+            else None,
+        }
 
     def notes(
         self,
@@ -548,6 +589,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     contextual_reasoner = _build_contextual_reasoner()
     writer = OpenAILunaWriter()
     fact_selector = OpenAILunaFactSelector()
+    semantic_set_selector = OpenAILunaSemanticSetSelector()
     pending_recorder = PendingWorkRepository(pending_root)
     conversation_root_resolver = ConversationRootResolver(state_root)
     self_binding_repository = (
@@ -590,6 +632,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             context_limit=context_limit,
             writer=writer,
             fact_selector=fact_selector,
+            semantic_set_selector=semantic_set_selector,
             pending_recorder=pending_recorder,
             history_recorder=history_recorder,
             request_id_factory=request_id_factory,

@@ -105,8 +105,21 @@ def planner_output(*actions: dict, limitations: list[str] | None = None) -> dict
 
 
 def provider_output(payload: dict) -> dict:
-    """Wrap an inner PlannerResult as the provider Structured Outputs envelope."""
-    return {"result": payload}
+    """Project legacy local fixtures into the current closed provider shape."""
+    projected = deepcopy(payload)
+    for action in projected.get("actions") or []:
+        if action.get("kind") == "retrieve":
+            action.setdefault("result_shape", "single")
+            if action["plan"].get("semantic_set") is None:
+                action["plan"].pop("semantic_set", None)
+        elif action.get("kind") == "write":
+            for unit in action.get("units", []):
+                if unit["target"].get("semantic_set") is None:
+                    unit["target"].pop("semantic_set", None)
+        elif action.get("kind") == "delegate" and isinstance(action.get("selection"), dict):
+            if action["selection"].get("semantic_set") is None:
+                action["selection"].pop("semantic_set", None)
+    return {"result": projected}
 
 
 def unit(
@@ -227,6 +240,30 @@ def test_simple_semantic_retrieval_and_semantic_idea_review_remain_unrestricted(
     assert action.plan.type is None and action.plan.filters == ()
 
 
+def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict) -> None:
+    """Provider output cannot depend on a model-authored semantic member ontology."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    collection = deepcopy(selection("What countries have I travelled to?"))
+    collection.pop("semantic_set")
+    payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
+    provider_schema = planner_result_json_schema(schema)
+    compact_schema = compact_planner_result_json_schema(schema)
+
+    assert "result_shape=collection" in prompt
+    assert "subject_kind" not in prompt
+    assert "member_query" not in prompt
+    assert "asks_exhaustive" not in prompt
+    assert all(
+        schema_accepts({"result": payload}, candidate)
+        for candidate in (provider_schema, compact_schema)
+    )
+    plan = validate_planner_result(payload, schema)
+    assert isinstance(plan, RequestPlan)
+    assert isinstance(plan.actions[0], RetrieveAction)
+    assert plan.actions[0].result_shape == "collection"
+    assert plan.actions[0].plan.query == "What countries have I travelled to?"
+
+
 def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> None:
     """Keep one and all-matching explicit while rejecting unknown cardinality values."""
     one = validate_request_plan(output(write(unit("Marta", cardinality="one"))), schema)
@@ -236,7 +273,7 @@ def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> N
     assert one.actions[0].units[0].cardinality == "one"  # type: ignore[union-attr]
     assert bulk.actions[0].units[0].cardinality == "all_matching"  # type: ignore[union-attr]
     plan_schema = request_plan_json_schema(schema)
-    unit_schema = plan_schema["properties"]["actions"]["items"]["anyOf"][1]["properties"]["units"][
+    unit_schema = plan_schema["properties"]["actions"]["items"]["anyOf"][2]["properties"]["units"][
         "items"
     ]
     assert "cardinality" in unit_schema["required"]
@@ -639,7 +676,7 @@ def test_prompt_and_schema_freeze_reference_occurrence_contract(schema: dict) ->
     assert "own `references` array" in prompt
     assert "Do not emit Markdown `[[wikilinks]]`" in prompt
     reference_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"]["anyOf"][
-        1
+        2
     ]["properties"]["units"]["items"]["properties"]["references"]["items"]
     assert reference_schema["required"] == ["target_index", "role", "mention"]
 
@@ -753,7 +790,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     result_schema = calls[0]["text"]["format"]["schema"]  # type: ignore[index]
     result_union = result_schema["properties"]["result"]["anyOf"]
     actions_schema = result_union[0]["properties"]["actions"]
-    write_schema = actions_schema["items"]["anyOf"][1]
+    write_schema = actions_schema["items"]["anyOf"][2]
     unit_schema = write_schema["properties"]["units"]["items"]
     assert write_schema["properties"]["kind"] == {"type": "string", "enum": ["write"]}
     assert set(unit_schema["required"]) == {
@@ -895,26 +932,31 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
     )
     assert "filter_array" in compact["$defs"]
     assert compact["$defs"]["retrieve_action"]["properties"]["plan"] == {
-        "$ref": "#/$defs/retrieve_selection"
+        "$ref": "#/$defs/selection"
     }
 
 
 def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict) -> None:
-    """Reject every schema-valid/direct-selection conflict that local retrieval rejects."""
+    """Admit a collection query and reject direct authority in either provider schema."""
     inline = planner_result_json_schema(schema)
     compact = compact_planner_result_json_schema(schema)
-    semantic = semantic_set_selection("¿Quién es mi familia?")
-    semantic["semantic_set"]["member_type"] = "person"
-    valid_semantic = provider_output(planner_output({"kind": "retrieve", "plan": semantic}))
+    semantic = selection("¿Quiénes son las personas de mi familia?")
+    semantic.pop("semantic_set")
+    valid_semantic = provider_output(
+        planner_output({"kind": "retrieve", "result_shape": "collection", "plan": semantic})
+    )
     ordinary = provider_output(planner_output(retrieve("Marta")))
 
     assert all(schema_accepts(payload, inline) for payload in (ordinary, valid_semantic))
     assert all(schema_accepts(payload, compact) for payload in (ordinary, valid_semantic))
-    assert validate_request_plan(output({"kind": "retrieve", "plan": semantic}), schema)
+    validated = validate_request_plan(
+        output({"kind": "retrieve", "result_shape": "collection", "plan": semantic}), schema
+    )
+    assert validated.actions[0].result_shape == "collection"
 
     semantic_filters = inline["properties"]["result"]["anyOf"][0]["properties"]["actions"]["items"][
         "anyOf"
-    ][0]["properties"]["plan"]["anyOf"][1]["properties"]["filters"]
+    ][1]["properties"]["plan"]["properties"]["filters"]
     assert semantic_filters["type"] == "array"
     assert isinstance(semantic_filters["items"], dict)
     assert semantic_filters["maxItems"] == 0
@@ -937,20 +979,27 @@ def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict
     ):
         invalid = deepcopy(semantic)
         invalid[field] = value
-        payload = provider_output(planner_output({"kind": "retrieve", "plan": invalid}))
+        payload = provider_output(
+            planner_output({"kind": "retrieve", "result_shape": "collection", "plan": invalid})
+        )
         conflicts.append((payload, invalid))
 
     for payload, invalid in conflicts:
         assert not schema_accepts(payload, inline)
         assert not schema_accepts(payload, compact)
         with pytest.raises(RequestPlanningError):
-            validate_request_plan(output({"kind": "retrieve", "plan": invalid}), schema)
+            validate_request_plan(
+                output({"kind": "retrieve", "result_shape": "collection", "plan": invalid}),
+                schema,
+            )
 
     write_target = schema_unit("Marta")
-    write_target["target"] = semantic
+    write_target["target"] = semantic_set_selection("¿Quién es mi familia?")
     write_payload = provider_output(planner_output({"kind": "write", "units": [write_target]}))
     delegate_payload = provider_output(
-        planner_output({"kind": "delegate", "request": "compare", "selection": semantic})
+        planner_output(
+            {"kind": "delegate", "request": "compare", "selection": write_target["target"]}
+        )
     )
     for payload in (write_payload, delegate_payload):
         assert not schema_accepts(payload, inline)
@@ -1468,6 +1517,7 @@ def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) ->
     action_variants = request_schema["properties"]["actions"]["items"]["anyOf"]
     assert request_schema["properties"]["actions"]["minItems"] == 1
     assert [variant["properties"]["kind"] for variant in action_variants] == [
+        {"type": "string", "enum": ["retrieve"]},
         {"type": "string", "enum": ["retrieve"]},
         {"type": "string", "enum": ["write"]},
         {"type": "string", "enum": ["delegate"]},

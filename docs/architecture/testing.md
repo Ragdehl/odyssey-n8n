@@ -78,6 +78,12 @@ For deterministic primitives and reusable boundaries, cover the applicable cases
 - returned contract **and** resulting canonical/durable state;
 - no unintended mutation on failure.
 
+For planner retrieval changes, keep the provider schema and local validator in parity across
+`single`, `collection`, and note-set presentation. In particular, test cross-field states that Core
+rejects, and test that several grounded collection members or matching Notes remain results rather
+than clarification. A deterministic pass proves the contract shape, not that a live model follows
+the changed instructions; focused production-model evidence remains a separate gate.
+
 Use isolated temporary/disposable fixtures. Tests must not modify real personal notes or require production credentials.
 
 ## Model-facing evaluations

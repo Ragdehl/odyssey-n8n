@@ -244,6 +244,13 @@ def _selection(value: SelectionCriteria | None) -> dict[str, Any] | None:
     }
     if value.self_target is not None:
         projected["self_target"] = value.self_target
+    if value.relational_reference is not None:
+        projected["relational_reference"] = {
+            "reference": value.relational_reference.reference,
+            "source_kind": value.relational_reference.source_kind,
+            "source_query": value.relational_reference.source_query,
+            "members": value.relational_reference.members,
+        }
     return projected
 
 
@@ -272,7 +279,11 @@ def _link_scope(value: LinkScope | None) -> dict[str, Any] | None:
 def _action(value: Any) -> dict[str, Any]:
     """Project one supported validated planner action using only public semantic fields."""
     if isinstance(value, RetrieveAction):
-        return {"kind": value.kind, "plan": _selection(value.plan)}
+        return {
+            "kind": value.kind,
+            "result_shape": value.result_shape,
+            "plan": _selection(value.plan),
+        }
     if isinstance(value, WriteAction):
         return {"kind": value.kind, "units": [_unit(item) for item in value.units]}
     if isinstance(value, DelegateAction):

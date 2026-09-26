@@ -74,15 +74,17 @@ current-Markdown, one-source, one-hop evidence boundary, shared-fact home, inver
 evidence policy, and all-or-clarify rule remain the v1 contract. UI-1 request detail is complete in PROD;
 its production promotion evidence is in [UI-1 production promotion](ui-1-production-promotion.md).
 
-[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is underway. Slice
-1 implements only Core set evidence and outcomes: a user semantic subject may be text-only and is
-separate from its canonical source Notes; bounded multi-fact linked/literal discovery, exact
-grounding, explicit completeness, and structured resolution outcomes remain Core-owned. It adds no
-generic Note or type. The first planner-only gate exposed the former incorrect existing-Note subject
-assumption; its historical evidence remains intact and a corrected future gate is frozen but not run.
-Staged clarification (#137), answer-source
-Note navigation (#138), progress (#136), and direct Notes CRUD (#134) remain later slices. Tasks and
-Events remain later directions.
+[Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md) is underway in Draft
+PR #142. The approved simplification keeps three distinct retrieval shapes: ordinary single-topic
+answers, matching Notes as objects via existing `presentation_intent=note_set`, and canonical-fact
+collections via `RetrieveAction.result_shape=collection`. The planner preserves the lossless query
+without a generated subject/member ontology; Core owns bounded evidence, linked/literal grounding,
+and the decision between answer, genuine clarification, and cannot-answer. Multiple valid results
+are not ambiguity. Previous planner-only gates remain historical evidence for their older frozen
+contracts; the changed model-facing contract still needs focused live regression evidence before
+readiness. No generic Note or type is added. Clarification continuation (#137), answer-source Note
+navigation (#138), progress (#136), and direct Notes CRUD (#134) remain separate acceptance
+boundaries until implemented and verified. Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete

@@ -112,7 +112,6 @@ def selection(
         "link_scope": None,
         "self_target": None,
         "relational_reference": None,
-        "semantic_set": None,
     }
 
 
@@ -138,7 +137,11 @@ def retrieve(
     filters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one retrieval action fixture."""
-    return {"kind": "retrieve", "plan": selection(query, note_type=note_type, filters=filters)}
+    return {
+        "kind": "retrieve",
+        "result_shape": "single",
+        "plan": selection(query, note_type=note_type, filters=filters),
+    }
 
 
 def delegate(

@@ -353,6 +353,7 @@ function resultLabel(result) {
     acknowledgement: result.note_result_snapshot?.kind === "affected_notes" ? "Guardado" : "Hecho",
     clarification: "Aclara tu solicitud",
     note_set: "Notas encontradas",
+    cannot_answer: "No puedo responder",
     empty: "Sin resultados",
     error: "No completado",
   }[result.kind] ?? "Odyssey";

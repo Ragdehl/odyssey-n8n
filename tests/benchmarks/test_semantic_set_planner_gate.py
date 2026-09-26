@@ -399,8 +399,10 @@ def test_v6_freezes_oracles_while_teaching_the_self_query_membership_boundary(
     assert float(v6_preflight(schema, cases)["conservative_no_cache_maximum_usd"]) <= 0.10
 
 
-def test_v6_prompt_retains_both_sides_of_generic_subject_kind_contract(schema: dict) -> None:
-    """Prevent prompt edits from reducing membership choice to possessive wording alone."""
+def test_current_prompt_uses_generic_collection_shape_without_subject_ontology(
+    schema: dict,
+) -> None:
+    """Leave archived v6 evidence intact while testing the current simplified contract."""
     cases, _oracles = load_v6_registry()
     teaching = json.loads(
         (ROOT / "benchmarks/semantic_set_planner/v6_teaching_examples.json").read_text()
@@ -409,10 +411,12 @@ def test_v6_prompt_retains_both_sides_of_generic_subject_kind_contract(schema: d
         schema, cases["fixed_context"], teaching_examples=teaching
     )
 
-    assert "what defines membership, not from possessive grammar" in prompt
-    assert "direct relationship to the authenticated human defines the group" in prompt
-    assert "object, container, or concept owns or contains the requested members" in prompt
-    assert "The possessive word itself never decides this" in prompt
+    assert "result_shape=single" in prompt
+    assert "result_shape=collection" in prompt
+    assert "multiple matching Notes are expected results, not ambiguity" in prompt
+    assert (
+        "subject_kind=self" not in prompt.split("Teaching examples (not evaluation cases):", 1)[0]
+    )
 
 
 def test_v6_runner_has_a_new_immutable_path_and_refuses_dry_preflight(
