@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,15 @@ from typing import cast
 from zoneinfo import ZoneInfo
 
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
+from odyssey_core.clarification import (
+    ClarificationChoice,
+    ClarificationClassifier,
+    ClarificationOption,
+    LocalClarificationStore,
+    OpenAILunaClarificationClassifier,
+    PendingClarification,
+    resolve_clarification_reply,
+)
 from odyssey_core.context import ContextFilter, ContextIndex
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
@@ -44,13 +54,16 @@ from odyssey_core.observability import (
     OperationalStage,
     ProviderCallEvidence,
 )
-from odyssey_core.pending_work import PendingWorkRepository
+from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
 from odyssey_core.persistence import ActorInput
+from odyssey_core.reference_preflight import ReferencePreflightError, current_identity_guard
 from odyssey_core.request_planning import (
     PlannerClarification,
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
+    WriteAction,
+    validate_request_plan,
 )
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
@@ -65,6 +78,21 @@ _VAULT_REPOSITORY_TYPE = VaultRepository
 # Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
 # the validated Luna-first planner rather than the former Sol-only planner.
 OpenAIRequestPlanner = LunaFirstRequestPlanner
+
+
+class _FixedRequestPlanner:
+    """Replay one locally validated incomplete action without another planner decision."""
+
+    is_local_replay = True
+
+    def __init__(self, plan: RequestPlan) -> None:
+        """Retain the revalidated plan for a single continuation execution."""
+        self._plan = plan
+
+    def plan(self, request: str, conversation_context: object = ()) -> RequestPlan:
+        """Return only the saved validated action; never inspect a new model response."""
+        del request, conversation_context
+        return self._plan
 
 
 class NotesTelemetryError(RuntimeError):
@@ -86,6 +114,10 @@ class RuntimeComposition:
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
     notes_embedder: object | None = None
+    pending_recorder: PendingWorkRepository | None = None
+    vault_repository: VaultRepository | None = None
+    canonical_schema: dict[str, object] | None = None
+    clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
     ) = None
@@ -119,12 +151,77 @@ class RuntimeComposition:
                 self.conversation_root_resolver.resolve(actor) / "delivery-results"
             )
             fingerprint = store.fingerprint(user_request, conversation_id)
-        with self._execute_lock:
+        clarification_store = (
+            LocalClarificationStore(self.conversation_root_resolver.resolve(actor), conversation_id)
+            if conversation_id is not None and self.conversation_root_resolver is not None
+            else None
+        )
+        with (
+            self._execute_lock,
+            clarification_store.locked() if clarification_store is not None else nullcontext(),
+        ):
             if store is not None and fingerprint is not None:
                 replay = store.load(request_id, fingerprint)
                 if replay is not None:
                     replay["delivery_replayed"] = True
                     return replay
+            pending = clarification_store.read() if clarification_store is not None else None
+            if pending is not None:
+                decision = resolve_clarification_reply(
+                    user_request,
+                    pending.options,
+                    self.clarification_classifier,
+                    pending.original_request,
+                )
+                if decision == "UNRESOLVED":
+                    self._append_clarification_reply(
+                        actor, conversation_id, request_id, user_request
+                    )
+                    response = self._pending_clarification_response(request_id, pending)
+                    if store is not None and fingerprint is not None:
+                        store.save(request_id, fingerprint, response, _current_time()["timestamp"])
+                    return response
+                clarification_store.clear()
+                if decision == "CANCEL":
+                    self._append_clarification_reply(
+                        actor, conversation_id, request_id, user_request
+                    )
+                    response = self._control_response(request_id, "CANCEL")
+                    if store is not None and fingerprint is not None:
+                        store.save(request_id, fingerprint, response, _current_time()["timestamp"])
+                    return response
+                if decision != "NEW_REQUEST":
+                    option_index = next(
+                        index
+                        for index, option in enumerate(pending.options)
+                        if option.id == decision
+                    )
+                    try:
+                        resumed_plan = self._validated_resume_plan(pending)
+                    except (ValueError, KeyError, TypeError, PendingWorkError):
+                        self._append_clarification_reply(
+                            actor, conversation_id, request_id, user_request
+                        )
+                        response = self._control_response(request_id, "STALE_CLARIFICATION")
+                        if store is not None and fingerprint is not None:
+                            store.save(
+                                request_id, fingerprint, response, _current_time()["timestamp"]
+                            )
+                        return response
+                    choice = ClarificationChoice(decision, pending.evidence_guards[option_index])
+                    result = self.execute(
+                        user_request,
+                        request_id,
+                        conversation_id,
+                        AuthenticatedActorContext(actor),
+                        None,
+                        resume_plan=resumed_plan,
+                        clarification_choice=choice,
+                        original_request=pending.original_request,
+                    )
+                    return self._finish_product_result(
+                        result, store, fingerprint, clarification_store, force_replay=True
+                    )
             result = self.execute(
                 user_request,
                 request_id,
@@ -134,26 +231,207 @@ class RuntimeComposition:
                 else None,
                 None,
             )
-            response = application_result_to_response(result)
-            if response["product_outcome"] == "CLARIFY":
-                response["clarification"] = self._clarification_view(result)
-            if store is not None and fingerprint is not None and result.affected_stable_note_ids:
-                store.save(
-                    result.request_id,
-                    fingerprint,
-                    response,
-                    _current_time()["timestamp"],
+            return self._finish_product_result(result, store, fingerprint, clarification_store)
+
+    def _finish_product_result(
+        self,
+        result: ApplicationResult,
+        store: LocalDeliveryResultStore | None,
+        fingerprint: str | None,
+        clarification_store: LocalClarificationStore | None,
+        *,
+        force_replay: bool = False,
+    ) -> dict[str, object]:
+        """Persist only one safely resumable decision and replay all product outcomes."""
+        response = application_result_to_response(result)
+        if response["product_outcome"] == "CLARIFY":
+            view = self._clarification_view(result)
+            response["clarification"] = view
+            if clarification_store is not None:
+                pending = self._pending_decision(result, view)
+                if pending is not None:
+                    clarification_store.replace(pending)
+                elif result.clarification_code is None:
+                    # A choice with no bounded safe options cannot be resumed in this v1.
+                    response["product_outcome"] = "CANNOT_ANSWER"
+                    response["product_reason"] = "INCOMPLETE_EVIDENCE"
+        if (
+            store is not None
+            and fingerprint is not None
+            and (
+                force_replay
+                or result.affected_stable_note_ids
+                or response["product_outcome"] == "CLARIFY"
+            )
+        ):
+            store.save(result.request_id, fingerprint, response, _current_time()["timestamp"])
+        return response
+
+    def _pending_decision(
+        self, result: ApplicationResult, view: dict[str, object]
+    ) -> PendingClarification | None:
+        """Accept only one previously grounded ambiguous write unit for safe continuation."""
+        if (
+            self.pending_recorder is None
+            or self.vault_repository is None
+            or self.canonical_schema is None
+            or not result.pending_work.persisted
+            or result.pending_work.record_id is None
+            or result.affected_stable_note_ids
+            or len(result.action_results) != 1
+            or not isinstance(view["options"], list)
+            or not 1 < len(view["options"]) <= 4
+        ):
+            return None
+        try:
+            record = self.pending_recorder.read(result.pending_work.record_id)
+            incomplete = record["incomplete_actions"]
+            if len(incomplete) != 1:
+                return None
+            action = incomplete[0]["planned_action"]
+            execution = incomplete[0]["execution_result"]
+            if action["kind"] == "write":
+                if (
+                    len(action["units"]) != 1
+                    or len(execution["unit_results"]) != 1
+                    or execution["unit_results"][0]["reason"] != "ambiguous_existing_target"
+                ):
+                    return None
+                candidates = execution["unit_results"][0]["candidates"]
+            elif action["kind"] == "retrieve":
+                if (
+                    action["result_shape"] != "single"
+                    or action["plan"]["entity"] is None
+                    or execution["reason"] != "ambiguous_existing_target"
+                ):
+                    return None
+                candidates = execution["candidate_note_ids"]
+            else:
+                return None
+            options = tuple(ClarificationOption(**item) for item in view["options"])
+            if tuple(option.id for option in options) != tuple(candidates):
+                return None
+            guards = []
+            for option in options:
+                guards.append(
+                    current_identity_guard(self.vault_repository, self.canonical_schema, option.id)
                 )
-            return response
+            return PendingClarification(
+                record["user_request"],
+                result.request_id,
+                result.pending_work.record_id,
+                options,
+                tuple(guards),
+            )
+        except (
+            KeyError,
+            IndexError,
+            TypeError,
+            ValueError,
+            OSError,
+            PendingWorkError,
+            ReferencePreflightError,
+        ):
+            return None
+
+    def _validated_resume_plan(self, pending: PendingClarification) -> RequestPlan:
+        """Revalidate the one incomplete action; completed work is never replayed."""
+        if self.pending_recorder is None or self.canonical_schema is None:
+            raise ValueError("pending continuation is unavailable")
+        record = self.pending_recorder.read(pending.pending_record_id)
+        if (
+            record["request_id"] != pending.original_request_id
+            or record["user_request"] != pending.original_request
+            or record["affected_stable_note_ids"]
+            or len(record["incomplete_actions"]) != 1
+        ):
+            raise ValueError("pending continuation is not singular")
+        action = record["incomplete_actions"][0]["planned_action"]
+        evidence = record["incomplete_actions"][0]["execution_result"]
+        candidate_ids = tuple(option.id for option in pending.options)
+        if action.get("kind") == "write":
+            safe = (
+                len(action.get("units", ())) == 1
+                and len(evidence.get("unit_results", ())) == 1
+                and evidence["unit_results"][0].get("reason") == "ambiguous_existing_target"
+                and tuple(evidence["unit_results"][0].get("candidates", ())) == candidate_ids
+            )
+        elif action.get("kind") == "retrieve":
+            safe = (
+                action.get("result_shape") == "single"
+                and action.get("plan", {}).get("entity") is not None
+                and evidence.get("reason") == "ambiguous_existing_target"
+                and tuple(evidence.get("candidate_note_ids", ())) == candidate_ids
+            )
+        else:
+            safe = False
+        if evidence.get("status") != "deferred" or not safe:
+            raise ValueError("pending continuation is not one supported decision")
+        plan = validate_request_plan(
+            {"actions": [action], "limitations": record["planner_limitations"]},
+            self.canonical_schema,
+        )
+        if len(plan.actions) != 1 or not isinstance(plan.actions[0], WriteAction | RetrieveAction):
+            raise ValueError("pending continuation is unsupported")
+        return plan
+
+    def _append_clarification_reply(
+        self, actor: str, conversation_id: str | None, request_id: str | None, text: str
+    ) -> None:
+        """Retain the visible reply even when no Core execution is needed."""
+        if conversation_id is not None:
+            with self._conversation_lock:
+                self._conversation_store(actor).append_turn(
+                    request_id=request_id or allocate_request_id(),
+                    role="user",
+                    text=text,
+                    created_at=_current_time()["timestamp"],
+                )
+
+    @staticmethod
+    def _control_response(request_id: str | None, control: str) -> dict[str, object]:
+        """Return a bounded non-executing product response for cancellation or stale state."""
+        return {
+            "request_id": request_id,
+            "status": "completed" if control == "CANCEL" else "needs_attention",
+            "product_outcome": "ANSWER" if control == "CANCEL" else "CANNOT_ANSWER",
+            "product_reason": None if control == "CANCEL" else "STALE_EVIDENCE",
+            "product_control": control,
+            "actions": [],
+            "affected_stable_note_ids": [],
+            "operational": {"total_duration_ms": 0.0, "stages": []},
+        }
+
+    @staticmethod
+    def _pending_clarification_response(
+        request_id: str | None, pending: PendingClarification
+    ) -> dict[str, object]:
+        """Ask again with exactly the same bounded options and original request intact."""
+        return {
+            "request_id": request_id,
+            "status": "needs_attention",
+            "product_outcome": "CLARIFY",
+            "product_reason": "AMBIGUOUS_REFERENCE",
+            "clarification": {
+                "request_id": pending.original_request_id,
+                "reason": "AMBIGUOUS_REFERENCE",
+                "options": [{"id": item.id, "label": item.label} for item in pending.options],
+            },
+            "actions": [],
+            "affected_stable_note_ids": [],
+            "operational": {"total_duration_ms": 0.0, "stages": []},
+        }
 
     def _clarification_view(self, result: ApplicationResult) -> dict[str, object]:
         """Project only current, bounded, actor-local option labels for one unresolved decision."""
         candidates = next(
             (
-                unit.candidates
+                action.candidate_note_ids or (unit.candidates if unit is not None else ())
                 for action in result.action_results
-                for unit in action.unit_results
-                if unit.reason == "ambiguous_existing_target" and unit.candidates
+                for unit in action.unit_results or (None,)
+                if action.reason == "ambiguous_existing_target"
+                or unit is not None
+                and unit.reason == "ambiguous_existing_target"
             ),
             (),
         )
@@ -259,6 +537,10 @@ class RuntimeComposition:
         conversation_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
+        *,
+        resume_plan: RequestPlan | None = None,
+        clarification_choice: ClarificationChoice | None = None,
+        original_request: str | None = None,
     ) -> ApplicationResult:
         """Execute one request and refresh derived indexes after affected mutations.
 
@@ -298,7 +580,18 @@ class RuntimeComposition:
                 )
         started = self.monotonic()
         core_started = self.monotonic()
-        if conversation_id is None:
+        if resume_plan is not None:
+            if original_request is None or clarification_choice is None:
+                raise ValueError("clarification continuation is incomplete")
+            result = self.core_execute(
+                original_request,
+                request_id,
+                authenticated_actor,
+                conversation_id,
+                resume_plan,
+                clarification_choice,
+            )
+        elif conversation_id is None:
             if authenticated_actor is None:
                 result = self.core_execute(user_request, request_id)
             else:
@@ -607,11 +900,17 @@ def build_runtime_from_environment() -> RuntimeComposition:
         request_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         conversation_id: str | None = None,
+        resume_plan: RequestPlan | None = None,
+        clarification_choice: ClarificationChoice | None = None,
     ) -> ApplicationResult:
         """Execute one request with fresh Luna-first planning and persistence clock context."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
-        planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
+        planner = (
+            _FixedRequestPlanner(resume_plan)
+            if resume_plan is not None
+            else OpenAIRequestPlanner.from_environment(schema, planner_context)
+        )
         request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
         if authenticated_actor is not None and not isinstance(
             authenticated_actor, AuthenticatedActorContext
@@ -649,6 +948,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 if conversation_id is not None and request_id is not None
                 else ()
             ),
+            clarification_choice=clarification_choice,
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)
@@ -762,6 +1062,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
         conversation_root_resolver=conversation_root_resolver,
         notes_service=NotesQueryService(repository, schema, context_index),
         notes_embedder=embedder,
+        pending_recorder=pending_recorder,
+        vault_repository=repository,
+        canonical_schema=schema,
+        clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
     )
 

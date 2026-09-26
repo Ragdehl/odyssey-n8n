@@ -33,9 +33,23 @@ complete collection members and note-set snapshots take bounded deterministic pr
 This is a model-facing planner change, so previous v3/v4/v5/v6 live evidence remains immutable
 historical evidence, **not** validation of the new contract. No provider call, DEV deployment, or
 PROD deployment is part of this implementation task. A focused live gate plus regression sentinels
-is required before production readiness. Durable clarification continuation and resumed-write
-authorization remain unimplemented until the human settles pending-choice retention/cancellation
-behavior; displaying an option is not itself mutation authority.
+is required before production readiness. One actor/conversation-scoped clarification decision is
+retained without a wall-clock TTL. Numeric and exact unique displayed labels resolve first;
+explicit cancel clears it. An optional constrained Luna classification can return only a supplied
+option, `CANCEL`, `NEW_REQUEST`, or `UNRESOLVED`. A new request supersedes the decision, while an
+unresolved reply keeps the original request and asks again. The state contains no hidden reasoning.
+For resumed writes, the original explicit request supplies intent, but the selected identity is
+re-resolved and its current canonical Markdown is checked before mutation; no extra confirmation
+is required. Resumed singular reads likewise re-ground the selected Note. A stale or no-longer-safe
+choice cannot authorize a write. The current bounded continuation handles one incomplete
+single-target action; larger staged plans remain fail-closed rather than replaying completed work.
+The prepared, unexecuted v7 combined gate keeps the six historical requests, adds one Note-set and
+one singular-source planner sentinel, then checks four bounded reply-classifier decisions. It is
+Luna/low only, at most 12 calls, zero retries, stops at the first non-PASS, and has a conservative
+no-cache ceiling of `$0.1388288` from the checked-in pricing snapshot. Its new immutable evidence
+path is `benchmarks/.live-results/semantic-set-slice1-v7-combined-luna-gate.jsonl`; fresh explicit
+authorization is required before running it. Deterministic Core/read/write checks remain separate
+from this planner/classifier model evidence.
 
 ### Planner-only live evidence status
 
@@ -437,10 +451,8 @@ serialized request. The checked-in pricing snapshot still yields a conservative 
   proposal. The design review could not verify that body under the no-API-call constraint.
 - Choose user wording/confirmation policy for an observed but non-exhaustive set when the question
   implies “all”; never promise real-world completeness from an open-world vault.
-- Set exact candidate, source-byte, member, provenance-row, pending retention and progress TTL
-  ceilings using deterministic budget evidence, not an arbitrary unbounded default.
-- Decide the clarification retention/cancellation UX and the user-visible result when a stored
-  decision expires; this does not affect canonical authority but does affect product behavior.
+- Set exact candidate, source-byte, member, provenance-row, and progress ceilings using
+  deterministic budget evidence, not an arbitrary unbounded default. Clarification v1 has no TTL.
 - Before #134 implementation, decide broken-link preservation, soft versus permanent deletion,
   and the transaction/recovery contract for multi-note mutations.
 

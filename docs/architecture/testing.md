@@ -84,6 +84,14 @@ rejects, and test that several grounded collection members or matching Notes rem
 than clarification. A deterministic pass proves the contract shape, not that a live model follows
 the changed instructions; focused production-model evidence remains a separate gate.
 
+Clarification continuation tests must keep result cardinality separate from identity ambiguity:
+an explicit Note set or grounded collection may contain many results, while one unresolved source
+or write target needs a bounded choice. Test numeric/exact-label precedence, cancel, new-request
+supersession, unresolved retention, actor/conversation isolation, durable replay, and a current
+canonical Markdown/re-resolution guard before any resumed write. Do not add a wall-clock expiry to
+v1; a stored choice is not mutation authority. Tests must use injected classifiers, never provider
+credentials or live model calls.
+
 Use isolated temporary/disposable fixtures. Tests must not modify real personal notes or require production credentials.
 
 ## Model-facing evaluations

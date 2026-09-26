@@ -326,6 +326,7 @@ def _action_result(value: ActionResult) -> dict[str, Any]:
         "bulk_result": _bulk(value.bulk_result),
         "delegated_request": value.delegated_request,
         "delegated_selection": _selection(value.delegated_selection),
+        "candidate_note_ids": list(value.candidate_note_ids),
     }
     if value.retrieval is not None:
         payload["retrieval"] = _context(value.retrieval)

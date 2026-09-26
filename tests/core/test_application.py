@@ -28,10 +28,16 @@ from odyssey_core import (
     WriteAction,
     WriteTargetOutcome,
 )
+from odyssey_core.clarification import ClarificationChoice, evidence_digest
 from odyssey_core.observability import OperationalOutcome, ProviderCallEvidence
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 from odyssey_core.reference_binding import PendingReference, ReferenceRenderingResult
 from odyssey_core.reference_preflight import UnitTargetPreflight
+from odyssey_core.resolution import (
+    ExistingEntityOutcome,
+    ExistingEntityResolution,
+    ResolutionSource,
+)
 from odyssey_core.semantic_sets import SemanticSetOutcome, SemanticSetResolution
 
 
@@ -187,6 +193,15 @@ def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
         "get_context",
         lambda *args, **kwargs: retrieval_calls.append(kwargs) or object(),
     )
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: ExistingEntityResolution(
+            ExistingEntityOutcome.RESOLVED,
+            "marta-stable-id",
+            ResolutionSource.EXACT_LOCAL,
+        ),
+    )
 
     @dataclass
     class RecordingPlanner:
@@ -218,7 +233,94 @@ def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
     assert planner.calls == [
         ("¿Y dónde vive?", ({"role": "user", "text": "Marta vive en Lyon"},)),
     ]
-    assert retrieval_calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
+    assert retrieval_calls == [
+        {
+            "query": "Marta",
+            "limit": 5,
+            "type": None,
+            "filters": (),
+            "allowed_note_ids": frozenset({"marta-stable-id"}),
+        }
+    ]
+
+
+def test_singular_ambiguous_source_clarifies_but_note_set_keeps_multiple(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multiple candidates block one intended source, not an explicit Note set."""
+    calls = []
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: (
+            calls.append("resolve")
+            or ExistingEntityResolution(
+                ExistingEntityOutcome.AMBIGUOUS,
+                None,
+                ResolutionSource.EXACT_LOCAL,
+                ("marta-1", "marta-2"),
+            )
+        ),
+    )
+    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
+    selected = RetrieveAction(SelectionCriteria("Marta", "Marta", None, (), None))
+
+    singular = run(RequestPlan((selected,), ()), monkeypatch)
+    assert singular.status is ApplicationStatus.NEEDS_ATTENTION
+    assert singular.action_results[0].candidate_note_ids == ("marta-1", "marta-2")
+    assert singular.action_results[0].reason == "ambiguous_existing_target"
+
+    calls.clear()
+    note_set = run(RequestPlan((selected,), (), presentation_intent="note_set"), monkeypatch)
+    assert note_set.status is ApplicationStatus.COMPLETED
+    assert calls == []
+
+
+def test_resumed_singular_read_rechecks_identity_and_markdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A chosen source is allowed only while current evidence still supports that identity."""
+    import odyssey_core.reference_preflight as preflight
+
+    class Repository:
+        """Expose only current synthetic canonical text for the guard."""
+
+        text = "original current Markdown"
+
+        def read_text(self, path: str) -> str:
+            """Read the current fixture text for the supplied contained path."""
+            assert path == "marta.md"
+            return self.text
+
+    repository = Repository()
+    monkeypatch.setattr(preflight, "_find_existing_identity", lambda *args: ("marta.md", "Marta"))
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: ExistingEntityResolution(
+            ExistingEntityOutcome.AMBIGUOUS,
+            None,
+            ResolutionSource.EXACT_LOCAL,
+            ("marta-1", "marta-2"),
+        ),
+    )
+    queries = []
+    monkeypatch.setattr(
+        application,
+        "get_context",
+        lambda *args, **kwargs: queries.append(kwargs) or object(),
+    )
+    plan = RequestPlan((RetrieveAction(SelectionCriteria("Marta", "Marta", None, (), None)),), ())
+    choice = ClarificationChoice("marta-2", evidence_digest(repository.text))
+    accepted = run(plan, monkeypatch, repository=repository, clarification_choice=choice)
+    assert accepted.status is ApplicationStatus.COMPLETED
+    assert queries[0]["allowed_note_ids"] == frozenset({"marta-2"})
+
+    repository.text = "materially changed Markdown"
+    rejected = run(plan, monkeypatch, repository=repository, clarification_choice=choice)
+    assert rejected.status is ApplicationStatus.NEEDS_ATTENTION
+    assert rejected.action_results[0].reason == "clarification_evidence_changed"
+    assert len(queries) == 1
 
 
 def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(

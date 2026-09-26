@@ -82,9 +82,13 @@ without a generated subject/member ontology; Core owns bounded evidence, linked/
 and the decision between answer, genuine clarification, and cannot-answer. Multiple valid results
 are not ambiguity. Previous planner-only gates remain historical evidence for their older frozen
 contracts; the changed model-facing contract still needs focused live regression evidence before
-readiness. No generic Note or type is added. Clarification continuation (#137), answer-source Note
-navigation (#138), progress (#136), and direct Notes CRUD (#134) remain separate acceptance
-boundaries until implemented and verified. Tasks and Events remain later directions.
+readiness. No generic Note or type is added. Answer-source Note navigation (#138), progress
+(#136), and direct Notes CRUD (#134) remain separate acceptance boundaries until implemented and
+verified. PR #142 now includes a deliberately narrow clarification-continuation (#137) slice:
+one durable bounded choice for a singular Note read or one write target, with cancel/new-request
+handling and current-Markdown re-grounding before resume. Broader staged/multi-action continuation
+remains deferred. The new combined planner-and-reply-classifier gate is prepared but not executed; no production
+readiness is claimed. Tasks and Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete

@@ -1,0 +1,14 @@
+{
+  "version": "7.0.0",
+  "frozen_before_provider_calls": true,
+  "oracles": [
+    {"id":"SSET01","kind":"collection","query_term_sets":[["familia"],["persona","quién","quien"]]},
+    {"id":"SSET02","kind":"collection","query_term_sets":[["kit"],["básic"],["bici"],["pieza","componente"]]},
+    {"id":"SSET03","kind":"collection","query_term_sets":[["receta"],["tortilla"],["ingrediente"]]},
+    {"id":"SSET04","kind":"collection","query_term_sets":[["compañ","persona"],["viaj"],["italia"]]},
+    {"id":"REG01","kind":"singular_relational","reference_terms":["ahijad"]},
+    {"id":"REG02","kind":"ordinary_named","query_term_sets":[["marta"],["trabaj"]]},
+    {"id":"NOTE01","kind":"note_set","query_term_sets":[["nota"],["viaj"]]},
+    {"id":"SINGLE01","kind":"single","requires_entity":true,"query_term_sets":[["nota"],["italia"]]}
+  ]
+}

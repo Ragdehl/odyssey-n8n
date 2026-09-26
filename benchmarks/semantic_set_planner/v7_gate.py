@@ -1,0 +1,237 @@
+"""Frozen, provider-free gate for collection, Note-set, and singular planner shapes."""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Mapping
+from dataclasses import asdict
+from decimal import Decimal
+from pathlib import Path
+from time import perf_counter
+from typing import Any, TextIO
+
+from benchmarks.semantic_set_planner.gate import Evaluation, _contains_all_sets
+from odyssey_core.clarification import ClarificationOption, OpenAILunaClarificationClassifier
+from odyssey_core.experimental_luna_planning import (
+    LUNA_EXPERIMENT_AUTOMATIC_RETRIES,
+    LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
+    LUNA_EXPERIMENT_MODEL,
+    LUNA_EXPERIMENT_REASONING_EFFORT,
+    ExperimentalPlannerResult,
+    luna_experimental_result_json_schema,
+    render_luna_experimental_prompt,
+)
+from odyssey_core.request_planning import RequestPlan, RetrieveAction
+
+ROOT = Path(__file__).resolve().parents[2]
+CASES_PATH = Path(__file__).with_name("v7_cases.json")
+ORACLE_PATH = Path(__file__).with_name("v7_oracle.json")
+CLASSIFIER_CASES_PATH = Path(__file__).with_name("v7_classifier_cases.json")
+PRICING_PATH = ROOT / "benchmarks/phase20_answerer/pricing_snapshot.json"
+CASE_ORDER = ("SSET01", "SSET02", "SSET03", "SSET04", "REG01", "REG02", "NOTE01", "SINGLE01")
+CLASSIFIER_ORDER = ("CLAR01", "CLAR02", "CLAR03", "CLAR04")
+MAX_PROVIDER_CALLS = len(CASE_ORDER) + len(CLASSIFIER_ORDER)
+MAX_INPUT_TOKENS = 70_000
+MAX_CLASSIFIER_INPUT_TOKENS = 8_192
+MAX_COST_USD = Decimal("0.1388288")
+_UNSAFE_AUTHORITY = re.compile(
+    r"(?:\[\[|\.md\b|[\\/]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+    re.IGNORECASE,
+)
+
+
+def load_v7_registry() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Load the exact ordered frozen cases and aligned meaning oracles."""
+    cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    oracle = json.loads(ORACLE_PATH.read_text(encoding="utf-8"))
+    if (
+        set(cases) != {"version", "frozen_before_provider_calls", "fixed_context", "cases"}
+        or set(oracle) != {"version", "frozen_before_provider_calls", "oracles"}
+        or cases["version"] != "7.0.0"
+        or oracle["version"] != "7.0.0"
+        or cases["frozen_before_provider_calls"] is not True
+        or oracle["frozen_before_provider_calls"] is not True
+        or tuple(item.get("id") for item in cases["cases"]) != CASE_ORDER
+        or tuple(item.get("id") for item in oracle["oracles"]) != CASE_ORDER
+        or any(set(item) != {"id", "request"} for item in cases["cases"])
+    ):
+        raise ValueError("v7 registry is not the reviewed ordered contract")
+    return cases, {item["id"]: item for item in oracle["oracles"]}
+
+
+def load_classifier_cases() -> list[dict[str, Any]]:
+    """Load exactly four bounded synthetic classifier sentinels, without provider use."""
+    payload = json.loads(CLASSIFIER_CASES_PATH.read_text(encoding="utf-8"))
+    if (
+        set(payload) != {"version", "frozen_before_provider_calls", "cases"}
+        or payload["version"] != "7.0.0"
+        or payload["frozen_before_provider_calls"] is not True
+        or tuple(item.get("id") for item in payload["cases"]) != CLASSIFIER_ORDER
+    ):
+        raise ValueError("v7 classifier registry is invalid")
+    for case in payload["cases"]:
+        if (
+            set(case) != {"id", "original_request", "reply", "options", "expected"}
+            or not all(
+                isinstance(case[field], str) and case[field]
+                for field in ("original_request", "reply", "expected")
+            )
+            or not isinstance(case["options"], list)
+            or len(case["options"]) != 2
+            or any(set(item) != {"id", "label"} for item in case["options"])
+            or case["expected"]
+            not in (
+                {item["id"] for item in case["options"]} | {"CANCEL", "NEW_REQUEST", "UNRESOLVED"}
+            )
+            or len(json.dumps(case, ensure_ascii=False).encode("utf-8")) + 4_096
+            > MAX_CLASSIFIER_INPUT_TOKENS
+        ):
+            raise ValueError("v7 classifier case is invalid")
+    return payload["cases"]
+
+
+def v7_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[str, Any]:
+    """Bound the one-call-per-case Luna-only experiment before provider construction."""
+    if (
+        LUNA_EXPERIMENT_MODEL != "gpt-5.6-luna"
+        or LUNA_EXPERIMENT_REASONING_EFFORT != "low"
+        or LUNA_EXPERIMENT_AUTOMATIC_RETRIES != 0
+        or tuple(case["id"] for case in cases["cases"]) != CASE_ORDER
+        or OpenAILunaClarificationClassifier.model != "gpt-5.6-luna"
+        or OpenAILunaClarificationClassifier.reasoning_effort != "low"
+    ):
+        raise ValueError("v7 provider configuration is unsafe")
+    load_classifier_cases()
+    prompt = render_luna_experimental_prompt(schema, cases["fixed_context"])
+    output_schema = luna_experimental_result_json_schema(schema)
+    maximum_bytes = max(
+        len(prompt.encode("utf-8"))
+        + len(json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode())
+        + len(case["request"].encode("utf-8"))
+        for case in cases["cases"]
+    )
+    if maximum_bytes > MAX_INPUT_TOKENS:
+        raise ValueError("v7 serialized input exceeds conservative bound")
+    pricing = json.loads(PRICING_PATH.read_text(encoding="utf-8"))
+    rates = pricing["models"][LUNA_EXPERIMENT_MODEL]
+    planner_bound = Decimal(len(CASE_ORDER)) * (
+        Decimal(MAX_INPUT_TOKENS) * Decimal(str(rates["input_per_million"]))
+        + Decimal(LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS) * Decimal(str(rates["output_per_million"]))
+    )
+    classifier_bound = Decimal(len(CLASSIFIER_ORDER)) * (
+        Decimal(MAX_CLASSIFIER_INPUT_TOKENS) * Decimal(str(rates["input_per_million"]))
+        + Decimal(128) * Decimal(str(rates["output_per_million"]))
+    )
+    ceiling = (planner_bound + classifier_bound) / Decimal(1_000_000)
+    if ceiling > MAX_COST_USD:
+        raise ValueError("v7 conservative ceiling exceeds reviewed bound")
+    return {
+        "case_order": CASE_ORDER + CLASSIFIER_ORDER,
+        "maximum_provider_calls": MAX_PROVIDER_CALLS,
+        "model": LUNA_EXPERIMENT_MODEL,
+        "reasoning": LUNA_EXPERIMENT_REASONING_EFFORT,
+        "retries": LUNA_EXPERIMENT_AUTOMATIC_RETRIES,
+        "serialized_request_bytes": maximum_bytes,
+        "classifier_maximum_input_tokens": MAX_CLASSIFIER_INPUT_TOKENS,
+        "conservative_no_cache_maximum_usd": str(ceiling),
+    }
+
+
+def run_classifier_cases(
+    classifier: OpenAILunaClarificationClassifier,
+    cases: list[dict[str, Any]],
+    evidence: TextIO,
+) -> list[dict[str, Any]]:
+    """Flush one bounded classifier row per reached case; stop on the first non-PASS."""
+    rows: list[dict[str, Any]] = []
+    for case in cases:
+        options = tuple(ClarificationOption(**item) for item in case["options"])
+        started = perf_counter()
+        try:
+            decision = classifier.classify(case["reply"], case["original_request"], options)
+        except Exception as error:
+            decision = "UNRESOLVED"
+            unexpected_error = type(error).__name__[:120]
+        else:
+            unexpected_error = None
+        allowed = {item.id for item in options} | {"CANCEL", "NEW_REQUEST", "UNRESOLVED"}
+        error_category = unexpected_error or classifier.last_error_category
+        classification = (
+            "FAIL_CLOSED"
+            if not classifier.last_called or error_category is not None
+            else "PASS"
+            if decision == case["expected"]
+            else "FAIL"
+        )
+        row = {
+            "case_id": case["id"],
+            "classification": classification,
+            "decision": decision if decision in allowed else "INVALID",
+            "model": classifier.model,
+            "reasoning_effort": classifier.reasoning_effort,
+            "max_retries": 0,
+            "usage": classifier.last_usage,
+            "duration_ms": round((perf_counter() - started) * 1000, 3),
+            "response_id": classifier.last_response_id,
+            "error_category": error_category,
+        }
+        rows.append(row)
+        evidence.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+        evidence.flush()
+        if classification != "PASS":
+            break
+    return rows
+
+
+def evaluate_v7_result(result: ExperimentalPlannerResult, oracle: Mapping[str, Any]) -> Evaluation:
+    """Check only planner-owned shape and complete query meaning, never Core evidence."""
+    if not isinstance(result, RequestPlan):
+        return Evaluation("FAIL", ("unexpected_non_plan_outcome",))
+    if len(result.actions) != 1 or not isinstance(result.actions[0], RetrieveAction):
+        return Evaluation("FAIL", ("wrong_action_kind_or_count",))
+    if _UNSAFE_AUTHORITY.search(json.dumps(asdict(result), ensure_ascii=False)):
+        return Evaluation("FAIL", ("unsafe_planner_authority",))
+    action = result.actions[0]
+    selection = action.plan
+    kind = oracle["kind"]
+    if kind == "collection":
+        if action.result_shape != "collection" or result.presentation_intent != "answer":
+            return Evaluation("FAIL", ("collection_shape_missing",))
+        if (
+            selection.entity is not None
+            or selection.type is not None
+            or selection.filters
+            or selection.link_scope is not None
+            or selection.self_target is not None
+            or selection.relational_reference is not None
+            or selection.semantic_set is not None
+        ):
+            return Evaluation("FAIL", ("collection_direct_selection_conflict",))
+    elif kind == "note_set":
+        if result.presentation_intent != "note_set" or action.result_shape != "single":
+            return Evaluation("FAIL", ("note_set_shape_missing",))
+    elif kind in {"ordinary_named", "single"}:
+        if action.result_shape != "single" or result.presentation_intent != "answer":
+            return Evaluation("FAIL", ("single_shape_missing",))
+        if selection.relational_reference is not None:
+            return Evaluation("FAIL", ("unexpected_relational_reference",))
+        if oracle.get("requires_entity") and selection.entity is None:
+            return Evaluation("FAIL", ("singular_source_identity_missing",))
+    elif kind == "singular_relational":
+        reference = selection.relational_reference
+        if (
+            action.result_shape != "single"
+            or result.presentation_intent != "answer"
+            or reference is None
+            or reference.source_kind != "self"
+            or reference.members != "one"
+            or not any(term in reference.reference.casefold() for term in oracle["reference_terms"])
+        ):
+            return Evaluation("FAIL", ("singular_relational_contract_missing",))
+        return Evaluation("PASS")
+    else:
+        return Evaluation("FAIL_CLOSED", ("unknown_oracle_kind",))
+    if not _contains_all_sets(selection.query, oracle["query_term_sets"]):
+        return Evaluation("FAIL", ("lossless_query_meaning_dropped",))
+    return Evaluation("PASS")

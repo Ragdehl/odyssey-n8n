@@ -202,8 +202,9 @@ def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
     for action in completed.get("actions") or []:
         if action["kind"] == "retrieve":
             selections = [action["plan"]]
-            action["result_shape"] = (
-                "collection" if action["plan"].get("semantic_set") is not None else "single"
+            action.setdefault(
+                "result_shape",
+                "collection" if action["plan"].get("semantic_set") is not None else "single",
             )
         elif action["kind"] == "write":
             selections = [unit["target"] for unit in action["units"]]

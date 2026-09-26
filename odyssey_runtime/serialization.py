@@ -195,6 +195,7 @@ def _product_outcome(result: ApplicationResult) -> tuple[str, str | None]:
         if action.reason in {
             "relational_evidence_ambiguous",
             "relational_singular_ambiguous",
+            "ambiguous_existing_target",
         } or any(unit.reason == "ambiguous_existing_target" for unit in action.unit_results):
             return "CLARIFY", "AMBIGUOUS_REFERENCE"
     if result.status is not ApplicationStatus.COMPLETED:
@@ -228,6 +229,7 @@ def _serialize_action(action: ActionResult) -> dict[str, Any]:
         "kind": action.kind,
         "status": action.status.value,
         "reason": action.reason,
+        "candidate_note_ids": list(action.candidate_note_ids),
         "units": [_serialize_unit(unit) for unit in action.unit_results],
     }
     if action.retrieval is not None:
