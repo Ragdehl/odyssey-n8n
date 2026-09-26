@@ -301,6 +301,23 @@ def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(sc
     assert presentation_intents == {"answer", "note_set", "answer_and_note_set"}
 
 
+def test_write_action_schema_requires_non_empty_units(schema: dict) -> None:
+    """Keep Structured Outputs aligned with the local non-empty WriteAction invariant."""
+    payload = planner_output(write())
+
+    assert not schema_accepts(
+        {"result": payload},
+        planner_result_json_schema(schema),
+    )
+    assert not schema_accepts(
+        {"result": payload},
+        compact_planner_result_json_schema(schema),
+    )
+
+    with pytest.raises(RequestPlanningError, match="non-empty units"):
+        validate_planner_result(payload, schema)
+
+
 def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> None:
     """Keep one and all-matching explicit while rejecting unknown cardinality values."""
     one = validate_request_plan(output(write(unit("Marta", cardinality="one"))), schema)

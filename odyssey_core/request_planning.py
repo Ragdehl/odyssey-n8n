@@ -463,6 +463,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                 "kind": {"type": "string", "enum": ["write"]},
                                 "units": {
                                     "type": "array",
+                                    "minItems": 1,
                                     "items": {
                                         "type": "object",
                                         "properties": {
