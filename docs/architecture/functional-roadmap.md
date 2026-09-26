@@ -99,7 +99,12 @@ One provider request was attempted; there was no response or token usage, no ret
 remaining 17 planner cases were not reached. CLAR01–04 were not rerun because the
 clarification-classifier contract/code is unchanged. The planner live gate remains incomplete and
 requires review before any further live authorization; no production or DEV readiness is claimed.
-Tasks and Events remain later directions.
+The single authorized retry on `89d9c3c82c5bf32d1c2e7f6b49046052a5ac7d5d` also stopped at SSET01
+before a validated response with the same DNS-resolution chain. Its separate immutable artifact
+`benchmarks/.live-results/semantic-set-slice1-v7-final-planner-recheck-luna-gate-retry1.jsonl`
+contains one `FAIL_CLOSED` row; one request was attempted, usage was unavailable, no retry occurred,
+and the other 17 cases were not reached. No further retry is authorized by that attempt. Tasks and
+Events remain later directions.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
