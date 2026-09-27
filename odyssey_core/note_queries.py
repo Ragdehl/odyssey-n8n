@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from odyssey_core.atomic_facts import AtomicFact, AtomicFactError, parse_atomic_facts
 from odyssey_core.context import (
     ContextFilter,
     ContextIndex,
@@ -105,6 +106,8 @@ class NoteBodyBlock:
 
     kind: str
     segments: tuple[NoteBodySegment, ...]
+    fact_locator: str | None = None
+    deletable: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +118,9 @@ class NoteDetail:
     body: str
     body_blocks: tuple[NoteBodyBlock, ...]
     links: tuple[NoteLink, ...]
+    revision: int = 1
+    source_hash: str = "0" * 64
+    atomic_facts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,7 +224,9 @@ def _link_resolver(
 
 
 def _presentation_blocks(
-    body: str, resolve: Callable[[str], _GroundedNote | None]
+    body: str,
+    resolve: Callable[[str], _GroundedNote | None],
+    atomic_facts: tuple[AtomicFact, ...] = (),
 ) -> tuple[NoteBodyBlock, ...]:
     """Project the Markdown subset Odyssey writes into safe, readable body blocks.
 
@@ -226,8 +234,10 @@ def _presentation_blocks(
     and Core-resolved stable IDs. The browser never receives a vault path or has to resolve a link.
     """
     visible = _without_comments(body)
+    locators = _atomic_fact_locators_by_list_item(body, atomic_facts)
     blocks: list[NoteBodyBlock] = []
     paragraph: list[str] = []
+    list_item_index = 0
 
     def flush_paragraph() -> None:
         if not paragraph:
@@ -248,11 +258,42 @@ def _presentation_blocks(
             continue
         if item := _list_item_content(line):
             flush_paragraph()
-            blocks.append(NoteBodyBlock("list_item", _presentation_segments(item, resolve)))
+            locator = locators.get(list_item_index)
+            list_item_index += 1
+            blocks.append(
+                NoteBodyBlock(
+                    "list_item",
+                    _presentation_segments(item, resolve),
+                    locator,
+                    locator is not None,
+                )
+            )
             continue
         paragraph.append(line)
     flush_paragraph()
     return tuple(block for block in blocks if block.segments)
+
+
+def _atomic_fact_locators_by_list_item(
+    body: str, atomic_facts: tuple[AtomicFact, ...]
+) -> dict[int, str]:
+    """Associate parsed atomic locators with their canonical list-item positions.
+
+    The association is derived from parser spans in Core, never from browser-visible text. This
+    keeps duplicate facts and fact text containing resolved wikilinks unambiguous to the browser.
+    """
+    locator_by_start = {fact.start: fact.locator for fact in atomic_facts}
+    result: dict[int, str] = {}
+    list_item_index = 0
+    offset = 0
+    for line in body.splitlines(keepends=True):
+        if line.strip() and _list_item_content(line.strip()):
+            locator = locator_by_start.get(offset)
+            if locator is not None:
+                result[list_item_index] = locator
+            list_item_index += 1
+        offset += len(line)
+    return result
 
 
 def _presentation_segments(
@@ -587,8 +628,23 @@ class NotesQueryService:
                 note.path.removesuffix(".md").rsplit("/", 1)[-1].casefold(), []
             ).append(note)
         resolve = _link_resolver(path_map, basenames)
-        body_blocks = _presentation_blocks(current.body, resolve)
+        try:
+            parsed_atomic_facts = parse_atomic_facts(current.body)
+        except AtomicFactError:
+            # Existing Markdown may contain historical marker-like comments. Preserve the
+            # read-only projection while withholding every direct mutation affordance.
+            parsed_atomic_facts = ()
+        body_blocks = _presentation_blocks(current.body, resolve, parsed_atomic_facts)
         links = _aggregate_links(body_blocks)
+        atomic_facts = tuple((fact.locator, fact.text) for fact in parsed_atomic_facts)
+        revision = None
+        try:
+            raw = self.repository.read_text(current.path)
+            revision = parse_note(raw).metadata["revision"]
+        except (KeyError, NoteFormatError, NoteUnavailableError) as error:
+            raise NotesQueryError("Canonical note is unavailable") from error
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+            raise NotesQueryError("Canonical note revision is invalid")
         return NoteDetail(
             current.summary,
             _presentation_text(body_blocks),
@@ -610,6 +666,9 @@ class NotesQueryService:
                     ),
                 )
             ),
+            revision,
+            current.source_hash,
+            atomic_facts,
         )
 
     def backlinks(

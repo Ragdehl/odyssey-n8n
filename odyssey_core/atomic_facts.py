@@ -9,6 +9,8 @@ from datetime import date
 
 _MARKER = re.compile(r"^[ \t]*<!-- odyssey:fact request=([^\s>]+) ordinal=(\d+) -->[ \t]*$")
 _MARKER_PREFIX = "<!-- odyssey:fact"
+_CAPTURE_HEADING = re.compile(r"^# Added \d{2}-\d{2}-\d{4}[ \t]*$", re.MULTILINE)
+_LEVEL_ONE_HEADING = re.compile(r"^# .+$", re.MULTILINE)
 
 
 class AtomicFactError(ValueError):
@@ -128,11 +130,34 @@ def append_atomic_facts(
 
 
 def remove_atomic_fact(body: str, target: AtomicFact) -> str:
-    """Remove exactly one parser-derived atomic fact block without touching adjacent Markdown."""
+    """Remove one fact and retire its capture heading only when that section becomes empty."""
     facts = parse_atomic_facts(body)
     if target not in facts:
         raise AtomicFactError("Atomic fact removal target is not from this authoritative body")
-    return body[: target.start] + body[target.end :]
+
+    capture_heading = None
+    for match in _CAPTURE_HEADING.finditer(body):
+        if match.end() <= target.start:
+            capture_heading = match
+        else:
+            break
+    if capture_heading is None:
+        return body[: target.start] + body[target.end :]
+
+    next_heading = _LEVEL_ONE_HEADING.search(body, capture_heading.end())
+    section_end = next_heading.start() if next_heading is not None else len(body)
+    if target.end > section_end:
+        return body[: target.start] + body[target.end :]
+
+    remaining_section = body[capture_heading.end() : target.start] + body[target.end : section_end]
+    if remaining_section.strip():
+        return body[: target.start] + body[target.end :]
+
+    prefix = body[: capture_heading.start()].rstrip()
+    suffix = body[section_end:].lstrip("\n")
+    if prefix and suffix:
+        return prefix + "\n\n" + suffix
+    return prefix or suffix
 
 
 def find_unique_atomic_fact(body: str, description: str) -> AtomicFact | None:

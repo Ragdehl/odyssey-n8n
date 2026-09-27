@@ -29,6 +29,10 @@ from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
 from odyssey_core.conversations import MAIN_CONVERSATION_ID
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
+from odyssey_core.direct_note_mutations import (
+    DirectNoteMutationError,
+    DirectNoteMutationService,
+)
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
@@ -120,6 +124,10 @@ class RuntimeComposition:
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
+    ) = None
+    direct_notes_mutations: DirectNoteMutationService | None = None
+    notes_mutation_actor: (
+        Callable[[AuthenticatedActorContext | None, ExternalPrincipal | None], object] | None
     ) = None
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -510,6 +518,52 @@ class RuntimeComposition:
                     cursor=payload.get("cursor"),
                 )
             )
+        if operation in {"delete_fact", "delete_note"}:
+            if self.direct_notes_mutations is None or self.notes_mutation_actor is None:
+                raise ValueError("Notes mutation service is unavailable")
+            request_id = payload.get("request_id")
+            if not isinstance(request_id, str) or not request_id:
+                raise ValueError("Notes mutation request ID is invalid")
+            common = {
+                "note_id": payload.get("note_id"),
+                "expected_revision": payload.get("expected_revision"),
+                "expected_source_hash": payload.get("expected_source_hash"),
+                "request_id": request_id,
+                "actor": self.notes_mutation_actor(authenticated_actor, external_principal),
+                "now": _current_time()["timestamp"],
+            }
+            with self._execute_lock:
+                try:
+                    if operation == "delete_fact":
+                        if set(payload) != {
+                            "note_id",
+                            "fact_locator",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        } or not isinstance(payload.get("fact_locator"), str):
+                            raise ValueError("Notes fact deletion payload is invalid")
+                        result = self.direct_notes_mutations.delete_fact(
+                            **common, fact_locator=payload["fact_locator"]
+                        )
+                    else:
+                        if set(payload) != {
+                            "note_id",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        }:
+                            raise ValueError("Notes deletion payload is invalid")
+                        result = self.direct_notes_mutations.delete_note(**common)
+                except DirectNoteMutationError:
+                    raise
+                self.refresh_indexes()
+            return {
+                "kind": "mutation",
+                "operation": result.operation,
+                "note_id": result.note_id,
+                "history": {"status": result.history.status.value},
+            }
         if operation == "intelligent":
             if (
                 self.intelligent_notes_execute is None
@@ -1055,18 +1109,34 @@ def build_runtime_from_environment() -> RuntimeComposition:
         )
 
     refresh_indexes()
+
+    def notes_mutation_actor(
+        authenticated_actor: AuthenticatedActorContext | None,
+        external_principal: ExternalPrincipal | None,
+    ) -> object:
+        """Apply the same trusted provenance mapping as ordinary runtime writes."""
+        if external_principal is not None:
+            authenticated_actor = identity_mapping_repository.resolve_existing(external_principal)
+            authenticated_actor = AuthenticatedActorContext(authenticated_actor.stable_user_id)
+        return _persistence_actor(actor, authenticated_actor)
+
+    notes_service = NotesQueryService(repository, schema, context_index)
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
-        notes_service=NotesQueryService(repository, schema, context_index),
+        notes_service=notes_service,
         notes_embedder=embedder,
         pending_recorder=pending_recorder,
         vault_repository=repository,
         canonical_schema=schema,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
+        direct_notes_mutations=DirectNoteMutationService(
+            repository, schema, notes_service, history_recorder
+        ),
+        notes_mutation_actor=notes_mutation_actor,
     )
 
 
@@ -1124,6 +1194,14 @@ def _notes_to_response(
             "body_blocks": [
                 {
                     "kind": block.kind,
+                    **(
+                        {
+                            "fact_locator": block.fact_locator,
+                            "deletable": True,
+                        }
+                        if block.deletable
+                        else {}
+                    ),
                     "segments": [
                         {
                             "text": segment.text,
@@ -1151,6 +1229,10 @@ def _notes_to_response(
                 }
                 for item in value.links
             ],
+            "mutation": {
+                "revision": value.revision,
+                "source_hash": value.source_hash,
+            },
         }
     if isinstance(value, BacklinkPage):
         return {

@@ -65,6 +65,32 @@ def test_exact_marked_fact_removal_leaves_neighbors_untouched() -> None:
         and "Has two children." in result
         and "Legacy prose." in result
     )
+    assert "# Added 29-08-2026" in result
+
+
+def test_last_fact_removal_also_removes_empty_capture_heading() -> None:
+    """Do not leave an Added-date heading behind when its only atomic fact is removed."""
+    body = append_atomic_facts("Legacy prose.", ("Works at Airbus.",), "R1", (0,), "2026-08-29")
+    target = parse_atomic_facts(body)[0]
+
+    result = remove_atomic_fact(body, target)
+
+    assert result == "Legacy prose."
+    assert "Added 29-08-2026" not in result
+
+
+def test_empty_capture_cleanup_preserves_following_sections() -> None:
+    """Remove only the emptied capture section and retain the next canonical section unchanged."""
+    first = append_atomic_facts("", ("Works at Airbus.",), "R1", (0,), "2026-08-29")
+    body = append_atomic_facts(first, ("Has two children.",), "R2", (0,), "2026-08-30")
+    target = find_unique_atomic_fact(body, "Works at Airbus.")
+    assert target is not None
+
+    result = remove_atomic_fact(body, target)
+
+    assert "Added 29-08-2026" not in result
+    assert result.startswith("# Added 30-08-2026\n- Has two children.")
+    assert "R2" in result
 
 
 def test_locator_is_note_scoped_for_global_identity() -> None:

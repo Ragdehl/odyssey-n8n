@@ -128,6 +128,8 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
     assert "const forwarded = { operation };" in source
     assert "if (operation === 'query')" in source
     assert "if (operation === 'detail') forwarded.note_id = note_id;" in source
+    assert "delete_fact: new Set(['operation', 'note_id', 'fact_locator'" in source
+    assert "delete_note: new Set(['operation', 'note_id', 'expected_revision'" in source
 
 
 def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
