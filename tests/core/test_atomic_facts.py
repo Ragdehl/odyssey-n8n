@@ -70,9 +70,7 @@ def test_exact_marked_fact_removal_leaves_neighbors_untouched() -> None:
 
 def test_last_fact_removal_also_removes_empty_capture_heading() -> None:
     """Do not leave an Added-date heading behind when its only atomic fact is removed."""
-    body = append_atomic_facts(
-        "Legacy prose.", ("Works at Airbus.",), "R1", (0,), "2026-08-29"
-    )
+    body = append_atomic_facts("Legacy prose.", ("Works at Airbus.",), "R1", (0,), "2026-08-29")
     target = parse_atomic_facts(body)[0]
 
     result = remove_atomic_fact(body, target)
