@@ -27,6 +27,7 @@ from odyssey_core.request_planning import (
     planner_result_json_schema,
     validate_request_plan,
 )
+from odyssey_core.semantic_sets import SetEvidenceSelection, SetMemberOccurrence
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetOutcome, decide_write_target
 
@@ -109,6 +110,28 @@ class FactReasoner:
                 "id": request.candidates[0].id if self.outcome == "RESOLVED" else None,
             },
             {},
+        )
+
+
+class RelevantFactSelector:
+    """Propose every fixture fact whose visible wording directly supports the relation."""
+
+    def __init__(self, wording: str) -> None:
+        """Keep the semantic relevance phrase independent from the one-choice reasoner."""
+        self.wording = wording.casefold()
+        self.requests: list[Any] = []
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        """Return each matching supplied fact with one bounded visible-text occurrence."""
+        self.requests.append(request)
+        selected = tuple(
+            candidate
+            for candidate in request.candidates
+            if self.wording in candidate.text.casefold()
+        )
+        return SetEvidenceSelection(
+            tuple(candidate.id for candidate in selected),
+            tuple(SetMemberOccurrence(candidate.id, "literal", 0, 1) for candidate in selected),
         )
 
 
@@ -201,6 +224,7 @@ def run(
     plan: RequestPlan,
     *,
     reasoner: FactReasoner | None = None,
+    selector: RelevantFactSelector | None = None,
 ) -> application.ApplicationResult:
     """Execute one synthetic plan through the real Core application boundary."""
     return application.execute_request(
@@ -216,10 +240,23 @@ def run(
         now="2026-09-24T12:00:00Z",
         context_limit=5,
         writer=ForbiddenWriter(),
+        semantic_set_selector=selector or RelevantFactSelector(_plan_relation_wording(plan)),
         authenticated_actor=ACTOR,
         self_binding_repository=SelfBinding(),
         request_id_factory=lambda: "relational-test",
     )
+
+
+def _plan_relation_wording(plan: RequestPlan) -> str:
+    """Extract the fixture's direct relationship wording for the deterministic selector."""
+    for action in plan.actions:
+        if isinstance(action, RetrieveAction) and action.plan.relational_reference is not None:
+            return action.plan.relational_reference.reference
+        if isinstance(action, WriteAction):
+            for unit in action.units:
+                if unit.target.relational_reference is not None:
+                    return unit.target.relational_reference.reference
+    return ""
 
 
 def test_model_contract_preserves_relational_intent_and_legacy_selection(schema: dict) -> None:
@@ -330,10 +367,15 @@ def test_singular_corrobating_facts_converge_on_one_current_identity(
         (),
     )
 
-    result = run(vault, schema, plan)
+    selector = RelevantFactSelector("mi mujer")
+    reasoner = FactReasoner()
+    result = run(vault, schema, plan, reasoner=reasoner, selector=selector)
 
     assert result.status is application.ApplicationStatus.COMPLETED
     assert calls[0]["allowed_note_ids"] == frozenset({"beatriz"})
+    assert len(selector.requests) == 1
+    assert len(selector.requests[0].candidates) == 2
+    assert reasoner.requests == []
 
 
 def test_multi_target_singular_fact_offers_each_grounded_identity_without_guessing(
@@ -356,7 +398,7 @@ def test_multi_target_singular_fact_offers_each_grounded_identity_without_guessi
         (),
     )
 
-    result = run(vault, schema, plan)
+    result = run(vault, schema, plan, selector=RelevantFactSelector("mis hijos"))
 
     action = result.action_results[0]
     assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
@@ -384,12 +426,40 @@ def test_conflicting_singular_relation_targets_offer_options_only_for_reads(
         (),
     )
 
-    result = run(vault, schema, plan, reasoner=FactReasoner("UNRESOLVED"))
+    selector = RelevantFactSelector("mi hija")
+    reasoner = FactReasoner()
+    result = run(vault, schema, plan, reasoner=reasoner, selector=selector)
 
     action = result.action_results[0]
     assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
     assert action.reason == "relational_evidence_ambiguous"
     assert action.candidate_note_ids == ("cloe", "marta")
+    assert len(selector.requests) == 1
+    assert len(selector.requests[0].candidates) == 2
+    assert reasoner.requests == []
+
+
+def test_semantic_relation_wording_selects_all_relevant_facts_without_literal_matching(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep semantic spouse wording while Core, rather than the reasoner, owns identity choice."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi mujer es [[Beatriz]]."))
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz Carrero", "")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi pareja", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=RelevantFactSelector("mi mujer"))
+
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert calls[0]["allowed_note_ids"] == frozenset({"beatriz"})
 
 
 def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
@@ -459,7 +529,7 @@ def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
 def test_relational_resolution_keeps_later_than_32_current_fact_candidates_reachable(
     tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Permit Core's contextual boundary to choose a valid relation after 32 other facts."""
+    """Permit bounded multi-fact relevance selection to reach a late current relation."""
     vault = tmp_path / "vault"
     vault.mkdir()
     other_facts: list[str] = []
@@ -475,15 +545,15 @@ def test_relational_resolution_keeps_later_than_32_current_fact_candidates_reach
     monkeypatch.setattr(
         application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
     )
-    reasoner = MatchingFactReasoner("Mi hija es Chloe")
+    selector = RelevantFactSelector("mi hija")
     plan = RequestPlan(
         (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
         (),
     )
-    result = run(vault, schema, plan, reasoner=reasoner)
+    result = run(vault, schema, plan, reasoner=FactReasoner(), selector=selector)
     assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
-    assert len(reasoner.requests[0].candidates) == 34
-    assert reasoner.requests[0].candidates[-1].evidence == "Mi hija es Chloe."
+    assert len(selector.requests[0].candidates) == 34
+    assert selector.requests[0].candidates[-1].text == "Mi hija es Chloe."
     assert calls[0]["allowed_note_ids"] == frozenset({"chloe"})
 
 

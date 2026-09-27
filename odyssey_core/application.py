@@ -731,6 +731,7 @@ def _execute_retrieve(
                 semantic_limit=semantic_limit,
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
+                semantic_set_selector=semantic_set_selector,
                 allow_identity_clarification=True,
             )
         except RelationalResolutionError as error:

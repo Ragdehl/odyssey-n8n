@@ -588,6 +588,18 @@ def _candidate_batches(
     return tuple(batches)
 
 
+def partition_semantic_set_candidates(
+    candidates: Sequence[SemanticSetCandidate],
+    bounds: SemanticSetBounds = DEFAULT_SEMANTIC_SET_BOUNDS,
+) -> tuple[tuple[SemanticSetCandidate, ...], ...] | SemanticSetResolution:
+    """Expose the bounded, deterministic selector partition used by Core read paths.
+
+    The returned batches cover the complete supplied canonical inventory.  Callers must process
+    every batch before claiming a complete answer.
+    """
+    return _candidate_batches(candidates, bounds)
+
+
 def _inventory(
     candidates: Sequence[SemanticSetCandidate] | Sequence[CanonicalFact],
 ) -> tuple[tuple[str, str, str], ...]:
