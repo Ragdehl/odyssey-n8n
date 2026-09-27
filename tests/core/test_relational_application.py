@@ -135,6 +135,21 @@ class RelevantFactSelector:
         )
 
 
+class StaticFactSelector:
+    """Return one controlled relevance result for Core fail-closed regression coverage."""
+
+    def __init__(self, outcome: SetEvidenceSelection | Exception) -> None:
+        """Keep a deterministic selector response or failure for one synthetic invocation."""
+        self.outcome = outcome
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        """Return the configured response without deriving a target identity."""
+        del request
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
+
+
 class MatchingFactReasoner(FactReasoner):
     """Select a supplied candidate by visible canonical fact wording for fixture coverage."""
 
@@ -224,7 +239,7 @@ def run(
     plan: RequestPlan,
     *,
     reasoner: FactReasoner | None = None,
-    selector: RelevantFactSelector | None = None,
+    selector: Any | None = None,
 ) -> application.ApplicationResult:
     """Execute one synthetic plan through the real Core application boundary."""
     return application.execute_request(
@@ -460,6 +475,118 @@ def test_semantic_relation_wording_selects_all_relevant_facts_without_literal_ma
 
     assert result.status is application.ApplicationStatus.COMPLETED
     assert calls[0]["allowed_note_ids"] == frozenset({"beatriz"})
+
+
+def test_relational_read_rejects_invalid_or_failed_multi_fact_relevance_selection(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Fail closed when read relevance selection is outside its batch or cannot run."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    invalid = StaticFactSelector(
+        SetEvidenceSelection(
+            ("outside-batch",), (SetMemberOccurrence("outside-batch", "literal", 0, 1),)
+        )
+    )
+    for selector, reason in (
+        (invalid, "relational_evidence_incomplete"),
+        (
+            StaticFactSelector(RuntimeError("selector unavailable")),
+            "relational_relevance_unavailable",
+        ),
+    ):
+        result = run(vault, schema, plan, selector=selector)
+        assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+        assert result.action_results[0].reason == reason
+
+
+def test_relational_read_scope_uncertainty_never_selects_one_identity(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Preserve ambiguity when the bounded relevance selector cannot establish scope."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(
+        vault, schema, plan, selector=StaticFactSelector(SetEvidenceSelection((), (), True))
+    )
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].reason == "relational_evidence_ambiguous"
+
+
+def test_relational_read_projects_selected_incoming_fact_to_its_complete_source_identity(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the established one-hop incoming source projection under multi-fact selection."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Mi padre es [[Edgar]]."))
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=RelevantFactSelector("mi padre"))
+
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert calls[0]["allowed_note_ids"] == frozenset({"cloe"})
+
+
+def test_relational_read_rejects_dangling_or_more_than_four_selected_targets(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Do not turn malformed or unbounded selected target sets into a partial answer."""
+    dangling = tmp_path / "dangling"
+    dangling.mkdir()
+    write_note(dangling, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Missing]]."))
+    singular = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    dangling_result = run(dangling, schema, singular, selector=RelevantFactSelector("mi hija"))
+    assert dangling_result.action_results[0].reason == "relational_evidence_incomplete"
+
+    crowded = tmp_path / "crowded"
+    crowded.mkdir()
+    names = ("A", "B", "C", "D", "E")
+    for name in names:
+        write_note(crowded, f"people/{name.lower()}.md", name.lower(), name, "")
+    links = " y ".join(f"[[{name}]]" for name in names)
+    write_note(crowded, "people/edgar.md", "edgar", "Edgar", fact(f"Mis hijos son {links}."))
+    crowded_result = run(
+        crowded,
+        schema,
+        RequestPlan(
+            (
+                RetrieveAction(
+                    relational_selection("mi hijo", source_kind="self", source_query=None)
+                ),
+            ),
+            (),
+        ),
+        selector=RelevantFactSelector("mis hijos"),
+    )
+    assert crowded_result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert crowded_result.action_results[0].reason == "relational_evidence_ambiguous"
+    assert crowded_result.action_results[0].candidate_note_ids == ()
 
 
 def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
