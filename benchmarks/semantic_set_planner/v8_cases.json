@@ -1,5 +1,5 @@
 {
-  "version": "8.0.0",
+  "version": "8.1.0",
   "frozen_before_provider_calls": true,
   "fixed_context": {"date": "2026-09-27", "time": "10:30", "timezone": "Europe/Paris"},
   "cases": [

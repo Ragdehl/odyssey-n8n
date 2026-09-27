@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,17 +14,24 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from benchmarks.semantic_set_planner.run_live import reserve_evidence_path, run_cases  # noqa: E402
+from benchmarks.semantic_set_planner.v7_gate import evaluate_historical_result  # noqa: E402
 from benchmarks.semantic_set_planner.v8_gate import (  # noqa: E402
     CASE_ORDER,
     MAX_PROVIDER_CALLS,
     PLANNER_ORDER,
-    evaluate_historical_result,
     evaluate_v8_result,
+    evaluate_v8_selector_result,
     load_historical_registry,
     load_v8_registry,
+    load_v8_selector_registry,
     v8_preflight,
 )
 from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner  # noqa: E402
+from odyssey_core.semantic_sets import (  # noqa: E402
+    OpenAILunaSemanticSetSelector,
+    SemanticSetCandidateView,
+    SemanticSetSelectionRequest,
+)
 
 OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-self-clarification-v8-luna-gate.jsonl"
 SCHEMA_PATH = ROOT / "config/note-schema.json"
@@ -35,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
     args = parser.parse_args(argv)
     cases, oracles = load_v8_registry()
+    selector_cases, selector_oracles = load_v8_selector_registry()
     historical_cases, historical_oracles = load_historical_registry()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     print(json.dumps(v8_preflight(schema, cases), ensure_ascii=False, sort_keys=True))
@@ -58,6 +67,50 @@ def main(argv: list[str] | None = None) -> int:
                     case_evaluator=evaluate_historical_result,
                 )
             )
+        if len(rows) == len(PLANNER_ORDER) and all(row["classification"] == "PASS" for row in rows):
+            selector = OpenAILunaSemanticSetSelector()
+            for case in selector_cases["cases"]:
+                try:
+                    result = selector.select(
+                        SemanticSetSelectionRequest(
+                            query=case["query"],
+                            intent=None,
+                            candidates=tuple(
+                                SemanticSetCandidateView(**item) for item in case["candidates"]
+                            ),
+                        )
+                    )
+                    evaluation = evaluate_v8_selector_result(
+                        result, case, selector_oracles[case["id"]]
+                    )
+                    row = {
+                        "case_id": case["id"],
+                        "gate_section": "selector",
+                        "classification": evaluation.classification,
+                        "findings": list(evaluation.findings),
+                        "validated_result": asdict(result),
+                        "model": selector.model,
+                        "reasoning_effort": selector.reasoning_effort,
+                        "max_retries": 0,
+                        "usage": selector.last_usage,
+                    }
+                except Exception as error:
+                    row = {
+                        "case_id": case["id"],
+                        "gate_section": "selector",
+                        "classification": "FAIL_CLOSED",
+                        "findings": [f"provider_or_local_error:{type(error).__name__[:120]}"],
+                        "validated_result": None,
+                        "model": "gpt-5.6-luna",
+                        "reasoning_effort": "low",
+                        "max_retries": 0,
+                        "usage": None,
+                    }
+                evidence.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+                evidence.flush()
+                rows.append(row)
+                if row["classification"] != "PASS":
+                    break
     return int(
         not (
             len(rows) == MAX_PROVIDER_CALLS and all(row["classification"] == "PASS" for row in rows)

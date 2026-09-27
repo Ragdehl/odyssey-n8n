@@ -1,5 +1,5 @@
 {
-  "version": "8.0.0",
+  "version": "8.1.0",
   "frozen_before_provider_calls": true,
   "oracles": [
     {"id":"SSET01","kind":"collection","collection_subject":"self","query_term_sets":[["familia"],["persona","quién","quien"]]},

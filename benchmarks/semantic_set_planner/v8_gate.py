@@ -27,10 +27,13 @@ from odyssey_core.experimental_luna_planning import (
     render_luna_experimental_prompt,
 )
 from odyssey_core.request_planning import RequestPlan, RetrieveAction, WriteAction
+from odyssey_core.semantic_sets import SetEvidenceSelection
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = Path(__file__).with_name("v8_cases.json")
 ORACLE_PATH = Path(__file__).with_name("v8_oracle.json")
+SELECTOR_CASES_PATH = Path(__file__).with_name("v8_selector_cases.json")
+SELECTOR_ORACLE_PATH = Path(__file__).with_name("v8_selector_oracle.json")
 PRICING_PATH = ROOT / "benchmarks/phase20_answerer/pricing_snapshot.json"
 CASE_ORDER = (
     "SSET01",
@@ -46,9 +49,12 @@ CASE_ORDER = (
     "ESC01",
 )
 PLANNER_ORDER = CASE_ORDER + HISTORICAL_CASE_ORDER
-MAX_PROVIDER_CALLS = len(PLANNER_ORDER)
+SELECTOR_ORDER = ("RELSEL_CORROBORATE", "RELSEL_CONFLICT", "RELSEL_MULTI_TARGET", "RELSEL_SEMANTIC")
+PLANNER_PROVIDER_CALLS = len(PLANNER_ORDER)
+SELECTOR_PROVIDER_CALLS = len(SELECTOR_ORDER)
+MAX_PROVIDER_CALLS = PLANNER_PROVIDER_CALLS + SELECTOR_PROVIDER_CALLS
 MAX_INPUT_TOKENS = 70_000
-MAX_COST_USD = Decimal("0.3456096")
+MAX_COST_USD = Decimal("0.41144")
 
 
 def load_v8_registry() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
@@ -58,8 +64,8 @@ def load_v8_registry() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     if (
         set(cases) != {"version", "frozen_before_provider_calls", "fixed_context", "cases"}
         or set(oracle) != {"version", "frozen_before_provider_calls", "oracles"}
-        or cases["version"] != "8.0.0"
-        or oracle["version"] != "8.0.0"
+        or cases["version"] != "8.1.0"
+        or oracle["version"] != "8.1.0"
         or cases["frozen_before_provider_calls"] is not True
         or oracle["frozen_before_provider_calls"] is not True
         or tuple(item.get("id") for item in cases["cases"]) != CASE_ORDER
@@ -77,6 +83,39 @@ def load_v8_registry() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     return cases, by_id
 
 
+def load_v8_selector_registry() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Load frozen selector-only rows with opaque fact IDs before provider construction."""
+    cases = json.loads(SELECTOR_CASES_PATH.read_text(encoding="utf-8"))
+    oracle = json.loads(SELECTOR_ORACLE_PATH.read_text(encoding="utf-8"))
+    if (
+        set(cases) != {"version", "frozen_before_provider_calls", "cases"}
+        or set(oracle) != {"version", "frozen_before_provider_calls", "oracles"}
+        or cases["version"] != "8.1.0"
+        or oracle["version"] != "8.1.0"
+        or cases["frozen_before_provider_calls"] is not True
+        or oracle["frozen_before_provider_calls"] is not True
+        or tuple(item.get("id") for item in cases["cases"]) != SELECTOR_ORDER
+        or tuple(item.get("id") for item in oracle["oracles"]) != SELECTOR_ORDER
+        or any(set(item) != {"id", "query", "candidates"} for item in cases["cases"])
+    ):
+        raise ValueError("v8 selector registry is not the reviewed ordered contract")
+    for case in cases["cases"]:
+        if (
+            not isinstance(case["query"], str)
+            or not case["query"].strip()
+            or not isinstance(case["candidates"], list)
+        ):
+            raise ValueError("v8 selector case is invalid")
+        ids = [item.get("id") for item in case["candidates"] if isinstance(item, dict)]
+        if (
+            not ids
+            or len(ids) != len(set(ids))
+            or any(set(item) != {"id", "text"} for item in case["candidates"])
+        ):
+            raise ValueError("v8 selector candidates are invalid")
+    return cases, {item["id"]: item for item in oracle["oracles"]}
+
+
 def v8_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[str, Any]:
     """Calculate the reviewed no-cache Luna ceiling without making provider calls."""
     if (
@@ -87,13 +126,18 @@ def v8_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[st
     ):
         raise ValueError("v8 provider configuration is unsafe")
     historical, _ = load_historical_registry()
+    selector_cases, _ = load_v8_selector_registry()
     prompt = render_luna_experimental_prompt(schema, cases["fixed_context"])
     output_schema = luna_experimental_result_json_schema(schema)
     maximum_bytes = max(
         len(prompt.encode("utf-8"))
         + len(json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode())
-        + len(case["request"].encode("utf-8"))
-        for case in [*cases["cases"], *historical]
+        + len(
+            (case["request"] if "request" in case else json.dumps(case, ensure_ascii=False)).encode(
+                "utf-8"
+            )
+        )
+        for case in [*cases["cases"], *historical, *selector_cases["cases"]]
     )
     if maximum_bytes > MAX_INPUT_TOKENS:
         raise ValueError("v8 serialized input exceeds conservative bound")
@@ -109,7 +153,8 @@ def v8_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[st
     if ceiling != MAX_COST_USD:
         raise ValueError("v8 conservative ceiling changed")
     return {
-        "case_order": PLANNER_ORDER,
+        "planner_case_order": PLANNER_ORDER,
+        "selector_case_order": SELECTOR_ORDER,
         "maximum_provider_calls": MAX_PROVIDER_CALLS,
         "model": LUNA_EXPERIMENT_MODEL,
         "reasoning": LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -117,6 +162,34 @@ def v8_preflight(schema: Mapping[str, Any], cases: Mapping[str, Any]) -> dict[st
         "serialized_request_bytes": maximum_bytes,
         "conservative_no_cache_maximum_usd": str(ceiling),
     }
+
+
+def evaluate_v8_selector_result(
+    result: SetEvidenceSelection, case: Mapping[str, Any], oracle: Mapping[str, Any]
+) -> Evaluation:
+    """Require every expected relevant opaque fact to carry direct supplied-text evidence."""
+    if not isinstance(result, SetEvidenceSelection) or result.scope_uncertain:
+        return Evaluation("FAIL", ("selector_scope_uncertain_or_invalid",))
+    supplied = tuple(result.supplied_fact_ids)
+    expected = tuple(oracle["selected_fact_ids"])
+    candidate_text = {item["id"]: item["text"] for item in case["candidates"]}
+    if set(supplied) != set(expected) or any(item not in candidate_text for item in supplied):
+        return Evaluation("FAIL", ("relevant_fact_set_missing_or_extra",))
+    supported: set[str] = set()
+    for occurrence in result.member_occurrences:
+        text = candidate_text.get(occurrence.candidate_id)
+        if (
+            text is None
+            or occurrence.kind not in {"literal", "link"}
+            or occurrence.start < 0
+            or occurrence.end <= occurrence.start
+            or occurrence.end > len(text)
+        ):
+            return Evaluation("FAIL_CLOSED", ("invalid_direct_occurrence",))
+        supported.add(occurrence.candidate_id)
+    if supported != set(expected):
+        return Evaluation("FAIL", ("selected_fact_lacks_direct_evidence",))
+    return Evaluation("PASS")
 
 
 def evaluate_v8_result(result: ExperimentalPlannerResult, oracle: Mapping[str, Any]) -> Evaluation:

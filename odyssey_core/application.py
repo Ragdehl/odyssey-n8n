@@ -733,6 +733,9 @@ def _execute_retrieve(
                 self_binding_repository=self_binding_repository,
                 semantic_set_selector=semantic_set_selector,
                 allow_identity_clarification=True,
+                chosen_identity_id=(
+                    clarification_choice.stable_id if clarification_choice is not None else None
+                ),
             )
         except RelationalResolutionError as error:
             return ActionResult(

@@ -12,8 +12,10 @@ import pytest
 
 import odyssey_core.application as application
 from odyssey_core.atomic_facts import render_atomic_facts
+from odyssey_core.clarification import ClarificationChoice
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.notes import Note, parse_note, serialize_note
+from odyssey_core.reference_preflight import current_identity_guard
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -240,6 +242,7 @@ def run(
     *,
     reasoner: FactReasoner | None = None,
     selector: Any | None = None,
+    clarification_choice: ClarificationChoice | None = None,
 ) -> application.ApplicationResult:
     """Execute one synthetic plan through the real Core application boundary."""
     return application.execute_request(
@@ -259,6 +262,7 @@ def run(
         authenticated_actor=ACTOR,
         self_binding_repository=SelfBinding(),
         request_id_factory=lambda: "relational-test",
+        clarification_choice=clarification_choice,
     )
 
 
@@ -587,6 +591,51 @@ def test_relational_read_rejects_dangling_or_more_than_four_selected_targets(
     assert crowded_result.status is application.ApplicationStatus.NEEDS_ATTENTION
     assert crowded_result.action_results[0].reason == "relational_evidence_ambiguous"
     assert crowded_result.action_results[0].candidate_note_ids == ()
+
+
+def test_relational_clarification_rechecks_source_and_target_guards(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A chosen relational identity cannot survive changed source or target Markdown."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    source_body = fact("Mi hija es [[Cloe]].", 0) + "\n\n" + fact("Mi hija es [[Marta]].", 1)
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", source_body)
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    initial = run(vault, schema, plan, selector=RelevantFactSelector("mi hija"))
+    action = initial.action_results[0]
+    assert action.relational_evidence_guard is not None
+    choice = ClarificationChoice(
+        "cloe",
+        current_identity_guard(VaultRepository(vault), schema, "cloe"),
+        action.relational_evidence_guard,
+    )
+
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Cloe vive en Lyon."))
+    stale_target = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("mi hija"),
+        clarification_choice=choice,
+    )
+    assert stale_target.action_results[0].reason == "clarification_evidence_changed"
+
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    stale_source = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("mi hija"),
+        clarification_choice=choice,
+    )
+    assert stale_source.action_results[0].reason == "clarification_evidence_changed"
 
 
 def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(

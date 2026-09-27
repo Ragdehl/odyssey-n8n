@@ -78,6 +78,7 @@ def resolve_relational_reference(
     self_binding_repository: SelfBindingRepository | None,
     semantic_set_selector: Any | None = None,
     allow_identity_clarification: bool = False,
+    chosen_identity_id: str | None = None,
 ) -> ResolvedRelationalReference:
     """Resolve one source and every semantically relevant current fact through Core grounding.
 
@@ -145,6 +146,7 @@ def resolve_relational_reference(
             incoming_projection,
             selected_candidates,
             evidence_guard,
+            chosen_identity_id,
         )
     decision, _usage = contextual_reasoner.resolve(
         ContextualResolutionRequest(
@@ -324,6 +326,7 @@ def _resolve_selected_read_facts(
     incoming_projection: Any,
     selected_candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
     evidence_guard: str,
+    chosen_identity_id: str | None,
 ) -> ResolvedRelationalReference:
     """Project complete target sets for all relevant facts before deciding a singular identity."""
     unique_targets: list[CanonicalIdentity] = []
@@ -364,16 +367,25 @@ def _resolve_selected_read_facts(
     assert relation is not None and first_projection is not None and first_direction is not None
     if relation.members == "one" and len(unique_targets) != 1:
         options = tuple(target.id for target in unique_targets)
-        if 1 < len(options) <= 4:
+        if chosen_identity_id is not None:
+            if not (1 < len(options) <= 4 and chosen_identity_id in options):
+                raise RelationalResolutionError(
+                    "clarification_scope_changed", evidence_guard=evidence_guard
+                )
+            unique_targets = [
+                target for target in unique_targets if target.id == chosen_identity_id
+            ]
+        elif 1 < len(options) <= 4:
             reason = (
                 "relational_singular_ambiguous"
                 if len(selected_candidates) == 1
                 else "relational_evidence_ambiguous"
             )
             raise RelationalResolutionError(reason, options, evidence_guard)
-        raise RelationalResolutionError(
-            "relational_evidence_ambiguous", evidence_guard=evidence_guard
-        )
+        else:
+            raise RelationalResolutionError(
+                "relational_evidence_ambiguous", evidence_guard=evidence_guard
+            )
     source = (
         incoming_projection.entity if incoming_projection is not None else first_projection.source
     )
