@@ -8,12 +8,19 @@ from pathlib import Path
 
 import pytest
 
+from odyssey_core import direct_note_mutations as mutation_module
 from odyssey_core.atomic_facts import append_atomic_facts
 from odyssey_core.context import ContextIndex
-from odyssey_core.direct_note_mutations import DirectNoteMutationError, DirectNoteMutationService
+from odyssey_core.direct_note_mutations import (
+    DirectNoteMutationError,
+    DirectNoteMutationService,
+    _ExactLocatorSelector,
+)
+from odyssey_core.fact_selection import FactCandidate
 from odyssey_core.git_history import GitHistoryResult, HistoryStatus
-from odyssey_core.note_queries import NotesQueryService
+from odyssey_core.note_queries import NotesQueryError, NotesQueryService
 from odyssey_core.notes import Note, parse_note, serialize_note
+from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 from odyssey_core.storage import VaultRepository
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -128,6 +135,329 @@ def test_direct_fact_delete_rejects_stale_state_before_mutation(tmp_path: Path) 
             actor="test",
             now=NOW,
         )
+
+
+def test_mutation_tokens_fail_closed_for_invalid_identity_revision_and_hash(tmp_path: Path) -> None:
+    """Reject malformed selected identity and stale-state tokens before reading or mutating."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    cases = (
+        {"note_id": "", "expected_revision": revision, "expected_source_hash": source_hash},
+        {"note_id": "ada", "expected_revision": True, "expected_source_hash": source_hash},
+        {"note_id": "ada", "expected_revision": 0, "expected_source_hash": source_hash},
+        {"note_id": "ada", "expected_revision": revision, "expected_source_hash": "z" * 64},
+        {"note_id": "ada", "expected_revision": revision + 1, "expected_source_hash": source_hash},
+        {"note_id": "ada", "expected_revision": revision, "expected_source_hash": "b" * 64},
+    )
+
+    for index, case in enumerate(cases):
+        with pytest.raises(DirectNoteMutationError, match="STALE_NOTE"):
+            mutations.delete_note(
+                **case,
+                request_id=f"invalid-token-{index}",
+                actor="test",
+                now=NOW,
+            )
+
+
+def test_mutation_rejects_unavailable_duplicate_and_deleted_note_identity(tmp_path: Path) -> None:
+    """Require exactly one active canonical note for the selected stable identity."""
+    repository, notes, mutations, schema = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="missing",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="missing-note",
+            actor="test",
+            now=NOW,
+        )
+    write(repository.root, "archive/duplicate.md", "ada", "Ada duplicate", "Duplicate identity.")
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="ada",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="duplicate-note",
+            actor="test",
+            now=NOW,
+        )
+
+    duplicate = parse_note(repository.read_text("archive/duplicate.md"))
+    duplicate.metadata["id"] = "retired"
+    repository.replace_text("archive/duplicate.md", serialize_note(duplicate))
+    current = parse_note(repository.read_text("people/ada.md"))
+    current.metadata["deleted"] = True
+    repository.replace_text("people/ada.md", serialize_note(current))
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="ada",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="deleted-note",
+            actor="test",
+            now=NOW,
+        )
+
+
+def test_mutation_rejects_unreadable_or_invalid_canonical_note(tmp_path: Path, monkeypatch) -> None:
+    """Fail closed if any vault note cannot be parsed and validated during identity grounding."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    original_read = repository.read_text
+
+    def unreadable(path: str) -> str:
+        if path == "people/ada.md":
+            return "not a canonical note"
+        return original_read(path)
+
+    monkeypatch.setattr(repository, "read_text", unreadable)
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="ada",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="invalid-canonical-note",
+            actor="test",
+            now=NOW,
+        )
+
+
+def test_exact_locator_selector_only_returns_a_current_candidate() -> None:
+    """Keep the selector result constrained to the exact fresh candidate identity."""
+    selector = _ExactLocatorSelector("request-1:0")
+
+    assert selector.select("ada", "ignored", (FactCandidate("request-1:0", "Fact"),)) == {
+        "outcome": "MATCH",
+        "locator": "request-1:0",
+    }
+    assert selector.select("ada", "ignored", (FactCandidate("request-1:1", "Fact"),)) == {
+        "outcome": "NO_MATCH",
+        "locator": None,
+    }
+
+
+def test_fact_delete_fails_closed_for_malformed_facts_and_missing_locator(tmp_path: Path) -> None:
+    """Reject malformed markers and locators that no longer identify a current atomic fact."""
+    repository, notes, mutations, _ = build(tmp_path)
+    raw = repository.read_text("people/ada.md")
+    malformed = raw.replace("ordinal=0", "broken=0")
+    repository.replace_text("people/ada.md", malformed)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    with pytest.raises(DirectNoteMutationError, match="FACT_UNAVAILABLE"):
+        mutations.delete_fact(
+            note_id="ada",
+            fact_locator="first:0",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="malformed-facts",
+            actor="test",
+            now=NOW,
+        )
+
+    repository.replace_text("people/ada.md", raw)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    with pytest.raises(DirectNoteMutationError, match="FACT_UNAVAILABLE"):
+        mutations.delete_fact(
+            note_id="ada",
+            fact_locator="missing:99",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="missing-fact",
+            actor="test",
+            now=NOW,
+        )
+
+
+@pytest.mark.parametrize("failure", [mutation_module.MaterializationError, ValueError])
+def test_fact_delete_maps_materialization_failures_to_bounded_error(
+    monkeypatch, tmp_path: Path, failure: type[Exception]
+) -> None:
+    """Translate Core materialization failures to the existing bounded fact error."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    monkeypatch.setattr(
+        mutation_module,
+        "materialize_update",
+        lambda *args, **kwargs: (_ for _ in ()).throw(failure("fixture")),
+    )
+
+    with pytest.raises(DirectNoteMutationError, match="FACT_UNAVAILABLE"):
+        mutations.delete_fact(
+            note_id="ada",
+            fact_locator="first:0",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="failed-materialize",
+            actor="test",
+            now=NOW,
+        )
+
+
+def test_fact_delete_maps_non_update_materialization_to_bounded_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Treat a no-change materialization result as a failed exact deletion."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    monkeypatch.setattr(
+        mutation_module,
+        "materialize_update",
+        lambda *args, **kwargs: EntityPersistenceResult(
+            PersistenceOperation.NO_CHANGE, "ada", "people/ada.md", revision
+        ),
+    )
+
+    with pytest.raises(DirectNoteMutationError, match="FACT_UNAVAILABLE"):
+        mutations.delete_fact(
+            note_id="ada",
+            fact_locator="first:0",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="no-change-fact",
+            actor="test",
+            now=NOW,
+        )
+
+
+def test_note_delete_maps_backlink_query_failure_to_bounded_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Refuse note deletion when Core cannot establish incoming-reference evidence."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    monkeypatch.setattr(
+        notes,
+        "backlinks",
+        lambda *args, **kwargs: (_ for _ in ()).throw(NotesQueryError("fixture")),
+    )
+
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="ada",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="backlink-error",
+            actor="test",
+            now=NOW,
+        )
+
+
+@pytest.mark.parametrize("failure", [mutation_module.MaterializationError, ValueError])
+def test_note_delete_maps_materialization_failures_to_bounded_error(
+    monkeypatch, tmp_path: Path, failure: type[Exception]
+) -> None:
+    """Translate soft-delete materialization errors without exposing storage details."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    monkeypatch.setattr(
+        mutation_module,
+        "materialize_delete",
+        lambda *args, **kwargs: (_ for _ in ()).throw(failure("fixture")),
+    )
+
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="ada",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="failed-soft-delete",
+            actor="test",
+            now=NOW,
+        )
+
+
+def test_note_delete_maps_non_delete_materialization_to_bounded_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Do not report success when materialization did not soft-delete the selected note."""
+    repository, notes, mutations, _ = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    monkeypatch.setattr(
+        mutation_module,
+        "materialize_delete",
+        lambda *args, **kwargs: EntityPersistenceResult(
+            PersistenceOperation.NO_CHANGE, "ada", "people/ada.md", revision
+        ),
+    )
+
+    with pytest.raises(DirectNoteMutationError, match="NOTE_UNAVAILABLE"):
+        mutations.delete_note(
+            note_id="ada",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="no-op-soft-delete",
+            actor="test",
+            now=NOW,
+        )
+
+
+def test_history_failures_are_reported_without_reversing_a_completed_mutation(
+    tmp_path: Path,
+) -> None:
+    """Keep history best-effort while exposing its disabled, begin-failed, and record-failed states."""
+    repository, notes, _, schema = build(tmp_path)
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+
+    disabled = DirectNoteMutationService(repository, schema, notes, None).delete_fact(
+        note_id="ada",
+        fact_locator="first:0",
+        expected_revision=revision,
+        expected_source_hash=source_hash,
+        request_id="history-disabled",
+        actor="test",
+        now=NOW,
+    )
+    assert disabled.history.status is HistoryStatus.DISABLED
+
+    class FailedHistory:
+        def begin(self, request_id: str) -> object:
+            raise RuntimeError("begin failed")
+
+        def record(self, **kwargs: object) -> GitHistoryResult:
+            raise RuntimeError("record failed")
+
+    revision, source_hash = mutation_tokens(repository, "people/ada.md")
+    begin_failed = DirectNoteMutationService(
+        repository, schema, notes, FailedHistory()
+    ).delete_fact(
+        note_id="ada",
+        fact_locator="first:1",
+        expected_revision=revision,
+        expected_source_hash=source_hash,
+        request_id="history-begin-failed",
+        actor="test",
+        now=NOW,
+    )
+    assert begin_failed.history.status is HistoryStatus.FAILED
+    assert begin_failed.history.reason == "history snapshot failed"
+
+    class RecordFailedHistory:
+        def begin(self, request_id: str) -> object:
+            return object()
+
+        def record(self, **kwargs: object) -> GitHistoryResult:
+            raise RuntimeError("record failed")
+
+    record_tmp = tmp_path / "record-failure"
+    record_tmp.mkdir()
+    record_repository, record_notes, _, record_schema = build(record_tmp)
+    revision, source_hash = mutation_tokens(record_repository, "people/ada.md")
+    record_failed = DirectNoteMutationService(
+        record_repository, record_schema, record_notes, RecordFailedHistory()
+    ).delete_fact(
+        note_id="ada",
+        fact_locator="first:1",
+        expected_revision=revision,
+        expected_source_hash=source_hash,
+        request_id="history-record-failed",
+        actor="test",
+        now=NOW,
+    )
+    assert record_failed.history.status is HistoryStatus.FAILED
+    assert record_failed.history.reason == "history record failed"
 
 
 def test_direct_fact_delete_records_the_existing_request_history_boundary(tmp_path: Path) -> None:

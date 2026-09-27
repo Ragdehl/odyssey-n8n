@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 from threading import Event, Thread
+from types import SimpleNamespace
 
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.context import ContextFilter
 from odyssey_core.conversations import MAIN_CONVERSATION_ID
-from odyssey_core.git_history import GitHistoryResult
+from odyssey_core.direct_note_mutations import DirectNoteMutationError
+from odyssey_core.git_history import GitHistoryResult, HistoryStatus
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_core.note_queries import (
@@ -499,6 +501,215 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
     assert runtime.notes("backlinks", {"note_id": "ada"})["items"][0]["source"]["id"] == "ada"
     with pytest.raises(ValueError, match="unsupported"):
         runtime.notes("unknown", {})
+
+
+def test_runtime_notes_mutations_validate_dispatch_and_refresh_only_after_success() -> None:
+    """Validate bounded delete payloads and refresh indexes only after Core confirms mutation."""
+    mutation_calls: list[tuple[str, dict[str, object]]] = []
+    refreshes: list[str] = []
+    actor_calls: list[tuple[object, object]] = []
+
+    class MutationService:
+        def delete_fact(self, **kwargs):
+            mutation_calls.append(("delete_fact", kwargs))
+            return SimpleNamespace(
+                operation="fact_deleted",
+                note_id="ada",
+                history=GitHistoryResult.disabled(),
+            )
+
+        def delete_note(self, **kwargs):
+            mutation_calls.append(("delete_note", kwargs))
+            return SimpleNamespace(
+                operation="note_deleted",
+                note_id="ada",
+                history=GitHistoryResult(HistoryStatus.COMMITTED, commit_sha="a" * 40),
+            )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: refreshes.append("refresh"),
+        notes_service=object(),
+        direct_notes_mutations=MutationService(),
+        notes_mutation_actor=lambda actor, principal: (
+            actor_calls.append((actor, principal)) or "test"
+        ),
+    )
+    fact_payload = {
+        "note_id": "ada",
+        "fact_locator": "request-1:0",
+        "expected_revision": 3,
+        "expected_source_hash": "a" * 64,
+        "request_id": "notes-fact",
+    }
+    note_payload = {
+        "note_id": "ada",
+        "expected_revision": 3,
+        "expected_source_hash": "a" * 64,
+        "request_id": "notes-note",
+    }
+
+    fact_result = runtime.notes("delete_fact", fact_payload)
+    note_result = runtime.notes("delete_note", note_payload)
+
+    assert fact_result == {
+        "kind": "mutation",
+        "operation": "fact_deleted",
+        "note_id": "ada",
+        "history": {"status": "DISABLED"},
+    }
+    assert note_result["operation"] == "note_deleted"
+    assert note_result["history"] == {"status": "COMMITTED"}
+    assert [kind for kind, _ in mutation_calls] == ["delete_fact", "delete_note"]
+    assert mutation_calls[0][1]["fact_locator"] == "request-1:0"
+    assert refreshes == ["refresh", "refresh"]
+    assert actor_calls == [(None, None), (None, None)]
+
+
+@pytest.mark.parametrize(
+    ("operation", "payload"),
+    [
+        (
+            "delete_fact",
+            {
+                "note_id": "ada",
+                "fact_locator": "x",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+            },
+        ),
+        (
+            "delete_fact",
+            {
+                "note_id": "ada",
+                "fact_locator": "x",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": "r",
+                "extra": True,
+            },
+        ),
+        (
+            "delete_fact",
+            {
+                "note_id": "ada",
+                "fact_locator": None,
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": "r",
+            },
+        ),
+        (
+            "delete_note",
+            {
+                "note_id": "ada",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": "r",
+                "fact_locator": "x",
+            },
+        ),
+        (
+            "delete_note",
+            {"note_id": "ada", "expected_revision": 1, "expected_source_hash": "a" * 64},
+        ),
+        (
+            "delete_note",
+            {
+                "note_id": "ada",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": "",
+            },
+        ),
+        (
+            "delete_note",
+            {
+                "note_id": "ada",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": 7,
+            },
+        ),
+    ],
+)
+def test_runtime_notes_mutations_reject_malformed_payloads_before_refresh(
+    operation, payload
+) -> None:
+    """Reject invalid mutation shapes and missing correlation before calling Core or refreshing."""
+    called: list[str] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: called.append("refresh"),
+        direct_notes_mutations=object(),
+        notes_mutation_actor=lambda *args: "test",
+    )
+
+    with pytest.raises(ValueError):
+        runtime.notes(operation, payload)
+
+    assert called == []
+
+
+@pytest.mark.parametrize(
+    ("mutation_service", "actor_factory"),
+    [(None, lambda *args: "test"), (object(), None)],
+)
+def test_runtime_notes_mutations_fail_when_service_or_actor_mapping_is_unavailable(
+    mutation_service, actor_factory
+) -> None:
+    """Require both the existing Core mutation service and trusted actor mapping seam."""
+    refreshed: list[bool] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: refreshed.append(True),
+        notes_service=object(),
+        direct_notes_mutations=mutation_service,
+        notes_mutation_actor=actor_factory,
+    )
+
+    with pytest.raises(ValueError, match="unavailable"):
+        runtime.notes(
+            "delete_note",
+            {
+                "note_id": "ada",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": "r",
+            },
+        )
+
+    assert refreshed == []
+
+
+def test_runtime_notes_propagates_core_mutation_error_without_refresh() -> None:
+    """Preserve bounded mutation conflicts for HTTP mapping and never refresh failed writes."""
+    refreshed: list[bool] = []
+
+    class MutationService:
+        def delete_note(self, **kwargs):
+            raise DirectNoteMutationError("INCOMING_REFERENCES")
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: refreshed.append(True),
+        notes_service=object(),
+        direct_notes_mutations=MutationService(),
+        notes_mutation_actor=lambda *args: "test",
+    )
+
+    with pytest.raises(DirectNoteMutationError, match="INCOMING_REFERENCES"):
+        runtime.notes(
+            "delete_note",
+            {
+                "note_id": "ada",
+                "expected_revision": 1,
+                "expected_source_hash": "a" * 64,
+                "request_id": "r",
+            },
+        )
+
+    assert refreshed == []
 
 
 def test_runtime_intelligent_notes_rejects_invalid_transport_without_replanning() -> None:

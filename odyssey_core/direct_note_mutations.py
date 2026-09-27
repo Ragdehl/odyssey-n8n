@@ -177,9 +177,19 @@ class DirectNoteMutationService:
         self, note_id: str, expected_revision: int, expected_source_hash: str
     ) -> tuple[str, Any, str]:
         """Re-read and validate the selected active note and all stale-write tokens."""
-        if not isinstance(note_id, str) or not note_id or not isinstance(expected_revision, int):
+        if (
+            not isinstance(note_id, str)
+            or not note_id
+            or not isinstance(expected_revision, int)
+            or isinstance(expected_revision, bool)
+            or expected_revision < 1
+        ):
             raise DirectNoteMutationError("STALE_NOTE")
-        if not isinstance(expected_source_hash, str) or len(expected_source_hash) != 64:
+        if (
+            not isinstance(expected_source_hash, str)
+            or len(expected_source_hash) != 64
+            or any(character not in "0123456789abcdef" for character in expected_source_hash)
+        ):
             raise DirectNoteMutationError("STALE_NOTE")
         matches: list[tuple[str, Any, str]] = []
         for path in self.repository.list_markdown_paths():
