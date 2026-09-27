@@ -574,21 +574,35 @@ def test_delegate_and_planning_failure_are_typed_without_mutation(
     assert failed.action_results == ()
 
 
-def test_planner_clarification_returns_before_all_execution_and_persistence(
+def test_planner_clarification_falls_back_to_generic_read_without_write_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Turn an explicit planner abstention into deterministic non-mutating application evidence."""
+    """Retrieve a clear question without allowing a closed planner result to write anything."""
     calls: list[str] = []
+    retrieved = object()
 
     class FailIfCalled:
-        """Record any forbidden post-clarification dependency use."""
+        """Record forbidden write-side dependency use."""
 
         def __getattr__(self, name: str):
             calls.append(name)
-            raise AssertionError(f"clarification called {name}")
+            raise AssertionError(f"write path called {name}")
+
+    context_calls: list[dict[str, Any]] = []
+
+    def fake_context(*_args: Any, **kwargs: Any) -> object:
+        context_calls.append(kwargs)
+        return retrieved
+
+    monkeypatch.setattr(application, "get_context", fake_context)
+    monkeypatch.setattr(
+        application,
+        "preflight_write_action",
+        lambda *_args, **_kwargs: pytest.fail("planner clarification reached write preflight"),
+    )
 
     result = application.execute_request(
-        "Bdbd",
+        "¿Quiénes son las personas de mi familia?",
         planner=FakePlanner(PlannerClarification("UNRECOGNIZED_REQUEST")),
         repository=FailIfCalled(),
         schema={},
@@ -605,13 +619,24 @@ def test_planner_clarification_returns_before_all_execution_and_persistence(
         request_id_factory=lambda: "request-bdbd-sentinel",
     )
 
-    assert result.status is ApplicationStatus.NEEDS_ATTENTION
-    assert result.clarification_code == "UNRECOGNIZED_REQUEST"
-    assert result.action_results == ()
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.clarification_code is None
+    assert result.action_results[0].retrieval is retrieved
     assert result.affected_stable_note_ids == ()
     assert result.planning_error is None
-    assert result.history.status.name == "NOT_ATTEMPTED"
-    assert [stage.name for stage in result.operational.stages] == ["planner", "pending"]
+    assert context_calls == [
+        {
+            "query": "¿Quiénes son las personas de mi familia?",
+            "limit": 5,
+            "type": None,
+            "filters": (),
+        }
+    ]
+    assert [stage.name for stage in result.operational.stages] == [
+        "planner",
+        "action.retrieve",
+        "pending",
+    ]
     assert calls == []
 
 

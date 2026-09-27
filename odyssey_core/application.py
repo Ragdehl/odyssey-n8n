@@ -236,7 +236,8 @@ def execute_request(
             continuity; Core never passes this text to canonical retrieval or mutation boundaries.
 
     Returns:
-        One stable request result. Clarifications and planning failures perform no actions or writes.
+        One stable request result. A closed planner clarification may perform only generic retrieval;
+        planning failures perform no actions or writes.
 
     Raises:
         ValueError: If boundary inputs are structurally invalid.
@@ -297,32 +298,53 @@ def execute_request(
         )
     planner_duration_ms = _elapsed_ms(planner_started, monotonic())
     if isinstance(plan, PlannerClarification):
-        stages.append(
-            OperationalStage(
-                "planner",
-                OperationalOutcome.COMPLETED,
-                planner_duration_ms,
-                model=getattr(planner, "model", None),
-                reasoning_effort=getattr(planner, "reasoning_effort", None),
-                usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
-                provider_calls=_planner_attempts(planner, provider_recorder.calls),
-                start_offset_ms=_elapsed_ms(started, planner_started),
-                substeps=getattr(planner, "last_spans", ()),
+        # A closed planner result cannot authorize a mutation. It can still leave an ordinary
+        # read question needlessly blocked by selection classification, so retrieve generically
+        # from the original request without asserting an entity, identity, or structured filter.
+        action_started = monotonic()
+        action_spans = SpanRecorder(action_started, monotonic)
+        action = RetrieveAction(SelectionCriteria(None, user_request, None, (), None))
+        result = _execute_retrieve(
+            0,
+            action,
+            repository,
+            schema,
+            context_index,
+            _MeasuredEmbedder(embedder, action_spans),
+            context_limit,
+            authenticated_actor,
+            self_binding_repository,
+            action_spans,
+        )
+        stages.extend(
+            (
+                OperationalStage(
+                    "planner",
+                    OperationalOutcome.COMPLETED,
+                    planner_duration_ms,
+                    model=getattr(planner, "model", None),
+                    reasoning_effort=getattr(planner, "reasoning_effort", None),
+                    usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+                    provider_calls=_planner_attempts(planner, provider_recorder.calls),
+                    start_offset_ms=_elapsed_ms(started, planner_started),
+                    substeps=getattr(planner, "last_spans", ()),
+                ),
+                OperationalStage(
+                    "action.retrieve",
+                    _action_operational_outcome(result.status),
+                    _elapsed_ms(action_started, monotonic()),
+                    start_offset_ms=_elapsed_ms(started, action_started),
+                    substeps=action_spans.spans,
+                ),
+                OperationalStage("pending", OperationalOutcome.SKIPPED),
             )
         )
-        stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
         return _with_operational(
             ApplicationResult(
                 request_id,
-                ApplicationStatus.NEEDS_ATTENTION,
+                _overall_status([result]),
+                (result,),
                 (),
-                (),
-                clarification_code=plan.code,
-                history=(
-                    GitHistoryResult(HistoryStatus.NOT_ATTEMPTED, reason="clarification requested")
-                    if history_recorder is not None
-                    else GitHistoryResult.disabled()
-                ),
             ),
             stages,
             started,
