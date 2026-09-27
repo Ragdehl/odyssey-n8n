@@ -103,11 +103,16 @@ scanning, and distinct user-safe failure reasons. Deterministic Core/runtime cov
 The frozen v8 Luna/low gate ran once at `32585c47bab0a90159ce2fc05339aa1c1c22ce5b` and stopped
 fail-fast after two calls: SSET01 passed; SSET02 failed because it emitted
 `collection_subject=self` instead of the unchanged required `query`. The two-row immutable artifact
-has SHA-256 `cf4b5b9295f35149840105cca8fc02a2fae6abc066bdfb3307a83123bc7fe35e`; no rerun occurred and
-no selector row was reached. A minimal inherited membership-anchor prompt clarification and frozen
-v9 successor gate are prepared. V9 reuses all 21 planner and 4 selector rows, retains a 25-call
-maximum and recalculated `$0.41144` conservative no-cache ceiling, and remains pending separate
-Luna/low authorization before production model-facing adoption.
+has SHA-256 `cf4b5b9295f35149840105cca8fc02a2fae6abc066bdfb3307a83123bc7fe35e`. The frozen v9 gate
+then ran once at `e86de53dabdd8b628d7918fdda647f629d4862a1`: SSET01 through REG02 passed, including
+SSET02 as `collection_subject=query`, then NOTE01 failed closed at `RETRIEVE_ACTION` /
+`SELECTION_MODE_CONFLICT`. Its seven-row immutable artifact has SHA-256
+`edaeaa65885d7340efb821a9013aaac367031fa60ad4066d9b31ebe453762bcf`; neither run reached selector
+rows, retried, or used Sol. Core validation remains fail closed. The current structural correction
+partitions `collection_subject` by retrieval shape in the provider schema and prepares frozen v10,
+which reuses all 21 planner and 4 selector rows with a 25-call maximum and `$0.41144` conservative
+no-cache ceiling. V10 requires separate Luna/low authorization before production model-facing
+adoption.
 
 [UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) is the current bounded phase in Draft PR #144.
 It finishes the existing Chat + Notes product and may expose only direct mutations that retain Core authority.

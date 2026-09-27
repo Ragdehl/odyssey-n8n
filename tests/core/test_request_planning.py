@@ -287,8 +287,12 @@ def test_collection_membership_anchor_instruction_is_generic_and_schema_is_uncha
     assert "First-person possession, ownership, association, or contextual reference" in prompt
     assert "another object, concept, source, or set determines membership" in prompt
     assert "preserve the complete self-related context in query" in prompt
+    assert "collection_subject belongs only to result_shape=collection" in prompt
+    assert (
+        "set it to null for every result_shape=single regardless of presentation intent" in prompt
+    )
     assert hashlib.sha256(encoded_schema).hexdigest() == (
-        "47db301e25fc7481129057b210580aed6100e401c0727c0db896591e54634814"
+        "22edb7ef4ddc61e33993536a990457030537aed5d25d93b2b661642787ec0b2d"
     )
     fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
     assert all(
@@ -353,6 +357,76 @@ def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(sc
     collect_contract_enums(planner_result_json_schema(schema))
     assert schema_shapes == {"single", "collection"}
     assert presentation_intents == {"answer", "note_set", "answer_and_note_set"}
+
+
+@pytest.mark.parametrize(
+    "provider_schema_factory", [planner_result_json_schema, compact_planner_result_json_schema]
+)
+def test_provider_schema_partitions_single_and_collection_subject_scope(
+    schema: dict, provider_schema_factory
+) -> None:
+    """Expose only the collection scope allowed by each retrieval result shape."""
+    provider_schema = provider_schema_factory(schema)
+    single = provider_output(planner_output(retrieve("one fact")))
+    collection = provider_output(
+        planner_output(
+            {
+                "kind": "retrieve",
+                "result_shape": "collection",
+                "plan": {
+                    **selection("all semantic members"),
+                    "collection_subject": "query",
+                },
+            }
+        )
+    )
+    collection["result"]["actions"][0]["plan"].pop("semantic_set", None)
+
+    assert schema_accepts(single, provider_schema)
+    assert schema_accepts(collection, provider_schema)
+
+    single["result"]["actions"][0]["plan"]["collection_subject"] = "self"
+    assert not schema_accepts(single, provider_schema)
+
+    collection["result"]["actions"][0]["plan"]["collection_subject"] = None
+    assert not schema_accepts(collection, provider_schema)
+    collection["result"]["actions"][0]["plan"].pop("collection_subject")
+    assert not schema_accepts(collection, provider_schema)
+
+
+@pytest.mark.parametrize("presentation_intent", ["note_set", "answer_and_note_set"])
+def test_matching_note_presentations_require_single_null_collection_subject(
+    schema: dict, presentation_intent: str
+) -> None:
+    """Keep matching-Note presentation distinct from semantic-member collection scope."""
+    payload = planner_output(retrieve("matching Notes"))
+    payload["presentation_intent"] = presentation_intent
+
+    plan = validate_planner_result(payload, schema)
+    action = plan.actions[0]
+    assert isinstance(action, RetrieveAction)
+    assert action.result_shape == "single"
+    assert action.plan.collection_subject is None
+
+    payload["actions"][0]["plan"]["collection_subject"] = "query"
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_planner_result(payload, schema)
+    assert raised.value.validation_stage is PlannerValidationStage.RETRIEVE_ACTION
+    assert raised.value.validation_code is PlannerValidationCode.SELECTION_MODE_CONFLICT
+
+
+def test_collection_cannot_request_matching_note_presentation(schema: dict) -> None:
+    """Keep semantic-member collections out of the matching-Note presentation path."""
+    collection = selection("all semantic members")
+    collection["semantic_set"] = None
+    collection["collection_subject"] = "self"
+    payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
+    payload["presentation_intent"] = "note_set"
+
+    with pytest.raises(
+        RequestPlanningError, match="Note-set presentation requires one direct retrieval"
+    ):
+        validate_planner_result(payload, schema)
 
 
 def test_write_action_schema_requires_non_empty_units(schema: dict) -> None:
@@ -1043,7 +1117,10 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
     )
     assert "filter_array" in compact["$defs"]
     assert compact["$defs"]["retrieve_action"]["properties"]["plan"] == {
-        "$ref": "#/$defs/selection"
+        "$ref": "#/$defs/single_retrieval_selection"
+    }
+    assert compact["$defs"]["single_retrieval_selection"]["properties"]["collection_subject"] == {
+        "type": "null"
     }
 
 

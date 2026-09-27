@@ -53,9 +53,9 @@ Return outcome PLAN with a RequestPlan when the request contains safely interpre
 
 Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks to see matching notes as objects; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, relational_reference, or result_shape=collection, use `answer`; do not discard or weaken meaning merely to produce a note set.
 
-Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, relational_reference, and collection_subject. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
 Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
-For retrieval, use result_shape=collection when the user is asking to enumerate or return multiple semantic members or values that together answer the request; use result_shape=single for ordinary fact retrieval or synthesis. Do not infer collection from grammatical plural alone. SelectionCriteria.query MUST preserve the complete useful request, including every material relation, scope, time, place, state, possession, purpose, context, and request for completeness. A collection has no direct entity, type, filters, link_scope, self_target, or relational_reference: set those to null or [] as appropriate. Set collection_subject=self only when the authenticated human is itself the semantic membership anchor: membership is directly defined by each member's relationship, action, state, or participation relative to that human. First-person possession, ownership, association, or contextual reference to another subject does not by itself make a collection self-scoped. When another object, concept, source, or set determines membership, set collection_subject=query and preserve the complete self-related context in query. This field contains no identity, name, path, generated subject phrase, relationship type, or inferred ontology. Core binds self and discovers bounded current canonical fact sources, selects only supplied evidence, and validates exact occurrences. Never provide collection members, IDs, paths, fact locators, candidate lists, links, mutation authority, or inferred relationship types. For an explicit list or set of matching Notes as objects, use result_shape=single with presentation_intent=note_set; multiple matching Notes are expected results, not ambiguity. Use ordinary single retrieval for one fact about a subject. Do not use collection shape for writes or delegate actions.
+For retrieval, use result_shape=collection when the user is asking to enumerate or return multiple semantic members or values that together answer the request; use result_shape=single for ordinary fact retrieval or synthesis. Do not infer collection from grammatical plural alone. SelectionCriteria.query MUST preserve the complete useful request, including every material relation, scope, time, place, state, possession, purpose, context, and request for completeness. collection_subject belongs only to result_shape=collection; set it to null for every result_shape=single regardless of presentation intent. A collection has no direct entity, type, filters, link_scope, self_target, or relational_reference: set those to null or [] as appropriate. Set collection_subject=self only when the authenticated human is itself the semantic membership anchor: membership is directly defined by each member's relationship, action, state, or participation relative to that human. First-person possession, ownership, association, or contextual reference to another subject does not by itself make a collection self-scoped. When another object, concept, source, or set determines membership, set collection_subject=query and preserve the complete self-related context in query. This field contains no identity, name, path, generated subject phrase, relationship type, or inferred ontology. Core binds self and discovers bounded current canonical fact sources, selects only supplied evidence, and validates exact occurrences. Never provide collection members, IDs, paths, fact locators, candidate lists, links, mutation authority, or inferred relationship types. For an explicit list or set of matching Notes as objects, use result_shape=single with presentation_intent=note_set; multiple matching Notes are expected results, not ambiguity. Use ordinary single retrieval for one fact about a subject. Do not use collection shape for writes or delegate actions.
 Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
@@ -428,6 +428,9 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
     direct_selection_schema = _selection_json_schema(retrieval_capabilities)
+    single_retrieval_selection_schema = _single_retrieval_selection_json_schema(
+        direct_selection_schema
+    )
     collection_selection_schema = _collection_selection_json_schema(direct_selection_schema)
     property_changes_schema = _property_changes_json_schema(write_capabilities)
     return {
@@ -443,7 +446,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                             "properties": {
                                 "kind": {"type": "string", "enum": ["retrieve"]},
                                 "result_shape": {"type": "string", "enum": ["single"]},
-                                "plan": direct_selection_schema,
+                                "plan": single_retrieval_selection_schema,
                             },
                             "required": ["kind", "result_shape", "plan"],
                             "additionalProperties": False,
@@ -632,6 +635,7 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     actions = plan_branch["properties"]["actions"]
     retrieve_action, collection_action, write_action, delegate_action = actions["items"]["anyOf"]
     collection_selection = collection_action["properties"]["plan"]
+    single_retrieval_selection = retrieve_action["properties"]["plan"]
     selection = write_action["properties"]["units"]["items"]["properties"]["target"]
     filter_array = selection["properties"]["filters"]
     link_scope = selection["properties"]["link_scope"]["anyOf"][1]
@@ -643,13 +647,17 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     selection["properties"]["link_scope"] = {
         "anyOf": [{"type": "null"}, {"$ref": "#/$defs/link_scope"}]
     }
+    single_retrieval_selection["properties"]["filters"] = {"$ref": "#/$defs/filter_array"}
+    single_retrieval_selection["properties"]["link_scope"] = {
+        "anyOf": [{"type": "null"}, {"$ref": "#/$defs/link_scope"}]
+    }
     write_action["properties"]["units"]["items"]["properties"]["target"] = {
         "$ref": "#/$defs/selection"
     }
     delegate_action["properties"]["selection"] = {
         "anyOf": [{"type": "null"}, {"$ref": "#/$defs/selection"}]
     }
-    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/selection"}
+    retrieve_action["properties"]["plan"] = {"$ref": "#/$defs/single_retrieval_selection"}
     collection_action["properties"]["plan"] = {"$ref": "#/$defs/collection_selection"}
     actions["items"]["anyOf"] = [
         {"$ref": "#/$defs/retrieve_action"},
@@ -665,6 +673,7 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
         "note_selector": note_selector,
         "link_scope": link_scope,
         "selection": selection,
+        "single_retrieval_selection": single_retrieval_selection,
         "collection_selection": collection_selection,
         "retrieve_action": retrieve_action,
         "collection_action": collection_action,
@@ -1171,6 +1180,22 @@ def _collection_selection_json_schema(direct_selection_schema: Mapping[str, Any]
     properties["type"] = {"type": "null"}
     properties["collection_subject"] = {"type": "string", "enum": ["self", "query"]}
     return collection_selection
+
+
+def _single_retrieval_selection_json_schema(
+    direct_selection_schema: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Restrict single retrievals so collection scope cannot compete with direct selection.
+
+    Args:
+        direct_selection_schema: Shared direct selection shape used by writes and delegation.
+
+    Returns:
+        Closed single-retrieval selection schema with no semantic-member collection scope.
+    """
+    single_retrieval_selection = deepcopy(direct_selection_schema)
+    single_retrieval_selection["properties"]["collection_subject"] = {"type": "null"}
+    return single_retrieval_selection
 
 
 def _note_selector_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:

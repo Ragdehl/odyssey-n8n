@@ -1,8 +1,8 @@
 # Semantic set resolution and evidence — architecture challenge
 
 Status: **#142 merged; corrective #140/#137 implementation and deterministic verification are on
-`fix/semantic-self-clarification`; the first frozen Luna gate failed and the corrected-prompt
-successor gate is prepared, pending separate authorization**. The earlier semantic-intent gates
+`fix/semantic-self-clarification`; v8 and v9 frozen Luna gates failed with preserved evidence, and
+the structurally corrected successor gate is prepared pending separate authorization**. The earlier semantic-intent gates
 below are historical evidence for their frozen contracts. This follows
 [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md).
 Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
@@ -135,7 +135,7 @@ collection, singular, note-set, write, and escalation sentinels plus the new sel
 multi-fact cases. A deterministic suite or earlier #142 live result cannot validate this changed
 contract. No provider call belongs to this challenge.
 
-### v8 failed live evidence and v9 successor gate
+### v8/v9 failed live evidence and v10 successor gate
 
 At behavior-bearing HEAD `32585c47bab0a90159ce2fc05339aa1c1c22ce5b`, the explicitly authorized
 frozen v8 gate ran once with `gpt-5.6-luna` / low. It made two Luna calls and stopped fail-fast:
@@ -158,13 +158,34 @@ membership, the planner emits `query` and retains the full self-related wording 
 query. This changes neither schema nor Core semantics and adds no domain vocabulary, relation
 ontology, identity assertion, or benchmark-derived example.
 
-`run_live_v9.py` is the distinct successor gate. It reuses the exact byte-checked v8 planner and
-selector cases/oracles, including SSET02 unchanged and all four relational selector rows, while
-using output path `semantic-self-clarification-v9-luna-gate.jsonl`. It retains confirmation,
-exclusive output reservation, per-row flush, fail-fast execution, zero automatic retries, no Sol
-fallback, and 25 maximum Luna calls. Recalculation against the revised inherited prompt retains the
-conservative no-cache ceiling of `$0.41144` because the fixed 70,000-token per-call bound remains
-unchanged. The v9 gate is prepared only and needs new explicit provider-call authorization.
+At behavior-bearing HEAD `e86de53dabdd8b628d7918fdda647f629d4862a1`, the explicitly authorized
+frozen v9 gate ran once with `gpt-5.6-luna` / low. It made seven Luna calls with zero retries and
+no Sol fallback: `SSET01`, `SSET02`, `SSET03`, `SSET04`, `REG01`, and `REG02` passed. In particular,
+SSET02 now emitted `result_shape=collection` with `collection_subject=query`, confirming the v8
+membership-anchor correction. `NOTE01` then failed closed at local `RETRIEVE_ACTION` /
+`SELECTION_MODE_CONFLICT`; its exact provider payload was deliberately not retained. No selector
+row was reached. The immutable seven-row artifact remains
+`benchmarks/.live-results/semantic-self-clarification-v9-luna-gate.jsonl` with SHA-256
+`edaeaa65885d7340efb821a9013aaac367031fa60ad4066d9b31ebe453762bcf`; it must never be overwritten,
+edited, replaced, or reused.
+
+The failure exposed a model-facing structural gap: the shared direct-selection schema allowed
+`collection_subject=self|query` for a single retrieval, while Core correctly rejects that
+combination. The successor contract partitions the shapes at Structured Outputs: single retrieval
+requires `collection_subject=null`; semantic-member collection requires exactly `self|query` and
+retains the existing direct-selector exclusions. The inherited prompt no longer presents
+`collection_subject` as a generic candidate-set field and states that it belongs only to collection
+retrieval. This does not change Core validation, introduce an ontology, or add benchmark-derived
+wording.
+
+`run_live_v10.py` is the distinct successor gate. It byte-checks and reuses the exact frozen v8/v9
+planner and selector cases/oracles, including SSET02 as `query`, NOTE01 as a single note-set
+request, historical planner sentinels, and all four relational selector rows. It uses output path
+`semantic-self-clarification-v10-luna-gate.jsonl`, explicit confirmation, exclusive output
+reservation, per-row flush, fail-fast execution, zero automatic retries, no Sol fallback, and 25
+maximum Luna calls. Recalculation against the revised prompt/schema retains the conservative
+no-cache ceiling of `$0.41144` because the fixed 70,000-token per-call bound remains unchanged. V10
+is prepared only and needs separate provider-call authorization.
 
 **Packaging.** One coherent corrective PR is reviewable: the planner subject bit, Core
 selection/projection/batching, existing clarification continuation, and user-safe outcome mapping
