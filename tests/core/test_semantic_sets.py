@@ -415,6 +415,52 @@ def test_batching_scans_late_evidence_beyond_old_source_and_fact_limits(tmp_path
     assert [len(request) for request in requests] == [64, 2]
 
 
+def test_duplicate_identity_across_selector_batches_is_returned_once(tmp_path: Path) -> None:
+    """Merge repeated canonical links by stable identity across independently bounded batches."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/shared.md", "shared", "Shared tool", "")
+    for index in range(65):
+        member = "[[people/shared|Shared tool]]" if index in {0, 64} else f"tool-{index}"
+        write(
+            vault,
+            f"notes/{index:03}.md",
+            f"note-{index:03}",
+            f"Note {index}",
+            fact(f"El kit incluye {member}.", 0),
+        )
+
+    result = run(
+        vault,
+        Select(
+            lambda candidate: (
+                [
+                    (
+                        "link",
+                        candidate.text.index("[[people/shared|Shared tool]]"),
+                        candidate.text.index("[[people/shared|Shared tool]]")
+                        + len("[[people/shared|Shared tool]]"),
+                    )
+                ]
+                if "[[people/shared|Shared tool]]" in candidate.text
+                else []
+            )
+        ),
+        intent=None,
+        query="¿Qué incluye el kit?",
+        collection_subject="query",
+    )
+
+    assert result.outcome is SemanticSetOutcome.ANSWERABLE
+    assert result.grounded_set is not None
+    identities = [
+        member.stable_id
+        for member in result.grounded_set.members
+        if isinstance(member, IdentitySetMember)
+    ]
+    assert identities == ["shared"]
+
+
 def test_batching_treats_aggregate_bytes_as_batches_and_oversized_fact_as_unavailable(
     tmp_path: Path,
 ) -> None:

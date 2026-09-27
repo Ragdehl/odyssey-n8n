@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -117,3 +118,43 @@ def test_invalid_pending_guard_is_not_persisted(tmp_path: Path) -> None:
             )
         )
     assert store.read() is None
+
+
+def test_relational_source_guard_must_be_a_sha256_digest(tmp_path: Path) -> None:
+    """Reject malformed source guards before they can authorize a relational continuation."""
+    store = LocalClarificationStore(tmp_path, "main")
+    with pytest.raises(ValueError, match="source evidence guard"):
+        store.replace(
+            PendingClarification(
+                "original request",
+                "request-1",
+                "pending-1",
+                OPTIONS,
+                ("a" * 64, "b" * 64),
+                source_evidence_guard="not-a-digest",
+            )
+        )
+    assert store.read() is None
+
+
+def test_malformed_persisted_relational_source_guard_fails_closed(tmp_path: Path) -> None:
+    """Treat a corrupted version-two source guard as invalid pending state on reload."""
+    record = tmp_path / "clarifications" / "main.json"
+    record.parent.mkdir()
+    record.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "original_request": "original request",
+                "original_request_id": "request-1",
+                "pending_record_id": "pending-1",
+                "options": [{"id": item.id, "label": item.label} for item in OPTIONS],
+                "evidence_guards": ["a" * 64, "b" * 64],
+                "source_evidence_guard": "not-a-digest",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="source evidence guard"):
+        LocalClarificationStore(tmp_path, "main").read()
