@@ -1,7 +1,8 @@
 # Semantic set resolution and evidence — architecture challenge
 
-Status: **Draft simplification on PR #142; production-model evidence pending**. The earlier
-semantic-intent gates below are historical evidence for their frozen contracts. This follows
+Status: **#142 merged; corrective #140/#137 architecture challenge revised on
+`fix/semantic-self-clarification`; implementation pending**. The earlier semantic-intent gates
+below are historical evidence for their frozen contracts. This follows
 [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md).
 Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#137](https://github.com/Ragdehl/odyssey-n8n/issues/137),
@@ -10,7 +11,135 @@ Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
 [#134](https://github.com/Ragdehl/odyssey-n8n/issues/134) is a compatibility constraint,
 not implementation scope.
 
-## Current approved retrieval boundary (PR #142)
+## Corrective architecture challenge after real DEV evidence (#140/#137)
+
+**REVISE; human decision required: NO.** The merged #142 contract remains the compatibility
+baseline, but its collection selection loses the authenticated subject and its global candidate
+limits make vault growth a functional limit. DEV evidence found 22 source Notes, 55 visible facts,
+and 13,162 serialized bytes, within the current 64/64/16 KiB bounds. That particular failure
+therefore does not establish a scan-overflow cause. The observed singular and collection failures
+have different boundaries: duplicate facts are rejected before their target identities are
+compared; a multi-target fact becomes an opaque singular error; collection planning forbids all
+selectors, including self scope; and the collection selector receives no authenticated self
+binding. `PlannerEscalation` is also projected as `UNRECOGNIZED_REQUEST`, which misstates a safely
+understood but unrepresentable request.
+
+### Phase contract
+
+**Objective.** Resolve direct self-relative identities and finite collections from current
+canonical facts, while preserving generic query-subject collections, one bounded clarification
+path, exact provenance, and an honest incomplete result when evidence cannot be fully scanned.
+
+**Acceptance.** Multiple current facts supporting one stable target corroborate it. A singular
+read with exactly one safely grounded target proceeds; with 2–4 distinct safe targets it offers
+those identities through the existing pending clarification and re-grounds on continuation; with
+no safe bounded choice it explains the bounded reason. Self collections use only evidence whose
+relationship to the authenticated self is established by Core, and generic collections remain
+available. A vault with more than 64 sources/facts or 16 KiB of facts can be scanned in bounded
+batches without treating a prefix as complete. Missing evidence, ambiguous scope, stale evidence,
+planner inability, and operational failure remain distinguishable in the product projection.
+
+**Out of scope.** No family/relationship ontology or synonym registry, graph recursion,
+transitive/co-occurrence inference, Note creation for literals, Notes CRUD, new service, new
+clarification engine, browser/n8n semantic authority, provider execution, or deployment.
+Existing singular self, note-set, write, and relational complete-set mutation contracts retain
+their current authority and fail-closed rules.
+
+**Open product decisions.** None for this corrective slice. The approved #140 contract already
+permits a grounded set qualified by its current-note scope or a focused clarification when its
+semantic boundary is materially uncertain. It does not authorize a real-world exhaustive claim.
+Large final answers remain subject to a bounded presentation limit; exceeding that limit must
+give a specific incomplete/too-large reason and a scope-narrowing suggestion, not a partial list
+presented as complete. Pagination of very large answers is deferred.
+
+### Minimal data and control flow
+
+```text
+validated plan: action + lossless query + single/collection + collection subject(self|query)
+    -> Core binds self through authenticated actor + SelfBindingRepository, if requested
+    -> Core enumerates eligible current canonical fact batches in stable order
+    -> existing bounded selector proposes relevant supplied facts/occurrences
+    -> Core projects full selected facts, resolves exact links, deduplicates stable identities
+    -> Core checks all batches and canonical inventory/revisions, then ANSWER / CLARIFY / UNAVAILABLE
+```
+
+The only new planner-visible collection semantic is `subject_kind=self | query` (field name is an
+implementation detail). `query` uses the complete `SelectionCriteria.query`; it needs no separate
+planner-generated subject/member wording. `self` contains no user ID, Note ID, path, name, or
+identity assertion. It does not reuse `self_target`, which already means the directly selected
+person Note. Core resolves `self` from the authenticated actor and supplies only the bound self
+Note's current facts plus existing one-hop incoming facts that literally link that Note when those
+facts directly support the requested relation. A third-party fact is not eligible merely because
+it contains a family-like word, and co-occurrence of two people does not establish a relation.
+For `query`, source Notes remain evidence containers; a requested kit or concept need not be a
+Note. The selector sees only opaque batch candidate IDs and text; Core alone owns identity and
+canonical re-grounding.
+
+For singular relational **reads**, select relevant canonical facts with the existing bounded
+fact-selection capability, then project every selected fact's complete exact target set. Group
+facts by stable target identity/set before deciding ambiguity. Multiple facts converging on one
+identity corroborate it; distinct relevant target identities form the safe option set. A selected
+fact with two links contributes both, so the selector cannot silently choose one child from a
+complete `Mis hijos...` fact. Incoming one-hop evidence retains the existing source-identity
+projection rule. Incomplete links or uncertain relevance fail closed. Keep existing relational
+write and complete-set mutation preflight behavior until separately justified; this correction
+must not weaken it. Selection remains semantic proposal, not identity authority.
+
+Extend the current `ActionResult.candidate_note_ids` / pending-work projection to carry 2–4
+grounded relational identity options and the source fact locator/revision guard. Reuse
+`LocalClarificationStore`, `PendingClarification`, `ClarificationOption`, `ClarificationChoice`,
+numeric/exact-label matching, and the optional bounded free-text classifier. The one-action
+continuation validator should accept a relational singular read, re-resolve the original plan
+against current self binding and Markdown, require the chosen identity to remain a safe candidate,
+and verify both source and target guards before retrieval. Preserve existing version-1 pending
+records or fail closed on incompatible data. One remaining identity proceeds automatically;
+more than four, zero, or unsafe identities produce a structured unavailable reason. Arbitrary
+scope questions are not squeezed into the identity-choice store.
+
+### Removing the global scan cliff
+
+The 64-source, 64-fact, and 16 KiB limits become **per-selector-batch payload limits**, not total
+vault eligibility limits. Core traverses the complete eligible canonical inventory in stable
+order; a fact larger than one batch is an explicit `EVIDENCE_ITEM_TOO_LARGE`, never skipped.
+Every batch returns only supplied fact IDs/occurrences. Core merges members by stable ID (or exact
+literal occurrence), retains each supporting source locator, and re-reads selected facts and link
+targets. Before claiming `COMPLETE_WITHIN_SCANNED_SCOPE`, Core verifies that the eligible
+canonical path/revision inventory is unchanged and that every batch finished validly. Any added,
+removed, modified, unreadable, invalid, or unprocessed eligible source yields stale, incomplete,
+or operational status; a selector's empty batch is not global no-evidence. Derived indexes may
+accelerate ordering/discovery only after their coverage is checked against canonical inventory;
+Top-K recall cannot establish completeness. Batches are finite and individually bounded, with no
+fixed total vault count. Existing request time/cost and bounded response limits still fail closed
+with a specific reason; they never turn a processed prefix into a complete set. The implementation
+should avoid holding every fact and repeated full-vault link reparses when it adds batch iteration.
+
+### Deterministic and live acceptance matrix
+
+| Boundary | Regression cases |
+| --- | --- |
+| Singular corroboration | Two `Mi mujer` facts -> one Beatriz; semantic `mi pareja` -> same identity; conflicting grounded targets -> 2–4 options, never first-target guessing. |
+| Singular multi-member | One `Mis hijos` fact -> Cloe/Bruno clarification; one safe target -> automatic answer; 0, >4, malformed/dangling links -> bounded unavailable reason. |
+| Clarification continuation | Number, exact label, bounded free text, unresolved, cancel, new request, duplicate label, stale source/target, changed self binding, actor isolation, and same-ID replay. |
+| Self collections | `mis hijos`, `mis padres`, `mi familia` aggregate current self evidence; many third-party distractors never enter self scope; one-hop incoming evidence is literal and direct. |
+| Generic collections | Kit literals, mixed links/literals, query subject without a Note, note-set presentation, and existing ordinary single/relational/write paths. |
+| Batching/completeness | More than each former global limit, multiple relevant batches, duplicate members across batches, late relevant fact, empty early batch, source mutation/addition/deletion during scan, oversized single fact, output member bound, selector invalid span/timeout. |
+| Product reasons | Missing knowledge, ambiguous scope without safe identity options, understood planner escalation, unintelligible input, and operational/provider failure produce distinct safe user messages and developer diagnostics. |
+
+Use disposable fixtures for deterministic Core/runtime E2E tests and the real DEV queries only
+after a later authorized deployment. A change to the production planner prompt/schema to emit
+collection subject scope is **material model-facing work**. Any changed selector instructions or
+structured output are model-facing too. Keep deterministic schema/fail-closed checks, diff the
+inherited strongest prompt, and later run a focused `gpt-5.6-luna`/low live gate with frozen
+collection, singular, note-set, write, and escalation sentinels plus the new self/query and
+multi-fact cases. A deterministic suite or earlier #142 live result cannot validate this changed
+contract. No provider call belongs to this challenge.
+
+**Packaging.** One coherent corrective PR is reviewable: the planner subject bit, Core
+selection/projection/batching, existing clarification continuation, and user-safe outcome mapping
+are one end-to-end safety contract. Keep commits/slices narrow inside that PR. Split only if
+batching exposes a separate migration or security boundary, which current evidence does not show.
+
+## Merged #142 retrieval boundary (compatibility baseline)
 
 The planner chooses the action, preserves a complete useful `SelectionCriteria.query`, and marks a
 `RetrieveAction` as `result_shape=single` or `result_shape=collection`. It does not produce a
@@ -30,10 +159,9 @@ The public outcome vocabulary is `ANSWER`, `CLARIFY`, `CANNOT_ANSWER`; detailed 
 internal. Ordinary single-note answers continue through the established grounded answerer, while
 complete collection members and note-set snapshots take bounded deterministic presentation paths.
 
-This is a model-facing planner change, so previous v3/v4/v5/v6 live evidence remains immutable
-historical evidence, **not** validation of the new contract. No provider call, DEV deployment, or
-PROD deployment is part of this implementation task. A focused live gate plus regression sentinels
-is required before production readiness. One actor/conversation-scoped clarification decision is
+The #142 planner change required its own focused Luna/low live gate; earlier v3/v4/v5/v6 evidence
+remains historical rather than validation of the merged contract. That #142 gate is closed, as
+recorded in the roadmap and PR history. One actor/conversation-scoped clarification decision is
 retained without a wall-clock TTL. Numeric and exact unique displayed labels resolve first;
 explicit cancel clears it. An optional constrained Luna classification can return only a supplied
 option, `CANCEL`, `NEW_REQUEST`, or `UNRESOLVED`. A new request supersedes the decision, while an
@@ -43,15 +171,10 @@ re-resolved and its current canonical Markdown is checked before mutation; no ex
 is required. Resumed singular reads likewise re-ground the selected Note. A stale or no-longer-safe
 choice cannot authorize a write. The current bounded continuation handles one incomplete
 single-target action; larger staged plans remain fail-closed rather than replaying completed work.
-The prepared, unexecuted v7 combined gate keeps the six historical requests, adds one Note-set and
-one singular-source planner sentinel, then checks four bounded reply-classifier decisions. It is
-Luna/low only, at most 12 calls, zero retries, stops at the first non-PASS, and has a conservative
-no-cache ceiling of `$0.1388288` from the checked-in pricing snapshot. Its new immutable evidence
-path is `benchmarks/.live-results/semantic-set-slice1-v7-combined-luna-gate.jsonl`; fresh explicit
-authorization is required before running it. Deterministic Core/read/write checks remain separate
-from this planner/classifier model evidence.
+The corrective subject/selection changes above need their own later focused live gate; #142's
+completed gate does not validate them.
 
-### Planner-only live evidence status
+### Historical planner-only live evidence during #142
 
 The first two frozen v3 planner-only attempts each stopped on the first case with an opaque
 `APIConnectionError`; their one-row evidence artifacts remain immutable and establish no semantic
