@@ -54,7 +54,7 @@ def test_v9_runner_has_a_distinct_immutable_path_and_refuses_without_confirmatio
     output_path = tmp_path / runner.OUTPUT_PATH.name
     monkeypatch.setattr(runner, "OUTPUT_PATH", output_path)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(runner, "OpenAILunaExperimentalPlanner", object())
+    monkeypatch.setattr(runner._v8, "OpenAILunaExperimentalPlanner", object())
 
     with pytest.raises(SystemExit, match="Live v9 planner gate preflight refused"):
         runner.main([])
