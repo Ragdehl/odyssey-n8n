@@ -91,16 +91,17 @@ was also closed by requiring non-empty `WriteAction.units`, and bounded write di
 relaxing validation. No additional Luna calls are required. Detailed retry/evidence history is retained in the PR
 and benchmark artifacts rather than duplicated here.
 
-Real DEV smoke after #142 exposed unresolved #140/#137 behavior: duplicate self facts can
-falsely appear ambiguous, singular multi-member facts do not yield safe identity choices, and
-collection planning drops authenticated-self scope. The observed 22-source/55-fact/13,162-byte
-DEV scan stayed within its current bounds; those limits are a separate future vault-size cliff.
+Real DEV smoke after #142 exposed #140/#137 behavior: duplicate self facts could falsely appear
+ambiguous, singular multi-member facts did not yield safe identity choices, and collection
+planning dropped authenticated-self scope. The observed 22-source/55-fact/13,162-byte DEV scan
+stayed within its former bounds; those limits were a separate vault-size cliff.
 The [corrective architecture challenge](semantic-set-resolution-and-evidence.md#corrective-architecture-challenge-after-real-dev-evidence-140137)
-revises the contract on `fix/semantic-self-clarification` before implementation: minimal
+revised the contract and is implemented on `fix/semantic-self-clarification`: minimal
 `self | query` collection subject, Core-bound self evidence, exact relational target
 deduplication, reuse of existing pending identity clarification, bounded progressive canonical
-scanning, and distinct user-safe failure reasons. The correction is not implemented or live
-validated. Its planner/selector changes require a new focused Luna/low gate.
+scanning, and distinct user-safe failure reasons. Deterministic Core/runtime coverage is complete.
+The frozen v8 Luna/low gate is prepared only: 21 maximum calls, $0.3456096 conservative no-cache
+ceiling, and no provider execution. It remains required before production model-facing adoption.
 
 [UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) is the current bounded phase in Draft PR #144.
 It finishes the existing Chat + Notes product and may expose only direct mutations that retain Core authority.
@@ -143,7 +144,7 @@ Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
 Semantic set resolution and evidence                             ✅ merged in PR #142
-Semantic self scope and clarification correction                   ➡️ architecture revised; implementation pending
+Semantic self scope and clarification correction                   ➡️ implementation verified; Luna gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks

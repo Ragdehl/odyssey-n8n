@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
@@ -216,7 +217,11 @@ class RuntimeComposition:
                                 request_id, fingerprint, response, _current_time()["timestamp"]
                             )
                         return response
-                    choice = ClarificationChoice(decision, pending.evidence_guards[option_index])
+                    choice = ClarificationChoice(
+                        decision,
+                        pending.evidence_guards[option_index],
+                        pending.source_evidence_guard,
+                    )
                     result = self.execute(
                         user_request,
                         request_id,
@@ -298,6 +303,8 @@ class RuntimeComposition:
                 return None
             action = incomplete[0]["planned_action"]
             execution = incomplete[0]["execution_result"]
+            source_guard: str | None = None
+            relational = False
             if action["kind"] == "write":
                 if (
                     len(action["units"]) != 1
@@ -307,13 +314,20 @@ class RuntimeComposition:
                     return None
                 candidates = execution["unit_results"][0]["candidates"]
             elif action["kind"] == "retrieve":
-                if (
-                    action["result_shape"] != "single"
-                    or action["plan"]["entity"] is None
-                    or execution["reason"] != "ambiguous_existing_target"
+                relational = action["plan"].get("relational_reference") is not None
+                ordinary = (
+                    action["plan"].get("entity") is not None
+                    and execution["reason"] == "ambiguous_existing_target"
+                )
+                if action["result_shape"] != "single" or not (
+                    ordinary
+                    or relational
+                    and execution["reason"]
+                    in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
                 ):
                     return None
                 candidates = execution["candidate_note_ids"]
+                source_guard = execution.get("relational_evidence_guard") if relational else None
             else:
                 return None
             options = tuple(ClarificationOption(**item) for item in view["options"])
@@ -324,12 +338,18 @@ class RuntimeComposition:
                 guards.append(
                     current_identity_guard(self.vault_repository, self.canonical_schema, option.id)
                 )
+            if relational and (
+                not isinstance(source_guard, str)
+                or re.fullmatch(r"[0-9a-f]{64}", source_guard) is None
+            ):
+                return None
             return PendingClarification(
                 record["user_request"],
                 result.request_id,
                 result.pending_work.record_id,
                 options,
                 tuple(guards),
+                source_guard,
             )
         except (
             KeyError,
@@ -365,12 +385,27 @@ class RuntimeComposition:
                 and tuple(evidence["unit_results"][0].get("candidates", ())) == candidate_ids
             )
         elif action.get("kind") == "retrieve":
+            relational = action.get("plan", {}).get("relational_reference") is not None
             safe = (
                 action.get("result_shape") == "single"
-                and action.get("plan", {}).get("entity") is not None
-                and evidence.get("reason") == "ambiguous_existing_target"
+                and (
+                    (
+                        action.get("plan", {}).get("entity") is not None
+                        and evidence.get("reason") == "ambiguous_existing_target"
+                    )
+                    or (
+                        relational
+                        and evidence.get("reason")
+                        in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+                    )
+                )
                 and tuple(evidence.get("candidate_note_ids", ())) == candidate_ids
             )
+            if relational and (
+                not isinstance(pending.source_evidence_guard, str)
+                or evidence.get("relational_evidence_guard") != pending.source_evidence_guard
+            ):
+                safe = False
         else:
             safe = False
         if evidence.get("status") != "deferred" or not safe:
@@ -437,7 +472,12 @@ class RuntimeComposition:
                 action.candidate_note_ids or (unit.candidates if unit is not None else ())
                 for action in result.action_results
                 for unit in action.unit_results or (None,)
-                if action.reason == "ambiguous_existing_target"
+                if action.reason
+                in {
+                    "ambiguous_existing_target",
+                    "relational_evidence_ambiguous",
+                    "relational_singular_ambiguous",
+                }
                 or unit is not None
                 and unit.reason == "ambiguous_existing_target"
             ),

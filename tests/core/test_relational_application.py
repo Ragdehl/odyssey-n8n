@@ -307,6 +307,91 @@ def test_r1_singular_relational_read_uses_current_member_only(
     assert len(list(vault.rglob("*.md"))) == 2
 
 
+def test_singular_corrobating_facts_converge_on_one_current_identity(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two current facts for the same spouse corroborate a singular self-relative read."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mi mujer es [[Beatriz]].", 0) + "\n\n" + fact("Mi mujer es [[Beatriz]].", 1),
+    )
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz Carrero", "")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi mujer", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert calls[0]["allowed_note_ids"] == frozenset({"beatriz"})
+
+
+def test_multi_target_singular_fact_offers_each_grounded_identity_without_guessing(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A selected multi-link child fact yields bounded existing clarification options."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[Cloe]] y [[Bruno]].", 0),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hijo", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan)
+
+    action = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.reason == "relational_singular_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "bruno")
+
+
+def test_conflicting_singular_relation_targets_offer_options_only_for_reads(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A read may clarify two current targets while write preflight remains unchanged."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mi hija es [[Cloe]].", 0) + "\n\n" + fact("Mi hija es [[Marta]].", 1),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, reasoner=FactReasoner("UNRESOLVED"))
+
+    action = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.reason == "relational_evidence_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "marta")
+
+
 def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
     tmp_path: Path, schema: dict
 ) -> None:

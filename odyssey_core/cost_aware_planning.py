@@ -111,7 +111,7 @@ class LunaFirstRequestPlanner:
 
         if isinstance(result, PlannerEscalation):
             self._sync_final_metadata(self._luna)
-            return PlannerClarification("UNRECOGNIZED_REQUEST")
+            return PlannerClarification("UNREPRESENTABLE_REQUEST")
         if isinstance(result, (RequestPlan, PlannerClarification)):
             self._sync_final_metadata(self._luna)
             return result

@@ -170,6 +170,7 @@ class ActionResult:
     reason: str | None = None
     semantic_set: SemanticSetResolution | None = None
     candidate_note_ids: tuple[str, ...] = ()
+    relational_evidence_guard: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -615,6 +616,9 @@ def _execute_retrieve(
                 repository=repository,
                 schema=schema,
                 selector=semantic_set_selector,
+                collection_subject=action.plan.collection_subject,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
             )
         except Exception as error:
             return ActionResult(
@@ -685,7 +689,7 @@ def _execute_retrieve(
         allowed_note_ids = frozenset(
             {clarification_choice.stable_id if clarification_choice else resolution.id}
         )
-    if clarification_choice is not None:
+    if clarification_choice is not None and action.plan.relational_reference is None:
         if (
             action.result_shape != "single"
             or action.plan.entity is None
@@ -727,9 +731,17 @@ def _execute_retrieve(
                 semantic_limit=semantic_limit,
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
+                allow_identity_clarification=True,
             )
         except RelationalResolutionError as error:
-            return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason=str(error),
+                candidate_note_ids=error.candidate_ids,
+                relational_evidence_guard=error.evidence_guard,
+            )
         except Exception as error:
             return ActionResult(
                 action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
@@ -742,6 +754,33 @@ def _execute_retrieve(
                 ActionStatus.DEFERRED,
                 reason="relational_evidence_incomplete",
             )
+        if clarification_choice is not None:
+            if clarification_choice.stable_id not in allowed_note_ids:
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    reason="clarification_scope_changed",
+                )
+            try:
+                if (
+                    clarification_choice.source_evidence_guard is not None
+                    and resolved.evidence_guard != clarification_choice.source_evidence_guard
+                ):
+                    raise ValueError("relational source evidence changed")
+                if (
+                    current_identity_guard(repository, schema, clarification_choice.stable_id)
+                    != clarification_choice.evidence_guard
+                ):
+                    raise ValueError("clarification evidence changed")
+            except Exception:
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    reason="clarification_evidence_changed",
+                )
+            allowed_note_ids = frozenset({clarification_choice.stable_id})
     if action.plan.self_target is not None:
         if action.plan.self_target != "self":
             return ActionResult(

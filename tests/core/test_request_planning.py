@@ -65,6 +65,7 @@ def selection(
         "self_target": None,
         "relational_reference": None,
         "semantic_set": None,
+        "collection_subject": None,
     }
 
 
@@ -110,13 +111,16 @@ def provider_output(payload: dict) -> dict:
     for action in projected.get("actions") or []:
         if action.get("kind") == "retrieve":
             action.setdefault("result_shape", "single")
+            action["plan"].setdefault("collection_subject", None)
             if action["plan"].get("semantic_set") is None:
                 action["plan"].pop("semantic_set", None)
         elif action.get("kind") == "write":
             for unit in action.get("units", []):
+                unit["target"].setdefault("collection_subject", None)
                 if unit["target"].get("semantic_set") is None:
                     unit["target"].pop("semantic_set", None)
         elif action.get("kind") == "delegate" and isinstance(action.get("selection"), dict):
+            action["selection"].setdefault("collection_subject", None)
             if action["selection"].get("semantic_set") is None:
                 action["selection"].pop("semantic_set", None)
     return {"result": projected}
@@ -245,11 +249,13 @@ def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict
     prompt = render_request_planner_prompt(schema, CONTEXT)
     collection = deepcopy(selection("What countries have I travelled to?"))
     collection.pop("semantic_set")
+    collection["collection_subject"] = "query"
     payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
     provider_schema = planner_result_json_schema(schema)
     compact_schema = compact_planner_result_json_schema(schema)
 
     assert "result_shape=collection" in prompt
+    assert "collection_subject=self" in prompt
     assert "subject_kind" not in prompt
     assert "member_query" not in prompt
     assert "asks_exhaustive" not in prompt
@@ -919,7 +925,10 @@ def test_planner_result_supports_closed_nonsense_clarification(
 
     assert isinstance(result, PlannerClarification)
     assert result.code == "UNRECOGNIZED_REQUEST"
-    assert PLANNER_CLARIFICATION_CODES == ("UNRECOGNIZED_REQUEST",)
+    assert PLANNER_CLARIFICATION_CODES == (
+        "UNRECOGNIZED_REQUEST",
+        "UNREPRESENTABLE_REQUEST",
+    )
     assert input_text  # The model-choice behavior remains a future live-evidence gate.
 
 
@@ -996,6 +1005,7 @@ def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict
     compact = compact_planner_result_json_schema(schema)
     semantic = selection("¿Quiénes son las personas de mi familia?")
     semantic.pop("semantic_set")
+    semantic["collection_subject"] = "query"
     valid_semantic = provider_output(
         planner_output({"kind": "retrieve", "result_shape": "collection", "plan": semantic})
     )
