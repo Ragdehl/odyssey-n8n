@@ -219,6 +219,17 @@ def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
         for selection in selections:
             if isinstance(selection, dict):
                 selection.setdefault("relational_reference", None)
+                if action.get("result_shape") == "collection":
+                    legacy_intent = selection.get("semantic_set")
+                    selection.setdefault(
+                        "collection_subject",
+                        "self"
+                        if isinstance(legacy_intent, dict)
+                        and legacy_intent.get("subject_kind") == "self"
+                        else "query",
+                    )
+                else:
+                    selection.setdefault("collection_subject", None)
                 selection.pop("semantic_set", None)
     return completed
 
