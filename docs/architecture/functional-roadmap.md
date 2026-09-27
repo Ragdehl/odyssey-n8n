@@ -100,8 +100,14 @@ revised the contract and is implemented on `fix/semantic-self-clarification`: mi
 `self | query` collection subject, Core-bound self evidence, exact relational target
 deduplication, reuse of existing pending identity clarification, bounded progressive canonical
 scanning, and distinct user-safe failure reasons. Deterministic Core/runtime coverage is complete.
-The frozen v8 Luna/low gate is prepared only: 21 maximum calls, $0.3456096 conservative no-cache
-ceiling, and no provider execution. It remains required before production model-facing adoption.
+The frozen v8 Luna/low gate ran once at `32585c47bab0a90159ce2fc05339aa1c1c22ce5b` and stopped
+fail-fast after two calls: SSET01 passed; SSET02 failed because it emitted
+`collection_subject=self` instead of the unchanged required `query`. The two-row immutable artifact
+has SHA-256 `cf4b5b9295f35149840105cca8fc02a2fae6abc066bdfb3307a83123bc7fe35e`; no rerun occurred and
+no selector row was reached. A minimal inherited membership-anchor prompt clarification and frozen
+v9 successor gate are prepared. V9 reuses all 21 planner and 4 selector rows, retains a 25-call
+maximum and recalculated `$0.41144` conservative no-cache ceiling, and remains pending separate
+Luna/low authorization before production model-facing adoption.
 
 [UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) is the current bounded phase in Draft PR #144.
 It finishes the existing Chat + Notes product and may expose only direct mutations that retain Core authority.
@@ -144,7 +150,7 @@ Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
 Semantic set resolution and evidence                             ✅ merged in PR #142
-Semantic self scope and clarification correction                   ➡️ implementation verified; Luna gate pending authorization
+Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks

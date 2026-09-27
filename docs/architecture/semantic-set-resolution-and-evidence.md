@@ -1,7 +1,8 @@
 # Semantic set resolution and evidence — architecture challenge
 
-Status: **#142 merged; corrective #140/#137 architecture challenge revised on
-`fix/semantic-self-clarification`; implementation pending**. The earlier semantic-intent gates
+Status: **#142 merged; corrective #140/#137 implementation and deterministic verification are on
+`fix/semantic-self-clarification`; the first frozen Luna gate failed and the corrected-prompt
+successor gate is prepared, pending separate authorization**. The earlier semantic-intent gates
 below are historical evidence for their frozen contracts. This follows
 [Reference & Relationship Resolution v1](post-ui2-note-creation-and-schema-evolution.md).
 Issues: [#140](https://github.com/Ragdehl/odyssey-n8n/issues/140),
@@ -133,6 +134,37 @@ inherited strongest prompt, and later run a focused `gpt-5.6-luna`/low live gate
 collection, singular, note-set, write, and escalation sentinels plus the new self/query and
 multi-fact cases. A deterministic suite or earlier #142 live result cannot validate this changed
 contract. No provider call belongs to this challenge.
+
+### v8 failed live evidence and v9 successor gate
+
+At behavior-bearing HEAD `32585c47bab0a90159ce2fc05339aa1c1c22ce5b`, the explicitly authorized
+frozen v8 gate ran once with `gpt-5.6-luna` / low. It made two Luna calls and stopped fail-fast:
+`SSET01` passed; `SSET02` failed because the planner emitted `collection_subject=self` where the
+unchanged frozen oracle requires `collection_subject=query`. The `SSET02` request is a collection
+whose member-defining subject is another subject referenced in first-person context; a possessive
+does not make the authenticated human its membership anchor. This is a planner-contract failure,
+not an oracle failure. No selector row was reached, no retry or Sol fallback occurred, and no
+rerun is authorized. The approximate pricing-snapshot cost is `$0.0023114`.
+
+The immutable two-row evidence artifact remains
+`benchmarks/.live-results/semantic-self-clarification-v8-luna-gate.jsonl` with SHA-256
+`cf4b5b9295f35149840105cca8fc02a2fae6abc066bdfb3307a83123bc7fe35e`; it must never be overwritten,
+edited, replaced, or reused.
+
+The smallest inherited prompt correction now defines `self` only when the authenticated human is
+the semantic membership anchor. First-person possession, ownership, association, or contextual
+reference to another subject is insufficient. When another object, concept, source, or set defines
+membership, the planner emits `query` and retains the full self-related wording in the lossless
+query. This changes neither schema nor Core semantics and adds no domain vocabulary, relation
+ontology, identity assertion, or benchmark-derived example.
+
+`run_live_v9.py` is the distinct successor gate. It reuses the exact byte-checked v8 planner and
+selector cases/oracles, including SSET02 unchanged and all four relational selector rows, while
+using output path `semantic-self-clarification-v9-luna-gate.jsonl`. It retains confirmation,
+exclusive output reservation, per-row flush, fail-fast execution, zero automatic retries, no Sol
+fallback, and 25 maximum Luna calls. Recalculation against the revised inherited prompt retains the
+conservative no-cache ceiling of `$0.41144` because the fixed 70,000-token per-call bound remains
+unchanged. The v9 gate is prepared only and needs new explicit provider-call authorization.
 
 **Packaging.** One coherent corrective PR is reviewable: the planner subject bit, Core
 selection/projection/batching, existing clarification continuation, and user-safe outcome mapping

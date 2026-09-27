@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -268,6 +269,53 @@ def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict
     assert isinstance(plan.actions[0], RetrieveAction)
     assert plan.actions[0].result_shape == "collection"
     assert plan.actions[0].plan.query == "What countries have I travelled to?"
+
+
+def test_collection_membership_anchor_instruction_is_generic_and_schema_is_unchanged(
+    schema: dict,
+) -> None:
+    """Keep self/query as a closed scope bit while teaching the abstract membership boundary."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    encoded_schema = json.dumps(
+        luna_experimental_result_json_schema(schema),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    assert "authenticated human is itself the semantic membership anchor" in prompt
+    assert "First-person possession, ownership, association, or contextual reference" in prompt
+    assert "another object, concept, source, or set determines membership" in prompt
+    assert "preserve the complete self-related context in query" in prompt
+    assert hashlib.sha256(encoded_schema).hexdigest() == (
+        "47db301e25fc7481129057b210580aed6100e401c0727c0db896591e54634814"
+    )
+    fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
+    assert all(
+        term not in fixed_instructions
+        for term in ("kit", "bicycle", "tortilla", "recipe", "family", "children")
+    )
+
+
+def test_legacy_collection_without_subject_remains_generic_query_scope(schema: dict) -> None:
+    """Continue reading a validated pre-subject collection plan without changing its semantics."""
+    legacy = selection("all relevant values")
+    legacy.pop("self_target")
+    legacy.pop("relational_reference")
+    legacy.pop("semantic_set")
+    legacy.pop("collection_subject")
+    legacy["entity"] = None
+    legacy["type"] = None
+    legacy["filters"] = []
+    legacy["link_scope"] = None
+
+    plan = validate_request_plan(
+        output({"kind": "retrieve", "result_shape": "collection", "plan": legacy}), schema
+    )
+
+    action = plan.actions[0]
+    assert isinstance(action, RetrieveAction)
+    assert action.plan.collection_subject == "query"
 
 
 def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(schema: dict) -> None:
