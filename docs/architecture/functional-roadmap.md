@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current functional phase — semantic set resolution and evidence design
+## Current functional work — semantic correction and UI polish
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
 universal Luna → Sol route was a local Luna planner-result validation mismatch after successful
@@ -91,6 +91,29 @@ was also closed by requiring non-empty `WriteAction.units`, and bounded write di
 relaxing validation. No additional Luna calls are required. Detailed retry/evidence history is retained in the PR
 and benchmark artifacts rather than duplicated here.
 
+Real DEV smoke after #142 exposed #140/#137 behavior: duplicate self facts could falsely appear
+ambiguous, singular multi-member facts did not yield safe identity choices, and collection
+planning dropped authenticated-self scope. The observed 22-source/55-fact/13,162-byte DEV scan
+stayed within its former bounds; those limits were a separate vault-size cliff.
+The [corrective architecture challenge](semantic-set-resolution-and-evidence.md#corrective-architecture-challenge-after-real-dev-evidence-140137)
+revised the contract and is implemented on `fix/semantic-self-clarification`: minimal
+`self | query` collection subject, Core-bound self evidence, exact relational target
+deduplication, reuse of existing pending identity clarification, bounded progressive canonical
+scanning, and distinct user-safe failure reasons. Deterministic Core/runtime coverage is complete.
+The frozen v8 Luna/low gate ran once at `32585c47bab0a90159ce2fc05339aa1c1c22ce5b` and stopped
+fail-fast after two calls: SSET01 passed; SSET02 failed because it emitted
+`collection_subject=self` instead of the unchanged required `query`. The two-row immutable artifact
+has SHA-256 `cf4b5b9295f35149840105cca8fc02a2fae6abc066bdfb3307a83123bc7fe35e`. The frozen v9 gate
+then ran once at `e86de53dabdd8b628d7918fdda647f629d4862a1`: SSET01 through REG02 passed, including
+SSET02 as `collection_subject=query`, then NOTE01 failed closed at `RETRIEVE_ACTION` /
+`SELECTION_MODE_CONFLICT`. Its seven-row immutable artifact has SHA-256
+`edaeaa65885d7340efb821a9013aaac367031fa60ad4066d9b31ebe453762bcf`; neither run reached selector
+rows, retried, or used Sol. Core validation remains fail closed. The current structural correction
+partitions `collection_subject` by retrieval shape in the provider schema and prepares frozen v10,
+which reuses all 21 planner and 4 selector rows with a 25-call maximum and `$0.41144` conservative
+no-cache ceiling. V10 requires separate Luna/low authorization before production model-facing
+adoption.
+
 [UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) is the current bounded phase in Draft PR #144.
 It finishes the existing Chat + Notes product and may expose only direct mutations that retain Core authority.
 Tasks remains the next application phase after this pass.
@@ -132,6 +155,7 @@ Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
 Semantic set resolution and evidence                             ✅ merged in PR #142
+Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks

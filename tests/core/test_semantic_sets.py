@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from odyssey_core.atomic_facts import render_atomic_facts
+from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.relationship_evidence import RelationshipEvidenceProjector
 from odyssey_core.request_planning import SemanticSetIntent
@@ -29,6 +30,19 @@ from odyssey_core.storage import VaultRepository
 
 ROOT = Path(__file__).resolve().parents[2]
 INTENT = SemanticSetIntent("query", "kit básico para la bici", "piezas", "", True)
+ACTOR = AuthenticatedActorContext("8c1a06bc-17cc-4f81-a026-e3ba04c971e5")
+
+
+class SelfBinding:
+    """Bind the disposable authenticated actor to the fixture self Note."""
+
+    def __init__(self, person_note_id: str = "self") -> None:
+        self.person_note_id = person_note_id
+
+    def resolve(self, stable_user_id: str) -> SimpleNamespace:
+        """Return the fixed current self binding only for the test actor."""
+        assert stable_user_id == ACTOR.stable_user_id
+        return SimpleNamespace(person_note_id=self.person_note_id)
 
 
 def schema() -> dict:
@@ -90,7 +104,16 @@ class Select:
         return SetEvidenceSelection(tuple(selected), tuple(occurrences), self.uncertain)
 
 
-def run(vault: Path, selector: Select, *, bounds: SemanticSetBounds | None = None, intent=INTENT):
+def run(
+    vault: Path,
+    selector: Select,
+    *,
+    bounds: SemanticSetBounds | None = None,
+    intent=INTENT,
+    query: str | None = None,
+    collection_subject: str | None = None,
+    binding: SelfBinding | None = None,
+):
     """Resolve one set from the full bounded canonical fact scope."""
     return resolve_semantic_set(
         intent,
@@ -98,6 +121,10 @@ def run(vault: Path, selector: Select, *, bounds: SemanticSetBounds | None = Non
         schema=schema(),
         selector=selector,
         bounds=bounds or SemanticSetBounds(),
+        query=query,
+        collection_subject=collection_subject,
+        authenticated_actor=ACTOR if collection_subject == "self" else None,
+        self_binding_repository=binding,
     )
 
 
@@ -277,6 +304,270 @@ def test_identity_mixed_and_unselected_facts_preserve_only_exact_selected_eviden
     assert [m.value for m in result.grounded_set.members if isinstance(m, LiteralSetMember)] == [
         "perro"
     ]
+
+
+def test_self_collection_uses_bound_note_and_literal_one_hop_evidence_only(tmp_path: Path) -> None:
+    """Bind self in Core while excluding similarly worded third-party family facts."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/ana.md", "ana", "Ana", "")
+    write(vault, "people/bruno.md", "bruno", "Bruno", "")
+    write(vault, "people/self.md", "self", "Self", fact("Mis hijos son [[Bruno]].", 0))
+    write(
+        vault,
+        "people/evidence.md",
+        "evidence",
+        "Evidence",
+        fact("Mi madre es [[Ana]] y soy [[Self]].", 0),
+    )
+    write(
+        vault,
+        "people/noise.md",
+        "noise",
+        "Noise",
+        fact("Mis hijos son [[Ana]] y [[Bruno]].", 0),
+    )
+    seen_sources: list[str] = []
+
+    class SelfSelector(Select):
+        """Select exact identity links while recording the Core-supplied self scope."""
+
+        def select(self, request):
+            seen_sources.extend(candidate.id for candidate in request.candidates)
+            return super().select(request)
+
+    result = run(
+        vault,
+        SelfSelector(
+            lambda candidate: [
+                ("link", candidate.text.index(link), candidate.text.index(link) + len(link))
+                for link in ("[[Bruno]]", "[[Ana]]")
+                if link in candidate.text
+            ]
+        ),
+        intent=None,
+        query="¿Quiénes son mis hijos y mis padres?",
+        collection_subject="self",
+        binding=SelfBinding(),
+    )
+
+    assert result.outcome is SemanticSetOutcome.ANSWERABLE
+    assert result.grounded_set and result.grounded_set.subject_kind == "self"
+    assert {
+        member.stable_id
+        for member in result.grounded_set.members
+        if isinstance(member, IdentitySetMember)
+    } == {
+        "ana",
+        "bruno",
+    }
+    # `candidate-*` reveals no source identity to a selector.  The count proves only the direct
+    # self fact and literal incoming fact were eligible; the noise fact never entered scope.
+    assert seen_sources == ["candidate-0", "candidate-1"]
+
+
+def test_batching_scans_late_evidence_beyond_old_source_and_fact_limits(tmp_path: Path) -> None:
+    """An empty first payload cannot end complete canonical collection discovery."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    for index in range(66):
+        value = "late-member" if index == 65 else f"noise-{index}"
+        write(
+            vault,
+            f"notes/{index:03}.md",
+            f"note-{index:03}",
+            f"Note {index}",
+            fact(f"El kit incluye {value}.", 0),
+        )
+    requests: list[tuple[str, ...]] = []
+
+    class LateSelector(Select):
+        """Emit a member only from the final selector batch."""
+
+        def select(self, request):
+            requests.append(tuple(candidate.id for candidate in request.candidates))
+            return super().select(request)
+
+    result = run(
+        vault,
+        LateSelector(
+            lambda candidate: (
+                [
+                    (
+                        "literal",
+                        candidate.text.index("late-member"),
+                        candidate.text.index("late-member") + len("late-member"),
+                    )
+                ]
+                if "late-member" in candidate.text
+                else []
+            )
+        ),
+        intent=None,
+        query="¿Qué incluye el kit?",
+        collection_subject="query",
+    )
+
+    assert result.outcome is SemanticSetOutcome.ANSWERABLE
+    assert result.grounded_set and [member.value for member in result.grounded_set.members] == [
+        "late-member"
+    ]
+    assert [len(request) for request in requests] == [64, 2]
+
+
+def test_duplicate_identity_across_selector_batches_is_returned_once(tmp_path: Path) -> None:
+    """Merge repeated canonical links by stable identity across independently bounded batches."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/shared.md", "shared", "Shared tool", "")
+    for index in range(65):
+        member = "[[people/shared|Shared tool]]" if index in {0, 64} else f"tool-{index}"
+        write(
+            vault,
+            f"notes/{index:03}.md",
+            f"note-{index:03}",
+            f"Note {index}",
+            fact(f"El kit incluye {member}.", 0),
+        )
+
+    result = run(
+        vault,
+        Select(
+            lambda candidate: (
+                [
+                    (
+                        "link",
+                        candidate.text.index("[[people/shared|Shared tool]]"),
+                        candidate.text.index("[[people/shared|Shared tool]]")
+                        + len("[[people/shared|Shared tool]]"),
+                    )
+                ]
+                if "[[people/shared|Shared tool]]" in candidate.text
+                else []
+            )
+        ),
+        intent=None,
+        query="¿Qué incluye el kit?",
+        collection_subject="query",
+    )
+
+    assert result.outcome is SemanticSetOutcome.ANSWERABLE
+    assert result.grounded_set is not None
+    identities = [
+        member.stable_id
+        for member in result.grounded_set.members
+        if isinstance(member, IdentitySetMember)
+    ]
+    assert identities == ["shared"]
+
+
+def test_batching_treats_aggregate_bytes_as_batches_and_oversized_fact_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Keep aggregate evidence reachable but reject one fact that cannot form a legal payload."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    for index in range(3):
+        value = f"member-{index}"
+        write(
+            vault,
+            f"notes/{index}.md",
+            f"note-{index}",
+            f"Note {index}",
+            fact(f"{value} " + "x" * 6_000, 0),
+        )
+    calls = 0
+
+    class ByteSelector(Select):
+        """Count legal bounded batch calls without selecting a member."""
+
+        def select(self, request):
+            nonlocal calls
+            calls += 1
+            return super().select(request)
+
+    aggregate = run(
+        vault,
+        ByteSelector(lambda _candidate: []),
+        intent=None,
+        query="¿Qué miembros hay?",
+        collection_subject="query",
+    )
+    assert aggregate.outcome is SemanticSetOutcome.NO_RELEVANT_EVIDENCE
+    assert calls == 2
+
+    write(vault, "notes/large.md", "large", "Large", fact("x" * (16 * 1024), 0))
+    too_large = run(
+        vault,
+        Select(lambda _candidate: []),
+        intent=None,
+        query="¿Qué miembros hay?",
+        collection_subject="query",
+    )
+    assert (too_large.outcome, too_large.reason) == (
+        SemanticSetOutcome.INCOMPLETE_EVIDENCE,
+        "evidence_item_too_large",
+    )
+
+
+@pytest.mark.parametrize("change", ["add", "delete"])
+def test_complete_collection_rejects_inventory_addition_or_deletion_during_batches(
+    tmp_path: Path, change: str
+) -> None:
+    """A changed eligible inventory never turns an already scanned prefix into a complete set."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "notes/first.md", "first", "First", fact("El kit incluye llave.", 0))
+    write(vault, "notes/second.md", "second", "Second", fact("El kit incluye cinta.", 0))
+
+    class InventoryMutation(Select):
+        """Change the disposable canonical inventory after Core captured its scan snapshot."""
+
+        def select(self, request):
+            if change == "add":
+                write(vault, "notes/added.md", "added", "Added", fact("El kit incluye bomba.", 0))
+            else:
+                (vault / "notes/second.md").unlink()
+            return super().select(request)
+
+    result = run(
+        vault,
+        InventoryMutation(lambda _candidate: []),
+        intent=None,
+        query="¿Qué incluye el kit?",
+        collection_subject="query",
+    )
+
+    assert (result.outcome, result.reason) == (
+        SemanticSetOutcome.STALE_EVIDENCE,
+        "inventory_changed",
+    )
+
+
+def test_selector_failure_is_a_structured_operational_collection_outcome(tmp_path: Path) -> None:
+    """Provider/selector failure never escapes as a partial collection answer."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "notes/kit.md", "kit", "Kit", fact("El kit incluye llave.", 0))
+
+    class FailingSelector:
+        """Simulate a bounded selector transport failure without a provider call."""
+
+        def select(self, request):
+            raise TimeoutError("synthetic selector timeout")
+
+    result = run(
+        vault,
+        FailingSelector(),
+        intent=None,
+        query="¿Qué incluye el kit?",
+        collection_subject="query",
+    )
+
+    assert (result.outcome, result.reason) == (
+        SemanticSetOutcome.OPERATIONAL_FAILURE,
+        "selector_failure",
+    )
 
 
 def test_scope_uncertainty_no_evidence_stale_and_overflow_fail_closed(tmp_path: Path) -> None:

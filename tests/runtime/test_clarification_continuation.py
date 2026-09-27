@@ -26,6 +26,7 @@ from odyssey_core.notes import Note, serialize_note
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.request_planning import (
     KnowledgeUnit,
+    RelationalReference,
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
@@ -308,3 +309,102 @@ def test_singular_read_resumes_without_replaying_a_note_set(tmp_path: Path) -> N
     assert response["product_outcome"] == "ANSWER"
     assert calls == [(original, "single", "italy-a")]
     assert state.read() is None
+
+
+def test_relational_read_pending_keeps_source_guard_in_version_two_state(tmp_path: Path) -> None:
+    """Reuse the existing store while binding a relational identity choice to source evidence."""
+    pending_root = tmp_path / "pending"
+    pending_root.mkdir()
+    pending_repo = PendingWorkRepository(pending_root)
+    original = "¿Quién es mi hijo?"
+    action = RetrieveAction(
+        SelectionCriteria(
+            None,
+            original,
+            "person",
+            (),
+            None,
+            relational_reference=RelationalReference("mi hijo", "self", None, "one"),
+        )
+    )
+    source_guard = "c" * 64
+    initial = ApplicationResult(
+        "relational-original",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (
+            ActionResult(
+                0,
+                "retrieve",
+                ActionStatus.DEFERRED,
+                reason="relational_singular_ambiguous",
+                candidate_note_ids=("marta-1", "marta-2"),
+                relational_evidence_guard=source_guard,
+            ),
+        ),
+        (),
+    )
+    pending_repo.record(
+        user_request=original,
+        plan=RequestPlan((action,), ()),
+        result=initial,
+        created_at="2026-09-26T10:00:00Z",
+    )
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    for note_id, name in (("marta-1", "Cloe"), ("marta-2", "Bruno")):
+        (vault / f"{note_id}.md").write_text(
+            serialize_note(
+                Note(
+                    {
+                        "id": note_id,
+                        "name": name,
+                        "type": "person",
+                        "created_at": "2026-09-26T10:00:00Z",
+                        "updated_at": "2026-09-26T10:00:00Z",
+                        "created_by": {"human": None, "app": "test"},
+                        "updated_by": {"human": None, "app": "test"},
+                        "revision": 1,
+                        "schema_version": 3,
+                    },
+                    "Known grounded fact.",
+                )
+            ),
+            encoding="utf-8",
+        )
+
+    class Notes:
+        """Provide current labels without adding a second semantic authority."""
+
+        def detail(self, note_id):
+            return SimpleNamespace(
+                note=SimpleNamespace(
+                    id=note_id, name={"marta-1": "Cloe", "marta-2": "Bruno"}[note_id]
+                )
+            )
+
+    resolver = ConversationRootResolver(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _completed(args[1]),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        pending_recorder=pending_repo,
+        canonical_schema=json.loads((ROOT / "config/note-schema.json").read_text()),
+        vault_repository=VaultRepository(vault),
+        notes_service=Notes(),
+    )
+    stored_result = ApplicationResult(
+        initial.request_id,
+        initial.status,
+        initial.action_results,
+        (),
+        pending_work=PendingWorkStatus(
+            required=True, persisted=True, record_id="relational-original"
+        ),
+    )
+
+    pending = runtime._pending_decision(stored_result, runtime._clarification_view(stored_result))
+
+    assert pending is not None and pending.source_evidence_guard == source_guard
+    state = LocalClarificationStore(resolver.resolve(ACTOR.stable_user_id), "main")
+    state.replace(pending)
+    assert state.read() == pending

@@ -180,6 +180,8 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
 
 def _product_outcome(result: ApplicationResult) -> tuple[str, str | None]:
     """Reduce internal execution outcomes to the three user-facing decisions."""
+    if result.clarification_code == "UNREPRESENTABLE_REQUEST":
+        return "CANNOT_ANSWER", result.clarification_code
     if result.clarification_code is not None:
         return "CLARIFY", result.clarification_code
     for action in result.action_results:

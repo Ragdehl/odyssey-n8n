@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -26,6 +27,15 @@ from odyssey_core.relationship_evidence import (
 )
 from odyssey_core.request_planning import SelectionCriteria
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
+from odyssey_core.semantic_sets import (
+    DEFAULT_SEMANTIC_SET_BOUNDS,
+    SemanticSetCandidate,
+    SemanticSetCandidateView,
+    SemanticSetResolution,
+    SemanticSetSelectionRequest,
+    SetEvidenceSelection,
+    partition_semantic_set_candidates,
+)
 from odyssey_core.storage import VaultRepository
 
 _WIKILINK_DISPLAY = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
@@ -33,6 +43,14 @@ _WIKILINK_DISPLAY = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
 class RelationalResolutionError(RuntimeError):
     """Signal that one relational identity or complete member set cannot be authorized."""
+
+    def __init__(
+        self, reason: str, candidate_ids: tuple[str, ...] = (), evidence_guard: str | None = None
+    ) -> None:
+        """Carry only Core-grounded bounded identity options when clarification is safe."""
+        super().__init__(reason)
+        self.candidate_ids = candidate_ids
+        self.evidence_guard = evidence_guard
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +62,7 @@ class ResolvedRelationalReference:
     fact_locator: str
     direction: EvidenceDirection
     targets: tuple[CanonicalIdentity, ...]
+    evidence_guard: str
 
 
 def resolve_relational_reference(
@@ -57,12 +76,16 @@ def resolve_relational_reference(
     semantic_limit: int,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
+    semantic_set_selector: Any | None = None,
+    allow_identity_clarification: bool = False,
+    chosen_identity_id: str | None = None,
 ) -> ResolvedRelationalReference:
-    """Resolve one source and one fact through existing identity and contextual boundaries.
+    """Resolve one source and every semantically relevant current fact through Core grounding.
 
-    The contextual decision selects only a supplied current fact locator. Core reprojects that
-    locator and admits only a complete one-hop target set of the requested cardinality. No model
-    output can supply or replace a stable member ID.
+    Read-side relevance selection may choose only supplied canonical fact locators. Core then
+    re-reads every selected fact, projects each complete one-hop target set, and decides identity
+    only after stable target deduplication. Writes retain their established single-choice
+    contextual preflight.
     """
     relation = selection.relational_reference
     if relation is None:
@@ -105,13 +128,26 @@ def resolve_relational_reference(
     candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...] = (*outgoing, *incoming)
     if not candidates:
         raise RelationalResolutionError("relational_evidence_unavailable")
-    repeated_literal_mention = tuple(
-        fact
-        for fact, _direction in candidates
-        if relation.reference.casefold() in fact.text.casefold()
-    )
-    if len(repeated_literal_mention) > 1:
-        raise RelationalResolutionError("relational_evidence_ambiguous")
+    evidence_guard = _candidate_evidence_guard(candidates)
+    if allow_identity_clarification:
+        selected_candidates = _select_relevant_read_facts(
+            selection.query,
+            candidates,
+            semantic_set_selector,
+        )
+        if not selected_candidates:
+            raise RelationalResolutionError(
+                "relational_evidence_unavailable", evidence_guard=evidence_guard
+            )
+        return _resolve_selected_read_facts(
+            selection,
+            source_id,
+            projector,
+            incoming_projection,
+            selected_candidates,
+            evidence_guard,
+            chosen_identity_id,
+        )
     decision, _usage = contextual_reasoner.resolve(
         ContextualResolutionRequest(
             reference=relation.reference,
@@ -123,29 +159,256 @@ def resolve_relational_reference(
             ),
         )
     )
+    # Mutations retain their existing stricter preflight: repeating the literal
+    # relation in more than one fact is not enough authority to edit either.
+    # Retrieval may instead offer grounded bounded identities through the
+    # established clarification continuation.
+    if (
+        not allow_identity_clarification
+        and sum(
+            relation.reference.casefold() in fact.text.casefold() for fact, _direction in candidates
+        )
+        > 1
+    ):
+        raise RelationalResolutionError(
+            "relational_evidence_ambiguous", evidence_guard=evidence_guard
+        )
     selected = validate_contextual_decision(
         decision, frozenset(fact.locator for fact, _direction in candidates)
     )
     if selected.outcome != "RESOLVED" or selected.id is None:
-        raise RelationalResolutionError("relational_evidence_ambiguous")
+        grounded: list[str] = []
+        for fact, direction in candidates:
+            if relation.reference.casefold() not in fact.text.casefold():
+                continue
+            projection = projector.project_targets(fact.source.id, fact.locator)
+            if projection.status is not TargetProjectionStatus.COMPLETE:
+                continue
+            targets = (
+                (projection.source,)
+                if direction is EvidenceDirection.INCOMING and projection.source is not None
+                else projection.targets
+            )
+            for target in targets:
+                if target is not None and target.id not in grounded:
+                    grounded.append(target.id)
+        options = tuple(grounded)
+        if allow_identity_clarification and relation.members == "one" and 1 < len(options) <= 4:
+            raise RelationalResolutionError(
+                "relational_evidence_ambiguous", options, evidence_guard
+            )
+        raise RelationalResolutionError(
+            "relational_evidence_ambiguous", evidence_guard=evidence_guard
+        )
     selected_fact, direction = next(
         (fact, direction) for fact, direction in candidates if fact.locator == selected.id
     )
     projection = projector.project_targets(selected_fact.source.id, selected.id)
     if projection.status is not TargetProjectionStatus.COMPLETE or projection.source is None:
-        raise RelationalResolutionError("relational_evidence_incomplete")
+        raise RelationalResolutionError(
+            "relational_evidence_incomplete", evidence_guard=evidence_guard
+        )
     if direction is EvidenceDirection.INCOMING:
         if not any(target.id == source_id for target in projection.targets):
-            raise RelationalResolutionError("relational_evidence_incomplete")
+            raise RelationalResolutionError(
+                "relational_evidence_incomplete", evidence_guard=evidence_guard
+            )
         targets = (projection.source,)
     else:
         targets = projection.targets
     if relation.members == "one" and len(targets) != 1:
-        raise RelationalResolutionError("relational_singular_ambiguous")
+        options = tuple(target.id for target in targets)
+        raise RelationalResolutionError(
+            "relational_singular_ambiguous",
+            options if allow_identity_clarification and 1 < len(options) <= 4 else (),
+            evidence_guard,
+        )
     if selection.type is not None and any(target.type != selection.type for target in targets):
-        raise RelationalResolutionError("relational_target_type_mismatch")
+        raise RelationalResolutionError(
+            "relational_target_type_mismatch", evidence_guard=evidence_guard
+        )
     source = incoming_projection.entity if incoming_projection is not None else projection.source
-    return ResolvedRelationalReference(source, projection.source, selected.id, direction, targets)
+    return ResolvedRelationalReference(
+        source, projection.source, selected.id, direction, targets, evidence_guard
+    )
+
+
+def _select_relevant_read_facts(
+    query: str,
+    candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
+    selector: Any | None,
+) -> tuple[tuple[CanonicalFact, EvidenceDirection], ...]:
+    """Return every bounded selector-proposed read fact, never a single contextual winner.
+
+    The existing semantic-set selector already returns a bounded set of supplied fact IDs.  Its
+    exact occurrences demonstrate direct textual support; their text is not used to grant target
+    identity authority.  Every selected locator is still re-grounded below.
+    """
+    if not callable(getattr(selector, "select", None)):
+        raise RelationalResolutionError("relational_relevance_unavailable")
+    selector_candidates = tuple(
+        SemanticSetCandidate(f"relational-{index}", fact)
+        for index, (fact, _direction) in enumerate(candidates)
+    )
+    batches = partition_semantic_set_candidates(selector_candidates)
+    if isinstance(batches, SemanticSetResolution):
+        # The public batching helper returns a structured failure for an oversized item or invalid
+        # payload bound. Do not silently omit it from a singular identity decision.
+        raise RelationalResolutionError("relational_evidence_incomplete")
+    assert isinstance(batches, tuple)
+    selected: list[tuple[CanonicalFact, EvidenceDirection]] = []
+    candidate_lookup = {
+        candidate.id: candidates[index] for index, candidate in enumerate(selector_candidates)
+    }
+    for batch in batches:
+        try:
+            proposed = selector.select(
+                SemanticSetSelectionRequest(
+                    query=query,
+                    intent=None,
+                    candidates=tuple(
+                        SemanticSetCandidateView(
+                            candidate.id, _humanize_fact_links(candidate.fact.text)
+                        )
+                        for candidate in batch
+                    ),
+                )
+            )
+            _validate_relational_selection(proposed, batch)
+        except RelationalResolutionError:
+            raise
+        except (TypeError, ValueError):
+            raise RelationalResolutionError("relational_evidence_incomplete") from None
+        except Exception:
+            raise RelationalResolutionError("relational_relevance_unavailable") from None
+        if proposed.scope_uncertain:
+            raise RelationalResolutionError("relational_evidence_ambiguous")
+        selected.extend(
+            candidate_lookup[candidate_id] for candidate_id in proposed.supplied_fact_ids
+        )
+    return tuple(selected)
+
+
+def _validate_relational_selection(
+    proposed: SetEvidenceSelection,
+    batch: tuple[SemanticSetCandidate, ...],
+) -> None:
+    """Validate a multi-fact relevance proposal without deriving identities from model spans."""
+    if not isinstance(proposed, SetEvidenceSelection) or not isinstance(
+        proposed.scope_uncertain, bool
+    ):
+        raise ValueError("Relational relevance selection is invalid")
+    supplied = set(proposed.supplied_fact_ids)
+    allowed = {candidate.id for candidate in batch}
+    if (
+        len(supplied) != len(proposed.supplied_fact_ids)
+        or not supplied <= allowed
+        or len(proposed.member_occurrences) > DEFAULT_SEMANTIC_SET_BOUNDS.members
+    ):
+        raise ValueError("Relational relevance selection is outside its batch")
+    by_id = {candidate.id: candidate for candidate in batch}
+    supported_ids: set[str] = set()
+    for occurrence in proposed.member_occurrences:
+        if occurrence.candidate_id not in supplied or occurrence.kind not in {"literal", "link"}:
+            raise ValueError("Relational relevance occurrence is invalid")
+        text = _humanize_fact_links(by_id[occurrence.candidate_id].fact.text)
+        if occurrence.start < 0 or occurrence.end <= occurrence.start or occurrence.end > len(text):
+            raise ValueError("Relational relevance occurrence is outside its fact")
+        supported_ids.add(occurrence.candidate_id)
+    if supplied != supported_ids:
+        raise ValueError("Every relational fact requires direct selected evidence")
+
+
+def _resolve_selected_read_facts(
+    selection: SelectionCriteria,
+    source_id: str,
+    projector: RelationshipEvidenceProjector,
+    incoming_projection: Any,
+    selected_candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
+    evidence_guard: str,
+    chosen_identity_id: str | None,
+) -> ResolvedRelationalReference:
+    """Project complete target sets for all relevant facts before deciding a singular identity."""
+    unique_targets: list[CanonicalIdentity] = []
+    seen_target_ids: set[str] = set()
+    first_projection = None
+    first_direction = None
+    for fact, direction in selected_candidates:
+        projection = projector.project_targets(fact.source.id, fact.locator)
+        if projection.status is not TargetProjectionStatus.COMPLETE or projection.source is None:
+            raise RelationalResolutionError(
+                "relational_evidence_incomplete", evidence_guard=evidence_guard
+            )
+        if direction is EvidenceDirection.INCOMING:
+            if not any(target.id == source_id for target in projection.targets):
+                raise RelationalResolutionError(
+                    "relational_evidence_incomplete", evidence_guard=evidence_guard
+                )
+            targets = (projection.source,)
+        else:
+            targets = projection.targets
+        if not targets:
+            raise RelationalResolutionError(
+                "relational_evidence_incomplete", evidence_guard=evidence_guard
+            )
+        if first_projection is None:
+            first_projection, first_direction = projection, direction
+        for target in targets:
+            if target.id not in seen_target_ids:
+                seen_target_ids.add(target.id)
+                unique_targets.append(target)
+    if selection.type is not None and any(
+        target.type != selection.type for target in unique_targets
+    ):
+        raise RelationalResolutionError(
+            "relational_target_type_mismatch", evidence_guard=evidence_guard
+        )
+    relation = selection.relational_reference
+    assert relation is not None and first_projection is not None and first_direction is not None
+    if relation.members == "one" and len(unique_targets) != 1:
+        options = tuple(target.id for target in unique_targets)
+        if chosen_identity_id is not None:
+            if not (1 < len(options) <= 4 and chosen_identity_id in options):
+                raise RelationalResolutionError(
+                    "clarification_scope_changed", evidence_guard=evidence_guard
+                )
+            unique_targets = [
+                target for target in unique_targets if target.id == chosen_identity_id
+            ]
+        elif 1 < len(options) <= 4:
+            reason = (
+                "relational_singular_ambiguous"
+                if len(selected_candidates) == 1
+                else "relational_evidence_ambiguous"
+            )
+            raise RelationalResolutionError(reason, options, evidence_guard)
+        else:
+            raise RelationalResolutionError(
+                "relational_evidence_ambiguous", evidence_guard=evidence_guard
+            )
+    source = (
+        incoming_projection.entity if incoming_projection is not None else first_projection.source
+    )
+    assert source is not None
+    return ResolvedRelationalReference(
+        source,
+        first_projection.source,
+        selected_candidates[0][0].locator,
+        first_direction,
+        tuple(unique_targets),
+        evidence_guard,
+    )
+
+
+def _candidate_evidence_guard(
+    candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
+) -> str:
+    """Hash the exact current candidate locator/revision scope without retaining its text."""
+    payload = "\n".join(
+        f"{fact.source.id}\0{fact.source.source_hash}\0{fact.locator}\0{direction.value}"
+        for fact, direction in candidates
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _humanize_fact_links(text: str) -> str:

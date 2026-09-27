@@ -112,6 +112,7 @@ def selection(
         "link_scope": None,
         "self_target": None,
         "relational_reference": None,
+        "collection_subject": None,
     }
 
 

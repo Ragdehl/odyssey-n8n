@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from benchmarks.semantic_set_planner import run_live_v7_planner_recheck_retry1 as retry  # noqa: E402
+from benchmarks.semantic_set_planner import (  # noqa: E402
+    run_live_v7_planner_recheck_retry1 as retry,
+)
 
 retry.OUTPUT_PATH = (
     retry.ROOT

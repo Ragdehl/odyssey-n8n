@@ -109,6 +109,24 @@ def test_ambiguous_write_target_clarifies_with_only_candidate_ids() -> None:
     assert response["actions"][0]["units"][0]["candidates"] == ["note-one", "note-two"]
 
 
+def test_understood_but_unrepresentable_planner_result_is_unavailable() -> None:
+    """Keep planner inability distinct from unintelligible user input."""
+    response = application_result_to_response(
+        ApplicationResult(
+            "request",
+            ApplicationStatus.NEEDS_ATTENTION,
+            (),
+            (),
+            clarification_code="UNREPRESENTABLE_REQUEST",
+        )
+    )
+
+    assert (response["product_outcome"], response["product_reason"]) == (
+        "CANNOT_ANSWER",
+        "UNREPRESENTABLE_REQUEST",
+    )
+
+
 def test_note_set_uses_matching_note_snapshot_not_singular_retrieval_cardinality() -> None:
     """Seven matching Notes are a valid set even if the ordinary answer context is empty."""
     result = ApplicationResult(

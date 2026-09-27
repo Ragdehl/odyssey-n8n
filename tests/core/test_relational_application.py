@@ -12,8 +12,10 @@ import pytest
 
 import odyssey_core.application as application
 from odyssey_core.atomic_facts import render_atomic_facts
+from odyssey_core.clarification import ClarificationChoice
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.notes import Note, parse_note, serialize_note
+from odyssey_core.reference_preflight import current_identity_guard
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -27,6 +29,7 @@ from odyssey_core.request_planning import (
     planner_result_json_schema,
     validate_request_plan,
 )
+from odyssey_core.semantic_sets import SetEvidenceSelection, SetMemberOccurrence
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetOutcome, decide_write_target
 
@@ -110,6 +113,43 @@ class FactReasoner:
             },
             {},
         )
+
+
+class RelevantFactSelector:
+    """Propose every fixture fact whose visible wording directly supports the relation."""
+
+    def __init__(self, wording: str) -> None:
+        """Keep the semantic relevance phrase independent from the one-choice reasoner."""
+        self.wording = wording.casefold()
+        self.requests: list[Any] = []
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        """Return each matching supplied fact with one bounded visible-text occurrence."""
+        self.requests.append(request)
+        selected = tuple(
+            candidate
+            for candidate in request.candidates
+            if self.wording in candidate.text.casefold()
+        )
+        return SetEvidenceSelection(
+            tuple(candidate.id for candidate in selected),
+            tuple(SetMemberOccurrence(candidate.id, "literal", 0, 1) for candidate in selected),
+        )
+
+
+class StaticFactSelector:
+    """Return one controlled relevance result for Core fail-closed regression coverage."""
+
+    def __init__(self, outcome: SetEvidenceSelection | Exception) -> None:
+        """Keep a deterministic selector response or failure for one synthetic invocation."""
+        self.outcome = outcome
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        """Return the configured response without deriving a target identity."""
+        del request
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome
 
 
 class MatchingFactReasoner(FactReasoner):
@@ -201,6 +241,8 @@ def run(
     plan: RequestPlan,
     *,
     reasoner: FactReasoner | None = None,
+    selector: Any | None = None,
+    clarification_choice: ClarificationChoice | None = None,
 ) -> application.ApplicationResult:
     """Execute one synthetic plan through the real Core application boundary."""
     return application.execute_request(
@@ -216,10 +258,24 @@ def run(
         now="2026-09-24T12:00:00Z",
         context_limit=5,
         writer=ForbiddenWriter(),
+        semantic_set_selector=selector or RelevantFactSelector(_plan_relation_wording(plan)),
         authenticated_actor=ACTOR,
         self_binding_repository=SelfBinding(),
         request_id_factory=lambda: "relational-test",
+        clarification_choice=clarification_choice,
     )
+
+
+def _plan_relation_wording(plan: RequestPlan) -> str:
+    """Extract the fixture's direct relationship wording for the deterministic selector."""
+    for action in plan.actions:
+        if isinstance(action, RetrieveAction) and action.plan.relational_reference is not None:
+            return action.plan.relational_reference.reference
+        if isinstance(action, WriteAction):
+            for unit in action.units:
+                if unit.target.relational_reference is not None:
+                    return unit.target.relational_reference.reference
+    return ""
 
 
 def test_model_contract_preserves_relational_intent_and_legacy_selection(schema: dict) -> None:
@@ -307,6 +363,360 @@ def test_r1_singular_relational_read_uses_current_member_only(
     assert len(list(vault.rglob("*.md"))) == 2
 
 
+def test_singular_corrobating_facts_converge_on_one_current_identity(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two current facts for the same spouse corroborate a singular self-relative read."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mi mujer es [[Beatriz]].", 0) + "\n\n" + fact("Mi mujer es [[Beatriz]].", 1),
+    )
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz Carrero", "")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi mujer", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    selector = RelevantFactSelector("mi mujer")
+    reasoner = FactReasoner()
+    result = run(vault, schema, plan, reasoner=reasoner, selector=selector)
+
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert calls[0]["allowed_note_ids"] == frozenset({"beatriz"})
+    assert len(selector.requests) == 1
+    assert len(selector.requests[0].candidates) == 2
+    assert reasoner.requests == []
+
+
+def test_multi_target_singular_fact_offers_each_grounded_identity_without_guessing(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A selected multi-link child fact yields bounded existing clarification options."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[Cloe]] y [[Bruno]].", 0),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hijo", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=RelevantFactSelector("mis hijos"))
+
+    action = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.reason == "relational_singular_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "bruno")
+
+
+def test_conflicting_singular_relation_targets_offer_options_only_for_reads(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A read may clarify two current targets while write preflight remains unchanged."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mi hija es [[Cloe]].", 0) + "\n\n" + fact("Mi hija es [[Marta]].", 1),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    selector = RelevantFactSelector("mi hija")
+    reasoner = FactReasoner()
+    result = run(vault, schema, plan, reasoner=reasoner, selector=selector)
+
+    action = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.reason == "relational_evidence_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "marta")
+    assert len(selector.requests) == 1
+    assert len(selector.requests[0].candidates) == 2
+    assert reasoner.requests == []
+
+
+def test_semantic_relation_wording_selects_all_relevant_facts_without_literal_matching(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep semantic spouse wording while Core, rather than the reasoner, owns identity choice."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi mujer es [[Beatriz]]."))
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz Carrero", "")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi pareja", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=RelevantFactSelector("mi mujer"))
+
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert calls[0]["allowed_note_ids"] == frozenset({"beatriz"})
+
+
+def test_relational_read_rejects_invalid_or_failed_multi_fact_relevance_selection(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Fail closed when read relevance selection is outside its batch or cannot run."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    invalid = StaticFactSelector(
+        SetEvidenceSelection(
+            ("outside-batch",), (SetMemberOccurrence("outside-batch", "literal", 0, 1),)
+        )
+    )
+    for selector, reason in (
+        (invalid, "relational_evidence_incomplete"),
+        (
+            StaticFactSelector(RuntimeError("selector unavailable")),
+            "relational_relevance_unavailable",
+        ),
+    ):
+        result = run(vault, schema, plan, selector=selector)
+        assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+        assert result.action_results[0].reason == reason
+
+
+def test_relational_read_scope_uncertainty_never_selects_one_identity(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Preserve ambiguity when the bounded relevance selector cannot establish scope."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(
+        vault, schema, plan, selector=StaticFactSelector(SetEvidenceSelection((), (), True))
+    )
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].reason == "relational_evidence_ambiguous"
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        SetEvidenceSelection(("relational-0",), ()),
+        SetEvidenceSelection(
+            ("relational-0",), (SetMemberOccurrence("relational-0", "unsupported", 0, 1),)
+        ),
+        SetEvidenceSelection(
+            ("relational-0",), (SetMemberOccurrence("relational-0", "literal", 0, 10_000),)
+        ),
+    ],
+)
+def test_relational_read_requires_valid_direct_occurrence_for_every_selected_fact(
+    tmp_path: Path, schema: dict, selection: SetEvidenceSelection
+) -> None:
+    """Reject relevance proposals without a valid direct occurrence in the supplied fact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=StaticFactSelector(selection))
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].reason == "relational_evidence_incomplete"
+
+
+def test_relational_read_with_no_relevant_fact_returns_missing_evidence(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Do not turn an empty relevance proposal into a generic ambiguous identity result."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi padre es [[Juan]]."))
+    write_note(vault, "people/juan.md", "juan", "Juan", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=StaticFactSelector(SetEvidenceSelection((), ())))
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].reason == "relational_evidence_unavailable"
+
+
+def test_relational_read_projects_selected_incoming_fact_to_its_complete_source_identity(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the established one-hop incoming source projection under multi-fact selection."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Mi padre es [[Edgar]]."))
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+
+    result = run(vault, schema, plan, selector=RelevantFactSelector("mi padre"))
+
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert calls[0]["allowed_note_ids"] == frozenset({"cloe"})
+
+
+def test_relational_read_rejects_dangling_or_more_than_four_selected_targets(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Do not turn malformed or unbounded selected target sets into a partial answer."""
+    dangling = tmp_path / "dangling"
+    dangling.mkdir()
+    write_note(dangling, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Missing]]."))
+    singular = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    dangling_result = run(dangling, schema, singular, selector=RelevantFactSelector("mi hija"))
+    assert dangling_result.action_results[0].reason == "relational_evidence_incomplete"
+
+    crowded = tmp_path / "crowded"
+    crowded.mkdir()
+    names = ("A", "B", "C", "D", "E")
+    for name in names:
+        write_note(crowded, f"people/{name.lower()}.md", name.lower(), name, "")
+    links = " y ".join(f"[[{name}]]" for name in names)
+    write_note(crowded, "people/edgar.md", "edgar", "Edgar", fact(f"Mis hijos son {links}."))
+    crowded_result = run(
+        crowded,
+        schema,
+        RequestPlan(
+            (
+                RetrieveAction(
+                    relational_selection("mi hijo", source_kind="self", source_query=None)
+                ),
+            ),
+            (),
+        ),
+        selector=RelevantFactSelector("mis hijos"),
+    )
+    assert crowded_result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert crowded_result.action_results[0].reason == "relational_evidence_ambiguous"
+    assert crowded_result.action_results[0].candidate_note_ids == ()
+
+
+def test_relational_clarification_rechecks_source_and_target_guards(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A chosen relational identity cannot survive changed source or target Markdown."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    source_body = fact("Mi hija es [[Cloe]].", 0) + "\n\n" + fact("Mi hija es [[Marta]].", 1)
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", source_body)
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
+        (),
+    )
+    initial = run(vault, schema, plan, selector=RelevantFactSelector("mi hija"))
+    action = initial.action_results[0]
+    assert action.relational_evidence_guard is not None
+    choice = ClarificationChoice(
+        "cloe",
+        current_identity_guard(VaultRepository(vault), schema, "cloe"),
+        action.relational_evidence_guard,
+    )
+
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Cloe vive en Lyon."))
+    stale_target = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("mi hija"),
+        clarification_choice=choice,
+    )
+    assert stale_target.action_results[0].reason == "clarification_evidence_changed"
+
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact("Mi hija es [[Cloe]]."))
+    stale_source = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("mi hija"),
+        clarification_choice=choice,
+    )
+    assert stale_source.action_results[0].reason == "clarification_evidence_changed"
+
+    # A fresh continuation re-resolves the same bounded options and may authorize only
+    # the selected stable identity after both source and target guards match again.
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", source_body)
+    current_choice = ClarificationChoice(
+        "cloe",
+        current_identity_guard(VaultRepository(vault), schema, "cloe"),
+        run(vault, schema, plan, selector=RelevantFactSelector("mi hija"))
+        .action_results[0]
+        .relational_evidence_guard,
+    )
+    # The empty fixture target produces no presentation context, so observe the exact
+    # identity authority handed to retrieval at the Core/application boundary.
+    allowed: list[frozenset[str]] = []
+    monkeypatch.setattr(
+        application,
+        "get_context",
+        lambda *args, **kwargs: allowed.append(kwargs["allowed_note_ids"]) or object(),
+    )
+    resumed = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("mi hija"),
+        clarification_choice=current_choice,
+    )
+
+    assert resumed.status is application.ApplicationStatus.COMPLETED
+    assert allowed == [frozenset({"cloe"})]
+
+
 def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
     tmp_path: Path, schema: dict
 ) -> None:
@@ -374,7 +784,7 @@ def test_ordinary_named_read_enriches_bruno_with_one_linked_shared_source_fact(
 def test_relational_resolution_keeps_later_than_32_current_fact_candidates_reachable(
     tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Permit Core's contextual boundary to choose a valid relation after 32 other facts."""
+    """Permit bounded multi-fact relevance selection to reach a late current relation."""
     vault = tmp_path / "vault"
     vault.mkdir()
     other_facts: list[str] = []
@@ -390,15 +800,15 @@ def test_relational_resolution_keeps_later_than_32_current_fact_candidates_reach
     monkeypatch.setattr(
         application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
     )
-    reasoner = MatchingFactReasoner("Mi hija es Chloe")
+    selector = RelevantFactSelector("mi hija")
     plan = RequestPlan(
         (RetrieveAction(relational_selection("mi hija", source_kind="self", source_query=None)),),
         (),
     )
-    result = run(vault, schema, plan, reasoner=reasoner)
+    result = run(vault, schema, plan, reasoner=FactReasoner(), selector=selector)
     assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
-    assert len(reasoner.requests[0].candidates) == 34
-    assert reasoner.requests[0].candidates[-1].evidence == "Mi hija es Chloe."
+    assert len(selector.requests[0].candidates) == 34
+    assert selector.requests[0].candidates[-1].text == "Mi hija es Chloe."
     assert calls[0]["allowed_note_ids"] == frozenset({"chloe"})
 
 
@@ -484,6 +894,17 @@ def test_w1_singular_relational_write_updates_child_and_never_creates(
         semantic_limit=5,
     )
     assert ordinary.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    unresolved = decide_write_target(
+        unit,
+        repository=VaultRepository(vault),
+        schema=schema,
+        semantic_index=EmptyIndex(),
+        embedder=EmptyEmbedder(),
+        contextual_reasoner=FactReasoner("UNRESOLVED"),
+        semantic_limit=5,
+    )
+    assert unresolved.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert "Vive en Lyon." not in parse_note((vault / "people/chloe.md").read_text()).content
     result = run(vault, schema, RequestPlan((WriteAction((unit,)),), ()))
     assert result.status is application.ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("chloe",)

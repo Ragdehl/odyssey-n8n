@@ -12,6 +12,11 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from odyssey_core.identity_boundary import (
+    AuthenticatedActorContext,
+    SelfBindingError,
+    SelfBindingRepository,
+)
 from odyssey_core.relationship_evidence import (
     CanonicalFact,
     RelationshipEvidenceError,
@@ -20,8 +25,8 @@ from odyssey_core.relationship_evidence import (
 from odyssey_core.request_planning import SemanticSetIntent
 from odyssey_core.storage import VaultRepository
 
-# The candidate payload stays within the established 16 KiB note-result snapshot ceiling. Sixty-four
-# sources, facts, and members align this scan with the existing snapshot's 64-ID budget.
+# These are per-selector-batch payload limits.  Core traverses the full eligible Markdown inventory
+# in stable batches and separately bounds the final response members.
 MAX_SEMANTIC_SET_SOURCE_NOTES = 64
 MAX_SEMANTIC_SET_FACTS = 64
 MAX_SEMANTIC_SET_SOURCE_BYTES = 16 * 1024
@@ -52,7 +57,7 @@ class SemanticSetCompleteness(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class SemanticSetBounds:
-    """Set explicit deterministic scan and output ceilings for semantic-set evidence."""
+    """Set explicit selector-batch payload and final collection output ceilings."""
 
     source_notes: int = MAX_SEMANTIC_SET_SOURCE_NOTES
     facts: int = MAX_SEMANTIC_SET_FACTS
@@ -323,11 +328,11 @@ class SemanticSetResolution:
 def enumerate_semantic_set_candidates(
     projector: RelationshipEvidenceProjector, *, bounds: SemanticSetBounds
 ) -> tuple[SemanticSetCandidate, ...] | SemanticSetResolution:
-    """Enumerate every current visible fact before selection.
+    """Enumerate the full current canonical inventory before bounded batch selection.
 
-    A semantic subject is user wording and need not be a Note. The projector rereads all active
-    canonical Markdown facts; any exceeded bound returns incomplete before a selector sees a
-    truncated scope. This does not traverse links or infer a graph relationship.
+    The limits in ``bounds`` constrain one selector payload, never the number of facts that can be
+    considered for a collection. This public helper retains its historical signature while the
+    resolver below partitions its complete result into deterministic batches.
     """
     try:
         ordered = projector.all_visible_facts()
@@ -335,21 +340,7 @@ def enumerate_semantic_set_candidates(
         return SemanticSetResolution(
             SemanticSetOutcome.OPERATIONAL_FAILURE, reason="canonical_scan"
         )
-    sources = {fact.source.id for fact in ordered}
-    serialized = sum(
-        len((fact.source.id + "\0" + fact.locator + "\0" + fact.text).encode("utf-8"))
-        for fact in ordered
-    )
-    if (
-        len(sources) > bounds.source_notes
-        or len(ordered) > bounds.facts
-        or serialized > bounds.source_bytes
-    ):
-        return SemanticSetResolution(
-            SemanticSetOutcome.INCOMPLETE_EVIDENCE,
-            candidate_count=len(ordered),
-            reason="candidate_scope_bound",
-        )
+    del bounds
     return tuple(
         SemanticSetCandidate(f"candidate-{index}", fact) for index, fact in enumerate(ordered)
     )
@@ -363,6 +354,9 @@ def resolve_semantic_set(
     schema: dict,
     selector: SemanticSetSelector,
     bounds: SemanticSetBounds = DEFAULT_SEMANTIC_SET_BOUNDS,
+    collection_subject: str | None = None,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
 ) -> SemanticSetResolution:
     """Select and re-ground one bounded collection from its complete query and current facts.
 
@@ -380,6 +374,8 @@ def resolve_semantic_set(
         query = _effective_query(intent) if intent is not None else None
     if not isinstance(query, str) or not query.strip():
         raise ValueError("Collection query must be non-empty")
+    if collection_subject not in {None, "self", "query"}:
+        raise ValueError("Collection subject is invalid")
     projector = RelationshipEvidenceProjector(repository, schema)
     typed_member_ids: frozenset[str] | None = None
     if intent is not None and intent.member_type is not None:
@@ -389,52 +385,227 @@ def resolve_semantic_set(
             return SemanticSetResolution(
                 SemanticSetOutcome.OPERATIONAL_FAILURE, reason="typed_scope"
             )
-        if len(typed_member_ids) > bounds.members:
-            return SemanticSetResolution(
-                SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="typed_member_scope_bound"
-            )
-    candidates = enumerate_semantic_set_candidates(projector, bounds=bounds)
+    candidates = _eligible_candidates(
+        projector,
+        bounds=bounds,
+        collection_subject=collection_subject,
+        authenticated_actor=authenticated_actor,
+        self_binding_repository=self_binding_repository,
+    )
     if isinstance(candidates, SemanticSetResolution):
         return candidates
     if not candidates:
         return SemanticSetResolution(SemanticSetOutcome.NO_RELEVANT_EVIDENCE)
-    try:
-        selection = selector.select(
-            SemanticSetSelectionRequest(
-                query=query,
-                intent=intent,
-                candidates=tuple(
-                    SemanticSetCandidateView(candidate.id, candidate.fact.text)
-                    for candidate in candidates
-                ),
-                typed_member_count=len(typed_member_ids) if typed_member_ids is not None else None,
+    inventory = _inventory(candidates)
+    batches = _candidate_batches(candidates, bounds)
+    if isinstance(batches, SemanticSetResolution):
+        return batches
+    members: list[SetMember] = []
+    identity_ids: set[str] = set()
+    literal_occurrences: set[tuple[str, str, int, int]] = set()
+    selected_any = False
+    for batch in batches:
+        try:
+            selection = selector.select(
+                SemanticSetSelectionRequest(
+                    query=query,
+                    intent=intent,
+                    candidates=tuple(
+                        SemanticSetCandidateView(candidate.id, candidate.fact.text)
+                        for candidate in batch
+                    ),
+                    typed_member_count=len(typed_member_ids)
+                    if typed_member_ids is not None
+                    else None,
+                )
             )
+            _validate_selection(selection, batch, bounds)
+        except (TypeError, ValueError):
+            return SemanticSetResolution(
+                SemanticSetOutcome.OPERATIONAL_FAILURE, reason="invalid_selection"
+            )
+        except Exception:
+            return SemanticSetResolution(
+                SemanticSetOutcome.OPERATIONAL_FAILURE, reason="selector_failure"
+            )
+        if selection.scope_uncertain:
+            return SemanticSetResolution(
+                SemanticSetOutcome.AMBIGUOUS_SET_SCOPE,
+                candidate_count=len(candidates),
+            )
+        if not selection.member_occurrences:
+            continue
+        selected_any = True
+        grounded = _ground_selection(
+            projector, intent, batch, selection, bounds, typed_member_ids=typed_member_ids
         )
-        _validate_selection(selection, candidates, bounds)
-    except (TypeError, ValueError):
+        if isinstance(grounded, SemanticSetResolution):
+            return grounded
+        for member in grounded.members:
+            if isinstance(member, IdentitySetMember):
+                if member.stable_id in identity_ids:
+                    continue
+                identity_ids.add(member.stable_id)
+            else:
+                key = (
+                    member.value,
+                    member.evidence.source_note_id,
+                    member.evidence.start,
+                    member.evidence.end,
+                )
+                if key in literal_occurrences:
+                    continue
+                literal_occurrences.add(key)
+            members.append(member)
+            if len(members) > bounds.members:
+                return SemanticSetResolution(
+                    SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="member_bound"
+                )
+    try:
+        current = _eligible_facts(
+            projector,
+            collection_subject=collection_subject,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
+        )
+    except (RelationshipEvidenceError, SelfBindingError):
         return SemanticSetResolution(
-            SemanticSetOutcome.OPERATIONAL_FAILURE, reason="invalid_selection"
+            SemanticSetOutcome.OPERATIONAL_FAILURE, reason="canonical_scan"
         )
-    if selection.scope_uncertain:
+    if _inventory(current) != inventory:
+        return SemanticSetResolution(SemanticSetOutcome.STALE_EVIDENCE, reason="inventory_changed")
+    if not selected_any:
         return SemanticSetResolution(
-            SemanticSetOutcome.AMBIGUOUS_SET_SCOPE,
-            candidate_count=len(candidates),
+            SemanticSetOutcome.NO_RELEVANT_EVIDENCE, candidate_count=len(candidates)
         )
-    if not selection.member_occurrences:
-        return SemanticSetResolution(
-            SemanticSetOutcome.NO_RELEVANT_EVIDENCE,
-            candidate_count=len(candidates),
-        )
-    grounded = _ground_selection(
-        projector, intent, candidates, selection, bounds, typed_member_ids=typed_member_ids
+    source_count = len({candidate.fact.source.id for candidate in candidates})
+    source_bytes = sum(_candidate_bytes(candidate) for candidate in candidates)
+    grounded_set = GroundedSemanticSet(
+        collection_subject or (intent.subject_kind if intent is not None else None),
+        intent.subject_query if intent is not None else None,
+        tuple(members),
+        SemanticSetCompleteness.COMPLETE_WITHIN_SCANNED_SCOPE,
+        source_count,
+        len(candidates),
+        source_bytes,
     )
-    if isinstance(grounded, SemanticSetResolution):
-        return grounded
     return SemanticSetResolution(
         SemanticSetOutcome.ANSWERABLE,
-        grounded,
+        grounded_set,
         candidate_count=len(candidates),
     )
+
+
+def _eligible_candidates(
+    projector: RelationshipEvidenceProjector,
+    *,
+    bounds: SemanticSetBounds,
+    collection_subject: str | None,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
+) -> tuple[SemanticSetCandidate, ...] | SemanticSetResolution:
+    """Expose the complete narrow candidate inventory for query or authenticated-self scope."""
+    del bounds
+    try:
+        facts = _eligible_facts(
+            projector,
+            collection_subject=collection_subject,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
+        )
+    except SelfBindingError:
+        return SemanticSetResolution(
+            SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="self_unavailable"
+        )
+    except RelationshipEvidenceError:
+        return SemanticSetResolution(
+            SemanticSetOutcome.OPERATIONAL_FAILURE, reason="canonical_scan"
+        )
+    return tuple(
+        SemanticSetCandidate(f"candidate-{index}", fact) for index, fact in enumerate(facts)
+    )
+
+
+def _eligible_facts(
+    projector: RelationshipEvidenceProjector,
+    *,
+    collection_subject: str | None,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
+) -> tuple[CanonicalFact, ...]:
+    """Return all facts in deterministic generic or authenticated-self collection scope."""
+    if collection_subject != "self":
+        return projector.all_visible_facts()
+    if authenticated_actor is None or self_binding_repository is None:
+        raise SelfBindingError("Authenticated self binding is unavailable")
+    self_id = self_binding_repository.resolve(authenticated_actor.stable_user_id).person_note_id
+    direct = projector.facts_for_source(self_id)
+    projection = projector.project_entity_evidence_candidates(self_id)
+    incoming = () if projection is None else tuple(item.fact for item in projection.incoming)
+    unique = {(fact.source.id, fact.locator): fact for fact in (*direct, *incoming)}
+    return tuple(sorted(unique.values(), key=lambda fact: (fact.source.path, fact.locator)))
+
+
+def _candidate_bytes(candidate: SemanticSetCandidate) -> int:
+    """Measure one Core-owned selector candidate payload contribution."""
+    fact = candidate.fact
+    return len((fact.source.id + "\0" + fact.locator + "\0" + fact.text).encode("utf-8"))
+
+
+def _candidate_batches(
+    candidates: Sequence[SemanticSetCandidate], bounds: SemanticSetBounds
+) -> tuple[tuple[SemanticSetCandidate, ...], ...] | SemanticSetResolution:
+    """Partition a complete inventory into stable payload-bounded selector batches."""
+    if min(bounds.source_notes, bounds.facts, bounds.source_bytes) < 1:
+        return SemanticSetResolution(
+            SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="selector_batch_bounds"
+        )
+    if bounds.members < 0:
+        raise ValueError("Semantic-set member bound cannot be negative")
+    batches: list[tuple[SemanticSetCandidate, ...]] = []
+    batch: list[SemanticSetCandidate] = []
+    source_ids: set[str] = set()
+    serialized = 0
+    for candidate in candidates:
+        size = _candidate_bytes(candidate)
+        if size > bounds.source_bytes:
+            return SemanticSetResolution(
+                SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="evidence_item_too_large"
+            )
+        adds_source = candidate.fact.source.id not in source_ids
+        if batch and (
+            len(batch) == bounds.facts
+            or serialized + size > bounds.source_bytes
+            or (adds_source and len(source_ids) == bounds.source_notes)
+        ):
+            batches.append(tuple(batch))
+            batch, source_ids, serialized = [], set(), 0
+        batch.append(candidate)
+        source_ids.add(candidate.fact.source.id)
+        serialized += size
+    if batch:
+        batches.append(tuple(batch))
+    return tuple(batches)
+
+
+def partition_semantic_set_candidates(
+    candidates: Sequence[SemanticSetCandidate],
+    bounds: SemanticSetBounds = DEFAULT_SEMANTIC_SET_BOUNDS,
+) -> tuple[tuple[SemanticSetCandidate, ...], ...] | SemanticSetResolution:
+    """Expose the bounded, deterministic selector partition used by Core read paths.
+
+    The returned batches cover the complete supplied canonical inventory.  Callers must process
+    every batch before claiming a complete answer.
+    """
+    return _candidate_batches(candidates, bounds)
+
+
+def _inventory(
+    candidates: Sequence[SemanticSetCandidate] | Sequence[CanonicalFact],
+) -> tuple[tuple[str, str, str], ...]:
+    """Bind a completed scan to exact source revisions and fact locators."""
+    facts = (item.fact if isinstance(item, SemanticSetCandidate) else item for item in candidates)
+    return tuple((fact.source.id, fact.source.source_hash, fact.locator) for fact in facts)
 
 
 def _effective_query(intent: SemanticSetIntent) -> str:
@@ -530,16 +701,32 @@ def _ground_selection(
 ) -> GroundedSemanticSet | SemanticSetResolution:
     """Re-read every selected source and construct identity/literal members from exact spans."""
     lookup = {candidate.id: candidate for candidate in candidates}
-    current_facts: dict[tuple[str, str], CanonicalFact] = {}
+    current_facts = dict(
+        projector.re_ground_facts(
+            (candidate.fact.source.id, candidate.fact.locator) for candidate in candidates
+        )
+    )
     for candidate in candidates:
-        facts = projector.facts_for_source(candidate.fact.source.id)
-        current = next((fact for fact in facts if fact.locator == candidate.fact.locator), None)
+        current = current_facts.get((candidate.fact.source.id, candidate.fact.locator))
         if current is None or current.source.source_hash != candidate.fact.source.source_hash:
             return SemanticSetResolution(SemanticSetOutcome.STALE_EVIDENCE, reason="source_changed")
-        current_facts[(candidate.fact.source.id, candidate.fact.locator)] = current
     identities: set[str] = set()
     literals: set[tuple[str, str, int, int]] = set()
     members: list[SetMember] = []
+    link_occurrences = tuple(
+        occurrence for occurrence in selection.member_occurrences if occurrence.kind == "link"
+    )
+    identities_by_occurrence = iter(
+        projector.resolve_link_occurrences(
+            (
+                lookup[occurrence.candidate_id].fact.source.id,
+                lookup[occurrence.candidate_id].fact.locator,
+                occurrence.start,
+                occurrence.end,
+            )
+            for occurrence in link_occurrences
+        )
+    )
     for occurrence in selection.member_occurrences:
         candidate = lookup[occurrence.candidate_id]
         fact = current_facts[(candidate.fact.source.id, candidate.fact.locator)]
@@ -562,9 +749,7 @@ def _ground_selection(
                 literals.add(key)
                 members.append(LiteralSetMember(value, evidence))
             continue
-        identity = projector.resolve_link_occurrence(
-            fact.source.id, fact.locator, occurrence.start, occurrence.end
-        )
+        identity = next(identities_by_occurrence)
         if identity is None:
             return SemanticSetResolution(
                 SemanticSetOutcome.INCOMPLETE_EVIDENCE, reason="identity_link"

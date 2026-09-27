@@ -53,6 +53,7 @@ class PendingClarification:
     pending_record_id: str
     options: tuple[ClarificationOption, ...]
     evidence_guards: tuple[str, ...]
+    source_evidence_guard: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,7 @@ class ClarificationChoice:
 
     stable_id: str
     evidence_guard: str
+    source_evidence_guard: str | None = None
 
 
 class ClarificationClassifier(Protocol):
@@ -218,18 +220,20 @@ class LocalClarificationStore:
             payload = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError("clarification record is unreadable") from error
+        version_one = {
+            "version",
+            "original_request",
+            "original_request_id",
+            "pending_record_id",
+            "options",
+            "evidence_guards",
+        }
+        version_two = {*version_one, "source_evidence_guard"}
         if (
             not isinstance(payload, dict)
-            or set(payload)
-            != {
-                "version",
-                "original_request",
-                "original_request_id",
-                "pending_record_id",
-                "options",
-                "evidence_guards",
-            }
-            or payload["version"] != 1
+            or (set(payload) != version_one and set(payload) != version_two)
+            or payload["version"] not in {1, 2}
+            or (payload["version"] == 1) != (set(payload) == version_one)
         ):
             raise ValueError("clarification record is invalid")
         if (
@@ -255,12 +259,18 @@ class LocalClarificationStore:
             for guard in guards
         ):
             raise ValueError("clarification evidence guards are invalid")
+        source_guard = payload.get("source_evidence_guard")
+        if source_guard is not None and (
+            not isinstance(source_guard, str) or re.fullmatch(r"[0-9a-f]{64}", source_guard) is None
+        ):
+            raise ValueError("clarification source evidence guard is invalid")
         return PendingClarification(
             payload["original_request"],
             payload["original_request_id"],
             payload["pending_record_id"],
             options,
             guards,
+            source_guard,
         )
 
     def replace(self, pending: PendingClarification) -> None:
@@ -281,14 +291,20 @@ class LocalClarificationStore:
             )
         ):
             raise ValueError("clarification record is invalid")
+        if pending.source_evidence_guard is not None and (
+            re.fullmatch(r"[0-9a-f]{64}", pending.source_evidence_guard) is None
+        ):
+            raise ValueError("clarification source evidence guard is invalid")
         payload = {
-            "version": 1,
+            "version": 2 if pending.source_evidence_guard is not None else 1,
             "original_request": pending.original_request,
             "original_request_id": pending.original_request_id,
             "pending_record_id": pending.pending_record_id,
             "options": [{"id": item.id, "label": item.label} for item in pending.options],
             "evidence_guards": list(pending.evidence_guards),
         }
+        if pending.source_evidence_guard is not None:
+            payload["source_evidence_guard"] = pending.source_evidence_guard
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > 32_768:
             raise ValueError("clarification record is too large")

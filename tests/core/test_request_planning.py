@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -65,6 +66,7 @@ def selection(
         "self_target": None,
         "relational_reference": None,
         "semantic_set": None,
+        "collection_subject": None,
     }
 
 
@@ -110,13 +112,16 @@ def provider_output(payload: dict) -> dict:
     for action in projected.get("actions") or []:
         if action.get("kind") == "retrieve":
             action.setdefault("result_shape", "single")
+            action["plan"].setdefault("collection_subject", None)
             if action["plan"].get("semantic_set") is None:
                 action["plan"].pop("semantic_set", None)
         elif action.get("kind") == "write":
             for unit in action.get("units", []):
+                unit["target"].setdefault("collection_subject", None)
                 if unit["target"].get("semantic_set") is None:
                     unit["target"].pop("semantic_set", None)
         elif action.get("kind") == "delegate" and isinstance(action.get("selection"), dict):
+            action["selection"].setdefault("collection_subject", None)
             if action["selection"].get("semantic_set") is None:
                 action["selection"].pop("semantic_set", None)
     return {"result": projected}
@@ -245,11 +250,13 @@ def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict
     prompt = render_request_planner_prompt(schema, CONTEXT)
     collection = deepcopy(selection("What countries have I travelled to?"))
     collection.pop("semantic_set")
+    collection["collection_subject"] = "query"
     payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
     provider_schema = planner_result_json_schema(schema)
     compact_schema = compact_planner_result_json_schema(schema)
 
     assert "result_shape=collection" in prompt
+    assert "collection_subject=self" in prompt
     assert "subject_kind" not in prompt
     assert "member_query" not in prompt
     assert "asks_exhaustive" not in prompt
@@ -262,6 +269,57 @@ def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict
     assert isinstance(plan.actions[0], RetrieveAction)
     assert plan.actions[0].result_shape == "collection"
     assert plan.actions[0].plan.query == "What countries have I travelled to?"
+
+
+def test_collection_membership_anchor_instruction_is_generic_and_schema_is_unchanged(
+    schema: dict,
+) -> None:
+    """Keep self/query as a closed scope bit while teaching the abstract membership boundary."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    encoded_schema = json.dumps(
+        luna_experimental_result_json_schema(schema),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    assert "authenticated human is itself the semantic membership anchor" in prompt
+    assert "First-person possession, ownership, association, or contextual reference" in prompt
+    assert "another object, concept, source, or set determines membership" in prompt
+    assert "preserve the complete self-related context in query" in prompt
+    assert "collection_subject belongs only to result_shape=collection" in prompt
+    assert (
+        "set it to null for every result_shape=single regardless of presentation intent" in prompt
+    )
+    assert hashlib.sha256(encoded_schema).hexdigest() == (
+        "22edb7ef4ddc61e33993536a990457030537aed5d25d93b2b661642787ec0b2d"
+    )
+    fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
+    assert all(
+        term not in fixed_instructions
+        for term in ("kit", "bicycle", "tortilla", "recipe", "family", "children")
+    )
+
+
+def test_legacy_collection_without_subject_remains_generic_query_scope(schema: dict) -> None:
+    """Continue reading a validated pre-subject collection plan without changing its semantics."""
+    legacy = selection("all relevant values")
+    legacy.pop("self_target")
+    legacy.pop("relational_reference")
+    legacy.pop("semantic_set")
+    legacy.pop("collection_subject")
+    legacy["entity"] = None
+    legacy["type"] = None
+    legacy["filters"] = []
+    legacy["link_scope"] = None
+
+    plan = validate_request_plan(
+        output({"kind": "retrieve", "result_shape": "collection", "plan": legacy}), schema
+    )
+
+    action = plan.actions[0]
+    assert isinstance(action, RetrieveAction)
+    assert action.plan.collection_subject == "query"
 
 
 def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(schema: dict) -> None:
@@ -299,6 +357,76 @@ def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(sc
     collect_contract_enums(planner_result_json_schema(schema))
     assert schema_shapes == {"single", "collection"}
     assert presentation_intents == {"answer", "note_set", "answer_and_note_set"}
+
+
+@pytest.mark.parametrize(
+    "provider_schema_factory", [planner_result_json_schema, compact_planner_result_json_schema]
+)
+def test_provider_schema_partitions_single_and_collection_subject_scope(
+    schema: dict, provider_schema_factory
+) -> None:
+    """Expose only the collection scope allowed by each retrieval result shape."""
+    provider_schema = provider_schema_factory(schema)
+    single = provider_output(planner_output(retrieve("one fact")))
+    collection = provider_output(
+        planner_output(
+            {
+                "kind": "retrieve",
+                "result_shape": "collection",
+                "plan": {
+                    **selection("all semantic members"),
+                    "collection_subject": "query",
+                },
+            }
+        )
+    )
+    collection["result"]["actions"][0]["plan"].pop("semantic_set", None)
+
+    assert schema_accepts(single, provider_schema)
+    assert schema_accepts(collection, provider_schema)
+
+    single["result"]["actions"][0]["plan"]["collection_subject"] = "self"
+    assert not schema_accepts(single, provider_schema)
+
+    collection["result"]["actions"][0]["plan"]["collection_subject"] = None
+    assert not schema_accepts(collection, provider_schema)
+    collection["result"]["actions"][0]["plan"].pop("collection_subject")
+    assert not schema_accepts(collection, provider_schema)
+
+
+@pytest.mark.parametrize("presentation_intent", ["note_set", "answer_and_note_set"])
+def test_matching_note_presentations_require_single_null_collection_subject(
+    schema: dict, presentation_intent: str
+) -> None:
+    """Keep matching-Note presentation distinct from semantic-member collection scope."""
+    payload = planner_output(retrieve("matching Notes"))
+    payload["presentation_intent"] = presentation_intent
+
+    plan = validate_planner_result(payload, schema)
+    action = plan.actions[0]
+    assert isinstance(action, RetrieveAction)
+    assert action.result_shape == "single"
+    assert action.plan.collection_subject is None
+
+    payload["actions"][0]["plan"]["collection_subject"] = "query"
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_planner_result(payload, schema)
+    assert raised.value.validation_stage is PlannerValidationStage.RETRIEVE_ACTION
+    assert raised.value.validation_code is PlannerValidationCode.SELECTION_MODE_CONFLICT
+
+
+def test_collection_cannot_request_matching_note_presentation(schema: dict) -> None:
+    """Keep semantic-member collections out of the matching-Note presentation path."""
+    collection = selection("all semantic members")
+    collection["semantic_set"] = None
+    collection["collection_subject"] = "self"
+    payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
+    payload["presentation_intent"] = "note_set"
+
+    with pytest.raises(
+        RequestPlanningError, match="Note-set presentation requires one direct retrieval"
+    ):
+        validate_planner_result(payload, schema)
 
 
 def test_write_action_schema_requires_non_empty_units(schema: dict) -> None:
@@ -919,7 +1047,10 @@ def test_planner_result_supports_closed_nonsense_clarification(
 
     assert isinstance(result, PlannerClarification)
     assert result.code == "UNRECOGNIZED_REQUEST"
-    assert PLANNER_CLARIFICATION_CODES == ("UNRECOGNIZED_REQUEST",)
+    assert PLANNER_CLARIFICATION_CODES == (
+        "UNRECOGNIZED_REQUEST",
+        "UNREPRESENTABLE_REQUEST",
+    )
     assert input_text  # The model-choice behavior remains a future live-evidence gate.
 
 
@@ -986,7 +1117,10 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
     )
     assert "filter_array" in compact["$defs"]
     assert compact["$defs"]["retrieve_action"]["properties"]["plan"] == {
-        "$ref": "#/$defs/selection"
+        "$ref": "#/$defs/single_retrieval_selection"
+    }
+    assert compact["$defs"]["single_retrieval_selection"]["properties"]["collection_subject"] == {
+        "type": "null"
     }
 
 
@@ -996,6 +1130,7 @@ def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict
     compact = compact_planner_result_json_schema(schema)
     semantic = selection("¿Quiénes son las personas de mi familia?")
     semantic.pop("semantic_set")
+    semantic["collection_subject"] = "query"
     valid_semantic = provider_output(
         planner_output({"kind": "retrieve", "result_shape": "collection", "plan": semantic})
     )
