@@ -149,9 +149,7 @@ def remove_atomic_fact(body: str, target: AtomicFact) -> str:
     if target.end > section_end:
         return body[: target.start] + body[target.end :]
 
-    remaining_section = (
-        body[capture_heading.end() : target.start] + body[target.end : section_end]
-    )
+    remaining_section = body[capture_heading.end() : target.start] + body[target.end : section_end]
     if remaining_section.strip():
         return body[: target.start] + body[target.end :]
 
