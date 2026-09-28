@@ -6,4 +6,4 @@ The five frozen Spanish cases cover a real self relationship, a possessive-but-n
 
 The runner calls `OpenAILunaExperimentalPlanner` directly. Maximum provider calls equal the number of cases, automatic retries are zero, and there is no Sol fallback path. Evidence is written incrementally to a fixed non-overwriting JSONL path and execution stops on the first failing case.
 
-`MAX_COST_USD` remains zero until a user explicitly authorizes the computed bounded paid run. Running the script without confirmation is safe and prints the current conservative no-cache ceiling without constructing a provider client.
+`MAX_COST_USD` is `$0.06`, matching the explicit user authorization recorded after review of the `$0.059576` conservative no-cache ceiling. The runner still requires `--confirm-live-provider-calls`, refuses overwrite, uses zero automatic retries, and has no Sol fallback path.

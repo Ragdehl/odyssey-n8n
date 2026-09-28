@@ -125,19 +125,20 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     assert input_bound > 0
 
 
-def test_zero_authorization_refuses_before_provider_construction(
+def test_over_budget_refuses_before_provider_construction(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Keep the prepared gate un-runnable until a user explicitly approves its paid ceiling."""
+    """Refuse before provider construction whenever the computed ceiling exceeds authorization."""
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.05"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "must-not-exist.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
         "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without authorization"),
+        lambda *_args, **_kwargs: pytest.fail("provider constructed above authorization"),
     )
-    with pytest.raises(SystemExit, match=r"exceeds \$0.00 authorization"):
+    with pytest.raises(SystemExit, match=r"exceeds \$0.05 authorization"):
         runner.main(["--confirm-live-provider-calls"])
     assert not runner.OUTPUT_PATH.exists()
 
