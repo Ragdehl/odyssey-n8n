@@ -6,7 +6,7 @@ The five frozen Spanish cases cover a real self relationship, a possessive-but-n
 
 The runner calls `OpenAILunaExperimentalPlanner` directly. Maximum provider calls equal the number of cases, automatic retries are zero, and there is no Sol fallback path. Evidence is written incrementally to a fixed non-overwriting JSONL path and execution stops on the first failing case.
 
-`MAX_COST_USD` is currently reset to `$0.00`. The 2026-09-28 active-schema reduction changes the provider-visible type vocabulary and current Luna teaching material, so the last successful run is historical evidence rather than validation of the amended head. The same five-case gate now preflights at a `$0.066086` conservative no-cache ceiling and `53,798`-byte input bound. No rerun is authorized yet. The runner still requires `--confirm-live-provider-calls`, refuses overwrite, uses zero automatic retries, and has no Sol fallback path.
+`MAX_COST_USD` is currently reset to `$0.00`. The 2026-09-28 active-schema reduction changes the provider-visible type vocabulary and current Luna teaching material, so the last successful run is historical evidence rather than validation of the amended head. The same five-case gate now preflights at a `$0.066086` conservative no-cache ceiling and `53,798`-byte input bound. No rerun is authorized yet. The amended gate reserves a distinct non-overwriting `semantic-write-resolution-v1-active-schema.jsonl` evidence path. The runner still requires `--confirm-live-provider-calls`, refuses overwrite, uses zero automatic retries, and has no Sol fallback path.
 
 ## Authorized live evidence
 

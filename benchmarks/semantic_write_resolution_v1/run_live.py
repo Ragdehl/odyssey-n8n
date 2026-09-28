@@ -28,7 +28,7 @@ from odyssey_core.experimental_luna_planning import (  # noqa: E402
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
 OUTPUT_PATH = (
-    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-current-main.jsonl"
+    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
 # Reset after the authorized current-main gate completed; a rerun requires fresh approval.
