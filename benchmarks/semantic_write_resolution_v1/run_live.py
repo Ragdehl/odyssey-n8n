@@ -31,8 +31,8 @@ OUTPUT_PATH = (
     ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-current-main.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
-# Explicitly authorized by the user for the fresh current-main five-case gate.
-MAX_COST_USD = Decimal("0.070515")
+# Reset after the authorized current-main gate completed; a rerun requires fresh approval.
+MAX_COST_USD = Decimal("0.00")
 
 
 def conservative_cost_ceiling(

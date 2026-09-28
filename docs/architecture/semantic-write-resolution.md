@@ -85,3 +85,9 @@ The focused contract must keep deterministic coverage for at least:
 - a genuinely ambiguous reference — defer for clarification without guessing, creating an identity, or writing a falsely settled source fact.
 
 The provider-facing schema/prompt change requires focused live evidence under `AGENTS.md`. That live gate is Luna/low only, planner-only, zero retries, zero Sol fallbacks, cost-gated, non-overwriting, and separate from deterministic Core execution tests.
+
+## Current-head live gate
+
+After integration with the current collection/clarification contract, the five-case Luna/low planner gate was repriced to a conservative no-cache ceiling of `$0.070515` with a `58,227`-byte input bound. The user explicitly authorized that bounded run.
+
+The gate executed once at commit `1f0047d`: five provider calls maximum, zero retries, zero Sol calls, and all five frozen cases passed. Recorded provider status was `completed` for every row. Usage-backed estimated actual cost was `$0.0044110`. The runner was then reset to `MAX_COST_USD=$0.00`; another paid run requires fresh authorization.
