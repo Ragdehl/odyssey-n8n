@@ -433,6 +433,7 @@ def execute_request(
                 request_id,
                 unit_ordinals,
                 measured_fact_selector,
+                measured_semantic_set_selector,
                 authenticated_actor,
                 self_binding_repository,
                 action_spans,
@@ -842,6 +843,7 @@ def _execute_write(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    semantic_set_selector: Any | None,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
@@ -875,6 +877,7 @@ def _execute_write(
             request_id,
             unit_ordinals,
             fact_selector,
+            semantic_set_selector,
             authenticated_actor,
             self_binding_repository,
             spans,
@@ -965,6 +968,7 @@ def _execute_relational_write(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    semantic_set_selector: Any | None,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
@@ -1007,6 +1011,8 @@ def _execute_relational_write(
             semantic_limit=semantic_limit,
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
+            semantic_set_selector=semantic_set_selector,
+            refine_singular_with_query=True,
         )
         projector = RelationshipEvidenceProjector(repository, schema)
         kwargs: dict[str, Any] = {}
@@ -1058,7 +1064,16 @@ def _execute_relational_write(
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
         if rendering.pending_references:
             raise RelationshipWritePreflightError("Relationship member binding is incomplete")
-    except (RelationalResolutionError, RelationshipWritePreflightError) as error:
+    except RelationalResolutionError as error:
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason=str(error),
+            candidate_note_ids=error.candidate_ids,
+            relational_evidence_guard=error.evidence_guard,
+        )
+    except RelationshipWritePreflightError as error:
         return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
     except Exception as error:
         return ActionResult(

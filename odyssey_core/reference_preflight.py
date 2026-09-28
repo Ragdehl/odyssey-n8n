@@ -15,6 +15,7 @@ from .observability import SpanRecorder
 from .relational_resolution import (
     RelationalResolutionError,
     ResolvedRelationalReference,
+    current_singular_relational_evidence_guard,
     resolve_relational_reference,
 )
 from .relationship_evidence import (
@@ -303,6 +304,11 @@ def preflight_relational_target_write_action(
     relation = unit.target.relational_reference
     if relation is None or relation.members != "one" or len(resolved.targets) != 1:
         raise RelationshipWritePreflightError("Singular relationship write target is invalid")
+    current_guard = current_singular_relational_evidence_guard(
+        relationship_projector, resolved.source.id
+    )
+    if current_guard != resolved.evidence_guard:
+        raise RelationshipWritePreflightError("Relationship evidence changed before write")
     projection = relationship_projector.project_targets(
         resolved.evidence_source.id, resolved.fact_locator
     )
@@ -314,7 +320,7 @@ def preflight_relational_target_write_action(
         raise RelationshipWritePreflightError("Relationship evidence changed before write")
     if resolved.direction is EvidenceDirection.OUTGOING:
         current_target_ids = tuple(target.id for target in projection.targets)
-        valid = current_target_ids == (resolved.targets[0].id,)
+        valid = resolved.targets[0].id in current_target_ids
     elif resolved.direction is EvidenceDirection.INCOMING:
         valid = projection.source.id == resolved.targets[0].id and any(
             target.id == resolved.source.id for target in projection.targets

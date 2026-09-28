@@ -1867,8 +1867,8 @@ def test_tag_changes_reject_duplicate_or_conflicting_values(schema: dict) -> Non
         )
 
 
-def test_write_relational_reference_must_cover_the_complete_bare_target(schema: dict) -> None:
-    """Reject a shortened relationship that discards richer WRITE identity evidence."""
+def test_singular_write_relational_reference_can_anchor_a_richer_target(schema: dict) -> None:
+    """Preserve rich singular qualifiers while using a relationship only as candidate authority."""
     rich = unit(
         "mi hija a la que le gusta ver detectives de animales",
         note_type="person",
@@ -1880,19 +1880,24 @@ def test_write_relational_reference_must_cover_the_complete_bare_target(schema: 
         "source_query": None,
         "members": "one",
     }
-    with pytest.raises(RequestPlanningError) as error:
-        validate_request_plan(output(write(rich)), schema)
-    assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
+    parsed = validate_request_plan(output(write(rich)), schema)
+    target = parsed.actions[0].units[0].target
+    assert target.query == "mi hija a la que le gusta ver detectives de animales"
+    assert target.relational_reference is not None
+    assert target.relational_reference.reference == "mi hija"
 
-    bare = unit("Mi hija", note_type="person", facts=["Vive en Lyon."])
-    bare["target"]["relational_reference"] = {
-        "reference": "mi hija",
+    complete_set = unit(
+        "mis hijos que viven en Francia", note_type="person", facts=["Fueron al colegio."]
+    )
+    complete_set["target"]["relational_reference"] = {
+        "reference": "mis hijos",
         "source_kind": "self",
         "source_query": None,
-        "members": "one",
+        "members": "complete_set",
     }
-    parsed = validate_request_plan(output(write(bare)), schema)
-    assert parsed.actions[0].units[0].target.relational_reference is not None
+    with pytest.raises(RequestPlanningError) as error:
+        validate_request_plan(output(write(complete_set)), schema)
+    assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
 
 
 def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(schema: dict) -> None:

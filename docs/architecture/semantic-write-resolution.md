@@ -48,7 +48,9 @@ fact         = "Adora el chocolate."
 
 It must not become `target.self_target=self`. `self` is reserved for facts whose actual subject is the authenticated user, for example `Axel y Denis son mis compañeros de trabajo`.
 
-For WRITE, `relational_reference` is reserved for a bare current relationship target. Its `reference` must cover the complete target wording: after whitespace normalization and case-folding, `target.query` and `relational_reference.reference` must match. A richer identity such as `mi hija a la que le gusta ver detectives de animales` therefore stays an ordinary semantic query. Shortening it to `relational_reference.reference = "mi hija"` is rejected deterministically rather than discarding the distinguishing evidence.
+For singular WRITE, `relational_reference` may be a **candidate anchor** rather than the final identity decision. Its source-relative `reference` defines the bounded current relationship universe; `target.query` still preserves the user's complete description and may contain additional qualifiers. Core first grounds every relevant current relationship fact (including incoming backlinks), projects only identities actually linked by those facts, and then evaluates the full `target.query` only inside that grounded universe. The relationship can therefore narrow `mi hija a la que le gusta ver detectives de animales` to current children before the richer description selects one child. A global semantic candidate cannot enter that second-stage decision.
+
+Bare singular relationship targets keep the established direct path. `complete_set` writes remain stricter: their relational reference must still describe the complete requested set rather than a qualified subset, because that path writes one shared source fact for the whole grounded set.
 
 ## Resolution
 
@@ -64,7 +66,7 @@ semantic query
 
 The contextual model may select only IDs supplied by Core. No similarity score, possessive phrase, or planner field is itself mutation authority.
 
-When a descriptive query starts from an authenticated-self relationship, Core may expose bounded one-hop canonical relationship evidence and related current identities to the contextual resolver. This expansion supplies evidence only; it never selects the target automatically.
+When a descriptive query carries a relational anchor, Core treats canonical structure and semantic interpretation as separate steps: relationship facts define the candidate universe; the full query chooses at most one member. Candidate evidence includes the canonical note body plus current incoming backlink facts, so information stored on another Note but linked to the candidate participates in identity resolution without copying knowledge or treating an index as authority. The same rule applies to `self` sources and named/existing sources such as `los amigos de Bruno`.
 
 ## Fact references
 
@@ -91,9 +93,10 @@ A later focused change should let an ambiguous contextual decision return a vali
 The focused contract must keep deterministic coverage for at least:
 
 - `Axel y Denis son mis compañeros de trabajo` — self is the subject; both coworkers are semantic fact references and participant notes are not reciprocally mutated;
-- `Mi hijo al que le gusta el fútbol adora el chocolate` — resolve the described child and update that child, not self;
+- `Mi hijo al que le gusta el fútbol adora el chocolate` — use the child relationship as a bounded candidate anchor when available, preserve the full qualifier, and update the resolved child rather than self;
 - `La amiga con la que cené ayer se muda a París` — resolve a contextually described target;
-- `Mi hijo mayor fue al cine con la amiga que vive en Lyon` — resolve both the described target and the described fact reference;
+- `Mi hijo mayor fue al cine con la amiga que vive en Lyon` — relationally narrow the described child target, then resolve the described fact reference independently;
+- `El amigo de Bruno que vive en Lyon se muda a Toulouse` — ground Bruno first, admit friend candidates from Bruno's outgoing facts or incoming backlinks, and apply the Lyon qualifier only inside that set;
 - a genuinely ambiguous reference — defer for clarification without guessing, creating an identity, or writing a falsely settled source fact.
 
 The provider-facing schema/prompt change requires focused live evidence under `AGENTS.md`. That live gate is Luna/low only, planner-only, zero retries, zero Sol fallbacks, cost-gated, non-overwriting, and separate from deterministic Core execution tests.
@@ -102,6 +105,6 @@ The provider-facing schema/prompt change requires focused live evidence under `A
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 
-A manual DEV regression then exposed a distinct planner boundary: for `Mi hija a la que le gusta ver detectives de animales adora el chocolate`, Luna preserved the full `target.query` but also emitted `relational_reference = "mi hija"`. Core consequently entered the bare relational resolver and correctly deferred with `relational_evidence_ambiguous`, losing the richer identifying context for resolution. The amended contract now rejects any shortened relational WRITE target and the live oracle explicitly requires `relational_reference=null` for descriptive targets. Historical live evidence did not cover this exact wording boundary.
+A manual DEV regression then exposed a distinct planner/Core boundary: for `Mi hija a la que le gusta ver detectives de animales adora el chocolate`, Luna preserved the full `target.query` and also emitted `relational_reference = "mi hija"`, but Core treated the relationship as a terminal one-fact decision and deferred before using the richer qualifier. A temporary exact-wording guard proved that the qualifier itself resolves correctly, but the durable design is stronger: keep the relationship as grounded candidate authority and use the complete query as the second-stage discriminator. This also generalizes to named sources and incoming backlinks instead of falling back to a vault-wide semantic search.
 
-The pending active-schema gate therefore uses a distinct registry that preserves the historical v1 cases and replaces the descriptive-child sentinel with the exact failing daughter wording. On the amended head it preflights at a conservative no-cache ceiling of `$0.066517` with a `54,229`-byte input bound. `MAX_COST_USD` remains `$0.00`; no provider call has been made for this amended contract and a fresh explicit authorization is required before running it.
+The pending active-schema gate therefore uses a distinct registry that preserves the historical v1 evidence while covering the exact daughter regression plus a generic existing-source case (`El amigo de Bruno que vive en Lyon...`). It now contains six Luna/low planner cases and preflights at a conservative no-cache ceiling of `$0.080100` with a `54,462`-byte input bound. `MAX_COST_USD` remains `$0.00`; no provider call has been made for this amended contract and a fresh explicit authorization is required before running it.

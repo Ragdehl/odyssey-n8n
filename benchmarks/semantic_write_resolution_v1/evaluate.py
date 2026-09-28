@@ -65,10 +65,17 @@ def evaluate(result: Any, expected: str) -> Evaluation:
             ]
         )
     elif expected == "descriptive_daughter_target":
+        relation = source.target.relational_reference
         checks.extend(
             [
                 (source.target.self_target is None, "not_self"),
-                (source.target.relational_reference is None, "ordinary_semantic_target"),
+                (relation is not None, "relational_anchor"),
+                (relation is not None and relation.source_kind == "self", "self_relation_source"),
+                (relation is not None and relation.members == "one", "singular_relation"),
+                (
+                    relation is not None and _contains(relation.reference, "hija"),
+                    "daughter_relation_preserved",
+                ),
                 (
                     _contains(source.target.query, "hija", "detectives", "animales"),
                     "daughter_query_preserved",
@@ -88,10 +95,17 @@ def evaluate(result: Any, expected: str) -> Evaluation:
             ]
         )
     elif expected == "descriptive_target_and_reference":
+        relation = source.target.relational_reference
         checks.extend(
             [
                 (source.target.self_target is None, "not_self"),
-                (source.target.relational_reference is None, "ordinary_semantic_target"),
+                (relation is not None, "relational_anchor"),
+                (relation is not None and relation.source_kind == "self", "self_relation_source"),
+                (relation is not None and relation.members == "one", "singular_relation"),
+                (
+                    relation is not None and _contains(relation.reference, "hijo"),
+                    "child_relation_preserved",
+                ),
                 (_contains(source.target.query, "hijo", "mayor"), "older_child_query"),
                 (_facts_contain(source, "cine"), "cinema_fact"),
                 (len(source.references) == 1, "one_reference"),
@@ -101,6 +115,31 @@ def evaluate(result: Any, expected: str) -> Evaluation:
                     and _contains(lookups[0].target.query, "amiga", "vive", "lyon"),
                     "friend_reference_query",
                 ),
+            ]
+        )
+    elif expected == "qualified_existing_relation_target":
+        relation = source.target.relational_reference
+        checks.extend(
+            [
+                (source.target.self_target is None, "not_self"),
+                (relation is not None, "relational_anchor"),
+                (relation is not None and relation.source_kind == "existing", "existing_source"),
+                (
+                    relation is not None
+                    and relation.source_query is not None
+                    and _contains(relation.source_query, "bruno"),
+                    "source_query",
+                ),
+                (
+                    relation is not None and _contains(relation.reference, "amigo"),
+                    "friend_relation",
+                ),
+                (
+                    _contains(source.target.query, "amigo", "bruno", "lyon"),
+                    "full_query_preserved",
+                ),
+                (_facts_contain(source, "toulouse"), "destination_fact"),
+                (not source.references and not lookups, "no_spurious_references"),
             ]
         )
     else:

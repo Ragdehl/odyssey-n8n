@@ -273,10 +273,7 @@ compatibility. These are **contract scenarios**, not evidence that the model fol
 | J. Literal-only kit | The Kit Note is a valid source row even though its listed pieces have no Note IDs. |
 | K. Later Notes CRUD | Fact edit, backlink-choice delete and stable-ID rename enter the same Core pending, preflight, mutation and audit boundaries; no operation is added in this stage. |
 
-The current `SelectionCriteria.relational_reference` is source-relative but chooses one fact and
-projects its literal wikilinks as identity members. `RelationshipEvidenceProjector` already reads
-current Markdown and can enumerate source facts and one-hop incoming linked facts. Its
-`project_targets()` cannot derive a multi-fact set or a literal member. `ContextPackage.related_items`
+The current `SelectionCriteria.relational_reference` is source-relative. Bare singular resolution can still choose one grounded fact, while qualified singular WRITE may use multiple relevant current relationship facts as a bounded candidate anchor before applying the full target description. `RelationshipEvidenceProjector` already reads current Markdown and can enumerate source facts and one-hop incoming linked facts. Its `project_targets()` still cannot derive an arbitrary semantic multi-fact set or a literal member; the broader semantic-set contract below remains separate. `ContextPackage.related_items`
 retains the actual source for related evidence. The answerer already returns
 `supporting_item_ids`, but the n8n final response currently discards them. Phase 17B pending work
 is durable and create-only; it cannot resume a staged decision. The browser/n8n/runtime product path
@@ -310,7 +307,7 @@ review itself changes no schema, service, or data.
 Rejected alternatives: family/work/travel-specific handlers; a relation registry; graph traversal;
 transitive, inverse, or co-occurrence inference; automatic Note creation for literals; copied facts
 for discoverability; a separate Notes-UI mutation path; and a realtime service. Existing v1
-`relational_reference` remains backward compatible and is not silently reinterpreted.
+`relational_reference` remains backward compatible for bare relationships; the later qualified-WRITE extension only changes how additional preserved query qualifiers narrow an already grounded relationship universe.
 
 ## 1–5. Set selection, grounding, members, and completeness
 

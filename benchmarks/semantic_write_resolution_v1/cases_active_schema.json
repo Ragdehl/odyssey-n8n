@@ -30,6 +30,11 @@
       "id": "SWR05-unsafe-pronoun",
       "request": "Recuerda que ella se muda a París.",
       "expect": "fail_closed_ambiguous_pronoun"
+    },
+    {
+      "id": "SWR06-existing-source-relational-anchor",
+      "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
+      "expect": "qualified_existing_relation_target"
     }
   ]
 }

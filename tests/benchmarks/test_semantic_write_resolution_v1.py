@@ -23,9 +23,14 @@ from odyssey_core.request_planning import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def selection(query: str, *, self_target: str | None = None) -> SelectionCriteria:
+def selection(
+    query: str,
+    *,
+    self_target: str | None = None,
+    relational_reference: RelationalReference | None = None,
+) -> SelectionCriteria:
     """Build one semantic person lookup for evaluator fixtures."""
-    return SelectionCriteria(None, query, "person", (), None, self_target)
+    return SelectionCriteria(None, query, "person", (), None, self_target, relational_reference)
 
 
 def unit(
@@ -35,10 +40,11 @@ def unit(
     self_target: str | None = None,
     references: tuple[KnowledgeReference, ...] = (),
     lookup_only: bool = False,
+    relational_reference: RelationalReference | None = None,
 ) -> KnowledgeUnit:
     """Build one immutable evaluated write unit."""
     return KnowledgeUnit(
-        selection(query, self_target=self_target),
+        selection(query, self_target=self_target, relational_reference=relational_reference),
         "record",
         (),
         (),
@@ -69,12 +75,17 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
     assert registry["version"] == "semantic-write-resolution-active-schema-2026-09-28"
-    assert len(registry["cases"]) == 5
+    assert len(registry["cases"]) == 6
     daughter = registry["cases"][1]
     assert daughter == {
         "id": "SWR02-rich-daughter-target",
         "request": "Mi hija a la que le gusta ver detectives de animales adora el chocolate.",
         "expect": "descriptive_daughter_target",
+    }
+    assert registry["cases"][-1] == {
+        "id": "SWR06-existing-source-relational-anchor",
+        "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
+        "expect": "qualified_existing_relation_target",
     }
 
 
@@ -110,31 +121,20 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
                     unit(
                         "mi hija a la que le gusta ver detectives de animales",
                         "Adora el chocolate.",
+                        relational_reference=RelationalReference("mi hija", "self", None, "one"),
                     ),
                 )
             ),
         ),
         (),
     )
-    bad_daughter_target = SelectionCriteria(
-        None,
-        "mi hija a la que le gusta ver detectives de animales",
-        "person",
-        (),
-        None,
-        relational_reference=RelationalReference("mi hija", "self", None, "one"),
-    )
     bad_daughter = RequestPlan(
         (
             WriteAction(
                 (
-                    KnowledgeUnit(
-                        bad_daughter_target,
-                        "record",
-                        (),
-                        (),
-                        ("Adora el chocolate.",),
-                        (),
+                    unit(
+                        "mi hija a la que le gusta ver detectives de animales",
+                        "Adora el chocolate.",
                     ),
                 )
             ),
@@ -154,6 +154,7 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
                         references=(
                             KnowledgeReference(1, "companion", "la amiga que vive en Lyon"),
                         ),
+                        relational_reference=RelationalReference("mi hijo", "self", None, "one"),
                     ),
                     unit("la amiga que vive en Lyon", "", lookup_only=True),
                 )
@@ -167,11 +168,28 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
     assert not evaluate(bad_daughter, "descriptive_daughter_target").passed
     assert evaluate(friend, "descriptive_friend_target").passed
     assert evaluate(mixed, "descriptive_target_and_reference").passed
+    existing = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit(
+                        "el amigo de Bruno que vive en Lyon",
+                        "Se muda a Toulouse.",
+                        relational_reference=RelationalReference(
+                            "los amigos de Bruno", "existing", "Bruno", "one"
+                        ),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    assert evaluate(existing, "qualified_existing_relation_target").passed
     assert evaluate(PlannerEscalation(), "fail_closed_ambiguous_pronoun").passed
 
 
 def test_cost_ceiling_is_luna_only_and_bounded() -> None:
-    """Price exactly five Luna/low calls; no Sol allowance is part of this gate."""
+    """Price exactly six Luna/low calls; no Sol allowance is part of this gate."""
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -179,7 +197,7 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert Decimal("0.06") < cost < Decimal("0.07")
+    assert Decimal("0.08") < cost < Decimal("0.09")
     assert input_bound > 0
 
     assert runner.MAX_COST_USD == Decimal("0.00")

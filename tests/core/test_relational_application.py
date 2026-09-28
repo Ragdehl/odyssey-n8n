@@ -151,6 +151,24 @@ class RelevantFactSelector:
         )
 
 
+class AllFactSelector:
+    """Select every supplied canonical relationship fact for Core pipeline tests."""
+
+    def __init__(self) -> None:
+        self.requests: list[Any] = []
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        """Return the complete supplied fact batch with bounded literal evidence markers."""
+        self.requests.append(request)
+        return SetEvidenceSelection(
+            tuple(candidate.id for candidate in request.candidates),
+            tuple(
+                SetMemberOccurrence(candidate.id, "literal", 0, 1)
+                for candidate in request.candidates
+            ),
+        )
+
+
 class StaticFactSelector:
     """Return one controlled relevance result for Core fail-closed regression coverage."""
 
@@ -1012,6 +1030,163 @@ def test_opposite_viewpoint_link_can_ground_singular_target(tmp_path: Path, sche
     assert (vault / "people/edgar.md").read_bytes() == before_source
     assert "Vive en Lyon." in parse_note((vault / "people/chloe.md").read_text()).content
     assert "people/edgar" not in reasoner.requests[0].candidates[0].evidence
+
+
+def test_qualified_self_relation_narrows_candidates_then_uses_backlink_evidence(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Use the self relationship as a universe, then resolve a rich qualifier from backlinks."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/marta|Marta]].")
+        + "\n\n"
+        + fact("[[people/cloe|Cloe]] es mi hija mayor.", 1),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    before_self = (vault / "people/edgar.md").read_bytes()
+    before_marta = (vault / "people/marta.md").read_bytes()
+    query = "mi hija mayor"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Adora el chocolate.",), ())
+    reasoner = MatchingFactReasoner("mi hija mayor")
+    selector = AllFactSelector()
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=reasoner,
+        selector=selector,
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    assert (vault / "people/edgar.md").read_bytes() == before_self
+    assert (vault / "people/marta.md").read_bytes() == before_marta
+    assert "Adora el chocolate." in parse_note((vault / "people/cloe.md").read_text()).content
+    assert len(selector.requests) == 1
+    assert selector.requests[0].query == "mi hija"
+    assert len(reasoner.requests) == 1
+    assert reasoner.requests[0].reference == query
+    supplied = {candidate.id: candidate.evidence for candidate in reasoner.requests[0].candidates}
+    assert set(supplied) == {"cloe", "marta"}
+    assert "incoming; source=Edgar (person)" in supplied["cloe"]
+    assert "mi hija mayor" in supplied["cloe"].casefold()
+    assert "mi hija mayor" not in supplied["marta"].casefold()
+
+
+def test_qualified_existing_source_relation_can_start_from_incoming_backlinks(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Find Bruno's related people from incoming links before applying the full target description."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    write_note(
+        vault,
+        "people/marta.md",
+        "marta",
+        "Marta",
+        fact("[[people/bruno|Bruno]] es mi amigo.") + "\n\n" + fact("Vive en Lyon.", 1),
+    )
+    write_note(
+        vault,
+        "people/ana.md",
+        "ana",
+        "Ana",
+        fact("[[people/bruno|Bruno]] es mi amigo.") + "\n\n" + fact("Vive en París.", 1),
+    )
+    before_bruno = (vault / "people/bruno.md").read_bytes()
+    before_ana = (vault / "people/ana.md").read_bytes()
+    query = "el amigo de Bruno que vive en Lyon"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("los amigos de Bruno", "existing", "Bruno", "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se muda a Toulouse.",), ())
+    reasoner = MatchingFactReasoner("Vive en Lyon")
+    selector = AllFactSelector()
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=reasoner,
+        selector=selector,
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("marta",)
+    assert (vault / "people/bruno.md").read_bytes() == before_bruno
+    assert (vault / "people/ana.md").read_bytes() == before_ana
+    assert "Se muda a Toulouse." in parse_note((vault / "people/marta.md").read_text()).content
+    assert len(selector.requests) == 1
+    assert selector.requests[0].query == "los amigos de Bruno"
+    assert len(reasoner.requests) == 1
+    assert reasoner.requests[0].reference == query
+    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"marta", "ana"}
+
+
+def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep a rich relational WRITE fail-closed when qualifiers do not select one member."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/marta|Marta]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta pintar."))
+    write_note(vault, "people/marta.md", "marta", "Marta", fact("Le gusta pintar."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    query = "mi hija a la que le gusta pintar"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Viaja mañana.",), ())
+    reasoner = MappedReasoner({query: None})
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=reasoner,
+        selector=AllFactSelector(),
+    )
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.affected_stable_note_ids == ()
+    assert all(path.read_bytes() == content for path, content in before.items())
+    action_result = result.action_results[0]
+    assert action_result.reason == "relational_evidence_ambiguous"
+    assert set(action_result.candidate_note_ids) == {"cloe", "marta"}
+    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "marta"}
 
 
 def test_w2_complete_set_writes_one_source_fact_and_no_member_notes(
