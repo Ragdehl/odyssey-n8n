@@ -68,6 +68,8 @@ The contextual model may select only IDs supplied by Core. No similarity score, 
 
 When a descriptive query carries a relational anchor, Core treats canonical structure and semantic interpretation as separate steps: relationship facts define the candidate universe; the full query chooses at most one member. Candidate evidence includes the canonical note body plus current incoming backlink facts, so information stored on another Note but linked to the candidate participates in identity resolution without copying knowledge or treating an index as authority. The same rule applies to `self` sources and named/existing sources such as `los amigos de Bruno`.
 
+Known tombstoned link targets (`deleted: true`) are not current identities and therefore cannot enter or block a qualified singular relationship candidate set. Core keeps the containing fact inside the evidence guard, ignores only the inactive target for candidate narrowing, and still fails closed for malformed, ambiguous, or genuinely missing links whose identity state cannot be established. Complete-set semantics remain stricter and never treat a partial active subset as complete.
+
 ## Fact references
 
 Provider references are lowered inside Core to the established deterministic reference-binding machinery. This lowering is an implementation bridge only: Luna never emits the local target indexes or lookup-only helper units.

@@ -242,7 +242,14 @@ def schema() -> dict[str, Any]:
 
 
 def write_note(
-    vault: Path, path: str, note_id: str, name: str, body: str, *, note_type: str = "person"
+    vault: Path,
+    path: str,
+    note_id: str,
+    name: str,
+    body: str,
+    *,
+    note_type: str = "person",
+    properties: dict[str, Any] | None = None,
 ) -> None:
     """Create one schema-valid disposable canonical note."""
     target = vault / path
@@ -259,6 +266,7 @@ def write_note(
         "schema_version": 3,
         "aliases": [],
         "tags": [],
+        **(properties or {}),
     }
     if note_type == "journal_entry":
         metadata["entry_date"] = "2026-09-23"
@@ -1086,6 +1094,72 @@ def test_qualified_self_relation_narrows_candidates_then_uses_backlink_evidence(
     assert "incoming; source=Edgar (person)" in supplied["cloe"]
     assert "mi hija mayor" in supplied["cloe"].casefold()
     assert "mi hija mayor" not in supplied["marta"].casefold()
+
+
+def test_qualified_relation_ignores_tombstoned_link_candidates_but_keeps_active_scope(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A stale link to a deleted identity cannot block or enter a current rich relation target."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/marta|Marta]].")
+        + "\n\n"
+        + fact("Le quiero comprar un peluche a [[people/old-daughter|mi hija]].", 1),
+    )
+    write_note(
+        vault,
+        "people/cloe.md",
+        "cloe",
+        "Cloe",
+        fact("Le gusta ver detectives de animales."),
+    )
+    write_note(vault, "people/marta.md", "marta", "Marta", fact("Le gusta pintar."))
+    write_note(
+        vault,
+        "people/old-daughter.md",
+        "old-daughter",
+        "mi hija",
+        "",
+        properties={"deleted": True},
+    )
+    before_self = (vault / "people/edgar.md").read_bytes()
+    before_marta = (vault / "people/marta.md").read_bytes()
+    before_deleted = (vault / "people/old-daughter.md").read_bytes()
+    query = "mi hija a la que le gusta ver detectives de animales"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Prefiere los cuentos de misterio.",), ())
+    reasoner = MatchingFactReasoner("detectives de animales")
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=reasoner,
+        selector=AllFactSelector(),
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    assert (
+        "Prefiere los cuentos de misterio."
+        in parse_note((vault / "people/cloe.md").read_text()).content
+    )
+    assert (vault / "people/edgar.md").read_bytes() == before_self
+    assert (vault / "people/marta.md").read_bytes() == before_marta
+    assert (vault / "people/old-daughter.md").read_bytes() == before_deleted
+    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "marta"}
 
 
 def test_qualified_existing_source_relation_can_start_from_incoming_backlinks(

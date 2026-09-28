@@ -321,7 +321,16 @@ def _resolve_qualified_singular_write(
     seen: set[str] = set()
     for fact, direction in selected_facts:
         projection = projector.project_targets(fact.source.id, fact.locator)
-        if projection.status is not TargetProjectionStatus.COMPLETE or projection.source is None:
+        if projection.status is TargetProjectionStatus.INACTIVE_TARGETS:
+            # A tombstoned canonical identity is not a current relationship candidate. Keep the
+            # fact in the evidence guard, but ignore its inactive members for singular narrowing.
+            if not projection.targets:
+                continue
+        elif projection.status is not TargetProjectionStatus.COMPLETE:
+            raise RelationalResolutionError(
+                "relational_evidence_incomplete", evidence_guard=evidence_guard
+            )
+        if projection.source is None:
             raise RelationalResolutionError(
                 "relational_evidence_incomplete", evidence_guard=evidence_guard
             )
