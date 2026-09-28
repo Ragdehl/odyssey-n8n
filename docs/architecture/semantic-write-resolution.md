@@ -68,9 +68,9 @@ When a descriptive query starts from an authenticated-self relationship, Core ma
 
 Provider references are lowered inside Core to the established deterministic reference-binding machinery. This lowering is an implementation bridge only: Luna never emits the local target indexes or lookup-only helper units.
 
-A semantic fact reference is existing-identity-only unless the same request contains an independently authorized material unit for that entity. An unmatched reference lookup cannot create a new note merely because the mention exists in user text.
+A semantic fact reference first resolves against current canonical identities. If it resolves to exactly one existing note, Core binds that identity without mutating the referenced note. If no existing identity is found and the reference carries a canonical Odyssey note type, the normal WRITE creation contract may create that entity and then bind the new canonical path into the source fact. This is how a phrase such as `el proyecto Faro` can create a `project` note when `project` is a canonical schema type.
 
-If a semantic reference resolves to exactly one existing note, Core binds the canonical path and materializes the wikilink before writing the source fact. If it is ambiguous or unresolved, the new semantic-reference source fact is deferred and the candidate evidence remains pending for clarification; Core neither guesses a link nor persists the source fact as if the reference were settled.
+If existing evidence is ambiguous, Core still defers for clarification rather than creating a duplicate or guessing. If unresolved reference wording has no canonical note type, Core has no creation authority; non-entity context should remain literal fact text rather than being promoted to a reference.
 
 Legacy pre-existing index-based internal fixtures may retain their historical non-blocking pending behavior while migration is incomplete. That compatibility path must not re-enter the provider schema.
 

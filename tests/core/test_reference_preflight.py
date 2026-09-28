@@ -195,12 +195,34 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     assert purchase.facts == ("Bought {{ref:0}}.",)
 
 
-def test_semantic_reference_lookup_never_creates_an_unresolved_note(
+def test_semantic_reference_lookup_creates_unresolved_schema_backed_entity(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:
-    """Treat lowered semantic references as existing-note searches, never creation authority."""
+    """Let a typed semantic reference create a new canonical entity after resolution finds none."""
     lookup = KnowledgeUnit(
-        SelectionCriteria(None, "la amiga que vive en Lyon", "person", (), None),
+        SelectionCriteria("Faro", "el proyecto Faro", "project", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, schema, action(lookup), ids=["project-faro-id"])
+    assert result[0].outcome is WriteTargetOutcome.CREATE
+    assert result[0].stable_id == "project-faro-id"
+    assert result[0].canonical_name == "Faro"
+    assert result[0].path == "Faro - project-faro-id.md"
+    assert result[0].reference_only is False
+    assert list(tmp_path.rglob("*.md")) == []
+
+
+def test_semantic_reference_lookup_without_type_stays_fail_closed(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Do not invent a canonical note type for unresolved wording that has none."""
+    lookup = KnowledgeUnit(
+        SelectionCriteria(None, "los lunes", None, (), None),
         "record",
         (),
         (),
@@ -210,7 +232,7 @@ def test_semantic_reference_lookup_never_creates_an_unresolved_note(
     )
     result = run(tmp_path, schema, action(lookup), ids=["must-not-be-used"])
     assert result[0].outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
-    assert result[0].reason == "unresolved_existing_reference"
+    assert result[0].reason == "unresolved_existing_target"
     assert result[0].reference_only is True
     assert result[0].stable_id is None
     assert list(tmp_path.rglob("*.md")) == []

@@ -516,12 +516,12 @@ def _decide_reference_only_target(
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
 ) -> WriteTargetDecision:
-    """Resolve one reference lookup against current notes without granting CREATE authority.
+    """Resolve one semantic reference and preserve schema-backed entity creation authority.
 
-    Reference-only units are internal search requests. A strict current relationship can resolve them
-    directly; if that bounded relationship path cannot identify one target, the preserved descriptive
-    query gets one ordinary semantic-resolution attempt. Neither path may create a new note merely
-    because a referenced entity was not found.
+    Reference helper units first try current canonical identity resolution. A strict current
+    relationship can resolve them directly; otherwise the preserved semantic query gets the ordinary
+    layered resolver. If no existing identity is found, a canonical ``target.type`` may authorize the
+    same CREATE decision as an ordinary record target. Untyped unresolved wording remains fail-closed.
     """
     candidate_unit = unit
     if unit.target.relational_reference is not None:
@@ -565,9 +565,7 @@ def _decide_reference_only_target(
         self_binding_repository=self_binding_repository,
     )
     if decision.outcome is WriteTargetOutcome.CREATE:
-        return WriteTargetDecision(
-            WriteTargetOutcome.NEEDS_CLARIFICATION, reason="unresolved_existing_reference"
-        )
+        return decision
     if (
         decision.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
         and decision.reason == "ambiguous_existing_target"
@@ -581,7 +579,7 @@ def _decide_reference_only_target(
 
 
 def is_reference_only_unit(unit: KnowledgeUnit) -> bool:
-    """Return whether a unit can only provide an existing reference target and never mutate."""
+    """Return whether a unit is a factless internal semantic-reference helper."""
     return (
         unit.intent == "record"
         and unit.cardinality == "one"

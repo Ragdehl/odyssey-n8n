@@ -1510,3 +1510,100 @@ def test_self_relationship_fact_uses_semantic_references_without_pairwise_writes
     assert (vault / "people/axel.md").read_bytes() == before_axel
     assert (vault / "people/denis.md").read_bytes() == before_denis
     assert len(list(vault.rglob("*.md"))) == 3
+
+
+def test_schema_backed_missing_reference_is_created_and_linked(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Create a missing typed project reference, then bind it into the self fact atomically."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    write_note(vault, "people/axel.md", "axel", "Axel", "")
+    write_note(vault, "people/denis.md", "denis", "Denis", "")
+    before_axel = (vault / "people/axel.md").read_bytes()
+    before_denis = (vault / "people/denis.md").read_bytes()
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "yo",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": "self",
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["{{ref:0}} y {{ref:1}} son mis compañeros en {{ref:2}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": "Axel",
+                                    "query": "Axel",
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "coworker",
+                                "mention": "Axel",
+                            },
+                            {
+                                "selection": {
+                                    "entity": "Denis",
+                                    "query": "Denis",
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "coworker",
+                                "mention": "Denis",
+                            },
+                            {
+                                "selection": {
+                                    "entity": "Faro",
+                                    "query": "el proyecto Faro",
+                                    "type": "project",
+                                    "filters": [],
+                                },
+                                "role": "project",
+                                "mention": "el proyecto Faro",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert "edgar" in result.affected_stable_note_ids
+    assert len(result.affected_stable_note_ids) == 2
+    project_paths = [
+        path
+        for path in vault.rglob("*.md")
+        if parse_note(path.read_text()).metadata.get("type") == "project"
+    ]
+    assert len(project_paths) == 1
+    project_note = parse_note(project_paths[0].read_text())
+    assert project_note.metadata["name"] == "Faro"
+    assert project_note.content == ""
+    assert project_note.metadata["id"] in result.affected_stable_note_ids
+    self_content = parse_note((vault / "people/edgar.md").read_text()).content
+    project_link = project_paths[0].with_suffix("").relative_to(vault).as_posix()
+    assert "[[people/axel|Axel]]" in self_content
+    assert "[[people/denis|Denis]]" in self_content
+    assert f"[[{project_link}|el proyecto Faro]]" in self_content
+    assert (vault / "people/axel.md").read_bytes() == before_axel
+    assert (vault / "people/denis.md").read_bytes() == before_denis
+    assert len(list(vault.rglob("*.md"))) == 4
