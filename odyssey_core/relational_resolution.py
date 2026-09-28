@@ -309,7 +309,10 @@ def _resolve_qualified_singular_write(
     relation = selection.relational_reference
     assert relation is not None and relation.members == "one"
     selected_facts = _select_relevant_read_facts(
-        relation.reference, candidates, semantic_set_selector
+        relation.reference,
+        candidates,
+        semantic_set_selector,
+        require_occurrences=False,
     )
     if not selected_facts:
         raise RelationalResolutionError(
@@ -439,6 +442,8 @@ def _select_relevant_read_facts(
     query: str,
     candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
     selector: Any | None,
+    *,
+    require_occurrences: bool = True,
 ) -> tuple[tuple[CanonicalFact, EvidenceDirection], ...]:
     """Return every bounded selector-proposed read fact, never a single contextual winner.
 
@@ -476,7 +481,7 @@ def _select_relevant_read_facts(
                     ),
                 )
             )
-            _validate_relational_selection(proposed, batch)
+            _validate_relational_selection(proposed, batch, require_occurrences=require_occurrences)
         except RelationalResolutionError:
             raise
         except (TypeError, ValueError):
@@ -494,8 +499,10 @@ def _select_relevant_read_facts(
 def _validate_relational_selection(
     proposed: SetEvidenceSelection,
     batch: tuple[SemanticSetCandidate, ...],
+    *,
+    require_occurrences: bool = True,
 ) -> None:
-    """Validate a multi-fact relevance proposal without deriving identities from model spans."""
+    """Validate bounded relevance IDs and, when required, their direct occurrence spans."""
     if not isinstance(proposed, SetEvidenceSelection) or not isinstance(
         proposed.scope_uncertain, bool
     ):
@@ -508,6 +515,8 @@ def _validate_relational_selection(
         or len(proposed.member_occurrences) > DEFAULT_SEMANTIC_SET_BOUNDS.members
     ):
         raise ValueError("Relational relevance selection is outside its batch")
+    if not require_occurrences:
+        return
     by_id = {candidate.id: candidate for candidate in batch}
     supported_ids: set[str] = set()
     for occurrence in proposed.member_occurrences:

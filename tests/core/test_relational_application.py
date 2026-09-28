@@ -169,6 +169,26 @@ class AllFactSelector:
         )
 
 
+class NoisyOccurrenceFactSelector:
+    """Select one bounded fact ID while returning unusable span decoration."""
+
+    def __init__(self, wording: str) -> None:
+        self.wording = wording.casefold()
+        self.requests: list[Any] = []
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        self.requests.append(request)
+        selected = next(
+            candidate
+            for candidate in request.candidates
+            if self.wording in candidate.text.casefold()
+        )
+        return SetEvidenceSelection(
+            (selected.id,),
+            (SetMemberOccurrence(selected.id, "literal", 0, 10_000),),
+        )
+
+
 class StaticFactSelector:
     """Return one controlled relevance result for Core fail-closed regression coverage."""
 
@@ -1160,6 +1180,56 @@ def test_qualified_relation_ignores_tombstoned_link_candidates_but_keeps_active_
     assert (vault / "people/marta.md").read_bytes() == before_marta
     assert (vault / "people/old-daughter.md").read_bytes() == before_deleted
     assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "marta"}
+
+
+def test_qualified_write_uses_bounded_fact_ids_even_if_reused_selector_span_is_noisy(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Do not let unused semantic-set span decoration block a grounded singular WRITE."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/marta|Marta]]."),
+    )
+    write_note(
+        vault,
+        "people/cloe.md",
+        "cloe",
+        "Cloe",
+        fact("Le gusta ver detectives de animales."),
+    )
+    write_note(vault, "people/marta.md", "marta", "Marta", fact("Le gusta pintar."))
+    query = "mi hija a la que le gusta ver detectives de animales"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Prefiere los cuentos de misterio.",), ())
+    selector = NoisyOccurrenceFactSelector("Mis hijas son")
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=MatchingFactReasoner("detectives de animales"),
+        selector=selector,
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    assert (
+        "Prefiere los cuentos de misterio."
+        in parse_note((vault / "people/cloe.md").read_text()).content
+    )
+    assert len(selector.requests) == 1
 
 
 def test_qualified_existing_source_relation_can_start_from_incoming_backlinks(

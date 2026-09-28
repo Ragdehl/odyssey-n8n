@@ -70,6 +70,8 @@ When a descriptive query carries a relational anchor, Core treats canonical stru
 
 Known tombstoned link targets (`deleted: true`) are not current identities and therefore cannot enter or block a qualified singular relationship candidate set. Core keeps the containing fact inside the evidence guard, ignores only the inactive target for candidate narrowing, and still fails closed for malformed, ambiguous, or genuinely missing links whose identity state cannot be established. Complete-set semantics remain stricter and never treat a partial active subset as complete.
 
+For qualified singular WRITE relationship anchoring, only the selector's supplied fact IDs carry relevance authority. They must be unique IDs from the exact Core-supplied batch. The reusable semantic-set response also contains character-span occurrence decorations, but those spans do not grant identity or mutation authority on this WRITE path and are not revalidated as relational proof; every chosen fact is instead re-read from canonical Markdown and its link targets are projected by Core before it can narrow candidates. This avoids making a harmless model span offset a false WRITE failure boundary while preserving the stricter occurrence checks on existing relational READ.
+
 ## Fact references
 
 Provider references are lowered inside Core to the established deterministic reference-binding machinery. This lowering is an implementation bridge only: Luna never emits the local target indexes or lookup-only helper units.
