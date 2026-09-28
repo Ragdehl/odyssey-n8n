@@ -877,6 +877,7 @@ def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> No
     assert "own `references` array" in prompt
     assert "selection.query" in prompt
     assert "do not emit Markdown `[[wikilinks]]`" in prompt
+    assert "target.query describes only the subject" in prompt
     assert "Possessive or first-person context is identity evidence, not write ownership" in prompt
     reference_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"]["anyOf"][
         2
@@ -1887,6 +1888,30 @@ def test_singular_write_relational_reference_can_anchor_a_richer_target(schema: 
     assert target.query == "mi hija a la que le gusta ver detectives de animales"
     assert target.relational_reference is not None
     assert target.relational_reference.reference == "mi hija"
+
+    contaminated = unit(
+        "Mi hija mayor va a cenar con la persona de la cena relacional de prueba que trabaja en Airbus Test.",
+        note_type="person",
+        facts=["Va a cenar con {{ref:0}}."],
+        references=[
+            {
+                "selection": reference_selection(
+                    "la persona de la cena relacional de prueba que trabaja en Airbus Test"
+                ),
+                "role": "dinner companion",
+                "mention": "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+            }
+        ],
+    )
+    contaminated["target"]["relational_reference"] = {
+        "reference": "mi hija mayor",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    with pytest.raises(RequestPlanningError) as error:
+        validate_request_plan(output(write(contaminated)), schema)
+    assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
 
     complete_set = unit(
         "mis hijos que viven en Francia", note_type="person", facts=["Fueron al colegio."]

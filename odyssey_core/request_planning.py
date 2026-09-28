@@ -73,7 +73,7 @@ Use DelegateAction only when the requested operation needs a specialized capabil
 
 A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
 
-Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
+Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. For a write, target.query describes only the subject being selected: put the new predicate and fact-only wording in facts, put referred entities in references, and keep target-identifying qualifiers in target.query. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact in the fact; do not drop it merely because it also helps identify the target.
 
 Distinguish a relationship used only to identify the subject from a relationship that is itself the new knowledge. If relational wording identifies the subject of a different predicate, target that described subject and record only the new predicate. If the requested knowledge itself asserts a relationship from an explicit source, including self, the natural write target is that source and the related participants belong in the fact as semantic references. Several participants sharing one relationship to the same source do not thereby have that relationship with each other; never invent pairwise relations from shared membership.
 
@@ -2093,6 +2093,13 @@ def _validate_knowledge_unit(
     for reference_index in range(len(references)):
         if reference_index not in marker_indexes:
             raise RequestPlanningError("KnowledgeReference has no fact occurrence marker")
+    if target.relational_reference is not None and _query_repeats_new_fact(
+        target.query, raw_facts, references
+    ):
+        raise RequestPlanningError(
+            "Relational write target query must describe only the selected subject",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
     return KnowledgeUnit(
         target=target,
         intent=intent,
@@ -2103,6 +2110,21 @@ def _validate_knowledge_unit(
         cardinality=cardinality,
         destination_type=destination_type,
     )
+
+
+def _query_repeats_new_fact(
+    query: str, facts: Sequence[str], references: Sequence[KnowledgeReference]
+) -> bool:
+    """Return whether a relational target query copied the new fact payload."""
+    normalized_query = " ".join(query.split()).casefold()
+    for fact in facts:
+        rendered = fact
+        for index, reference in enumerate(references):
+            rendered = rendered.replace(f"{{{{ref:{index}}}}}", reference.mention)
+        normalized_fact = " ".join(rendered.split()).casefold().strip(" .!?;:")
+        if len(normalized_fact) >= 8 and normalized_fact in normalized_query:
+            return True
+    return False
 
 
 @_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)

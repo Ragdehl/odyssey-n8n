@@ -40,6 +40,11 @@
       "id": "SWR07-qualified-event-member",
       "request": "De las personas que estuvieron en la cena relacional de prueba, la que trabaja en Airbus Test se ha comprado un paraguas rojo.",
       "expect": "qualified_existing_event_relation_target"
+    },
+    {
+      "id": "SWR08-relational-target-described-reference",
+      "request": "Mi hija mayor va a cenar con la persona de la cena relacional de prueba que trabaja en Airbus Test.",
+      "expect": "relational_target_and_described_reference"
     }
   ]
 }
