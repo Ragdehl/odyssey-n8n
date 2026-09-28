@@ -1607,3 +1607,84 @@ def test_schema_backed_missing_reference_is_created_and_linked(
     assert (vault / "people/axel.md").read_bytes() == before_axel
     assert (vault / "people/denis.md").read_bytes() == before_denis
     assert len(list(vault.rglob("*.md"))) == 4
+
+
+def test_new_reference_is_rolled_back_when_consuming_fact_cannot_be_written(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Do not leave a new typed reference behind when its only source target is ambiguous."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta ver detectives de animales.")
+    )
+    write_note(
+        vault,
+        "people/bruno.md",
+        "bruno",
+        "Bruno Test",
+        fact("Le gusta ver detectives de animales."),
+    )
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    target_query = "mi hija a la que le gusta ver detectives de animales"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": target_query,
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Trabaja en {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": "Aurora",
+                                    "query": "el proyecto Aurora",
+                                    "type": "project",
+                                    "filters": [],
+                                },
+                                "role": "project",
+                                "mention": "el proyecto Aurora",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    index = MappedIndex(
+        {
+            target_query: (
+                SemanticEntityCandidate("cloe", "people/cloe.md", "person", "Cloe", 0.95),
+                SemanticEntityCandidate("bruno", "people/bruno.md", "person", "Bruno Test", 0.94),
+            )
+        }
+    )
+    reasoner = MappedReasoner({target_query: None})
+
+    result = run(vault, schema, plan, reasoner=reasoner, semantic_index=index)
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.affected_stable_note_ids == ()
+    assert len(list(vault.rglob("*.md"))) == 2
+    assert all(path.read_bytes() == content for path, content in before.items())
+    source_result, project_result = result.action_results[0].unit_results
+    assert source_result.status is application.UnitStatus.DEFERRED
+    assert source_result.reason == "ambiguous_existing_target"
+    assert project_result.status is application.UnitStatus.DEFERRED
+    assert project_result.reason == "DEPENDENT_FACT_NOT_WRITTEN"

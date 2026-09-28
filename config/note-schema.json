@@ -157,56 +157,6 @@
             "properties": []
         },
         {
-            "id": "task",
-            "name": "Task",
-            "description": "Action that can be managed by a task workflow without defining task-specific lifecycle fields in the canonical note schema.",
-            "examples": [
-                "Renew passport",
-                "Review Odyssey schema"
-            ],
-            "properties": []
-        },
-        {
-            "id": "store",
-            "name": "Store",
-            "description": "Physical or virtual establishment where purchases can occur.",
-            "examples": [
-                "Carrefour Balma",
-                "Lidl"
-            ],
-            "properties": []
-        },
-        {
-            "id": "product",
-            "name": "Product",
-            "description": "Identifiable product that can recur across purchases or other knowledge contexts.",
-            "examples": [
-                "Leche Lactel",
-                "Arduino Uno"
-            ],
-            "properties": []
-        },
-        {
-            "id": "purchase",
-            "name": "Purchase",
-            "description": "Human-readable record of a purchase occurrence that can link naturally to stores and products.",
-            "examples": [
-                "Compra Carrefour 2026-08-13",
-                "Online hardware order"
-            ],
-            "properties": []
-        },
-        {
-            "id": "recipe",
-            "name": "Recipe",
-            "description": "Reusable cooking recipe that can link naturally to product or ingredient notes.",
-            "examples": [
-                "Tortilla española",
-                "Tomato soup"
-            ],
-            "properties": []
-        },
-        {
             "id": "document",
             "name": "Document",
             "description": "Document or document-like artifact worth representing as an independent knowledge object.",

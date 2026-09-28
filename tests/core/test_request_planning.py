@@ -311,7 +311,7 @@ def test_collection_membership_anchor_instruction_is_generic_and_collection_sche
         "set it to null for every result_shape=single regardless of presentation intent" in prompt
     )
     assert hashlib.sha256(encoded_schema).hexdigest() == (
-        "ed7cb84408c551c459f020eebc2f11418a02694573ce23a2f644a2a0f97d0de9"
+        "9ac3869685e8df09b863398edee3c1f2a28505cc6429490c51c106952357a322"
     )
     fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
     assert all(
@@ -691,36 +691,36 @@ def test_write_intents_multiple_targets_and_references(schema: dict) -> None:
         output(
             write(
                 unit(
-                    "Carrefour Balma",
-                    note_type="store",
+                    "Faro",
+                    note_type="project",
                     intent="amend",
                     facts=["Closes at 20:30.", "Has underground parking."],
                 ),
                 unit(
-                    "Leche Pascual semidesnatada",
-                    note_type="product",
+                    "Marta",
+                    note_type="person",
                     facts=[],
                 ),
                 unit(
-                    "Weekly shopping",
-                    note_type="purchase",
-                    facts=["Bought {{ref:0}} in {{ref:1}} today."],
+                    "Project brief",
+                    note_type="document",
+                    facts=["Mentions {{ref:0}} and {{ref:1}}."],
                     references=[
-                        {"target_index": 0, "role": "store", "mention": "Carrefour Balma"},
+                        {"target_index": 0, "role": "project", "mention": "Faro"},
                         {
                             "target_index": 1,
-                            "role": "product",
-                            "mention": "Leche Pascual semidesnatada",
+                            "role": "person",
+                            "mention": "Marta",
                         },
                     ],
                 ),
-                unit("Old shopping list", intent="delete", facts=[]),
+                unit("Old project brief", intent="delete", facts=[]),
                 unit(
-                    "Weekly shopping",
-                    note_type="purchase",
+                    "Project brief",
+                    note_type="document",
                     intent="remove",
-                    facts=["Remove the obsolete delivery fee at {{ref:0}}."],
-                    references=[{"target_index": 0, "role": "store", "mention": "Carrefour Balma"}],
+                    facts=["Remove the obsolete project reference {{ref:0}}."],
+                    references=[{"target_index": 0, "role": "project", "mention": "Faro"}],
                 ),
             )
         ),
@@ -931,23 +931,23 @@ def test_semantic_reference_reuses_matching_same_request_target(schema: dict) ->
         output(
             write(
                 unit(
-                    "Weekly shopping",
-                    note_type="purchase",
+                    "Project brief",
+                    note_type="document",
                     facts=["Bought {{ref:0}}."],
                     references=[
                         {
                             "selection": reference_selection(
-                                "Leche Pascual", entity="Leche Pascual", note_type="product"
+                                "Faro", entity="Faro", note_type="project"
                             ),
-                            "role": "product",
-                            "mention": "Leche Pascual",
+                            "role": "project",
+                            "mention": "Faro",
                         }
                     ],
                 ),
                 unit(
-                    "Leche Pascual",
-                    entity="Leche Pascual",
-                    note_type="product",
+                    "Faro",
+                    entity="Faro",
+                    note_type="project",
                     facts=[],
                 ),
             )

@@ -70,9 +70,19 @@ Provider references are lowered inside Core to the established deterministic ref
 
 A semantic fact reference first resolves against current canonical identities. If it resolves to exactly one existing note, Core binds that identity without mutating the referenced note. If no existing identity is found and the reference carries a canonical Odyssey note type, the normal WRITE creation contract may create that entity and then bind the new canonical path into the source fact. This is how a phrase such as `el proyecto Faro` can create a `project` note when `project` is a canonical schema type.
 
+The active `note-schema` is the authority for that creation vocabulary. Core must not add a second hidden ontology such as a separate "concrete enough" test. Types whose semantics belong to future applications stay out of the active registry until those applications define them; an inactive type cannot silently become CREATE authority.
+
+A new entity created only to satisfy a semantic fact reference is dependency-atomic with the fact that consumes it. Core may preflight and materialize dependencies first, but if no consuming source fact ultimately materializes, the just-created revision-1 helper is revalidated and rolled back before the request is committed or the derived index is refreshed. Independent successful branches may still remain `PARTIAL`; this is not whole-request transactional rollback.
+
 If existing evidence is ambiguous, Core still defers for clarification rather than creating a duplicate or guessing. If unresolved reference wording has no canonical note type, Core has no creation authority; non-entity context should remain literal fact text rather than being promoted to a reference.
 
 Legacy pre-existing index-based internal fixtures may retain their historical non-blocking pending behavior while migration is incomplete. That compatibility path must not re-enter the provider schema.
+
+## Deferred ambiguity explanation
+
+The current contextual resolver can safely return `RESOLVED`, `AMBIGUOUS`, or `UNRESOLVED`, but `AMBIGUOUS` does not yet carry the smaller set of candidates the model considered genuinely plausible. The application therefore cannot reliably explain a conflict such as "Cloe and Bruno Test both match this description" without risking presentation of unrelated candidates from the broader retrieval set.
+
+A later focused change should let an ambiguous contextual decision return a validated subset of supplied `candidate_ids` together with enough grounded source evidence for a useful user-facing clarification. Core must verify every returned ID was in the supplied candidate set and must never manufacture the explanation from semantic rank alone. This is a model-facing contract change and requires its own deterministic fail-closed coverage and focused live gate; it is intentionally not part of the current atomicity/schema amendment.
 
 ## Required sentinels
 
@@ -86,8 +96,8 @@ The focused contract must keep deterministic coverage for at least:
 
 The provider-facing schema/prompt change requires focused live evidence under `AGENTS.md`. That live gate is Luna/low only, planner-only, zero retries, zero Sol fallbacks, cost-gated, non-overwriting, and separate from deterministic Core execution tests.
 
-## Current-head live gate
+## Live-gate status
 
-After integration with the current collection/clarification contract, the five-case Luna/low planner gate was repriced to a conservative no-cache ceiling of `$0.070515` with a `58,227`-byte input bound. The user explicitly authorized that bounded run.
+After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 
-The gate executed once at commit `1f0047d`: five provider calls maximum, zero retries, zero Sol calls, and all five frozen cases passed. Recorded provider status was `completed` for every row. Usage-backed estimated actual cost was `$0.0044110`. The runner was then reset to `MAX_COST_USD=$0.00`; another paid run requires fresh authorization.
+The 2026-09-28 active-schema reduction changes the provider-visible type vocabulary and the Luna teaching prompt, so the earlier run does not validate the amended head. The same five-case gate now preflights at a conservative no-cache ceiling of `$0.066086` with a `53,798`-byte input bound. `MAX_COST_USD` remains `$0.00`; no paid rerun is authorized until a fresh explicit approval is recorded.

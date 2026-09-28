@@ -109,11 +109,29 @@ def test_oracle_fails_closed_on_physical_fields_bad_intent_and_bad_references() 
         assert status == "CRITICAL"
 
 
-def test_frozen_contract_matches_current_canonical_types() -> None:
-    """Detect type-vocabulary drift before any later paid benchmark execution."""
+def test_frozen_contract_remains_historical_after_active_schema_reduction() -> None:
+    """Keep the paid Phase 15 contract frozen while making later active-schema drift explicit."""
     root = Path(__file__).resolve().parents[2]
     schema = json.loads((root / "config/note-schema.json").read_text(encoding="utf-8"))
-    assert [item["id"] for item in schema["types"]] == load_contract()["canonical_types"]
+    assert [item["id"] for item in schema["types"]] == [
+        "concept",
+        "project",
+        "document",
+        "person",
+        "journal_entry",
+    ]
+    assert load_contract()["canonical_types"] == [
+        "concept",
+        "project",
+        "task",
+        "store",
+        "product",
+        "purchase",
+        "recipe",
+        "document",
+        "person",
+        "journal_entry",
+    ]
     assert validate_output(
         {"actions": [{"kind": "write", "units": [unit("Carrefour")]}], "limitations": []}
     )

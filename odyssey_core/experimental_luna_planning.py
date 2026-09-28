@@ -46,7 +46,7 @@ _TEACHING_EXAMPLES_PATH = (
     Path(__file__).resolve().parents[1]
     / "benchmarks"
     / "luna_first_planner"
-    / "teaching_examples.json"
+    / "teaching_examples_v2.json"
 )
 
 

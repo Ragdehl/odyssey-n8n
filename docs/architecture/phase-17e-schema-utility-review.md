@@ -6,6 +6,16 @@ This document is the working decision record for the Phase 17E pre-E2E schema ut
 
 The review classifies each current canonical type and property as `KEEP`, `DEFER`, or `REMOVE` based primarily on direct user-visible value. No ontology/schema change is implied by documenting a review decision; actual schema changes still require explicit proposal, validation, and human approval.
 
+## 2026-09-28 active-registry amendment
+
+The historical review below deliberately kept several future app-owned types in the single registry as a temporary implementation bridge. Semantic WRITE reference creation changed the consequence of that choice: a registered canonical type can now authorize creation of a missing typed entity. Registration is therefore active creation authority, not merely dormant classification vocabulary.
+
+The active base Odyssey registry is reduced to `concept`, `project`, `document`, `person`, and `journal_entry`. `task`, `store`, `product`, `purchase`, and `recipe` are deferred from the active registry until the application that owns their semantics defines and registers them through the future extension boundary. They are not rejected as future concepts; they are simply not base-Odyssey creation authority today.
+
+`project` remains active because current DEV use has demonstrated immediate reusable identity value outside a dedicated Projects application. `journal_entry` likewise remains an active current knowledge shape. The deferred commerce/cooking/task vocabulary should be reintroduced only from concrete application semantics rather than by adding hidden Core heuristics above `note-schema`.
+
+This amendment supersedes only the active-registration aspect of the older `KEEP` decisions below. The original review remains intact as the historical rationale and future ownership record.
+
 ## Review test
 
 For each note type and property, ask separately:

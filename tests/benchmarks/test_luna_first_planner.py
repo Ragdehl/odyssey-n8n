@@ -97,6 +97,23 @@ def schema() -> dict[str, Any]:
     return json.loads((ROOT / "config" / "note-schema.json").read_text(encoding="utf-8"))
 
 
+@pytest.fixture
+def historical_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Restore retired Phase-17E domain types only for frozen historical evaluator fixtures."""
+    value = json.loads(json.dumps(schema))
+    for note_type in ("task", "store", "product", "purchase", "recipe"):
+        value["types"].append(
+            {
+                "id": note_type,
+                "name": note_type.title(),
+                "description": f"Historical benchmark-only {note_type} type.",
+                "examples": [note_type],
+                "properties": [],
+            }
+        )
+    return value
+
+
 def selection(
     query: str,
     *,
@@ -678,7 +695,7 @@ def test_provider_failure_retains_safe_chain_without_changing_category(
 
 
 def test_evaluator_forces_escalation_for_historical_domain_date_pattern(
-    schema: dict[str, Any],
+    historical_schema: dict[str, Any],
 ) -> None:
     """Override a schema-valid PLAN that maps trusted domain time to note lifecycle."""
     _, oracles = load_frozen_registry()
@@ -690,7 +707,7 @@ def test_evaluator_forces_escalation_for_historical_domain_date_pattern(
         ),
         limitations=["unsupported_domain_date"],
     )
-    evaluation = evaluate_payload("HD01", payload, schema, oracles["HD01"])
+    evaluation = evaluate_payload("HD01", payload, historical_schema, oracles["HD01"])
     assert evaluation.classification is Classification.FORCED_ESCALATE
     assert evaluation.findings == ("domain_date_mapped_to_lifecycle",)
 
@@ -721,7 +738,7 @@ def test_schema_valid_unsafe_plan_is_not_counted_safe(schema: dict[str, Any]) ->
     assert evaluation.classification is Classification.UNSAFE_NON_ESCALATION
 
 
-def test_v1_sd01_classification_remains_reproducible(schema: dict[str, Any]) -> None:
+def test_v1_sd01_classification_remains_reproducible(historical_schema: dict[str, Any]) -> None:
     """Preserve the historical lexical-oracle result exactly under the v1 evaluator."""
     _, v1_oracles = load_frozen_registry()
     payload = plan_payload(
@@ -731,12 +748,14 @@ def test_v1_sd01_classification_remains_reproducible(schema: dict[str, Any]) -> 
             note_type="purchase",
         )
     )
-    evaluation = evaluate_payload("SD01", payload, schema, v1_oracles["SD01"])
+    evaluation = evaluate_payload("SD01", payload, historical_schema, v1_oracles["SD01"])
     assert evaluation.classification is Classification.UNSAFE_NON_ESCALATION
     assert evaluation.findings == ("missing_delegate",)
 
 
-def test_v2_sd01_records_structural_safety_and_wording_review(schema: dict[str, Any]) -> None:
+def test_v2_sd01_records_structural_safety_and_wording_review(
+    historical_schema: dict[str, Any],
+) -> None:
     """Treat count/how-many wording as semantic review, not unsafe non-escalation."""
     _, oracles = load_frozen_registry_v2()
     payload = plan_payload(
@@ -746,7 +765,7 @@ def test_v2_sd01_records_structural_safety_and_wording_review(schema: dict[str, 
             note_type="purchase",
         )
     )
-    evaluation = evaluate_payload_v2("SD01", payload, schema, oracles["SD01"])
+    evaluation = evaluate_payload_v2("SD01", payload, historical_schema, oracles["SD01"])
     assert evaluation.classification is ClassificationV2.SAFE_PLAN
     assert evaluation.findings == ()
     assert evaluation.semantic_review == ()
@@ -763,7 +782,9 @@ def test_v2_wrong_delegate_selection_still_fails_structurally(schema: dict[str, 
     assert evaluation.findings == ("missing_delegate",)
 
 
-def test_v2_explicitly_contradictory_delegate_operation_fails(schema: dict[str, Any]) -> None:
+def test_v2_explicitly_contradictory_delegate_operation_fails(
+    historical_schema: dict[str, Any],
+) -> None:
     """Reject a delegate that deterministically asks for a forbidden operation."""
     _, oracles = load_frozen_registry_v2()
     payload = plan_payload(
@@ -773,20 +794,20 @@ def test_v2_explicitly_contradictory_delegate_operation_fails(schema: dict[str, 
             note_type="purchase",
         )
     )
-    evaluation = evaluate_payload_v2("SD01", payload, schema, oracles["SD01"])
+    evaluation = evaluate_payload_v2("SD01", payload, historical_schema, oracles["SD01"])
     assert evaluation.classification is ClassificationV2.UNSAFE_NON_ESCALATION
     assert evaluation.findings == ("contradictory_delegate_operation",)
 
 
 def test_v2_paraphrased_sd02_and_sd03_are_review_only_not_lexical_failures(
-    schema: dict[str, Any],
+    historical_schema: dict[str, Any],
 ) -> None:
     """Keep harmless wording differences visible without turning them into safety failures."""
     _, oracles = load_frozen_registry_v2()
     sd02 = evaluate_payload_v2(
         "SD02",
         plan_payload(delegate("Convert my Balma note into French", "Balma note")),
-        schema,
+        historical_schema,
         oracles["SD02"],
     )
     sd03 = evaluate_payload_v2(
@@ -798,7 +819,7 @@ def test_v2_paraphrased_sd02_and_sd03_are_review_only_not_lexical_failures(
                 note_type="purchase",
             )
         ),
-        schema,
+        historical_schema,
         oracles["SD03"],
     )
     assert sd02.classification is ClassificationV2.SAFE_PLAN

@@ -25,6 +25,7 @@ from .materialization import (
     materialize_delete,
     materialize_type_migration,
     materialize_update,
+    rollback_created_reference,
 )
 from .observability import (
     OperationalEvidence,
@@ -1261,7 +1262,58 @@ def _execute_single_units(
                 operation=persisted.operation.value,
                 stable_note_id=persisted.id,
             )
+    _rollback_orphan_reference_creates(action, preflight, results, repository, schema)
     return [results[index] for index in range(len(action.units))]
+
+
+def _rollback_orphan_reference_creates(
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+    results: dict[int, UnitResult],
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> None:
+    """Rollback new reference helpers unless at least one consuming source fact succeeded."""
+    consumers: dict[int, set[int]] = {index: set() for index, _ in enumerate(action.units)}
+    for source_index, unit in enumerate(action.units):
+        for reference in unit.references:
+            consumers[reference.target_index].add(source_index)
+
+    for target_index, unit in enumerate(action.units):
+        target = preflight[target_index]
+        result = results.get(target_index)
+        if (
+            not unit.reference_lookup_only
+            or target.outcome is not WriteTargetOutcome.CREATE
+            or result is None
+            or result.status is not UnitStatus.SUCCEEDED
+            or result.operation != "CREATED"
+        ):
+            continue
+        if any(
+            (source_result := results.get(source_index)) is not None
+            and source_result.status is UnitStatus.SUCCEEDED
+            and source_result.materially_affected
+            for source_index in consumers[target_index]
+        ):
+            continue
+        try:
+            rollback_created_reference(target, repository=repository, schema=schema)
+        except Exception as error:
+            results[target_index] = UnitResult(
+                target_index,
+                UnitStatus.FAILED,
+                operation="CREATE",
+                stable_note_id=target.stable_id,
+                reason=f"REFERENCE_CREATE_ROLLBACK_FAILED: {_safe_reason(error)}",
+            )
+        else:
+            results[target_index] = UnitResult(
+                target_index,
+                UnitStatus.DEFERRED,
+                reason="DEPENDENT_FACT_NOT_WRITTEN",
+                materially_affected=False,
+            )
 
 
 def _fact_ordinal_starts(action: WriteAction, start: int) -> tuple[tuple[int, KnowledgeUnit], ...]:

@@ -71,15 +71,15 @@ def test_find_exact_entity_candidates_finds_primary_name_with_unicode_casefold_a
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Match a filename stem exactly after minimal deterministic normalization."""
-    _write_note(repository, "stores/Straße.md", note_id="store-1", note_type="store")
+    _write_note(repository, "stores/Straße.md", note_id="store-1", note_type="project")
 
-    candidates = find_exact_entity_candidates(repository, schema, "  STRASSE  ", type="store")
+    candidates = find_exact_entity_candidates(repository, schema, "  STRASSE  ", type="project")
 
     assert len(candidates) == 1
     assert isinstance(candidates[0], ExactEntityCandidate)
     assert candidates[0].path == "stores/Straße.md"
     assert candidates[0].id == "store-1"
-    assert candidates[0].type == "store"
+    assert candidates[0].type == "project"
     assert candidates[0].primary_name == "Straße"
     assert candidates[0].match_kind is MatchKind.PRIMARY_NAME
     assert candidates[0].matched_value == "Straße"
@@ -93,12 +93,14 @@ def test_exact_matching_normalizes_canonical_unicode_and_repeated_whitespace(
         repository,
         "stores/Café du Port.md",
         note_id="store-cafe",
-        note_type="store",
+        note_type="project",
         aliases=["L’Épicerie   Centrale"],
     )
 
-    primary = find_exact_entity_candidates(repository, schema, "Cafe\u0301\tdu\nPort", type="store")
-    alias = find_exact_entity_candidates(repository, schema, "l’épicerie centrale", type="store")
+    primary = find_exact_entity_candidates(
+        repository, schema, "Cafe\u0301\tdu\nPort", type="project"
+    )
+    alias = find_exact_entity_candidates(repository, schema, "l’épicerie centrale", type="project")
 
     assert [candidate.id for candidate in primary] == ["store-cafe"]
     assert [candidate.id for candidate in alias] == ["store-cafe"]
@@ -109,9 +111,9 @@ def test_exact_matching_preserves_accents_words_hyphens_and_punctuation(
     repository: VaultRepository, schema: dict[str, object], query: str
 ) -> None:
     """Keep identity-bearing lexical and punctuation differences out of exact matching."""
-    _write_note(repository, "stores/Café du Port.md", note_id="store-cafe", note_type="store")
+    _write_note(repository, "stores/Café du Port.md", note_id="store-cafe", note_type="project")
 
-    assert find_exact_entity_candidates(repository, schema, query, type="store") == ()
+    assert find_exact_entity_candidates(repository, schema, query, type="project") == ()
 
 
 def test_find_exact_entity_candidates_finds_alias_and_primary_name_takes_precedence(
@@ -122,18 +124,18 @@ def test_find_exact_entity_candidates_finds_alias_and_primary_name_takes_precede
         repository,
         "stores/Carrefour Balma.md",
         note_id="store-balma",
-        note_type="store",
+        note_type="project",
         aliases=["Carrefour"],
     )
     _write_note(
         repository,
         "stores/Carrefour.md",
         note_id="store-main",
-        note_type="store",
+        note_type="project",
         aliases=["Carrefour"],
     )
 
-    candidates = find_exact_entity_candidates(repository, schema, "carrefour", type="store")
+    candidates = find_exact_entity_candidates(repository, schema, "carrefour", type="project")
 
     assert [candidate.id for candidate in candidates] == ["store-main", "store-balma"]
     assert [candidate.match_kind for candidate in candidates] == [
@@ -150,21 +152,21 @@ def test_empty_valid_alias_does_not_break_candidate_discovery(
         repository,
         "stores/Carrefour.md",
         note_id="store-main",
-        note_type="store",
+        note_type="project",
         aliases=[""],
     )
 
-    assert find_exact_entity_candidates(repository, schema, "Auchan", type="store") == ()
+    assert find_exact_entity_candidates(repository, schema, "Auchan", type="project") == ()
 
 
 def test_type_filter_excludes_exact_cross_type_match(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Constrain identity candidates to the caller's canonical entity type."""
-    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
+    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="project")
     _write_note(repository, "documents/Carrefour.md", note_id="doc-1", note_type="document")
 
-    candidates = find_exact_entity_candidates(repository, schema, "Carrefour", type="store")
+    candidates = find_exact_entity_candidates(repository, schema, "Carrefour", type="project")
 
     assert [candidate.id for candidate in candidates] == ["store-1"]
 
@@ -173,7 +175,7 @@ def test_same_exact_name_across_types_is_ambiguous_without_type_filter(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Preserve cross-type ambiguity when the caller supplies no type constraint."""
-    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
+    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="project")
     _write_note(repository, "documents/Carrefour.md", note_id="doc-1", note_type="document")
 
     resolution = resolve_exact_entity(repository, schema, "Carrefour")
@@ -181,7 +183,7 @@ def test_same_exact_name_across_types_is_ambiguous_without_type_filter(
     assert resolution.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
     assert [(candidate.type, candidate.id) for candidate in resolution.candidates] == [
         ("document", "doc-1"),
-        ("store", "store-1"),
+        ("project", "store-1"),
     ]
 
 
@@ -189,13 +191,13 @@ def test_candidate_order_is_deterministic_across_repeated_discovery(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Order primary matches first, then normalized names and paths deterministically."""
-    _write_note(repository, "stores/Carrefour.md", note_id="store-main", note_type="store")
+    _write_note(repository, "stores/Carrefour.md", note_id="store-main", note_type="project")
     _write_note(repository, "documents/Carrefour.md", note_id="doc-main", note_type="document")
     _write_note(
         repository,
         "stores/alpha.md",
         note_id="store-alpha",
-        note_type="store",
+        note_type="project",
         aliases=["Carrefour"],
     )
     _write_note(
@@ -223,18 +225,18 @@ def test_resolve_exact_entity_represents_all_three_normal_outcomes(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Return unique, absent, and ambiguous exact matches as explicit outcomes."""
-    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
+    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="project")
     _write_note(
         repository,
         "stores/Carrefour Balma.md",
         note_id="store-2",
-        note_type="store",
+        note_type="project",
         aliases=["Carrefour"],
     )
 
-    ambiguous = resolve_exact_entity(repository, schema, " Carrefour ", type="store")
-    no_exact_match = resolve_exact_entity(repository, schema, "Auchan", type="store")
-    exact_match = resolve_exact_entity(repository, schema, "Carrefour Balma", type="store")
+    ambiguous = resolve_exact_entity(repository, schema, " Carrefour ", type="project")
+    no_exact_match = resolve_exact_entity(repository, schema, "Auchan", type="project")
+    exact_match = resolve_exact_entity(repository, schema, "Carrefour Balma", type="project")
 
     assert ambiguous.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
     assert ambiguous.query == "Carrefour"
@@ -251,11 +253,11 @@ def test_partial_name_is_not_a_candidate_or_resolution(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Never promote a sole partial name to an identity match."""
-    _write_note(repository, "stores/Carrefour Balma.md", note_id="store-1", note_type="store")
+    _write_note(repository, "stores/Carrefour Balma.md", note_id="store-1", note_type="project")
 
-    assert find_exact_entity_candidates(repository, schema, "Carre", type="store") == ()
+    assert find_exact_entity_candidates(repository, schema, "Carre", type="project") == ()
     assert (
-        resolve_exact_entity(repository, schema, "Carre", type="store").outcome
+        resolve_exact_entity(repository, schema, "Carre", type="project").outcome
         is ExactResolutionOutcome.NO_EXACT_MATCH
     )
 
@@ -291,7 +293,7 @@ def test_invalid_query_and_unknown_type_fail_before_scanning(
     for query in ("", "   ", None):
         with pytest.raises(ValueError):
             find_exact_entity_candidates(  # type: ignore[arg-type]
-                repository, schema, query, type="store"
+                repository, schema, query, type="project"
             )
     with pytest.raises(ValueError, match="Unknown canonical note type"):
         find_exact_entity_candidates(repository, schema, "Carrefour", type="supermarket")
@@ -301,7 +303,7 @@ def test_invalid_query_and_unknown_type_fail_before_scanning(
     "markdown",
     [
         "not frontmatter",
-        "---\nid: broken\ntype: store\n---\n\n# Missing required metadata\n",
+        "---\nid: broken\ntype: project\n---\n\n# Missing required metadata\n",
     ],
 )
 def test_invalid_existing_note_fails_closed(
@@ -311,18 +313,18 @@ def test_invalid_existing_note_fails_closed(
     repository.create_text("broken.md", markdown)
 
     with pytest.raises(ExactEntityLookupError, match="broken.md"):
-        resolve_exact_entity(repository, schema, "Carrefour", type="store")
+        resolve_exact_entity(repository, schema, "Carrefour", type="project")
 
 
 def test_candidate_discovery_is_read_only(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:
     """Leave note content and vault paths unchanged after lookup."""
-    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="store")
+    _write_note(repository, "stores/Carrefour.md", note_id="store-1", note_type="project")
     before = repository.read_text("stores/Carrefour.md")
     before_paths = repository.list_markdown_paths()
 
-    resolve_exact_entity(repository, schema, "Carrefour", type="store")
+    resolve_exact_entity(repository, schema, "Carrefour", type="project")
 
     assert repository.read_text("stores/Carrefour.md") == before
     assert repository.list_markdown_paths() == before_paths

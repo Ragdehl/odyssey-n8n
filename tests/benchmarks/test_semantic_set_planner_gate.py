@@ -315,7 +315,7 @@ def test_v4_retry2_continues_only_after_the_two_immutable_pass_prerequisites(
     output_path = tmp_path / V4_RETRY2_OUTPUT_PATH.name
     monkeypatch.setattr(retry2, "OUTPUT_PATH", output_path)
     assert output_path.exists() is False
-    with pytest.raises(SystemExit, match="preflight refused"):
+    with pytest.raises(SystemExit, match="contract changed"):
         retry2.main(["--confirm-live-provider-calls"])
     assert output_path.exists() is False
 
