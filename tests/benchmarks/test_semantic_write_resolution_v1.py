@@ -126,7 +126,7 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
 
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
-    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.MAX_COST_USD == Decimal("0.070515")
 
 
 def test_over_budget_refuses_before_provider_construction(

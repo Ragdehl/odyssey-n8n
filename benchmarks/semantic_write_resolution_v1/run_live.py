@@ -27,10 +27,12 @@ from odyssey_core.experimental_luna_planning import (  # noqa: E402
 
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
-OUTPUT_PATH = ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1.jsonl"
+OUTPUT_PATH = (
+    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-current-main.jsonl"
+)
 INPUT_OVERHEAD_BYTES = 1024
-# Deliberately zero until the user explicitly authorizes a bounded paid run.
-MAX_COST_USD = Decimal("0.00")
+# Explicitly authorized by the user for the fresh current-main five-case gate.
+MAX_COST_USD = Decimal("0.070515")
 
 
 def conservative_cost_ceiling(
