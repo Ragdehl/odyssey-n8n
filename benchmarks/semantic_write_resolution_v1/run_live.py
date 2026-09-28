@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from benchmarks.semantic_write_resolution_v1.evaluate import evaluate, load_registry  # noqa: E402
+from benchmarks.semantic_write_resolution_v1.evaluate import evaluate  # noqa: E402
 from odyssey_core.experimental_luna_planning import (  # noqa: E402
     LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
     LUNA_EXPERIMENT_MODEL,
@@ -32,6 +32,7 @@ OUTPUT_PATH = (
 )
 INPUT_OVERHEAD_BYTES = 1024
 # Reset after the authorized current-main gate completed; a rerun requires fresh approval.
+ACTIVE_REGISTRY_PATH = Path(__file__).with_name("cases_active_schema.json")
 MAX_COST_USD = Decimal("0.00")
 
 
@@ -105,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
     args = parser.parse_args(argv)
-    registry = load_registry()
+    registry = json.loads(ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
     cases = registry["cases"]
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     cost, input_bound = conservative_cost_ceiling(cases, registry["fixed_context"], schema)

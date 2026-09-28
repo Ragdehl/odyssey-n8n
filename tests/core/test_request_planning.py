@@ -1867,6 +1867,34 @@ def test_tag_changes_reject_duplicate_or_conflicting_values(schema: dict) -> Non
         )
 
 
+def test_write_relational_reference_must_cover_the_complete_bare_target(schema: dict) -> None:
+    """Reject a shortened relationship that discards richer WRITE identity evidence."""
+    rich = unit(
+        "mi hija a la que le gusta ver detectives de animales",
+        note_type="person",
+        facts=["Adora el chocolate."],
+    )
+    rich["target"]["relational_reference"] = {
+        "reference": "mi hija",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    with pytest.raises(RequestPlanningError) as error:
+        validate_request_plan(output(write(rich)), schema)
+    assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
+
+    bare = unit("Mi hija", note_type="person", facts=["Vive en Lyon."])
+    bare["target"]["relational_reference"] = {
+        "reference": "mi hija",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    parsed = validate_request_plan(output(write(bare)), schema)
+    assert parsed.actions[0].units[0].target.relational_reference is not None
+
+
 def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(schema: dict) -> None:
     """Accept the bounded intent without granting a planner canonical evidence authority."""
     semantic = {"kind": "retrieve", "plan": semantic_set_selection("¿Quién es mi familia?")}

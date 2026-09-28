@@ -48,6 +48,8 @@ fact         = "Adora el chocolate."
 
 It must not become `target.self_target=self`. `self` is reserved for facts whose actual subject is the authenticated user, for example `Axel y Denis son mis compañeros de trabajo`.
 
+For WRITE, `relational_reference` is reserved for a bare current relationship target. Its `reference` must cover the complete target wording: after whitespace normalization and case-folding, `target.query` and `relational_reference.reference` must match. A richer identity such as `mi hija a la que le gusta ver detectives de animales` therefore stays an ordinary semantic query. Shortening it to `relational_reference.reference = "mi hija"` is rejected deterministically rather than discarding the distinguishing evidence.
+
 ## Resolution
 
 Core resolves a semantic target or reference against current canonical evidence:
@@ -100,4 +102,6 @@ The provider-facing schema/prompt change requires focused live evidence under `A
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 
-The 2026-09-28 active-schema reduction changes the provider-visible type vocabulary and the Luna teaching prompt, so the earlier run does not validate the amended head. The same five-case gate now preflights at a conservative no-cache ceiling of `$0.066086` with a `53,798`-byte input bound. `MAX_COST_USD` remains `$0.00`; no paid rerun is authorized until a fresh explicit approval is recorded.
+A manual DEV regression then exposed a distinct planner boundary: for `Mi hija a la que le gusta ver detectives de animales adora el chocolate`, Luna preserved the full `target.query` but also emitted `relational_reference = "mi hija"`. Core consequently entered the bare relational resolver and correctly deferred with `relational_evidence_ambiguous`, losing the richer identifying context for resolution. The amended contract now rejects any shortened relational WRITE target and the live oracle explicitly requires `relational_reference=null` for descriptive targets. Historical live evidence did not cover this exact wording boundary.
+
+The pending active-schema gate therefore uses a distinct registry that preserves the historical v1 cases and replaces the descriptive-child sentinel with the exact failing daughter wording. On the amended head it preflights at a conservative no-cache ceiling of `$0.066517` with a `54,229`-byte input bound. `MAX_COST_USD` remains `$0.00`; no provider call has been made for this amended contract and a fresh explicit authorization is required before running it.

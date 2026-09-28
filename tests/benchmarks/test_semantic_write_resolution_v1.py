@@ -14,6 +14,7 @@ from odyssey_core.experimental_luna_planning import PlannerEscalation
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    RelationalReference,
     RequestPlan,
     SelectionCriteria,
     WriteAction,
@@ -62,6 +63,21 @@ def test_registry_is_the_five_frozen_write_cases() -> None:
     ]
 
 
+def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -> None:
+    """Keep historical v1 frozen while the pending current gate covers the DEV failure exactly."""
+    import benchmarks.semantic_write_resolution_v1.run_live as runner
+
+    registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
+    assert registry["version"] == "semantic-write-resolution-active-schema-2026-09-28"
+    assert len(registry["cases"]) == 5
+    daughter = registry["cases"][1]
+    assert daughter == {
+        "id": "SWR02-rich-daughter-target",
+        "request": "Mi hija a la que le gusta ver detectives de animales adora el chocolate.",
+        "expect": "descriptive_daughter_target",
+    }
+
+
 def test_evaluator_accepts_intended_semantic_shapes() -> None:
     """Require self only for self facts and semantic lookup units for mentioned entities."""
     coworkers = RequestPlan(
@@ -87,6 +103,44 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
     child = RequestPlan(
         (WriteAction((unit("mi hijo al que le gusta el fútbol", "Adora el chocolate."),)),), ()
     )
+    daughter = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit(
+                        "mi hija a la que le gusta ver detectives de animales",
+                        "Adora el chocolate.",
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    bad_daughter_target = SelectionCriteria(
+        None,
+        "mi hija a la que le gusta ver detectives de animales",
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+    )
+    bad_daughter = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        bad_daughter_target,
+                        "record",
+                        (),
+                        (),
+                        ("Adora el chocolate.",),
+                        (),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
     friend = RequestPlan(
         (WriteAction((unit("la amiga con la que cené ayer", "Se muda a París."),)),), ()
     )
@@ -109,6 +163,8 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
     )
     assert evaluate(coworkers, "self_relationship_references").passed
     assert evaluate(child, "descriptive_child_target").passed
+    assert evaluate(daughter, "descriptive_daughter_target").passed
+    assert not evaluate(bad_daughter, "descriptive_daughter_target").passed
     assert evaluate(friend, "descriptive_friend_target").passed
     assert evaluate(mixed, "descriptive_target_and_reference").passed
     assert evaluate(PlannerEscalation(), "fail_closed_ambiguous_pronoun").passed
@@ -116,15 +172,15 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
 
 def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     """Price exactly five Luna/low calls; no Sol allowance is part of this gate."""
-    registry = load_registry()
+    import benchmarks.semantic_write_resolution_v1.run_live as runner
+
+    registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
     assert Decimal("0.06") < cost < Decimal("0.07")
     assert input_bound > 0
-
-    import benchmarks.semantic_write_resolution_v1.run_live as runner
 
     assert runner.MAX_COST_USD == Decimal("0.00")
 

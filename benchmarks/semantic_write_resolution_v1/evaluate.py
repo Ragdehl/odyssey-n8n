@@ -58,7 +58,21 @@ def evaluate(result: Any, expected: str) -> Evaluation:
         checks.extend(
             [
                 (source.target.self_target is None, "not_self"),
+                (source.target.relational_reference is None, "ordinary_semantic_target"),
                 (_contains(source.target.query, "hijo", "futbol"), "child_query_preserved"),
+                (_facts_contain(source, "chocolate"), "chocolate_fact"),
+                (not source.references and not lookups, "no_spurious_references"),
+            ]
+        )
+    elif expected == "descriptive_daughter_target":
+        checks.extend(
+            [
+                (source.target.self_target is None, "not_self"),
+                (source.target.relational_reference is None, "ordinary_semantic_target"),
+                (
+                    _contains(source.target.query, "hija", "detectives", "animales"),
+                    "daughter_query_preserved",
+                ),
                 (_facts_contain(source, "chocolate"), "chocolate_fact"),
                 (not source.references and not lookups, "no_spurious_references"),
             ]
@@ -67,6 +81,7 @@ def evaluate(result: Any, expected: str) -> Evaluation:
         checks.extend(
             [
                 (source.target.self_target is None, "not_self"),
+                (source.target.relational_reference is None, "ordinary_semantic_target"),
                 (_contains(source.target.query, "amiga", "cen", "ayer"), "friend_query_preserved"),
                 (_facts_contain(source, "paris"), "paris_fact"),
                 (not source.references and not lookups, "no_spurious_references"),
@@ -76,6 +91,7 @@ def evaluate(result: Any, expected: str) -> Evaluation:
         checks.extend(
             [
                 (source.target.self_target is None, "not_self"),
+                (source.target.relational_reference is None, "ordinary_semantic_target"),
                 (_contains(source.target.query, "hijo", "mayor"), "older_child_query"),
                 (_facts_contain(source, "cine"), "cinema_fact"),
                 (len(source.references) == 1, "one_reference"),
