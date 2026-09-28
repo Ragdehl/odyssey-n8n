@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
 
 from .identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .observability import SpanRecorder
-from .relational_resolution import ResolvedRelationalReference
+from .relational_resolution import (
+    RelationalResolutionError,
+    ResolvedRelationalReference,
+    resolve_relational_reference,
+)
 from .relationship_evidence import (
     EvidenceDirection,
     RelationshipEvidenceProjector,
@@ -174,7 +178,7 @@ def _preflight_write_action(
                 "all_matching units cannot use single-identity reference preflight"
             )
         if unit_index in resolved_targets:
-            if not _is_reference_only_unit(unit):
+            if not is_reference_only_unit(unit):
                 raise ReferencePreflightError(
                     "Validated relationship target must be a structurally reference-only unit"
                 )
@@ -191,7 +195,7 @@ def _preflight_write_action(
             )
             continue
         if unit_index in relationship_targets:
-            if unit.target.relational_reference is None or _is_reference_only_unit(unit):
+            if unit.target.relational_reference is None or is_reference_only_unit(unit):
                 raise ReferencePreflightError("Relationship write target is invalid")
             path, name = _find_existing_identity(
                 repository, schema, relationship_targets[unit_index]
@@ -216,12 +220,15 @@ def _preflight_write_action(
             "authenticated_actor": authenticated_actor,
             "self_binding_repository": self_binding_repository,
         }
+        decision_function = (
+            _decide_reference_only_target if unit.reference_lookup_only else decide_write_target
+        )
         decision = (
             span_recorder.invoke(
-                f"preflight.unit[{unit_index}].target", decide_write_target, unit, **target_kwargs
+                f"preflight.unit[{unit_index}].target", decision_function, unit, **target_kwargs
             )
             if span_recorder is not None
-            else decide_write_target(unit, **target_kwargs)
+            else decision_function(unit, **target_kwargs)
         )
         results.append(
             _materialize_decision(
@@ -440,7 +447,7 @@ def preflight_relationship_write_action(
             "Relationship member set does not match current evidence"
         )
     source_unit = action.units[binding.source_unit_index]
-    if _is_reference_only_unit(source_unit):
+    if is_reference_only_unit(source_unit):
         raise RelationshipWritePreflightError("Relationship write source has no mutation payload")
     referenced_member_indexes = tuple(
         reference.target_index for reference in source_unit.references
@@ -473,7 +480,83 @@ def preflight_relationship_write_action(
     return preflight
 
 
-def _is_reference_only_unit(unit: KnowledgeUnit) -> bool:
+def _decide_reference_only_target(
+    unit: KnowledgeUnit,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    semantic_index: Any,
+    embedder: Any,
+    contextual_reasoner: Any,
+    semantic_limit: int,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
+) -> WriteTargetDecision:
+    """Resolve one reference lookup against current notes without granting CREATE authority.
+
+    Reference-only units are internal search requests. A strict current relationship can resolve them
+    directly; if that bounded relationship path cannot identify one target, the preserved descriptive
+    query gets one ordinary semantic-resolution attempt. Neither path may create a new note merely
+    because a referenced entity was not found.
+    """
+    candidate_unit = unit
+    if unit.target.relational_reference is not None:
+        try:
+            resolved = resolve_relational_reference(
+                unit.target,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+            )
+        except RelationalResolutionError:
+            candidate_unit = replace(
+                unit,
+                target=replace(unit.target, relational_reference=None),
+            )
+        else:
+            if len(resolved.targets) == 1:
+                return WriteTargetDecision(
+                    WriteTargetOutcome.UPDATE, existing_note_id=resolved.targets[0].id
+                )
+            return WriteTargetDecision(
+                WriteTargetOutcome.NEEDS_CLARIFICATION,
+                reason="ambiguous_existing_reference",
+                candidate_note_ids=tuple(target.id for target in resolved.targets),
+            )
+
+    decision = decide_write_target(
+        candidate_unit,
+        repository=repository,
+        schema=schema,
+        semantic_index=semantic_index,
+        embedder=embedder,
+        contextual_reasoner=contextual_reasoner,
+        semantic_limit=semantic_limit,
+        authenticated_actor=authenticated_actor,
+        self_binding_repository=self_binding_repository,
+    )
+    if decision.outcome is WriteTargetOutcome.CREATE:
+        return WriteTargetDecision(
+            WriteTargetOutcome.NEEDS_CLARIFICATION, reason="unresolved_existing_reference"
+        )
+    if (
+        decision.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+        and decision.reason == "ambiguous_existing_target"
+    ):
+        return WriteTargetDecision(
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            reason="ambiguous_existing_reference",
+            candidate_note_ids=decision.candidate_note_ids,
+        )
+    return decision
+
+
+def is_reference_only_unit(unit: KnowledgeUnit) -> bool:
     """Return whether a unit can only provide an existing reference target and never mutate."""
     return (
         unit.intent == "record"
@@ -506,12 +589,18 @@ def _materialize_decision(
             decision.outcome,
             candidate_note_ids=decision.candidate_note_ids,
             reason=decision.reason,
+            reference_only=unit.reference_lookup_only,
         )
     if decision.outcome is WriteTargetOutcome.UPDATE:
         assert decision.existing_note_id is not None
         path, name = _find_existing_identity(repository, schema, decision.existing_note_id)
         return UnitTargetPreflight(
-            unit_index, decision.outcome, decision.existing_note_id, name, path
+            unit_index,
+            decision.outcome,
+            decision.existing_note_id,
+            name,
+            path,
+            reference_only=unit.reference_lookup_only,
         )
     name = unit.target.entity or unit.target.query
     if not isinstance(name, str) or not name.strip():

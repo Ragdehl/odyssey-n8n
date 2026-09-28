@@ -192,6 +192,47 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     assert purchase.facts == ("Bought {{ref:0}}.",)
 
 
+def test_semantic_reference_lookup_never_creates_an_unresolved_note(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Treat lowered semantic references as existing-note searches, never creation authority."""
+    lookup = KnowledgeUnit(
+        SelectionCriteria(None, "la amiga que vive en Lyon", "person", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, schema, action(lookup), ids=["must-not-be-used"])
+    assert result[0].outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result[0].reason == "unresolved_existing_reference"
+    assert result[0].reference_only is True
+    assert result[0].stable_id is None
+    assert list(tmp_path.rglob("*.md")) == []
+
+
+def test_semantic_reference_lookup_reuses_one_exact_existing_note(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Reuse a canonical exact match and mark the synthetic unit as reference-only."""
+    write_existing(tmp_path, "people/Marta.md")
+    lookup = KnowledgeUnit(
+        SelectionCriteria("Marta", "Marta", "person", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, schema, action(lookup))
+    assert result[0].outcome is WriteTargetOutcome.UPDATE
+    assert result[0].stable_id == "existing-marta"
+    assert result[0].reference_only is True
+
+
 def test_ordinary_preflight_exposes_no_exact_id_override(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:

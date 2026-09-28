@@ -173,25 +173,24 @@ def test_named_reference_oracle_accepts_either_unit_order() -> None:
     assert evaluate_result(result, oracles["S03"]).classification == "PASS"
 
 
-def test_cost_ceiling_blocks_provider_construction_above_authorization(
+def test_historical_live_authorization_expires_when_current_contract_cost_grows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Refuse before construction when the frozen maximum exceeds an authorization cap."""
+    """Fail closed instead of silently reusing Slice 3's historical provider authorization."""
     registry, _oracles = load_frozen_registry()
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     cost, luna_input, sol_input = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert cost <= MAX_COST_USD
+    assert cost > MAX_COST_USD
     assert luna_input > 0 and sol_input > 0
     import benchmarks.reference_relationship_v1.run_live as runner
 
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "should-not-exist.jsonl")
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.45"))
     monkeypatch.setattr(
         runner.LunaFirstRequestPlanner,
         "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed despite cost gate"),
+        lambda *_args, **_kwargs: pytest.fail("provider constructed despite expired cost guard"),
     )
     with pytest.raises(SystemExit, match="exceeds"):
         main(["--confirm-live-provider-calls"])
@@ -205,6 +204,7 @@ def test_missing_provider_environment_refuses_before_evidence_reservation(
     import benchmarks.reference_relationship_v1.run_live as runner
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "should-not-exist.jsonl")
     monkeypatch.setattr(
         runner.LunaFirstRequestPlanner,
@@ -226,6 +226,7 @@ def test_attempt_3_uses_a_distinct_exclusive_evidence_path(
     evidence_path = tmp_path / runner.OUTPUT_PATH.name
     original = b"prior attempt evidence\n"
     evidence_path.write_bytes(original)
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", evidence_path)
     monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
     monkeypatch.setattr(
@@ -249,14 +250,15 @@ def test_continuation_selects_only_the_fixed_unattempted_suffix() -> None:
     assert len(cases) + 1 == 3
 
 
-def test_continuation_cost_fits_the_authorized_ceiling() -> None:
-    """Price only the fixed continuation cases within their explicit authorization."""
+def test_continuation_historical_authorization_is_not_reusable_after_contract_change() -> None:
+    """Require fresh authorization if someone tries to rerun the completed historical suffix."""
     registry, cases, _oracles = load_continuation_cases()
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     cost, luna_input, sol_input = continuation_cost_ceiling(
         cases, registry["fixed_context"], schema
     )
-    assert cost <= CONTINUATION_MAX_COST_USD == Decimal("0.37")
+    assert CONTINUATION_MAX_COST_USD == Decimal("0.37")
+    assert cost > CONTINUATION_MAX_COST_USD
     assert luna_input > 0 and sol_input > 0
 
 

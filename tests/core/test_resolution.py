@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.contextual import ContextualProviderError, ContextualResolutionError
 from odyssey_core.identity import ExactEntityLookupError
 from odyssey_core.notes import Note, serialize_note, validate_note
@@ -178,6 +179,50 @@ def test_ambiguous_exact_candidates_are_never_dropped_by_semantic_top_n(
     assert result.outcome is ExistingEntityOutcome.AMBIGUOUS
     assert result.candidate_ids == ("ada-one", "ada-two")
     assert [item.id for item in request.candidates] == ["ada-one", "ada-two"]
+
+
+def test_relationship_context_expands_semantic_candidates_without_selecting_identity(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Expose co-targets from one canonical fact so Luna can resolve descriptive identities."""
+    self_body = render_atomic_facts(
+        ("Mis hijos son [[people/Cloe|Cloe]] y [[people/Bruno|Bruno]].",),
+        "fixture",
+        (0,),
+        "2026-09-28",
+    )
+    write_note(
+        tmp_path,
+        "people/Self.md",
+        valid_note("self", "person", self_body, name="Self"),
+    )
+    write_note(tmp_path, "people/Cloe.md", valid_note("cloe", "person", "", name="Cloe"))
+    write_note(tmp_path, "people/Bruno.md", valid_note("bruno", "person", "", name="Bruno"))
+    index = FakeIndex((candidate("bruno", "people/Bruno.md", "Bruno"),))
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "cloe"})
+
+    result = resolve_existing_entity(
+        "mi hija",
+        "mi hija",
+        type="person",
+        repository=VaultRepository(tmp_path),
+        schema=schema,
+        semantic_index=index,  # type: ignore[arg-type]
+        embedder=FakeEmbedder(),  # type: ignore[arg-type]
+        contextual_reasoner=reasoner,  # type: ignore[arg-type]
+        semantic_limit=5,
+        expand_relationship_context=True,
+        self_note_id="self",
+    )
+
+    assert result.outcome is ExistingEntityOutcome.RESOLVED
+    assert result.id == "cloe"
+    assert result.candidate_ids == ("bruno", "cloe")
+    request = reasoner.requests[0]
+    assert [item.id for item in request.candidates] == ["bruno", "cloe"]
+    cloe_evidence = next(item.evidence for item in request.candidates if item.id == "cloe")
+    assert "source=authenticated self" in cloe_evidence
+    assert "Mis hijos son Cloe y Bruno" in cloe_evidence
 
 
 def test_no_semantic_candidates_is_local_unresolved(tmp_path: Path, schema: dict[str, Any]) -> None:

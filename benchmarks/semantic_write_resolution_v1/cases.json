@@ -1,0 +1,35 @@
+{
+  "version": "semantic-write-resolution-v1",
+  "fixed_context": {
+    "date": "2026-09-28",
+    "time": "14:00",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "SWR01-self-coworkers",
+      "request": "Axel y Denis son mis compañeros de trabajo.",
+      "expect": "self_relationship_references"
+    },
+    {
+      "id": "SWR02-described-child-target",
+      "request": "Mi hijo al que le gusta el fútbol adora el chocolate.",
+      "expect": "descriptive_child_target"
+    },
+    {
+      "id": "SWR03-described-friend-target",
+      "request": "La amiga con la que cené ayer se muda a París.",
+      "expect": "descriptive_friend_target"
+    },
+    {
+      "id": "SWR04-target-and-described-reference",
+      "request": "Mi hijo mayor fue al cine con la amiga que vive en Lyon.",
+      "expect": "descriptive_target_and_reference"
+    },
+    {
+      "id": "SWR05-unsafe-pronoun",
+      "request": "Recuerda que ella se muda a París.",
+      "expect": "fail_closed_ambiguous_pronoun"
+    }
+  ]
+}

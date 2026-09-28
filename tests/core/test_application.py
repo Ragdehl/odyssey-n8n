@@ -905,3 +905,54 @@ def test_multiple_pending_references_remain_typed_without_blocking_source_write(
     assert result.action_results[0].unit_results[2].status is UnitStatus.DEFERRED
     assert writes == [0]
     assert rendered[0] == ("Marta and Airbus",)
+
+
+def test_semantic_lookup_ambiguity_blocks_source_write_until_clarified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not persist a new semantic-reference fact until its existing identity is resolved."""
+    source = unit("Bruno", references=(KnowledgeReference(1, "friend", "Marta"),))
+    lookup = unit("Marta")
+    action = WriteAction((source, lookup))
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.UPDATE, "bruno-id", "Bruno", "Bruno.md"),
+        UnitTargetPreflight(
+            1,
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            candidate_note_ids=("marta-1", "marta-2"),
+            reason="ambiguous_existing_reference",
+            reference_only=True,
+        ),
+    )
+    monkeypatch.setattr(application, "preflight_write_action", lambda *args, **kwargs: preflight)
+    monkeypatch.setattr(
+        application,
+        "render_reference_facts",
+        lambda *args: ReferenceRenderingResult(
+            (("Marta",), ()),
+            (
+                PendingReference(
+                    0,
+                    0,
+                    1,
+                    "friend",
+                    "Marta",
+                    "ambiguous_existing_reference",
+                    ("marta-1", "marta-2"),
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        application,
+        "materialize_update",
+        lambda *args, **kwargs: pytest.fail("ambiguous semantic reference must block source write"),
+    )
+
+    result = run(RequestPlan((action,), ()), monkeypatch)
+
+    source_result, lookup_result = result.action_results[0].unit_results
+    assert source_result.status is UnitStatus.DEFERRED
+    assert source_result.reason == "DEPENDENCY_FAILED"
+    assert lookup_result.status is UnitStatus.DEFERRED
+    assert lookup_result.reason == "ambiguous_existing_reference"

@@ -66,6 +66,22 @@ def selection(
     }
 
 
+def reference_selection(
+    query: str,
+    *,
+    entity: str | None = None,
+    note_type: str | None = None,
+    filters: list[dict] | None = None,
+) -> dict:
+    """Build the compact semantic lookup shape exposed inside KnowledgeReference."""
+    return {
+        "entity": entity,
+        "query": query,
+        "type": note_type,
+        "filters": filters or [],
+    }
+
+
 def retrieve(
     query: str, *, note_type: str | None = None, filters: list[dict] | None = None
 ) -> dict:
@@ -600,16 +616,95 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
 
 
-def test_prompt_and_schema_freeze_reference_occurrence_contract(schema: dict) -> None:
-    """Teach Sol about local markers and require mention in each closed reference object."""
+def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> None:
+    """Keep marker occurrences local while making provider references semantic searches."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
     assert "{{ref:N}}" in prompt
     assert "own `references` array" in prompt
-    assert "Do not emit Markdown `[[wikilinks]]`" in prompt
+    assert "selection.query" in prompt
+    assert "do not emit Markdown `[[wikilinks]]`" in prompt
+    assert "Possessive or first-person context is identity evidence, not write ownership" in prompt
     reference_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"]["anyOf"][
         1
     ]["properties"]["units"]["items"]["properties"]["references"]["items"]
-    assert reference_schema["required"] == ["target_index", "role", "mention"]
+    assert reference_schema["required"] == ["selection", "role", "mention"]
+    assert "target_index" not in reference_schema["properties"]
+    selection_schema = reference_schema["properties"]["selection"]
+    assert selection_schema["required"] == ["entity", "query", "type", "filters"]
+    assert "link_scope" not in selection_schema["properties"]
+    assert "self_target" not in selection_schema["properties"]
+    assert "relational_reference" not in selection_schema["properties"]
+
+
+def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dict) -> None:
+    """Let the provider describe what to search while Core owns mechanical target indexes."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "mi hijo mayor",
+                    note_type="person",
+                    facts=["Fue al cine con {{ref:0}}."],
+                    references=[
+                        {
+                            "selection": reference_selection(
+                                "la amiga que vive en Lyon", note_type="person"
+                            ),
+                            "role": "companion",
+                            "mention": "la amiga que vive en Lyon",
+                        }
+                    ],
+                )
+            )
+        ),
+        schema,
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    assert action.units[0].references[0].target_index == 1
+    assert action.units[0].references[0].selection is None
+    lookup = action.units[1]
+    assert lookup.reference_lookup_only is True
+    assert lookup.target.query == "la amiga que vive en Lyon"
+    assert lookup.target.type == "person"
+    assert lookup.facts == ()
+
+
+def test_semantic_reference_reuses_matching_same_request_target(schema: dict) -> None:
+    """Preserve same-request dependency semantics without exposing unit indexes to the model."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "Weekly shopping",
+                    note_type="purchase",
+                    facts=["Bought {{ref:0}}."],
+                    references=[
+                        {
+                            "selection": reference_selection(
+                                "Leche Pascual", entity="Leche Pascual", note_type="product"
+                            ),
+                            "role": "product",
+                            "mention": "Leche Pascual",
+                        }
+                    ],
+                ),
+                unit(
+                    "Leche Pascual",
+                    entity="Leche Pascual",
+                    note_type="product",
+                    facts=[],
+                ),
+            )
+        ),
+        schema,
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    assert action.units[0].references[0].target_index == 1
+    assert action.units[1].reference_lookup_only is False
 
 
 def test_prompt_explains_semantic_atomicity_not_punctuation_segmentation(schema: dict) -> None:

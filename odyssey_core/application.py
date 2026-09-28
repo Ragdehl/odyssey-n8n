@@ -694,7 +694,10 @@ def _execute_write(
     spans: SpanRecorder,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
-    if any(unit.target.relational_reference is not None for unit in action.units):
+    if any(
+        unit.target.relational_reference is not None and not unit.reference_lookup_only
+        for unit in action.units
+    ):
         return _execute_relational_write(
             action_index,
             action,
@@ -1116,7 +1119,10 @@ def _create_dependencies(
     dependencies = {index: set() for index, _ in enumerate(action.units)}
     for source, unit in enumerate(action.units):
         for reference in unit.references:
-            if preflight[reference.target_index].outcome is WriteTargetOutcome.CREATE:
+            target = preflight[reference.target_index]
+            if target.outcome is WriteTargetOutcome.CREATE or (
+                target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION and target.reference_only
+            ):
                 dependencies[source].add(reference.target_index)
     return dependencies
 

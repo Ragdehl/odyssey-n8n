@@ -1,5 +1,10 @@
 # Phase 16 reference binding and pre-writer wikilinks
 
+> **Current model-facing update:** ordinary WRITE references no longer expose `target_index` to Luna.
+> The current semantic-query contract and its compatibility lowering are defined in
+> [Semantic WRITE identity and reference resolution](semantic-write-resolution.md). The historical
+> index-based materialization mechanics below remain useful implementation rationale.
+
 ## Purpose
 
 This document is the canonical contract for materializing semantic `KnowledgeUnit.references` into ordinary Markdown `[[wikilinks]]` during Phase 16.

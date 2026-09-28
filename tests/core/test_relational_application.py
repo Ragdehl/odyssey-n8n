@@ -27,6 +27,7 @@ from odyssey_core.request_planning import (
     planner_result_json_schema,
     validate_request_plan,
 )
+from odyssey_core.semantic import SemanticEntityCandidate
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetOutcome, decide_write_target
 
@@ -47,6 +48,19 @@ class EmptyEmbedder:
 
     model_name = "tests"
     model_version = "1"
+
+
+class MappedIndex:
+    """Return deterministic semantic candidates for selected natural-language queries."""
+
+    def __init__(self, mapping: dict[str, tuple[SemanticEntityCandidate, ...]]) -> None:
+        self.mapping = mapping
+
+    def find_candidates(
+        self, _embedder: object, reference: str, **kwargs: Any
+    ) -> tuple[SemanticEntityCandidate, ...]:
+        """Return only candidates assigned to the exact fixture query."""
+        return self.mapping.get(reference, ())[: int(kwargs["limit"])]
 
 
 class RelationshipContextEmbedder:
@@ -129,6 +143,23 @@ class MatchingFactReasoner(FactReasoner):
         return ({"outcome": "RESOLVED", "id": candidate.id}, {})
 
 
+class MappedReasoner(FactReasoner):
+    """Select a predetermined candidate ID per contextual reference wording."""
+
+    def __init__(self, decisions: dict[str, str | None]) -> None:
+        super().__init__()
+        self.decisions = decisions
+
+    def resolve(self, request: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return a closed decision only when the requested candidate was supplied by Core."""
+        self.requests.append(request)
+        selected = self.decisions[request.reference]
+        if selected is None:
+            return ({"outcome": "AMBIGUOUS", "id": None}, {})
+        assert selected in {candidate.id for candidate in request.candidates}
+        return ({"outcome": "RESOLVED", "id": selected}, {})
+
+
 class ForbiddenWriter:
     """Reject unexpected free-form writer use for atomic fixture facts."""
 
@@ -201,6 +232,7 @@ def run(
     plan: RequestPlan,
     *,
     reasoner: FactReasoner | None = None,
+    semantic_index: Any | None = None,
 ) -> application.ApplicationResult:
     """Execute one synthetic plan through the real Core application boundary."""
     return application.execute_request(
@@ -209,7 +241,7 @@ def run(
         repository=VaultRepository(vault),
         schema=schema,
         context_index=object(),
-        semantic_index=EmptyIndex(),
+        semantic_index=semantic_index or EmptyIndex(),
         embedder=EmptyEmbedder(),
         contextual_reasoner=reasoner or FactReasoner(),
         actor="test",
@@ -825,3 +857,281 @@ def test_s3_semantic_s4_named_reference_s5_bulk_remain_non_relational(schema: di
         .plan.relational_reference
         is None
     )
+
+
+def test_descriptive_possessive_target_updates_resolved_child_not_self(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Treat first-person possessive wording as identity evidence, not self write ownership."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta el fútbol."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Le gusta el ajedrez."))
+    before_self = (vault / "people/edgar.md").read_bytes()
+    before_bruno = (vault / "people/bruno.md").read_bytes()
+    query = "mi hijo al que le gusta el fútbol"
+    index = MappedIndex(
+        {query: (SemanticEntityCandidate("edgar", "people/edgar.md", "person", "Edgar", 0.91),)}
+    )
+    reasoner = MappedReasoner({query: "cloe"})
+    unit = KnowledgeUnit(
+        SelectionCriteria(None, query, "person", (), None),
+        "record",
+        (),
+        (),
+        ("Adora el chocolate.",),
+        (),
+    )
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=reasoner,
+        semantic_index=index,
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    assert (vault / "people/edgar.md").read_bytes() == before_self
+    assert (vault / "people/bruno.md").read_bytes() == before_bruno
+    assert "Adora el chocolate." in parse_note((vault / "people/cloe.md").read_text()).content
+    supplied = {candidate.id for candidate in reasoner.requests[0].candidates}
+    assert supplied == {"edgar", "cloe", "bruno"}
+
+
+def test_semantic_fact_reference_resolves_existing_note_without_lookup_write(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Lower a descriptive provider reference to Core lookup and materialize only the source fact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    write_note(
+        vault,
+        "people/marta.md",
+        "marta",
+        "Marta",
+        fact("Ayer cenó con Edgar y vive en Lyon."),
+    )
+    before_marta = (vault / "people/marta.md").read_bytes()
+    reference_query = "la amiga con la que cenamos ayer"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": "Bruno",
+                            "query": "Bruno",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Fue al concierto con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": reference_query,
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "companion",
+                                "mention": "la amiga con la que cenamos ayer",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    assert action.units[1].reference_lookup_only is True
+    index = MappedIndex(
+        {
+            reference_query: (
+                SemanticEntityCandidate("marta", "people/marta.md", "person", "Marta", 0.93),
+            )
+        }
+    )
+    reasoner = MappedReasoner({reference_query: "marta"})
+
+    result = run(vault, schema, plan, reasoner=reasoner, semantic_index=index)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("bruno",)
+    bruno = parse_note((vault / "people/bruno.md").read_text()).content
+    assert "[[people/marta|la amiga con la que cenamos ayer]]" in bruno
+    assert (vault / "people/marta.md").read_bytes() == before_marta
+    assert len(list(vault.rglob("*.md"))) == 2
+    unit_results = result.action_results[0].unit_results
+    assert unit_results[1].operation == "REFERENCE_BOUND"
+    assert unit_results[1].materially_affected is False
+
+
+def test_ambiguous_semantic_reference_defers_source_write_without_guessing(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Require clarification before a new semantic reference can affect the source fact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", fact("Vive en Lyon."))
+    write_note(vault, "people/ana.md", "ana", "Ana", fact("Vive en Lyon."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    reference_query = "la amiga que vive en Lyon"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": "Bruno",
+                            "query": "Bruno",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Fue al cine con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": reference_query,
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "companion",
+                                "mention": "la amiga que vive en Lyon",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    index = MappedIndex(
+        {
+            reference_query: (
+                SemanticEntityCandidate("marta", "people/marta.md", "person", "Marta", 0.9),
+                SemanticEntityCandidate("ana", "people/ana.md", "person", "Ana", 0.89),
+            )
+        }
+    )
+    reasoner = MappedReasoner({reference_query: None})
+
+    result = run(vault, schema, plan, reasoner=reasoner, semantic_index=index)
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.affected_stable_note_ids == ()
+    assert all(path.read_bytes() == content for path, content in before.items())
+    assert len(list(vault.rglob("*.md"))) == 3
+    source_result, lookup_result = result.action_results[0].unit_results
+    assert source_result.status is application.UnitStatus.DEFERRED
+    assert source_result.reason == "DEPENDENCY_FAILED"
+    assert lookup_result.reason == "ambiguous_existing_reference"
+    assert set(lookup_result.candidates) == {"marta", "ana"}
+
+
+def test_self_relationship_fact_uses_semantic_references_without_pairwise_writes(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Write one self fact linking several existing participants and leave participant notes untouched."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    write_note(vault, "people/axel.md", "axel", "Axel", "")
+    write_note(vault, "people/denis.md", "denis", "Denis", "")
+    before_axel = (vault / "people/axel.md").read_bytes()
+    before_denis = (vault / "people/denis.md").read_bytes()
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "yo",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": "self",
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["{{ref:0}} y {{ref:1}} son mis compañeros de trabajo."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": "Axel",
+                                    "query": "Axel",
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "coworker",
+                                "mention": "Axel",
+                            },
+                            {
+                                "selection": {
+                                    "entity": "Denis",
+                                    "query": "Denis",
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "coworker",
+                                "mention": "Denis",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("edgar",)
+    self_content = parse_note((vault / "people/edgar.md").read_text()).content
+    assert "[[people/axel|Axel]]" in self_content
+    assert "[[people/denis|Denis]]" in self_content
+    assert (vault / "people/axel.md").read_bytes() == before_axel
+    assert (vault / "people/denis.md").read_bytes() == before_denis
+    assert len(list(vault.rglob("*.md"))) == 3
