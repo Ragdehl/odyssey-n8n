@@ -111,7 +111,7 @@ def resolve_relational_reference(
         assert relation.source_query is not None
         source_resolution = resolve_existing_entity(
             relation.source_query,
-            selection.query,
+            relation.reference,
             repository=repository,
             schema=schema,
             semantic_index=semantic_index,

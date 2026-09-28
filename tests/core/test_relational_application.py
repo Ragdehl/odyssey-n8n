@@ -66,6 +66,35 @@ class MappedIndex:
         return self.mapping.get(reference, ())[: int(kwargs["limit"])]
 
 
+class ContextSensitiveSourceIndex:
+    """Expose source-resolution drift when target qualifiers leak into anchor lookup context."""
+
+    def __init__(
+        self,
+        source_query: str,
+        relation_context: str,
+        source_candidate: SemanticEntityCandidate,
+        polluted_candidate: SemanticEntityCandidate,
+    ) -> None:
+        self.source_query = source_query
+        self.relation_context = relation_context
+        self.source_candidate = source_candidate
+        self.polluted_candidate = polluted_candidate
+        self.calls: list[tuple[str, str]] = []
+
+    def find_candidates(
+        self, _embedder: object, reference: str, **kwargs: Any
+    ) -> tuple[SemanticEntityCandidate, ...]:
+        context = str(kwargs.get("context", ""))
+        self.calls.append((reference, context))
+        if reference != self.source_query:
+            return ()
+        candidate = (
+            self.source_candidate if context == self.relation_context else self.polluted_candidate
+        )
+        return (candidate,)
+
+
 class RelationshipContextEmbedder:
     """Provide deterministic local relevance vectors for shared-fact retrieval coverage."""
 
@@ -236,6 +265,25 @@ class MappedReasoner(FactReasoner):
             return ({"outcome": "AMBIGUOUS", "id": None}, {})
         assert selected in {candidate.id for candidate in request.candidates}
         return ({"outcome": "RESOLVED", "id": selected}, {})
+
+
+class SourceThenQualifierReasoner(FactReasoner):
+    """Resolve the bounded source first, then one qualified relation member by evidence text."""
+
+    def __init__(self, source_query: str, qualifier: str) -> None:
+        super().__init__()
+        self.source_query = source_query
+        self.qualifier = qualifier.casefold()
+
+    def resolve(self, request: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        self.requests.append(request)
+        if request.reference == self.source_query:
+            candidate = request.candidates[0]
+        else:
+            candidate = next(
+                item for item in request.candidates if self.qualifier in item.evidence.casefold()
+            )
+        return ({"outcome": "RESOLVED", "id": candidate.id}, {})
 
 
 class ForbiddenWriter:
@@ -1286,6 +1334,86 @@ def test_qualified_existing_source_relation_can_start_from_incoming_backlinks(
     assert len(reasoner.requests) == 1
     assert reasoner.requests[0].reference == query
     assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"marta", "ana"}
+
+
+def test_existing_relation_source_resolution_ignores_target_only_qualifiers(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep the anchor source lookup independent from qualifiers used only to pick one member."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "events/dinner.md",
+        "dinner",
+        "Cena relacional de prueba",
+        fact(
+            "En la cena relacional de prueba estuvieron "
+            "[[people/clara|Clara]], [[people/bruno|Bruno]] y [[people/marta|Marta]]."
+        ),
+        note_type="journal_entry",
+        properties={"entry_date": "2026-09-24"},
+    )
+    write_note(vault, "people/clara.md", "clara", "Clara", fact("Habla italiano."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Le gusta la bicicleta."))
+    write_note(
+        vault,
+        "people/marta.md",
+        "marta",
+        "Marta",
+        fact("Trabaja en [[concepts/airbus|Airbus Test]]."),
+    )
+    write_note(
+        vault,
+        "concepts/airbus.md",
+        "airbus",
+        "Airbus Test",
+        "",
+        note_type="concept",
+    )
+    source_query = "la cena relacional de prueba"
+    relation_reference = "las personas que estuvieron en la cena relacional de prueba"
+    query = "la persona de la cena relacional de prueba que trabaja en Airbus Test"
+    index = ContextSensitiveSourceIndex(
+        source_query,
+        relation_reference,
+        SemanticEntityCandidate(
+            "dinner", "events/dinner.md", "journal_entry", "Cena relacional de prueba", 1.0
+        ),
+        SemanticEntityCandidate("marta", "people/marta.md", "person", "Marta", 1.0),
+    )
+    reasoner = SourceThenQualifierReasoner(source_query, "Trabaja en Airbus Test")
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference(
+            relation_reference, "existing", source_query, "one"
+        ),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha comprado un paraguas rojo.",), ())
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=reasoner,
+        semantic_index=index,
+        selector=AllFactSelector(),
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("marta",)
+    assert (
+        "Se ha comprado un paraguas rojo."
+        in parse_note((vault / "people/marta.md").read_text()).content
+    )
+    assert index.calls[0] == (source_query, relation_reference)
+    assert reasoner.requests[0].reference == source_query
+    assert reasoner.requests[0].context == relation_reference
+    assert reasoner.requests[-1].reference == query
 
 
 def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
