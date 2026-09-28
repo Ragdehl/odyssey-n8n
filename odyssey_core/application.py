@@ -607,11 +607,24 @@ def _execute_retrieve(
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
             )
-        except RelationalResolutionError:
-            # Relational grounding is an optimization for reads, not an authorization boundary.
-            # If exact relationship projection cannot be established, continue with ordinary
-            # retrieval so the grounded answerer can evaluate the available evidence.
+        except RelationalResolutionError as error:
+            # Exact relationship projection is an optimization for reads, not mutation authority.
+            # For self-relative questions, keep the fallback grounded on the authenticated self
+            # note instead of widening the search to unrelated people in the vault.
             resolved = None
+            relation = action.plan.relational_reference
+            if relation.source_kind == "self":
+                if authenticated_actor is None or self_binding_repository is None:
+                    return ActionResult(
+                        action_index, action.kind, ActionStatus.DEFERRED, reason=str(error)
+                    )
+                try:
+                    binding = self_binding_repository.resolve(authenticated_actor.stable_user_id)
+                except SelfBindingError:
+                    return ActionResult(
+                        action_index, action.kind, ActionStatus.DEFERRED, reason=str(error)
+                    )
+                allowed_note_ids = frozenset({binding.person_note_id})
         except Exception as error:
             return ActionResult(
                 action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)

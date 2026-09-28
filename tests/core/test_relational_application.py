@@ -462,7 +462,15 @@ def test_incomplete_complete_set_read_falls_back_to_generic_retrieval(
     result = run(vault, schema, plan)
     assert result.status is application.ApplicationStatus.COMPLETED
     assert result.action_results[0].retrieval is retrieved
-    assert calls == [{"query": "mis padres", "limit": 5, "type": None, "filters": ()}]
+    assert calls == [
+        {
+            "query": "mis padres",
+            "limit": 5,
+            "type": None,
+            "filters": (),
+            "allowed_note_ids": frozenset({"edgar"}),
+        }
+    ]
 
 
 def test_ambiguous_relational_read_falls_back_to_generic_retrieval(
@@ -491,7 +499,15 @@ def test_ambiguous_relational_read_falls_back_to_generic_retrieval(
     result = run(vault, schema, plan)
     assert result.status is application.ApplicationStatus.COMPLETED
     assert result.action_results[0].retrieval is retrieved
-    assert calls == [{"query": "mi mujer", "limit": 5, "type": "person", "filters": ()}]
+    assert calls == [
+        {
+            "query": "mi mujer",
+            "limit": 5,
+            "type": "person",
+            "filters": (),
+            "allowed_note_ids": frozenset({"edgar"}),
+        }
+    ]
 
 
 def test_w1_singular_relational_write_updates_child_and_never_creates(
