@@ -1840,6 +1840,8 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     """Do not add a production exception that suppresses valid dated reflections."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
     assert "Do not infer `journal_entry` merely because a reflection says today/hoy" not in prompt
+    assert "relational_reference.members MUST be one" in prompt
+    assert "target.entity MUST remain null" in prompt
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:
@@ -1898,6 +1900,24 @@ def test_singular_write_relational_reference_can_anchor_a_richer_target(schema: 
     with pytest.raises(RequestPlanningError) as error:
         validate_request_plan(output(write(complete_set)), schema)
     assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
+
+    event_member = unit(
+        "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+        note_type="person",
+        facts=["Se ha comprado un paraguas rojo."],
+    )
+    event_member["target"]["relational_reference"] = {
+        "reference": "las personas que estuvieron en la cena relacional de prueba",
+        "source_kind": "existing",
+        "source_query": "cena relacional de prueba",
+        "members": "one",
+    }
+    parsed_event = validate_request_plan(output(write(event_member)), schema)
+    event_target = parsed_event.actions[0].units[0].target
+    assert event_target.entity is None
+    assert event_target.relational_reference is not None
+    assert event_target.relational_reference.members == "one"
+    assert event_target.relational_reference.source_query == "cena relacional de prueba"
 
 
 def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(schema: dict) -> None:

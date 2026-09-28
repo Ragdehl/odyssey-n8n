@@ -142,6 +142,37 @@ def evaluate(result: Any, expected: str) -> Evaluation:
                 (not source.references and not lookups, "no_spurious_references"),
             ]
         )
+    elif expected == "qualified_existing_event_relation_target":
+        relation = source.target.relational_reference
+        checks.extend(
+            [
+                (source.target.entity is None, "no_direct_entity"),
+                (source.target.self_target is None, "not_self"),
+                (relation is not None, "relational_anchor"),
+                (relation is not None and relation.source_kind == "existing", "existing_source"),
+                (relation is not None and relation.members == "one", "singular_relation"),
+                (
+                    relation is not None
+                    and relation.source_query is not None
+                    and _contains(relation.source_query, "cena", "relacional", "prueba"),
+                    "event_source_query",
+                ),
+                (
+                    relation is not None
+                    and _contains(relation.reference, "person", "cena", "relacional", "prueba"),
+                    "participant_relation",
+                ),
+                (
+                    _contains(source.target.query, "cena", "relacional", "airbus", "test"),
+                    "full_query_preserved",
+                ),
+                (
+                    _facts_contain(source, "paraguas") and _facts_contain(source, "rojo"),
+                    "purchase_fact",
+                ),
+                (not source.references and not lookups, "no_spurious_references"),
+            ]
+        )
     else:
         return Evaluation(False, ("unknown_expectation",))
     return _verdict(checks)

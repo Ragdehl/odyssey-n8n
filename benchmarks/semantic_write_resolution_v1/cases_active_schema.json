@@ -35,6 +35,11 @@
       "id": "SWR06-existing-source-relational-anchor",
       "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
       "expect": "qualified_existing_relation_target"
+    },
+    {
+      "id": "SWR07-qualified-event-member",
+      "request": "De las personas que estuvieron en la cena relacional de prueba, la que trabaja en Airbus Test se ha comprado un paraguas rojo.",
+      "expect": "qualified_existing_event_relation_target"
     }
   ]
 }

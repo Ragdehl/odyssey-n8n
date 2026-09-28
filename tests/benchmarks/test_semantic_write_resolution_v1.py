@@ -75,17 +75,25 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
     assert registry["version"] == "semantic-write-resolution-active-schema-2026-09-28"
-    assert len(registry["cases"]) == 6
+    assert len(registry["cases"]) == 7
     daughter = registry["cases"][1]
     assert daughter == {
         "id": "SWR02-rich-daughter-target",
         "request": "Mi hija a la que le gusta ver detectives de animales adora el chocolate.",
         "expect": "descriptive_daughter_target",
     }
-    assert registry["cases"][-1] == {
+    assert registry["cases"][-2] == {
         "id": "SWR06-existing-source-relational-anchor",
         "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
         "expect": "qualified_existing_relation_target",
+    }
+    assert registry["cases"][-1] == {
+        "id": "SWR07-qualified-event-member",
+        "request": (
+            "De las personas que estuvieron en la cena relacional de prueba, "
+            "la que trabaja en Airbus Test se ha comprado un paraguas rojo."
+        ),
+        "expect": "qualified_existing_event_relation_target",
     }
 
 
@@ -185,11 +193,31 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
         (),
     )
     assert evaluate(existing, "qualified_existing_relation_target").passed
+    event_member = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit(
+                        "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+                        "Se ha comprado un paraguas rojo.",
+                        relational_reference=RelationalReference(
+                            "las personas que estuvieron en la cena relacional de prueba",
+                            "existing",
+                            "cena relacional de prueba",
+                            "one",
+                        ),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    assert evaluate(event_member, "qualified_existing_event_relation_target").passed
     assert evaluate(PlannerEscalation(), "fail_closed_ambiguous_pronoun").passed
 
 
 def test_cost_ceiling_is_luna_only_and_bounded() -> None:
-    """Price exactly six Luna/low calls; no Sol allowance is part of this gate."""
+    """Price exactly seven Luna/low calls; no Sol allowance is part of this gate."""
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -197,7 +225,7 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert Decimal("0.08") < cost < Decimal("0.09")
+    assert Decimal("0.09") < cost < Decimal("0.10")
     assert input_bound > 0
 
     assert runner.MAX_COST_USD == Decimal("0.00")
