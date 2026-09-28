@@ -434,10 +434,10 @@ def test_complete_set_relational_read_restricts_retrieval_to_every_current_membe
     assert calls[0]["allowed_note_ids"] == frozenset({"ana", "luis"})
 
 
-def test_incomplete_complete_set_read_defers_without_calling_retrieval(
+def test_incomplete_complete_set_read_falls_back_to_generic_retrieval(
     tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Keep plural relation retrieval all-or-clarify when a current member is missing."""
+    """Let an incomplete relational read continue through ordinary grounded retrieval."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write_note(
@@ -445,10 +445,9 @@ def test_incomplete_complete_set_read_defers_without_calling_retrieval(
     )
     write_note(vault, "people/ana.md", "ana", "Ana", "")
     calls: list[dict[str, Any]] = []
+    retrieved = object()
     monkeypatch.setattr(
-        application,
-        "get_context",
-        lambda *args, **kwargs: calls.append(kwargs) or pytest.fail("partial retrieval invoked"),
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or retrieved
     )
     plan = RequestPlan(
         (
@@ -461,9 +460,38 @@ def test_incomplete_complete_set_read_defers_without_calling_retrieval(
         (),
     )
     result = run(vault, schema, plan)
-    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
-    assert result.action_results[0].reason == "relational_evidence_incomplete"
-    assert calls == []
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert result.action_results[0].retrieval is retrieved
+    assert calls == [{"query": "mis padres", "limit": 5, "type": None, "filters": ()}]
+
+
+def test_ambiguous_relational_read_falls_back_to_generic_retrieval(
+    tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do not block a read when several current facts mention the same relationship wording."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mi mujer es [[Beatriz]].") + "\n\n" + fact("Mi mujer se llama [[Beatriz]].", 1),
+    )
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz", "")
+    calls: list[dict[str, Any]] = []
+    retrieved = object()
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or retrieved
+    )
+    plan = RequestPlan(
+        (RetrieveAction(relational_selection("mi mujer", source_kind="self", source_query=None)),),
+        (),
+    )
+    result = run(vault, schema, plan)
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert result.action_results[0].retrieval is retrieved
+    assert calls == [{"query": "mi mujer", "limit": 5, "type": "person", "filters": ()}]
 
 
 def test_w1_singular_relational_write_updates_child_and_never_creates(

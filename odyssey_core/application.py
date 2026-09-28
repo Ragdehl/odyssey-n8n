@@ -607,20 +607,19 @@ def _execute_retrieve(
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
             )
-        except RelationalResolutionError as error:
-            return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
+        except RelationalResolutionError:
+            # Relational grounding is an optimization for reads, not an authorization boundary.
+            # If exact relationship projection cannot be established, continue with ordinary
+            # retrieval so the grounded answerer can evaluate the available evidence.
+            resolved = None
         except Exception as error:
             return ActionResult(
                 action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
             )
-        allowed_note_ids = frozenset(target.id for target in resolved.targets)
-        if not allowed_note_ids:
-            return ActionResult(
-                action_index,
-                action.kind,
-                ActionStatus.DEFERRED,
-                reason="relational_evidence_incomplete",
-            )
+        if resolved is not None:
+            resolved_note_ids = frozenset(target.id for target in resolved.targets)
+            if resolved_note_ids:
+                allowed_note_ids = resolved_note_ids
     if action.plan.self_target is not None:
         if action.plan.self_target != "self":
             return ActionResult(
