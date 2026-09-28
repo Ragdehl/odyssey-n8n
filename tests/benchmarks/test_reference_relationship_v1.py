@@ -182,7 +182,7 @@ def test_cost_ceiling_blocks_provider_construction_above_authorization(
     cost, luna_input, sol_input = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert cost <= MAX_COST_USD
+    assert cost > MAX_COST_USD
     assert luna_input > 0 and sol_input > 0
     import benchmarks.reference_relationship_v1.run_live as runner
 
@@ -205,6 +205,7 @@ def test_missing_provider_environment_refuses_before_evidence_reservation(
     import benchmarks.reference_relationship_v1.run_live as runner
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "should-not-exist.jsonl")
     monkeypatch.setattr(
         runner.LunaFirstRequestPlanner,
@@ -227,6 +228,7 @@ def test_attempt_3_uses_a_distinct_exclusive_evidence_path(
     original = b"prior attempt evidence\n"
     evidence_path.write_bytes(original)
     monkeypatch.setattr(runner, "OUTPUT_PATH", evidence_path)
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setenv("OPENAI_API_KEY", "test-presence-only")
     monkeypatch.setattr(
         runner.LunaFirstRequestPlanner,
@@ -249,14 +251,14 @@ def test_continuation_selects_only_the_fixed_unattempted_suffix() -> None:
     assert len(cases) + 1 == 3
 
 
-def test_continuation_cost_fits_the_authorized_ceiling() -> None:
-    """Price only the fixed continuation cases within their explicit authorization."""
+def test_continuation_cost_requires_a_fresh_authorization_after_schema_growth() -> None:
+    """Keep the old continuation authorization from silently covering a new schema contract."""
     registry, cases, _oracles = load_continuation_cases()
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     cost, luna_input, sol_input = continuation_cost_ceiling(
         cases, registry["fixed_context"], schema
     )
-    assert cost <= CONTINUATION_MAX_COST_USD == Decimal("0.37")
+    assert cost > CONTINUATION_MAX_COST_USD == Decimal("0.37")
     assert luna_input > 0 and sol_input > 0
 
 

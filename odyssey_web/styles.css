@@ -57,6 +57,8 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-view-header { display: flex; align-items: center; gap: .5rem; }
 .note-view-header h2 { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
 .note-view-header button, .note-history button { min-height: 2.1rem; min-width: 2.1rem; padding: .35rem; }
+.note-edit-controls { display: flex; align-items: center; gap: .35rem; margin-left: auto; }
+.note-edit-toggle { background: #e7e9f4; color: #39445d; }
 .note-history { display: flex; justify-content: flex-end; gap: .35rem; }
 .note-properties { display: grid; grid-template-columns: minmax(6rem, .8fr) minmax(0, 1.2fr); gap: .3rem .65rem; margin: .8rem 0; font-size: .85rem; }
 .note-properties dt { color: #6a7287; text-transform: capitalize; } .note-properties dd { margin: 0; overflow-wrap: anywhere; }
@@ -65,6 +67,10 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-inline-link { color: #394d88; font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
 .note-inline-link svg, .backlink svg { width: .88em; height: .88em; margin-right: .16em; vertical-align: -.08em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .note-empty-body { color: #6a7287; font-style: italic; }
+.note-danger-button { min-height: 2.2rem; padding: .4rem .55rem; background: #8b3131; white-space: nowrap; }
+.note-editable-fact { display: flex; align-items: start; justify-content: space-between; gap: .5rem; }
+.note-fact-content { min-width: 0; overflow-wrap: anywhere; }
+.note-fact-delete { flex: 0 0 auto; min-height: 2rem; padding: .3rem .45rem; font-size: .76rem; }
 .note-backlinks { display: grid; gap: .4rem; margin-top: 1rem; } .note-backlinks h3 { margin: 0; font-size: .85rem; }
 .backlink { min-height: 2.35rem; text-align: left; color: #39445d; background: #edf0f8; }
 .backlink-occurrence { border-left: 2px solid #d9deef; padding-left: .55rem; }

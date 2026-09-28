@@ -9,19 +9,23 @@
         "actions": [
           {
             "kind": "retrieve",
+            "result_shape": "collection",
             "plan": {
               "entity": null,
               "query": "purchases I made in July",
-              "type": "purchase",
+              "type": null,
               "filters": [],
-              "link_scope": null
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null
             }
           }
         ],
-        "limitations": ["unsupported_domain_date"],
-        "clarification_code": null
+        "limitations": [],
+        "clarification_code": null,
+        "presentation_intent": "answer"
       },
-      "lesson": "July is purchase event time, not note creation time; preserve it semantically and never approximate it with created_at."
+      "lesson": "July is purchase event time, not note creation time, so preserve it in the lossless query rather than using lifecycle filters. Because the user asks to enumerate the purchases themselves, use result_shape=collection with no direct selector and let Core discover grounded evidence; ordinary facts or synthesis about one subject remain single."
     },
     {
       "id": "teach-lifecycle-date",

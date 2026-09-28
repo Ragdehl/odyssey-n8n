@@ -184,6 +184,10 @@ This direction does **not** require an immediate new tracing database or one lar
 
 This work is also **not a sequencing blocker** for continued Odyssey Online development. After the current planner hardening is complete, product progress, real-app use, and the already-preserved cost-aware Luna-first planner experiment may proceed before implementing a consolidated request-trace representation. Real usage should help determine which missing trace links are actually worth persisting.
 
+The proposed [semantic set and evidence stage](semantic-set-resolution-and-evidence.md) keeps
+ephemeral user-facing progress separate from this durable advanced request trace. Any progress
+surface must consume real bounded execution events and must not expose provider internals.
+
 ## Deployment provenance and boundary-level diagnostics
 
 The Phase 20.3 protected mobile E2E exposed a concrete observability gap: Core/runtime diagnostics were sufficient to prove that `qzxqzx` correctly produced `needs_attention + UNRECOGNIZED_REQUEST`, while the deployed n8n product workflow returned an ordinary empty-result response because the active workflow had drifted behind the version-controlled `workflows/odyssey-online.ts` contract.

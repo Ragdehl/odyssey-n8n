@@ -21,6 +21,7 @@ from odyssey_core.application import (
 )
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage, RelatedContextItem
+from odyssey_core.direct_note_mutations import DirectNoteMutationError
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
@@ -62,6 +63,8 @@ def test_application_result_serialization_exposes_only_public_evidence() -> None
     assert response == {
         "request_id": "request-test",
         "status": "completed",
+        "product_outcome": "ANSWER",
+        "product_reason": None,
         "planning_error": None,
         "clarification_code": None,
         "presentation_intent": "answer",
@@ -474,6 +477,87 @@ def test_http_notes_boundary_fails_closed_for_stale_or_malformed_operations() ->
         assert response.status == 400
         assert json.loads(response.read()) == {"error": "invalid notes request"}
         assert calls == ["query"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_notes_accepts_mutations_maps_bounded_conflicts_and_rejects_malformed_payloads() -> (
+    None
+):
+    """Expose only the two bounded delete operations and map Core conflicts to HTTP 409."""
+    calls: list[str] = []
+
+    class NotesRuntime:
+        def notes(self, operation, payload, actor, principal):
+            calls.append(operation)
+            if operation == "delete_fact":
+                raise DirectNoteMutationError("FACT_UNAVAILABLE")
+            if operation == "delete_note":
+                return {"kind": "mutation", "operation": "note_deleted"}
+            raise AssertionError("unexpected operation")
+
+    server = _test_server(NotesRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(
+                {
+                    "operation": "delete_fact",
+                    "note_id": "ada",
+                    "fact_locator": "request-1:0",
+                    "expected_revision": 1,
+                    "expected_source_hash": "a" * 64,
+                    "request_id": "delete-1",
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 409
+        assert json.loads(response.read()) == {"error": "FACT_UNAVAILABLE"}
+
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(
+                {
+                    "operation": "delete_note",
+                    "note_id": "ada",
+                    "expected_revision": 1,
+                    "expected_source_hash": "a" * 64,
+                    "request_id": "delete-2",
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "mutation", "operation": "note_deleted"}
+        assert calls == ["delete_fact", "delete_note"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_notes_rejects_malformed_mutation_without_leaking_details() -> None:
+    """Return a stable 400 when runtime validation rejects an allowed but malformed operation."""
+    runtime = RuntimeComposition(
+        core_execute=lambda *args: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),
+        direct_notes_mutations=object(),
+        notes_mutation_actor=lambda *args: "test",
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST", "/notes", body=json.dumps({"operation": "delete_note", "note_id": "ada"})
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid notes request"}
     finally:
         server.shutdown()
         server.server_close()

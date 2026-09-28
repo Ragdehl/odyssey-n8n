@@ -74,7 +74,7 @@ def test_luna_escalation_becomes_user_clarification_without_sol() -> None:
         "Rewrite whichever family notes seem outdated without asking which facts are true."
     )
 
-    assert result == PlannerClarification("UNRECOGNIZED_REQUEST")
+    assert result == PlannerClarification("UNREPRESENTABLE_REQUEST")
     assert sol.calls == 0
 
 

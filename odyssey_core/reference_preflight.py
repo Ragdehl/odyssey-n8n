@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
+from .clarification import ClarificationChoice, evidence_digest
 from .identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .observability import SpanRecorder
@@ -86,6 +87,7 @@ def preflight_write_action(
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
     span_recorder: SpanRecorder | None = None,
+    clarification_choice: ClarificationChoice | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Decide every ordered unit once and preallocate safe CREATE identities without writing.
 
@@ -123,6 +125,7 @@ def preflight_write_action(
         authenticated_actor=authenticated_actor,
         self_binding_repository=self_binding_repository,
         span_recorder=span_recorder,
+        clarification_choice=clarification_choice,
     )
 
 
@@ -139,12 +142,15 @@ def _preflight_write_action(
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     span_recorder: SpanRecorder | None,
+    clarification_choice: ClarificationChoice | None = None,
     _validated_reference_targets: Mapping[int, str] | None = None,
     _validated_relationship_targets: Mapping[int, str] | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Implement preflight with private, relationship-validated target bindings."""
     if not isinstance(action, WriteAction):
         raise ValueError("Reference preflight requires a WriteAction")
+    if clarification_choice is not None and len(action.units) != 1:
+        raise ReferencePreflightError("Clarified write requires one unit")
     results: list[UnitTargetPreflight] = []
     allocated_paths: set[str] = set()
     existing_paths = set(repository.list_markdown_paths())
@@ -223,6 +229,24 @@ def _preflight_write_action(
             if span_recorder is not None
             else decide_write_target(unit, **target_kwargs)
         )
+        if clarification_choice is not None:
+            still_offered = (
+                decision.existing_note_id == clarification_choice.stable_id
+                if decision.outcome is WriteTargetOutcome.UPDATE
+                else decision.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+                and decision.reason == "ambiguous_existing_target"
+                and clarification_choice.stable_id in decision.candidate_note_ids
+            )
+            if not still_offered:
+                raise ReferencePreflightError("Clarified identity is no longer valid")
+            path, _name = _find_existing_identity(
+                repository, schema, clarification_choice.stable_id
+            )
+            if evidence_digest(repository.read_text(path)) != clarification_choice.evidence_guard:
+                raise ReferencePreflightError("Clarified evidence changed")
+            decision = WriteTargetDecision(
+                WriteTargetOutcome.UPDATE, existing_note_id=clarification_choice.stable_id
+            )
         results.append(
             _materialize_decision(
                 unit_index,
@@ -552,6 +576,14 @@ def _find_existing_identity(
     if len(matches) > 1:
         raise ReferencePreflightError(f"Stable note ID is duplicated: {stable_id}")
     return matches[0]
+
+
+def current_identity_guard(
+    repository: VaultRepository, schema: dict[str, Any], stable_id: str
+) -> str:
+    """Hash one uniquely grounded canonical Note for a bounded clarification choice."""
+    path, _name = _find_existing_identity(repository, schema, stable_id)
+    return evidence_digest(repository.read_text(path))
 
 
 def _safe_creation_name(name: str) -> str:

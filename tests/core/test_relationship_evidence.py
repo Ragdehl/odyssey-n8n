@@ -108,6 +108,55 @@ def test_unique_singular_target_uses_one_current_literal_link_hop(
     assert stale_fact.status is TargetProjectionStatus.FACT_UNAVAILABLE
 
 
+def test_exact_link_occurrence_requires_one_current_path_or_basename_target(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Resolve only an exact literal span and reject ambiguous, invalid, or deleted targets."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/target.md", "path-target", "Target", "")
+    write(vault, "projects/unique.md", "basename-target", "Unique", "")
+    write(vault, "people/shared.md", "shared-person", "Shared", "")
+    write(vault, "projects/shared.md", "shared-project", "Shared", "")
+    source_text = "[[people/target]], [[unique]], [[shared]]"
+    write(vault, "people/source.md", "source", "Source", fact(source_text))
+
+    evidence = projector(vault, schema)
+    source_fact = evidence.facts_for_source("source")[0]
+    path_start = source_fact.text.index("[[people/target]]")
+    unique_start = source_fact.text.index("[[unique]]")
+    shared_start = source_fact.text.index("[[shared]]")
+
+    assert (
+        evidence.resolve_link_occurrence(
+            "source", source_fact.locator, path_start, path_start + len("[[people/target]]")
+        ).id
+        == "path-target"
+    )
+    assert (
+        evidence.resolve_link_occurrence(
+            "source", source_fact.locator, unique_start, unique_start + len("[[unique]]")
+        ).id
+        == "basename-target"
+    )
+    assert (
+        evidence.resolve_link_occurrence(
+            "source", source_fact.locator, shared_start, shared_start + len("[[shared]]")
+        )
+        is None
+    )
+    assert evidence.resolve_link_occurrence("source", source_fact.locator, -1, 1) is None
+    assert evidence.resolve_link_occurrence("source", source_fact.locator, 0, 1) is None
+
+    (vault / "projects" / "unique.md").unlink()
+    assert (
+        projector(vault, schema).resolve_link_occurrence(
+            "source", source_fact.locator, unique_start, unique_start + len("[[unique]]")
+        )
+        is None
+    )
+
+
 def test_complete_finite_set_preserves_literal_order_and_rejects_partial_members(
     tmp_path: Path, schema: dict
 ) -> None:

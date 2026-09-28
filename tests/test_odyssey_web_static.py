@@ -206,7 +206,7 @@ def test_notes_detail_uses_safe_structured_presentation_and_complete_type_icons(
     client = (WEB_ROOT / "notes-client.js").read_text(encoding="utf-8")
     schema = json.loads(Path("config/note-schema.json").read_text(encoding="utf-8"))
 
-    assert "renderBody(body, value.body_blocks, open)" in notes
+    assert "renderBody(body, value.body_blocks, open, state.editing" in notes
     assert "appendBodySegments" in notes
     assert 'document.createElement("a")' in notes
     assert "encodeURIComponent(segment.target_id)" in notes

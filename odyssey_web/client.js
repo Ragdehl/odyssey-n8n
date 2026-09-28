@@ -1,5 +1,5 @@
 const ALLOWED_STATUSES = new Set(["completed", "partial", "needs_attention", "failed"]);
-const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "empty", "error", "note_set"]);
+const ALLOWED_KINDS = new Set(["answer", "acknowledgement", "clarification", "cannot_answer", "empty", "error", "note_set"]);
 // The private runtime has a 120-second n8n deadline. Leave five seconds for
 // n8n to shape its bounded response before treating delivery as uncertain.
 export const PRODUCT_REQUEST_TIMEOUT_MS = 125_000;
@@ -151,6 +151,31 @@ export function validateProductResponse(value) {
   }
   if (value.note_result_snapshot !== undefined) {
     result.note_result_snapshot = validateNoteResultSnapshot(value.note_result_snapshot);
+  }
+  if (value.collection_members !== undefined) {
+    if (!Array.isArray(value.collection_members) || value.collection_members.length > 64 ||
+        value.collection_members.some((member) => !member || typeof member.value !== "string" ||
+          !member.value.trim() || member.value.length > 512 ||
+          (member.kind !== "literal" && member.kind !== "identity") ||
+          typeof member.source_note_id !== "string" || !member.source_note_id ||
+          member.source_note_id.length > 128 ||
+          (member.stable_note_id !== null &&
+            (typeof member.stable_note_id !== "string" || member.stable_note_id.length > 128)))) {
+      throw new ProductRequestError("Odyssey returned an invalid collection.");
+    }
+    result.collection_members = value.collection_members;
+  }
+  if (value.clarification !== undefined) {
+    const clarification = value.clarification;
+    if (!clarification || typeof clarification.request_id !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(clarification.request_id) ||
+        !Array.isArray(clarification.options) || clarification.options.length > 4 ||
+        clarification.options.some((option) => !option || typeof option.id !== "string" ||
+          !option.id || option.id.length > 128 ||
+          typeof option.label !== "string" || !option.label.trim() || option.label.length > 160)) {
+      throw new ProductRequestError("Odyssey returned an invalid clarification.");
+    }
+    result.clarification = clarification;
   }
   return result;
 }
@@ -398,6 +423,7 @@ export async function requestProductResult({
         request: submission.request,
         request_id: submission.requestId,
         ...(conversationId ? {conversation_id: conversationId} : {}),
+        ...(submission.replyToRequestId ? {reply_to_request_id: submission.replyToRequestId} : {}),
       }),
       signal: controller.signal,
     });

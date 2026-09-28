@@ -40,6 +40,8 @@ LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS = 2048
 LUNA_EXPERIMENT_AUTOMATIC_RETRIES = 0
 
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
+_MAX_ERROR_CHAIN_DEPTH = 5
+_MAX_ERROR_TYPE_NAME_LENGTH = 120
 _TEACHING_EXAMPLES_PATH = (
     Path(__file__).resolve().parents[1]
     / "benchmarks"
@@ -183,6 +185,12 @@ Choose the outcome before drafting fields:
 4. CLARIFY and ESCALATE carry null actions, null limitations, and null clarification_code except CLARIFY's UNRECOGNIZED_REQUEST.
 Never approximate a fact, event, decision, purchase, or other domain date with note lifecycle fields; preserve uncertain meaning and ESCALATE rather than guessing.
 
+Retrieval-shape tie-breakers:
+- Choose result_shape=collection by the cardinality of the requested answer, not by the number of named source subjects. Several semantic members or values of one named subject are still a collection; keep that subject only in the lossless query and leave collection direct selectors null or empty.
+- Use result_shape=single only when the requested answer is one fact or a synthesis rather than an enumerated member or value set.
+Presentation tie-breaker:
+- Selection semantics take precedence over presentation. If link_scope or relational_reference is required, presentation_intent MUST be answer even when the user asks to show notes; never weaken the required selection to produce note_set or answer_and_note_set.
+
 Teaching examples (not evaluation cases):
 
 {rendered_examples}
@@ -195,11 +203,15 @@ Teaching examples (not evaluation cases):
 
 
 def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
-    """Render inherited teaching selections with explicit absent relational intent."""
+    """Render inherited examples under the current retrieval-shape provider contract."""
     completed = deepcopy(dict(result))
     for action in completed.get("actions") or []:
         if action["kind"] == "retrieve":
             selections = [action["plan"]]
+            action.setdefault(
+                "result_shape",
+                "collection" if action["plan"].get("semantic_set") is not None else "single",
+            )
         elif action["kind"] == "write":
             selections = [unit["target"] for unit in action["units"]]
         else:
@@ -207,6 +219,18 @@ def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
         for selection in selections:
             if isinstance(selection, dict):
                 selection.setdefault("relational_reference", None)
+                if action.get("result_shape") == "collection":
+                    legacy_intent = selection.get("semantic_set")
+                    selection.setdefault(
+                        "collection_subject",
+                        "self"
+                        if isinstance(legacy_intent, dict)
+                        and legacy_intent.get("subject_kind") == "self"
+                        else "query",
+                    )
+                else:
+                    selection.setdefault("collection_subject", None)
+                selection.pop("semantic_set", None)
     return completed
 
 
@@ -254,10 +278,15 @@ class OpenAILunaExperimentalPlanner:
         schema: Mapping[str, Any],
         current_context: Mapping[str, str],
         monotonic: Any = perf_counter,
+        *,
+        teaching_examples: Sequence[Mapping[str, Any]] | None = None,
     ) -> None:
         self._client = client
         self._schema = schema
         self._current_context = current_context
+        self._teaching_examples = (
+            tuple(teaching_examples) if teaching_examples is not None else None
+        )
         self._monotonic = monotonic
         self.model = LUNA_EXPERIMENT_MODEL
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
@@ -269,6 +298,7 @@ class OpenAILunaExperimentalPlanner:
         self.last_spans: tuple[OperationalSpan, ...] = ()
         self.last_input_sizes: dict[str, int] | None = None
         self.last_error_category: str | None = None
+        self.last_error_chain: tuple[str, ...] | None = None
         self.last_parse_status: str | None = None
         self.last_validation_stage: str | None = None
         self.last_validation_code: str | None = None
@@ -276,7 +306,11 @@ class OpenAILunaExperimentalPlanner:
 
     @classmethod
     def from_environment(
-        cls, schema: Mapping[str, Any], current_context: Mapping[str, str]
+        cls,
+        schema: Mapping[str, Any],
+        current_context: Mapping[str, str],
+        *,
+        teaching_examples: Sequence[Mapping[str, Any]] | None = None,
     ) -> OpenAILunaExperimentalPlanner:
         """Construct the experimental client with automatic SDK retries disabled."""
         if not os.environ.get("OPENAI_API_KEY"):
@@ -287,7 +321,12 @@ class OpenAILunaExperimentalPlanner:
             raise RequestPlanningError(
                 "Install the OpenAI SDK for Luna experiment planning"
             ) from error
-        return cls(OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES), schema, current_context)
+        return cls(
+            OpenAI(max_retries=LUNA_EXPERIMENT_AUTOMATIC_RETRIES),
+            schema,
+            current_context,
+            teaching_examples=teaching_examples,
+        )
 
     def plan(
         self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
@@ -301,6 +340,7 @@ class OpenAILunaExperimentalPlanner:
         self.last_spans = ()
         self.last_input_sizes = None
         self.last_error_category = None
+        self.last_error_chain = None
         self.last_parse_status = None
         self.last_validation_stage = None
         self.last_validation_code = None
@@ -312,6 +352,7 @@ class OpenAILunaExperimentalPlanner:
             prompt = render_luna_experimental_prompt(
                 self._schema,
                 self._current_context,
+                teaching_examples=self._teaching_examples,
                 conversation_context=conversation_context,
                 size_components=sizes,
             )
@@ -353,6 +394,7 @@ class OpenAILunaExperimentalPlanner:
             recorder.add("provider", provider_started, OperationalOutcome.FAILED, error)
             self.last_spans = recorder.spans
             self.last_error_category = type(error).__name__[:120]
+            self.last_error_chain = bounded_exception_type_chain(error)
             raise
         recorder.add("provider", provider_started)
         self.last_spans = recorder.spans
@@ -416,6 +458,27 @@ def _bounded_metadata(value: Any, *, maximum: int = 160) -> str | None:
     if not isinstance(value, str) or not value:
         return None
     return value[:maximum]
+
+
+def bounded_exception_type_chain(error: BaseException) -> tuple[str, ...]:
+    """Return a bounded, cycle-safe exception type chain without exception content.
+
+    Prefer explicit causes, falling back to implicit contexts only when there is no cause.
+    This diagnostic deliberately retains class names only: provider messages, requests, headers,
+    payloads, and arbitrary exception representations never enter benchmark evidence.
+    """
+    chain: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and len(chain) < _MAX_ERROR_CHAIN_DEPTH:
+        identity = id(current)
+        if identity in seen:
+            break
+        seen.add(identity)
+        chain.append(type(current).__name__[:_MAX_ERROR_TYPE_NAME_LENGTH])
+        cause = current.__cause__
+        current = cause if cause is not None else current.__context__
+    return tuple(chain)
 
 
 def production_result_contract_unchanged(schema: Mapping[str, Any]) -> dict[str, Any]:

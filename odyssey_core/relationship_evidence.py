@@ -254,6 +254,106 @@ class RelationshipEvidenceProjector:
             return ()
         return tuple(item.fact for item in source.facts)
 
+    def re_ground_facts(
+        self, locators: Iterable[tuple[str, str]]
+    ) -> Mapping[tuple[str, str], CanonicalFact]:
+        """Re-read requested fact locators together from one current canonical snapshot.
+
+        Missing locators are omitted.  Consumers compare the returned fact source hash with the
+        snapshot that supplied the locator before treating it as current evidence.
+        """
+        requested = frozenset(locators)
+        if not requested:
+            return MappingProxyType({})
+        notes = self._load_notes()
+        grounded: dict[tuple[str, str], CanonicalFact] = {}
+        for source_id, locator in requested:
+            source = notes.get(source_id)
+            if source is None:
+                continue
+            selected = next((item for item in source.facts if item.fact.locator == locator), None)
+            if selected is not None:
+                grounded[(source_id, locator)] = selected.fact
+        return MappingProxyType(grounded)
+
+    def resolve_link_occurrences(
+        self, occurrences: Iterable[tuple[str, str, int, int]]
+    ) -> tuple[CanonicalIdentity | None, ...]:
+        """Resolve exact supplied wikilink spans together from one current Markdown snapshot."""
+        requested = tuple(occurrences)
+        if not requested:
+            return ()
+        notes = self._load_notes()
+        resolved: list[CanonicalIdentity | None] = []
+        for source_id, fact_locator, start, end in requested:
+            source = notes.get(source_id)
+            selected = (
+                next((item for item in source.facts if item.fact.locator == fact_locator), None)
+                if source is not None
+                else None
+            )
+            if (
+                selected is None
+                or not isinstance(start, int)
+                or not isinstance(end, int)
+                or start < 0
+                or end <= start
+                or end > len(selected.fact.text)
+            ):
+                resolved.append(None)
+                continue
+            link_text = selected.fact.text[start:end]
+            if not (link_text.startswith("[[") and link_text.endswith("]]")):
+                resolved.append(None)
+                continue
+            target = _safe_link_target(link_text[2:-2].partition("|")[0].partition("#")[0])
+            if target is None:
+                resolved.append(None)
+                continue
+            direct = tuple(
+                note.identity
+                for note in notes.values()
+                if note.identity.path.removesuffix(".md").casefold() == target
+            )
+            if len(direct) == 1:
+                resolved.append(direct[0])
+                continue
+            if "/" in target:
+                resolved.append(None)
+                continue
+            basenames = tuple(
+                note.identity
+                for note in notes.values()
+                if note.identity.path.removesuffix(".md").rsplit("/", 1)[-1].casefold() == target
+            )
+            resolved.append(basenames[0] if len(basenames) == 1 else None)
+        return tuple(resolved)
+
+    def all_visible_facts(self) -> tuple[CanonicalFact, ...]:
+        """Return every active current visible fact block in canonical path/locator order.
+
+        This is a discovery primitive only. Callers still impose their own explicit fact, source,
+        and serialized-byte bounds before passing any candidate to a semantic selector.
+        """
+        notes = self._load_notes()
+        return tuple(
+            item.fact
+            for _note_id, note in sorted(notes.items(), key=lambda item: item[1].identity.path)
+            for item in note.facts
+        )
+
+    def note_ids_of_type(self, note_type: str) -> tuple[str, ...]:
+        """Enumerate every active canonical identity of one schema-defined Note type.
+
+        This is a complete current-Markdown candidate universe for typed semantic-set members;
+        callers still use direct facts and one-hop incoming evidence for admission.
+        """
+        return tuple(
+            note_id
+            for note_id, note in sorted(self._load_notes().items())
+            if note.identity.type == note_type
+        )
+
     def project_targets(self, source_id: str, fact_locator: str) -> TargetProjection:
         """Resolve every literal direct target in one selected canonical fact or fail closed.
 
@@ -285,6 +385,17 @@ class RelationshipEvidenceProjector:
             selected.targets,
             evidence,
         )
+
+    def resolve_link_occurrence(
+        self, source_id: str, fact_locator: str, start: int, end: int
+    ) -> CanonicalIdentity | None:
+        """Resolve one exact current wikilink span to its stable target identity.
+
+        The caller supplies only a current Core candidate locator and exact fact span.  This method
+        rereads the full canonical snapshot and returns ``None`` for stale, malformed, ambiguous,
+        dangling, or non-link occurrences so callers cannot treat display text as identity proof.
+        """
+        return self.resolve_link_occurrences(((source_id, fact_locator, start, end),))[0]
 
     def project_entity_evidence_candidates(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -11,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from odyssey_core.experimental_luna_planning import luna_experimental_result_json_schema
 from odyssey_core.request_planning import (
     PLANNER_AUTOMATIC_RETRIES,
     PLANNER_CLARIFICATION_CODES,
@@ -63,7 +65,22 @@ def selection(
         "link_scope": link_scope,
         "self_target": None,
         "relational_reference": None,
+        "semantic_set": None,
+        "collection_subject": None,
     }
+
+
+def semantic_set_selection(query: str) -> dict:
+    """Build the only planner-visible Slice 1 semantic-set retrieval intent."""
+    result = selection(query)
+    result["semantic_set"] = {
+        "subject_kind": "self",
+        "subject_query": None,
+        "member_query": "personas de mi familia",
+        "explicit_qualifiers": "",
+        "asks_exhaustive": True,
+    }
+    return result
 
 
 def retrieve(
@@ -90,8 +107,24 @@ def planner_output(*actions: dict, limitations: list[str] | None = None) -> dict
 
 
 def provider_output(payload: dict) -> dict:
-    """Wrap an inner PlannerResult as the provider Structured Outputs envelope."""
-    return {"result": payload}
+    """Project legacy local fixtures into the current closed provider shape."""
+    projected = deepcopy(payload)
+    for action in projected.get("actions") or []:
+        if action.get("kind") == "retrieve":
+            action.setdefault("result_shape", "single")
+            action["plan"].setdefault("collection_subject", None)
+            if action["plan"].get("semantic_set") is None:
+                action["plan"].pop("semantic_set", None)
+        elif action.get("kind") == "write":
+            for unit in action.get("units", []):
+                unit["target"].setdefault("collection_subject", None)
+                if unit["target"].get("semantic_set") is None:
+                    unit["target"].pop("semantic_set", None)
+        elif action.get("kind") == "delegate" and isinstance(action.get("selection"), dict):
+            action["selection"].setdefault("collection_subject", None)
+            if action["selection"].get("semantic_set") is None:
+                action["selection"].pop("semantic_set", None)
+    return {"result": projected}
 
 
 def unit(
@@ -156,6 +189,11 @@ def schema_accepts(
         return False
     if expected_type == "array" and not isinstance(instance, list):
         return False
+    if expected_type == "array" and (
+        ("minItems" in schema and len(instance) < schema["minItems"])
+        or ("maxItems" in schema and len(instance) > schema["maxItems"])
+    ):
+        return False
     is_object = expected_type == "object" or "properties" in schema
     if is_object and not isinstance(instance, dict):
         return False
@@ -178,6 +216,18 @@ def schema_accepts(
     )
 
 
+def assert_all_array_schemas_define_items(value: Any) -> None:
+    """Reject provider schemas that contain a strict array without an item contract."""
+    if isinstance(value, dict):
+        if value.get("type") == "array":
+            assert isinstance(value.get("items"), dict)
+        for child in value.values():
+            assert_all_array_schemas_define_items(child)
+    elif isinstance(value, list):
+        for child in value:
+            assert_all_array_schemas_define_items(child)
+
+
 def prop(field: str, value: object, *, op: str = "set") -> dict:
     """Build one raw generic property-change fixture."""
     return {"field": field, "op": op, "value": value}
@@ -195,6 +245,207 @@ def test_simple_semantic_retrieval_and_semantic_idea_review_remain_unrestricted(
     assert action.plan.type is None and action.plan.filters == ()
 
 
+def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict) -> None:
+    """Provider output cannot depend on a model-authored semantic member ontology."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    collection = deepcopy(selection("What countries have I travelled to?"))
+    collection.pop("semantic_set")
+    collection["collection_subject"] = "query"
+    payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
+    provider_schema = planner_result_json_schema(schema)
+    compact_schema = compact_planner_result_json_schema(schema)
+
+    assert "result_shape=collection" in prompt
+    assert "collection_subject=self" in prompt
+    assert "subject_kind" not in prompt
+    assert "member_query" not in prompt
+    assert "asks_exhaustive" not in prompt
+    assert all(
+        schema_accepts({"result": payload}, candidate)
+        for candidate in (provider_schema, compact_schema)
+    )
+    plan = validate_planner_result(payload, schema)
+    assert isinstance(plan, RequestPlan)
+    assert isinstance(plan.actions[0], RetrieveAction)
+    assert plan.actions[0].result_shape == "collection"
+    assert plan.actions[0].plan.query == "What countries have I travelled to?"
+
+
+def test_collection_membership_anchor_instruction_is_generic_and_schema_is_unchanged(
+    schema: dict,
+) -> None:
+    """Keep self/query as a closed scope bit while teaching the abstract membership boundary."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    encoded_schema = json.dumps(
+        luna_experimental_result_json_schema(schema),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    assert "authenticated human is itself the semantic membership anchor" in prompt
+    assert "First-person possession, ownership, association, or contextual reference" in prompt
+    assert "another object, concept, source, or set determines membership" in prompt
+    assert "preserve the complete self-related context in query" in prompt
+    assert "collection_subject belongs only to result_shape=collection" in prompt
+    assert (
+        "set it to null for every result_shape=single regardless of presentation intent" in prompt
+    )
+    assert hashlib.sha256(encoded_schema).hexdigest() == (
+        "22edb7ef4ddc61e33993536a990457030537aed5d25d93b2b661642787ec0b2d"
+    )
+    fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
+    assert all(
+        term not in fixed_instructions
+        for term in ("kit", "bicycle", "tortilla", "recipe", "family", "children")
+    )
+
+
+def test_legacy_collection_without_subject_remains_generic_query_scope(schema: dict) -> None:
+    """Continue reading a validated pre-subject collection plan without changing its semantics."""
+    legacy = selection("all relevant values")
+    legacy.pop("self_target")
+    legacy.pop("relational_reference")
+    legacy.pop("semantic_set")
+    legacy.pop("collection_subject")
+    legacy["entity"] = None
+    legacy["type"] = None
+    legacy["filters"] = []
+    legacy["link_scope"] = None
+
+    plan = validate_request_plan(
+        output({"kind": "retrieve", "result_shape": "collection", "plan": legacy}), schema
+    )
+
+    action = plan.actions[0]
+    assert isinstance(action, RetrieveAction)
+    assert action.plan.collection_subject == "query"
+
+
+def test_prompt_defines_generic_collection_shape_without_conflating_note_sets(schema: dict) -> None:
+    """Protect the abstract collection-vs-single rule and keep Note sets separate."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    assert (
+        "use result_shape=collection when the user is asking to enumerate or return multiple "
+        "semantic members or values that together answer the request"
+    ) in prompt
+    assert "use result_shape=single for ordinary fact retrieval or synthesis" in prompt
+    assert "Do not infer collection from grammatical plural alone" in prompt
+    assert "SelectionCriteria.query MUST preserve the complete useful request" in prompt
+    assert "use result_shape=single with presentation_intent=note_set" in prompt
+    assert all(word not in prompt for word in ("ingredients", "emergency bag", "bike kit"))
+
+    schema_shapes: set[str] = set()
+    presentation_intents: set[str] = set()
+
+    def collect_contract_enums(node: Any) -> None:
+        if isinstance(node, dict):
+            properties = node.get("properties", {})
+            if isinstance(properties, dict):
+                shape = properties.get("result_shape")
+                if isinstance(shape, dict):
+                    schema_shapes.update(shape.get("enum", []))
+                intent = properties.get("presentation_intent")
+                if isinstance(intent, dict):
+                    presentation_intents.update(intent.get("enum", []))
+            for value in node.values():
+                collect_contract_enums(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect_contract_enums(value)
+
+    collect_contract_enums(planner_result_json_schema(schema))
+    assert schema_shapes == {"single", "collection"}
+    assert presentation_intents == {"answer", "note_set", "answer_and_note_set"}
+
+
+@pytest.mark.parametrize(
+    "provider_schema_factory", [planner_result_json_schema, compact_planner_result_json_schema]
+)
+def test_provider_schema_partitions_single_and_collection_subject_scope(
+    schema: dict, provider_schema_factory
+) -> None:
+    """Expose only the collection scope allowed by each retrieval result shape."""
+    provider_schema = provider_schema_factory(schema)
+    single = provider_output(planner_output(retrieve("one fact")))
+    collection = provider_output(
+        planner_output(
+            {
+                "kind": "retrieve",
+                "result_shape": "collection",
+                "plan": {
+                    **selection("all semantic members"),
+                    "collection_subject": "query",
+                },
+            }
+        )
+    )
+    collection["result"]["actions"][0]["plan"].pop("semantic_set", None)
+
+    assert schema_accepts(single, provider_schema)
+    assert schema_accepts(collection, provider_schema)
+
+    single["result"]["actions"][0]["plan"]["collection_subject"] = "self"
+    assert not schema_accepts(single, provider_schema)
+
+    collection["result"]["actions"][0]["plan"]["collection_subject"] = None
+    assert not schema_accepts(collection, provider_schema)
+    collection["result"]["actions"][0]["plan"].pop("collection_subject")
+    assert not schema_accepts(collection, provider_schema)
+
+
+@pytest.mark.parametrize("presentation_intent", ["note_set", "answer_and_note_set"])
+def test_matching_note_presentations_require_single_null_collection_subject(
+    schema: dict, presentation_intent: str
+) -> None:
+    """Keep matching-Note presentation distinct from semantic-member collection scope."""
+    payload = planner_output(retrieve("matching Notes"))
+    payload["presentation_intent"] = presentation_intent
+
+    plan = validate_planner_result(payload, schema)
+    action = plan.actions[0]
+    assert isinstance(action, RetrieveAction)
+    assert action.result_shape == "single"
+    assert action.plan.collection_subject is None
+
+    payload["actions"][0]["plan"]["collection_subject"] = "query"
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_planner_result(payload, schema)
+    assert raised.value.validation_stage is PlannerValidationStage.RETRIEVE_ACTION
+    assert raised.value.validation_code is PlannerValidationCode.SELECTION_MODE_CONFLICT
+
+
+def test_collection_cannot_request_matching_note_presentation(schema: dict) -> None:
+    """Keep semantic-member collections out of the matching-Note presentation path."""
+    collection = selection("all semantic members")
+    collection["semantic_set"] = None
+    collection["collection_subject"] = "self"
+    payload = planner_output({"kind": "retrieve", "result_shape": "collection", "plan": collection})
+    payload["presentation_intent"] = "note_set"
+
+    with pytest.raises(
+        RequestPlanningError, match="Note-set presentation requires one direct retrieval"
+    ):
+        validate_planner_result(payload, schema)
+
+
+def test_write_action_schema_requires_non_empty_units(schema: dict) -> None:
+    """Keep Structured Outputs aligned with the local non-empty WriteAction invariant."""
+    payload = planner_output(write())
+
+    assert not schema_accepts(
+        {"result": payload},
+        planner_result_json_schema(schema),
+    )
+    assert not schema_accepts(
+        {"result": payload},
+        compact_planner_result_json_schema(schema),
+    )
+
+    with pytest.raises(RequestPlanningError, match="non-empty units"):
+        validate_planner_result(payload, schema)
+
+
 def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> None:
     """Keep one and all-matching explicit while rejecting unknown cardinality values."""
     one = validate_request_plan(output(write(unit("Marta", cardinality="one"))), schema)
@@ -204,7 +455,7 @@ def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> N
     assert one.actions[0].units[0].cardinality == "one"  # type: ignore[union-attr]
     assert bulk.actions[0].units[0].cardinality == "all_matching"  # type: ignore[union-attr]
     plan_schema = request_plan_json_schema(schema)
-    unit_schema = plan_schema["properties"]["actions"]["items"]["anyOf"][1]["properties"]["units"][
+    unit_schema = plan_schema["properties"]["actions"]["items"]["anyOf"][2]["properties"]["units"][
         "items"
     ]
     assert "cardinality" in unit_schema["required"]
@@ -607,7 +858,7 @@ def test_prompt_and_schema_freeze_reference_occurrence_contract(schema: dict) ->
     assert "own `references` array" in prompt
     assert "Do not emit Markdown `[[wikilinks]]`" in prompt
     reference_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"]["anyOf"][
-        1
+        2
     ]["properties"]["units"]["items"]["properties"]["references"]["items"]
     assert reference_schema["required"] == ["target_index", "role", "mention"]
 
@@ -721,7 +972,7 @@ def test_openai_boundary_uses_sol_low_structured_output_and_store_false(schema: 
     result_schema = calls[0]["text"]["format"]["schema"]  # type: ignore[index]
     result_union = result_schema["properties"]["result"]["anyOf"]
     actions_schema = result_union[0]["properties"]["actions"]
-    write_schema = actions_schema["items"]["anyOf"][1]
+    write_schema = actions_schema["items"]["anyOf"][2]
     unit_schema = write_schema["properties"]["units"]["items"]
     assert write_schema["properties"]["kind"] == {"type": "string", "enum": ["write"]}
     assert set(unit_schema["required"]) == {
@@ -796,7 +1047,10 @@ def test_planner_result_supports_closed_nonsense_clarification(
 
     assert isinstance(result, PlannerClarification)
     assert result.code == "UNRECOGNIZED_REQUEST"
-    assert PLANNER_CLARIFICATION_CODES == ("UNRECOGNIZED_REQUEST",)
+    assert PLANNER_CLARIFICATION_CODES == (
+        "UNRECOGNIZED_REQUEST",
+        "UNREPRESENTABLE_REQUEST",
+    )
     assert input_text  # The model-choice behavior remains a future live-evidence gate.
 
 
@@ -863,8 +1117,92 @@ def test_compact_planner_schema_preserves_all_current_result_shapes(schema: dict
     )
     assert "filter_array" in compact["$defs"]
     assert compact["$defs"]["retrieve_action"]["properties"]["plan"] == {
-        "$ref": "#/$defs/selection"
+        "$ref": "#/$defs/single_retrieval_selection"
     }
+    assert compact["$defs"]["single_retrieval_selection"]["properties"]["collection_subject"] == {
+        "type": "null"
+    }
+
+
+def test_provider_schema_matches_local_semantic_set_selection_modes(schema: dict) -> None:
+    """Admit a collection query and reject direct authority in either provider schema."""
+    inline = planner_result_json_schema(schema)
+    compact = compact_planner_result_json_schema(schema)
+    semantic = selection("¿Quiénes son las personas de mi familia?")
+    semantic.pop("semantic_set")
+    semantic["collection_subject"] = "query"
+    valid_semantic = provider_output(
+        planner_output({"kind": "retrieve", "result_shape": "collection", "plan": semantic})
+    )
+    ordinary = provider_output(planner_output(retrieve("Marta")))
+
+    assert all(schema_accepts(payload, inline) for payload in (ordinary, valid_semantic))
+    assert all(schema_accepts(payload, compact) for payload in (ordinary, valid_semantic))
+    validated = validate_request_plan(
+        output({"kind": "retrieve", "result_shape": "collection", "plan": semantic}), schema
+    )
+    assert validated.actions[0].result_shape == "collection"
+
+    semantic_filters = inline["properties"]["result"]["anyOf"][0]["properties"]["actions"]["items"][
+        "anyOf"
+    ][1]["properties"]["plan"]["properties"]["filters"]
+    assert semantic_filters["type"] == "array"
+    assert isinstance(semantic_filters["items"], dict)
+    assert semantic_filters["maxItems"] == 0
+
+    conflicts = []
+    for field, value in (
+        ("entity", "Marta"),
+        ("self_target", "self"),
+        ("link_scope", {"anchor": selection("Marta"), "direction": "outgoing", "max_depth": 1}),
+        ("filters", [{"field": "type", "op": "eq", "value": "person"}]),
+        (
+            "relational_reference",
+            {
+                "reference": "mi familia",
+                "source_kind": "self",
+                "source_query": None,
+                "members": "one",
+            },
+        ),
+    ):
+        invalid = deepcopy(semantic)
+        invalid[field] = value
+        payload = provider_output(
+            planner_output({"kind": "retrieve", "result_shape": "collection", "plan": invalid})
+        )
+        conflicts.append((payload, invalid))
+
+    for payload, invalid in conflicts:
+        assert not schema_accepts(payload, inline)
+        assert not schema_accepts(payload, compact)
+        with pytest.raises(RequestPlanningError):
+            validate_request_plan(
+                output({"kind": "retrieve", "result_shape": "collection", "plan": invalid}),
+                schema,
+            )
+
+    write_target = schema_unit("Marta")
+    write_target["target"] = semantic_set_selection("¿Quién es mi familia?")
+    write_payload = provider_output(planner_output({"kind": "write", "units": [write_target]}))
+    delegate_payload = provider_output(
+        planner_output(
+            {"kind": "delegate", "request": "compare", "selection": write_target["target"]}
+        )
+    )
+    for payload in (write_payload, delegate_payload):
+        assert not schema_accepts(payload, inline)
+        assert not schema_accepts(payload, compact)
+
+
+def test_provider_array_schemas_always_define_items(schema: dict) -> None:
+    """Keep strict provider schemas compatible with Structured Outputs array requirements."""
+    for provider_schema in (
+        planner_result_json_schema(schema),
+        compact_planner_result_json_schema(schema),
+        luna_experimental_result_json_schema(schema),
+    ):
+        assert_all_array_schemas_define_items(provider_schema)
 
 
 def test_context_payload_is_not_a_planner_result(schema: dict) -> None:
@@ -1130,6 +1468,30 @@ def test_malformed_planner_json_fails_closed_with_bounded_parse_evidence(schema:
         ),
         (
             planner_output(
+                write(
+                    unit(
+                        "Marta",
+                        references=[
+                            {
+                                "target_index": 0,
+                                "role": "self",
+                                "mention": "Marta",
+                            }
+                        ],
+                        facts=["Marta {{ref:0}} has a note."],
+                    )
+                )
+            ),
+            PlannerValidationStage.WRITE_ACTION,
+            PlannerValidationCode.INVALID_REFERENCE,
+        ),
+        (
+            planner_output(write(unit("Marta", intent="record", facts=[]))),
+            PlannerValidationStage.WRITE_ACTION,
+            PlannerValidationCode.INVALID_MUTATION,
+        ),
+        (
+            planner_output(
                 retrieve("Where does Marta work?"),
                 write(unit("", facts=["Marta works at Thales."])),
             ),
@@ -1369,6 +1731,7 @@ def test_request_plan_schema_uses_supported_enum_discriminators(schema: dict) ->
     assert request_schema["properties"]["actions"]["minItems"] == 1
     assert [variant["properties"]["kind"] for variant in action_variants] == [
         {"type": "string", "enum": ["retrieve"]},
+        {"type": "string", "enum": ["retrieve"]},
         {"type": "string", "enum": ["write"]},
         {"type": "string", "enum": ["delegate"]},
     ]
@@ -1401,6 +1764,151 @@ def test_tag_changes_reject_duplicate_or_conflicting_values(schema: dict) -> Non
                 write(
                     unit("sofa", intent="remove", tag_changes=[{"op": "add", "value": "muebles"}])
                 )
+            ),
+            schema,
+        )
+
+
+def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(schema: dict) -> None:
+    """Accept the bounded intent without granting a planner canonical evidence authority."""
+    semantic = {"kind": "retrieve", "plan": semantic_set_selection("¿Quién es mi familia?")}
+    plan = validate_request_plan(output(semantic), schema)
+    intent = plan.actions[0].plan.semantic_set
+    assert intent and intent.subject_kind == "self" and intent.subject_query is None
+    assert plan.actions[0].plan.relational_reference is None
+
+    textual = semantic_set_selection("¿Qué piezas incluye mi kit?")
+    textual["semantic_set"].update(
+        {
+            "subject_kind": "query",
+            "subject_query": "mi kit de reparación",
+            "member_query": "piezas",
+        }
+    )
+    textual_intent = (
+        validate_request_plan(output({"kind": "retrieve", "plan": textual}), schema)
+        .actions[0]
+        .plan.semantic_set
+    )
+    assert textual_intent and textual_intent.subject_query == "mi kit de reparación"
+
+    textual["semantic_set"]["subject_query"] = None
+    with pytest.raises(RequestPlanningError, match="semantic set is invalid"):
+        validate_request_plan(output({"kind": "retrieve", "plan": textual}), schema)
+
+    legacy = selection("Marta")
+    legacy.pop("semantic_set")
+    assert (
+        validate_request_plan(output({"kind": "retrieve", "plan": legacy}), schema)
+        .actions[0]
+        .plan.semantic_set
+        is None
+    )
+
+    forbidden = unit("Marta")
+    forbidden["target"] = semantic_set_selection("¿Quién es mi familia?")
+    with pytest.raises(RequestPlanningError, match="requires RetrieveAction"):
+        validate_request_plan(output(write(forbidden)), schema)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("entity", "Marta"),
+        ("self_target", "self"),
+        (
+            "relational_reference",
+            {
+                "reference": "mi familia",
+                "source_kind": "self",
+                "source_query": None,
+                "members": "complete_set",
+            },
+        ),
+    ],
+)
+def test_semantic_set_rejects_conflicting_selection_authority(
+    schema: dict, field: str, value: object
+) -> None:
+    """Keep a multi-fact set intent separate from direct and relational retrieval contracts."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    selected[field] = value
+
+    with pytest.raises(RequestPlanningError, match="semantic set conflicts"):
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+
+@pytest.mark.parametrize("unsafe", ["people/marta.md", "[[Marta]]", "x" * 257])
+def test_semantic_set_rejects_unsafe_or_unbounded_planner_wording(
+    schema: dict, unsafe: str
+) -> None:
+    """Never let planner wording carry a path, link, or unbounded payload into Core selection."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    selected["semantic_set"]["member_query"] = unsafe
+
+    with pytest.raises(RequestPlanningError, match="semantic set wording is unsafe"):
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_code"),
+    [
+        (
+            lambda selected: selected["semantic_set"].pop("member_query"),
+            PlannerValidationCode.INVALID_SEMANTIC_SET_FIELDS,
+        ),
+        (
+            lambda selected: selected["semantic_set"].update(
+                {"subject_kind": "self", "subject_query": "mi familia"}
+            ),
+            PlannerValidationCode.INVALID_SEMANTIC_SET_INVARIANT,
+        ),
+        (
+            lambda selected: selected.update({"self_target": "self"}),
+            PlannerValidationCode.SELECTION_MODE_CONFLICT,
+        ),
+        (
+            lambda selected: selected["semantic_set"].update({"member_query": "people/marta.md"}),
+            PlannerValidationCode.UNSAFE_SEMANTIC_SET_WORDING,
+        ),
+    ],
+)
+def test_semantic_set_validation_emits_safe_bounded_reason_codes(
+    schema: dict, mutate, expected_code: PlannerValidationCode
+) -> None:
+    """Retain selection-safe reasons without retaining planner wording or exception text."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    mutate(selected)
+
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+    assert raised.value.validation_stage is PlannerValidationStage.SELECTION
+    assert raised.value.validation_code is expected_code
+
+
+def test_selection_shape_failure_emits_safe_bounded_reason_code(schema: dict) -> None:
+    """Keep generic selection-shape failures distinguishable from semantic-set failures."""
+    selected = semantic_set_selection("¿Quién es mi familia?")
+    selected["unexpected"] = True
+
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_request_plan(output({"kind": "retrieve", "plan": selected}), schema)
+
+    assert raised.value.validation_stage is PlannerValidationStage.SELECTION
+    assert raised.value.validation_code is PlannerValidationCode.INVALID_SELECTION_FIELDS
+
+
+def test_semantic_set_is_rejected_from_delegate_selection(schema: dict) -> None:
+    """Do not grant a semantic-set intent to a non-retrieval specialized capability."""
+    with pytest.raises(RequestPlanningError, match="semantic set requires RetrieveAction"):
+        validate_request_plan(
+            output(
+                {
+                    "kind": "delegate",
+                    "request": "analiza el grupo",
+                    "selection": semantic_set_selection("¿Quién es mi familia?"),
+                }
             ),
             schema,
         )
