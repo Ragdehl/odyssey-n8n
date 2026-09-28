@@ -23,14 +23,22 @@ from odyssey_core import (
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
+    SemanticSetIntent,
     UnitStatus,
     WriteAction,
     WriteTargetOutcome,
 )
+from odyssey_core.clarification import ClarificationChoice, evidence_digest
 from odyssey_core.observability import OperationalOutcome, ProviderCallEvidence
 from odyssey_core.persistence import EntityPersistenceResult, PersistenceOperation
 from odyssey_core.reference_binding import PendingReference, ReferenceRenderingResult
 from odyssey_core.reference_preflight import UnitTargetPreflight
+from odyssey_core.resolution import (
+    ExistingEntityOutcome,
+    ExistingEntityResolution,
+    ResolutionSource,
+)
+from odyssey_core.semantic_sets import SemanticSetOutcome, SemanticSetResolution
 
 
 @dataclass
@@ -77,6 +85,81 @@ def run(plan: RequestPlan, monkeypatch: pytest.MonkeyPatch, **kwargs: Any):
     )
 
 
+def semantic_set_plan(
+    *, subject_kind: str = "self", subject_query: str | None = None
+) -> RequestPlan:
+    """Build one validated-shaped semantic-set retrieval plan for application routing tests."""
+    return RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None,
+                    "elementos del grupo",
+                    None,
+                    (),
+                    None,
+                    semantic_set=SemanticSetIntent(
+                        subject_kind, subject_query, "elementos del grupo", "", True
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+
+
+def test_execute_request_defers_semantic_set_without_an_injected_selector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not replace a semantic set with ordinary ranked retrieval when selection is unavailable."""
+    result = run(semantic_set_plan(), monkeypatch)
+
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.action_results[0].status is application.ActionStatus.DEFERRED
+    assert result.action_results[0].reason == "semantic_set_selector_unavailable"
+
+
+def test_execute_request_routes_semantic_set_directly_to_core_fact_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not resolve the semantic subject as a Note before Core discovers fact evidence."""
+    calls: list[dict[str, object]] = []
+
+    def resolve(*args: object, **kwargs: object) -> SemanticSetResolution:
+        calls.append(kwargs)
+        return SemanticSetResolution(SemanticSetOutcome.ANSWERABLE)
+
+    monkeypatch.setattr(application, "resolve_semantic_set", resolve)
+    result = run(
+        semantic_set_plan(),
+        monkeypatch,
+        semantic_set_selector=SimpleNamespace(select=lambda request: request),
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.action_results[0].status is application.ActionStatus.COMPLETED
+    assert "anchor_id" not in calls[0]
+
+
+def test_execute_request_passes_textual_semantic_subject_without_existing_entity_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep textual subjects out of the existing-entity resolver and source topology in Core."""
+    monkeypatch.setattr(
+        application,
+        "resolve_semantic_set",
+        lambda *args, **kwargs: SemanticSetResolution(SemanticSetOutcome.ANSWERABLE),
+    )
+    result = run(
+        semantic_set_plan(subject_kind="query", subject_query="kit básico"),
+        monkeypatch,
+        semantic_set_selector=SimpleNamespace(select=lambda request: request),
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.action_results[0].semantic_set is not None
+
+
 def test_retrieve_uses_existing_context_and_propagates_one_request_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -110,6 +193,15 @@ def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
         "get_context",
         lambda *args, **kwargs: retrieval_calls.append(kwargs) or object(),
     )
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: ExistingEntityResolution(
+            ExistingEntityOutcome.RESOLVED,
+            "marta-stable-id",
+            ResolutionSource.EXACT_LOCAL,
+        ),
+    )
 
     @dataclass
     class RecordingPlanner:
@@ -141,7 +233,94 @@ def test_recent_context_reaches_planner_once_but_not_canonical_retrieval(
     assert planner.calls == [
         ("¿Y dónde vive?", ({"role": "user", "text": "Marta vive en Lyon"},)),
     ]
-    assert retrieval_calls == [{"query": "Marta", "limit": 5, "type": None, "filters": ()}]
+    assert retrieval_calls == [
+        {
+            "query": "Marta",
+            "limit": 5,
+            "type": None,
+            "filters": (),
+            "allowed_note_ids": frozenset({"marta-stable-id"}),
+        }
+    ]
+
+
+def test_singular_ambiguous_source_clarifies_but_note_set_keeps_multiple(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multiple candidates block one intended source, not an explicit Note set."""
+    calls = []
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: (
+            calls.append("resolve")
+            or ExistingEntityResolution(
+                ExistingEntityOutcome.AMBIGUOUS,
+                None,
+                ResolutionSource.EXACT_LOCAL,
+                ("marta-1", "marta-2"),
+            )
+        ),
+    )
+    monkeypatch.setattr(application, "get_context", lambda *args, **kwargs: object())
+    selected = RetrieveAction(SelectionCriteria("Marta", "Marta", None, (), None))
+
+    singular = run(RequestPlan((selected,), ()), monkeypatch)
+    assert singular.status is ApplicationStatus.NEEDS_ATTENTION
+    assert singular.action_results[0].candidate_note_ids == ("marta-1", "marta-2")
+    assert singular.action_results[0].reason == "ambiguous_existing_target"
+
+    calls.clear()
+    note_set = run(RequestPlan((selected,), (), presentation_intent="note_set"), monkeypatch)
+    assert note_set.status is ApplicationStatus.COMPLETED
+    assert calls == []
+
+
+def test_resumed_singular_read_rechecks_identity_and_markdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A chosen source is allowed only while current evidence still supports that identity."""
+    import odyssey_core.reference_preflight as preflight
+
+    class Repository:
+        """Expose only current synthetic canonical text for the guard."""
+
+        text = "original current Markdown"
+
+        def read_text(self, path: str) -> str:
+            """Read the current fixture text for the supplied contained path."""
+            assert path == "marta.md"
+            return self.text
+
+    repository = Repository()
+    monkeypatch.setattr(preflight, "_find_existing_identity", lambda *args: ("marta.md", "Marta"))
+    monkeypatch.setattr(
+        application,
+        "resolve_existing_entity",
+        lambda *args, **kwargs: ExistingEntityResolution(
+            ExistingEntityOutcome.AMBIGUOUS,
+            None,
+            ResolutionSource.EXACT_LOCAL,
+            ("marta-1", "marta-2"),
+        ),
+    )
+    queries = []
+    monkeypatch.setattr(
+        application,
+        "get_context",
+        lambda *args, **kwargs: queries.append(kwargs) or object(),
+    )
+    plan = RequestPlan((RetrieveAction(SelectionCriteria("Marta", "Marta", None, (), None)),), ())
+    choice = ClarificationChoice("marta-2", evidence_digest(repository.text))
+    accepted = run(plan, monkeypatch, repository=repository, clarification_choice=choice)
+    assert accepted.status is ApplicationStatus.COMPLETED
+    assert queries[0]["allowed_note_ids"] == frozenset({"marta-2"})
+
+    repository.text = "materially changed Markdown"
+    rejected = run(plan, monkeypatch, repository=repository, clarification_choice=choice)
+    assert rejected.status is ApplicationStatus.NEEDS_ATTENTION
+    assert rejected.action_results[0].reason == "clarification_evidence_changed"
+    assert len(queries) == 1
 
 
 def test_operational_evidence_has_bounded_planner_usage_and_injected_timing(
@@ -574,35 +753,21 @@ def test_delegate_and_planning_failure_are_typed_without_mutation(
     assert failed.action_results == ()
 
 
-def test_planner_clarification_falls_back_to_generic_read_without_write_execution(
+def test_planner_clarification_returns_before_all_execution_and_persistence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Retrieve a clear question without allowing a closed planner result to write anything."""
+    """Turn an explicit planner abstention into deterministic non-mutating application evidence."""
     calls: list[str] = []
-    retrieved = object()
 
     class FailIfCalled:
-        """Record forbidden write-side dependency use."""
+        """Record any forbidden post-clarification dependency use."""
 
         def __getattr__(self, name: str):
             calls.append(name)
-            raise AssertionError(f"write path called {name}")
-
-    context_calls: list[dict[str, Any]] = []
-
-    def fake_context(*_args: Any, **kwargs: Any) -> object:
-        context_calls.append(kwargs)
-        return retrieved
-
-    monkeypatch.setattr(application, "get_context", fake_context)
-    monkeypatch.setattr(
-        application,
-        "preflight_write_action",
-        lambda *_args, **_kwargs: pytest.fail("planner clarification reached write preflight"),
-    )
+            raise AssertionError(f"clarification called {name}")
 
     result = application.execute_request(
-        "¿Quiénes son las personas de mi familia?",
+        "Bdbd",
         planner=FakePlanner(PlannerClarification("UNRECOGNIZED_REQUEST")),
         repository=FailIfCalled(),
         schema={},
@@ -619,24 +784,13 @@ def test_planner_clarification_falls_back_to_generic_read_without_write_executio
         request_id_factory=lambda: "request-bdbd-sentinel",
     )
 
-    assert result.status is ApplicationStatus.COMPLETED
-    assert result.clarification_code is None
-    assert result.action_results[0].retrieval is retrieved
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "UNRECOGNIZED_REQUEST"
+    assert result.action_results == ()
     assert result.affected_stable_note_ids == ()
     assert result.planning_error is None
-    assert context_calls == [
-        {
-            "query": "¿Quiénes son las personas de mi familia?",
-            "limit": 5,
-            "type": None,
-            "filters": (),
-        }
-    ]
-    assert [stage.name for stage in result.operational.stages] == [
-        "planner",
-        "action.retrieve",
-        "pending",
-    ]
+    assert result.history.status.name == "NOT_ATTEMPTED"
+    assert [stage.name for stage in result.operational.stages] == ["planner", "pending"]
     assert calls == []
 
 

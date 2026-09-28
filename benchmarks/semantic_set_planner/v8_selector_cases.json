@@ -1,0 +1,10 @@
+{
+  "version": "8.1.0",
+  "frozen_before_provider_calls": true,
+  "cases": [
+    {"id":"RELSEL_CORROBORATE","query":"¿Quién es mi pareja?","candidates":[{"id":"relational-0","text":"Mi mujer es [[Beatriz]]."},{"id":"relational-1","text":"Mi mujer es [[Beatriz]]."}]},
+    {"id":"RELSEL_CONFLICT","query":"¿Quién es mi hija?","candidates":[{"id":"relational-0","text":"Mi hija es [[Cloe]]."},{"id":"relational-1","text":"Mi hija es [[Marta]]."}]},
+    {"id":"RELSEL_MULTI_TARGET","query":"¿Quién es mi hijo?","candidates":[{"id":"relational-0","text":"Mis hijos son [[Cloe]] y [[Bruno]]."}]},
+    {"id":"RELSEL_SEMANTIC","query":"¿Quién es mi pareja?","candidates":[{"id":"relational-0","text":"Mi mujer es [[Beatriz]]."}]}
+  ]
+}

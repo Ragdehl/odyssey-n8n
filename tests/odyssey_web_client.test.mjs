@@ -135,6 +135,28 @@ test("closed planner clarification is a normal bounded product result", () => {
   assert.equal(result.kind, "clarification");
 });
 
+test("bounded collection and cannot-answer results keep grounded public fields", () => {
+  const result = validateProductResponse({
+    request_id: "web-collection",
+    status: "completed",
+    kind: "answer",
+    message: "one, two",
+    collection_members: [
+      {kind: "literal", value: "one", stable_note_id: null, source_note_id: "source-1"},
+      {kind: "literal", value: "two", stable_note_id: null, source_note_id: "source-2"},
+    ],
+  });
+  assert.equal(result.collection_members.length, 2);
+  assert.equal(validateProductResponse({
+    request_id: "web-absent", status: "failed", kind: "cannot_answer",
+    message: "No encuentro información pertinente en tus notas.",
+  }).kind, "cannot_answer");
+  assert.throws(() => validateProductResponse({
+    ...result,
+    collection_members: [{kind: "literal", value: "invented", source_note_id: "", stable_note_id: null}],
+  }), ProductRequestError);
+});
+
 test("product response validation accepts only the narrow browser contract", () => {
   const valid = {
     request_id: "web-1",
@@ -470,6 +492,44 @@ test("Notes browser validation accepts typed pages, detail, and explicit backlin
       ]},
     }]}],
   }).items[0].occurrences, 2);
+});
+
+test("Notes browser validation accepts only bounded direct-mutation metadata", () => {
+  const detail = validateNotesResponse({
+    kind: "detail",
+    note: noteSummary(),
+    body: "Marta trabaja en Thales.",
+    body_blocks: [{kind: "paragraph", segments: [{text: "Marta trabaja en Thales."}]}],
+    links: [],
+    mutation: {
+      revision: 3,
+      source_hash: "a".repeat(64),
+    },
+  });
+  assert.equal(detail.mutation.revision, 3);
+  assert.deepEqual(validateNotesResponse({
+    kind: "mutation", operation: "fact_deleted", note_id: "marta", history: {status: "COMMITTED"},
+  }).history.status, "COMMITTED");
+  assert.throws(() => validateNotesResponse({
+    kind: "detail", note: noteSummary(), body: "", body_blocks: [], links: [],
+    mutation: {revision: 3, source_hash: "wrong"},
+  }), NotesRequestError);
+});
+
+test("Notes detail validates a visible atomic locator without exposing canonical fact text", () => {
+  const detail = validateNotesResponse({
+    kind: "detail", note: noteSummary(), body: "Axel y Denis", links: [],
+    body_blocks: [{kind: "list_item", deletable: true, fact_locator: "request-1:0", segments: [
+      {text: "Axel", target_id: "axel", target_type: "person"}, {text: " y "},
+      {text: "Denis", target_id: "denis", target_type: "person"},
+    ]}],
+    mutation: {revision: 3, source_hash: "a".repeat(64)},
+  });
+  assert.equal(detail.body_blocks[0].fact_locator, "request-1:0");
+  assert.equal(detail.body_blocks[0].segments[0].text, "Axel");
+  assert.throws(() => validateNotesResponse({
+    ...detail, body_blocks: [{kind: "paragraph", deletable: true, fact_locator: "request-1:0", segments: [{text: "unsafe"}]}],
+  }), NotesRequestError);
 });
 
 test("product transport accepts the closed v2 affected-note snapshot but rejects hybrids", () => {

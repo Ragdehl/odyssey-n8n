@@ -121,8 +121,12 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert Decimal("0") < cost < Decimal("0.07")
+    assert Decimal("0.07") < cost < Decimal("0.08")
     assert input_bound > 0
+
+    import benchmarks.semantic_write_resolution_v1.run_live as runner
+
+    assert runner.MAX_COST_USD == Decimal("0.00")
 
 
 def test_over_budget_refuses_before_provider_construction(

@@ -1,0 +1,11 @@
+{
+  "version": "6.0.0", "frozen_before_provider_calls": true,
+  "oracles": [
+    {"id":"SSET01","kind":"semantic_set","subject_kind":"self","member_type":"person","terms":[["familia"],["persona","familiar"]],"exhaustive":true},
+    {"id":"SSET02","kind":"semantic_set","subject_kind":"query","member_type":null,"terms":[["kit"],["básic"],["bici"],["pieza","componente"]],"exhaustive":true},
+    {"id":"SSET03","kind":"semantic_set","subject_kind":"query","member_type":null,"terms":[["receta"],["tortilla"],["ingrediente"]],"exhaustive":true},
+    {"id":"SSET04","kind":"semantic_set","subject_kind":"self","member_type":"person","terms":[["compañ","persona"],["viaj"],["italia"]],"exhaustive":true},
+    {"id":"REG01","kind":"singular_relational","reference_terms":["ahijad"]},
+    {"id":"REG02","kind":"ordinary_named","query_term_sets":[["marta"],["trabaj"]]}
+  ]
+}
