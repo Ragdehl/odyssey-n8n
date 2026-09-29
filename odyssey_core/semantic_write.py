@@ -8,12 +8,15 @@ from enum import StrEnum
 from typing import Any
 
 from odyssey_core.context import ContextFilter
+from odyssey_core.planner_capabilities import build_planner_capabilities, build_write_capabilities
 from odyssey_core.request_planning import (
     SELF_TARGET,
     PropertyChange,
     RequestPlanningError,
     TagChange,
     WriteAction,
+    planner_filter_array_json_schema,
+    planner_property_changes_json_schema,
     validate_request_plan,
 )
 
@@ -113,6 +116,329 @@ class SemanticWriteIntent:
     operations: tuple[SemanticWriteOperation, ...]
 
 
+def semantic_write_schema_definitions(schema: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the closed dynamic Structured Outputs definitions for Luna semantic WRITE.
+
+    Note types, filters, writable properties, property value types, and destination types are
+    projected from the canonical schema. The returned definitions are intended to be installed in
+    the provider schema root so their ``#/$defs`` references remain valid.
+    """
+    retrieval = build_planner_capabilities(schema)
+    writable = build_write_capabilities(schema)
+    note_type = {
+        "anyOf": [
+            {"type": "null"},
+            {"type": "string", "enum": list(retrieval["types"])},
+        ]
+    }
+    candidate_scope = {
+        "type": "object",
+        "properties": {
+            "source": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {"kind": {"type": "string", "enum": ["SELF"]}},
+                        "required": ["kind"],
+                        "additionalProperties": False,
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "kind": {
+                                "type": "string",
+                                "enum": ["EXISTING_DESCRIPTION"],
+                            },
+                            "description": {"type": "string", "maxLength": 256},
+                        },
+                        "required": ["kind", "description"],
+                        "additionalProperties": False,
+                    },
+                ]
+            },
+            "member_query": {"type": "string", "maxLength": 256},
+            "extent": {
+                "type": "string",
+                "enum": ["one_member", "complete_set"],
+            },
+        },
+        "required": ["source", "member_query", "extent"],
+        "additionalProperties": False,
+    }
+    identity = {
+        "type": "object",
+        "properties": {
+            "description": {"type": "string", "maxLength": 256},
+            "binding": {"type": "string", "enum": ["self", "described"]},
+            "direct_name": {"type": ["string", "null"]},
+            "note_type": note_type,
+            "filters": {"$ref": "#/$defs/filter_array"},
+            "candidate_scope": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"$ref": "#/$defs/semantic_candidate_scope"},
+                ]
+            },
+        },
+        "required": [
+            "description",
+            "binding",
+            "direct_name",
+            "note_type",
+            "filters",
+            "candidate_scope",
+        ],
+        "additionalProperties": False,
+    }
+    literal_part = {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["literal"]},
+            "text": {"type": "string"},
+        },
+        "required": ["kind", "text"],
+        "additionalProperties": False,
+    }
+    identity_part = {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["identity"]},
+            "text": {"type": "string", "maxLength": 256},
+            "identity": {"$ref": "#/$defs/semantic_identity"},
+        },
+        "required": ["kind", "text", "identity"],
+        "additionalProperties": False,
+    }
+    fact = {
+        "type": "object",
+        "properties": {
+            "parts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/semantic_literal_part"},
+                        {"$ref": "#/$defs/semantic_identity_part"},
+                    ]
+                },
+            }
+        },
+        "required": ["parts"],
+        "additionalProperties": False,
+    }
+    operation = {
+        "type": "object",
+        "properties": {
+            "target": {"$ref": "#/$defs/semantic_identity"},
+            "apply_to": {"type": "string", "enum": ["one", "all_matching"]},
+            "intent": {"type": "string", "enum": ["record", "amend", "remove", "delete"]},
+            "facts": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/semantic_fact"},
+            },
+            "properties": {"$ref": "#/$defs/semantic_property_changes"},
+            "tag_changes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "op": {"type": "string", "enum": ["add", "remove"]},
+                        "value": {"type": "string"},
+                    },
+                    "required": ["op", "value"],
+                    "additionalProperties": False,
+                },
+            },
+            "destination_type": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"type": "string", "enum": sorted(writable["types"])},
+                ]
+            },
+        },
+        "required": [
+            "target",
+            "apply_to",
+            "intent",
+            "facts",
+            "properties",
+            "tag_changes",
+            "destination_type",
+        ],
+        "additionalProperties": False,
+    }
+    return {
+        "filter_array": planner_filter_array_json_schema(retrieval),
+        "semantic_candidate_scope": candidate_scope,
+        "semantic_identity": identity,
+        "semantic_literal_part": literal_part,
+        "semantic_identity_part": identity_part,
+        "semantic_fact": fact,
+        "semantic_property_changes": planner_property_changes_json_schema(writable),
+        "semantic_operation": operation,
+    }
+
+
+def semantic_write_action_json_schema() -> dict[str, Any]:
+    """Return the closed write-action branch referencing semantic root definitions."""
+    return {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["write"]},
+            "operations": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/semantic_operation"},
+            },
+        },
+        "required": ["kind", "operations"],
+        "additionalProperties": False,
+    }
+
+
+def decode_semantic_write_action(raw: Any) -> SemanticWriteIntent:
+    """Decode one closed provider write action without accepting Core mechanical fields.
+
+    Args:
+        raw: Untrusted JSON-decoded Luna action.
+    Returns:
+        Immutable semantic WRITE intent preserving operation and fact-part order.
+
+    Raises:
+        SemanticWriteCompileError: If any object is open, correlated state is invalid, or the
+            resulting meaning cannot compile through the existing Core contract.
+    """
+    if not isinstance(raw, dict) or set(raw) != {"kind", "operations"}:
+        raise SemanticWriteCompileError("Semantic write action fields are invalid")
+    if raw["kind"] != "write" or not isinstance(raw["operations"], list):
+        raise SemanticWriteCompileError("Semantic write action is invalid")
+    return SemanticWriteIntent(tuple(_decode_operation(item) for item in raw["operations"]))
+
+
+def _decode_operation(raw: Any) -> SemanticWriteOperation:
+    """Decode one closed semantic operation while retaining provider order."""
+    required = {
+        "target",
+        "apply_to",
+        "intent",
+        "facts",
+        "properties",
+        "tag_changes",
+        "destination_type",
+    }
+    if not isinstance(raw, dict) or set(raw) != required:
+        raise SemanticWriteCompileError("Semantic write operation fields are invalid")
+    try:
+        apply_to = ApplyTo(raw["apply_to"])
+    except (TypeError, ValueError) as error:
+        raise SemanticWriteCompileError("Semantic write apply_to is invalid") from error
+    facts = raw["facts"]
+    properties = raw["properties"]
+    tags = raw["tag_changes"]
+    if (
+        not isinstance(facts, list)
+        or not isinstance(properties, list)
+        or not isinstance(tags, list)
+    ):
+        raise SemanticWriteCompileError("Semantic write operation payload is invalid")
+    return SemanticWriteOperation(
+        target=_decode_identity(raw["target"]),
+        apply_to=apply_to,
+        intent=raw["intent"],
+        facts=tuple(_decode_fact(item) for item in facts),
+        properties=tuple(_decode_property(item) for item in properties),
+        tag_changes=tuple(_decode_tag(item) for item in tags),
+        destination_type=raw["destination_type"],
+    )
+
+
+def _decode_identity(raw: Any) -> IdentityIntent:
+    """Decode one non-recursive semantic identity object."""
+    required = {
+        "description",
+        "binding",
+        "direct_name",
+        "note_type",
+        "filters",
+        "candidate_scope",
+    }
+    if not isinstance(raw, dict) or set(raw) != required:
+        raise SemanticWriteCompileError("Semantic identity fields are invalid")
+    try:
+        binding = IdentityBinding(raw["binding"])
+    except (TypeError, ValueError) as error:
+        raise SemanticWriteCompileError("Semantic identity binding is invalid") from error
+    filters = raw["filters"]
+    if not isinstance(filters, list):
+        raise SemanticWriteCompileError("Semantic identity filters are invalid")
+    decoded_filters = []
+    for item in filters:
+        if not isinstance(item, dict) or set(item) != {"field", "op", "value"}:
+            raise SemanticWriteCompileError("Semantic identity filter fields are invalid")
+        decoded_filters.append(ContextFilter(item["field"], item["op"], item["value"]))
+    return IdentityIntent(
+        description=raw["description"],
+        binding=binding,
+        direct_name=raw["direct_name"],
+        note_type=raw["note_type"],
+        filters=tuple(decoded_filters),
+        candidate_scope=_decode_candidate_scope(raw["candidate_scope"]),
+    )
+
+
+def _decode_candidate_scope(raw: Any) -> CandidateScope | None:
+    """Decode the closed SELF/existing-description source union without recursive identity."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {"source", "member_query", "extent"}:
+        raise SemanticWriteCompileError("Candidate scope fields are invalid")
+    source = raw["source"]
+    if not isinstance(source, dict):
+        raise SemanticWriteCompileError("Candidate source is invalid")
+    if set(source) == {"kind"} and source["kind"] == "SELF":
+        decoded_source: IdentityBinding | ExistingSource = IdentityBinding.SELF
+    elif set(source) == {"kind", "description"} and source["kind"] == "EXISTING_DESCRIPTION":
+        decoded_source = ExistingSource(source["description"])
+    else:
+        raise SemanticWriteCompileError("Candidate source fields are invalid")
+    try:
+        extent = CandidateScopeExtent(raw["extent"])
+    except (TypeError, ValueError) as error:
+        raise SemanticWriteCompileError("Candidate scope extent is invalid") from error
+    return CandidateScope(decoded_source, raw["member_query"], extent)
+
+
+def _decode_fact(raw: Any) -> SemanticFact:
+    """Decode one fact and its closed ordered part union."""
+    if not isinstance(raw, dict) or set(raw) != {"parts"} or not isinstance(raw["parts"], list):
+        raise SemanticWriteCompileError("Semantic fact fields are invalid")
+    parts: list[LiteralPart | IdentityPart] = []
+    for part in raw["parts"]:
+        if not isinstance(part, dict):
+            raise SemanticWriteCompileError("Semantic fact part is invalid")
+        if set(part) == {"kind", "text"} and part["kind"] == "literal":
+            parts.append(LiteralPart(part["text"]))
+        elif set(part) == {"kind", "text", "identity"} and part["kind"] == "identity":
+            parts.append(IdentityPart(part["text"], _decode_identity(part["identity"])))
+        else:
+            raise SemanticWriteCompileError("Semantic fact part fields are invalid")
+    return SemanticFact(tuple(parts))
+
+
+def _decode_property(raw: Any) -> PropertyChange:
+    """Decode a closed property change for authoritative Core revalidation."""
+    if not isinstance(raw, dict) or set(raw) != {"field", "op", "value"}:
+        raise SemanticWriteCompileError("Semantic property fields are invalid")
+    return PropertyChange(raw["field"], raw["op"], raw["value"])
+
+
+def _decode_tag(raw: Any) -> TagChange:
+    """Decode a closed explicit tag change for authoritative Core revalidation."""
+    if not isinstance(raw, dict) or set(raw) != {"op", "value"}:
+        raise SemanticWriteCompileError("Semantic tag fields are invalid")
+    return TagChange(raw["op"], raw["value"])
+
+
 def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any]) -> WriteAction:
     """Compile immutable semantic WRITE intent through the established request-plan validator.
 
@@ -132,6 +458,7 @@ def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any
         isinstance(operation, SemanticWriteOperation) for operation in intent.operations
     ):
         raise SemanticWriteCompileError("Semantic WRITE intent requires operations")
+    _validate_action_executable_shape(intent.operations)
 
     try:
         units = [_compile_operation(operation) for operation in intent.operations]
@@ -148,6 +475,44 @@ def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any
     ):  # Defensive: the raw shape above is intentionally fixed.
         raise SemanticWriteCompileError("Semantic WRITE compiler did not produce a write action")
     return action
+
+
+def _validate_action_executable_shape(
+    operations: tuple[SemanticWriteOperation, ...],
+) -> None:
+    """Reject action-wide shapes the existing application cannot execute atomically."""
+    if not all(
+        isinstance(operation.apply_to, ApplyTo)
+        and isinstance(operation.target, IdentityIntent)
+        and (
+            operation.target.candidate_scope is None
+            or isinstance(operation.target.candidate_scope, CandidateScope)
+        )
+        for operation in operations
+    ):
+        raise SemanticWriteCompileError("Semantic WRITE operation target is invalid")
+    apply_modes = {operation.apply_to for operation in operations}
+    if len(apply_modes) > 1:
+        raise SemanticWriteCompileError("One write action cannot mix one and all-matching")
+    if sum(operation.apply_to is ApplyTo.ALL_MATCHING for operation in operations) > 1:
+        raise SemanticWriteCompileError("One write action cannot contain multiple bulk operations")
+    relational = [
+        operation for operation in operations if operation.target.candidate_scope is not None
+    ]
+    if len(relational) > 1:
+        raise SemanticWriteCompileError(
+            "One write action cannot contain multiple material relational targets"
+        )
+    complete_sets = [
+        operation
+        for operation in operations
+        if operation.target.candidate_scope is not None
+        and operation.target.candidate_scope.extent is CandidateScopeExtent.COMPLETE_SET
+    ]
+    if complete_sets and len(operations) > 1:
+        raise SemanticWriteCompileError(
+            "A complete-set operation cannot share one material write action"
+        )
 
 
 def _compile_operation(operation: SemanticWriteOperation) -> dict[str, Any]:

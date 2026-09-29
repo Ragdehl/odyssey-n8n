@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,9 @@ from odyssey_core.semantic_write import (
     SemanticWriteIntent,
     SemanticWriteOperation,
     compile_semantic_write,
+    decode_semantic_write_action,
+    semantic_write_action_json_schema,
+    semantic_write_schema_definitions,
 )
 from odyssey_core.write_target import WriteTargetOutcome
 
@@ -83,6 +87,51 @@ def operation(
 def compile_one(schema: dict, *operations: SemanticWriteOperation):
     """Compile ordered operations through the public provider-free boundary."""
     return compile_semantic_write(SemanticWriteIntent(operations), schema)
+
+
+def raw_identity(
+    description: str = "Marta",
+    *,
+    binding: str = "described",
+    direct_name: str | None = "Marta",
+    note_type: str | None = "person",
+    filters: list[dict] | None = None,
+    candidate_scope: dict | None = None,
+) -> dict:
+    """Build one complete provider semantic identity object."""
+    return {
+        "description": description,
+        "binding": binding,
+        "direct_name": direct_name,
+        "note_type": note_type,
+        "filters": filters or [],
+        "candidate_scope": candidate_scope,
+    }
+
+
+def raw_operation(
+    *,
+    target: dict | None = None,
+    apply_to: str = "one",
+    facts: list[dict] | None = None,
+) -> dict:
+    """Build one complete provider semantic operation object."""
+    return {
+        "target": target or raw_identity(),
+        "apply_to": apply_to,
+        "intent": "record",
+        "facts": facts
+        if facts is not None
+        else [{"parts": [{"kind": "literal", "text": "Lives in Lyon."}]}],
+        "properties": [],
+        "tag_changes": [],
+        "destination_type": None,
+    }
+
+
+def raw_action(*operations: dict) -> dict:
+    """Build one complete provider semantic write action."""
+    return {"kind": "write", "operations": list(operations) or [raw_operation()]}
 
 
 def test_simple_named_and_multiple_facts_lower_without_reference_plumbing(schema: dict) -> None:
@@ -676,3 +725,170 @@ def test_self_and_candidate_scope_selector_conflicts_fail_closed(schema: dict) -
                 fact(LiteralPart("Texto.")),
             ),
         )
+
+
+def test_semantic_provider_objects_are_closed_and_fully_required(schema: dict) -> None:
+    """Keep every Structured Outputs object closed with all declared properties required."""
+    root = {
+        "type": "object",
+        "properties": semantic_write_action_json_schema()["properties"],
+        "required": semantic_write_action_json_schema()["required"],
+        "additionalProperties": False,
+        "$defs": semantic_write_schema_definitions(schema),
+    }
+
+    def assert_closed(value: object) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "object":
+                assert value.get("additionalProperties") is False
+                assert set(value.get("required", [])) == set(value.get("properties", {}))
+            for child in value.values():
+                assert_closed(child)
+        elif isinstance(value, list):
+            for child in value:
+                assert_closed(child)
+
+    assert_closed(root)
+
+
+@pytest.mark.parametrize(
+    "mechanical_field",
+    [
+        "units",
+        "cardinality",
+        "references",
+        "target_index",
+        "reference_lookup_only",
+        "role",
+        "source_kind",
+        "source_query",
+        "members",
+    ],
+)
+def test_raw_decoder_rejects_core_mechanical_fields(schema: dict, mechanical_field: str) -> None:
+    """Keep every legacy unit/reference/relational plumbing field outside Luna WRITE."""
+    raw = raw_action(raw_operation())
+    if mechanical_field == "units":
+        raw[mechanical_field] = []
+    elif mechanical_field in {"cardinality", "references", "reference_lookup_only"}:
+        raw["operations"][0][mechanical_field] = None
+    elif mechanical_field in {"target_index", "role"}:
+        raw["operations"][0]["facts"][0]["parts"][0][mechanical_field] = None
+    else:
+        raw["operations"][0]["target"]["candidate_scope"] = {
+            "source": {"kind": "SELF"},
+            "member_query": "my colleagues",
+            "extent": "one_member",
+            mechanical_field: None,
+        }
+    with pytest.raises(SemanticWriteCompileError):
+        compile_semantic_write(decode_semantic_write_action(raw), schema)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        {"kind": "SELF", "description": "me"},
+        {"kind": "EXISTING_DESCRIPTION"},
+        {"kind": "EXISTING_DESCRIPTION", "description": "dinner", "identity": {}},
+        {"kind": "OTHER"},
+        {
+            "kind": "EXISTING_DESCRIPTION",
+            "description": "dinner",
+            "source": {"kind": "SELF"},
+        },
+    ],
+)
+def test_candidate_source_union_rejects_correlated_or_recursive_states(source: dict) -> None:
+    """Accept only SELF or one non-recursive existing-description source."""
+    target = raw_identity(
+        direct_name=None,
+        candidate_scope={
+            "source": source,
+            "member_query": "participants",
+            "extent": "one_member",
+        },
+    )
+    with pytest.raises(SemanticWriteCompileError):
+        decode_semantic_write_action(raw_action(raw_operation(target=target)))
+
+
+def test_semantic_schema_is_derived_from_synthetic_canonical_additions(schema: dict) -> None:
+    """Prove types, filters, properties, value shapes, and destinations are not hardcoded."""
+    synthetic = deepcopy(schema)
+    synthetic["types"].append(
+        {
+            "id": "synthetic_type",
+            "name": "Synthetic",
+            "description": "Test-only dynamic type.",
+            "examples": ["Synthetic note"],
+            "properties": [
+                {
+                    "id": "priority_score",
+                    "value_type": "integer",
+                    "required": False,
+                    "description": "Test-only score.",
+                    "filterable": True,
+                },
+                {
+                    "id": "reviewers",
+                    "value_type": "array[string]",
+                    "required": False,
+                    "description": "Test-only reviewers.",
+                    "filterable": False,
+                },
+            ],
+        }
+    )
+    definitions = semantic_write_schema_definitions(synthetic)
+    serialized = json.dumps(definitions, sort_keys=True)
+    assert (
+        "synthetic_type"
+        in definitions["semantic_identity"]["properties"]["note_type"]["anyOf"][1]["enum"]
+    )
+    assert "priority_score" in serialized
+    assert '"type": "integer"' in serialized
+    assert "reviewers" in serialized
+    assert '"type": "array"' in serialized
+    destination = definitions["semantic_operation"]["properties"]["destination_type"]
+    assert "synthetic_type" in destination["anyOf"][1]["enum"]
+
+
+def test_action_wide_unsupported_execution_shapes_fail_locally(schema: dict) -> None:
+    """Reject mixed/bulk/relational/complete-set combinations before application execution."""
+    one = operation(person("Marta"), fact(LiteralPart("Texto.")))
+    bulk = operation(
+        person("todas las personas"),
+        fact(LiteralPart("Texto.")),
+        apply_to=ApplyTo.ALL_MATCHING,
+    )
+    relational_a = operation(
+        person("mi hija", scope=scoped_self("mi hija")), fact(LiteralPart("Texto."))
+    )
+    relational_b = operation(
+        person("mi hijo", scope=scoped_self("mi hijo")), fact(LiteralPart("Texto."))
+    )
+    complete = operation(
+        person(
+            "mis hijos",
+            scope=scoped_self("mis hijos", CandidateScopeExtent.COMPLETE_SET),
+        ),
+        fact(LiteralPart("Texto.")),
+    )
+    for operations in (
+        (one, bulk),
+        (bulk, bulk),
+        (relational_a, relational_b),
+        (complete, one),
+    ):
+        with pytest.raises(SemanticWriteCompileError):
+            compile_one(schema, *operations)
+
+
+def test_semantic_identity_256_character_bound_fails_locally(schema: dict) -> None:
+    """Keep overlong model wording on the normal fail-closed planner path."""
+    intent = decode_semantic_write_action(
+        raw_action(raw_operation(target=raw_identity("x" * 257, direct_name=None)))
+    )
+    with pytest.raises(SemanticWriteCompileError):
+        compile_semantic_write(intent, schema)

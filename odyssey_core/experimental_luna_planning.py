@@ -28,10 +28,19 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RequestPlanningError,
     compact_planner_result_json_schema,
+    finalize_request_plan,
     planner_result_json_schema,
-    render_request_planner_prompt,
+    render_semantic_write_planner_prompt,
     request_plan_json_schema,
     validate_planner_result,
+    validate_request_action,
+)
+from odyssey_core.semantic_write import (
+    SemanticWriteCompileError,
+    compile_semantic_write,
+    decode_semantic_write_action,
+    semantic_write_action_json_schema,
+    semantic_write_schema_definitions,
 )
 
 LUNA_EXPERIMENT_MODEL = "gpt-5.6-luna"
@@ -46,7 +55,7 @@ _TEACHING_EXAMPLES_PATH = (
     Path(__file__).resolve().parents[1]
     / "benchmarks"
     / "luna_first_planner"
-    / "teaching_examples_v2.json"
+    / "teaching_examples_v3.json"
 )
 
 
@@ -87,6 +96,12 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
         "additionalProperties": False,
     }
     definitions = deepcopy(production_schema["$defs"])
+    semantic_definitions = semantic_write_schema_definitions(schema)
+    existing_filter_array = definitions["filter_array"]
+    if semantic_definitions["filter_array"] != existing_filter_array:
+        raise RequestPlanningError("Semantic WRITE filter schema diverged from shared selection")
+    definitions.update(semantic_definitions)
+    definitions["write_action"] = semantic_write_action_json_schema()
     definitions["escalate_result"] = escalate_branch
     return {
         "type": "object",
@@ -114,6 +129,10 @@ def validate_luna_experimental_result(
             stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
             code=PlannerValidationCode.INVALID_FIELDS,
         )
+    if payload.get("outcome") == "CLARIFY":
+        return validate_planner_result(payload, schema)
+    if payload.get("outcome") == "PLAN":
+        return _validate_luna_plan(payload, schema)
     if payload.get("outcome") != "ESCALATE":
         return validate_planner_result(payload, schema)
     if set(payload) != {"outcome", "actions", "limitations", "clarification_code"}:
@@ -131,6 +150,42 @@ def validate_luna_experimental_result(
             code=PlannerValidationCode.INVALID_FIELDS,
         )
     return PlannerEscalation()
+
+
+def _validate_luna_plan(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> RequestPlan:
+    """Compile semantic writes in provider order and reuse established action/final invariants."""
+    required = {"outcome", "actions", "limitations", "clarification_code"}
+    if (
+        not required <= set(payload)
+        or set(payload) - (required | {"presentation_intent"})
+        or payload["clarification_code"] is not None
+        or not isinstance(payload["actions"], list)
+        or not isinstance(payload["limitations"], list)
+    ):
+        raise RequestPlanningError(
+            "Luna PLAN fields are invalid",
+            stage=PlannerValidationStage.PLANNER_RESULT_ENVELOPE,
+            code=PlannerValidationCode.INVALID_FIELDS,
+        )
+    actions = []
+    for raw_action in payload["actions"]:
+        try:
+            if isinstance(raw_action, dict) and raw_action.get("kind") == "write":
+                intent = decode_semantic_write_action(raw_action)
+                actions.append(compile_semantic_write(intent, schema))
+            else:
+                actions.append(validate_request_action(raw_action, schema))
+        except SemanticWriteCompileError as error:
+            raise RequestPlanningError(
+                "Luna semantic WRITE failed local compilation",
+                stage=PlannerValidationStage.WRITE_ACTION,
+                code=PlannerValidationCode.INVALID_MUTATION,
+            ) from error
+    return finalize_request_plan(
+        actions,
+        payload["limitations"],
+        payload.get("presentation_intent", "answer"),
+    )
 
 
 def render_luna_experimental_prompt(
@@ -173,7 +228,7 @@ def render_luna_experimental_prompt(
         f"Lesson: {item['lesson']}"
         for item in examples
     )
-    semantic_prompt = render_request_planner_prompt(
+    semantic_prompt = render_semantic_write_planner_prompt(
         schema, current_context, conversation_context, size_components=size_components
     )
     prompt = f"""{semantic_prompt}
@@ -213,7 +268,7 @@ def _complete_example_selections(result: Mapping[str, Any]) -> dict[str, Any]:
                 "collection" if action["plan"].get("semantic_set") is not None else "single",
             )
         elif action["kind"] == "write":
-            selections = [unit["target"] for unit in action["units"]]
+            selections = []
         else:
             selections = [action.get("selection")]
         for selection in selections:

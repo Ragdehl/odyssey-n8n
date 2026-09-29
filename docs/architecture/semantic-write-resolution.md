@@ -31,31 +31,76 @@ KnowledgeReference
 
 `target_index`, `self_target`, `link_scope`, and `relational_reference` are not provider fields inside a fact reference. The ordinary write target keeps the established full `SelectionCriteria` contract because direct self writes and bounded relational source writes still need those explicit semantics.
 
-## Parallel SemanticWriteIntent compiler checkpoint
+## Luna semantic WRITE frontend checkpoint
 
-The current feature branch adds a **provider-free, non-adopted** semantic WRITE boundary in parallel with the production planner. It does not change the production prompt, Structured Outputs schema, model, resolver, runtime, storage, or materialization path. Its purpose is to prove that the model can eventually describe WRITE meaning without also serializing Core plumbing.
+The current feature branch implements the first reversible **offline Luna-only adoption** of the
+semantic WRITE boundary. Luna's WRITE prompt/schema now describe semantic operations; Sol retains
+the exact legacy prompt and provider schema as the independent fallback. Both branches converge
+immediately on the existing `RequestPlan` boundary, so the resolver, application, runtime, storage,
+and materialization interfaces remain unchanged. This checkpoint has deterministic evidence only;
+it has not been called against a provider and is not live-adoption evidence.
 
 ```text
-natural-language WRITE
+Luna semantic PLAN actions (provider order)
+        |
+        +-- retrieve/delegate --> established validators
+        |
+        `-- each semantic write.operations[]
+                    |
+                    v
+             SemanticWriteIntent
+                    |
+                    v
+          exactly one existing WriteAction
         |
         v
-SemanticWriteIntent        planner-owned meaning (future adoption)
-        |
-        v
-deterministic Core compiler
-        |
-        v
-existing WriteAction / KnowledgeUnit
-        |
-        v
-existing resolution -> preflight -> binding -> materialization
+existing RequestPlan -> unchanged downstream behavior
+
+Sol fallback -> frozen legacy prompt/schema -> existing RequestPlan
 ```
 
 The semantic values preserve ownership, the full target description, explicit direct-name/type/filter evidence, `SELF`, genuine bulk intent, candidate-scope meaning, ordered facts, explicit property/tag/type mutations, and which fact spans denote other Odyssey identities. A candidate scope is deliberately generic and non-recursive: its source is either authenticated self or one existing source described in free text, plus a free-text member query and `one member | complete set` extent. This is not a relationship ontology.
 
 Core deterministically derives the existing representation mechanics: local `{{ref:N}}` numbering, `KnowledgeReference` values, generic internal reference role, lookup-only units, target indexes, `source_kind` / `source_query` / `members`, and ordinary singular cardinality. The compiler immediately routes the resulting raw write shape through the existing `validate_request_plan()` path, so property, tag, type-migration, reference, bulk, and mutation invariants remain owned by the established validator. `all_matching` bulk and relational `complete_set` stay distinct semantic operations.
 
-The frozen SWR registry is unchanged. Provider-free tests demonstrate equivalent lowering for all nine WRITE cases; SWR05 remains a planner-owned clarification and never reaches the compiler. Model-facing adoption is a later step and will require its own prompt/schema review plus fresh focused live evidence under the normal authorization gate.
+Candidate-scope source is a closed non-recursive union: authenticated `SELF`, or
+`EXISTING_DESCRIPTION` with one bounded description. Semantic objects are closed and fully required
+for Structured Outputs. The wire contract cannot express units, cardinality, reference indexes,
+lookup-only flags, roles, or relational source/member plumbing. The raw decoder rejects open or
+correlated shapes; `compile_semantic_write()` remains authoritative for lowering and established
+schema/mutation validation.
+
+One provider write action owns its ordered `operations[]` and compiles independently to exactly one
+existing `WriteAction`. Separate writes remain separate even when adjacent or separated by retrieve
+or delegate actions. The compiler fails closed on mixed `one` / `all_matching`, multiple bulk
+operations, multiple material relational targets, and `complete_set` combined with another material
+operation. A semantic parse/compiler failure becomes bounded `RequestPlanningError`, allowing the
+existing single normal Sol fallback. `ESCALATE` remains a clarification and never invokes Sol.
+
+The frozen SWR registry, cases, oracles, and v8 evidence are unchanged. Provider-free tests cover all
+nine compilable current SWR cases; SWR05 remains planner-owned escalation and never reaches the
+compiler. `teaching_examples_v3.json` converts only WRITE examples to the semantic shape while
+preserving generic READ/delegate lessons; v2 remains immutable.
+
+### Provider-free measurements and gate status
+
+Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` context:
+
+| Input | `c6e4364` baseline | Offline checkpoint | Delta |
+| --- | ---: | ---: | ---: |
+| Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
+| Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
+| Luna prompt | 32,076 bytes | 29,296 bytes | -2,780 (-8.7%) |
+| Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
+| Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
+
+These are contract-size measurements, not latency evidence. The old-contract v9 runner is
+permanently retired before provider construction. The new `semantic-write-frontend-v1` lineage
+reuses the ten active SWR cases by pinned hash and adds only three generic READ/delegate/mixed-order
+sentinels: 13 Luna/low calls maximum, zero retries, zero Sol calls, 49,041-byte conservative input
+bound, and `$0.1594554` conservative no-cache ceiling. Its fresh artifact path is
+`semantic-write-frontend-v1-luna-gate.jsonl`; `MAX_COST_USD` remains `$0.00`. No live gate was run,
+and live adoption remains blocked on fresh explicit authorization.
 
 ## Possessives are identity evidence, not self authority
 

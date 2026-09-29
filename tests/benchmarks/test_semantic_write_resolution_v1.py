@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from benchmarks.semantic_write_resolution_v1.evaluate import evaluate, load_registry
-from benchmarks.semantic_write_resolution_v1.run_live import conservative_cost_ceiling
 from odyssey_core.experimental_luna_planning import PlannerEscalation
 from odyssey_core.request_planning import (
     KnowledgeReference,
@@ -362,50 +361,17 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
     assert evaluate(PlannerEscalation(), "fail_closed_ambiguous_pronoun").passed
 
 
-def test_cost_ceiling_is_luna_only_and_bounded() -> None:
-    """Price exactly ten Luna/low calls; no Sol allowance is part of this gate."""
-    import benchmarks.semantic_write_resolution_v1.run_live as runner
-
-    registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
-    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
-    cost, input_bound = conservative_cost_ceiling(
-        registry["cases"], registry["fixed_context"], schema
-    )
-    assert Decimal("0.13") < cost < Decimal("0.14")
-    assert 50_000 < input_bound < 60_000
-
-    assert runner.MAX_COST_USD == Decimal("0.00")
-
-
-def test_over_budget_refuses_before_provider_construction(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Refuse before provider construction whenever the computed ceiling exceeds authorization."""
-    import benchmarks.semantic_write_resolution_v1.run_live as runner
-
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.05"))
-    monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "must-not-exist.jsonl")
-    monkeypatch.setattr(
-        runner.OpenAILunaExperimentalPlanner,
-        "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed above authorization"),
-    )
-    with pytest.raises(SystemExit, match=r"exceeds \$0.05 authorization"):
-        runner.main(["--confirm-live-provider-calls"])
-    assert not runner.OUTPUT_PATH.exists()
-
-
-def test_missing_confirmation_refuses_before_provider_construction(
+def test_legacy_v9_runner_is_permanently_retired_before_provider_construction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Require an explicit command-line confirmation even after a future budget approval."""
+    """Prevent the old KnowledgeUnit contract from consuming the reserved v9 path."""
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
         "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without confirmation"),
+        lambda *_args, **_kwargs: pytest.fail("retired runner constructed a provider"),
     )
-    with pytest.raises(SystemExit, match="without --confirm-live-provider-calls"):
-        runner.main([])
+    with pytest.raises(SystemExit, match="Retired live runner"):
+        runner.main(["--confirm-live-provider-calls"])
+    assert runner.MAX_COST_USD == Decimal("0.00")

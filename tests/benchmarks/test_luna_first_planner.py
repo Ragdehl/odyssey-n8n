@@ -79,16 +79,20 @@ from odyssey_core.request_planning import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_MODEL,
     PLANNER_REASONING_EFFORT,
+    DelegateAction,
     PlannerClarification,
     RequestPlan,
     RequestPlanningError,
     RetrieveAction,
     WriteAction,
     compact_planner_result_json_schema,
+    planner_result_json_schema,
+    render_request_planner_prompt,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTEXT = {"date": "2026-09-09", "time": "10:30", "timezone": "Europe/Paris"}
+BASELINE_CONTEXT = {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
 
 
 @pytest.fixture
@@ -176,6 +180,47 @@ def delegate(
     }
 
 
+def semantic_identity(
+    description: str,
+    *,
+    direct_name: str | None = None,
+    note_type: str | None = "person",
+    candidate_scope: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build one provider-complete semantic WRITE identity."""
+    return {
+        "description": description,
+        "binding": "described",
+        "direct_name": direct_name,
+        "note_type": note_type,
+        "filters": [],
+        "candidate_scope": candidate_scope,
+    }
+
+
+def semantic_write(
+    description: str,
+    fact: str,
+    *,
+    direct_name: str | None = None,
+) -> dict[str, Any]:
+    """Build one semantic write action with one literal record operation."""
+    return {
+        "kind": "write",
+        "operations": [
+            {
+                "target": semantic_identity(description, direct_name=direct_name),
+                "apply_to": "one",
+                "intent": "record",
+                "facts": [{"parts": [{"kind": "literal", "text": fact}]}],
+                "properties": [],
+                "tag_changes": [],
+                "destination_type": None,
+            }
+        ],
+    }
+
+
 def test_production_sol_configuration_remains_unchanged() -> None:
     """Keep the selected production planner and incident hardening intact."""
     assert (PLANNER_MODEL, PLANNER_REASONING_EFFORT) == ("gpt-5.6-sol", "low")
@@ -189,6 +234,97 @@ def test_production_sol_configuration_remains_unchanged() -> None:
     assert LUNA_EXPERIMENT_AUTOMATIC_RETRIES == 0
 
 
+def test_sol_prompt_and_provider_schema_equal_c6e4364_baseline(
+    schema: dict[str, Any],
+) -> None:
+    """Freeze the established Sol bytes and provider language during Luna-only adoption."""
+    prompt = render_request_planner_prompt(schema, BASELINE_CONTEXT).encode("utf-8")
+    provider_schema = json.dumps(
+        planner_result_json_schema(schema), ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    assert len(prompt) == 25_474
+    assert hashlib.sha256(prompt).hexdigest() == (
+        "64efb6ecf5c380f5808811fbd9c473934eb3b47a6c0790a8e940320f51367036"
+    )
+    assert len(provider_schema) == 47_418
+    assert hashlib.sha256(provider_schema).hexdigest() == (
+        "dd7fba6948ce1503518f17df233b1842bda7316d45bf693f95c8c0cf538a518f"
+    )
+
+
+def test_luna_read_and_delegate_schema_subtrees_are_byte_equivalent(
+    schema: dict[str, Any],
+) -> None:
+    """Change only Luna's write definition while retaining read/delegate schema objects."""
+    baseline = compact_planner_result_json_schema(schema)["$defs"]
+    adopted = luna_experimental_result_json_schema(schema)["$defs"]
+    unchanged = {
+        "filter_array",
+        "note_selector",
+        "link_scope",
+        "selection",
+        "single_retrieval_selection",
+        "collection_selection",
+        "retrieve_action",
+        "collection_action",
+        "delegate_action",
+        "limitations",
+        "clarify_result",
+    }
+    for name in unchanged:
+        assert json.dumps(adopted[name], separators=(",", ":")) == json.dumps(
+            baseline[name], separators=(",", ":")
+        )
+
+
+def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
+    schema: dict[str, Any],
+) -> None:
+    """Enforce the branch reduction and record provider-free whole-input byte deltas."""
+    result_schema = luna_experimental_result_json_schema(schema)
+    definitions = result_schema["$defs"]
+    semantic_names = [
+        "semantic_candidate_scope",
+        "semantic_identity",
+        "semantic_literal_part",
+        "semantic_identity_part",
+        "semantic_fact",
+        "semantic_property_changes",
+        "semantic_operation",
+        "write_action",
+    ]
+    write_branch_bytes = len(
+        json.dumps(
+            {name: definitions[name] for name in semantic_names},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    prompt_bytes = len(render_luna_experimental_prompt(schema, BASELINE_CONTEXT).encode("utf-8"))
+    schema_bytes = len(
+        json.dumps(result_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    assert write_branch_bytes == 3_380
+    assert write_branch_bytes <= int(7_343 * 0.75)
+    assert prompt_bytes == 29_296
+    assert schema_bytes == 18_541
+
+
+def test_luna_prompt_contains_one_semantic_write_language(schema: dict[str, Any]) -> None:
+    """Prevent legacy unit/reference mechanics from surviving beside semantic operations."""
+    prompt = render_luna_experimental_prompt(schema, BASELINE_CONTEXT)
+    for legacy in (
+        "KnowledgeUnit",
+        "{{ref:",
+        "target_index",
+        "lookup-only",
+        "reference_lookup_only",
+    ):
+        assert legacy not in prompt
+    assert "Each write action owns its ordered operations array" in prompt
+    assert "candidate_scope.source is either SELF or one EXISTING_DESCRIPTION" in prompt
+
+
 def test_plan_reuses_existing_local_validation(schema: dict[str, Any]) -> None:
     """Accept valid RequestPlans and reject invalid plans through the existing validator."""
     result = validate_luna_experimental_result(plan_payload(retrieve("Odyssey")), schema)
@@ -197,6 +333,97 @@ def test_plan_reuses_existing_local_validation(schema: dict[str, Any]) -> None:
     invalid = plan_payload(retrieve(""))
     with pytest.raises(RequestPlanningError, match="query"):
         validate_luna_experimental_result(invalid, schema)
+
+
+def test_mixed_retrieve_write_delegate_order_is_exact(schema: dict[str, Any]) -> None:
+    """Compile each semantic write in place without reordering other action kinds."""
+    result = validate_luna_experimental_result(
+        plan_payload(
+            retrieve("Odyssey"),
+            semantic_write("Marta", "Lives in Lyon.", direct_name="Marta"),
+            delegate("count matching documents", "documents about Odyssey", note_type="document"),
+        ),
+        schema,
+    )
+    assert [type(action) for action in result.actions] == [
+        RetrieveAction,
+        WriteAction,
+        DelegateAction,
+    ]
+
+
+def test_separated_and_adjacent_semantic_write_actions_are_never_merged(
+    schema: dict[str, Any],
+) -> None:
+    """Keep one provider write action mapped to exactly one existing WriteAction."""
+    separated = validate_luna_experimental_result(
+        plan_payload(
+            semantic_write("Marta", "Lives in Lyon.", direct_name="Marta"),
+            retrieve("Odyssey"),
+            semantic_write("Denis", "Lives in Paris.", direct_name="Denis"),
+        ),
+        schema,
+    )
+    adjacent = validate_luna_experimental_result(
+        plan_payload(
+            semantic_write("Marta", "Lives in Lyon.", direct_name="Marta"),
+            semantic_write("Denis", "Lives in Paris.", direct_name="Denis"),
+        ),
+        schema,
+    )
+    assert [action.kind for action in separated.actions] == ["write", "retrieve", "write"]
+    assert [action.kind for action in adjacent.actions] == ["write", "write"]
+    assert [action.units[0].target.entity for action in adjacent.actions] == ["Marta", "Denis"]
+
+
+def test_one_semantic_write_preserves_operation_order_and_reference_reuse(
+    schema: dict[str, Any],
+) -> None:
+    """Keep ordered operations together and let Core reuse a same-action material target."""
+    faro = semantic_identity("Faro", direct_name="Faro", note_type="project")
+    report = semantic_identity("the status report", note_type="document")
+    result = validate_luna_experimental_result(
+        plan_payload(
+            {
+                "kind": "write",
+                "operations": [
+                    {
+                        "target": report,
+                        "apply_to": "one",
+                        "intent": "record",
+                        "facts": [
+                            {
+                                "parts": [
+                                    {"kind": "literal", "text": "Mentions "},
+                                    {"kind": "identity", "text": "Faro", "identity": faro},
+                                    {"kind": "literal", "text": "."},
+                                ]
+                            }
+                        ],
+                        "properties": [],
+                        "tag_changes": [],
+                        "destination_type": None,
+                    },
+                    {
+                        "target": faro,
+                        "apply_to": "one",
+                        "intent": "record",
+                        "facts": [{"parts": [{"kind": "literal", "text": "Is active."}]}],
+                        "properties": [],
+                        "tag_changes": [],
+                        "destination_type": None,
+                    },
+                ],
+            }
+        ),
+        schema,
+    )
+    action = result.actions[0]
+    assert isinstance(action, WriteAction)
+    assert [unit.target.entity for unit in action.units] == [None, "Faro"]
+    assert action.units[0].facts == ("Mentions {{ref:0}}.",)
+    assert action.units[0].references[0].target_index == 1
+    assert action.units[1].reference_lookup_only is False
 
 
 @pytest.mark.parametrize("presentation_intent", ["answer", "note_set", "answer_and_note_set"])
@@ -235,6 +462,27 @@ def test_clarify_and_escalate_carry_no_actions(schema: dict[str, Any]) -> None:
     )
     assert isinstance(clarify, PlannerClarification)
     assert asdict(escalate) == {"outcome": "ESCALATE"}
+
+
+def test_swr05_escalation_never_enters_semantic_compiler(
+    schema: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep the unsafe-pronoun sentinel planner-owned and wholly outside WRITE compilation."""
+    monkeypatch.setattr(
+        luna_module,
+        "compile_semantic_write",
+        lambda *_args, **_kwargs: pytest.fail("ESCALATE entered semantic compiler"),
+    )
+    result = validate_luna_experimental_result(
+        {
+            "outcome": "ESCALATE",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+        },
+        schema,
+    )
+    assert result == PlannerEscalation()
 
 
 def test_escalate_accepts_only_its_closed_luna_payload(schema: dict[str, Any]) -> None:
@@ -346,6 +594,7 @@ def _schema_accepts(
     "payload",
     [
         plan_payload(retrieve("Odyssey")),
+        plan_payload(semantic_write("Marta", "Lives in Lyon.", direct_name="Marta")),
         plan_payload(retrieve("Odyssey"), presentation_intent="note_set"),
         {
             "outcome": "CLARIFY",
@@ -479,6 +728,30 @@ def test_teaching_and_held_out_sets_are_exactly_disjoint_and_frozen() -> None:
     assert len(cases_payload["cases"]) == 24
     assert teaching_requests.isdisjoint(held_out_requests)
     assert list(oracles) == [item["id"] for item in cases_payload["cases"]]
+    active_swr = json.loads(
+        (ROOT / "benchmarks/semantic_write_resolution_v1/cases_active_schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert teaching_requests.isdisjoint(
+        {item["request"].strip().casefold() for item in active_swr["cases"]}
+    )
+    teaching_text = json.dumps(teaching, ensure_ascii=False).casefold()
+    for distinctive_phrase in (
+        "detectives de animales",
+        "cena relacional de prueba",
+        "airbus test",
+        "paraguas rojo",
+        "habla italiano",
+        "denis y axel son zurdos",
+    ):
+        assert distinctive_phrase not in teaching_text
+    assert (
+        hashlib.sha256(
+            (ROOT / "benchmarks/luna_first_planner/teaching_examples_v2.json").read_bytes()
+        ).hexdigest()
+        == "8aa2cde6f876faadf7c2ef94759129eaf7883c03da8c17165476d1774bfdb5ac"
+    )
     manifest_path = ROOT / "benchmarks" / "luna_first_planner" / "frozen_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["frozen_before_provider_calls"] is True
@@ -501,8 +774,8 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     )
     assert "Selection semantics take precedence over presentation" in prompt
     assert "presentation_intent MUST be answer even when the user asks to show notes" in prompt
-    assert "describes a distinct participant" in prompt
-    assert "Literal preservation is only for non-identity context or values" in prompt
+    assert "identity parts for distinct participants" in prompt
+    assert "A literal part preserves non-identity wording exactly" in prompt
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
@@ -545,16 +818,34 @@ def test_complete_set_relational_teaching_example_preserves_one_source_write(
     )
     prompt = render_luna_experimental_prompt(schema, CONTEXT)
     assert example["request"] in prompt
-    assert "relational_reference.members=complete_set" in prompt
+    assert "candidate_scope.extent=complete_set" in prompt
 
 
-def test_every_teaching_example_keeps_the_production_result_contract(
+def test_every_v3_teaching_example_validates_and_writes_are_semantic_only(
     schema: dict[str, Any],
 ) -> None:
-    """Validate the new lesson alongside every inherited teaching result."""
+    """Validate v3 and exclude every legacy WRITE mechanical field from its write examples."""
+    mechanical = {
+        "units",
+        "cardinality",
+        "references",
+        "target_index",
+        "reference_lookup_only",
+        "role",
+        "source_kind",
+        "source_query",
+        "members",
+    }
     for example in load_teaching_examples():
         result = validate_luna_experimental_result(example["result"], schema)
         assert isinstance(result, (RequestPlan, PlannerClarification, PlannerEscalation))
+        for action in example["result"].get("actions") or []:
+            if action["kind"] != "write":
+                continue
+            assert set(action) == {"kind", "operations"}
+            assert not mechanical & set(json.dumps(action).replace('"', " ").split())
+            serialized = json.dumps(action)
+            assert all(f'"{field}"' not in serialized for field in mechanical)
 
 
 def test_prompt_keeps_recent_context_as_non_authoritative_continuity_evidence(

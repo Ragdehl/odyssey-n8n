@@ -91,6 +91,29 @@ Planner writable type/property capabilities (derived dynamically from the same c
 
 {{WRITE_CAPABILITIES}}"""
 
+_SEMANTIC_WRITE_PROMPT_REPLACEMENTS = {
+    "Every PLAN has presentation_intent.": """Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks to see matching notes as objects; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks both for an answer/synthesis and the matching notes. For semantic writes, delegation, multiple independent actions, clarification, any retrieval link_scope or relational_reference, any write candidate_scope, or result_shape=collection, use `answer`; do not discard or weaken meaning merely to produce a note set.""",
+    "Interpret each requested action in this order.": """Interpret each requested action in provider order and preserve that order exactly. For retrieval and delegation, FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person retrieval/delegation target, self_target means only the authenticated human's canonical person note. THEN choose retrieve, semantic write, or delegate. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Set relational_reference only when a retrieval or delegation identity is defined by a relationship or complete finite participant set in an existing canonical source. Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. When descriptive or event context does not have a safely bounded canonical source relationship, preserve the full description in ordinary query and leave relational_reference=null so Core can resolve it semantically across Odyssey.
+For retrieval, use result_shape=collection when the user is asking to enumerate or return multiple semantic members or values that together answer the request; use result_shape=single for ordinary fact retrieval or synthesis. Do not infer collection from grammatical plural alone. SelectionCriteria.query MUST preserve the complete useful request, including every material relation, scope, time, place, state, possession, purpose, context, and request for completeness. collection_subject belongs only to result_shape=collection; set it to null for every result_shape=single regardless of presentation intent. A collection has no direct entity, type, filters, link_scope, self_target, or relational_reference: set those to null or [] as appropriate. Set collection_subject=self only when the authenticated human is itself the semantic membership anchor: membership is directly defined by each member's relationship, action, state, or participation relative to that human. First-person possession, ownership, association, or contextual reference to another subject does not by itself make a collection self-scoped. When another object, concept, source, or set determines membership, set collection_subject=query and preserve the complete self-related context in query. This field contains no identity, name, path, generated subject phrase, relationship type, or inferred ontology. Core binds self and discovers bounded current canonical fact sources, selects only supplied evidence, and validates exact occurrences. Never provide collection members, IDs, paths, fact locators, candidate lists, links, mutation authority, or inferred relationship types. For an explicit list or set of matching Notes as objects, use result_shape=single with presentation_intent=note_set; multiple matching Notes are expected results, not ambiguity. Use ordinary single retrieval for one fact about a subject. Do not use collection shape for writes or delegate actions.
+Use self_target only when the direct retrieval/delegation entity is the current human. Possessive or first-person context is identity evidence, not ownership: a description such as "my colleague who likes cycling" selects that described entity rather than self. Semantic writes express the corresponding distinction with target.binding.
+For a semantic write, describe meaning only. Each write action owns its ordered operations array and compiles independently to one existing Core WriteAction. Never merge separate write actions, never split one write action globally, and never create cross-action bindings. Each operation contains one semantic target, one genuine apply_to value, one mutation intent, and its ordered payload. Use apply_to=one for one logical identity and all_matching only when the user truly requests the complete deterministically selectable set; never infer all_matching from plural grammar, several candidates, or independent names.
+An identity has a complete human-readable description, binding=self or described, optional direct_name, optional canonical note_type, explicit deterministic filters, and optional candidate_scope. binding=self is only for facts whose actual subject is the authenticated human; first-person possession or relationship wording does not make another subject self. A described identity may use candidate_scope only when current canonical relationship evidence bounds the candidates. candidate_scope.source is either SELF or one EXISTING_DESCRIPTION with free-text description; member_query names the relationship-bounded candidates and extent is one_member or complete_set. Preserve all additional identity qualifiers in description. Candidate scope is non-recursive, never supplies members, IDs, paths, or a relationship taxonomy, and never itself authorizes CREATE. Use complete_set only when the requested fact applies to that complete current finite set; otherwise use one_member. Use direct_name only for safely explicit name/alias wording, and never combine direct_name or filters with candidate_scope.""",
+    "RetrieveAction.plan and every KnowledgeUnit.target": """RetrieveAction.plan and a non-null DelegateAction.selection obey the same SelectionCriteria rules. Entity is only a safely explicit primary-name/alias candidate from the user's wording; it is never an Odyssey ID and does not assert repository existence. Do not turn every noun phrase or mentioned name into entity: contextual descriptions such as "the corner shop" and "Marta's friend" keep entity=null. A null link_scope means the direct note only, never a graph neighborhood. Ordinary knowledge about one entity uses that direct selection. When the user explicitly selects notes through linked, related, backlink/reference, direction, or bounded-hop graph meaning that the existing LinkScope can represent, link_scope is required; retaining that graph meaning only in query is insufficient. Its non-recursive anchor independently selects the one safe note identity. Do not execute traversal.""",
+    "A RetrieveAction exists only": """A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A semantic write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. Put a property mentioned only to identify a write target in target.filters when it maps safely to the dynamic filter contract; put it in properties only when the user is asking to record, change, or remove that property. Meaning that cannot safely become a filter stays in target.description.
+
+For every semantic write, determine ownership before mutation payload. target.description describes only the selected subject and preserves all target-identifying qualifiers; new predicates belong in facts, and distinct Odyssey identities mentioned by facts use identity parts. If the requested knowledge asserts one relationship from an explicit source, including self, the natural target is that source and the related participants are identity parts in its fact. Several participants sharing that one source relationship stay in one source-targeted operation. By contrast, one independently true predicate applied to distinct subjects produces separate operations. Minimize note mutations without changing ownership: never invent an aggregate source, infer pairwise relations, or move a fact to a less natural owner.
+
+After ownership is fixed, decompose only the new durable knowledge. Group compatible changes for the same logical target inside one operation; different intents remain distinct operations. Atomicity is semantic, not punctuation-based: use separate facts for independently meaningful knowledge, but keep clauses with dependent reasons, explanation, reflection, or decision wording together. Preserve operation, fact, and part order. Use only record, amend, remove, and delete. Explicit correction uses remove for false prior knowledge and amend for corrected knowledge. Amend/remove require a material payload; delete carries none. destination_type is null except for explicit metadata-only reclassification with intent=amend and apply_to=one.
+
+Facts contain ordered parts. A literal part preserves non-identity wording exactly. An identity part contains the exact occurrence text plus an independently selectable semantic identity. Use identity parts for distinct participants that safely denote Odyssey note identities, including descriptive participants; do not promote ordinary places, dates, URLs, paths, external identifiers, or context into identities merely because they are nouns or proper names. An identity part must not select its own operation target. Reuse the same semantic identity wording within the same write action when occurrences refer to the same identity; Core derives all reference markers, indexes, lookup units, roles, and binding mechanics. Never emit those mechanical fields, stable IDs, Markdown wikilinks, or inferred inverse writes.
+
+Properties, filters, note types, destination types, and property value types come only from the supplied dynamic capabilities. Tags are explicit free-form metadata; never infer tags from semantic words. Candidate complete_set and all_matching are distinct: complete_set is one relationship-bounded source operation, while all_matching is a bulk selection. If safe ownership, action boundaries, candidate scope, correction shape, or identity promotion remains uncertain, ESCALATE instead of approximating.""",
+    "For a write, determine semantic ownership": "",
+    "Decompose only the new durable knowledge": "",
+    "Decide fact references last.": "",
+}
+
 
 class PlannerValidationStage(StrEnum):
     """Allowlisted local boundary that rejected decoded planner output."""
@@ -370,16 +393,81 @@ def render_request_planner_prompt(
         ValueError: If the canonical schema cannot be projected safely into planner capabilities.
         RuntimeError: If an internal capability placeholder is missing or duplicated.
     """
+    return _render_request_planner_prompt_template(
+        _PROMPT_TEMPLATE,
+        schema,
+        current_context,
+        conversation_context,
+        size_components=size_components,
+    )
+
+
+def render_semantic_write_planner_prompt(
+    schema: Mapping[str, Any],
+    current_context: Mapping[str, str],
+    conversation_context: Sequence[Mapping[str, str]] = (),
+    *,
+    size_components: dict[str, int] | None = None,
+) -> str:
+    """Render the Luna semantic-WRITE variant while retaining common planner instructions.
+
+    The production Sol renderer continues to consume ``_PROMPT_TEMPLATE`` unchanged. This variant
+    replaces whole legacy WRITE-language paragraphs rather than appending corrective overrides, so
+    Luna sees one coherent semantic contract and the common retrieval/delegation instructions.
+    """
+    paragraphs = _PROMPT_TEMPLATE.split("\n\n")
+    replaced: set[str] = set()
+    rendered: list[str] = []
+    for paragraph in paragraphs:
+        replacement = next(
+            (
+                value
+                for prefix, value in _SEMANTIC_WRITE_PROMPT_REPLACEMENTS.items()
+                if paragraph.startswith(prefix)
+            ),
+            None,
+        )
+        if replacement is None:
+            rendered.append(paragraph)
+            continue
+        prefix = next(
+            prefix for prefix in _SEMANTIC_WRITE_PROMPT_REPLACEMENTS if paragraph.startswith(prefix)
+        )
+        if prefix in replaced:
+            raise RuntimeError("Semantic WRITE prompt replacement is ambiguous")
+        replaced.add(prefix)
+        if replacement:
+            rendered.append(replacement)
+    if replaced != set(_SEMANTIC_WRITE_PROMPT_REPLACEMENTS):
+        raise RuntimeError("Semantic WRITE prompt replacement is incomplete")
+    return _render_request_planner_prompt_template(
+        "\n\n".join(rendered),
+        schema,
+        current_context,
+        conversation_context,
+        size_components=size_components,
+    )
+
+
+def _render_request_planner_prompt_template(
+    template: str,
+    schema: Mapping[str, Any],
+    current_context: Mapping[str, str],
+    conversation_context: Sequence[Mapping[str, str]],
+    *,
+    size_components: dict[str, int] | None,
+) -> str:
+    """Fill one reviewed planner template from current schema capabilities and context."""
     _validate_current_context(current_context)
-    if _PROMPT_TEMPLATE.count(_RETRIEVAL_CAPABILITY_PLACEHOLDER) != 1:
+    if template.count(_RETRIEVAL_CAPABILITY_PLACEHOLDER) != 1:
         raise RuntimeError("Request planner retrieval capability placeholder is invalid")
-    if _PROMPT_TEMPLATE.count(_WRITE_CAPABILITY_PLACEHOLDER) != 1:
+    if template.count(_WRITE_CAPABILITY_PLACEHOLDER) != 1:
         raise RuntimeError("Request planner write capability placeholder is invalid")
     retrieval = build_planner_capabilities(schema, current_context=current_context)
     writable = build_write_capabilities(schema)
     retrieval_json = json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))
     writable_json = json.dumps(writable, ensure_ascii=False, separators=(",", ":"))
-    rendered = _PROMPT_TEMPLATE.replace(
+    rendered = template.replace(
         _RETRIEVAL_CAPABILITY_PLACEHOLDER,
         retrieval_json,
     )
@@ -777,6 +865,31 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     presentation_intent = payload.get("presentation_intent", "answer")
     if not isinstance(raw_actions, list) or not raw_actions:
         raise RequestPlanningError("RequestPlan actions must be a non-empty list")
+    actions = tuple(
+        _validate_action(action, schema, retrieval_capabilities, write_capabilities)
+        for action in raw_actions
+    )
+    return finalize_request_plan(actions, limitations, presentation_intent)
+
+
+def validate_request_action(action: Any, schema: Mapping[str, Any]) -> RequestAction:
+    """Validate one raw action for adapters that preserve a heterogeneous provider sequence."""
+    return _validate_action(
+        action,
+        schema,
+        build_planner_capabilities(schema),
+        build_write_capabilities(schema),
+    )
+
+
+def finalize_request_plan(
+    actions: Sequence[RequestAction], limitations: Any, presentation_intent: Any
+) -> RequestPlan:
+    """Apply shared plan-level limitations and presentation invariants to validated actions."""
+    if not actions or not all(
+        isinstance(action, (RetrieveAction, WriteAction, DelegateAction)) for action in actions
+    ):
+        raise RequestPlanningError("RequestPlan actions must be a non-empty validated sequence")
     if (
         not isinstance(limitations, list)
         or len(limitations) != len(set(limitations))
@@ -787,10 +900,6 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
             stage=PlannerValidationStage.REQUEST_PLAN,
             code=PlannerValidationCode.INVALID_LIMITATIONS,
         )
-    actions = tuple(
-        _validate_action(action, schema, retrieval_capabilities, write_capabilities)
-        for action in raw_actions
-    )
     if presentation_intent not in PRESENTATION_INTENTS:
         raise RequestPlanningError("RequestPlan presentation intent is invalid")
     if presentation_intent != "answer" and (
@@ -802,7 +911,9 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     ):
         raise RequestPlanningError("Note-set presentation requires one direct retrieval")
     return RequestPlan(
-        actions=actions, limitations=tuple(limitations), presentation_intent=presentation_intent
+        actions=tuple(actions),
+        limitations=tuple(limitations),
+        presentation_intent=presentation_intent,
     )
 
 
@@ -1288,6 +1399,14 @@ def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[di
     return alternatives
 
 
+def planner_filter_array_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose the shared dynamic closed filter array for alternate provider action branches."""
+    return {
+        "type": "array",
+        "items": {"anyOf": _filter_json_schema_alternatives(capabilities)},
+    }
+
+
 def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict[str, Any]:
     """Build dynamic strict property-change alternatives from type-specific properties.
 
@@ -1341,6 +1460,13 @@ def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict
         "items": {"type": "object", "properties": {}, "additionalProperties": False},
         "maxItems": 0,
     }
+
+
+def planner_property_changes_json_schema(
+    write_capabilities: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Expose schema-derived property mutations without duplicating their value-type mapping."""
+    return _property_changes_json_schema(write_capabilities)
 
 
 def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]:
