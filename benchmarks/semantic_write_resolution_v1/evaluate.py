@@ -149,8 +149,8 @@ def evaluate(result: Any, expected: str) -> Evaluation:
                 (relation is not None and relation.source_kind == "self", "self_relation_source"),
                 (relation is not None and relation.members == "one", "singular_relation"),
                 (
-                    relation is not None and _contains(relation.reference, "hija", "mayor"),
-                    "older_daughter_relation",
+                    relation is not None and _contains(relation.reference, "hija"),
+                    "daughter_relation_anchor",
                 ),
                 (_contains(source.target.query, "hija", "mayor"), "older_daughter_query"),
                 (

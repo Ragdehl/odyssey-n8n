@@ -296,9 +296,7 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
                                 "la persona de la cena relacional de prueba que trabaja en Airbus Test",
                             ),
                         ),
-                        relational_reference=RelationalReference(
-                            "mi hija mayor", "self", None, "one"
-                        ),
+                        relational_reference=RelationalReference("mi hija", "self", None, "one"),
                     ),
                     unit(
                         "la persona de la cena relacional de prueba que trabaja en Airbus Test",

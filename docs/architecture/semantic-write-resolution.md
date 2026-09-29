@@ -90,7 +90,7 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 31,999 bytes | -77 (-0.2%) |
+| Luna prompt | 32,076 bytes | 32,087 bytes | +11 (+0.03%) |
 | Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
 | Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
 
@@ -124,14 +124,20 @@ companion lost its explicit existing-source relationship bound and became a glob
 That violates the frozen `bounded_companion_relation` oracle and would widen identity resolution beyond
 the user's supplied source, so the oracle is retained.
 
-The v5 correction strengthens that same generic teaching example rather than adding another prompt
-rule. Its fact participant now explicitly comes from an existing workshop roster and carries its own
-`EXISTING_DESCRIPTION` candidate scope while retaining the richer Porto qualifier in the full identity
-description. No prompt rule, relationship taxonomy, schema, compiler, Core interface, frozen case, or
-oracle changed. The unexecuted v5 successor reuses the same 13 cases, permits at most 13 Luna/low calls
-with zero retries and zero Sol calls, and has a 51,744-byte conservative input bound plus `$0.1664832`
-no-cache ceiling. Its fresh artifact path is `semantic-write-frontend-v5-luna-gate.jsonl`;
-`MAX_COST_USD` is `$0.00`, so live adoption remains blocked on fresh explicit authorization.
+The v5 correction strengthened that same generic teaching example. The authorized v5 gate again
+passed SWR01-SWR07 and stopped on SWR08: the companion still lost its bounded event-source scope. The
+run also exposed one over-constrained oracle detail: it required `mayor` inside the daughter relationship
+anchor, while the deterministic semantic compiler intentionally uses `mi hija` as the candidate universe
+and keeps `mayor` in the full target description. That oracle detail is corrected; the real
+`bounded_companion_relation` failure remains unchanged.
+
+The offline v6 correction refines the existing generic teaching example rather than adding prompt rules:
+a participant explicitly described as coming from a specific named roster carries its own
+`EXISTING_DESCRIPTION` scope even when the request does not literally say “existing”. This scope does
+not assert source existence or authorize creation; Core must ground the source or clarify. Mere event
+context without named membership remains unbounded. v6 keeps the same 13 requests, has a 51,832-byte
+conservative input bound and `$0.166712` no-cache ceiling, and is locked at `MAX_COST_USD=$0.00` pending
+fresh authorization. The v6 manifest also pins the evaluator hash so future oracle drift is explicit.
 
 ## Possessives are identity evidence, not self authority
 
@@ -233,8 +239,7 @@ The user then authorized semantic-write-frontend-v4 at its `$0.1657318` conserva
 once at authorization commit `3fb65b7`, passed SWR01-SWR07, and stopped fail-fast on SWR08 after eight
 completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
 `1963296cbcc857c0f07703b0b045ee411b3aabed826a4d689bf822ed9b975652`; the usage-backed
-checked-in-pricing estimate is `$0.00631928`. The v1-v4 runners/paths are permanently consumed. The
-v5 successor is offline-only and unauthorized.
+checked-in-pricing estimate is `$0.00631928`. The user then authorized v5 at `$0.1664832`. It also passed SWR01-SWR07 and stopped on SWR08 after eight Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c`; usage-backed cost is `$0.00604402`. The v1-v5 runners/paths are permanently consumed. The v6 successor is offline-only and unauthorized.
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 

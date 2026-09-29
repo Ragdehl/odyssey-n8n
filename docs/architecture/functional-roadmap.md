@@ -154,7 +154,7 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic WRITE intent/Core compiler simplification                ➡️ v4 failed SWR08; offline v5 correction on Draft PR #147
+Semantic WRITE intent/Core compiler simplification                ➡️ v5 failed SWR08; offline v6 correction on Draft PR #147
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
@@ -168,7 +168,7 @@ Projects — compose over Tasks                                     ⬜ planned 
 Draft PR #147 now contains the first reversible offline Luna-only semantic WRITE frontend.
 Provider-free assertions keep Sol's 25,474-byte prompt and 47,418-byte provider schema identical to
 baseline while Luna compiles each ordered semantic write action immediately into the existing
-`WriteAction` / `RequestPlan` boundary. The corrected Luna prompt is 31,999 bytes (from 32,076), the whole
+`WriteAction` / `RequestPlan` boundary. The corrected Luna prompt is 32,087 bytes (from 32,076), the whole
 schema is 18,541 bytes (from 22,521), and the WRITE branch is 3,380 bytes (from 7,343); these are
 size measurements only, not latency evidence. Historical v8 assets remain immutable, old-contract
 v9 is retired unexecuted. The authorized v1-v3 gates progressively fixed participant identity,

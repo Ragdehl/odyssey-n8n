@@ -283,7 +283,7 @@
     },
     {
       "id": "teach-relational-target-with-described-reference",
-      "request": "Remember that my mentor who works remotely attended a conference with the designer from the existing Riverside workshop roster who lives in Porto.",
+      "request": "Remember that my mentor who works remotely attended a conference with the designer from the Riverside workshop roster who lives in Porto.",
       "result": {
         "outcome": "PLAN",
         "actions": [
@@ -316,9 +316,9 @@
                       },
                       {
                         "kind": "identity",
-                        "text": "the designer from the existing Riverside workshop roster who lives in Porto",
+                        "text": "the designer from the Riverside workshop roster who lives in Porto",
                         "identity": {
-                          "description": "the designer from the existing Riverside workshop roster who lives in Porto",
+                          "description": "the designer from the Riverside workshop roster who lives in Porto",
                           "binding": "described",
                           "direct_name": null,
                           "note_type": "person",
@@ -326,9 +326,9 @@
                           "candidate_scope": {
                             "source": {
                               "kind": "EXISTING_DESCRIPTION",
-                              "description": "the existing Riverside workshop roster"
+                              "description": "the Riverside workshop roster"
                             },
-                            "member_query": "the designer from the existing Riverside workshop roster",
+                            "member_query": "the designer from the Riverside workshop roster",
                             "extent": "one_member"
                           }
                         }
@@ -351,7 +351,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "Keep the bounded target and bounded fact participant independent. When the participant explicitly comes from an existing canonical source, preserve that source in identity candidate_scope and keep other qualifiers in description."
+      "lesson": "Keep the bounded target and bounded fact participant independent. Wording that defines an identity as a member of a specific named source may use candidate_scope even without the word 'existing'; Core must still ground that source or clarify, and candidate_scope never creates it. Mere descriptive event context without a named membership source stays unbounded."
     },
     {
       "id": "teach-relational-complete-set-write",

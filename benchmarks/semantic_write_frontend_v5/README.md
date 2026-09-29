@@ -1,14 +1,7 @@
 # Semantic WRITE frontend v5
 
-This is the unexecuted successor to the consumed v4 gate. It reuses the exact same hash-pinned ten
-active SWR cases plus the same three READ/delegation/mixed-order sentinels and unchanged oracles.
+This gate is permanently consumed. The user authorized the 13-case Luna/low gate at its `$0.1664832` conservative ceiling. It passed SWR01-SWR07 and stopped fail-fast on SWR08 after eight completed Luna/low calls, with zero retries and zero Sol calls.
 
-The only model-facing correction strengthens one existing generic teaching example: its separately
-described fact participant now explicitly comes from an existing workshop roster and therefore carries
-its own `EXISTING_DESCRIPTION` candidate scope. This demonstrates that a relationship-bounded target
-and a separately relationship-bounded fact identity remain independent. No prompt rule, schema,
-compiler, Core interface, or relationship taxonomy changes.
+SWR08 preserved the full daughter target and the described companion, but the companion lost its required bounded event-source scope. The run also exposed an older oracle detail that was too strict: it required `relational_reference.reference` to contain `mayor`, while the deterministic semantic compiler intentionally uses the broader `mi hija` candidate anchor and keeps `mayor` in the full target query. That oracle detail is corrected for the successor; the real bounded-companion failure remains.
 
-The gate permits at most 13 Luna/low calls, zero retries, and zero Sol calls. Its provider-free
-conservative input bound is 51,744 bytes per call and its no-cache ceiling is `$0.1664832`.
-`MAX_COST_USD` is `$0.00`; execution requires fresh explicit human authorization.
+Artifact SHA-256: `a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c`. Usage-backed cost: `$0.00604402`. The v5 runner is permanently locked at `$0.00`.

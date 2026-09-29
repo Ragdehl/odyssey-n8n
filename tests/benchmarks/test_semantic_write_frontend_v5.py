@@ -1,7 +1,8 @@
-"""Offline guards for the unexecuted semantic-write-frontend-v5 live gate."""
+"""Guards for the consumed semantic-write-frontend-v5 gate."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -13,51 +14,25 @@ from benchmarks.semantic_write_frontend_v5 import run_live as runner
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_gate_reuses_the_same_hash_pinned_ten_plus_three_cases() -> None:
-    cases, context = runner.load_gate_cases()
-    assert len(cases) == 13
-    assert [case["lineage"] for case in cases].count("frozen_swr") == 10
-    assert [case["lineage"] for case in cases].count("frontend_sentinel") == 3
-    assert context == {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
-
-
-def test_gate_cost_ceiling_matches_explicit_authorization() -> None:
-    cases, context = runner.load_gate_cases()
-    schema = json.loads(runner.SCHEMA_PATH.read_text(encoding="utf-8"))
-    cost, input_bound = runner.conservative_cost_ceiling(cases, context, schema)
-    assert len(cases) == 13
-    assert cost == Decimal("0.1664832")
-    assert input_bound == 51_744
-    assert runner.MAX_COST_USD == Decimal("0.1664832")
-    assert runner.OUTPUT_PATH == (
-        ROOT / "benchmarks/.live-results/semantic-write-frontend-v5-luna-gate.jsonl"
+def test_gate_is_consumed_with_evidence():
+    assert runner.MAX_COST_USD == Decimal("0.00") and runner.GATE_CONSUMED is True
+    m = json.loads(runner.MANIFEST_PATH.read_text())
+    assert m["provider_calls_made"] == 8
+    assert m["result"] == "failed_swr08"
+    assert (
+        m["artifact_sha256"] == "a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c"
     )
-    assert not runner.OUTPUT_PATH.exists()
+    if runner.OUTPUT_PATH.exists():
+        assert hashlib.sha256(runner.OUTPUT_PATH.read_bytes()).hexdigest() == m["artifact_sha256"]
 
 
-def test_gate_refuses_before_provider_construction_when_budget_is_insufficient(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
-    monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "must-not-exist.jsonl")
-    monkeypatch.setattr(
-        runner.OpenAILunaExperimentalPlanner,
-        "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without authorization"),
-    )
-    with pytest.raises(SystemExit, match=r"exceeds \$0.00 authorization"):
-        runner.main(["--confirm-live-provider-calls"])
-    assert not runner.OUTPUT_PATH.exists()
-
-
-def test_gate_requires_confirmation_before_any_hypothetical_authorized_call(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_consumed_gate_refuses_before_provider(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
+    monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "x.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
         "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without confirmation"),
+        lambda *_a, **_k: pytest.fail("provider constructed"),
     )
-    with pytest.raises(SystemExit, match="without --confirm-live-provider-calls"):
-        runner.main([])
+    with pytest.raises(SystemExit, match="permanently consumed"):
+        runner.main(["--confirm-live-provider-calls"])

@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_380
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 31_999
+    assert prompt_bytes == 32_087
     assert schema_bytes == 18_541
 
 
@@ -806,15 +806,15 @@ def test_relational_target_with_described_reference_teaching_example_compiles(
     assert material[0].target.query == "my mentor who works remotely"
     assert material[0].facts == ("Attended a conference with {{ref:0}}.",)
     assert material[0].references[0].mention == (
-        "the designer from the existing Riverside workshop roster who lives in Porto"
+        "the designer from the Riverside workshop roster who lives in Porto"
     )
     assert lookups[0].target.query == (
-        "the designer from the existing Riverside workshop roster who lives in Porto"
+        "the designer from the Riverside workshop roster who lives in Porto"
     )
     companion_relation = lookups[0].target.relational_reference
     assert companion_relation is not None
     assert companion_relation.source_kind == "existing"
-    assert companion_relation.source_query == "the existing Riverside workshop roster"
+    assert companion_relation.source_query == "the Riverside workshop roster"
     assert companion_relation.members == "one"
 
 
