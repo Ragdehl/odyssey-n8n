@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0",
+  "version": "3.0.1",
   "examples": [
     {
       "id": "teach-domain-date",
@@ -171,6 +171,71 @@
         "presentation_intent": "answer"
       },
       "lesson": "One semantic operation keeps independent durable facts separate, while Core derives reference and unit mechanics after target resolution."
+    },
+    {
+      "id": "teach-source-relationship-participants",
+      "request": "Remember that Hana and Luis joined me for a museum visit.",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "write",
+            "operations": [
+              {
+                "target": {
+                  "description": "the authenticated human",
+                  "binding": "self",
+                  "direct_name": null,
+                  "note_type": "person",
+                  "filters": [],
+                  "candidate_scope": null
+                },
+                "apply_to": "one",
+                "intent": "record",
+                "facts": [
+                  {
+                    "parts": [
+                      {
+                        "kind": "identity",
+                        "text": "Hana",
+                        "identity": {
+                          "description": "Hana",
+                          "binding": "described",
+                          "direct_name": "Hana",
+                          "note_type": "person",
+                          "filters": [],
+                          "candidate_scope": null
+                        }
+                      },
+                      {"kind": "literal", "text": " and "},
+                      {
+                        "kind": "identity",
+                        "text": "Luis",
+                        "identity": {
+                          "description": "Luis",
+                          "binding": "described",
+                          "direct_name": "Luis",
+                          "note_type": "person",
+                          "filters": [],
+                          "candidate_scope": null
+                        }
+                      },
+                      {"kind": "literal", "text": " joined me for a museum visit."}
+                    ]
+                  }
+                ],
+                "properties": [],
+                "tag_changes": [],
+                "destination_type": null
+              }
+            ]
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null,
+        "presentation_intent": "answer"
+      },
+      "lesson": "The authenticated human owns this one relationship fact. Keep one self-targeted operation and encode each safely selectable participant as an identity part; do not create participant-targeted operations."
     },
     {
       "id": "teach-relational-complete-set-write",

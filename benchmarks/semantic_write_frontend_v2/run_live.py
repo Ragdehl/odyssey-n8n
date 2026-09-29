@@ -1,10 +1,11 @@
-"""Preserve the consumed Luna semantic-write-frontend-v1 live-evidence lineage."""
+"""Prepare the authorization-gated Luna semantic-write-frontend-v2 live evidence."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import sys
 from dataclasses import asdict
 from decimal import Decimal
@@ -19,6 +20,7 @@ from benchmarks.semantic_write_resolution_v1.evaluate import evaluate  # noqa: E
 from odyssey_core.experimental_luna_planning import (  # noqa: E402
     LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
     LUNA_EXPERIMENT_MODEL,
+    LUNA_EXPERIMENT_REASONING_EFFORT,
     OpenAILunaExperimentalPlanner,
     luna_experimental_result_json_schema,
     render_luna_experimental_prompt,
@@ -28,17 +30,15 @@ from odyssey_core.request_planning import RequestPlan  # noqa: E402
 SCHEMA_PATH = ROOT / "config/note-schema.json"
 PRICING_PATH = ROOT / "benchmarks/performance_p1/pricing_snapshot.json"
 FROZEN_SWR_PATH = ROOT / "benchmarks/semantic_write_resolution_v1/cases_active_schema.json"
-SENTINELS_PATH = Path(__file__).with_name("sentinels.json")
+SENTINELS_PATH = ROOT / "benchmarks/semantic_write_frontend_v1/sentinels.json"
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
-OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-write-frontend-v1-luna-gate.jsonl"
+OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-write-frontend-v2-luna-gate.jsonl"
 INPUT_OVERHEAD_BYTES = 1024
-# Reset after the authorized v1 attempt; any successor run requires fresh explicit authorization.
 MAX_COST_USD = Decimal("0.00")
-GATE_CONSUMED = True
 
 
 def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Load hash-pinned SWR cases plus only the new read/delegate/order sentinels."""
+    """Load unchanged hash-pinned SWR cases and v1's three generic sentinels."""
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     for path, expected in (
         (FROZEN_SWR_PATH, manifest["sha256"]["frozen_swr_cases"]),
@@ -75,7 +75,7 @@ def conservative_cost_ceiling(
 
 
 def _case_passed(result: Any, case: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Apply the frozen SWR oracle or the narrow action-order sentinel."""
+    """Apply the frozen SWR oracle or the unchanged narrow action-order sentinel."""
     if case["lineage"] == "frozen_swr":
         verdict = evaluate(result, case["expect"])
         return verdict.passed, list(verdict.findings)
@@ -132,11 +132,37 @@ def run_cases(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Refuse every invocation because the v1 lineage and artifact are permanently consumed."""
+    """Refuse missing authorization, confirmation, credentials, or an existing artifact."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
-    parser.parse_args(argv)
-    raise SystemExit("Refusing live calls: semantic-write-frontend-v1 is permanently consumed")
+    args = parser.parse_args(argv)
+    cases, context = load_gate_cases()
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    cost, input_bound = conservative_cost_ceiling(cases, context, schema)
+    print(
+        f"logical_cases={len(cases)} provider_call_ceiling={len(cases)} retries=0 sol_calls=0 "
+        f"model={LUNA_EXPERIMENT_MODEL} effort={LUNA_EXPERIMENT_REASONING_EFFORT} "
+        f"no_cache_max_usd={cost:.6f} luna_input_bound={input_bound}"
+    )
+    if not args.confirm_live_provider_calls:
+        raise SystemExit("Refusing live calls without --confirm-live-provider-calls")
+    if cost > MAX_COST_USD:
+        raise SystemExit(
+            f"Refusing live calls: conservative ceiling exceeds ${MAX_COST_USD:.2f} authorization"
+        )
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise SystemExit("Refusing live calls: OPENAI_API_KEY is absent from process environment")
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        evidence = OUTPUT_PATH.open("x", encoding="utf-8")
+    except FileExistsError as error:
+        raise SystemExit(f"Refusing to overwrite existing evidence: {OUTPUT_PATH}") from error
+    try:
+        planner = OpenAILunaExperimentalPlanner.from_environment(schema, context)
+        rows = run_cases(planner, cases, evidence)
+    finally:
+        evidence.close()
+    return 0 if len(rows) == len(cases) and all(row["passed"] for row in rows) else 1
 
 
 if __name__ == "__main__":

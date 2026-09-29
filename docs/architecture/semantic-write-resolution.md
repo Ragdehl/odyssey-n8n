@@ -37,8 +37,8 @@ The current feature branch implements the first reversible **offline Luna-only a
 semantic WRITE boundary. Luna's WRITE prompt/schema now describe semantic operations; Sol retains
 the exact legacy prompt and provider schema as the independent fallback. Both branches converge
 immediately on the existing `RequestPlan` boundary, so the resolver, application, runtime, storage,
-and materialization interfaces remain unchanged. This checkpoint has deterministic evidence only;
-it has not been called against a provider and is not live-adoption evidence.
+and materialization interfaces remain unchanged. The first live adoption gate failed on its first
+case; the offline successor correction below still requires fresh live evidence.
 
 ```text
 Luna semantic PLAN actions (provider order)
@@ -90,17 +90,26 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 29,296 bytes | -2,780 (-8.7%) |
+| Luna prompt | 32,076 bytes | 30,412 bytes | -1,664 (-5.2%) |
 | Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
 | Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
 
 These are contract-size measurements, not latency evidence. The old-contract v9 runner is
-permanently retired before provider construction. The new `semantic-write-frontend-v1` lineage
-reuses the ten active SWR cases by pinned hash and adds only three generic READ/delegate/mixed-order
-sentinels: 13 Luna/low calls maximum, zero retries, zero Sol calls, 49,041-byte conservative input
-bound, and `$0.1594554` conservative no-cache ceiling. Its fresh artifact path is
-`semantic-write-frontend-v1-luna-gate.jsonl`; `MAX_COST_USD` remains `$0.00`. No live gate was run,
-and live adoption remains blocked on fresh explicit authorization.
+permanently retired before provider construction. The consumed `semantic-write-frontend-v1` gate
+reused the ten active SWR cases plus three generic READ/delegate/mixed-order sentinels. It stopped
+fail-fast on SWR01 after one completed Luna/low call: the target was correctly authenticated self,
+but both safely selectable participants were left inside one literal fact, so Core received no
+identity parts or references. The unchanged frozen oracle correctly rejected that loss of link
+semantics.
+
+The smallest correction is one generic teaching example for the already-stated rule: several
+participants sharing one explicit-source relationship remain identity parts inside one
+source-targeted operation. No prompt rule, relationship taxonomy, schema, compiler, Core interface,
+or frozen oracle changed. The unexecuted `semantic-write-frontend-v2` successor reuses the same
+13 cases, permits at most 13 Luna/low calls with zero retries and zero Sol calls, and has a
+50,157-byte conservative input bound plus `$0.162357` no-cache ceiling. Its fresh artifact path is
+`semantic-write-frontend-v2-luna-gate.jsonl`; `MAX_COST_USD` is `$0.00`, so live adoption remains
+blocked on fresh explicit authorization.
 
 ## Possessives are identity evidence, not self authority
 
@@ -179,6 +188,13 @@ The focused contract must keep deterministic coverage for at least:
 The provider-facing schema/prompt change requires focused live evidence under `AGENTS.md`. That live gate is Luna/low only, planner-only, zero retries, zero Sol fallbacks, cost-gated, non-overwriting, and separate from deterministic Core execution tests.
 
 ## Live-gate status
+
+The user authorized semantic-write-frontend-v1 at its `$0.1594554` conservative ceiling. It ran
+once at authorization commit `6985314` and stopped fail-fast on SWR01 after exactly one completed
+Luna/low call, zero retries, and zero Sol calls. The retained one-row artifact SHA-256 is
+`4431ba7ca547aa3c82070d20f4c391b2113cb4ce8b9754d88e0ddefb1018ebfa`; usage was 9,073 input,
+125 output, and 0 reasoning tokens, for a checked-in-pricing estimate of `$0.0019646`. The v1
+runner/path are permanently consumed. The v2 successor is offline-only and unauthorized.
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 

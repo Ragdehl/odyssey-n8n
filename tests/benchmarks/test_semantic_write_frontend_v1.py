@@ -1,7 +1,8 @@
-"""Offline guards for the unexecuted semantic-write-frontend-v1 live gate."""
+"""Offline guards for the consumed semantic-write-frontend-v1 live gate."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -27,46 +28,56 @@ def test_gate_reuses_hash_pinned_swr_cases_and_only_three_new_sentinels() -> Non
     ]
 
 
-def test_gate_cost_ceiling_is_offline_luna_only_and_unauthorized() -> None:
-    """Record the future maximum call count and conservative no-cache ceiling at $0 authority."""
-    cases, context = runner.load_gate_cases()
-    schema = json.loads(runner.SCHEMA_PATH.read_text(encoding="utf-8"))
-    cost, input_bound = runner.conservative_cost_ceiling(cases, context, schema)
-    assert len(cases) == 13
-    assert cost == Decimal("0.1594554")
-    assert input_bound == 49_041
-    assert runner.MAX_COST_USD == Decimal("0.1594554")
+def test_gate_is_consumed_with_recorded_immutable_evidence() -> None:
+    """Freeze consumed v1 metadata and verify the local ignored artifact when available."""
+    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.GATE_CONSUMED is True
     assert runner.OUTPUT_PATH == (
         ROOT / "benchmarks/.live-results/semantic-write-frontend-v1-luna-gate.jsonl"
     )
-    assert not runner.OUTPUT_PATH.exists()
+    manifest = json.loads(runner.MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert manifest["provider_calls_made"] == 1
+    assert manifest["consumed_artifact"] == (
+        "benchmarks/.live-results/semantic-write-frontend-v1-luna-gate.jsonl"
+    )
+    assert manifest["artifact_sha256"] == (
+        "4431ba7ca547aa3c82070d20f4c391b2113cb4ce8b9754d88e0ddefb1018ebfa"
+    )
+    assert manifest["result"] == "failed_swr01"
+    assert manifest["max_cost_usd"] == "0.00"
+
+    # The live artifact is intentionally ignored and therefore absent in a clean CI checkout.
+    # When present locally, verify that it is still the exact retained evidence.
+    if runner.OUTPUT_PATH.exists():
+        assert (
+            hashlib.sha256(runner.OUTPUT_PATH.read_bytes()).hexdigest()
+            == (manifest["artifact_sha256"])
+        )
+        rows = [json.loads(line) for line in runner.OUTPUT_PATH.read_text().splitlines()]
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["case_id"] == "SWR01-self-coworkers"
+        assert row["passed"] is False
+        assert row["provider_status"] == "completed"
+        assert row["usage"] == {
+            "input_tokens": 9073,
+            "output_tokens": 125,
+            "cached_input_tokens": 0,
+            "reasoning_tokens": 0,
+        }
 
 
-def test_gate_refuses_before_provider_construction_when_budget_is_insufficient(
+def test_consumed_gate_refuses_before_provider_construction(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Keep the cost cap fail-closed even though this exact gate is now authorized."""
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
+    """Make v1 non-reusable even if callers alter its budget or artifact path."""
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "must-not-exist.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
         "from_environment",
         lambda *_args, **_kwargs: pytest.fail("provider constructed without authorization"),
     )
-    with pytest.raises(SystemExit, match=r"exceeds \$0.00 authorization"):
+    with pytest.raises(SystemExit, match="permanently consumed"):
         runner.main(["--confirm-live-provider-calls"])
     assert not runner.OUTPUT_PATH.exists()
-
-
-def test_gate_requires_confirmation_even_after_hypothetical_future_budget(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Keep command confirmation independent from a future reviewed cost authorization."""
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
-    monkeypatch.setattr(
-        runner.OpenAILunaExperimentalPlanner,
-        "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without confirmation"),
-    )
-    with pytest.raises(SystemExit, match="without --confirm-live-provider-calls"):
-        runner.main([])

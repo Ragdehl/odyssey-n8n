@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_380
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 29_296
+    assert prompt_bytes == 30_412
     assert schema_bytes == 18_541
 
 
@@ -724,7 +724,7 @@ def test_teaching_and_held_out_sets_are_exactly_disjoint_and_frozen() -> None:
     teaching = load_teaching_examples()
     teaching_requests = {item["request"].strip().casefold() for item in teaching}
     held_out_requests = {item["request"].strip().casefold() for item in cases_payload["cases"]}
-    assert len(teaching) == 8
+    assert len(teaching) == 9
     assert len(cases_payload["cases"]) == 24
     assert teaching_requests.isdisjoint(held_out_requests)
     assert list(oracles) == [item["id"] for item in cases_payload["cases"]]
@@ -819,6 +819,30 @@ def test_complete_set_relational_teaching_example_preserves_one_source_write(
     prompt = render_luna_experimental_prompt(schema, CONTEXT)
     assert example["request"] in prompt
     assert "candidate_scope.extent=complete_set" in prompt
+
+
+def test_source_relationship_teaching_example_compiles_participant_identities(
+    schema: dict[str, Any],
+) -> None:
+    """Teach one source-owned relation with two independently resolved participants."""
+    example = next(
+        item
+        for item in load_teaching_examples()
+        if item["id"] == "teach-source-relationship-participants"
+    )
+    result = validate_luna_experimental_result(example["result"], schema)
+    assert isinstance(result, RequestPlan)
+    assert len(result.actions) == 1
+    action = result.actions[0]
+    assert isinstance(action, WriteAction)
+    material = [unit for unit in action.units if not unit.reference_lookup_only]
+    lookups = [unit for unit in action.units if unit.reference_lookup_only]
+    assert len(material) == 1
+    assert material[0].target.self_target == "self"
+    assert material[0].facts == ("{{ref:0}} and {{ref:1}} joined me for a museum visit.",)
+    assert {reference.mention for reference in material[0].references} == {"Hana", "Luis"}
+    assert {unit.target.query for unit in lookups} == {"Hana", "Luis"}
+    assert len(lookups) == 2
 
 
 def test_every_v3_teaching_example_validates_and_writes_are_semantic_only(
