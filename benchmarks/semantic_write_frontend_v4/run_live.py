@@ -26,7 +26,7 @@ FROZEN_SWR_PATH = _v3.FROZEN_SWR_PATH
 SENTINELS_PATH = _v3.SENTINELS_PATH
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
 OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-write-frontend-v4-luna-gate.jsonl"
-MAX_COST_USD = Decimal("0.00")
+MAX_COST_USD = Decimal("0.1657318")
 
 conservative_cost_ceiling = _v3.conservative_cost_ceiling
 run_cases = _v3.run_cases
