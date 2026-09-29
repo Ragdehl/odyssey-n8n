@@ -1,0 +1,11 @@
+{
+  "version": "semantic-write-frontend-v3",
+  "frozen_before_provider_calls": true,
+  "provider_calls_made": 0,
+  "sha256": {
+    "frozen_swr_cases": "2b0966ea2ba14ea43a1f110ce55b9a9d5050ee0b0582feee86e1d29946a3157c",
+    "sentinels": "d20301398f956457937606a591a22a58434dcd6c781a08707f7a24e989c22bc9"
+  },
+  "future_artifact": "benchmarks/.live-results/semantic-write-frontend-v3-luna-gate.jsonl",
+  "max_cost_usd": "0.00"
+}

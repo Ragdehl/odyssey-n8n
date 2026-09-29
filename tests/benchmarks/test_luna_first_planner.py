@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_380
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 30_412
+    assert prompt_bytes == 30_533
     assert schema_bytes == 18_541
 
 
@@ -800,14 +800,14 @@ def test_complete_set_relational_teaching_example_preserves_one_source_write(
     assert relation is not None
     assert relation.members == "complete_set"
     assert relation.source_kind == "existing"
-    assert relation.source_query == "the dinner last night"
+    assert relation.source_query == "the existing Atlas project note"
     assert unit.target.entity is None
     assert unit.target.self_target is None
     assert unit.target.link_scope is None
     assert unit.cardinality == "one"
     assert unit.intent == "record"
     assert unit.facts == (
-        "Everyone who attended the dinner last night previously worked for the same company.",
+        "Everyone listed as a member in the existing Atlas project note previously worked for the same company.",
     )
     assert unit.references == ()
     assert all(candidate.cardinality != "all_matching" for candidate in result.actions[0].units)
@@ -818,7 +818,8 @@ def test_complete_set_relational_teaching_example_preserves_one_source_write(
     )
     prompt = render_luna_experimental_prompt(schema, CONTEXT)
     assert example["request"] in prompt
-    assert "candidate_scope.extent=complete_set" in prompt
+    assert "existing Atlas project note" in example["request"]
+    assert "extent=complete_set" in prompt
 
 
 def test_source_relationship_teaching_example_compiles_participant_identities(

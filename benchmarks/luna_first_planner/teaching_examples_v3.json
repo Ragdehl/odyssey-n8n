@@ -1,5 +1,5 @@
 {
-  "version": "3.0.1",
+  "version": "3.0.2",
   "examples": [
     {
       "id": "teach-domain-date",
@@ -40,8 +40,16 @@
               "query": "notes I created in July 2026",
               "type": null,
               "filters": [
-                {"field": "created_at", "op": "gte", "value": "2026-07-01T00:00:00+02:00"},
-                {"field": "created_at", "op": "lt", "value": "2026-08-01T00:00:00+02:00"}
+                {
+                  "field": "created_at",
+                  "op": "gte",
+                  "value": "2026-07-01T00:00:00+02:00"
+                },
+                {
+                  "field": "created_at",
+                  "op": "lt",
+                  "value": "2026-08-01T00:00:00+02:00"
+                }
               ],
               "link_scope": null
             }
@@ -65,8 +73,16 @@
               "query": "Odyssey notes created on September 8, 2026",
               "type": null,
               "filters": [
-                {"field": "created_at", "op": "gte", "value": "2026-09-08T00:00:00+02:00"},
-                {"field": "created_at", "op": "lt", "value": "2026-09-09T00:00:00+02:00"}
+                {
+                  "field": "created_at",
+                  "op": "gte",
+                  "value": "2026-09-08T00:00:00+02:00"
+                },
+                {
+                  "field": "created_at",
+                  "op": "lt",
+                  "value": "2026-09-09T00:00:00+02:00"
+                }
               ],
               "link_scope": null
             }
@@ -78,8 +94,16 @@
               "query": "n8n notes modified on September 9, 2026",
               "type": null,
               "filters": [
-                {"field": "updated_at", "op": "gte", "value": "2026-09-09T00:00:00+02:00"},
-                {"field": "updated_at", "op": "lt", "value": "2026-09-10T00:00:00+02:00"}
+                {
+                  "field": "updated_at",
+                  "op": "gte",
+                  "value": "2026-09-09T00:00:00+02:00"
+                },
+                {
+                  "field": "updated_at",
+                  "op": "lt",
+                  "value": "2026-09-10T00:00:00+02:00"
+                }
               ],
               "link_scope": null
             }
@@ -156,8 +180,22 @@
                 "apply_to": "one",
                 "intent": "record",
                 "facts": [
-                  {"parts": [{"kind": "literal", "text": "Lives in Lyon."}]},
-                  {"parts": [{"kind": "literal", "text": "Works at Thales."}]}
+                  {
+                    "parts": [
+                      {
+                        "kind": "literal",
+                        "text": "Lives in Lyon."
+                      }
+                    ]
+                  },
+                  {
+                    "parts": [
+                      {
+                        "kind": "literal",
+                        "text": "Works at Thales."
+                      }
+                    ]
+                  }
                 ],
                 "properties": [],
                 "tag_changes": [],
@@ -207,7 +245,10 @@
                           "candidate_scope": null
                         }
                       },
-                      {"kind": "literal", "text": " and "},
+                      {
+                        "kind": "literal",
+                        "text": " and "
+                      },
                       {
                         "kind": "identity",
                         "text": "Luis",
@@ -220,7 +261,10 @@
                           "candidate_scope": null
                         }
                       },
-                      {"kind": "literal", "text": " joined me for a museum visit."}
+                      {
+                        "kind": "literal",
+                        "text": " joined me for a museum visit."
+                      }
                     ]
                   }
                 ],
@@ -239,7 +283,7 @@
     },
     {
       "id": "teach-relational-complete-set-write",
-      "request": "Record that everyone who attended the dinner last night previously worked for the same company.",
+      "request": "In the existing Atlas project note, record that everyone listed as a member previously worked for the same company.",
       "result": {
         "outcome": "PLAN",
         "actions": [
@@ -248,7 +292,7 @@
             "operations": [
               {
                 "target": {
-                  "description": "everyone who attended the dinner last night",
+                  "description": "everyone listed as a member in the existing Atlas project note",
                   "binding": "described",
                   "direct_name": null,
                   "note_type": null,
@@ -256,9 +300,9 @@
                   "candidate_scope": {
                     "source": {
                       "kind": "EXISTING_DESCRIPTION",
-                      "description": "the dinner last night"
+                      "description": "the existing Atlas project note"
                     },
-                    "member_query": "everyone who attended the dinner last night",
+                    "member_query": "everyone listed as a member in the existing Atlas project note",
                     "extent": "complete_set"
                   }
                 },
@@ -269,7 +313,7 @@
                     "parts": [
                       {
                         "kind": "literal",
-                        "text": "Everyone who attended the dinner last night previously worked for the same company."
+                        "text": "Everyone listed as a member in the existing Atlas project note previously worked for the same company."
                       }
                     ]
                   }
@@ -285,7 +329,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "Represent one bounded complete current relationship set with candidate_scope.extent=complete_set and apply_to=one. Core derives the existing relational source-write mechanics; never enumerate members or invent IDs."
+      "lesson": "Use candidate_scope with an existing source only when the request actually identifies an existing canonical source. For a complete current member set, use extent=complete_set and apply_to=one; do not turn mere event context into an invented source."
     }
   ]
 }

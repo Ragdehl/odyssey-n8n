@@ -154,7 +154,7 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic WRITE intent/Core compiler simplification                ➡️ v1 failed SWR01; offline v2 correction on Draft PR #147
+Semantic WRITE intent/Core compiler simplification                ➡️ v2 failed SWR03; offline v3 correction on Draft PR #147
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
@@ -168,15 +168,16 @@ Projects — compose over Tasks                                     ⬜ planned 
 Draft PR #147 now contains the first reversible offline Luna-only semantic WRITE frontend.
 Provider-free assertions keep Sol's 25,474-byte prompt and 47,418-byte provider schema identical to
 baseline while Luna compiles each ordered semantic write action immediately into the existing
-`WriteAction` / `RequestPlan` boundary. The corrected Luna prompt is 30,412 bytes (from 32,076), the whole
+`WriteAction` / `RequestPlan` boundary. The corrected Luna prompt is 30,533 bytes (from 32,076), the whole
 schema is 18,541 bytes (from 22,521), and the WRITE branch is 3,380 bytes (from 7,343); these are
 size measurements only, not latency evidence. Historical v8 assets remain immutable, old-contract
-v9 is retired unexecuted, and the authorized `semantic-write-frontend-v1` gate stopped fail-fast on
-SWR01 after one completed Luna/low call because it lost participant identity/link semantics. The
-offline correction adds one generic teaching example for the existing identity-part rule. The
-13-call `semantic-write-frontend-v2` successor retains the unchanged cases/oracles, has a 50,157-byte
-input bound and `$0.162357` conservative ceiling, and remains locked at `MAX_COST_USD=$0.00`; live
-adoption is blocked on fresh explicit authorization.
+v9 is retired unexecuted. The authorized v1 gate failed SWR01 after one Luna/low call and the
+minimal participant-identity teaching correction fixed that case. The authorized v2 gate then passed
+SWR01 and SWR02 but stopped on SWR03 because Luna promoted mere dinner context into an invented
+existing source. The frozen oracle is retained. The offline v3 correction removes the contradictory
+teaching signal by making its complete-set source explicitly existing. The unchanged 13-case v3 gate
+has a 50,278-byte input bound and `$0.1626716` conservative ceiling and remains locked at
+`MAX_COST_USD=$0.00`; live adoption is blocked on fresh explicit authorization.
 
 Earlier latency observations motivate P1 but do not predetermine its bottleneck or authorize a fast path.
 
