@@ -165,6 +165,40 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
     friend = RequestPlan(
         (WriteAction((unit("la amiga con la que cené ayer", "Se muda a París."),)),), ()
     )
+    relational_friend = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit(
+                        "la amiga con la que cené ayer",
+                        "Se muda a París.",
+                        relational_reference=RelationalReference(
+                            "la amiga con la que cené ayer", "self", None, "one"
+                        ),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    overlinked_friend = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit(
+                        "la amiga con la que cené ayer",
+                        "Se muda a {{ref:0}}.",
+                        references=(KnowledgeReference(1, "destination", "París"),),
+                        relational_reference=RelationalReference(
+                            "la amiga con la que cené ayer", "self", None, "one"
+                        ),
+                    ),
+                    unit("París", "", lookup_only=True),
+                )
+            ),
+        ),
+        (),
+    )
     mixed = RequestPlan(
         (
             WriteAction(
@@ -201,6 +235,8 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
     assert evaluate(daughter, "descriptive_daughter_target").passed
     assert not evaluate(bad_daughter, "descriptive_daughter_target").passed
     assert evaluate(friend, "descriptive_friend_target").passed
+    assert evaluate(relational_friend, "descriptive_friend_target").passed
+    assert not evaluate(overlinked_friend, "descriptive_friend_target").passed
     assert evaluate(mixed, "descriptive_target_and_reference").passed
     existing = RequestPlan(
         (

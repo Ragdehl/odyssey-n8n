@@ -1845,6 +1845,11 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     assert "target.entity MUST remain null" in prompt
     assert "emit exactly one source-targeted KnowledgeUnit" in prompt
     assert "NEVER split the relationship into participant-targeted units" in prompt
+    assert "A proper noun or ordinary fact argument is not enough by itself" in prompt
+    assert (
+        "Type-null references are for wording that explicitly denotes an existing Odyssey identity"
+        in prompt
+    )
     assert "Minimize note mutations without changing semantic ownership" in prompt
     assert "preserve those subjects as separate write targets" in prompt
 

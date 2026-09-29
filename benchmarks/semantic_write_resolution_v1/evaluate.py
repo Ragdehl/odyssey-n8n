@@ -102,10 +102,17 @@ def evaluate(result: Any, expected: str) -> Evaluation:
             ]
         )
     elif expected == "descriptive_friend_target":
+        relation = source.target.relational_reference
+        compatible_relation = relation is None or (
+            relation.source_kind == "self"
+            and relation.source_query is None
+            and relation.members == "one"
+            and _contains(relation.reference, "amiga")
+        )
         checks.extend(
             [
                 (source.target.self_target is None, "not_self"),
-                (source.target.relational_reference is None, "ordinary_semantic_target"),
+                (compatible_relation, "compatible_friend_target_selection"),
                 (_contains(source.target.query, "amiga", "cen", "ayer"), "friend_query_preserved"),
                 (_facts_contain(source, "paris"), "paris_fact"),
                 (not source.references and not lookups, "no_spurious_references"),
