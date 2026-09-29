@@ -31,7 +31,7 @@ OUTPUT_PATH = (
     ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema-v4.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
-# Reset after v3 stopped fail-fast; the consolidated-prompt v4 run requires fresh approval.
+# v4 evidence consumed successfully; reset until a new contract gets a new path and approval.
 ACTIVE_REGISTRY_PATH = Path(__file__).with_name("cases_active_schema.json")
 MAX_COST_USD = Decimal("0.00")
 
