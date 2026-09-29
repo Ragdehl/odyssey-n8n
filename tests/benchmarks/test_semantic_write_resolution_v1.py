@@ -316,8 +316,8 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert Decimal("0.12") < cost < Decimal("0.13")
-    assert input_bound > 0
+    assert Decimal("0.11") < cost < Decimal("0.13")
+    assert 50_000 < input_bound < 60_000
 
     assert runner.MAX_COST_USD == Decimal("0.00")
 

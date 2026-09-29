@@ -967,8 +967,8 @@ def test_prompt_explains_semantic_atomicity_not_punctuation_segmentation(schema:
     prompt = render_request_planner_prompt(schema, CONTEXT)
     assert "Atomicity is semantic, not punctuation-based" in prompt
     assert "keep sentences or clauses together" in prompt
-    assert "Marta vive en Lyon y trabaja en Thales" in prompt
-    assert "Quiero mudarme a Lyon porque" in prompt
+    assert "split independently meaningful knowledge" in prompt
+    assert "one coherent explanation, reflection, or decision" in prompt
 
 
 def test_dynamic_capabilities_reflect_schema_changes_and_controlled_tags(schema: dict) -> None:
@@ -1852,6 +1852,13 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     )
     assert "Minimize note mutations without changing semantic ownership" in prompt
     assert "preserve those subjects as separate write targets" in prompt
+
+
+def test_write_prompt_does_not_embed_live_gate_fixture_examples(schema: dict) -> None:
+    """Keep concrete regression phrases in tests, not as production prompt patches."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    for fixture_text in ("Axel", "Denis", "Cloe", "Cena relacional de prueba", "Airbus Test"):
+        assert fixture_text not in prompt
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:

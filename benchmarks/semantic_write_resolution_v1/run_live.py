@@ -28,10 +28,10 @@ from odyssey_core.experimental_luna_planning import (  # noqa: E402
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
 OUTPUT_PATH = (
-    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema-v3.jsonl"
+    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema-v4.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
-# Reset after v2 stopped fail-fast; any corrected-contract v3 run requires fresh approval.
+# Reset after v3 stopped fail-fast; the consolidated-prompt v4 run requires fresh approval.
 ACTIVE_REGISTRY_PATH = Path(__file__).with_name("cases_active_schema.json")
 MAX_COST_USD = Decimal("0.00")
 
