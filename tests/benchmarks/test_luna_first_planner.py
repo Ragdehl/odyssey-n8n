@@ -501,6 +501,8 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     )
     assert "Selection semantics take precedence over presentation" in prompt
     assert "presentation_intent MUST be answer even when the user asks to show notes" in prompt
+    assert "describes a distinct participant" in prompt
+    assert "Literal preservation is only for non-identity context or values" in prompt
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
