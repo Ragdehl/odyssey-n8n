@@ -19,7 +19,7 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
     schema = json.loads(runner.SCHEMA_PATH.read_text())
     cost, bound = runner.conservative_cost_ceiling(cases, context, schema)
     assert len(cases) == 13 and cost == Decimal("0.166712") and bound == 51_832
-    assert runner.MAX_COST_USD == Decimal("0.00") and not runner.OUTPUT_PATH.exists()
+    assert runner.MAX_COST_USD == Decimal("0.166712") and not runner.OUTPUT_PATH.exists()
     manifest = json.loads(runner.MANIFEST_PATH.read_text())
     actual = hashlib.sha256(
         (ROOT / "benchmarks/semantic_write_resolution_v1/evaluate.py").read_bytes()
@@ -28,6 +28,7 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
 
 
 def test_gate_refuses_without_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "x.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
