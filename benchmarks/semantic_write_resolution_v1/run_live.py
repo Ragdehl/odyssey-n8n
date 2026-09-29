@@ -31,9 +31,9 @@ OUTPUT_PATH = (
     ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
-# Reset after the authorized current-main gate completed; a rerun requires fresh approval.
+# Explicitly authorized by the user on 2026-09-29 for the eight-case active-schema gate.
 ACTIVE_REGISTRY_PATH = Path(__file__).with_name("cases_active_schema.json")
-MAX_COST_USD = Decimal("0.00")
+MAX_COST_USD = Decimal("0.1079632")
 
 
 def conservative_cost_ceiling(
