@@ -896,7 +896,29 @@ def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> No
     ]
     assert "link_scope" not in selection_schema["properties"]
     assert "self_target" not in selection_schema["properties"]
-    assert "relational_reference" in selection_schema["properties"]
+    relational_branches = selection_schema["properties"]["relational_reference"]["anyOf"]
+    assert relational_branches[0] == {"type": "null"}
+    assert {
+        branch["properties"]["source_kind"]["enum"][0] for branch in relational_branches[1:]
+    } == {
+        "self",
+        "existing",
+    }
+    assert all(
+        branch["properties"]["members"]["enum"] == ["one"] for branch in relational_branches[1:]
+    )
+    self_branch = next(
+        branch
+        for branch in relational_branches[1:]
+        if branch["properties"]["source_kind"]["enum"] == ["self"]
+    )
+    existing_branch = next(
+        branch
+        for branch in relational_branches[1:]
+        if branch["properties"]["source_kind"]["enum"] == ["existing"]
+    )
+    assert self_branch["properties"]["source_query"] == {"type": "null"}
+    assert existing_branch["properties"]["source_query"] == {"type": "string"}
     assert "members=one" in prompt
 
 
@@ -1007,6 +1029,21 @@ def test_fact_reference_rejects_complete_relational_member_set(schema: dict) -> 
 
     with pytest.raises(RequestPlanningError, match="must select one identity"):
         validate_request_plan(raw, schema)
+
+    provider_payload = provider_output(
+        planner_output(
+            write(
+                schema_unit(
+                    "Cloe",
+                    note_type="person",
+                    facts=["Fue con {{ref:0}}."],
+                    references=raw["actions"][0]["units"][0]["references"],
+                )
+            )
+        )
+    )
+    assert not schema_accepts(provider_payload, planner_result_json_schema(schema))
+    assert not schema_accepts(provider_payload, compact_planner_result_json_schema(schema))
 
 
 def test_semantic_reference_reuses_matching_same_request_target(schema: dict) -> None:

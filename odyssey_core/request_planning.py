@@ -1170,9 +1170,35 @@ def _relational_reference_json_schema() -> dict[str, Any]:
 
 
 def _reference_selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the compact fact-reference selector with optional bounded relationship anchoring."""
+    """Build the compact fact-reference selector with only singular grounded anchors."""
     selector = deepcopy(_note_selector_json_schema(capabilities))
-    selector["properties"]["relational_reference"] = _relational_reference_json_schema()
+    shared_properties = {
+        "reference": {"type": "string"},
+        "members": {"type": "string", "enum": ["one"]},
+    }
+    self_reference = {
+        "type": "object",
+        "properties": {
+            **shared_properties,
+            "source_kind": {"type": "string", "enum": ["self"]},
+            "source_query": {"type": "null"},
+        },
+        "required": ["reference", "source_kind", "source_query", "members"],
+        "additionalProperties": False,
+    }
+    existing_reference = {
+        "type": "object",
+        "properties": {
+            **shared_properties,
+            "source_kind": {"type": "string", "enum": ["existing"]},
+            "source_query": {"type": "string"},
+        },
+        "required": ["reference", "source_kind", "source_query", "members"],
+        "additionalProperties": False,
+    }
+    selector["properties"]["relational_reference"] = {
+        "anyOf": [{"type": "null"}, self_reference, existing_reference]
+    }
     selector["required"] = [*selector["required"], "relational_reference"]
     return selector
 
