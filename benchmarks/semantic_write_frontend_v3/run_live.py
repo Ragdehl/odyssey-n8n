@@ -26,7 +26,8 @@ FROZEN_SWR_PATH = _v2.FROZEN_SWR_PATH
 SENTINELS_PATH = _v2.SENTINELS_PATH
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
 OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-write-frontend-v3-luna-gate.jsonl"
-MAX_COST_USD = Decimal("0.00")
+# Explicitly authorized by the user on 2026-09-29 for the 13-case semantic-write-frontend-v3 gate.
+MAX_COST_USD = Decimal("0.1626716")
 
 conservative_cost_ceiling = _v2.conservative_cost_ceiling
 run_cases = _v2.run_cases
