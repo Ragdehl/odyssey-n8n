@@ -1,10 +1,8 @@
-"""Prepare the authorization-gated semantic-write-frontend-v7 Luna evidence."""
+"""Preserve the retired, unexecuted semantic-write-frontend-v7 lineage."""
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -14,11 +12,6 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from benchmarks.semantic_write_frontend_v6 import run_live as _v6  # noqa: E402
-from odyssey_core.experimental_luna_planning import (  # noqa: E402
-    LUNA_EXPERIMENT_MODEL,
-    LUNA_EXPERIMENT_REASONING_EFFORT,
-    OpenAILunaExperimentalPlanner,
-)
 
 SCHEMA_PATH = _v6.SCHEMA_PATH
 FROZEN_SWR_PATH = _v6.FROZEN_SWR_PATH
@@ -34,37 +27,16 @@ def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:
     return _v6.load_gate_cases()
 
 
+OpenAILunaExperimentalPlanner = _v6.OpenAILunaExperimentalPlanner
+GATE_RETIRED = True
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Refuse every invocation because v7 was superseded before provider calls."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
-    args = parser.parse_args(argv)
-    cases, context = load_gate_cases()
-    schema = json.loads(SCHEMA_PATH.read_text())
-    cost, input_bound = conservative_cost_ceiling(cases, context, schema)
-    print(
-        f"logical_cases={len(cases)} provider_call_ceiling={len(cases)} retries=0 sol_calls=0 "
-        f"model={LUNA_EXPERIMENT_MODEL} effort={LUNA_EXPERIMENT_REASONING_EFFORT} "
-        f"no_cache_max_usd={cost:.6f} luna_input_bound={input_bound}"
-    )
-    if not args.confirm_live_provider_calls:
-        raise SystemExit("Refusing live calls without --confirm-live-provider-calls")
-    if cost > MAX_COST_USD:
-        raise SystemExit(
-            f"Refusing live calls: conservative ceiling exceeds ${MAX_COST_USD:.2f} authorization"
-        )
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise SystemExit("Refusing live calls: OPENAI_API_KEY is absent from process environment")
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        evidence = OUTPUT_PATH.open("x", encoding="utf-8")
-    except FileExistsError as error:
-        raise SystemExit(f"Refusing to overwrite existing evidence: {OUTPUT_PATH}") from error
-    try:
-        planner = OpenAILunaExperimentalPlanner.from_environment(schema, context)
-        rows = run_cases(planner, cases, evidence)
-    finally:
-        evidence.close()
-    return 0 if len(rows) == len(cases) and all(row["passed"] for row in rows) else 1
+    parser.parse_args(argv)
+    raise SystemExit("Refusing live calls: semantic-write-frontend-v7 was retired unexecuted")
 
 
 if __name__ == "__main__":

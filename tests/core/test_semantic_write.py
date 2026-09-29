@@ -789,18 +789,19 @@ def test_raw_decoder_rejects_core_mechanical_fields(schema: dict, mechanical_fie
     "source",
     [
         {"kind": "SELF", "description": "me"},
-        {"kind": "EXISTING_DESCRIPTION"},
-        {"kind": "EXISTING_DESCRIPTION", "description": "dinner", "identity": {}},
+        {"kind": "SOURCE_DESCRIPTION"},
+        {"kind": "SOURCE_DESCRIPTION", "description": "dinner", "identity": {}},
+        {"kind": "EXISTING_DESCRIPTION", "description": "dinner"},
         {"kind": "OTHER"},
         {
-            "kind": "EXISTING_DESCRIPTION",
+            "kind": "SOURCE_DESCRIPTION",
             "description": "dinner",
             "source": {"kind": "SELF"},
         },
     ],
 )
 def test_candidate_source_union_rejects_correlated_or_recursive_states(source: dict) -> None:
-    """Accept only SELF or one non-recursive existing-description source."""
+    """Accept only SELF or one non-recursive described source for Core grounding."""
     target = raw_identity(
         direct_name=None,
         candidate_scope={

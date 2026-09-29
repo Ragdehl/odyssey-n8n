@@ -64,7 +64,9 @@ The semantic values preserve ownership, the full target description, explicit di
 Core deterministically derives the existing representation mechanics: local `{{ref:N}}` numbering, `KnowledgeReference` values, generic internal reference role, lookup-only units, target indexes, `source_kind` / `source_query` / `members`, and ordinary singular cardinality. The compiler immediately routes the resulting raw write shape through the existing `validate_request_plan()` path, so property, tag, type-migration, reference, bulk, and mutation invariants remain owned by the established validator. `all_matching` bulk and relational `complete_set` stay distinct semantic operations.
 
 Candidate-scope source is a closed non-recursive union: authenticated `SELF`, or
-`EXISTING_DESCRIPTION` with one bounded description. Semantic objects are closed and fully required
+`SOURCE_DESCRIPTION` with one bounded description. `SOURCE_DESCRIPTION` is deliberately not an
+existence assertion: it records the source described by the request, while Core must resolve that
+source against existing canonical evidence or clarify. Semantic objects are closed and fully required
 for Structured Outputs. The wire contract cannot express units, cardinality, reference indexes,
 lookup-only flags, roles, or relational source/member plumbing. The raw decoder rejects open or
 correlated shapes; `compile_semantic_write()` remains authoritative for lowering and established
@@ -90,9 +92,9 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 32,051 bytes | -25 (-0.08%) |
-| Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
-| Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
+| Luna prompt | 32,076 bytes | 32,158 bytes | +82 (+0.26%) |
+| Luna provider schema | 22,521 bytes | 18,539 bytes | -3,982 (-17.7%) |
+| Luna WRITE schema branch | 7,343 bytes | 3,378 bytes | -3,965 (-54.0%) |
 
 These are contract-size measurements, not latency evidence. The old-contract v9 runner is
 permanently retired before provider construction. The consumed `semantic-write-frontend-v1` gate
@@ -131,19 +133,22 @@ anchor, while the deterministic semantic compiler intentionally uses `mi hija` a
 and keeps `mayor` in the full target description. That oracle detail is corrected; the real
 `bounded_companion_relation` failure remains unchanged.
 
-The v6 correction refined the existing generic teaching example rather than adding prompt rules: a
-participant explicitly described as coming from a specific named roster carries its own
-`EXISTING_DESCRIPTION` scope even when the request does not literally say “existing”. The authorized
-v6 gate passed SWR01-SWR03 but stopped on SWR04 because Luna made authenticated self the owner of the
-child's cinema fact and represented the child as another fact identity. That violates the unchanged
-ownership contract: first-person possession is identity evidence, not self write authority.
+The v6 correction refined the existing generic teaching example rather than adding prompt rules. The
+authorized v6 gate passed SWR01-SWR03 but stopped on SWR04 because Luna made authenticated self the
+owner of the child's cinema fact and represented the child as another fact identity. That regression
+appeared only after retuning the teaching example to repair SWR08, while the earlier v4/v5 checkpoints
+had repeatedly passed SWR01-SWR07. This is evidence of non-monotonic example tuning rather than a need
+for more phrase-specific examples.
 
-The offline v7 correction adds no prompt rule and no new example. It clarifies the lessons of the two
-existing generic examples: self owns the museum relationship fact because the request explicitly says
-participants joined self, whereas the bounded mentor owns its own conference fact even though self
-provides the candidate relationship. The bounded-participant lesson remains intact. v7 keeps the same
-13 requests and evaluator hash, has a 51,796-byte conservative input bound and `$0.1666184` no-cache
-ceiling, and is locked at `MAX_COST_USD=$0.00` pending fresh authorization.
+The architecture review therefore retires frontend-v7 **without provider calls** and restores the
+teaching examples semantically to the known-best v5 checkpoint. The remaining SWR08 ambiguity is moved
+into the semantic contract itself: provider-facing `EXISTING_DESCRIPTION` becomes
+`SOURCE_DESCRIPTION`. Luna no longer has to claim that the source exists; it only describes the source
+that bounds the identity, and Core remains responsible for grounding it against canonical evidence or
+clarifying. The internal lowered `source_kind=existing` behavior is unchanged. No new teaching example,
+relationship taxonomy, Core resolver rule, or mutation authority is added. Offline frontend-v8 reuses
+the same 13 requests and pinned evaluator, has a 51,901-byte conservative input bound and `$0.1668914`
+no-cache ceiling, and is locked at `MAX_COST_USD=$0.00`.
 
 ## Possessives are identity evidence, not self authority
 
@@ -245,7 +250,7 @@ The user then authorized semantic-write-frontend-v4 at its `$0.1657318` conserva
 once at authorization commit `3fb65b7`, passed SWR01-SWR07, and stopped fail-fast on SWR08 after eight
 completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
 `1963296cbcc857c0f07703b0b045ee411b3aabed826a4d689bf822ed9b975652`; the usage-backed
-checked-in-pricing estimate is `$0.00631928`. The user then authorized v5 at `$0.1664832`. It also passed SWR01-SWR07 and stopped on SWR08 after eight Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c`; usage-backed cost is `$0.00604402`. The user then authorized v6 at `$0.166712`. It passed SWR01-SWR03 and stopped on SWR04 after four Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `0a4b2524bda2605bcbcc6e4f7662090c0089e4c2cc264089ab83c3ecb9b0ab2e`; usage-backed cost is `$0.00380722`. The v1-v6 runners/paths are permanently consumed. The v7 successor is offline-only and unauthorized.
+checked-in-pricing estimate is `$0.00631928`. The user then authorized v5 at `$0.1664832`. It also passed SWR01-SWR07 and stopped on SWR08 after eight Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c`; usage-backed cost is `$0.00604402`. The user then authorized v6 at `$0.166712`. It passed SWR01-SWR03 and stopped on SWR04 after four Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `0a4b2524bda2605bcbcc6e4f7662090c0089e4c2cc264089ab83c3ecb9b0ab2e`; usage-backed cost is `$0.00380722`. The v1-v6 runners/paths are permanently consumed. Frontend-v7 was retired unexecuted after the design review; frontend-v8 is offline-only and unauthorized.
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 

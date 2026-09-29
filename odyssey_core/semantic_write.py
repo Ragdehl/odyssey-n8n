@@ -147,7 +147,7 @@ def semantic_write_schema_definitions(schema: Mapping[str, Any]) -> dict[str, An
                         "properties": {
                             "kind": {
                                 "type": "string",
-                                "enum": ["EXISTING_DESCRIPTION"],
+                                "enum": ["SOURCE_DESCRIPTION"],
                             },
                             "description": {"type": "string", "maxLength": 256},
                         },
@@ -387,7 +387,7 @@ def _decode_identity(raw: Any) -> IdentityIntent:
 
 
 def _decode_candidate_scope(raw: Any) -> CandidateScope | None:
-    """Decode the closed SELF/existing-description source union without recursive identity."""
+    """Decode the closed SELF/source-description union without recursive identity."""
     if raw is None:
         return None
     if not isinstance(raw, dict) or set(raw) != {"source", "member_query", "extent"}:
@@ -397,7 +397,7 @@ def _decode_candidate_scope(raw: Any) -> CandidateScope | None:
         raise SemanticWriteCompileError("Candidate source is invalid")
     if set(source) == {"kind"} and source["kind"] == "SELF":
         decoded_source: IdentityBinding | ExistingSource = IdentityBinding.SELF
-    elif set(source) == {"kind", "description"} and source["kind"] == "EXISTING_DESCRIPTION":
+    elif set(source) == {"kind", "description"} and source["kind"] == "SOURCE_DESCRIPTION":
         decoded_source = ExistingSource(source["description"])
     else:
         raise SemanticWriteCompileError("Candidate source fields are invalid")

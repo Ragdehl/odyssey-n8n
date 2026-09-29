@@ -304,10 +304,10 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     schema_bytes = len(
         json.dumps(result_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     )
-    assert write_branch_bytes == 3_380
+    assert write_branch_bytes == 3_378
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 32_051
-    assert schema_bytes == 18_541
+    assert prompt_bytes == 32_158
+    assert schema_bytes == 18_539
 
 
 def test_luna_prompt_contains_one_semantic_write_language(schema: dict[str, Any]) -> None:
@@ -322,7 +322,7 @@ def test_luna_prompt_contains_one_semantic_write_language(schema: dict[str, Any]
     ):
         assert legacy not in prompt
     assert "Each write action owns its ordered operations array" in prompt
-    assert "candidate_scope.source is either SELF or one EXISTING_DESCRIPTION" in prompt
+    assert "candidate_scope.source is either SELF or one SOURCE_DESCRIPTION" in prompt
 
 
 def test_plan_reuses_existing_local_validation(schema: dict[str, Any]) -> None:
@@ -806,15 +806,15 @@ def test_relational_target_with_described_reference_teaching_example_compiles(
     assert material[0].target.query == "my mentor who works remotely"
     assert material[0].facts == ("Attended a conference with {{ref:0}}.",)
     assert material[0].references[0].mention == (
-        "the designer from the Riverside workshop roster who lives in Porto"
+        "the designer from the existing Riverside workshop roster who lives in Porto"
     )
     assert lookups[0].target.query == (
-        "the designer from the Riverside workshop roster who lives in Porto"
+        "the designer from the existing Riverside workshop roster who lives in Porto"
     )
     companion_relation = lookups[0].target.relational_reference
     assert companion_relation is not None
     assert companion_relation.source_kind == "existing"
-    assert companion_relation.source_query == "the Riverside workshop roster"
+    assert companion_relation.source_query == "the existing Riverside workshop roster"
     assert companion_relation.members == "one"
 
 

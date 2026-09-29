@@ -154,7 +154,7 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic WRITE intent/Core compiler simplification                ➡️ v6 failed SWR04; offline v7 correction on Draft PR #147
+Semantic WRITE intent/Core compiler simplification                ➡️ v6 failed SWR04; v7 retired; offline frontend-v8 design on Draft PR #147
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
@@ -168,18 +168,17 @@ Projects — compose over Tasks                                     ⬜ planned 
 Draft PR #147 now contains the first reversible offline Luna-only semantic WRITE frontend.
 Provider-free assertions keep Sol's 25,474-byte prompt and 47,418-byte provider schema identical to
 baseline while Luna compiles each ordered semantic write action immediately into the existing
-`WriteAction` / `RequestPlan` boundary. The corrected Luna prompt is 32,051 bytes (from 32,076), the whole
-schema is 18,541 bytes (from 22,521), and the WRITE branch is 3,380 bytes (from 7,343); these are
-size measurements only, not latency evidence. Historical v8 assets remain immutable, old-contract
-v9 is retired unexecuted. The authorized v1-v5 gates progressively exposed participant identity,
-invented-source, target-plus-reference, and bounded-participant teaching gaps. The authorized v6 gate
-passed SWR01-SWR03 but regressed on SWR04 by writing the child-owned cinema fact onto authenticated
-self and lowering the child as another fact identity. The frozen ownership oracle is retained. The
-offline v7 correction adds no prompt rule or example: it clarifies the ownership lesson in the two
-existing generic examples so self owns a relationship fact only when the assertion actually involves
-self, while first-person possession may bound another target without transferring ownership. The
-unchanged 13-case v7 gate has a 51,796-byte input bound and `$0.1666184` conservative ceiling and
-remains locked at `MAX_COST_USD=$0.00`; live adoption is blocked on fresh explicit authorization.
+`WriteAction` / `RequestPlan` boundary. After the v6 regression review, the teaching data is restored
+semantically to the last stable checkpoint that passed SWR01-SWR07. The current Luna prompt is 32,158
+bytes (from 32,076), the whole schema is 18,539 bytes (from 22,521), and the WRITE branch is 3,378
+bytes (from 7,343); these are size measurements only, not latency evidence. Historical v8 assets remain
+immutable and old-contract v9 is retired unexecuted. The authorized v6 gate passed SWR01-SWR03 but
+regressed on SWR04 after example retuning. Rather than continue that non-monotonic tuning, frontend-v7
+is retired unexecuted. Offline frontend-v8 restores the known-best teaching semantics and changes only
+the semantic source vocabulary: provider-facing `EXISTING_DESCRIPTION` becomes `SOURCE_DESCRIPTION`.
+This no longer asks Luna to assert source existence; it describes the user-supplied source and Core
+must ground it as existing canonical evidence or clarify. The same 13-case gate has a 51,901-byte input
+bound and `$0.1668914` conservative ceiling and remains locked at `MAX_COST_USD=$0.00`.
 
 Earlier latency observations motivate P1 but do not predetermine its bottleneck or authorize a fast path.
 

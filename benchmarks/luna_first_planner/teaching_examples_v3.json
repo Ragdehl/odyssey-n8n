@@ -279,11 +279,11 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "Self owns this fact because Hana and Luis explicitly joined me. Possessive wording about another subject does not make self its owner. Keep one self-targeted operation with participant identity parts."
+      "lesson": "The authenticated human owns this one relationship fact. Keep one self-targeted operation and encode each safely selectable participant as an identity part; do not create participant-targeted operations."
     },
     {
       "id": "teach-relational-target-with-described-reference",
-      "request": "Remember that my mentor who works remotely attended a conference with the designer from the Riverside workshop roster who lives in Porto.",
+      "request": "Remember that my mentor who works remotely attended a conference with the designer from the existing Riverside workshop roster who lives in Porto.",
       "result": {
         "outcome": "PLAN",
         "actions": [
@@ -316,19 +316,19 @@
                       },
                       {
                         "kind": "identity",
-                        "text": "the designer from the Riverside workshop roster who lives in Porto",
+                        "text": "the designer from the existing Riverside workshop roster who lives in Porto",
                         "identity": {
-                          "description": "the designer from the Riverside workshop roster who lives in Porto",
+                          "description": "the designer from the existing Riverside workshop roster who lives in Porto",
                           "binding": "described",
                           "direct_name": null,
                           "note_type": "person",
                           "filters": [],
                           "candidate_scope": {
                             "source": {
-                              "kind": "EXISTING_DESCRIPTION",
-                              "description": "the Riverside workshop roster"
+                              "kind": "SOURCE_DESCRIPTION",
+                              "description": "the existing Riverside workshop roster"
                             },
-                            "member_query": "the designer from the Riverside workshop roster",
+                            "member_query": "the designer from the existing Riverside workshop roster",
                             "extent": "one_member"
                           }
                         }
@@ -351,7 +351,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "The mentor owns the conference fact; self only bounds which mentor is meant. Keep that target independent from the bounded participant. A specific named membership source may use candidate_scope without the word 'existing'; Core must ground it or clarify, and candidate_scope never creates it. Mere event context stays unbounded."
+      "lesson": "Keep the bounded target and bounded fact participant independent. When the participant explicitly comes from an existing canonical source, preserve that source in identity candidate_scope and keep other qualifiers in description."
     },
     {
       "id": "teach-relational-complete-set-write",
@@ -371,7 +371,7 @@
                   "filters": [],
                   "candidate_scope": {
                     "source": {
-                      "kind": "EXISTING_DESCRIPTION",
+                      "kind": "SOURCE_DESCRIPTION",
                       "description": "the existing Atlas project note"
                     },
                     "member_query": "everyone listed as a member in the existing Atlas project note",
