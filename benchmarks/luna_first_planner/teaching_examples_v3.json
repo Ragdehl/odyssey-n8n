@@ -279,7 +279,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "The authenticated human owns this one relationship fact. Keep one self-targeted operation and encode each safely selectable participant as an identity part; do not create participant-targeted operations."
+      "lesson": "Self owns this fact because Hana and Luis explicitly joined me. Possessive wording about another subject does not make self its owner. Keep one self-targeted operation with participant identity parts."
     },
     {
       "id": "teach-relational-target-with-described-reference",
@@ -351,7 +351,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "Keep the bounded target and bounded fact participant independent. Wording that defines an identity as a member of a specific named source may use candidate_scope even without the word 'existing'; Core must still ground that source or clarify, and candidate_scope never creates it. Mere descriptive event context without a named membership source stays unbounded."
+      "lesson": "The mentor owns the conference fact; self only bounds which mentor is meant. Keep that target independent from the bounded participant. A specific named membership source may use candidate_scope without the word 'existing'; Core must ground it or clarify, and candidate_scope never creates it. Mere event context stays unbounded."
     },
     {
       "id": "teach-relational-complete-set-write",

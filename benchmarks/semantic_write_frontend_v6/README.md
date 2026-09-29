@@ -1,9 +1,14 @@
 # Semantic WRITE frontend v6
 
-This is the offline successor to consumed v5. It reuses the same 10 SWR cases and 3 generic sentinels.
+This gate is permanently consumed. The user authorized the 13-case Luna/low gate at its `$0.166712`
+conservative ceiling. It ran once at authorization commit `90f796e` and stopped fail-fast on SWR04
+after four completed Luna/low calls, with zero retries and zero Sol calls. SWR01-SWR03 passed.
 
-v5 passed SWR01-SWR07 and failed SWR08 because the described companion lost its named event-source bound. The run also exposed one over-constrained SWR08 oracle detail: requiring `mayor` inside the relationship anchor contradicted the deterministic compiler contract, which intentionally allows `mi hija` as the candidate universe while retaining `mi hija mayor` in the full target description. v6 corrects that oracle detail and keeps the real bounded-companion requirement unchanged.
+SWR04 (`Mi hijo mayor fue al cine con la amiga que vive en Lyon.`) incorrectly made authenticated
+self the write owner and lowered both the child and friend as fact identities. The request instead
+asserts a fact about the child; first-person possession only supplies identity evidence. The frozen
+ownership oracle is retained.
 
-The only model-facing correction refines the existing generic mentor/designer teaching example: a participant defined as coming from a specific named roster carries `EXISTING_DESCRIPTION` even without the literal word “existing”. This does not assert the source exists or authorize creation; Core must ground it or clarify. Mere descriptive event context without named membership remains unbounded.
-
-The gate permits at most 13 Luna/low calls, zero retries, and zero Sol calls. Conservative input bound: 51,832 bytes. No-cache ceiling: `$0.166712`. `MAX_COST_USD` remains `$0.00` until fresh explicit authorization.
+The immutable artifact is `benchmarks/.live-results/semantic-write-frontend-v6-luna-gate.jsonl`,
+SHA-256 `0a4b2524bda2605bcbcc6e4f7662090c0089e4c2cc264089ab83c3ecb9b0ab2e`. Usage-backed cost from the
+checked-in pricing snapshot is `$0.00380722`. The v6 runner is permanently consumed at `$0.00`.

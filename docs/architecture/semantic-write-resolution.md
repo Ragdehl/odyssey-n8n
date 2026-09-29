@@ -90,7 +90,7 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 32,087 bytes | +11 (+0.03%) |
+| Luna prompt | 32,076 bytes | 32,051 bytes | -25 (-0.08%) |
 | Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
 | Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
 
@@ -131,13 +131,19 @@ anchor, while the deterministic semantic compiler intentionally uses `mi hija` a
 and keeps `mayor` in the full target description. That oracle detail is corrected; the real
 `bounded_companion_relation` failure remains unchanged.
 
-The offline v6 correction refines the existing generic teaching example rather than adding prompt rules:
-a participant explicitly described as coming from a specific named roster carries its own
-`EXISTING_DESCRIPTION` scope even when the request does not literally say “existing”. This scope does
-not assert source existence or authorize creation; Core must ground the source or clarify. Mere event
-context without named membership remains unbounded. v6 keeps the same 13 requests, has a 51,832-byte
-conservative input bound and `$0.166712` no-cache ceiling, and is locked at `MAX_COST_USD=$0.00` pending
-fresh authorization. The v6 manifest also pins the evaluator hash so future oracle drift is explicit.
+The v6 correction refined the existing generic teaching example rather than adding prompt rules: a
+participant explicitly described as coming from a specific named roster carries its own
+`EXISTING_DESCRIPTION` scope even when the request does not literally say “existing”. The authorized
+v6 gate passed SWR01-SWR03 but stopped on SWR04 because Luna made authenticated self the owner of the
+child's cinema fact and represented the child as another fact identity. That violates the unchanged
+ownership contract: first-person possession is identity evidence, not self write authority.
+
+The offline v7 correction adds no prompt rule and no new example. It clarifies the lessons of the two
+existing generic examples: self owns the museum relationship fact because the request explicitly says
+participants joined self, whereas the bounded mentor owns its own conference fact even though self
+provides the candidate relationship. The bounded-participant lesson remains intact. v7 keeps the same
+13 requests and evaluator hash, has a 51,796-byte conservative input bound and `$0.1666184` no-cache
+ceiling, and is locked at `MAX_COST_USD=$0.00` pending fresh authorization.
 
 ## Possessives are identity evidence, not self authority
 
@@ -239,7 +245,7 @@ The user then authorized semantic-write-frontend-v4 at its `$0.1657318` conserva
 once at authorization commit `3fb65b7`, passed SWR01-SWR07, and stopped fail-fast on SWR08 after eight
 completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
 `1963296cbcc857c0f07703b0b045ee411b3aabed826a4d689bf822ed9b975652`; the usage-backed
-checked-in-pricing estimate is `$0.00631928`. The user then authorized v5 at `$0.1664832`. It also passed SWR01-SWR07 and stopped on SWR08 after eight Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c`; usage-backed cost is `$0.00604402`. The v1-v5 runners/paths are permanently consumed. The v6 successor is offline-only and unauthorized.
+checked-in-pricing estimate is `$0.00631928`. The user then authorized v5 at `$0.1664832`. It also passed SWR01-SWR07 and stopped on SWR08 after eight Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `a94c33198b96bfbb152e3402ba04e7acba6fbeafff8e4b315fb9343c07d9987c`; usage-backed cost is `$0.00604402`. The user then authorized v6 at `$0.166712`. It passed SWR01-SWR03 and stopped on SWR04 after four Luna/low calls, zero retries, and zero Sol calls. Its retained artifact SHA-256 is `0a4b2524bda2605bcbcc6e4f7662090c0089e4c2cc264089ab83c3ecb9b0ab2e`; usage-backed cost is `$0.00380722`. The v1-v6 runners/paths are permanently consumed. The v7 successor is offline-only and unauthorized.
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 
