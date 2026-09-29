@@ -28,12 +28,12 @@ from odyssey_core.experimental_luna_planning import (  # noqa: E402
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
 OUTPUT_PATH = (
-    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema.jsonl"
+    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema-v2.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
-# Explicitly authorized by the user on 2026-09-29 for the eight-case active-schema gate.
+# Reset after the first active-schema attempt stopped fail-fast; a corrected-contract rerun requires fresh approval.
 ACTIVE_REGISTRY_PATH = Path(__file__).with_name("cases_active_schema.json")
-MAX_COST_USD = Decimal("0.1079632")
+MAX_COST_USD = Decimal("0.00")
 
 
 def conservative_cost_ceiling(

@@ -265,7 +265,7 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     assert Decimal("0.10") < cost < Decimal("0.12")
     assert input_bound > 0
 
-    assert runner.MAX_COST_USD == Decimal("0.1079632")
+    assert runner.MAX_COST_USD == Decimal("0.00")
 
 
 def test_over_budget_refuses_before_provider_construction(
