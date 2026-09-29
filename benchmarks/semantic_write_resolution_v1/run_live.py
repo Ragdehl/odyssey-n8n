@@ -28,10 +28,10 @@ from odyssey_core.experimental_luna_planning import (  # noqa: E402
 SCHEMA_PATH = ROOT / "config" / "note-schema.json"
 PRICING_PATH = ROOT / "benchmarks" / "performance_p1" / "pricing_snapshot.json"
 OUTPUT_PATH = (
-    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema-v6.jsonl"
+    ROOT / "benchmarks" / ".live-results" / "semantic-write-resolution-v1-active-schema-v7.jsonl"
 )
 INPUT_OVERHEAD_BYTES = 1024
-# v6 path is reserved for the tightened relational fact-reference provider contract; authorization remains reset.
+# v7 path is reserved for the same-target fact-reference invariant; authorization remains reset.
 ACTIVE_REGISTRY_PATH = Path(__file__).with_name("cases_active_schema.json")
 MAX_COST_USD = Decimal("0.00")
 

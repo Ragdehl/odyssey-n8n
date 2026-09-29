@@ -920,6 +920,43 @@ def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> No
     assert self_branch["properties"]["source_query"] == {"type": "null"}
     assert existing_branch["properties"]["source_query"] == {"type": "string"}
     assert "members=one" in prompt
+    assert "must denote a different logical note from its own KnowledgeUnit target" in prompt
+
+
+def test_fact_reference_cannot_select_its_own_unit_target(schema: dict) -> None:
+    """Fail closed when a model redundantly turns the write subject into a fact reference."""
+    target_query = "mi hijo mayor"
+    relation = {
+        "reference": target_query,
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    raw_unit = schema_unit(
+        target_query,
+        note_type="person",
+        facts=["{{ref:0}} fue al cine."],
+        references=[
+            {
+                "selection": reference_selection(
+                    target_query,
+                    note_type="person",
+                    relational_reference=relation,
+                ),
+                "role": "subject",
+                "mention": target_query,
+            }
+        ],
+    )
+    raw_unit["target"]["relational_reference"] = relation
+    payload = provider_output(planner_output(write(raw_unit)))
+
+    assert schema_accepts(payload, planner_result_json_schema(schema))
+    assert schema_accepts(payload, compact_planner_result_json_schema(schema))
+    with pytest.raises(RequestPlanningError, match="cannot select its own") as raised:
+        validate_planner_result(payload["result"], schema)
+    assert raised.value.validation_stage is PlannerValidationStage.KNOWLEDGE_UNIT
+    assert raised.value.validation_code is PlannerValidationCode.INVALID_REFERENCE
 
 
 def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dict) -> None:
