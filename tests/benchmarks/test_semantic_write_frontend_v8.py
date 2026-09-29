@@ -19,8 +19,8 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
     schema = json.loads(runner.SCHEMA_PATH.read_text())
     cost, bound = runner.conservative_cost_ceiling(cases, context, schema)
     assert len(cases) == 13
-    assert cost == Decimal("0.1668914")
-    assert bound == 51_901
+    assert cost == Decimal("0.1672112")
+    assert bound == 52_024
     assert runner.MAX_COST_USD == Decimal("0.00")
     assert not runner.OUTPUT_PATH.exists()
     manifest = json.loads(runner.MANIFEST_PATH.read_text())

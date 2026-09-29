@@ -92,7 +92,7 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 32,158 bytes | +82 (+0.26%) |
+| Luna prompt | 32,076 bytes | 32,281 bytes | +82 (+0.26%) |
 | Luna provider schema | 22,521 bytes | 18,539 bytes | -3,982 (-17.7%) |
 | Luna WRITE schema branch | 7,343 bytes | 3,378 bytes | -3,965 (-54.0%) |
 
@@ -147,7 +147,7 @@ into the semantic contract itself: provider-facing `EXISTING_DESCRIPTION` become
 that bounds the identity, and Core remains responsible for grounding it against canonical evidence or
 clarifying. The internal lowered `source_kind=existing` behavior is unchanged. No new teaching example,
 relationship taxonomy, Core resolver rule, or mutation authority is added. Offline frontend-v8 reuses
-the same 13 requests and pinned evaluator, has a 51,901-byte conservative input bound and `$0.1668914`
+the same 13 requests and pinned evaluator, has a 52,024-byte conservative input bound and `$0.1672112`
 no-cache ceiling, and is locked at `MAX_COST_USD=$0.00`.
 
 ## Possessives are identity evidence, not self authority

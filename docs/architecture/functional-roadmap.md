@@ -177,8 +177,8 @@ regressed on SWR04 after example retuning. Rather than continue that non-monoton
 is retired unexecuted. Offline frontend-v8 restores the known-best teaching semantics and changes only
 the semantic source vocabulary: provider-facing `EXISTING_DESCRIPTION` becomes `SOURCE_DESCRIPTION`.
 This no longer asks Luna to assert source existence; it describes the user-supplied source and Core
-must ground it as existing canonical evidence or clarify. The same 13-case gate has a 51,901-byte input
-bound and `$0.1668914` conservative ceiling and remains locked at `MAX_COST_USD=$0.00`.
+must ground it as existing canonical evidence or clarify. The same 13-case gate has a 52,024-byte input
+bound and `$0.1672112` conservative ceiling and remains locked at `MAX_COST_USD=$0.00`.
 
 Earlier latency observations motivate P1 but do not predetermine its bottleneck or authorize a fast path.
 
