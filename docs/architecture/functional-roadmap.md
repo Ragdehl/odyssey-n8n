@@ -154,7 +154,7 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic WRITE intent/Core compiler simplification                ➡️ v6 failed SWR04; v7 retired; offline frontend-v8 design on Draft PR #147
+Semantic WRITE intent/Core compiler simplification                ➡️ v8 complete matrix: 12/13 passed; SWR07 remains unresolved on Draft PR #147
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
@@ -177,8 +177,7 @@ regressed on SWR04 after example retuning. Rather than continue that non-monoton
 is retired unexecuted. Offline frontend-v8 restores the known-best teaching semantics and changes only
 the semantic source vocabulary: provider-facing `EXISTING_DESCRIPTION` becomes `SOURCE_DESCRIPTION`.
 This no longer asks Luna to assert source existence; it describes the user-supplied source and Core
-must ground it as existing canonical evidence or clarify. The same 13-case gate now collects all 13 results even if an earlier oracle fails, so one authorized run gives a complete diagnostic matrix. It has a 52,024-byte input
-bound and `$0.1672112` conservative ceiling and remains locked at `MAX_COST_USD=$0.00`.
+must ground it as existing canonical evidence or clarify. The same 13-case gate collected the complete matrix in one authorized run: **12/13 passed**. SWR08 and SWR10 passed; only SWR07 failed because Luna kept the full qualified participant description but omitted its source-bounded candidate scope. This makes the remaining weakness explicit rather than hiding later results behind fail-fast. The v8 lineage is now permanently consumed at `MAX_COST_USD=$0.00`.
 
 Earlier latency observations motivate P1 but do not predetermine its bottleneck or authorize a fast path.
 

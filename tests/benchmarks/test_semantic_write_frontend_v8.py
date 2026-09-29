@@ -21,13 +21,24 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
     assert len(cases) == 13
     assert cost == Decimal("0.1672112")
     assert bound == 52_024
-    assert runner.MAX_COST_USD == Decimal("0.1672112")
-    assert not runner.OUTPUT_PATH.exists()
+    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.GATE_CONSUMED is True
     manifest = json.loads(runner.MANIFEST_PATH.read_text())
     actual = hashlib.sha256(
         (ROOT / "benchmarks/semantic_write_resolution_v1/evaluate.py").read_bytes()
     ).hexdigest()
     assert manifest["evaluator_sha256"] == actual
+    assert manifest["provider_calls_made"] == 13
+    assert manifest["result"] == "12_passed_1_failed_swr07"
+    assert (
+        manifest["artifact_sha256"]
+        == "49e3598e4f8fb8131bfd0122501160cf113ca4da952112207e7573fa2b98be61"
+    )
+    if runner.OUTPUT_PATH.exists():
+        assert (
+            hashlib.sha256(runner.OUTPUT_PATH.read_bytes()).hexdigest()
+            == manifest["artifact_sha256"]
+        )
     assert manifest["failure_policy"] == "collect_all_case_results"
     assert manifest["logical_cases"] == 13
     assert manifest["max_provider_calls"] == 13
@@ -35,17 +46,18 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
     assert manifest["sol_calls"] == 0
 
 
-def test_gate_refuses_without_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
+def test_consumed_gate_refuses_before_provider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "x.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
         "from_environment",
         lambda *_a, **_k: pytest.fail("provider constructed"),
     )
-    with pytest.raises(SystemExit, match=r"exceeds \$0.0000000 authorization"):
+    with pytest.raises(SystemExit, match="permanently consumed"):
         runner.main(["--confirm-live-provider-calls"])
-    assert not runner.OUTPUT_PATH.exists()
 
 
 def test_gate_collects_all_cases_after_failures(monkeypatch: pytest.MonkeyPatch) -> None:

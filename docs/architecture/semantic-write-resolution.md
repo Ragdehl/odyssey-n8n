@@ -146,9 +146,7 @@ into the semantic contract itself: provider-facing `EXISTING_DESCRIPTION` become
 `SOURCE_DESCRIPTION`. Luna no longer has to claim that the source exists; it only describes the source
 that bounds the identity, and Core remains responsible for grounding it against canonical evidence or
 clarifying. The internal lowered `source_kind=existing` behavior is unchanged. No new teaching example,
-relationship taxonomy, Core resolver rule, or mutation authority is added. Offline frontend-v8 reuses
-the same 13 requests and pinned evaluator and deliberately continues after failed oracles to collect the complete matrix in one authorized run. It has a 52,024-byte conservative input bound and `$0.1672112`
-no-cache ceiling, and is locked at `MAX_COST_USD=$0.00`.
+relationship taxonomy, Core resolver rule, or mutation authority is added. Frontend-v8 reused the same 13 requests and pinned evaluator and deliberately continued after failed oracles to collect the complete matrix. The authorized run completed all 13 cases: **12 passed and only SWR07 failed**. SWR08 and SWR10 both passed under `SOURCE_DESCRIPTION`. SWR07 preserved the full qualified participant wording but omitted candidate scope, widening it to a global descriptive target instead of a bounded event-source member. The retained artifact SHA-256 is `49e3598e4f8fb8131bfd0122501160cf113ca4da952112207e7573fa2b98be61`; usage-backed estimated cost is `$0.00912232`. v8 is permanently consumed at zero authority.
 
 ## Possessives are identity evidence, not self authority
 
