@@ -36,7 +36,11 @@ from .observability import (
     normalize_provider_usage,
 )
 from .persistence import ActorInput
-from .reference_binding import PendingReference, render_reference_facts
+from .reference_binding import (
+    PendingReference,
+    bind_canonical_reference_mentions,
+    render_reference_facts,
+)
 from .reference_preflight import (
     RelationshipWritePreflightError,
     UnitTargetPreflight,
@@ -927,13 +931,14 @@ def _execute_write(
             span_recorder=spans,
             **kwargs,
         )
-        rendering = spans.invoke("reference_render", render_reference_facts, action, preflight)
+        executable = bind_canonical_reference_mentions(action, preflight)
+        rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
     except Exception as error:
         return ActionResult(
             action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
         )
     results = _execute_single_units(
-        action,
+        executable,
         preflight,
         rendering.pending_references,
         rendering.rendered_facts,
@@ -1061,6 +1066,7 @@ def _execute_relational_write(
                 span_recorder=spans,
                 **kwargs,
             )
+        executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
         if rendering.pending_references:
             raise RelationshipWritePreflightError("Relationship member binding is incomplete")

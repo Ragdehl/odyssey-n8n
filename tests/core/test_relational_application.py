@@ -1803,7 +1803,8 @@ def test_semantic_fact_reference_resolves_existing_note_without_lookup_write(
     assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
     assert result.affected_stable_note_ids == ("bruno",)
     bruno = parse_note((vault / "people/bruno.md").read_text()).content
-    assert "[[people/marta|la amiga con la que cenamos ayer]]" in bruno
+    assert "[[people/marta|Marta]]" in bruno
+    assert "la amiga con la que cenamos ayer" not in bruno
     assert (vault / "people/marta.md").read_bytes() == before_marta
     assert len(list(vault.rglob("*.md"))) == 2
     unit_results = result.action_results[0].unit_results
@@ -2050,7 +2051,8 @@ def test_schema_backed_missing_reference_is_created_and_linked(
     project_link = project_paths[0].with_suffix("").relative_to(vault).as_posix()
     assert "[[people/axel|Axel]]" in self_content
     assert "[[people/denis|Denis]]" in self_content
-    assert f"[[{project_link}|el proyecto Faro]]" in self_content
+    assert f"[[{project_link}|Faro]]" in self_content
+    assert "|el proyecto Faro]]" not in self_content
     assert (vault / "people/axel.md").read_bytes() == before_axel
     assert (vault / "people/denis.md").read_bytes() == before_denis
     assert len(list(vault.rglob("*.md"))) == 4

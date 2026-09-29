@@ -37,14 +37,14 @@ metadata; the filename is a stable creation-time label and always contains the f
 ## Phase 16.5C scope
 
 Phase 16.5C is deliberately small. It does not resolve identity, allocate IDs, persist notes, run
-HITL, or decide whether occurrence wording should become a durable alias. It consumes the already
-validated `KnowledgeUnit` plus the Phase 16.5B preflight table and produces writer-ready facts.
+HITL, or promote occurrence wording into aliases. It consumes the already validated `KnowledgeUnit`
+plus the Phase 16.5B preflight table and produces writer-ready facts.
 
 ```text
 {{ref:N}}
     |
-    +--> target has one safe path
-    |       -> [[vault/path-without-.md|mention]]
+    +--> target has one safe path + canonical name
+    |       -> [[vault/path-without-.md|canonical name]]
     |
     `--> target still needs clarification
             -> mention as plain text
@@ -52,14 +52,14 @@ validated `KnowledgeUnit` plus the Phase 16.5B preflight table and produces writ
 ```
 
 The link target is always derived from the authoritative existing path or the preallocated CREATE
-path. The display text is the occurrence-local `mention`. The renderer never performs a second
-identity lookup and never guesses from a human name or alias.
+path. Once identity is resolved, the display text is always the target's canonical `name`; the
+occurrence-local `mention` remains resolution/clarification wording and never becomes durable alias
+text implicitly. The renderer never performs a second identity lookup.
 
-A resolved wikilink must preserve the exact `mention` only when that text is syntactically safe as an
-Obsidian display label. If the mention itself contains structural wikilink delimiters such as `|`,
-`[` or `]` (or unsafe control/newline characters), Core fails closed rather than altering the wording
-or emitting ambiguous Markdown. An unresolved reference may still remain as plain mention text because
-no wikilink syntax is being constructed in that case.
+A resolved canonical name must be syntactically safe as an Obsidian display label. If it contains
+structural wikilink delimiters such as `|`, `[` or `]` (or unsafe control/newline characters), Core
+fails closed rather than emitting ambiguous Markdown. An unresolved reference remains plain original
+mention text because no canonical identity or wikilink has been authorized yet.
 
 Phase 16.5C itself remains non-persisting. Durable pending-reference artifacts are a later
 application/HITL concern described below.

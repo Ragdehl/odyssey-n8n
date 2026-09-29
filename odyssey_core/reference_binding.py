@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .request_planning import KnowledgeReference, KnowledgeUnit, WriteAction
@@ -42,6 +42,36 @@ class ReferenceRenderingResult:
 
     rendered_facts: tuple[tuple[str, ...], ...]
     pending_references: tuple[PendingReference, ...]
+
+
+def bind_canonical_reference_mentions(
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+) -> WriteAction:
+    """Replace resolved reference mentions with the target canonical name.
+
+    Unresolved references retain the user's wording so clarification remains readable. Resolved
+    references use canonical display text in durable Markdown; identity is still carried by the
+    authoritative preflight path/stable ID.
+    """
+    if len(preflight) != len(action.units):
+        raise ReferenceBindingError("Reference preflight table must match unit count exactly")
+    bound_units: list[KnowledgeUnit] = []
+    for unit in action.units:
+        bound_references: list[KnowledgeReference] = []
+        for reference in unit.references:
+            if reference.target_index is None or reference.target_index >= len(preflight):
+                raise ReferenceBindingError("Reference target index is out of range")
+            target = preflight[reference.target_index]
+            if target.outcome in {WriteTargetOutcome.UPDATE, WriteTargetOutcome.CREATE}:
+                if not target.canonical_name:
+                    raise ReferenceBindingError("Resolved reference target has no canonical name")
+                mention = _wikilink_display(target.canonical_name)
+                bound_references.append(replace(reference, mention=mention))
+            else:
+                bound_references.append(reference)
+        bound_units.append(replace(unit, references=tuple(bound_references)))
+    return replace(action, units=tuple(bound_units))
 
 
 def render_reference_facts(
@@ -142,8 +172,10 @@ def _render_fact(
             if not target.path:
                 raise ReferenceBindingError("Resolved reference target has no path")
             target_without_suffix = _wikilink_target(target.path)
-            mention = _wikilink_display(reference.mention)
-            output.append(f"[[{target_without_suffix}|{mention}]]")
+            if not target.canonical_name:
+                raise ReferenceBindingError("Resolved reference target has no canonical name")
+            display = _wikilink_display(target.canonical_name)
+            output.append(f"[[{target_without_suffix}|{display}]]")
         elif target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION:
             output.append(reference.mention)
             if not any(

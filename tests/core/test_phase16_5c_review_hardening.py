@@ -42,22 +42,22 @@ def _unit(
     )
 
 
-def _target(index: int, path: str) -> UnitTargetPreflight:
+def _target(index: int, path: str, *, name: str | None = None) -> UnitTargetPreflight:
     """Build one safely resolved preflight target."""
     return UnitTargetPreflight(
         index,
         WriteTargetOutcome.UPDATE,
         stable_id=f"id-{index}",
-        canonical_name=f"Name {index}",
+        canonical_name=name or f"Name {index}",
         path=path,
     )
 
 
-def test_renderer_rejects_display_text_that_breaks_wikilink_syntax() -> None:
-    """Occurrence wording must never create an ambiguous pipe-delimited wikilink."""
+def test_renderer_rejects_canonical_name_that_breaks_wikilink_syntax() -> None:
+    """A resolved canonical name must never create an ambiguous pipe-delimited wikilink."""
     action = WriteAction(
         (
-            _unit("Hablé con {{ref:0}}.", mention="A | B"),
+            _unit("Hablé con {{ref:0}}.", mention="la persona descrita"),
             KnowledgeUnit(
                 SelectionCriteria("A", "A", "person", (), None), "record", (), (), ("fact",), ()
             ),
@@ -66,7 +66,10 @@ def test_renderer_rejects_display_text_that_breaks_wikilink_syntax() -> None:
     with pytest.raises(ReferenceBindingError, match="display text"):
         render_reference_facts(
             action,
-            (_target(0, "people/Bea.md"), _target(1, "people/A - id.md")),
+            (
+                _target(0, "people/Bea.md"),
+                _target(1, "people/A - id.md", name="A | B"),
+            ),
         )
 
 
