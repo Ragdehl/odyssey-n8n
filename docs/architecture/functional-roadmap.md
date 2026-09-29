@@ -154,7 +154,7 @@ Performance / Latency / Cost P1                                  ✅ complete
 Reference & Relationship Resolution v1 Slice 1                    ✅ complete
 Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
-Semantic WRITE intent/Core compiler simplification                ➡️ v8 complete matrix: 12/13 passed; SWR07 remains unresolved on Draft PR #147
+Semantic WRITE intent/Core compiler simplification                ➡️ v8 accepted: 12/13 passed; bounded SWR07 degradation documented on Draft PR #147
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
 UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
@@ -169,7 +169,7 @@ Draft PR #147 now contains the first reversible offline Luna-only semantic WRITE
 Provider-free assertions keep Sol's 25,474-byte prompt and 47,418-byte provider schema identical to
 baseline while Luna compiles each ordered semantic write action immediately into the existing
 `WriteAction` / `RequestPlan` boundary. After the v6 regression review, the teaching data is restored
-semantically to the last stable checkpoint that passed SWR01-SWR07. The current Luna prompt is 32,158
+semantically to the last stable checkpoint that passed SWR01-SWR07. The current Luna prompt is 32,281
 bytes (from 32,076), the whole schema is 18,539 bytes (from 22,521), and the WRITE branch is 3,378
 bytes (from 7,343); these are size measurements only, not latency evidence. Historical v8 assets remain
 immutable and old-contract v9 is retired unexecuted. The authorized v6 gate passed SWR01-SWR03 but
@@ -177,7 +177,7 @@ regressed on SWR04 after example retuning. Rather than continue that non-monoton
 is retired unexecuted. Offline frontend-v8 restores the known-best teaching semantics and changes only
 the semantic source vocabulary: provider-facing `EXISTING_DESCRIPTION` becomes `SOURCE_DESCRIPTION`.
 This no longer asks Luna to assert source existence; it describes the user-supplied source and Core
-must ground it as existing canonical evidence or clarify. The same 13-case gate collected the complete matrix in one authorized run: **12/13 passed**. SWR08 and SWR10 passed; only SWR07 failed because Luna kept the full qualified participant description but omitted its source-bounded candidate scope. This makes the remaining weakness explicit rather than hiding later results behind fail-fast. The v8 lineage is now permanently consumed at `MAX_COST_USD=$0.00`.
+must ground it as existing canonical evidence or clarify. The same 13-case gate collected the complete matrix in one authorized run: **12/13 passed**. SWR08 and SWR10 passed; only SWR07 failed because Luna kept the full qualified participant description but omitted its source-bounded candidate scope. This makes the remaining weakness explicit rather than hiding later results behind fail-fast. The v8 lineage is now permanently consumed at `MAX_COST_USD=$0.00`. The project accepts that bounded degradation rather than adding case-specific prompt complexity. A frozen model-only comparison then ran the identical matrix on `gpt-6-luna` / low: **11/13 passed**. GPT-6 Luna fixed SWR07 but regressed SWR08 and SWR10 by dropping event-source bounds on fact references. Its estimated cost was `$0.00419596` versus `$0.00912232` for GPT-5.6 Luna, but the planner retains **GPT-5.6 Luna** because it is more accurate on the frozen regression matrix.
 
 Earlier latency observations motivate P1 but do not predetermine its bottleneck or authorize a fast path.
 

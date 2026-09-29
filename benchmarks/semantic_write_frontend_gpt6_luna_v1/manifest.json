@@ -2,7 +2,7 @@
   "version": "semantic-write-frontend-gpt6-luna-v1",
   "comparison_baseline": "semantic-write-frontend-v8",
   "frozen_before_provider_calls": true,
-  "provider_calls_made": 0,
+  "provider_calls_made": 13,
   "model": "gpt-6-luna",
   "reasoning_effort": "low",
   "max_provider_calls": 13,
@@ -22,5 +22,14 @@
     "output_per_million": "0.50"
   },
   "future_artifact": "benchmarks/.live-results/semantic-write-frontend-gpt6-luna-v1.jsonl",
-  "max_cost_usd": "0.0809432"
+  "max_cost_usd": "0.00",
+  "artifact_sha256": "896e73337a9a1ffbf2984b8db18c214d7dea03e8f705ad181b6950554a941628",
+  "result": "11_of_13_passed",
+  "failed_cases": [
+    "SWR08-relational-target-described-reference",
+    "SWR10-relational-target-two-bounded-references"
+  ],
+  "actual_cost_usd_estimate": "0.00419596",
+  "consumed_artifact": "benchmarks/.live-results/semantic-write-frontend-gpt6-luna-v1.jsonl",
+  "comparison_conclusion": "retain_gpt-5.6-luna_for_planner"
 }
