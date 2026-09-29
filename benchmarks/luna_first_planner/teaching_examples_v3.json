@@ -1,5 +1,5 @@
 {
-  "version": "3.0.2",
+  "version": "3.0.3",
   "examples": [
     {
       "id": "teach-domain-date",
@@ -280,6 +280,71 @@
         "presentation_intent": "answer"
       },
       "lesson": "The authenticated human owns this one relationship fact. Keep one self-targeted operation and encode each safely selectable participant as an identity part; do not create participant-targeted operations."
+    },
+    {
+      "id": "teach-relational-target-with-described-reference",
+      "request": "Remember that my mentor who works remotely attended a conference with the designer who lives in Porto.",
+      "result": {
+        "outcome": "PLAN",
+        "actions": [
+          {
+            "kind": "write",
+            "operations": [
+              {
+                "target": {
+                  "description": "my mentor who works remotely",
+                  "binding": "described",
+                  "direct_name": null,
+                  "note_type": "person",
+                  "filters": [],
+                  "candidate_scope": {
+                    "source": {
+                      "kind": "SELF"
+                    },
+                    "member_query": "my mentor",
+                    "extent": "one_member"
+                  }
+                },
+                "apply_to": "one",
+                "intent": "record",
+                "facts": [
+                  {
+                    "parts": [
+                      {
+                        "kind": "literal",
+                        "text": "Attended a conference with "
+                      },
+                      {
+                        "kind": "identity",
+                        "text": "the designer who lives in Porto",
+                        "identity": {
+                          "description": "the designer who lives in Porto",
+                          "binding": "described",
+                          "direct_name": null,
+                          "note_type": "person",
+                          "filters": [],
+                          "candidate_scope": null
+                        }
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "."
+                      }
+                    ]
+                  }
+                ],
+                "properties": [],
+                "tag_changes": [],
+                "destination_type": null
+              }
+            ]
+          }
+        ],
+        "limitations": [],
+        "clarification_code": null,
+        "presentation_intent": "answer"
+      },
+      "lesson": "A relationship-bounded target and a separately described participant are independent identities. Keep the full target qualifier in target.description, bound only the target candidate set to SELF, and encode the other participant as an identity part in the fact."
     },
     {
       "id": "teach-relational-complete-set-write",

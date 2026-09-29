@@ -90,7 +90,7 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 30,533 bytes | -1,543 (-4.8%) |
+| Luna prompt | 32,076 bytes | 31,710 bytes | -366 (-1.1%) |
 | Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
 | Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
 
@@ -110,12 +110,20 @@ does not establish an existing canonical dinner source, and the prompt already s
 one. The contradiction was in the complete-set teaching example, which itself treated an implicit
 dinner event as an existing source.
 
-The v3 correction changes only that teaching example so its request explicitly identifies an existing
-Atlas project note before using `EXISTING_DESCRIPTION`. No prompt rule, relationship taxonomy, schema,
-compiler, Core interface, frozen case, or oracle changed. The unexecuted v3 successor reuses the same
-13 cases, permits at most 13 Luna/low calls with zero retries and zero Sol calls, and has a 50,278-byte
-conservative input bound plus `$0.1626716` no-cache ceiling. Its fresh artifact path is
-`semantic-write-frontend-v3-luna-gate.jsonl`; `MAX_COST_USD` is `$0.00`, so live adoption remains
+The v3 correction changed only that teaching example so its request explicitly identified an existing
+Atlas project note before using `EXISTING_DESCRIPTION`. The authorized v3 gate then passed SWR01,
+SWR02, and SWR03, confirming that correction, but stopped fail-fast on SWR04 because Luna returned
+`ESCALATE` for `Mi hijo mayor fue al cine con la amiga que vive en Lyon.`. The semantic frontend can
+represent that request safely: the older child is one relationship-bounded target and the Lyon friend
+is one independently described fact identity. The unchanged frozen oracle is therefore retained.
+
+The v4 correction adds one generic non-held-out teaching example with unrelated vocabulary for that
+already-stated distinction: one SELF-bounded described target plus one separate descriptive identity
+part in the new fact. No prompt rule, relationship taxonomy, schema, compiler, Core interface, frozen
+case, or oracle changed. The unexecuted v4 successor reuses the same 13 cases, permits at most 13
+Luna/low calls with zero retries and zero Sol calls, and has a 51,455-byte conservative input bound
+plus `$0.1657318` no-cache ceiling. Its fresh artifact path is
+`semantic-write-frontend-v4-luna-gate.jsonl`; `MAX_COST_USD` is `$0.00`, so live adoption remains
 blocked on fresh explicit authorization.
 
 ## Possessives are identity evidence, not self authority
@@ -206,8 +214,14 @@ The user then authorized semantic-write-frontend-v2 at its `$0.162357` conservat
 once at authorization commit `8caa17c`, passed SWR01 and SWR02, and stopped fail-fast on SWR03 after
 three completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
 `5b2cbe8fa4b1cdc6936968d9f54d9f1a377d3badcdaeeba388f97df5e1147edd`; the usage-backed
-checked-in-pricing estimate is `$0.00308352`. Both v1 and v2 runners/paths are permanently consumed.
-The v3 successor is offline-only and unauthorized.
+checked-in-pricing estimate is `$0.00308352`.
+
+The user then authorized semantic-write-frontend-v3 at its `$0.1626716` conservative ceiling. It ran
+once at authorization commit `be0976c`, passed SWR01-SWR03, and stopped fail-fast on SWR04 after four
+completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
+`ff1c88f2cb29613009f943f73cba61cbcb2a00b613acca75207070771d93f8fc`; the usage-backed
+checked-in-pricing estimate is `$0.00360986`. The v1, v2, and v3 runners/paths are permanently
+consumed. The v4 successor is offline-only and unauthorized.
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 

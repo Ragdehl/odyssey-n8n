@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_380
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 30_533
+    assert prompt_bytes == 31_710
     assert schema_bytes == 18_541
 
 
@@ -724,7 +724,7 @@ def test_teaching_and_held_out_sets_are_exactly_disjoint_and_frozen() -> None:
     teaching = load_teaching_examples()
     teaching_requests = {item["request"].strip().casefold() for item in teaching}
     held_out_requests = {item["request"].strip().casefold() for item in cases_payload["cases"]}
-    assert len(teaching) == 9
+    assert len(teaching) == 10
     assert len(cases_payload["cases"]) == 24
     assert teaching_requests.isdisjoint(held_out_requests)
     assert list(oracles) == [item["id"] for item in cases_payload["cases"]]
@@ -779,6 +779,34 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
+
+
+def test_relational_target_with_described_reference_teaching_example_compiles(
+    schema: dict[str, Any],
+) -> None:
+    """Teach one bounded target plus one independently resolved fact participant."""
+    example = next(
+        item
+        for item in load_teaching_examples()
+        if item["id"] == "teach-relational-target-with-described-reference"
+    )
+    result = validate_luna_experimental_result(example["result"], schema)
+    assert isinstance(result, RequestPlan)
+    assert len(result.actions) == 1
+    action = result.actions[0]
+    assert isinstance(action, WriteAction)
+    material = [unit for unit in action.units if not unit.reference_lookup_only]
+    lookups = [unit for unit in action.units if unit.reference_lookup_only]
+    assert len(material) == 1
+    assert len(lookups) == 1
+    relation = material[0].target.relational_reference
+    assert relation is not None
+    assert relation.source_kind == "self"
+    assert relation.members == "one"
+    assert material[0].target.query == "my mentor who works remotely"
+    assert material[0].facts == ("Attended a conference with {{ref:0}}.",)
+    assert material[0].references[0].mention == "the designer who lives in Porto"
+    assert lookups[0].target.query == "the designer who lives in Porto"
 
 
 def test_complete_set_relational_teaching_example_preserves_one_source_write(
