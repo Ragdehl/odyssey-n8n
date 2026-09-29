@@ -74,20 +74,20 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
-    assert registry["version"] == "semantic-write-resolution-active-schema-2026-09-28"
-    assert len(registry["cases"]) == 9
+    assert registry["version"] == "semantic-write-resolution-active-schema-2026-09-29"
+    assert len(registry["cases"]) == 10
     daughter = registry["cases"][1]
     assert daughter == {
         "id": "SWR02-rich-daughter-target",
         "request": "Mi hija a la que le gusta ver detectives de animales adora el chocolate.",
         "expect": "descriptive_daughter_target",
     }
-    assert registry["cases"][-4] == {
+    assert registry["cases"][-5] == {
         "id": "SWR06-existing-source-relational-anchor",
         "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
         "expect": "qualified_existing_relation_target",
     }
-    assert registry["cases"][-3] == {
+    assert registry["cases"][-4] == {
         "id": "SWR07-qualified-event-member",
         "request": (
             "De las personas que estuvieron en la cena relacional de prueba, "
@@ -95,7 +95,7 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
         ),
         "expect": "qualified_existing_event_relation_target",
     }
-    assert registry["cases"][-2] == {
+    assert registry["cases"][-3] == {
         "id": "SWR08-relational-target-described-reference",
         "request": (
             "Mi hija mayor va a cenar con la persona de la cena relacional de prueba "
@@ -103,10 +103,18 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
         ),
         "expect": "relational_target_and_described_reference",
     }
-    assert registry["cases"][-1] == {
+    assert registry["cases"][-2] == {
         "id": "SWR09-independent-shared-predicate",
         "request": "Denis y Axel son zurdos.",
         "expect": "independent_shared_predicate",
+    }
+    assert registry["cases"][-1] == {
+        "id": "SWR10-relational-target-two-bounded-references",
+        "request": (
+            "Mi hija mayor va al parque el sábado con la persona de la cena relacional de prueba "
+            "que trabaja en Airbus Test y con la persona de la cena relacional de prueba que habla italiano."
+        ),
+        "expect": "relational_target_and_two_bounded_references",
     }
 
 
@@ -297,6 +305,12 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
                         "la persona de la cena relacional de prueba que trabaja en Airbus Test",
                         "",
                         lookup_only=True,
+                        relational_reference=RelationalReference(
+                            "las personas que estuvieron en la cena relacional de prueba",
+                            "existing",
+                            "cena relacional de prueba",
+                            "one",
+                        ),
                     ),
                 )
             ),
@@ -304,11 +318,52 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
         (),
     )
     assert evaluate(combined, "relational_target_and_described_reference").passed
+    two_bounded = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit(
+                        "mi hija mayor",
+                        "Va al parque el sábado con {{ref:0}} y con {{ref:1}}.",
+                        references=(
+                            KnowledgeReference(1, "companion", "persona Airbus"),
+                            KnowledgeReference(2, "companion", "persona italiano"),
+                        ),
+                        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+                    ),
+                    unit(
+                        "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+                        "",
+                        lookup_only=True,
+                        relational_reference=RelationalReference(
+                            "las personas de la cena relacional de prueba",
+                            "existing",
+                            "cena relacional de prueba",
+                            "one",
+                        ),
+                    ),
+                    unit(
+                        "la persona de la cena relacional de prueba que habla italiano",
+                        "",
+                        lookup_only=True,
+                        relational_reference=RelationalReference(
+                            "las personas de la cena relacional de prueba",
+                            "existing",
+                            "cena relacional de prueba",
+                            "one",
+                        ),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    assert evaluate(two_bounded, "relational_target_and_two_bounded_references").passed
     assert evaluate(PlannerEscalation(), "fail_closed_ambiguous_pronoun").passed
 
 
 def test_cost_ceiling_is_luna_only_and_bounded() -> None:
-    """Price exactly nine Luna/low calls; no Sol allowance is part of this gate."""
+    """Price exactly ten Luna/low calls; no Sol allowance is part of this gate."""
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -316,7 +371,7 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert Decimal("0.11") < cost < Decimal("0.13")
+    assert Decimal("0.13") < cost < Decimal("0.14")
     assert 50_000 < input_bound < 60_000
 
     assert runner.MAX_COST_USD == Decimal("0.00")

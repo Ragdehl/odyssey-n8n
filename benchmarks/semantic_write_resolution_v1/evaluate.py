@@ -165,6 +165,58 @@ def evaluate(result: Any, expected: str) -> Evaluation:
                     and _contains(lookups[0].target.query, "persona", "cena", "airbus", "test"),
                     "described_companion_query",
                 ),
+                (
+                    len(lookups) == 1
+                    and lookups[0].target.relational_reference is not None
+                    and lookups[0].target.relational_reference.source_kind == "existing"
+                    and lookups[0].target.relational_reference.members == "one"
+                    and lookups[0].target.relational_reference.source_query is not None
+                    and _contains(
+                        lookups[0].target.relational_reference.source_query,
+                        "cena",
+                        "relacional",
+                        "prueba",
+                    ),
+                    "bounded_companion_relation",
+                ),
+            ]
+        )
+    elif expected == "relational_target_and_two_bounded_references":
+        relation = source.target.relational_reference
+        lookup_relations = tuple(unit.target.relational_reference for unit in lookups)
+        checks.extend(
+            [
+                (relation is not None, "relational_anchor"),
+                (relation is not None and relation.source_kind == "self", "self_relation_source"),
+                (relation is not None and relation.members == "one", "singular_relation"),
+                (_contains(source.target.query, "hija", "mayor"), "older_daughter_query"),
+                (_facts_contain(source, "parque"), "park_fact"),
+                (_facts_contain(source, "sabado"), "literal_saturday_preserved"),
+                (len(source.references) == 2, "two_references"),
+                (len(lookups) == 2, "two_lookup_only_units"),
+                (
+                    len(lookups) == 2
+                    and any(_contains(unit.target.query, "airbus", "test") for unit in lookups)
+                    and any(_contains(unit.target.query, "habla", "italiano") for unit in lookups),
+                    "reference_qualifiers_preserved",
+                ),
+                (
+                    len(lookup_relations) == 2
+                    and all(item is not None for item in lookup_relations)
+                    and all(item.source_kind == "existing" for item in lookup_relations if item)
+                    and all(item.members == "one" for item in lookup_relations if item)
+                    and all(
+                        item.source_query is not None
+                        and _contains(item.source_query, "cena", "relacional", "prueba")
+                        for item in lookup_relations
+                        if item
+                    ),
+                    "both_references_bounded_to_event",
+                ),
+                (
+                    all(not _contains(unit.target.query, "sabado") for unit in lookups),
+                    "saturday_not_promoted_to_reference",
+                ),
             ]
         )
     elif expected == "qualified_existing_relation_target":

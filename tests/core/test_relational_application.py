@@ -1900,6 +1900,238 @@ def test_two_semantic_fact_references_resolve_independently_with_canonical_names
     assert len(list(vault.rglob("*.md"))) == 3
 
 
+def test_relational_target_with_two_relational_fact_references_stays_bounded(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Resolve target and two fact references inside their own canonical relationship universes."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Es mi hija mayor."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Es mi hijo menor."))
+    write_note(
+        vault,
+        "events/dinner.md",
+        "dinner",
+        "Cena relacional de prueba",
+        fact(
+            "En la cena relacional de prueba estuvieron "
+            "[[people/clara|Clara Test]], [[people/marta|Marta Test]] y [[people/ana|Ana Test]]."
+        ),
+        note_type="journal_entry",
+        properties={"entry_date": "2026-09-24"},
+    )
+    write_note(vault, "people/clara.md", "clara", "Clara Test", fact("Habla italiano."))
+    write_note(vault, "people/marta.md", "marta", "Marta Test", fact("Trabaja en Airbus Test."))
+    write_note(vault, "people/ana.md", "ana", "Ana Test", fact("Practica natación."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    dinner_source = "la cena relacional de prueba"
+    dinner_members = "las personas que estuvieron en la cena relacional de prueba"
+    marta_query = "la persona de la cena relacional de prueba que trabaja en Airbus Test"
+    clara_query = "la persona de la cena relacional de prueba que habla italiano"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "mi hija mayor",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": {
+                                "reference": "mi hija",
+                                "source_kind": "self",
+                                "source_query": None,
+                                "members": "one",
+                            },
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Va al parque el sábado con {{ref:0}} y con {{ref:1}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": marta_query,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": dinner_members,
+                                        "source_kind": "existing",
+                                        "source_query": dinner_source,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": marta_query,
+                            },
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": clara_query,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": dinner_members,
+                                        "source_kind": "existing",
+                                        "source_query": dinner_source,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": clara_query,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 3
+    assert all(unit.reference_lookup_only for unit in action.units[1:])
+    index = MappedIndex(
+        {
+            dinner_source: (
+                SemanticEntityCandidate(
+                    "dinner",
+                    "events/dinner.md",
+                    "journal_entry",
+                    "Cena relacional de prueba",
+                    1.0,
+                ),
+            )
+        }
+    )
+    reasoner = MappedReasoner(
+        {
+            "mi hija mayor": "cloe",
+            dinner_source: "dinner",
+            marta_query: "marta",
+            clara_query: "clara",
+        }
+    )
+
+    result = run(
+        vault,
+        schema,
+        plan,
+        reasoner=reasoner,
+        semantic_index=index,
+        selector=AllFactSelector(),
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    content = parse_note((vault / "people/cloe.md").read_text()).content
+    assert "Va al parque el sábado" in content
+    assert "[[people/marta|Marta Test]]" in content
+    assert "[[people/clara|Clara Test]]" in content
+    assert marta_query not in content and clara_query not in content
+    assert (vault / "people/marta.md").read_bytes() == before[vault / "people/marta.md"]
+    assert (vault / "people/clara.md").read_bytes() == before[vault / "people/clara.md"]
+    assert len(list(vault.rglob("*.md"))) == len(before)
+    assert all(
+        request.reference in {"mi hija mayor", dinner_source, marta_query, clara_query}
+        for request in reasoner.requests
+    )
+
+
+def test_relational_fact_reference_never_escapes_to_global_semantic_candidate(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Fail closed when a bounded reference anchor cannot ground, even if global search could guess."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta Test", fact("Trabaja en Airbus Test."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    query = "la persona de la cena inexistente que trabaja en Airbus Test"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": "Cloe",
+                            "query": "Cloe",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Va al parque con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": query,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "las personas de la cena inexistente",
+                                        "source_kind": "existing",
+                                        "source_query": "la cena inexistente",
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": query,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    index = MappedIndex(
+        {
+            query: (
+                SemanticEntityCandidate("marta", "people/marta.md", "person", "Marta Test", 0.99),
+            )
+        }
+    )
+    reasoner = MappedReasoner({query: "marta"})
+
+    result = run(vault, schema, plan, reasoner=reasoner, semantic_index=index)
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.affected_stable_note_ids == ()
+    assert all(path.read_bytes() == content for path, content in before.items())
+    source_result, lookup_result = result.action_results[0].unit_results
+    assert source_result.status is application.UnitStatus.DEFERRED
+    assert source_result.reason == "DEPENDENCY_FAILED"
+    assert lookup_result.status is application.UnitStatus.DEFERRED
+    assert lookup_result.reason == "unresolved_existing_reference"
+    assert reasoner.requests == []
+
+
 def test_ambiguous_semantic_reference_defers_source_write_without_guessing(
     tmp_path: Path, schema: dict
 ) -> None:

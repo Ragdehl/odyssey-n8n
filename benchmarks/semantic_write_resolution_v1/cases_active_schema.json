@@ -1,5 +1,5 @@
 {
-  "version": "semantic-write-resolution-active-schema-2026-09-28",
+  "version": "semantic-write-resolution-active-schema-2026-09-29",
   "fixed_context": {
     "date": "2026-09-28",
     "time": "20:30",
@@ -50,6 +50,11 @@
       "id": "SWR09-independent-shared-predicate",
       "request": "Denis y Axel son zurdos.",
       "expect": "independent_shared_predicate"
+    },
+    {
+      "id": "SWR10-relational-target-two-bounded-references",
+      "request": "Mi hija mayor va al parque el sábado con la persona de la cena relacional de prueba que trabaja en Airbus Test y con la persona de la cena relacional de prueba que habla italiano.",
+      "expect": "relational_target_and_two_bounded_references"
     }
   ]
 }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
@@ -93,6 +93,7 @@ def preflight_write_action(
     self_binding_repository: SelfBindingRepository | None = None,
     span_recorder: SpanRecorder | None = None,
     clarification_choice: ClarificationChoice | None = None,
+    semantic_set_selector: Any | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Decide every ordered unit once and preallocate safe CREATE identities without writing.
 
@@ -131,6 +132,7 @@ def preflight_write_action(
         self_binding_repository=self_binding_repository,
         span_recorder=span_recorder,
         clarification_choice=clarification_choice,
+        semantic_set_selector=semantic_set_selector,
     )
 
 
@@ -148,6 +150,7 @@ def _preflight_write_action(
     self_binding_repository: SelfBindingRepository | None,
     span_recorder: SpanRecorder | None,
     clarification_choice: ClarificationChoice | None = None,
+    semantic_set_selector: Any | None = None,
     _validated_reference_targets: Mapping[int, str] | None = None,
     _validated_relationship_targets: Mapping[int, str] | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
@@ -230,6 +233,8 @@ def _preflight_write_action(
         decision_function = (
             _decide_reference_only_target if unit.reference_lookup_only else decide_write_target
         )
+        if unit.reference_lookup_only:
+            target_kwargs["semantic_set_selector"] = semantic_set_selector
         decision = (
             span_recorder.invoke(
                 f"preflight.unit[{unit_index}].target", decision_function, unit, **target_kwargs
@@ -286,6 +291,7 @@ def preflight_relational_target_write_action(
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
     span_recorder: SpanRecorder | None = None,
+    semantic_set_selector: Any | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Re-ground one fact-bearing relational target before admitting its existing ID.
 
@@ -297,7 +303,11 @@ def preflight_relational_target_write_action(
         or not isinstance(target_unit_index, int)
         or isinstance(target_unit_index, bool)
         or not 0 <= target_unit_index < len(action.units)
-        or sum(unit.target.relational_reference is not None for unit in action.units) != 1
+        or sum(
+            unit.target.relational_reference is not None and not unit.reference_lookup_only
+            for unit in action.units
+        )
+        != 1
     ):
         raise RelationshipWritePreflightError("Singular relationship write shape is invalid")
     unit = action.units[target_unit_index]
@@ -341,6 +351,7 @@ def preflight_relational_target_write_action(
         authenticated_actor=authenticated_actor,
         self_binding_repository=self_binding_repository,
         span_recorder=span_recorder,
+        semantic_set_selector=semantic_set_selector,
         _validated_relationship_targets={target_unit_index: resolved.targets[0].id},
     )
 
@@ -421,6 +432,7 @@ def preflight_relationship_write_action(
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
     span_recorder: SpanRecorder | None = None,
+    semantic_set_selector: Any | None = None,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Re-ground a relationship fact and produce one ordinary preflight table for its write.
 
@@ -500,6 +512,7 @@ def preflight_relationship_write_action(
         authenticated_actor=authenticated_actor,
         self_binding_repository=self_binding_repository,
         span_recorder=span_recorder,
+        semantic_set_selector=semantic_set_selector,
         _validated_reference_targets=dict(zip(member_indices, member_ids, strict=True)),
     )
     source = preflight[binding.source_unit_index]
@@ -521,15 +534,14 @@ def _decide_reference_only_target(
     semantic_limit: int,
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
+    semantic_set_selector: Any | None = None,
 ) -> WriteTargetDecision:
     """Resolve one semantic reference and preserve schema-backed entity creation authority.
 
-    Reference helper units first try current canonical identity resolution. A strict current
-    relationship can resolve them directly; otherwise the preserved semantic query gets the ordinary
-    layered resolver. If no existing identity is found, a canonical ``target.type`` may authorize the
-    same CREATE decision as an ordinary record target. Untyped unresolved wording remains fail-closed.
+    A bounded relationship reference resolves only inside its current canonical member set and never
+    falls back to global semantic search. Ordinary reference selections keep the layered resolver; a
+    canonical ``target.type`` may still authorize CREATE when no existing identity is found.
     """
-    candidate_unit = unit
     if unit.target.relational_reference is not None:
         try:
             resolved = resolve_relational_reference(
@@ -542,25 +554,31 @@ def _decide_reference_only_target(
                 semantic_limit=semantic_limit,
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
+                semantic_set_selector=semantic_set_selector,
+                refine_singular_with_query=True,
             )
-        except RelationalResolutionError:
-            candidate_unit = replace(
-                unit,
-                target=replace(unit.target, relational_reference=None),
-            )
-        else:
-            if len(resolved.targets) == 1:
-                return WriteTargetDecision(
-                    WriteTargetOutcome.UPDATE, existing_note_id=resolved.targets[0].id
-                )
+        except RelationalResolutionError as error:
             return WriteTargetDecision(
                 WriteTargetOutcome.NEEDS_CLARIFICATION,
-                reason="ambiguous_existing_reference",
-                candidate_note_ids=tuple(target.id for target in resolved.targets),
+                reason=(
+                    "ambiguous_existing_reference"
+                    if error.candidate_ids
+                    else "unresolved_existing_reference"
+                ),
+                candidate_note_ids=error.candidate_ids,
             )
+        if len(resolved.targets) == 1:
+            return WriteTargetDecision(
+                WriteTargetOutcome.UPDATE, existing_note_id=resolved.targets[0].id
+            )
+        return WriteTargetDecision(
+            WriteTargetOutcome.NEEDS_CLARIFICATION,
+            reason="ambiguous_existing_reference",
+            candidate_note_ids=tuple(target.id for target in resolved.targets),
+        )
 
     decision = decide_write_target(
-        candidate_unit,
+        unit,
         repository=repository,
         schema=schema,
         semantic_index=semantic_index,

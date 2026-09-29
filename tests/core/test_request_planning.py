@@ -76,6 +76,7 @@ def reference_selection(
     entity: str | None = None,
     note_type: str | None = None,
     filters: list[dict] | None = None,
+    relational_reference: dict | None = None,
 ) -> dict:
     """Build the compact semantic lookup shape exposed inside KnowledgeReference."""
     return {
@@ -83,6 +84,7 @@ def reference_selection(
         "query": query,
         "type": note_type,
         "filters": filters or [],
+        "relational_reference": relational_reference,
     }
 
 
@@ -885,10 +887,17 @@ def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> No
     assert reference_schema["required"] == ["selection", "role", "mention"]
     assert "target_index" not in reference_schema["properties"]
     selection_schema = reference_schema["properties"]["selection"]
-    assert selection_schema["required"] == ["entity", "query", "type", "filters"]
+    assert selection_schema["required"] == [
+        "entity",
+        "query",
+        "type",
+        "filters",
+        "relational_reference",
+    ]
     assert "link_scope" not in selection_schema["properties"]
     assert "self_target" not in selection_schema["properties"]
-    assert "relational_reference" not in selection_schema["properties"]
+    assert "relational_reference" in selection_schema["properties"]
+    assert "members=one" in prompt
 
 
 def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dict) -> None:
@@ -924,6 +933,80 @@ def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dic
     assert lookup.target.query == "la amiga que vive en Lyon"
     assert lookup.target.type == "person"
     assert lookup.facts == ()
+
+
+def test_relational_reference_selection_lowers_to_bounded_lookup_unit(schema: dict) -> None:
+    """Preserve one bounded relation anchor when a fact reference needs member disambiguation."""
+    query = "la persona de la cena que trabaja en Airbus Test"
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "mi hija mayor",
+                    note_type="person",
+                    facts=["Va al parque con {{ref:0}}."],
+                    references=[
+                        {
+                            "selection": reference_selection(
+                                query,
+                                note_type="person",
+                                relational_reference={
+                                    "reference": "las personas de la cena",
+                                    "source_kind": "existing",
+                                    "source_query": "la cena",
+                                    "members": "one",
+                                },
+                            ),
+                            "role": "companion",
+                            "mention": query,
+                        }
+                    ],
+                )
+            )
+        ),
+        schema,
+    )
+
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    lookup = action.units[1]
+    assert lookup.reference_lookup_only is True
+    assert lookup.target.query == query
+    assert lookup.target.relational_reference is not None
+    assert lookup.target.relational_reference.source_query == "la cena"
+    assert lookup.target.relational_reference.members == "one"
+
+
+def test_fact_reference_rejects_complete_relational_member_set(schema: dict) -> None:
+    """Require every fact marker to bind one canonical note rather than an implicit member set."""
+    raw = output(
+        write(
+            unit(
+                "Cloe",
+                note_type="person",
+                facts=["Fue con {{ref:0}}."],
+                references=[
+                    {
+                        "selection": reference_selection(
+                            "todos los de la cena",
+                            relational_reference={
+                                "reference": "todos los de la cena",
+                                "source_kind": "existing",
+                                "source_query": "la cena",
+                                "members": "complete_set",
+                            },
+                        ),
+                        "role": "companions",
+                        "mention": "todos los de la cena",
+                    }
+                ],
+            )
+        )
+    )
+
+    with pytest.raises(RequestPlanningError, match="must select one identity"):
+        validate_request_plan(raw, schema)
 
 
 def test_semantic_reference_reuses_matching_same_request_target(schema: dict) -> None:

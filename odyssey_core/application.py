@@ -929,6 +929,7 @@ def _execute_write(
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
             span_recorder=spans,
+            semantic_set_selector=semantic_set_selector,
             **kwargs,
         )
         executable = bind_canonical_reference_mentions(action, preflight)
@@ -982,7 +983,7 @@ def _execute_relational_write(
     relational_indexes = tuple(
         index
         for index, candidate in enumerate(action.units)
-        if candidate.target.relational_reference is not None
+        if candidate.target.relational_reference is not None and not candidate.reference_lookup_only
     )
     if len(relational_indexes) != 1 or any(
         candidate.cardinality != "one" for candidate in action.units
@@ -1042,6 +1043,7 @@ def _execute_relational_write(
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
                 span_recorder=spans,
+                semantic_set_selector=semantic_set_selector,
                 **kwargs,
             )
             ordinals = (unit_ordinals[0], *(((),) * len(resolved.targets)))
@@ -1064,6 +1066,7 @@ def _execute_relational_write(
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
                 span_recorder=spans,
+                semantic_set_selector=semantic_set_selector,
                 **kwargs,
             )
         executable = bind_canonical_reference_mentions(executable, preflight)

@@ -77,7 +77,7 @@ For a write, determine semantic ownership before mutation payload. target.query 
 
 Decompose only the new durable knowledge after ownership is fixed. Group compatible changes for the same logical target; different intents for the same target produce separate KnowledgeUnits. Atomicity is semantic, not punctuation-based: split independently meaningful knowledge into separate atomic `facts` entries, but keep sentences or clauses together when they form one coherent explanation, reflection, or decision with dependent reasons or other meaning that would be lost by splitting. Preserve order and references. A canonical property used only to identify an existing target may constrain `target.filters`; a newly recorded property belongs in `properties` and must not be copied into filters unless its old value is explicitly part of the identity evidence. For conversational knowledge that safely maps to a property, retain the human knowledge fact as well. Use only record, amend, remove, and delete. Explicit correction uses remove for the false prior fact and amend for the corrected knowledge. Amend/remove require at least one mutation across properties or facts. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit. Delete has no mutation payload. Set `destination_type` to null for ordinary writes. Set it only for an explicit reclassification of the same existing note, using intent=amend and cardinality=one.
 
-Decide fact references last. Replace an occurrence with `{{ref:N}}`, where N is the zero-based index in that fact unit's own `references` array, only when that wording denotes another logical Odyssey note identity that can be selected safely under the active capabilities; the reference contains `mention`, `role`, and a small semantic `selection` of `entity`, `query`, `type`, and `filters`. Preserve the user's complete identifying wording in `selection.query`, including relationship or event context. A proper noun or ordinary fact argument is not enough by itself. If wording functions as literal context or value and no active canonical type or explicit existing-note identity safely represents it, preserve it literally rather than creating a speculative lookup that could block the write. Type-null references are for wording that explicitly denotes an existing Odyssey identity whose exact type need not be asserted, not for speculative entity promotion. Do not create extra model-facing KnowledgeUnits merely to carry reference targets, resolve identities yourself, or emit stable IDs; do not emit Markdown `[[wikilinks]]`. Core owns identity resolution and binding. A mention used only to identify the write target or an incidental name is not automatically a reference, and references never authorize inverse or mirrored writes.
+Decide fact references last. Replace an occurrence with `{{ref:N}}`, where N is the zero-based index in that fact unit's own `references` array, only when that wording denotes another logical Odyssey note identity that can be selected safely under the active capabilities; the reference contains `mention`, `role`, and a compact semantic `selection` of `entity`, `query`, `type`, `filters`, and optional `relational_reference`. Preserve the user's complete identifying wording in `selection.query`. When the referred identity is defined by a bounded current relationship or event membership, use `relational_reference` under the same source rules as target selection, keep only the relationship anchor in `relational_reference.reference`, keep additional qualifiers in `selection.query`, and set `members=one`; Core then disambiguates only inside that grounded member set. A proper noun or ordinary fact argument is not enough by itself. If wording functions as literal context or value and no active canonical type or explicit existing-note identity safely represents it, preserve it literally rather than creating a speculative lookup that could block the write. Type-null references are for wording that explicitly denotes an existing Odyssey identity whose exact type need not be asserted, not for speculative entity promotion. Do not create extra model-facing KnowledgeUnits merely to carry reference targets, resolve identities yourself, or emit stable IDs; do not emit Markdown `[[wikilinks]]`. Core owns identity resolution and binding. A mention used only to identify the write target or an incidental name is not automatically a reference, and references never authorize inverse or mirrored writes.
 
 Tags are generic free-form metadata. Emit a tag filter only when the user explicitly asks to search by a tag, using `tags` with `contains`; emit `tag_changes` only when the user explicitly asks to add or remove a tag. Never infer tags from semantic words such as idea, decision, reflection, or review, and never require a registry or controlled vocabulary.
 
@@ -432,7 +432,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         direct_selection_schema
     )
     collection_selection_schema = _collection_selection_json_schema(direct_selection_schema)
-    reference_selection_schema = _note_selector_json_schema(retrieval_capabilities)
+    reference_selection_schema = _reference_selection_json_schema(retrieval_capabilities)
     property_changes_schema = _property_changes_json_schema(write_capabilities)
     return {
         "type": "object",
@@ -1129,22 +1129,7 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                 ]
             },
             "self_target": {"type": ["string", "null"], "enum": [SELF_TARGET, None]},
-            "relational_reference": {
-                "anyOf": [
-                    {"type": "null"},
-                    {
-                        "type": "object",
-                        "properties": {
-                            "reference": {"type": "string"},
-                            "source_kind": {"type": "string", "enum": ["self", "existing"]},
-                            "source_query": {"type": ["string", "null"]},
-                            "members": {"type": "string", "enum": ["one", "complete_set"]},
-                        },
-                        "required": ["reference", "source_kind", "source_query", "members"],
-                        "additionalProperties": False,
-                    },
-                ]
-            },
+            "relational_reference": _relational_reference_json_schema(),
             "collection_subject": {
                 "type": ["string", "null"],
                 "enum": ["self", "query", None],
@@ -1162,6 +1147,34 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
         ],
         "additionalProperties": False,
     }
+
+
+def _relational_reference_json_schema() -> dict[str, Any]:
+    """Build the shared bounded relationship-anchor shape for direct and reference selection."""
+    return {
+        "anyOf": [
+            {"type": "null"},
+            {
+                "type": "object",
+                "properties": {
+                    "reference": {"type": "string"},
+                    "source_kind": {"type": "string", "enum": ["self", "existing"]},
+                    "source_query": {"type": ["string", "null"]},
+                    "members": {"type": "string", "enum": ["one", "complete_set"]},
+                },
+                "required": ["reference", "source_kind", "source_query", "members"],
+                "additionalProperties": False,
+            },
+        ]
+    }
+
+
+def _reference_selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the compact fact-reference selector with optional bounded relationship anchoring."""
+    selector = deepcopy(_note_selector_json_schema(capabilities))
+    selector["properties"]["relational_reference"] = _relational_reference_json_schema()
+    selector["required"] = [*selector["required"], "relational_reference"]
+    return selector
 
 
 def _collection_selection_json_schema(direct_selection_schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -1661,15 +1674,36 @@ def _validate_reference_selection(
     schema: Mapping[str, Any],
     capabilities: Mapping[str, Any],
 ) -> SelectionCriteria:
-    """Validate the deliberately small semantic lookup contract used by fact references.
+    """Validate the compact semantic lookup contract used by fact references.
 
-    Fact references identify an existing Odyssey entity; they do not carry graph traversal, direct
-    self-binding, collection intent, or bounded relational-write semantics. Contextual identity
-    wording therefore stays in the ordinary query and Core owns later retrieval and resolution.
+    References may use the same bounded relationship anchor as a singular write target when their
+    identity is defined by current canonical membership. They still cannot request graph traversal,
+    direct self-binding, collection semantics, or a complete member set.
     """
+    base_keys = {"entity", "query", "type", "filters"}
+    if not isinstance(raw, dict) or set(raw) not in (
+        base_keys,
+        {*base_keys, "relational_reference"},
+    ):
+        raise RequestPlanningError("KnowledgeReference selection fields are invalid")
     selector = _validate_note_selector(
-        raw, schema, capabilities, label="KnowledgeReference selection"
+        {key: raw[key] for key in base_keys},
+        schema,
+        capabilities,
+        label="KnowledgeReference selection",
     )
+    relational = _validate_relational_reference(
+        raw.get("relational_reference"), label="KnowledgeReference selection"
+    )
+    if relational is not None and relational.members != "one":
+        raise RequestPlanningError(
+            "KnowledgeReference relational reference must select one identity"
+        )
+    if relational is not None and (selector.entity is not None or selector.filters):
+        raise RequestPlanningError(
+            "KnowledgeReference relational reference conflicts with direct selection",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
     return SelectionCriteria(
         entity=selector.entity,
         query=selector.query,
@@ -1677,7 +1711,7 @@ def _validate_reference_selection(
         filters=selector.filters,
         link_scope=None,
         self_target=None,
-        relational_reference=None,
+        relational_reference=relational,
         semantic_set=None,
         collection_subject=None,
     )
