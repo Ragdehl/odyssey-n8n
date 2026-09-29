@@ -1,0 +1,404 @@
+"""Provider-free semantic WRITE values and deterministic lowering to Core actions."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+
+from odyssey_core.context import ContextFilter
+from odyssey_core.request_planning import (
+    SELF_TARGET,
+    PropertyChange,
+    RequestPlanningError,
+    TagChange,
+    WriteAction,
+    validate_request_plan,
+)
+
+
+class SemanticWriteCompileError(ValueError):
+    """Indicate a semantic WRITE value that cannot safely lower to the Core contract."""
+
+
+class ApplyTo(StrEnum):
+    """Express whether an operation applies to one identity or a deterministic matching set."""
+
+    ONE = "one"
+    ALL_MATCHING = "all_matching"
+
+
+class IdentityBinding(StrEnum):
+    """Describe whether an identity is the authenticated self or ordinary described identity."""
+
+    SELF = "self"
+    DESCRIBED = "described"
+
+
+class CandidateScopeExtent(StrEnum):
+    """Describe whether a candidate scope selects one member or its complete current set."""
+
+    ONE_MEMBER = "one_member"
+    COMPLETE_SET = "complete_set"
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingSource:
+    """Preserve the description of one existing non-recursive relationship source."""
+
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateScope:
+    """Bound one described identity through self or one existing relationship source."""
+
+    source: IdentityBinding | ExistingSource
+    member_query: str
+    extent: CandidateScopeExtent
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityIntent:
+    """Preserve semantic identity evidence without claiming a canonical identity."""
+
+    description: str
+    binding: IdentityBinding
+    direct_name: str | None = None
+    note_type: str | None = None
+    filters: tuple[ContextFilter, ...] = ()
+    candidate_scope: CandidateScope | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LiteralPart:
+    """Keep one literal, non-reference span of a semantic fact."""
+
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityPart:
+    """Keep one exact fact mention together with its independently selectable identity."""
+
+    text: str
+    identity: IdentityIntent
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticFact:
+    """Represent one ordered fact before Core assigns local reference markers."""
+
+    parts: tuple[LiteralPart | IdentityPart, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticWriteOperation:
+    """Represent one semantic mutation target and its ordered payload without Core mechanics."""
+
+    target: IdentityIntent
+    apply_to: ApplyTo
+    intent: str
+    facts: tuple[SemanticFact, ...] = ()
+    properties: tuple[PropertyChange, ...] = ()
+    tag_changes: tuple[TagChange, ...] = ()
+    destination_type: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticWriteIntent:
+    """Contain ordered semantic write operations for deterministic Core lowering."""
+
+    operations: tuple[SemanticWriteOperation, ...]
+
+
+def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any]) -> WriteAction:
+    """Compile immutable semantic WRITE intent through the established request-plan validator.
+
+    Args:
+        intent: Provider-free semantic mutations whose ownership and decomposition are already set.
+        schema: Active canonical schema used by the existing Core validator.
+
+    Returns:
+        One validated, fully lowered ``WriteAction`` with Core-owned indexes and lookup units.
+
+    Raises:
+        SemanticWriteCompileError: If intent is unsafe, unsupported, or rejected by Core validation.
+    """
+    if not isinstance(intent, SemanticWriteIntent) or not isinstance(intent.operations, tuple):
+        raise SemanticWriteCompileError("Semantic WRITE intent is invalid")
+    if not intent.operations or not all(
+        isinstance(operation, SemanticWriteOperation) for operation in intent.operations
+    ):
+        raise SemanticWriteCompileError("Semantic WRITE intent requires operations")
+
+    try:
+        units = [_compile_operation(operation) for operation in intent.operations]
+        plan = validate_request_plan(
+            {"actions": [{"kind": "write", "units": units}], "limitations": []}, schema
+        )
+    except (RequestPlanningError, TypeError, ValueError) as error:
+        raise SemanticWriteCompileError(
+            "Semantic WRITE intent violates the Core contract"
+        ) from error
+    action = plan.actions[0]
+    if not isinstance(
+        action, WriteAction
+    ):  # Defensive: the raw shape above is intentionally fixed.
+        raise SemanticWriteCompileError("Semantic WRITE compiler did not produce a write action")
+    return action
+
+
+def _compile_operation(operation: SemanticWriteOperation) -> dict[str, Any]:
+    """Project one semantic operation into the existing untrusted raw unit shape."""
+    if not isinstance(operation.apply_to, ApplyTo) or operation.intent not in {
+        "record",
+        "amend",
+        "remove",
+        "delete",
+    }:
+        raise SemanticWriteCompileError("Semantic WRITE operation is invalid")
+    if not isinstance(operation.facts, tuple) or not isinstance(operation.properties, tuple):
+        raise SemanticWriteCompileError("Semantic WRITE operation payload is invalid")
+    if not isinstance(operation.tag_changes, tuple):
+        raise SemanticWriteCompileError("Semantic WRITE operation payload is invalid")
+
+    target = _compile_identity(operation.target, allow_self=True, allow_complete_set=True)
+    _validate_operation_shape(operation, target)
+    facts, references = _compile_facts(operation.facts, operation.target)
+    return {
+        "target": target,
+        "cardinality": operation.apply_to.value,
+        "intent": operation.intent,
+        "properties": [_property_raw(change) for change in operation.properties],
+        "tag_changes": [_tag_raw(change) for change in operation.tag_changes],
+        "facts": facts,
+        "references": references,
+        "destination_type": operation.destination_type,
+    }
+
+
+def _validate_operation_shape(operation: SemanticWriteOperation, target: dict[str, Any]) -> None:
+    """Reject semantic shapes that existing raw validation cannot faithfully represent."""
+    has_payload = bool(
+        operation.facts
+        or operation.properties
+        or operation.tag_changes
+        or operation.destination_type is not None
+    )
+    if operation.intent == "delete" and has_payload:
+        raise SemanticWriteCompileError("Delete cannot carry a mutation payload")
+    if operation.intent in {"amend", "remove"} and not has_payload:
+        raise SemanticWriteCompileError("Amend and remove require a mutation payload")
+    if operation.apply_to is ApplyTo.ALL_MATCHING:
+        if (
+            operation.target.binding is IdentityBinding.SELF
+            or operation.target.candidate_scope is not None
+            or any(_fact_has_identity_part(fact) for fact in operation.facts)
+            or (operation.target.note_type is None and not operation.target.filters)
+        ):
+            raise SemanticWriteCompileError("All-matching operation lacks deterministic authority")
+    scope = operation.target.candidate_scope
+    if scope is not None and scope.extent is CandidateScopeExtent.COMPLETE_SET:
+        if (
+            operation.apply_to is not ApplyTo.ONE
+            or operation.intent != "record"
+            or len(operation.facts) != 1
+            or any(isinstance(part, IdentityPart) for part in operation.facts[0].parts)
+            or operation.properties
+            or operation.tag_changes
+            or operation.destination_type is not None
+        ):
+            raise SemanticWriteCompileError("Complete set shape is unsupported")
+    if operation.destination_type is not None:
+        _safe_text(operation.destination_type)
+        if operation.apply_to is not ApplyTo.ONE or operation.intent != "amend" or operation.facts:
+            raise SemanticWriteCompileError("Type migration must be one metadata-only amendment")
+    if target["relational_reference"] is not None and operation.apply_to is ApplyTo.ALL_MATCHING:
+        raise SemanticWriteCompileError("Relational targets cannot be all matching")
+
+
+def _compile_facts(
+    facts: tuple[SemanticFact, ...], target: IdentityIntent
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Render semantic fact parts and create local semantic reference selections."""
+    rendered: list[str] = []
+    references: list[dict[str, Any]] = []
+    reference_keys: list[tuple[IdentityIntent, str]] = []
+    for fact in facts:
+        if (
+            not isinstance(fact, SemanticFact)
+            or not isinstance(fact.parts, tuple)
+            or not fact.parts
+        ):
+            raise SemanticWriteCompileError("Semantic fact is invalid")
+        pieces: list[str] = []
+        for part in fact.parts:
+            if isinstance(part, LiteralPart):
+                _safe_literal_text(part.text)
+                pieces.append(part.text)
+                continue
+            if not isinstance(part, IdentityPart):
+                raise SemanticWriteCompileError("Semantic fact part is invalid")
+            _safe_text(part.text)
+            selection = _compile_identity(part.identity, allow_self=False, allow_complete_set=False)
+            if part.identity == target:
+                raise SemanticWriteCompileError("Fact reference cannot select its own target")
+            reference_key = (part.identity, part.text)
+            reference_index = next(
+                (
+                    index
+                    for index, existing_key in enumerate(reference_keys)
+                    if existing_key == reference_key
+                ),
+                None,
+            )
+            if reference_index is None:
+                reference_index = len(references)
+                reference_keys.append(reference_key)
+                references.append(
+                    {"selection": selection, "role": "identity", "mention": part.text}
+                )
+            pieces.append(f"{{{{ref:{reference_index}}}}}")
+        rendered.append("".join(pieces))
+    return rendered, references
+
+
+def _compile_identity(
+    identity: IdentityIntent, *, allow_self: bool, allow_complete_set: bool
+) -> dict[str, Any]:
+    """Map one semantic identity losslessly to an existing target or reference selection."""
+    if not isinstance(identity, IdentityIntent) or not isinstance(
+        identity.binding, IdentityBinding
+    ):
+        raise SemanticWriteCompileError("Identity intent is invalid")
+    _safe_text(identity.description)
+    if identity.direct_name is not None:
+        _safe_text(identity.direct_name)
+    if identity.note_type is not None:
+        _safe_text(identity.note_type)
+    if not isinstance(identity.filters, tuple) or not all(
+        isinstance(item, ContextFilter) for item in identity.filters
+    ):
+        raise SemanticWriteCompileError("Identity filters are invalid")
+    if identity.binding is IdentityBinding.SELF:
+        if (
+            not allow_self
+            or identity.direct_name is not None
+            or identity.candidate_scope is not None
+        ):
+            raise SemanticWriteCompileError("Self identity has unsupported selectors")
+        return {
+            "entity": None,
+            "query": identity.description,
+            "type": identity.note_type,
+            "filters": [_filter_raw(item) for item in identity.filters],
+            "link_scope": None,
+            "self_target": SELF_TARGET,
+            "relational_reference": None,
+            "semantic_set": None,
+            "collection_subject": None,
+        }
+    if identity.binding is not IdentityBinding.DESCRIBED:
+        raise SemanticWriteCompileError("Identity binding is invalid")
+    relational_reference = _compile_candidate_scope(identity, allow_complete_set=allow_complete_set)
+    if relational_reference is not None and (identity.direct_name is not None or identity.filters):
+        raise SemanticWriteCompileError("Candidate scope conflicts with direct identity selectors")
+    result = {
+        "entity": identity.direct_name,
+        "query": identity.description,
+        "type": identity.note_type,
+        "filters": [_filter_raw(item) for item in identity.filters],
+        "link_scope": None,
+        "self_target": None,
+        "relational_reference": relational_reference,
+        "semantic_set": None,
+        "collection_subject": None,
+    }
+    if not allow_self:
+        return {
+            key: result[key]
+            for key in ("entity", "query", "type", "filters", "relational_reference")
+        }
+    return result
+
+
+def _compile_candidate_scope(
+    identity: IdentityIntent, *, allow_complete_set: bool
+) -> dict[str, str | None] | None:
+    """Map non-recursive semantic scope fields to the existing relational reference value."""
+    scope = identity.candidate_scope
+    if scope is None:
+        return None
+    if not isinstance(scope, CandidateScope) or not isinstance(scope.extent, CandidateScopeExtent):
+        raise SemanticWriteCompileError("Candidate scope is invalid")
+    _safe_text(scope.member_query)
+    if scope.extent is CandidateScopeExtent.COMPLETE_SET and not allow_complete_set:
+        raise SemanticWriteCompileError("Fact references cannot select a complete set")
+    if scope.source is IdentityBinding.SELF:
+        source_kind, source_query = "self", None
+    elif isinstance(scope.source, ExistingSource):
+        _safe_text(scope.source.description)
+        source_kind, source_query = "existing", scope.source.description
+    else:
+        raise SemanticWriteCompileError("Candidate scope source is invalid")
+    return {
+        "reference": scope.member_query,
+        "source_kind": source_kind,
+        "source_query": source_query,
+        "members": "one" if scope.extent is CandidateScopeExtent.ONE_MEMBER else "complete_set",
+    }
+
+
+def _safe_text(value: object, *, preserve_outer_whitespace: bool = False) -> None:
+    """Reject empty or representation-bearing wording without censoring semantic content."""
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or (not preserve_outer_whitespace and value != value.strip())
+        or len(value) > 256
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        or "{{ref" in value
+        or "[[" in value
+        or "]]" in value
+    ):
+        raise SemanticWriteCompileError("Semantic wording is unsafe")
+
+
+def _safe_literal_text(value: object) -> None:
+    """Preserve arbitrary single-line fact spans while reserving Core reference syntax."""
+    if (
+        not isinstance(value, str)
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        or "{{ref" in value
+        or "[[" in value
+        or "]]" in value
+    ):
+        raise SemanticWriteCompileError("Semantic literal text is unsafe")
+
+
+def _fact_has_identity_part(fact: SemanticFact) -> bool:
+    """Return whether one fact needs a reference selection unavailable to bulk writes."""
+    return isinstance(fact, SemanticFact) and any(
+        isinstance(part, IdentityPart) for part in fact.parts
+    )
+
+
+def _filter_raw(filter_value: ContextFilter) -> dict[str, Any]:
+    """Serialize an existing immutable filter without introducing a second filter representation."""
+    return {"field": filter_value.field, "op": filter_value.op, "value": filter_value.value}
+
+
+def _property_raw(change: PropertyChange) -> dict[str, Any]:
+    """Serialize an existing immutable property mutation for Core revalidation."""
+    if not isinstance(change, PropertyChange):
+        raise SemanticWriteCompileError("Property change is invalid")
+    return {"field": change.field, "op": change.op, "value": change.value}
+
+
+def _tag_raw(change: TagChange) -> dict[str, str]:
+    """Serialize an existing immutable tag mutation for Core revalidation."""
+    if not isinstance(change, TagChange):
+        raise SemanticWriteCompileError("Tag change is invalid")
+    return {"op": change.op, "value": change.value}

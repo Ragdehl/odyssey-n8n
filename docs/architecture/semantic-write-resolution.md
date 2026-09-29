@@ -31,6 +31,32 @@ KnowledgeReference
 
 `target_index`, `self_target`, `link_scope`, and `relational_reference` are not provider fields inside a fact reference. The ordinary write target keeps the established full `SelectionCriteria` contract because direct self writes and bounded relational source writes still need those explicit semantics.
 
+## Parallel SemanticWriteIntent compiler checkpoint
+
+The current feature branch adds a **provider-free, non-adopted** semantic WRITE boundary in parallel with the production planner. It does not change the production prompt, Structured Outputs schema, model, resolver, runtime, storage, or materialization path. Its purpose is to prove that the model can eventually describe WRITE meaning without also serializing Core plumbing.
+
+```text
+natural-language WRITE
+        |
+        v
+SemanticWriteIntent        planner-owned meaning (future adoption)
+        |
+        v
+deterministic Core compiler
+        |
+        v
+existing WriteAction / KnowledgeUnit
+        |
+        v
+existing resolution -> preflight -> binding -> materialization
+```
+
+The semantic values preserve ownership, the full target description, explicit direct-name/type/filter evidence, `SELF`, genuine bulk intent, candidate-scope meaning, ordered facts, explicit property/tag/type mutations, and which fact spans denote other Odyssey identities. A candidate scope is deliberately generic and non-recursive: its source is either authenticated self or one existing source described in free text, plus a free-text member query and `one member | complete set` extent. This is not a relationship ontology.
+
+Core deterministically derives the existing representation mechanics: local `{{ref:N}}` numbering, `KnowledgeReference` values, generic internal reference role, lookup-only units, target indexes, `source_kind` / `source_query` / `members`, and ordinary singular cardinality. The compiler immediately routes the resulting raw write shape through the existing `validate_request_plan()` path, so property, tag, type-migration, reference, bulk, and mutation invariants remain owned by the established validator. `all_matching` bulk and relational `complete_set` stay distinct semantic operations.
+
+The frozen SWR registry is unchanged. Provider-free tests demonstrate equivalent lowering for all nine WRITE cases; SWR05 remains a planner-owned clarification and never reaches the compiler. Model-facing adoption is a later step and will require its own prompt/schema review plus fresh focused live evidence under the normal authorization gate.
+
 ## Possessives are identity evidence, not self authority
 
 First-person possessive wording does not by itself select the authenticated self note.

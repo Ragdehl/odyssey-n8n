@@ -199,6 +199,21 @@ from .semantic_sets import (
     resolve_semantic_set,
     serialize_semantic_set_candidate_payload,
 )
+from .semantic_write import (
+    ApplyTo,
+    CandidateScope,
+    CandidateScopeExtent,
+    ExistingSource,
+    IdentityBinding,
+    IdentityIntent,
+    IdentityPart,
+    LiteralPart,
+    SemanticFact,
+    SemanticWriteCompileError,
+    SemanticWriteIntent,
+    SemanticWriteOperation,
+    compile_semantic_write,
+)
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
 __all__ = [
@@ -256,6 +271,19 @@ __all__ = [
     "TextEmbedder",
     "build_semantic_retrieval_text",
     "find_semantic_entity_candidates",
+    "ApplyTo",
+    "CandidateScope",
+    "CandidateScopeExtent",
+    "ExistingSource",
+    "IdentityBinding",
+    "IdentityIntent",
+    "IdentityPart",
+    "LiteralPart",
+    "SemanticFact",
+    "SemanticWriteCompileError",
+    "SemanticWriteIntent",
+    "SemanticWriteOperation",
+    "compile_semantic_write",
     "ContextIndex",
     "ContextFilter",
     "ContextIndexError",
