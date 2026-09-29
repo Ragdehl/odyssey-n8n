@@ -75,19 +75,19 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
     assert registry["version"] == "semantic-write-resolution-active-schema-2026-09-28"
-    assert len(registry["cases"]) == 8
+    assert len(registry["cases"]) == 9
     daughter = registry["cases"][1]
     assert daughter == {
         "id": "SWR02-rich-daughter-target",
         "request": "Mi hija a la que le gusta ver detectives de animales adora el chocolate.",
         "expect": "descriptive_daughter_target",
     }
-    assert registry["cases"][-3] == {
+    assert registry["cases"][-4] == {
         "id": "SWR06-existing-source-relational-anchor",
         "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
         "expect": "qualified_existing_relation_target",
     }
-    assert registry["cases"][-2] == {
+    assert registry["cases"][-3] == {
         "id": "SWR07-qualified-event-member",
         "request": (
             "De las personas que estuvieron en la cena relacional de prueba, "
@@ -95,13 +95,18 @@ def test_active_schema_registry_captures_the_manual_rich_daughter_regression() -
         ),
         "expect": "qualified_existing_event_relation_target",
     }
-    assert registry["cases"][-1] == {
+    assert registry["cases"][-2] == {
         "id": "SWR08-relational-target-described-reference",
         "request": (
             "Mi hija mayor va a cenar con la persona de la cena relacional de prueba "
             "que trabaja en Airbus Test."
         ),
         "expect": "relational_target_and_described_reference",
+    }
+    assert registry["cases"][-1] == {
+        "id": "SWR09-independent-shared-predicate",
+        "request": "Denis y Axel son zurdos.",
+        "expect": "independent_shared_predicate",
     }
 
 
@@ -179,6 +184,19 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
         (),
     )
     assert evaluate(coworkers, "self_relationship_references").passed
+    independent = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit("Denis", "Es zurdo."),
+                    unit("Axel", "Es zurdo."),
+                )
+            ),
+        ),
+        (),
+    )
+    assert evaluate(independent, "independent_shared_predicate").passed
+    assert not evaluate(coworkers, "independent_shared_predicate").passed
     assert evaluate(child, "descriptive_child_target").passed
     assert evaluate(daughter, "descriptive_daughter_target").passed
     assert not evaluate(bad_daughter, "descriptive_daughter_target").passed
@@ -254,7 +272,7 @@ def test_evaluator_accepts_intended_semantic_shapes() -> None:
 
 
 def test_cost_ceiling_is_luna_only_and_bounded() -> None:
-    """Price exactly eight Luna/low calls; no Sol allowance is part of this gate."""
+    """Price exactly nine Luna/low calls; no Sol allowance is part of this gate."""
     import benchmarks.semantic_write_resolution_v1.run_live as runner
 
     registry = json.loads(runner.ACTIVE_REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -262,7 +280,7 @@ def test_cost_ceiling_is_luna_only_and_bounded() -> None:
     cost, input_bound = conservative_cost_ceiling(
         registry["cases"], registry["fixed_context"], schema
     )
-    assert Decimal("0.10") < cost < Decimal("0.12")
+    assert Decimal("0.12") < cost < Decimal("0.13")
     assert input_bound > 0
 
     assert runner.MAX_COST_USD == Decimal("0.00")

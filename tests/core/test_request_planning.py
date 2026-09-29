@@ -1845,6 +1845,8 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     assert "target.entity MUST remain null" in prompt
     assert "emit exactly one source-targeted KnowledgeUnit" in prompt
     assert "NEVER split the relationship into participant-targeted units" in prompt
+    assert "Minimize note mutations without changing semantic ownership" in prompt
+    assert "preserve those subjects as separate write targets" in prompt
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:

@@ -110,6 +110,8 @@ Introduce a structured relationship/property only when a deterministic user-faci
 
 Do not duplicate every wikilink as a generic `related_to`/inverse relation pair.
 
+Write ownership should minimize canonical note mutations without changing the meaning of the knowledge. A relationship with one natural source is stored once on that source and links its participants; the same independently true predicate applied to several distinct subjects remains separate knowledge on those subjects. Never invent an aggregate/source note merely to reduce the number of writes.
+
 ## Types and properties must unlock user value
 
 The test for structure is:

@@ -45,6 +45,11 @@
       "id": "SWR08-relational-target-described-reference",
       "request": "Mi hija mayor va a cenar con la persona de la cena relacional de prueba que trabaja en Airbus Test.",
       "expect": "relational_target_and_described_reference"
+    },
+    {
+      "id": "SWR09-independent-shared-predicate",
+      "request": "Denis y Axel son zurdos.",
+      "expect": "independent_shared_predicate"
     }
   ]
 }

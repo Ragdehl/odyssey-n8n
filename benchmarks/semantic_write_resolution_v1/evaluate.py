@@ -40,6 +40,23 @@ def evaluate(result: Any, expected: str) -> Evaluation:
         return Evaluation(False, ("not_single_write",))
     material = tuple(unit for unit in action.units if not unit.reference_lookup_only)
     lookups = tuple(unit for unit in action.units if unit.reference_lookup_only)
+    if expected == "independent_shared_predicate":
+        checks = [
+            (len(material) == 2, "two_material_units"),
+            (not lookups, "no_lookup_only_units"),
+            (
+                {_normalize(unit.target.query) for unit in material} == {"axel", "denis"},
+                "independent_targets",
+            ),
+            (all(unit.target.self_target is None for unit in material), "not_self"),
+            (
+                all(unit.target.relational_reference is None for unit in material),
+                "not_relational_source",
+            ),
+            (all(_facts_contain(unit, "zurdo") for unit in material), "predicate_on_each_target"),
+            (all(not unit.references for unit in material), "no_spurious_references"),
+        ]
+        return _verdict(checks)
     checks: list[tuple[bool, str]] = [(len(material) == 1, "one_material_unit")]
     if len(material) != 1:
         return _verdict(checks)
