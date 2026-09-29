@@ -90,7 +90,7 @@ Measured with the active schema and the frozen `2026-09-28 20:30 Europe/Paris` c
 | --- | ---: | ---: | ---: |
 | Sol prompt | 25,474 bytes | 25,474 bytes | 0 (byte/hash identical) |
 | Sol provider schema | 47,418 bytes | 47,418 bytes | 0 (byte/hash identical) |
-| Luna prompt | 32,076 bytes | 31,710 bytes | -366 (-1.1%) |
+| Luna prompt | 32,076 bytes | 31,999 bytes | -77 (-0.2%) |
 | Luna provider schema | 22,521 bytes | 18,541 bytes | -3,980 (-17.7%) |
 | Luna WRITE schema branch | 7,343 bytes | 3,380 bytes | -3,963 (-54.0%) |
 
@@ -117,14 +117,21 @@ SWR02, and SWR03, confirming that correction, but stopped fail-fast on SWR04 bec
 represent that request safely: the older child is one relationship-bounded target and the Lyon friend
 is one independently described fact identity. The unchanged frozen oracle is therefore retained.
 
-The v4 correction adds one generic non-held-out teaching example with unrelated vocabulary for that
-already-stated distinction: one SELF-bounded described target plus one separate descriptive identity
-part in the new fact. No prompt rule, relationship taxonomy, schema, compiler, Core interface, frozen
-case, or oracle changed. The unexecuted v4 successor reuses the same 13 cases, permits at most 13
-Luna/low calls with zero retries and zero Sol calls, and has a 51,455-byte conservative input bound
-plus `$0.1657318` no-cache ceiling. Its fresh artifact path is
-`semantic-write-frontend-v4-luna-gate.jsonl`; `MAX_COST_USD` is `$0.00`, so live adoption remains
-blocked on fresh explicit authorization.
+The v4 correction added one generic non-held-out teaching example with unrelated vocabulary for that
+already-stated distinction. The authorized v4 gate then passed SWR01 through SWR07 and stopped on
+SWR08: Luna preserved the SELF-bounded daughter target and the full described companion, but the
+companion lost its explicit existing-source relationship bound and became a global descriptive lookup.
+That violates the frozen `bounded_companion_relation` oracle and would widen identity resolution beyond
+the user's supplied source, so the oracle is retained.
+
+The v5 correction strengthens that same generic teaching example rather than adding another prompt
+rule. Its fact participant now explicitly comes from an existing workshop roster and carries its own
+`EXISTING_DESCRIPTION` candidate scope while retaining the richer Porto qualifier in the full identity
+description. No prompt rule, relationship taxonomy, schema, compiler, Core interface, frozen case, or
+oracle changed. The unexecuted v5 successor reuses the same 13 cases, permits at most 13 Luna/low calls
+with zero retries and zero Sol calls, and has a 51,744-byte conservative input bound plus `$0.1664832`
+no-cache ceiling. Its fresh artifact path is `semantic-write-frontend-v5-luna-gate.jsonl`;
+`MAX_COST_USD` is `$0.00`, so live adoption remains blocked on fresh explicit authorization.
 
 ## Possessives are identity evidence, not self authority
 
@@ -220,8 +227,14 @@ The user then authorized semantic-write-frontend-v3 at its `$0.1626716` conserva
 once at authorization commit `be0976c`, passed SWR01-SWR03, and stopped fail-fast on SWR04 after four
 completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
 `ff1c88f2cb29613009f943f73cba61cbcb2a00b613acca75207070771d93f8fc`; the usage-backed
-checked-in-pricing estimate is `$0.00360986`. The v1, v2, and v3 runners/paths are permanently
-consumed. The v4 successor is offline-only and unauthorized.
+checked-in-pricing estimate is `$0.00360986`.
+
+The user then authorized semantic-write-frontend-v4 at its `$0.1657318` conservative ceiling. It ran
+once at authorization commit `3fb65b7`, passed SWR01-SWR07, and stopped fail-fast on SWR08 after eight
+completed Luna/low calls, zero retries, and zero Sol calls. The retained artifact SHA-256 is
+`1963296cbcc857c0f07703b0b045ee411b3aabed826a4d689bf822ed9b975652`; the usage-backed
+checked-in-pricing estimate is `$0.00631928`. The v1-v4 runners/paths are permanently consumed. The
+v5 successor is offline-only and unauthorized.
 
 After integration with the collection/clarification contract, the five-case Luna/low planner gate ran at commit `1f0047d` under an explicitly authorized `$0.070515` conservative ceiling and `58,227`-byte input bound. All five frozen cases passed with five Luna/low calls, zero retries, zero Sol calls, and an estimated actual cost of `$0.0044110`. That evidence remains historical evidence for that exact model-facing contract.
 

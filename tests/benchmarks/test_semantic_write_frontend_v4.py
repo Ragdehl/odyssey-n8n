@@ -1,7 +1,8 @@
-"""Offline guards for the unexecuted semantic-write-frontend-v4 live gate."""
+"""Offline guards for the consumed semantic-write-frontend-v4 live gate."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -21,43 +22,39 @@ def test_gate_reuses_the_same_hash_pinned_ten_plus_three_cases() -> None:
     assert context == {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
 
 
-def test_gate_cost_ceiling_matches_explicit_authorization() -> None:
-    cases, context = runner.load_gate_cases()
-    schema = json.loads(runner.SCHEMA_PATH.read_text(encoding="utf-8"))
-    cost, input_bound = runner.conservative_cost_ceiling(cases, context, schema)
-    assert len(cases) == 13
-    assert cost == Decimal("0.1657318")
-    assert input_bound == 51_455
-    assert runner.MAX_COST_USD == Decimal("0.1657318")
-    assert runner.OUTPUT_PATH == (
-        ROOT / "benchmarks/.live-results/semantic-write-frontend-v4-luna-gate.jsonl"
+def test_gate_is_consumed_with_recorded_immutable_evidence() -> None:
+    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.GATE_CONSUMED is True
+    manifest = json.loads(runner.MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert manifest["provider_calls_made"] == 8
+    assert manifest["result"] == "failed_swr08"
+    assert (
+        manifest["artifact_sha256"]
+        == "1963296cbcc857c0f07703b0b045ee411b3aabed826a4d689bf822ed9b975652"
     )
-    assert not runner.OUTPUT_PATH.exists()
+    assert manifest["max_cost_usd"] == "0.00"
+    if runner.OUTPUT_PATH.exists():
+        assert (
+            hashlib.sha256(runner.OUTPUT_PATH.read_bytes()).hexdigest()
+            == manifest["artifact_sha256"]
+        )
+        rows = [json.loads(line) for line in runner.OUTPUT_PATH.read_text().splitlines()]
+        assert len(rows) == 8
+        assert [row["passed"] for row in rows] == [True] * 7 + [False]
+        assert rows[-1]["case_id"] == "SWR08-relational-target-described-reference"
+        assert rows[-1]["findings"] == ["bounded_companion_relation"]
 
 
-def test_gate_refuses_before_provider_construction_when_budget_is_insufficient(
+def test_consumed_gate_refuses_before_provider_construction(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "must-not-exist.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
         "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without authorization"),
+        lambda *_args, **_kwargs: pytest.fail("provider constructed for consumed gate"),
     )
-    with pytest.raises(SystemExit, match=r"exceeds \$0.00 authorization"):
+    with pytest.raises(SystemExit, match="permanently consumed"):
         runner.main(["--confirm-live-provider-calls"])
     assert not runner.OUTPUT_PATH.exists()
-
-
-def test_gate_requires_confirmation_before_any_hypothetical_authorized_call(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("1"))
-    monkeypatch.setattr(
-        runner.OpenAILunaExperimentalPlanner,
-        "from_environment",
-        lambda *_args, **_kwargs: pytest.fail("provider constructed without confirmation"),
-    )
-    with pytest.raises(SystemExit, match="without --confirm-live-provider-calls"):
-        runner.main([])

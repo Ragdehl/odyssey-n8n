@@ -1,16 +1,16 @@
 # Semantic WRITE frontend v4
 
-This is the unexecuted successor to the consumed v3 Luna/low gate. It reuses the exact same
-hash-pinned ten active SWR cases plus the same three READ/delegation/mixed-order sentinels and
-unchanged oracles.
+This is the consumed successor to the v3 gate. It reused the exact same hash-pinned ten active SWR
+cases plus the same three READ/delegation/mixed-order sentinels and unchanged oracles.
 
-The only model-facing correction is one generic non-held-out teaching example for a
-relationship-bounded target plus a separately described participant inside the new fact. The prompt
-prose, semantic WRITE schema/compiler, Core interfaces, Sol fallback contract, and frozen gate cases
-remain unchanged.
+The user authorized the 13-case Luna/low gate at its `$0.1657318` conservative ceiling. It ran once
+and stopped fail-fast on SWR08 after eight completed Luna/low calls, with zero retries and zero Sol
+calls. SWR01 through SWR07 passed. SWR08 preserved the relationship-bounded daughter target and the
+full described companion, but left that companion globally described instead of preserving the
+request's explicit existing dinner source as the companion identity's bounded candidate scope. The
+unchanged oracle is retained.
 
-The gate permits at most 13 Luna/low calls, zero retries, and zero Sol calls. Its provider-free
-conservative input bound is 51,455 bytes per call and its no-cache ceiling is `$0.1657318`.
-`MAX_COST_USD` is `$0.00`; the fresh non-overwriting artifact path is
-`benchmarks/.live-results/semantic-write-frontend-v4-luna-gate.jsonl`. Execution requires fresh
-explicit human authorization.
+The immutable artifact is `benchmarks/.live-results/semantic-write-frontend-v4-luna-gate.jsonl`,
+SHA-256 `1963296cbcc857c0f07703b0b045ee411b3aabed826a4d689bf822ed9b975652`. Usage-backed cost from the
+checked-in pricing snapshot is `$0.00631928`. The v4 runner is permanently consumed at `$0.00`; a
+successor must use a new versioned runner and artifact path.

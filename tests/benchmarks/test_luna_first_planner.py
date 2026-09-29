@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_380
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 31_710
+    assert prompt_bytes == 31_999
     assert schema_bytes == 18_541
 
 
@@ -784,7 +784,7 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
 def test_relational_target_with_described_reference_teaching_example_compiles(
     schema: dict[str, Any],
 ) -> None:
-    """Teach one bounded target plus one independently resolved fact participant."""
+    """Teach one bounded target plus one independently bounded fact participant."""
     example = next(
         item
         for item in load_teaching_examples()
@@ -805,8 +805,17 @@ def test_relational_target_with_described_reference_teaching_example_compiles(
     assert relation.members == "one"
     assert material[0].target.query == "my mentor who works remotely"
     assert material[0].facts == ("Attended a conference with {{ref:0}}.",)
-    assert material[0].references[0].mention == "the designer who lives in Porto"
-    assert lookups[0].target.query == "the designer who lives in Porto"
+    assert material[0].references[0].mention == (
+        "the designer from the existing Riverside workshop roster who lives in Porto"
+    )
+    assert lookups[0].target.query == (
+        "the designer from the existing Riverside workshop roster who lives in Porto"
+    )
+    companion_relation = lookups[0].target.relational_reference
+    assert companion_relation is not None
+    assert companion_relation.source_kind == "existing"
+    assert companion_relation.source_query == "the existing Riverside workshop roster"
+    assert companion_relation.members == "one"
 
 
 def test_complete_set_relational_teaching_example_preserves_one_source_write(
