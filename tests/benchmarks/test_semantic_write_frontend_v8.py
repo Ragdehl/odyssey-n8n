@@ -28,6 +28,11 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
         (ROOT / "benchmarks/semantic_write_resolution_v1/evaluate.py").read_bytes()
     ).hexdigest()
     assert manifest["evaluator_sha256"] == actual
+    assert manifest["failure_policy"] == "collect_all_case_results"
+    assert manifest["logical_cases"] == 13
+    assert manifest["max_provider_calls"] == 13
+    assert manifest["retries"] == 0
+    assert manifest["sol_calls"] == 0
 
 
 def test_gate_refuses_without_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -40,3 +45,21 @@ def test_gate_refuses_without_authority(monkeypatch: pytest.MonkeyPatch, tmp_pat
     with pytest.raises(SystemExit, match=r"exceeds \$0.0000000 authorization"):
         runner.main(["--confirm-live-provider-calls"])
     assert not runner.OUTPUT_PATH.exists()
+
+
+def test_gate_collects_all_cases_after_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    cases, _ = runner.load_gate_cases()
+    seen: list[str] = []
+
+    def fake_single_case_runner(_planner, one_case, _evidence):
+        assert len(one_case) == 1
+        case_id = one_case[0]["id"]
+        seen.append(case_id)
+        return [{"case_id": case_id, "passed": case_id != cases[1]["id"]}]
+
+    monkeypatch.setattr(runner, "run_cases", fake_single_case_runner)
+    rows = runner.run_all_cases(object(), cases, object())
+    assert len(rows) == 13
+    assert seen == [case["id"] for case in cases]
+    assert rows[1]["passed"] is False
+    assert rows[-1]["case_id"] == cases[-1]["id"]

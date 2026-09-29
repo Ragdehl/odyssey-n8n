@@ -147,7 +147,7 @@ into the semantic contract itself: provider-facing `EXISTING_DESCRIPTION` become
 that bounds the identity, and Core remains responsible for grounding it against canonical evidence or
 clarifying. The internal lowered `source_kind=existing` behavior is unchanged. No new teaching example,
 relationship taxonomy, Core resolver rule, or mutation authority is added. Offline frontend-v8 reuses
-the same 13 requests and pinned evaluator, has a 52,024-byte conservative input bound and `$0.1672112`
+the same 13 requests and pinned evaluator and deliberately continues after failed oracles to collect the complete matrix in one authorized run. It has a 52,024-byte conservative input bound and `$0.1672112`
 no-cache ceiling, and is locked at `MAX_COST_USD=$0.00`.
 
 ## Possessives are identity evidence, not self authority

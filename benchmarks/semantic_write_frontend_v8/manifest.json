@@ -8,5 +8,10 @@
   },
   "evaluator_sha256": "7360d91b179ba68c1243c6829738ec0507a04034c8b6c1cc5cee6ec009a3b9e3",
   "future_artifact": "benchmarks/.live-results/semantic-write-frontend-v8-luna-gate.jsonl",
-  "max_cost_usd": "0.00"
+  "max_cost_usd": "0.00",
+  "failure_policy": "collect_all_case_results",
+  "logical_cases": 13,
+  "max_provider_calls": 13,
+  "retries": 0,
+  "sol_calls": 0
 }
