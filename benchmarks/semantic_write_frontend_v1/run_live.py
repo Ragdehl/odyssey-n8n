@@ -34,7 +34,8 @@ SENTINELS_PATH = Path(__file__).with_name("sentinels.json")
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
 OUTPUT_PATH = ROOT / "benchmarks/.live-results/semantic-write-frontend-v1-luna-gate.jsonl"
 INPUT_OVERHEAD_BYTES = 1024
-MAX_COST_USD = Decimal("0.00")
+# Explicitly authorized by the user on 2026-09-29 for the 13-case semantic-write-frontend-v1 gate.
+MAX_COST_USD = Decimal("0.1594554")
 
 
 def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:

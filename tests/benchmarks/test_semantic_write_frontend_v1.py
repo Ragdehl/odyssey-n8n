@@ -35,17 +35,18 @@ def test_gate_cost_ceiling_is_offline_luna_only_and_unauthorized() -> None:
     assert len(cases) == 13
     assert cost == Decimal("0.1594554")
     assert input_bound == 49_041
-    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.MAX_COST_USD == Decimal("0.1594554")
     assert runner.OUTPUT_PATH == (
         ROOT / "benchmarks/.live-results/semantic-write-frontend-v1-luna-gate.jsonl"
     )
     assert not runner.OUTPUT_PATH.exists()
 
 
-def test_gate_refuses_before_provider_construction_without_fresh_authorization(
+def test_gate_refuses_before_provider_construction_when_budget_is_insufficient(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Leave provider construction unreachable while MAX_COST_USD remains zero."""
+    """Keep the cost cap fail-closed even though this exact gate is now authorized."""
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "must-not-exist.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
