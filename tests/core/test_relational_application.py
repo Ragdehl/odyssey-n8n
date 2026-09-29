@@ -1812,6 +1812,94 @@ def test_semantic_fact_reference_resolves_existing_note_without_lookup_write(
     assert unit_results[1].materially_affected is False
 
 
+def test_two_semantic_fact_references_resolve_independently_with_canonical_names(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Bind two described references independently and persist only canonical display names."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta Test", fact("Trabaja en Airbus Test."))
+    write_note(vault, "people/clara.md", "clara", "Clara Test", fact("Habla italiano."))
+    before_marta = (vault / "people/marta.md").read_bytes()
+    before_clara = (vault / "people/clara.md").read_bytes()
+    marta_query = "la persona de la cena relacional de prueba que trabaja en Airbus Test"
+    clara_query = "la persona de la cena relacional de prueba que habla italiano"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": "Cloe",
+                            "query": "Cloe",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Va a cenar con {{ref:0}} y {{ref:1}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": marta_query,
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "companion",
+                                "mention": marta_query,
+                            },
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": clara_query,
+                                    "type": "person",
+                                    "filters": [],
+                                },
+                                "role": "companion",
+                                "mention": clara_query,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    index = MappedIndex(
+        {
+            marta_query: (
+                SemanticEntityCandidate("marta", "people/marta.md", "person", "Marta Test", 0.93),
+            ),
+            clara_query: (
+                SemanticEntityCandidate("clara", "people/clara.md", "person", "Clara Test", 0.92),
+            ),
+        }
+    )
+    reasoner = MappedReasoner({marta_query: "marta", clara_query: "clara"})
+
+    result = run(vault, schema, plan, reasoner=reasoner, semantic_index=index)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    cloe = parse_note((vault / "people/cloe.md").read_text()).content
+    assert "[[people/marta|Marta Test]]" in cloe
+    assert "[[people/clara|Clara Test]]" in cloe
+    assert marta_query not in cloe and clara_query not in cloe
+    assert (vault / "people/marta.md").read_bytes() == before_marta
+    assert (vault / "people/clara.md").read_bytes() == before_clara
+    assert len(list(vault.rglob("*.md"))) == 3
+
+
 def test_ambiguous_semantic_reference_defers_source_write_without_guessing(
     tmp_path: Path, schema: dict
 ) -> None:
