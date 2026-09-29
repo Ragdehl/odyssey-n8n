@@ -484,6 +484,72 @@ def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> N
         validate_request_plan(output(write(unit("Marta", cardinality="many"))), schema)
 
 
+def test_swr01_style_self_source_and_two_references_remains_valid(schema: dict) -> None:
+    """Keep the source-owned relationship shape valid while diagnostics become finer."""
+    raw = schema_unit(
+        "yo",
+        facts=["{{ref:0}} y {{ref:1}} son mis compañeros de trabajo."],
+        references=[
+            {
+                "selection": reference_selection("Axel", note_type="person"),
+                "role": "coworker",
+                "mention": "Axel",
+            },
+            {
+                "selection": reference_selection("Denis", note_type="person"),
+                "role": "coworker",
+                "mention": "Denis",
+            },
+        ],
+    )
+    raw["target"]["self_target"] = "self"
+    payload = planner_output(write(raw))
+
+    assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
+    plan = validate_planner_result(payload, schema)
+    assert len(plan.actions[0].units[0].references) == 2  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("raw_unit", "code"),
+    [
+        (
+            schema_unit("personas", entity="Marta", cardinality="all_matching"),
+            PlannerValidationCode.INVALID_CARDINALITY,
+        ),
+        (
+            schema_unit("Marta", facts=["Duplicado.", "Duplicado."]),
+            PlannerValidationCode.INVALID_MUTATION,
+        ),
+        (
+            schema_unit(
+                "Marta",
+                facts=["Marta conoce a Axel."],
+                references=[
+                    {
+                        "selection": reference_selection("Axel", note_type="person"),
+                        "role": "friend",
+                        "mention": "Axel",
+                    }
+                ],
+            ),
+            PlannerValidationCode.INVALID_REFERENCE,
+        ),
+    ],
+)
+def test_schema_valid_knowledge_unit_failures_keep_bounded_codes(
+    schema: dict, raw_unit: dict, code: PlannerValidationCode
+) -> None:
+    """Attribute semantic failures without retaining model payload details."""
+    payload = planner_output(write(raw_unit))
+    assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
+
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_planner_result(payload, schema)
+    assert raised.value.validation_stage is PlannerValidationStage.KNOWLEDGE_UNIT
+    assert raised.value.validation_code is code
+
+
 def test_bulk_cardinality_cannot_mix_singular_entity_or_references(schema: dict) -> None:
     """Keep all-matching set membership distinct from identity and Phase 16.5 references."""
     with pytest.raises(RequestPlanningError, match="entity"):
@@ -1856,7 +1922,7 @@ def test_local_validation_diagnostics_never_retain_payload_or_request_sentinels(
         planner.plan("SECRET_REQUEST_SENTINEL")
 
     assert planner.last_validation_stage == PlannerValidationStage.KNOWLEDGE_UNIT.value
-    assert planner.last_validation_code == PlannerValidationCode.INVALID_FIELDS.value
+    assert planner.last_validation_code == PlannerValidationCode.INVALID_MUTATION.value
     diagnostics = repr(
         (
             planner.last_error_category,

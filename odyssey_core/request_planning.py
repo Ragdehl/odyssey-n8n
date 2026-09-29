@@ -2061,11 +2061,20 @@ def _validate_knowledge_unit(
             code=PlannerValidationCode.INVALID_CARDINALITY,
         )
     if cardinality == "all_matching" and target.entity is not None:
-        raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
+        raise RequestPlanningError(
+            "all_matching KnowledgeUnit target.entity must be null",
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     if cardinality == "all_matching" and target.self_target is not None:
-        raise RequestPlanningError("self_target requires one direct target")
+        raise RequestPlanningError(
+            "self_target requires one direct target",
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     if cardinality == "all_matching" and target.relational_reference is not None:
-        raise RequestPlanningError("relational member sets use one source unit")
+        raise RequestPlanningError(
+            "relational member sets use one source unit",
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     intent = unit["intent"]
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
@@ -2074,7 +2083,10 @@ def _validate_knowledge_unit(
     if destination_type is not None and destination_type not in write_capabilities["types"]:
         raise RequestPlanningError("KnowledgeUnit destination_type is invalid")
     if destination_type is not None and (cardinality != "one" or intent != "amend"):
-        raise RequestPlanningError("Type migration requires intent=amend and cardinality=one")
+        raise RequestPlanningError(
+            "Type migration requires intent=amend and cardinality=one",
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
 
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
@@ -2090,14 +2102,19 @@ def _validate_knowledge_unit(
         or len(raw_facts) != len(set(raw_facts))
         or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
     ):
-        raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
+        raise RequestPlanningError(
+            "KnowledgeUnit facts must be unique non-empty strings",
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
     if any("\n" in fact or "\r" in fact or "<!-- odyssey:fact" in fact for fact in raw_facts):
         raise RequestPlanningError(
-            "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers"
+            "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers",
+            code=PlannerValidationCode.INVALID_MUTATION,
         )
     if intent == "delete" and (raw_properties or tag_changes or raw_facts):
         raise RequestPlanningError(
-            "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts"
+            "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts",
+            code=PlannerValidationCode.INVALID_MUTATION,
         )
 
     raw_references = unit["references"]
@@ -2106,13 +2123,19 @@ def _validate_knowledge_unit(
     references: list[KnowledgeReference] = []
     for reference in raw_references:
         if not isinstance(reference, dict):
-            raise RequestPlanningError("KnowledgeUnit reference is invalid")
+            raise RequestPlanningError(
+                "KnowledgeUnit reference is invalid",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
         keys = set(reference)
         if keys not in (
             {"target_index", "role", "mention"},
             {"selection", "role", "mention"},
         ):
-            raise RequestPlanningError("KnowledgeUnit reference is invalid")
+            raise RequestPlanningError(
+                "KnowledgeUnit reference is invalid",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
         if (
             not isinstance(reference["role"], str)
             or not reference["role"].strip()
@@ -2121,7 +2144,10 @@ def _validate_knowledge_unit(
             or "[[" in reference["mention"]
             or "]]" in reference["mention"]
         ):
-            raise RequestPlanningError("KnowledgeUnit reference is invalid")
+            raise RequestPlanningError(
+                "KnowledgeUnit reference is invalid",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
         target_index: int | None = None
         selection: SelectionCriteria | None = None
         if "target_index" in reference:
@@ -2131,7 +2157,10 @@ def _validate_knowledge_unit(
                 or isinstance(raw_target_index, bool)
                 or raw_target_index < 0
             ):
-                raise RequestPlanningError("KnowledgeUnit reference is invalid")
+                raise RequestPlanningError(
+                    "KnowledgeUnit reference is invalid",
+                    code=PlannerValidationCode.INVALID_REFERENCE,
+                )
             target_index = raw_target_index
         else:
             selection = _validate_reference_selection(
@@ -2156,7 +2185,10 @@ def _validate_knowledge_unit(
     marker_indexes = _validate_fact_reference_markers(raw_facts, len(references))
     for reference_index in range(len(references)):
         if reference_index not in marker_indexes:
-            raise RequestPlanningError("KnowledgeReference has no fact occurrence marker")
+            raise RequestPlanningError(
+                "KnowledgeReference has no fact occurrence marker",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
     if target.relational_reference is not None and _query_repeats_new_fact(
         target.query, raw_facts, references
     ):
