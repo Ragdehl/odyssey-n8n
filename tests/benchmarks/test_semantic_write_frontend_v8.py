@@ -21,7 +21,7 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
     assert len(cases) == 13
     assert cost == Decimal("0.1672112")
     assert bound == 52_024
-    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.MAX_COST_USD == Decimal("0.1672112")
     assert not runner.OUTPUT_PATH.exists()
     manifest = json.loads(runner.MANIFEST_PATH.read_text())
     actual = hashlib.sha256(
@@ -36,6 +36,7 @@ def test_gate_shape_cost_and_oracle_pin() -> None:
 
 
 def test_gate_refuses_without_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(runner, "MAX_COST_USD", Decimal("0.00"))
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "x.jsonl")
     monkeypatch.setattr(
         runner.OpenAILunaExperimentalPlanner,
