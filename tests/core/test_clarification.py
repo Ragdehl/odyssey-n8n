@@ -24,12 +24,20 @@ OPTIONS = (
 
 @pytest.mark.parametrize(
     ("reply", "expected"),
-    [("1", "note-a"), (" 2 ", "note-b"), ("marta in lyon", "note-a"), ("3", None), ("Marta", None)],
+    [
+        ("1", "note-a"),
+        (" 2 ", "note-b"),
+        ("marta in lyon", "note-a"),
+        ("He elegido a Marta in Madrid.", "note-b"),
+        ("3", None),
+        ("Marta", None),
+        ("He elegido a Marta.", None),
+    ],
 )
-def test_only_numeric_or_exact_unique_label_selects_option(
+def test_only_bounded_deterministic_reply_forms_select_option(
     reply: str, expected: str | None
 ) -> None:
-    """Free text and unknown numbers cannot invent a target."""
+    """Only numeric, exact-label, or exact UI-choice forms can select a supplied target."""
     assert match_clarification_reply(reply, OPTIONS) == expected
 
 
@@ -37,6 +45,7 @@ def test_duplicate_labels_remain_unresolved_and_ids_must_be_unique() -> None:
     """Displayed labels cannot silently identify one of two same-named Notes."""
     same_label = (ClarificationOption("note-a", "Marta"), ClarificationOption("note-b", "Marta"))
     assert match_clarification_reply("Marta", same_label) is None
+    assert match_clarification_reply("He elegido a Marta.", same_label) is None
     assert match_clarification_reply("2", same_label) == "note-b"
     with pytest.raises(ValueError):
         match_clarification_reply("1", (OPTIONS[0], OPTIONS[0]))
@@ -73,6 +82,12 @@ def test_reply_precedence_and_bounded_control_outcomes() -> None:
     assert (
         resolve_clarification_reply("Marta in Lyon", OPTIONS, classifier, "original request")
         == "note-a"
+    )
+    assert (
+        resolve_clarification_reply(
+            "He elegido a Marta in Madrid.", OPTIONS, classifier, "original request"
+        )
+        == "note-b"
     )
     assert (
         resolve_clarification_reply("cancel", OPTIONS, classifier, "original request") == "CANCEL"
@@ -118,6 +133,32 @@ def test_invalid_pending_guard_is_not_persisted(tmp_path: Path) -> None:
             )
         )
     assert store.read() is None
+
+
+def test_rich_pending_version_round_trips_while_legacy_version_remains_readable(
+    tmp_path: Path,
+) -> None:
+    """Persist presentation in v3 without changing the v1/v2 reader contract."""
+    rich_options = (
+        ClarificationOption("note-a", "Marta", "person", "Marta vive en Lyon."),
+        ClarificationOption("note-b", "Marta", "person", "Marta vive en Madrid."),
+    )
+    pending = PendingClarification(
+        "original request",
+        "request-1",
+        "pending-1",
+        rich_options,
+        ("a" * 64, "b" * 64),
+        requested_reference="Marta",
+        explanation="No puedo identificar con seguridad a Marta.",
+    )
+    store = LocalClarificationStore(tmp_path, "main")
+    store.replace(pending)
+
+    assert store.read() == pending
+    payload = json.loads((tmp_path / "clarifications" / "main.json").read_text())
+    assert payload["version"] == 3
+    assert match_clarification_reply("Marta", rich_options) is None
 
 
 def test_relational_source_guard_must_be_a_sha256_digest(tmp_path: Path) -> None:

@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_378
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 32_281
+    assert prompt_bytes == 33_258
     assert schema_bytes == 18_539
 
 
@@ -775,6 +775,14 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     assert "Selection semantics take precedence over presentation" in prompt
     assert "presentation_intent MUST be answer even when the user asks to show notes" in prompt
     assert "identity parts for distinct participants" in prompt
+    assert "never transfers ownership of a different predicate to its source" in prompt
+    assert "keep that subject as the operation target" in prompt
+    assert "Candidate scope applies uniformly to every described semantic identity" in prompt
+    assert "every canonical note type" in prompt
+    assert (
+        "whether that identity is the operation target or an identity part inside a fact" in prompt
+    )
+    assert "Never drop a required candidate_scope because the identity is non-person" in prompt
     assert "A literal part preserves non-identity wording exactly" in prompt
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])

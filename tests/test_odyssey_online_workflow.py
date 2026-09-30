@@ -157,7 +157,9 @@ def test_collection_and_clarification_are_direct_grounded_routes() -> None:
     assert "a.collection?.outcome === 'ANSWERABLE'" in source
     assert "collection_members: members" in source
     assert "if (outcome === 'CLARIFY')" in source
-    assert "clarification: { request_id:" in source
+    assert "clarification: { request_id: c?.request_id" in source
+    assert "new Set(raw.map(o => o.id)).size === raw.length" in source
+    assert "note_type: o.note_type, evidence: o.evidence" in source
 
 
 def test_valid_insufficient_evidence_is_a_normal_empty_response() -> None:

@@ -153,6 +153,11 @@ class FactReasoner:
             {
                 "outcome": self.outcome,
                 "id": request.candidates[0].id if self.outcome == "RESOLVED" else None,
+                "ambiguous_ids": (
+                    [candidate.id for candidate in request.candidates[:4]]
+                    if self.outcome == "AMBIGUOUS"
+                    else []
+                ),
             },
             {},
         )
@@ -247,7 +252,7 @@ class MatchingFactReasoner(FactReasoner):
         candidate = next(
             item for item in request.candidates if self.wording in item.evidence.casefold()
         )
-        return ({"outcome": "RESOLVED", "id": candidate.id}, {})
+        return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
 
 
 class MappedReasoner(FactReasoner):
@@ -262,9 +267,16 @@ class MappedReasoner(FactReasoner):
         self.requests.append(request)
         selected = self.decisions[request.reference]
         if selected is None:
-            return ({"outcome": "AMBIGUOUS", "id": None}, {})
+            return (
+                {
+                    "outcome": "AMBIGUOUS",
+                    "id": None,
+                    "ambiguous_ids": [candidate.id for candidate in request.candidates[:4]],
+                },
+                {},
+            )
         assert selected in {candidate.id for candidate in request.candidates}
-        return ({"outcome": "RESOLVED", "id": selected}, {})
+        return ({"outcome": "RESOLVED", "id": selected, "ambiguous_ids": []}, {})
 
 
 class SourceThenQualifierReasoner(FactReasoner):
@@ -283,7 +295,7 @@ class SourceThenQualifierReasoner(FactReasoner):
             candidate = next(
                 item for item in request.candidates if self.qualifier in item.evidence.casefold()
             )
-        return ({"outcome": "RESOLVED", "id": candidate.id}, {})
+        return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
 
 
 class ForbiddenWriter:
@@ -549,6 +561,48 @@ def test_multi_target_singular_fact_offers_each_grounded_identity_without_guessi
     assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
     assert action.reason == "relational_singular_ambiguous"
     assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.clarification is not None
+    assert [item.evidence for item in action.clarification.candidates] == [
+        "Mis hijos son Cloe y Bruno.",
+        "Mis hijos son Cloe y Bruno.",
+    ]
+
+
+def test_ambiguous_selected_fact_locators_expose_only_grounded_targets_and_evidence(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Ground relational WRITE options in exactly the fact locators selected by the reasoner."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    source_body = (
+        fact("Mis hijos son [[Cloe]] y [[Bruno]].", 0)
+        + "\n\n"
+        + fact("[[Cloe]] es mi hija mayor.", 1)
+    )
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", source_body)
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    target = relational_selection("mi descendiente", source_kind="self", source_query=None)
+    unit = KnowledgeUnit(target, "record", (), (), ("Viaja mañana.",), ())
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=FactReasoner("AMBIGUOUS"),
+    )
+
+    action = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.clarification is not None
+    assert [item.label for item in action.clarification.candidates] == ["Cloe", "Bruno"]
+    assert action.clarification.candidates[0].evidence == (
+        "Mis hijos son Cloe y Bruno. · Cloe es mi hija mayor."
+    )
+    assert action.clarification.candidates[1].evidence == "Mis hijos son Cloe y Bruno."
+    assert all(path.read_bytes() == content for path, content in before.items())
 
 
 def test_conflicting_singular_relation_targets_offer_options_only_for_reads(
@@ -1416,6 +1470,108 @@ def test_existing_relation_source_resolution_ignores_target_only_qualifiers(
     assert reasoner.requests[-1].reference == query
 
 
+def test_bare_singular_relational_write_offers_grounded_members_and_resumes_choice(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A relation that names one unspecified member must clarify before writing."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta pintar."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Le gusta correr."))
+    selection = relational_selection("uno de mis hijos", source_kind="self", source_query=None)
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha apuntado a natación.",), ())
+    plan = RequestPlan((WriteAction((unit,)),), ())
+    selector = RelevantFactSelector("Mis hijos")
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    initial = run(vault, schema, plan, selector=selector)
+
+    assert initial.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert initial.affected_stable_note_ids == ()
+    assert all(path.read_bytes() == content for path, content in before.items())
+    action = initial.action_results[0]
+    assert action.reason == "relational_singular_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.clarification is not None
+    assert [candidate.label for candidate in action.clarification.candidates] == ["Cloe", "Bruno"]
+    assert action.relational_evidence_guard is not None
+
+    choice = ClarificationChoice(
+        "bruno",
+        current_identity_guard(VaultRepository(vault), schema, "bruno"),
+        action.relational_evidence_guard,
+    )
+    resumed = run(
+        vault, schema, plan, selector=RelevantFactSelector("Mis hijos"), clarification_choice=choice
+    )
+
+    assert resumed.status is application.ApplicationStatus.COMPLETED
+    assert resumed.affected_stable_note_ids == ("bruno",)
+    assert (
+        "Se ha apuntado a natación." in parse_note((vault / "people/bruno.md").read_text()).content
+    )
+    assert (
+        "Se ha apuntado a natación."
+        not in parse_note((vault / "people/cloe.md").read_text()).content
+    )
+
+
+def test_bare_singular_relational_write_rejects_choice_after_source_evidence_changes(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A pending member choice cannot survive a changed canonical relationship fact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    original_source = fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].")
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", original_source)
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    selection = relational_selection("uno de mis hijos", source_kind="self", source_query=None)
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha apuntado a natación.",), ())
+    plan = RequestPlan((WriteAction((unit,)),), ())
+    initial = run(vault, schema, plan, selector=RelevantFactSelector("Mis hijos"))
+    action = initial.action_results[0]
+    assert action.relational_evidence_guard is not None
+    choice = ClarificationChoice(
+        "bruno",
+        current_identity_guard(VaultRepository(vault), schema, "bruno"),
+        action.relational_evidence_guard,
+    )
+
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact(
+            "Mis hijos son [[people/cloe|Cloe]], [[people/bruno|Bruno]] y [[people/lucas|Lucas]]."
+        ),
+    )
+    write_note(vault, "people/lucas.md", "lucas", "Lucas", "")
+    resumed = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("Mis hijos"),
+        clarification_choice=choice,
+    )
+
+    assert resumed.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert resumed.action_results[0].reason == "clarification_evidence_changed"
+    assert resumed.affected_stable_note_ids == ()
+    assert (
+        "Se ha apuntado a natación."
+        not in parse_note((vault / "people/bruno.md").read_text()).content
+    )
+
+
 def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
     tmp_path: Path, schema: dict
 ) -> None:
@@ -1427,19 +1583,19 @@ def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
         "people/edgar.md",
         "edgar",
         "Edgar",
-        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/marta|Marta]]."),
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
     )
     write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta pintar."))
-    write_note(vault, "people/marta.md", "marta", "Marta", fact("Le gusta pintar."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Le gusta pintar."))
     before = {path: path.read_bytes() for path in vault.rglob("*.md")}
-    query = "mi hija a la que le gusta pintar"
+    query = "mi hijo mayor"
     selection = SelectionCriteria(
         None,
         query,
         "person",
         (),
         None,
-        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+        relational_reference=RelationalReference("mis hijos", "self", None, "one"),
     )
     unit = KnowledgeUnit(selection, "record", (), (), ("Viaja mañana.",), ())
     reasoner = MappedReasoner({query: None})
@@ -1457,8 +1613,71 @@ def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
     assert all(path.read_bytes() == content for path, content in before.items())
     action_result = result.action_results[0]
     assert action_result.reason == "relational_evidence_ambiguous"
-    assert set(action_result.candidate_note_ids) == {"cloe", "marta"}
-    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "marta"}
+    assert action_result.candidate_note_ids == ("cloe", "bruno")
+    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "bruno"}
+    assert action_result.clarification is not None
+    assert action_result.clarification.requested_reference == query
+    assert [item.label for item in action_result.clarification.candidates] == ["Cloe", "Bruno"]
+    assert all(
+        "Mis hijos son Cloe y Bruno" in item.evidence
+        for item in action_result.clarification.candidates
+    )
+
+
+def test_qualified_relation_unresolved_with_plausible_ids_offers_grounded_choices(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A safe abstention can still expose bounded relation members for human clarification."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Es mi hija mayor."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Es mi hijo."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    query = "mi hijo mayor"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mis hijos", "self", None, "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha apuntado a natación.",), ())
+
+    class SafeAbstainingReasoner(FactReasoner):
+        def resolve(self, request: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+            self.requests.append(request)
+            return (
+                {
+                    "outcome": "UNRESOLVED",
+                    "id": None,
+                    "ambiguous_ids": [candidate.id for candidate in request.candidates],
+                },
+                {},
+            )
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=SafeAbstainingReasoner(),
+        selector=AllFactSelector(),
+    )
+
+    action_result = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action_result.reason == "relational_evidence_ambiguous"
+    assert action_result.candidate_note_ids == ("cloe", "bruno")
+    assert action_result.clarification is not None
+    assert [item.label for item in action_result.clarification.candidates] == ["Cloe", "Bruno"]
+    assert all(path.read_bytes() == content for path, content in before.items())
 
 
 def test_w2_complete_set_writes_one_source_fact_and_no_member_notes(

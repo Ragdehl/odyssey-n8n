@@ -96,9 +96,11 @@ def write_note(vault: Path, path: str, note: Note) -> None:
     target.write_text(serialize_note(note), encoding="utf-8")
 
 
-def candidate(note_id: str, path: str, name: str) -> SemanticEntityCandidate:
+def candidate(
+    note_id: str, path: str, name: str, note_type: str = "person"
+) -> SemanticEntityCandidate:
     """Build one retrieval-only candidate fixture without exposing its score downstream."""
-    return SemanticEntityCandidate(note_id, path, "person", name, 0.99)
+    return SemanticEntityCandidate(note_id, path, note_type, name, 0.99)
 
 
 def run_resolution(
@@ -131,7 +133,7 @@ def test_exact_unique_short_circuits_without_contextual_call(
 ) -> None:
     """Resolve one exact primary name locally and never invoke the provider."""
     write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
-    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada"})
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada", "ambiguous_ids": []})
     result = run_resolution(tmp_path, schema, "Ada", FakeIndex(), reasoner, semantic_limit=5)
     assert result.outcome is ExistingEntityOutcome.RESOLVED
     assert result.id == "ada"
@@ -150,7 +152,7 @@ def test_exact_absent_uses_one_contextual_call(tmp_path: Path, schema: dict[str,
     """Pass validated semantic evidence through one contextual decision."""
     write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
     index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
-    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada"})
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada", "ambiguous_ids": []})
     result = run_resolution(
         tmp_path, schema, "the engineer", index, reasoner, context="At work", semantic_limit=5
     )
@@ -173,12 +175,58 @@ def test_ambiguous_exact_candidates_are_never_dropped_by_semantic_top_n(
         tmp_path, "people/Ada Two.md", valid_note("ada-two", "person", "Neighbor.", aliases=["Ada"])
     )
     index = FakeIndex((candidate("ada-one", "people/Ada One.md", "Ada One"),))
-    reasoner = FakeReasoner({"outcome": "AMBIGUOUS", "id": None})
+    reasoner = FakeReasoner(
+        {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["ada-one", "ada-two"]}
+    )
     result = run_resolution(tmp_path, schema, "Ada", index, reasoner, semantic_limit=5)
     request = reasoner.requests[0]
     assert result.outcome is ExistingEntityOutcome.AMBIGUOUS
     assert result.candidate_ids == ("ada-one", "ada-two")
     assert [item.id for item in request.candidates] == ["ada-one", "ada-two"]
+
+
+def test_generic_ambiguity_uses_canonical_type_and_first_meaningful_body_line(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Present non-person options neutrally without promoting a heading to evidence."""
+    write_note(
+        tmp_path,
+        "projects/Atlas.md",
+        valid_note("atlas", "project", "# Overview\nCurrent migration project.", name="Atlas"),
+    )
+    write_note(
+        tmp_path,
+        "projects/Apollo.md",
+        valid_note("apollo", "project", "# Overview\nPlanned website project.", name="Apollo"),
+    )
+    index = FakeIndex(
+        (
+            candidate("atlas", "projects/Atlas.md", "Atlas", "project"),
+            candidate("apollo", "projects/Apollo.md", "Apollo", "project"),
+        )
+    )
+    reasoner = FakeReasoner(
+        {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["atlas", "apollo"]}
+    )
+
+    result = run_resolution(
+        tmp_path,
+        schema,
+        "the project",
+        index,
+        reasoner,
+        type="project",
+        semantic_limit=5,
+    )
+
+    assert result.outcome is ExistingEntityOutcome.AMBIGUOUS
+    assert result.clarification is not None
+    assert [
+        (item.label, item.note_type, item.evidence) for item in result.clarification.candidates
+    ] == [
+        ("Atlas", "project", "Current migration project."),
+        ("Apollo", "project", "Planned website project."),
+    ]
 
 
 def test_relationship_context_expands_semantic_candidates_without_selecting_identity(
@@ -199,7 +247,7 @@ def test_relationship_context_expands_semantic_candidates_without_selecting_iden
     write_note(tmp_path, "people/Cloe.md", valid_note("cloe", "person", "", name="Cloe"))
     write_note(tmp_path, "people/Bruno.md", valid_note("bruno", "person", "", name="Bruno"))
     index = FakeIndex((candidate("bruno", "people/Bruno.md", "Bruno"),))
-    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "cloe"})
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "cloe", "ambiguous_ids": []})
 
     result = resolve_existing_entity(
         "mi hija",
@@ -225,9 +273,79 @@ def test_relationship_context_expands_semantic_candidates_without_selecting_iden
     assert "Mis hijos son Cloe y Bruno" in cloe_evidence
 
 
+def test_non_person_ambiguity_exposes_only_validated_subset_with_canonical_evidence(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep generic note types and exclude a broad semantic candidate from public options."""
+    for note_id, name, body in (
+        ("north", "Proyecto Norte", "Migración del portal interno."),
+        ("south", "Proyecto Sur", "Migración del portal público."),
+        ("archive", "Proyecto Archivo", "Trabajo histórico ya separado."),
+    ):
+        write_note(
+            tmp_path, f"projects/{note_id}.md", valid_note(note_id, "project", body, name=name)
+        )
+    index = FakeIndex(
+        tuple(
+            candidate(note_id, f"projects/{note_id}.md", name, "project")
+            for note_id, name in (
+                ("north", "Proyecto Norte"),
+                ("south", "Proyecto Sur"),
+                ("archive", "Proyecto Archivo"),
+            )
+        )
+    )
+    reasoner = FakeReasoner(
+        {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["north", "south"]}
+    )
+
+    result = run_resolution(
+        tmp_path, schema, "la migración", index, reasoner, type="project", semantic_limit=5
+    )
+
+    assert result.candidate_ids == ("north", "south")
+    assert result.clarification is not None
+    assert [item.note_type for item in result.clarification.candidates] == [
+        "project",
+        "project",
+    ]
+    assert [item.evidence for item in result.clarification.candidates] == [
+        "Migración del portal interno.",
+        "Migración del portal público.",
+    ]
+
+
+def test_unresolved_with_plausible_ids_exposes_grounded_clarification_options(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep safe abstention while surfacing only the model's supplied grounded subset."""
+    for note_id, name, body in (
+        ("cloe", "Cloe", "Es la hija mayor."),
+        ("bruno", "Bruno", "Es hijo del usuario."),
+        ("marc", "Marc", "Es un vecino."),
+    ):
+        write_note(tmp_path, f"people/{note_id}.md", valid_note(note_id, "person", body, name=name))
+    index = FakeIndex(
+        tuple(
+            candidate(note_id, f"people/{note_id}.md", name)
+            for note_id, name in (("cloe", "Cloe"), ("bruno", "Bruno"), ("marc", "Marc"))
+        )
+    )
+    reasoner = FakeReasoner(
+        {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["cloe", "bruno"]}
+    )
+
+    result = run_resolution(tmp_path, schema, "mi hijo mayor", index, reasoner, semantic_limit=5)
+
+    assert result.outcome is ExistingEntityOutcome.UNRESOLVED
+    assert result.candidate_ids == ("cloe", "bruno")
+    assert result.clarification is not None
+    assert [item.label for item in result.clarification.candidates] == ["Cloe", "Bruno"]
+
+
 def test_no_semantic_candidates_is_local_unresolved(tmp_path: Path, schema: dict[str, Any]) -> None:
     """Return a legitimate local abstention without making a provider call."""
-    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "never"})
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "never", "ambiguous_ids": []})
     result = run_resolution(tmp_path, schema, "missing", FakeIndex(), reasoner, semantic_limit=5)
     assert result.outcome is ExistingEntityOutcome.UNRESOLVED
     assert result.id is None
@@ -243,7 +361,7 @@ def test_usage_metadata_has_a_strict_operational_allowlist(
     write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
     index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
     reasoner = FakeReasoner(
-        {"outcome": "RESOLVED", "id": "ada"},
+        {"outcome": "RESOLVED", "id": "ada", "ambiguous_ids": []},
         {
             "response_id": "resp-1",
             "input_tokens": 1000,
@@ -274,7 +392,7 @@ def test_usage_metadata_has_a_strict_operational_allowlist(
     "output",
     [
         {"outcome": "MAYBE", "id": None},
-        {"outcome": "RESOLVED", "id": "outside"},
+        {"outcome": "RESOLVED", "id": "outside", "ambiguous_ids": []},
         {"outcome": "AMBIGUOUS", "id": "candidate"},
     ],
 )
@@ -361,7 +479,7 @@ def test_invalid_candidate_note_is_rejected_before_provider_evidence(
     (tmp_path / "people").mkdir()
     (tmp_path / "people/Ada.md").write_text("---\nid: ada\ntype: person\n---\n", encoding="utf-8")
     index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
-    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada"})
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada", "ambiguous_ids": []})
     with pytest.raises(ExactEntityLookupError):
         run_resolution(tmp_path, schema, "unknown", index, reasoner, semantic_limit=5)
     assert reasoner.requests == []

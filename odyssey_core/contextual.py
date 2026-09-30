@@ -59,6 +59,7 @@ class ContextualResolutionDecision:
 
     outcome: str
     id: str | None
+    ambiguous_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +87,12 @@ class ContextualReasoner(Protocol):
 _SYSTEM_INSTRUCTIONS = """You decide whether one contextual reference identifies a supplied candidate.
 
 RESOLVED: exactly one supplied candidate is uniquely supported by the reference and context.
-AMBIGUOUS: two or more supplied candidates remain genuinely plausible.
-UNRESOLVED: no supplied candidate is sufficiently supported.
+AMBIGUOUS: two to four supplied candidates are supported alternatives that the evidence cannot distinguish; return those IDs.
+UNRESOLVED: no supplied candidate is sufficiently supported to identify one. When two to four supplied candidates remain credible clarification options, return those IDs in ambiguous_ids; otherwise return an empty list.
 
 A false RESOLVED is substantially worse than abstention. Do not invent facts or relationships.
 Respect explicit negative evidence. Semantic similarity and rank are not identity proof. Do not force
-the closest candidate. If evidence is insufficient, abstain. Return only the requested decision."""
+the closest candidate or list mere semantic neighbours as clarification options. Return only the requested decision."""
 
 
 def build_openai_payload(
@@ -101,6 +102,7 @@ def build_openai_payload(
     reasoning_effort: str = "medium",
     examples: tuple[ContextualResolutionExample, ...] = (),
     prompt_cache_key: str | None = None,
+    max_output_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Build one blind Responses API request with strict Structured Outputs.
 
@@ -110,6 +112,7 @@ def build_openai_payload(
         reasoning_effort: Responses API reasoning effort.
         examples: Pre-existing labelled calibration turns shared by every evaluated model.
         prompt_cache_key: Stable routing key for explicit caching, or ``None`` to disable caching.
+        max_output_tokens: Optional caller-owned response ceiling for a bounded live gate.
 
     Returns:
         JSON-compatible payload containing no benchmark labels, scoring metadata, or case identity.
@@ -122,7 +125,11 @@ def build_openai_payload(
     for index, example in enumerate(examples):
         _validate_request(example.request)
         validate_contextual_decision(
-            {"outcome": example.decision.outcome, "id": example.decision.id},
+            {
+                "outcome": example.decision.outcome,
+                "id": example.decision.id,
+                "ambiguous_ids": list(example.decision.ambiguous_ids),
+            },
             frozenset(candidate.id for candidate in example.request.candidates),
         )
         user_content: str | list[dict[str, Any]] = _render_user_evidence(example.request)
@@ -140,7 +147,11 @@ def build_openai_payload(
                 {
                     "role": "assistant",
                     "content": json.dumps(
-                        {"outcome": example.decision.outcome, "id": example.decision.id},
+                        {
+                            "outcome": example.decision.outcome,
+                            "id": example.decision.id,
+                            "ambiguous_ids": list(example.decision.ambiguous_ids),
+                        },
                         ensure_ascii=False,
                         separators=(",", ":"),
                     ),
@@ -163,8 +174,13 @@ def build_openai_payload(
                     "properties": {
                         "outcome": {"type": "string", "enum": sorted(OUTCOMES)},
                         "id": {"type": ["string", "null"]},
+                        "ambiguous_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 4,
+                        },
                     },
-                    "required": ["outcome", "id"],
+                    "required": ["outcome", "id", "ambiguous_ids"],
                     "additionalProperties": False,
                 },
             }
@@ -173,6 +189,10 @@ def build_openai_payload(
     if examples and prompt_cache_key is not None:
         payload["prompt_cache_key"] = prompt_cache_key
         payload["prompt_cache_options"] = {"mode": "explicit"}
+    if max_output_tokens is not None:
+        if not isinstance(max_output_tokens, int) or not 1 <= max_output_tokens <= 4096:
+            raise ValueError("Contextual max output tokens must be between 1 and 4096")
+        payload["max_output_tokens"] = max_output_tokens
     return payload
 
 
@@ -203,19 +223,8 @@ def _render_user_evidence(request: ContextualResolutionRequest) -> str:
 def validate_contextual_decision(
     output: object, candidate_ids: set[str] | frozenset[str]
 ) -> ContextualResolutionDecision:
-    """Fail closed unless model output satisfies the complete Odyssey decision contract.
-
-    Args:
-        output: Parsed model output to validate independently of provider enforcement.
-        candidate_ids: Exact identities supplied to the model for this request.
-
-    Returns:
-        Validated contextual-resolution decision.
-
-    Raises:
-        ContextualResolutionError: If schema, outcome, nullability, or candidate membership is invalid.
-    """
-    if not isinstance(output, dict) or set(output) != {"outcome", "id"}:
+    """Fail closed unless model output satisfies the complete Odyssey decision contract."""
+    if not isinstance(output, dict) or set(output) != {"outcome", "id", "ambiguous_ids"}:
         raise ContextualResolutionError("Contextual decision has an invalid schema")
     outcome = output["outcome"]
     identity = output["id"]
@@ -223,14 +232,77 @@ def validate_contextual_decision(
         raise ContextualResolutionError("Contextual decision has an invalid outcome")
     if identity is not None and not isinstance(identity, str):
         raise ContextualResolutionError("Contextual decision ID must be a string or null")
+    ambiguous_ids = _validated_ambiguous_ids(output["ambiguous_ids"])
+    _validate_outcome_contract(outcome, identity, ambiguous_ids, candidate_ids)
+    return ContextualResolutionDecision(outcome=outcome, id=identity, ambiguous_ids=ambiguous_ids)
+
+
+def _validated_ambiguous_ids(value: object) -> tuple[str, ...]:
+    """Validate the bounded candidate subset independently of outcome semantics."""
+    if not isinstance(value, list) or any(
+        not isinstance(candidate_id, str) or not candidate_id for candidate_id in value
+    ):
+        raise ContextualResolutionError("Contextual ambiguous IDs must be a string array")
+    if len(value) != len(set(value)):
+        raise ContextualResolutionError("Contextual ambiguous IDs must be unique")
+    return tuple(value)
+
+
+def _validate_outcome_contract(
+    outcome: str,
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    """Apply outcome-specific nullability and supplied-candidate constraints."""
     if outcome == "RESOLVED":
-        if identity is None:
-            raise ContextualResolutionError("RESOLVED requires a non-null candidate ID")
-        if identity not in candidate_ids:
-            raise ContextualResolutionError("RESOLVED selected an ID outside the candidate set")
-    elif identity is not None:
-        raise ContextualResolutionError(f"{outcome} requires a null ID")
-    return ContextualResolutionDecision(outcome=outcome, id=identity)
+        _validate_resolved_contract(identity, ambiguous_ids, candidate_ids)
+    elif outcome == "AMBIGUOUS":
+        _validate_ambiguous_contract(identity, ambiguous_ids, candidate_ids)
+    else:
+        _validate_unresolved_contract(identity, ambiguous_ids, candidate_ids)
+
+
+def _validate_resolved_contract(
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    if identity is None:
+        raise ContextualResolutionError("RESOLVED requires a non-null candidate ID")
+    if identity not in candidate_ids:
+        raise ContextualResolutionError("RESOLVED selected an ID outside the candidate set")
+    if ambiguous_ids:
+        raise ContextualResolutionError("RESOLVED requires empty ambiguous IDs")
+
+
+def _validate_ambiguous_contract(
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    if identity is not None:
+        raise ContextualResolutionError("AMBIGUOUS requires a null ID")
+    if not 1 < len(ambiguous_ids) <= 4:
+        raise ContextualResolutionError("AMBIGUOUS requires two to four candidate IDs")
+    if any(candidate_id not in candidate_ids for candidate_id in ambiguous_ids):
+        raise ContextualResolutionError("AMBIGUOUS selected an ID outside the candidate set")
+
+
+def _validate_unresolved_contract(
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    """Permit only a bounded supplied clarification subset alongside safe abstention."""
+    if identity is not None:
+        raise ContextualResolutionError("UNRESOLVED requires a null ID")
+    if ambiguous_ids and not 1 < len(ambiguous_ids) <= 4:
+        raise ContextualResolutionError(
+            "UNRESOLVED clarification requires two to four candidate IDs"
+        )
+    if any(candidate_id not in candidate_ids for candidate_id in ambiguous_ids):
+        raise ContextualResolutionError("UNRESOLVED selected an ID outside the candidate set")
 
 
 class OpenAIContextualReasoner:
@@ -252,11 +324,13 @@ class OpenAIContextualReasoner:
         reasoning_effort: str = "medium",
         timeout_seconds: float = 120.0,
         examples: tuple[ContextualResolutionExample, ...] = (),
+        max_output_tokens: int | None = None,
     ) -> None:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = timeout_seconds
         self.examples = examples
+        self.max_output_tokens = max_output_tokens
         self.last_usage: dict[str, Any] | None = None
         self.last_call = False
 
@@ -282,6 +356,7 @@ class OpenAIContextualReasoner:
             self.model,
             reasoning_effort=self.reasoning_effort,
             examples=self.examples,
+            max_output_tokens=self.max_output_tokens,
         )
         self.last_call = True
         self.last_usage = None

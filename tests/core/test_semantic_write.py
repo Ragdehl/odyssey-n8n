@@ -244,6 +244,28 @@ def test_swr_scoped_targets_preserve_description_and_candidate_scope(
     assert relational.members == "one"
 
 
+def test_candidate_scope_is_note_type_agnostic_for_project_target(schema: dict) -> None:
+    """Keep the same bounded candidate semantics for non-person note types."""
+    target = IdentityIntent(
+        "uno de mis proyectos",
+        IdentityBinding.DESCRIBED,
+        note_type="project",
+        candidate_scope=scoped_self("mis proyectos"),
+    )
+    action = compile_one(
+        schema,
+        operation(target, fact(LiteralPart("Ha cambiado de prioridad."))),
+    )
+
+    unit = action.units[0]
+    assert unit.target.type == "project"
+    assert unit.target.query == "uno de mis proyectos"
+    assert unit.target.relational_reference is not None
+    assert unit.target.relational_reference.source_kind == "self"
+    assert unit.target.relational_reference.reference == "mis proyectos"
+    assert unit.target.relational_reference.members == "one"
+
+
 def test_swr03_ordinary_described_target_stays_unscoped(schema: dict) -> None:
     """Keep an ordinary described target independent of relational representation."""
     action = compile_one(

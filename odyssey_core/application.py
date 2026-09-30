@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .clarification import ClarificationChoice
+from .clarification_presentation import ClarificationPresentation
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
@@ -158,6 +159,7 @@ class UnitResult:
     candidates: tuple[str, ...] = ()
     dependencies: tuple[DependencyEvidence, ...] = ()
     materially_affected: bool = True
+    clarification: ClarificationPresentation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +178,7 @@ class ActionResult:
     semantic_set: SemanticSetResolution | None = None
     candidate_note_ids: tuple[str, ...] = ()
     relational_evidence_guard: str | None = None
+    clarification: ClarificationPresentation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -664,7 +667,7 @@ def _execute_retrieve(
             return ActionResult(
                 action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
             )
-        if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS:
+        if resolution.offers_clarification:
             if clarification_choice is None:
                 return ActionResult(
                     action_index,
@@ -672,6 +675,7 @@ def _execute_retrieve(
                     ActionStatus.DEFERRED,
                     reason="ambiguous_existing_target",
                     candidate_note_ids=resolution.candidate_ids,
+                    clarification=resolution.clarification,
                 )
             still_offered = clarification_choice.stable_id in resolution.candidate_ids
         elif resolution.outcome is ExistingEntityOutcome.RESOLVED:
@@ -751,6 +755,7 @@ def _execute_retrieve(
                 reason=str(error),
                 candidate_note_ids=error.candidate_ids,
                 relational_evidence_guard=error.evidence_guard,
+                clarification=error.clarification,
             )
         except Exception as error:
             return ActionResult(
@@ -858,13 +863,6 @@ def _execute_write(
         unit.target.relational_reference is not None and not unit.reference_lookup_only
         for unit in action.units
     ):
-        if clarification_choice is not None:
-            return ActionResult(
-                action_index,
-                action.kind,
-                ActionStatus.DEFERRED,
-                reason="clarification_scope_changed",
-            )
         return _execute_relational_write(
             action_index,
             action,
@@ -885,6 +883,7 @@ def _execute_write(
             authenticated_actor,
             self_binding_repository,
             spans,
+            clarification_choice,
         )
     cardinalities = {unit.cardinality for unit in action.units}
     if len(cardinalities) != 1:
@@ -958,6 +957,82 @@ def _execute_write(
     )
 
 
+def _relational_clarification_still_valid(
+    resolved: Any,
+    choice: ClarificationChoice,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> bool:
+    """Revalidate the chosen identity and relationship guard before mutation."""
+    return (
+        len(resolved.targets) == 1
+        and resolved.targets[0].id == choice.stable_id
+        and resolved.evidence_guard == choice.source_evidence_guard
+        and current_identity_guard(repository, schema, choice.stable_id) == choice.evidence_guard
+    )
+
+
+def _prepare_relational_write_preflight(
+    action: WriteAction,
+    unit: KnowledgeUnit,
+    resolved: Any,
+    relational_index: int,
+    unit_ordinals: tuple[tuple[int, ...], ...],
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    semantic_index: Any,
+    embedder: Any,
+    contextual_reasoner: Any,
+    semantic_limit: int,
+    id_allocator: Callable[[], str] | None,
+    semantic_set_selector: Any | None,
+    authenticated_actor: AuthenticatedActorContext | None,
+    self_binding_repository: SelfBindingRepository | None,
+    spans: SpanRecorder,
+) -> tuple[WriteAction, tuple[UnitTargetPreflight, ...], tuple[tuple[int, ...], ...]]:
+    """Prepare either shared-fact or singular-target relational preflight outside execution flow."""
+    relation = unit.target.relational_reference
+    if relation is None:
+        raise RelationshipWritePreflightError("Relationship target is unavailable")
+    projector = RelationshipEvidenceProjector(repository, schema)
+    kwargs: dict[str, Any] = {}
+    if id_allocator is not None:
+        kwargs["id_allocator"] = id_allocator
+    common = {
+        "relationship_projector": projector,
+        "repository": repository,
+        "schema": schema,
+        "semantic_index": semantic_index,
+        "embedder": embedder,
+        "contextual_reasoner": contextual_reasoner,
+        "semantic_limit": semantic_limit,
+        "authenticated_actor": authenticated_actor,
+        "self_binding_repository": self_binding_repository,
+        "span_recorder": spans,
+        "semantic_set_selector": semantic_set_selector,
+        **kwargs,
+    }
+    if relation.members == "complete_set":
+        if len(action.units) != 1:
+            raise RelationshipWritePreflightError("Shared relationship fact must be one unit")
+        executable, binding = prepare_relationship_shared_fact_action(unit, resolved)
+        preflight = spans.invoke(
+            "preflight", preflight_relationship_write_action, executable, binding, **common
+        )
+        ordinals = (unit_ordinals[0], *(((),) * len(resolved.targets)))
+        return executable, preflight, ordinals
+    preflight = spans.invoke(
+        "preflight",
+        preflight_relational_target_write_action,
+        action,
+        resolved,
+        target_unit_index=relational_index,
+        **common,
+    )
+    return action, preflight, unit_ordinals
+
+
 def _execute_relational_write(
     action_index: int,
     action: WriteAction,
@@ -978,6 +1053,7 @@ def _execute_relational_write(
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
+    clarification_choice: ClarificationChoice | None = None,
 ) -> ActionResult:
     """Route one relational write through current evidence and relationship-only preflight."""
     relational_indexes = tuple(
@@ -1018,57 +1094,39 @@ def _execute_relational_write(
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
             semantic_set_selector=semantic_set_selector,
+            fallback_identity_clarification=relation.members == "one",
             refine_singular_with_query=True,
+            chosen_identity_id=(
+                clarification_choice.stable_id if clarification_choice is not None else None
+            ),
         )
-        projector = RelationshipEvidenceProjector(repository, schema)
-        kwargs: dict[str, Any] = {}
-        if id_allocator is not None:
-            kwargs["id_allocator"] = id_allocator
-        if relation.members == "complete_set":
-            if len(action.units) != 1:
-                raise RelationshipWritePreflightError("Shared relationship fact must be one unit")
-            executable, binding = prepare_relationship_shared_fact_action(unit, resolved)
-            preflight = spans.invoke(
-                "preflight",
-                preflight_relationship_write_action,
-                executable,
-                binding,
-                relationship_projector=projector,
-                repository=repository,
-                schema=schema,
-                semantic_index=semantic_index,
-                embedder=embedder,
-                contextual_reasoner=contextual_reasoner,
-                semantic_limit=semantic_limit,
-                authenticated_actor=authenticated_actor,
-                self_binding_repository=self_binding_repository,
-                span_recorder=spans,
-                semantic_set_selector=semantic_set_selector,
-                **kwargs,
+        if clarification_choice is not None and not _relational_clarification_still_valid(
+            resolved, clarification_choice, repository, schema
+        ):
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="clarification_evidence_changed",
             )
-            ordinals = (unit_ordinals[0], *(((),) * len(resolved.targets)))
-        else:
-            executable = action
-            ordinals = unit_ordinals
-            preflight = spans.invoke(
-                "preflight",
-                preflight_relational_target_write_action,
-                action,
-                resolved,
-                target_unit_index=relational_index,
-                relationship_projector=projector,
-                repository=repository,
-                schema=schema,
-                semantic_index=semantic_index,
-                embedder=embedder,
-                contextual_reasoner=contextual_reasoner,
-                semantic_limit=semantic_limit,
-                authenticated_actor=authenticated_actor,
-                self_binding_repository=self_binding_repository,
-                span_recorder=spans,
-                semantic_set_selector=semantic_set_selector,
-                **kwargs,
-            )
+        executable, preflight, ordinals = _prepare_relational_write_preflight(
+            action,
+            unit,
+            resolved,
+            relational_index,
+            unit_ordinals,
+            repository=repository,
+            schema=schema,
+            semantic_index=semantic_index,
+            embedder=embedder,
+            contextual_reasoner=contextual_reasoner,
+            semantic_limit=semantic_limit,
+            id_allocator=id_allocator,
+            semantic_set_selector=semantic_set_selector,
+            authenticated_actor=authenticated_actor,
+            self_binding_repository=self_binding_repository,
+            spans=spans,
+        )
         executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
         if rendering.pending_references:
@@ -1081,6 +1139,7 @@ def _execute_relational_write(
             reason=str(error),
             candidate_note_ids=error.candidate_ids,
             relational_evidence_guard=error.evidence_guard,
+            clarification=error.clarification,
         )
     except RelationshipWritePreflightError as error:
         return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
@@ -1177,6 +1236,7 @@ def _execute_single_units(
                 UnitStatus.DEFERRED,
                 reason=target.reason,
                 candidates=target.candidate_note_ids,
+                clarification=target.clarification,
             )
     for cycle_index in _cyclic_nodes(dependencies):
         if cycle_index not in results:

@@ -45,7 +45,9 @@ class FakeIndex:
 class FakeReasoner:
     """Provide one injected deterministic Phase 11 contextual decision."""
 
-    def __init__(self, output: object = {"outcome": "UNRESOLVED", "id": None}) -> None:
+    def __init__(
+        self, output: object = {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}
+    ) -> None:
         """Store the raw decision and count calls for boundary assertions."""
         self.output = output
         self.calls = 0
@@ -164,7 +166,7 @@ def test_e04_contextual_identity_resolves_through_existing_stack(
         schema,
         unit("la amiga de Marta", entity=None),
         index,
-        FakeReasoner({"outcome": "RESOLVED", "id": "friend"}),
+        FakeReasoner({"outcome": "RESOLVED", "id": "friend", "ambiguous_ids": []}),
     )
     assert result.outcome is WriteTargetOutcome.UPDATE
     assert result.existing_note_id == "friend"
@@ -178,11 +180,37 @@ def test_e05_e11_ambiguity_never_creates(tmp_path: Path, schema: dict) -> None:
         tmp_path,
         schema,
         unit("Marta", entity="Marta"),
-        reasoner=FakeReasoner({"outcome": "UNRESOLVED", "id": None}),
+        reasoner=FakeReasoner({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}),
     )
     assert result.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
     assert result.reason == "ambiguous_existing_target"
     assert result.candidate_note_ids == ("garcia", "lopez")
+
+
+def test_unresolved_with_plausible_existing_candidates_clarifies_instead_of_creating(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A record request cannot CREATE while grounded existing identities remain plausible."""
+    for note_id, name in (("cloe", "Cloe"), ("bruno", "Bruno")):
+        write_note(tmp_path, f"people/{name}.md", note(note_id, "person", name=name))
+    index = FakeIndex(
+        (
+            SemanticEntityCandidate("cloe", "people/Cloe.md", "person", "Cloe", 0.9),
+            SemanticEntityCandidate("bruno", "people/Bruno.md", "person", "Bruno", 0.8),
+        )
+    )
+    result = decide(
+        tmp_path,
+        schema,
+        unit("mi hijo mayor"),
+        index,
+        FakeReasoner({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["cloe", "bruno"]}),
+    )
+
+    assert result.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result.reason == "ambiguous_existing_target"
+    assert result.candidate_note_ids == ("cloe", "bruno")
+    assert result.clarification is not None
 
 
 @pytest.mark.parametrize("intent", ["amend", "remove", "delete"])

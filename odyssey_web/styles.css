@@ -86,6 +86,16 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .message-odyssey { justify-self: start; }
 .message-loading { color: #677088; }
 .message-error { color: #7d2b2b; border-color: rgba(160, 48, 48, .2); background: #fff8f7; }
+.message-clarification { width: min(100%, 34rem); }
+.clarification-options { display: grid; gap: .55rem; margin-top: .75rem; }
+.clarification-option { padding: .65rem; border: 1px solid rgba(23, 32, 51, .1); border-radius: .75rem; background: #f8f9fc; }
+.clarification-option h3, .clarification-option p { margin: 0; }
+.clarification-type { margin-top: .15rem !important; color: #6a7287; font-size: .78rem; }
+.clarification-evidence { margin-top: .4rem !important; line-height: 1.4; }
+.clarification-controls { display: flex; gap: .45rem; margin-top: .55rem; }
+.clarification-controls button, .clarification-cancel { min-height: 2.35rem; padding: .35rem .7rem; }
+.clarification-cancel { margin-top: .6rem; background: transparent; color: #5c6478; }
+.clarification-status { margin: 0 .35rem .35rem; color: #6559b5; font-size: .8rem; }
 .message-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .eyebrow { color: #6a7287; font-size: .7rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .message-text { margin-top: .35rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }

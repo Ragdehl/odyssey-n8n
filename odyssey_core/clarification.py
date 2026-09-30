@@ -42,6 +42,8 @@ class ClarificationOption:
 
     id: str
     label: str
+    note_type: str = ""
+    evidence: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +56,8 @@ class PendingClarification:
     options: tuple[ClarificationOption, ...]
     evidence_guards: tuple[str, ...]
     source_evidence_guard: str | None = None
+    requested_reference: str | None = None
+    explanation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,11 +233,15 @@ class LocalClarificationStore:
             "evidence_guards",
         }
         version_two = {*version_one, "source_evidence_guard"}
+        version_three = {*version_two, "requested_reference", "explanation"}
         if (
             not isinstance(payload, dict)
-            or (set(payload) != version_one and set(payload) != version_two)
-            or payload["version"] not in {1, 2}
+            or frozenset(payload)
+            not in {frozenset(version_one), frozenset(version_two), frozenset(version_three)}
+            or payload["version"] not in {1, 2, 3}
             or (payload["version"] == 1) != (set(payload) == version_one)
+            or (payload["version"] == 2) != (set(payload) == version_two)
+            or (payload["version"] == 3) != (set(payload) == version_three)
         ):
             raise ValueError("clarification record is invalid")
         if (
@@ -264,6 +272,20 @@ class LocalClarificationStore:
             not isinstance(source_guard, str) or re.fullmatch(r"[0-9a-f]{64}", source_guard) is None
         ):
             raise ValueError("clarification source evidence guard is invalid")
+        requested_reference = payload.get("requested_reference")
+        explanation = payload.get("explanation")
+        if payload["version"] == 3 and (
+            not isinstance(requested_reference, str)
+            or not requested_reference.strip()
+            or len(requested_reference) > 240
+            or not isinstance(explanation, str)
+            or not explanation.strip()
+            or len(explanation) > 500
+            or any(
+                not option.note_type.strip() or not option.evidence.strip() for option in options
+            )
+        ):
+            raise ValueError("clarification presentation is invalid")
         return PendingClarification(
             payload["original_request"],
             payload["original_request_id"],
@@ -271,40 +293,14 @@ class LocalClarificationStore:
             options,
             guards,
             source_guard,
+            requested_reference,
+            explanation,
         )
 
     def replace(self, pending: PendingClarification) -> None:
         """Atomically replace the sole pending decision after validating its bounded shape."""
-        if not isinstance(pending, PendingClarification):
-            raise ValueError("clarification record is invalid")
-        match_clarification_reply("", pending.options)
-        if (
-            not pending.original_request.strip()
-            or len(pending.original_request.encode("utf-8")) > 16_384
-            or any(
-                _SAFE_ID.fullmatch(value) is None
-                for value in (pending.original_request_id, pending.pending_record_id)
-            )
-            or len(pending.evidence_guards) != len(pending.options)
-            or any(
-                re.fullmatch(r"[0-9a-f]{64}", guard) is None for guard in pending.evidence_guards
-            )
-        ):
-            raise ValueError("clarification record is invalid")
-        if pending.source_evidence_guard is not None and (
-            re.fullmatch(r"[0-9a-f]{64}", pending.source_evidence_guard) is None
-        ):
-            raise ValueError("clarification source evidence guard is invalid")
-        payload = {
-            "version": 2 if pending.source_evidence_guard is not None else 1,
-            "original_request": pending.original_request,
-            "original_request_id": pending.original_request_id,
-            "pending_record_id": pending.pending_record_id,
-            "options": [{"id": item.id, "label": item.label} for item in pending.options],
-            "evidence_guards": list(pending.evidence_guards),
-        }
-        if pending.source_evidence_guard is not None:
-            payload["source_evidence_guard"] = pending.source_evidence_guard
+        rich = _validate_pending_record(pending)
+        payload = _pending_payload(pending, rich)
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > 32_768:
             raise ValueError("clarification record is too large")
@@ -324,6 +320,83 @@ class LocalClarificationStore:
     def clear(self) -> None:
         """Forget the active decision without touching the immutable pending-work evidence."""
         self._path.unlink(missing_ok=True)
+
+
+def _validate_pending_record(pending: PendingClarification) -> bool:
+    """Validate durable clarification state and report whether it carries rich presentation."""
+    if not isinstance(pending, PendingClarification):
+        raise ValueError("clarification record is invalid")
+    match_clarification_reply("", pending.options)
+    _validate_pending_identity_fields(pending)
+    _validate_source_guard(pending.source_evidence_guard)
+    rich = pending.requested_reference is not None or pending.explanation is not None
+    if rich:
+        _validate_rich_pending(pending)
+    return rich
+
+
+def _validate_pending_identity_fields(pending: PendingClarification) -> None:
+    if (
+        not pending.original_request.strip()
+        or len(pending.original_request.encode("utf-8")) > 16_384
+        or any(
+            _SAFE_ID.fullmatch(value) is None
+            for value in (pending.original_request_id, pending.pending_record_id)
+        )
+        or len(pending.evidence_guards) != len(pending.options)
+        or any(re.fullmatch(r"[0-9a-f]{64}", guard) is None for guard in pending.evidence_guards)
+    ):
+        raise ValueError("clarification record is invalid")
+
+
+def _validate_source_guard(source_guard: str | None) -> None:
+    if source_guard is not None and re.fullmatch(r"[0-9a-f]{64}", source_guard) is None:
+        raise ValueError("clarification source evidence guard is invalid")
+
+
+def _validate_rich_pending(pending: PendingClarification) -> None:
+    if (
+        not isinstance(pending.requested_reference, str)
+        or not pending.requested_reference.strip()
+        or len(pending.requested_reference) > 240
+        or not isinstance(pending.explanation, str)
+        or not pending.explanation.strip()
+        or len(pending.explanation) > 500
+        or any(not option.note_type or not option.evidence for option in pending.options)
+    ):
+        raise ValueError("clarification presentation is invalid")
+
+
+def _pending_payload(pending: PendingClarification, rich: bool) -> dict[str, object]:
+    """Build the versioned durable payload without nested version-selection expressions."""
+    if rich:
+        version = 3
+    elif pending.source_evidence_guard is not None:
+        version = 2
+    else:
+        version = 1
+    options = [
+        {
+            "id": item.id,
+            "label": item.label,
+            **({"note_type": item.note_type, "evidence": item.evidence} if rich else {}),
+        }
+        for item in pending.options
+    ]
+    payload: dict[str, object] = {
+        "version": version,
+        "original_request": pending.original_request,
+        "original_request_id": pending.original_request_id,
+        "pending_record_id": pending.pending_record_id,
+        "options": options,
+        "evidence_guards": list(pending.evidence_guards),
+    }
+    if pending.source_evidence_guard is not None or rich:
+        payload["source_evidence_guard"] = pending.source_evidence_guard
+    if rich:
+        payload["requested_reference"] = pending.requested_reference
+        payload["explanation"] = pending.explanation
+    return payload
 
 
 def resolve_clarification_reply(
@@ -357,7 +430,7 @@ def evidence_digest(markdown: str) -> str:
 
 
 def match_clarification_reply(reply: str, options: tuple[ClarificationOption, ...]) -> str | None:
-    """Choose only a numeric or exact unique displayed option; otherwise stay unresolved.
+    """Choose only a bounded deterministic option form; otherwise stay unresolved.
 
     Args:
         reply: The next user message, never treated as canonical identity authority.
@@ -378,6 +451,10 @@ def match_clarification_reply(reply: str, options: tuple[ClarificationOption, ..
         or not isinstance(option.label, str)
         or not option.label.strip()
         or len(option.label) > 160
+        or not isinstance(option.note_type, str)
+        or len(option.note_type) > 80
+        or not isinstance(option.evidence, str)
+        or len(option.evidence) > 320
         for option in options
     ) or len({option.id for option in options}) != len(options):
         raise ValueError("Clarification options are invalid")
@@ -385,7 +462,14 @@ def match_clarification_reply(reply: str, options: tuple[ClarificationOption, ..
     if normalized.isascii() and normalized.isdecimal():
         index = int(normalized)
         return options[index - 1].id if 1 <= index <= len(options) else None
-    matches = [option.id for option in options if option.label.casefold() == normalized.casefold()]
+    normalized_key = normalized.casefold()
+    # The browser emits this exact sentence for its bounded choice button. Treat it as a
+    # deterministic alias of the supplied display label, never as free-text identity authority.
+    matches = [
+        option.id
+        for option in options
+        if normalized_key in {option.label.casefold(), f"He elegido a {option.label}.".casefold()}
+    ]
     return matches[0] if len(matches) == 1 else None
 
 

@@ -14,13 +14,10 @@ from benchmarks.semantic_write_frontend_v8 import run_live as runner
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_gate_shape_cost_and_oracle_pin() -> None:
-    cases, context = runner.load_gate_cases()
-    schema = json.loads(runner.SCHEMA_PATH.read_text())
-    cost, bound = runner.conservative_cost_ceiling(cases, context, schema)
+def test_consumed_gate_shape_and_oracle_pin() -> None:
+    """Check immutable v8 evidence without recomputing its historical budget from today's prompt."""
+    cases, _context = runner.load_gate_cases()
     assert len(cases) == 13
-    assert cost == Decimal("0.1672112")
-    assert bound == 52_024
     assert runner.MAX_COST_USD == Decimal("0.00")
     assert runner.GATE_CONSUMED is True
     manifest = json.loads(runner.MANIFEST_PATH.read_text())

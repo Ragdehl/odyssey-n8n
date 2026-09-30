@@ -647,6 +647,12 @@ export function mountNotes(root, {
     search.value = state.query;
     void load({reset: true, mode: "snapshot", snapshotIds: snapshot.note_ids});
   });
+  document.addEventListener("odyssey:open-note", (event) => {
+    const noteId = event.detail?.note_id;
+    if (typeof noteId === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(noteId)) {
+      void open(noteId);
+    }
+  });
   list.addEventListener("scroll", () => {
     if (list.scrollTop + list.clientHeight >= list.scrollHeight - 80) void load();
   });

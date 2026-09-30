@@ -135,6 +135,58 @@ test("closed planner clarification is a normal bounded product result", () => {
   assert.equal(result.kind, "clarification");
 });
 
+test("rich clarification requires bounded canonical candidate evidence", () => {
+  const value = {
+    request_id: "web-rich", status: "needs_attention", kind: "clarification",
+    message: "No puedo identificar con seguridad a “mi hijo mayor”.",
+    clarification: {
+      request_id: "web-rich", requested_reference: "mi hijo mayor",
+      explanation: "No puedo identificar con seguridad a “mi hijo mayor”. He encontrado estas posibilidades en tus notas.",
+      options: [
+        {id: "cloe", label: "Cloe", note_type: "person", evidence: "Mis hijos son Cloe y Bruno."},
+        {id: "bruno", label: "Bruno", note_type: "person", evidence: "Mis hijos son Cloe y Bruno."},
+      ],
+    },
+  };
+  assert.equal(validateProductResponse(value).clarification.options.length, 2);
+  assert.throws(() => validateProductResponse({
+    ...value,
+    clarification: {...value.clarification, options: [
+      {...value.clarification.options[0], evidence: ""},
+      value.clarification.options[1],
+    ]},
+  }), ProductRequestError);
+  assert.throws(() => validateProductResponse({
+    ...value,
+    clarification: {...value.clarification, options: [
+      value.clarification.options[0], value.clarification.options[0],
+    ]},
+  }), ProductRequestError);
+});
+
+test("legacy basic clarification options remain compatible but hybrid shapes fail closed", () => {
+  const value = {
+    request_id: "web-basic", status: "needs_attention", kind: "clarification",
+    message: "¿A cuál te refieres?",
+    clarification: {
+      request_id: "web-basic",
+      options: [{id: "atlas", label: "Atlas"}, {id: "apollo", label: "Apollo"}],
+    },
+  };
+  assert.deepEqual(validateProductResponse(value).clarification.options, value.clarification.options);
+  assert.throws(() => validateProductResponse({
+    ...value,
+    clarification: {...value.clarification, options: [
+      {...value.clarification.options[0], note_type: "project", evidence: "Current project."},
+      value.clarification.options[1],
+    ]},
+  }), ProductRequestError);
+  assert.throws(() => validateProductResponse({
+    ...value,
+    clarification: {...value.clarification, rank: 1},
+  }), ProductRequestError);
+});
+
 test("bounded collection and cannot-answer results keep grounded public fields", () => {
   const result = validateProductResponse({
     request_id: "web-collection",

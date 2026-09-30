@@ -1,0 +1,51 @@
+{
+  "version": "planner-prompt-regression-v1",
+  "frozen_before_provider_calls": true,
+  "provider_calls_made": 0,
+  "base_gate": "semantic-write-frontend-v8",
+  "sha256": {
+    "base_frozen_swr_cases": "2b0966ea2ba14ea43a1f110ce55b9a9d5050ee0b0582feee86e1d29946a3157c",
+    "base_sentinels": "d20301398f956457937606a591a22a58434dcd6c781a08707f7a24e989c22bc9",
+    "additional_cases": "659b247b8d6ae6b216fb0b7c91b1f9ee502495f173753ce5d6650067e59be57c"
+  },
+  "logical_cases": 16,
+  "max_provider_calls": 16,
+  "reasoning_effort": "low",
+  "retries": 0,
+  "sol_calls": 0,
+  "max_cost_usd": "0.00",
+  "status": "prepared_retry_zero_authority",
+  "failure_policy": "collect_complete_matrix",
+  "artifact": "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna-v3.jsonl",
+  "production_model": "gpt-5.6-luna",
+  "artifacts": {
+    "gpt-5.6-luna": "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna-v3.jsonl"
+  },
+  "candidate_contract": {
+    "prompt_sha256": "d60c7605f0f3751cf7c5394e90daa8b92df9c10e6e9d949b447ab50907bdcd4b",
+    "provider_schema_sha256": "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
+    "teaching_examples_sha256": "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0"
+  },
+  "attempt": 3,
+  "previous_run": {
+    "attempt": 2,
+    "candidate_prompt_sha256": "9761962e279bf3379259e138996bc6a72502d3642f8eb9e41892c4386dafe00b",
+    "artifact": "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna-v2.jsonl",
+    "artifact_sha256": "774dab8e5ec1c55396cfeba5a5c9e403ee2e76439ca4085bd79763d92eae287c",
+    "provider_calls": 16,
+    "passed": 12,
+    "failed_cases": [
+      "SWR07-qualified-event-member",
+      "SWR08-relational-target-described-reference",
+      "SWR10-relational-target-two-bounded-references",
+      "PPR16-unknown-self-project-member-write"
+    ],
+    "reviewed_safe_degradations": [
+      "SWR07-qualified-event-member",
+      "SWR08-relational-target-described-reference",
+      "PPR16-unknown-self-project-member-write"
+    ],
+    "blocking_failure": "SWR10-relational-target-two-bounded-references",
+    "estimated_cost_usd": "0.0363288"
+  }
+}

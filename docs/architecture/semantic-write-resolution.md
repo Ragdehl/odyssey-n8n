@@ -205,11 +205,76 @@ If existing evidence is ambiguous, Core still defers for clarification rather th
 
 Legacy pre-existing index-based internal fixtures may retain their historical non-blocking pending behavior while migration is incomplete. That compatibility path must not re-enter the provider schema.
 
-## Deferred ambiguity explanation
+## Explainable ambiguity clarification
 
-The current contextual resolver can safely return `RESOLVED`, `AMBIGUOUS`, or `UNRESOLVED`, but `AMBIGUOUS` does not yet carry the smaller set of candidates the model considered genuinely plausible. The application therefore cannot reliably explain a conflict such as "Cloe and Bruno Test both match this description" without risking presentation of unrelated candidates from the broader retrieval set.
+The active contextual Structured Output strictly requires `{outcome,id,ambiguous_ids}` for all three
+established outcomes. `RESOLVED` still carries exactly one supplied `id` and preserves the complete
+Core-supplied candidate set for established downstream behavior. `UNRESOLVED` may carry either no
+model IDs or a unique two-to-four-ID supplied clarification subset; those IDs remain non-authoritative
+until a human chooses one. `AMBIGUOUS` carries a unique two-to-four-ID subset of the exact supplied
+candidate set. Core rejects
+missing, fabricated, duplicate, contradictory, empty, singleton, or oversized subsets. Semantic rank
+never becomes presentation or identity authority.
 
-A later focused change should let an ambiguous contextual decision return a validated subset of supplied `candidate_ids` together with enough grounded source evidence for a useful user-facing clarification. Core must verify every returned ID was in the supplied candidate set and must never manufacture the explanation from semantic rank alone. This is a model-facing contract change and requires its own deterministic fail-closed coverage and focused live gate; it is intentionally not part of the current atomicity/schema amendment.
+For ordinary identity ambiguity, Core re-reads the exact validated subset from current canonical
+Markdown and derives stable ID, canonical label, note type, and a short neutral evidence snippet. For
+relational ambiguity over canonical fact locators, Core re-reads and projects only the selected facts,
+deduplicates their current targets and snippets when several facts support one identity, and exposes options only when the safe final identity set contains
+two to four members. Zero, one, more than four, dangling, stale, incomplete, or type-invalid options
+remain fail closed. This is generic across canonical note types.
+
+The public explanation is deterministic from the requested reference and those Core-grounded fields;
+model rationale, prompts, scores, rank, filesystem paths, and hidden reasoning are never retained.
+Version 3 pending clarification state preserves the bounded presentation while remaining compatible
+with existing v1/v2 records. Candidate selection resumes the persisted plan through the existing
+identity and source-evidence guards; it does not replan the write. Runtime, n8n, and the browser only
+validate/project this shape. The browser presents an inline card with choose, note-detail, cancel, and
+ordinary free-text reply paths.
+
+Deterministic Core/runtime/workflow/browser evidence is implemented on
+`feat/explainable-clarification`. The immutable `contextual-explainable-v1` gate was authorized and
+executed once with six `gpt-5.6-luna` / medium calls, zero retries, and zero Sol calls. Five of six
+frozen oracles passed. The only mismatch, `CTXE04_RELATIONAL_FACT_AMBIGUITY`, returned the safer
+`UNRESOLVED` outcome instead of the frozen `AMBIGUOUS` subset; it did not falsely resolve or invent an
+ID. That sentinel paired the genuinely relational fact `Mis hijos son Cloe y Bruno` with an aquatic-
+activity fact that does not itself establish the requested `mi hijo mayor` identity, so its original
+ambiguity oracle is intentionally retained as historical evidence rather than weakened after seeing
+live output. The gate is permanently consumed at `$0.00`; artifact SHA-256 is
+`f523a7791cc9cfe233f8cb2dacf34e74309ded2b4028648cdb3cd39b87cc093c` and usage-backed estimated
+cost is `$0.00376700`.
+
+Product review then refined the abstention contract: `UNRESOLVED` may retain two to four supplied,
+credible clarification candidates even when none is sufficiently supported for automatic identity
+selection. Those IDs remain non-authoritative until the human chooses one through the existing
+guarded continuation. Mere semantic neighbours are not valid options. A frozen six-case v2 gate uses
+`gpt-6-luna` / medium first, replaces the debatable canonical-fact sentinel with a qualified identity
+case, and accepts either `AMBIGUOUS` or safe `UNRESOLVED` only when the exact grounded Cloe/Bruno
+option set is returned. The authorized v2 gate used a `$0.00845370` conservative no-cache ceiling. Its first three
+GPT-6 Luna / medium cases passed; the fourth provider response stopped as `incomplete` before a
+semantic decision because the 256-token output cap was too small. V2 therefore made four provider
+calls, has three immutable evidence rows (SHA-256
+`5827bdc7e84bfd70b7ebc2f46afd5c582edd53c7ee2035393946bbc82449ab26`), and is permanently
+consumed at zero authority. This is harness evidence, not a semantic failure; a fresh version and
+separate authorization are required for any later live gate.
+
+A manual DEV acceptance test then exposed one missing write-side continuation: the bare singular
+relation `Uno de mis hijos se ha apuntado a natación` was correctly planned as a SELF relation with
+`members=one`, but the historical mutation path returned `relational_evidence_ambiguous` without
+candidate IDs. The durable fix preserves the existing contextual fact resolution first and activates
+the established bounded semantic-set relevance path only as a clarification fallback when a singular
+WRITE remains ambiguous without options. Core then re-projects current canonical facts into two-to-
+four identities, blocks mutation until one is chosen, and revalidates both source and target guards
+before resuming. Qualified singular writes and complete-set writes keep their previous paths. DEV also
+sets `ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna` for this acceptance cycle; the production default remains
+`gpt-5.6-luna`.
+
+### Deterministic clarification path matrix
+
+Clarification changes now require vertical, provider-free regression coverage across the meaningful product state machine rather than only isolated resolver tests. The current suite exercises: initial relational WRITE ambiguity with no pre-choice mutation; exact-label choice; browser-style numeric choice; bounded free-text classifier choice; cancellation; unresolved free text that preserves the same rich options; an unrelated new request that supersedes pending work; same-delivery replay/idempotence; stale chosen-target evidence; stale relationship-source evidence; ordinary ambiguous WRITE; singular READ continuation; relational READ source guards; and the same relational WRITE flow over `project` Notes to prove that the UX is not person-specific. Workflow tests preserve direct `CLARIFY` routing and option projection, while browser tests execute choose, inspect-note, cancel, and continued composer use. A final deployed DEV/browser check remains the full network/product gate before merge.
+
+### Planner model-facing regression gate
+
+The accepted Luna planner prompt, provider schema, teaching examples, production model, and reasoning effort are hash-pinned in `benchmarks/planner_model_contract/accepted_contract.json`. A material change to any protected value must not be made green by simply replacing the hash: it requires a fresh versioned live regression gate, explicit bounded-cost authorization, complete-matrix evidence, and review before the accepted contract moves. New model evaluations start with GPT-6 Luna when applicable; if the deployed model differs, its production configuration must still pass the focused regression gate unless a separately evidenced model switch is explicitly approved. `planner_prompt_regression_v1` reuses the 13 frozen Semantic WRITE frontend cases and adds three small clarification-entry sentinels for an unspecified SELF member, the same request after a related conversation turn, and the same semantics over project Notes. The prepared gate has zero provider authority until explicitly authorized.
 
 ## Required sentinels
 
@@ -222,7 +287,8 @@ The focused contract must keep deterministic coverage for at least:
 - `El amigo de Bruno que vive en Lyon se muda a Toulouse` — ground Bruno first, admit friend candidates from Bruno's outgoing facts or incoming backlinks, and apply the Lyon qualifier only inside that set;
 - a genuinely ambiguous reference — defer for clarification without guessing, creating an identity, or writing a falsely settled source fact.
 
-The provider-facing schema/prompt change requires focused live evidence under `AGENTS.md`. That live gate is Luna/low only, planner-only, zero retries, zero Sol fallbacks, cost-gated, non-overwriting, and separate from deterministic Core execution tests.
+The contextual provider-facing schema/prompt change requires the focused live evidence above under
+`AGENTS.md`; the Semantic WRITE planner prompt/schema remains unchanged.
 
 ## Live-gate status
 
