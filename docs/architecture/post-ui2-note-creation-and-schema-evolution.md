@@ -224,7 +224,11 @@ explicit fact and bounded request/candidate evidence, not from co-occurrence or 
    existing retrieval and ranking remain responsible for answer evidence. Incomplete sets defer
    before retrieval, and relational note-set presentation remains separate. Ordinary preflight
    always clarifies on relational intent, preventing fallback CREATE. The planner's general
-   `all_matching` remains separate.
+   `all_matching` remains separate. Fact references may use the same bounded singular anchor when
+   their identity is defined by current canonical membership in self or an existing source. Their
+   full descriptive query supplies only the qualifier applied inside that member set; `members` is
+   always `one`, no stable identity is model-supplied, and failure to ground the declared anchor
+   stays fail-closed rather than falling back to global semantic candidates.
 
    The Slice 3 architecture challenge returned **PROCEED**: an optional selection value plus a
    Core-owned resolver is the smallest fit; a new action type, relation ontology, or generic stable-ID

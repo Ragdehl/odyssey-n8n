@@ -26,12 +26,14 @@ def unit(facts: tuple[str, ...], refs: tuple[KnowledgeReference, ...] = ()) -> K
 
 
 def target(
-    index: int, outcome: WriteTargetOutcome, *, path: str | None = None
+    index: int,
+    outcome: WriteTargetOutcome,
+    *,
+    path: str | None = None,
+    name: str = "Canonical",
 ) -> UnitTargetPreflight:
     """Build one deterministic preflight fixture."""
-    return UnitTargetPreflight(
-        index, outcome, stable_id="id", canonical_name="Canonical", path=path
-    )
+    return UnitTargetPreflight(index, outcome, stable_id="id", canonical_name=name, path=path)
 
 
 def test_resolved_update_and_preallocated_create_render_authoritative_paths() -> None:
@@ -49,7 +51,12 @@ def test_resolved_update_and_preallocated_create_render_authoritative_paths() ->
         action,
         (
             target(0, WriteTargetOutcome.UPDATE, path="people/Marta.md"),
-            target(1, WriteTargetOutcome.CREATE, path="products/Leche Pascual - full-id.md"),
+            target(
+                1,
+                WriteTargetOutcome.CREATE,
+                path="products/Leche Pascual - full-id.md",
+                name="Leche Pascual",
+            ),
         ),
     )
     assert result.rendered_facts == (
@@ -61,8 +68,8 @@ def test_resolved_update_and_preallocated_create_render_authoritative_paths() ->
     assert result.pending_references == ()
 
 
-def test_mention_is_display_text_and_two_references_keep_folders() -> None:
-    """Use occurrence wording exactly, even when it differs from canonical identity."""
+def test_canonical_name_is_display_text_and_two_references_keep_folders() -> None:
+    """Render canonical target names even when user occurrence wording is descriptive."""
     action = WriteAction(
         (
             unit(
@@ -80,13 +87,23 @@ def test_mention_is_display_text_and_two_references_keep_folders() -> None:
         action,
         (
             target(0, WriteTargetOutcome.UPDATE, path="source.md"),
-            target(1, WriteTargetOutcome.UPDATE, path="people/Marta García.md"),
-            target(2, WriteTargetOutcome.CREATE, path="places/Toulouse - id.md"),
+            target(
+                1,
+                WriteTargetOutcome.UPDATE,
+                path="people/Marta García.md",
+                name="Marta García",
+            ),
+            target(
+                2,
+                WriteTargetOutcome.CREATE,
+                path="places/Toulouse - id.md",
+                name="Toulouse",
+            ),
         ),
     )
     assert (
         result.rendered_facts[0][0]
-        == "Hablé con [[people/Marta García|la amiga de Laura]] sobre [[places/Toulouse - id|Toulouse]]."
+        == "Hablé con [[people/Marta García|Marta García]] sobre [[places/Toulouse - id|Toulouse]]."
     )
 
 

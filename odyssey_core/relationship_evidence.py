@@ -44,9 +44,10 @@ class EvidenceDirection(Enum):
 
 
 class TargetProjectionStatus(Enum):
-    """Describe whether one selected fact establishes a complete target set."""
+    """Describe whether one selected fact establishes a complete active target set."""
 
     COMPLETE = "complete"
+    INACTIVE_TARGETS = "inactive_targets"
     INCOMPLETE = "incomplete"
     SOURCE_UNAVAILABLE = "source_unavailable"
     FACT_UNAVAILABLE = "fact_unavailable"
@@ -119,10 +120,11 @@ class EntityEvidenceCandidateProjection:
 
 @dataclass(frozen=True, slots=True)
 class _GroundedFact:
-    """Keep a source fact plus literal link targets resolved in one vault snapshot."""
+    """Keep one source fact plus active targets and known inactive-link state."""
 
     fact: CanonicalFact
     targets: tuple[CanonicalIdentity, ...] | None
+    has_inactive_targets: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,7 +372,23 @@ class RelationshipEvidenceProjector:
             return TargetProjection(
                 TargetProjectionStatus.FACT_UNAVAILABLE, source.identity, None, (), ()
             )
-        if selected.targets is None or not selected.targets:
+        if selected.targets is None:
+            return TargetProjection(
+                TargetProjectionStatus.INCOMPLETE, source.identity, selected.fact, (), ()
+            )
+        if selected.has_inactive_targets:
+            evidence = tuple(
+                RelationshipEvidence(selected.fact, EvidenceDirection.OUTGOING, target)
+                for target in selected.targets
+            )
+            return TargetProjection(
+                TargetProjectionStatus.INACTIVE_TARGETS,
+                source.identity,
+                selected.fact,
+                selected.targets,
+                evidence,
+            )
+        if not selected.targets:
             return TargetProjection(
                 TargetProjectionStatus.INCOMPLETE, source.identity, selected.fact, (), ()
             )
@@ -419,7 +437,7 @@ class RelationshipEvidenceProjector:
         direct = tuple(
             RelationshipEvidence(item.fact, EvidenceDirection.DIRECT, None)
             for item in entity.facts
-            if item.targets == ()
+            if item.targets == () and not item.has_inactive_targets
         )
         outgoing = tuple(
             RelationshipEvidence(item.fact, EvidenceDirection.OUTGOING, target)
@@ -471,6 +489,8 @@ class RelationshipEvidenceProjector:
         basenames: dict[
             str, list[tuple[CanonicalIdentity, Mapping[str, Any], tuple[str, ...]]]
         ] = {}
+        inactive_paths: set[str] = set()
+        inactive_basenames: dict[str, int] = {}
         for path in self.repository.list_markdown_paths():
             try:
                 raw = self.repository.read_text(path)
@@ -481,6 +501,12 @@ class RelationshipEvidenceProjector:
                     "Canonical note is unavailable or invalid"
                 ) from error
             if note.metadata.get("deleted") is True:
+                inactive_path = path.removesuffix(".md").casefold()
+                inactive_paths.add(inactive_path)
+                inactive_basename = inactive_path.rsplit("/", 1)[-1]
+                inactive_basenames[inactive_basename] = (
+                    inactive_basenames.get(inactive_basename, 0) + 1
+                )
                 continue
             note_id = str(note.metadata["id"])
             if note_id in unlinked:
@@ -527,6 +553,7 @@ class RelationshipEvidenceProjector:
                 )
                 fact = CanonicalFact(identity, locator, text)
                 literal_targets = _literal_link_targets(text)
+                has_inactive_targets = False
                 if literal_targets is None:
                     targets = None
                 else:
@@ -535,6 +562,12 @@ class RelationshipEvidenceProjector:
                     for target in literal_targets:
                         target_identity = resolve(target)
                         if target_identity is None:
+                            inactive = target in inactive_paths or (
+                                "/" not in target and inactive_basenames.get(target, 0) == 1
+                            )
+                            if inactive:
+                                has_inactive_targets = True
+                                continue
                             resolved = []
                             targets = None
                             break
@@ -543,6 +576,6 @@ class RelationshipEvidenceProjector:
                             resolved.append(target_identity)
                     else:
                         targets = tuple(resolved)
-                facts.append(_GroundedFact(fact, targets))
+                facts.append(_GroundedFact(fact, targets, has_inactive_targets))
             grounded[note_id] = _GroundedNote(identity, properties, tuple(facts))
         return grounded

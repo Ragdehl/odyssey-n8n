@@ -70,6 +70,24 @@ def selection(
     }
 
 
+def reference_selection(
+    query: str,
+    *,
+    entity: str | None = None,
+    note_type: str | None = None,
+    filters: list[dict] | None = None,
+    relational_reference: dict | None = None,
+) -> dict:
+    """Build the compact semantic lookup shape exposed inside KnowledgeReference."""
+    return {
+        "entity": entity,
+        "query": query,
+        "type": note_type,
+        "filters": filters or [],
+        "relational_reference": relational_reference,
+    }
+
+
 def semantic_set_selection(query: str) -> dict:
     """Build the only planner-visible Slice 1 semantic-set retrieval intent."""
     result = selection(query)
@@ -271,13 +289,16 @@ def test_collection_contract_is_lossless_query_plus_retrieval_shape(schema: dict
     assert plan.actions[0].plan.query == "What countries have I travelled to?"
 
 
-def test_collection_membership_anchor_instruction_is_generic_and_schema_is_unchanged(
+def test_collection_membership_anchor_instruction_is_generic_and_collection_schema_is_unchanged(
     schema: dict,
 ) -> None:
-    """Keep self/query as a closed scope bit while teaching the abstract membership boundary."""
+    """Keep collection scope/schema fixed while other planner action contracts may evolve."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
+    collection_action_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"][
+        "anyOf"
+    ][1]
     encoded_schema = json.dumps(
-        luna_experimental_result_json_schema(schema),
+        collection_action_schema,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -292,7 +313,7 @@ def test_collection_membership_anchor_instruction_is_generic_and_schema_is_uncha
         "set it to null for every result_shape=single regardless of presentation intent" in prompt
     )
     assert hashlib.sha256(encoded_schema).hexdigest() == (
-        "22edb7ef4ddc61e33993536a990457030537aed5d25d93b2b661642787ec0b2d"
+        "9ac3869685e8df09b863398edee3c1f2a28505cc6429490c51c106952357a322"
     )
     fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
     assert all(
@@ -461,6 +482,72 @@ def test_knowledge_unit_cardinality_is_required_and_validated(schema: dict) -> N
     assert "cardinality" in unit_schema["required"]
     with pytest.raises(RequestPlanningError, match="cardinality"):
         validate_request_plan(output(write(unit("Marta", cardinality="many"))), schema)
+
+
+def test_swr01_style_self_source_and_two_references_remains_valid(schema: dict) -> None:
+    """Keep the source-owned relationship shape valid while diagnostics become finer."""
+    raw = schema_unit(
+        "yo",
+        facts=["{{ref:0}} y {{ref:1}} son mis compañeros de trabajo."],
+        references=[
+            {
+                "selection": reference_selection("Axel", note_type="person"),
+                "role": "coworker",
+                "mention": "Axel",
+            },
+            {
+                "selection": reference_selection("Denis", note_type="person"),
+                "role": "coworker",
+                "mention": "Denis",
+            },
+        ],
+    )
+    raw["target"]["self_target"] = "self"
+    payload = planner_output(write(raw))
+
+    assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
+    plan = validate_planner_result(payload, schema)
+    assert len(plan.actions[0].units[0].references) == 2  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("raw_unit", "code"),
+    [
+        (
+            schema_unit("personas", entity="Marta", cardinality="all_matching"),
+            PlannerValidationCode.INVALID_CARDINALITY,
+        ),
+        (
+            schema_unit("Marta", facts=["Duplicado.", "Duplicado."]),
+            PlannerValidationCode.INVALID_MUTATION,
+        ),
+        (
+            schema_unit(
+                "Marta",
+                facts=["Marta conoce a Axel."],
+                references=[
+                    {
+                        "selection": reference_selection("Axel", note_type="person"),
+                        "role": "friend",
+                        "mention": "Axel",
+                    }
+                ],
+            ),
+            PlannerValidationCode.INVALID_REFERENCE,
+        ),
+    ],
+)
+def test_schema_valid_knowledge_unit_failures_keep_bounded_codes(
+    schema: dict, raw_unit: dict, code: PlannerValidationCode
+) -> None:
+    """Attribute semantic failures without retaining model payload details."""
+    payload = planner_output(write(raw_unit))
+    assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
+
+    with pytest.raises(RequestPlanningError) as raised:
+        validate_planner_result(payload, schema)
+    assert raised.value.validation_stage is PlannerValidationStage.KNOWLEDGE_UNIT
+    assert raised.value.validation_code is code
 
 
 def test_bulk_cardinality_cannot_mix_singular_entity_or_references(schema: dict) -> None:
@@ -672,36 +759,36 @@ def test_write_intents_multiple_targets_and_references(schema: dict) -> None:
         output(
             write(
                 unit(
-                    "Carrefour Balma",
-                    note_type="store",
+                    "Faro",
+                    note_type="project",
                     intent="amend",
                     facts=["Closes at 20:30.", "Has underground parking."],
                 ),
                 unit(
-                    "Leche Pascual semidesnatada",
-                    note_type="product",
+                    "Marta",
+                    note_type="person",
                     facts=[],
                 ),
                 unit(
-                    "Weekly shopping",
-                    note_type="purchase",
-                    facts=["Bought {{ref:0}} in {{ref:1}} today."],
+                    "Project brief",
+                    note_type="document",
+                    facts=["Mentions {{ref:0}} and {{ref:1}}."],
                     references=[
-                        {"target_index": 0, "role": "store", "mention": "Carrefour Balma"},
+                        {"target_index": 0, "role": "project", "mention": "Faro"},
                         {
                             "target_index": 1,
-                            "role": "product",
-                            "mention": "Leche Pascual semidesnatada",
+                            "role": "person",
+                            "mention": "Marta",
                         },
                     ],
                 ),
-                unit("Old shopping list", intent="delete", facts=[]),
+                unit("Old project brief", intent="delete", facts=[]),
                 unit(
-                    "Weekly shopping",
-                    note_type="purchase",
+                    "Project brief",
+                    note_type="document",
                     intent="remove",
-                    facts=["Remove the obsolete delivery fee at {{ref:0}}."],
-                    references=[{"target_index": 0, "role": "store", "mention": "Carrefour Balma"}],
+                    facts=["Remove the obsolete project reference {{ref:0}}."],
+                    references=[{"target_index": 0, "role": "project", "mention": "Faro"}],
                 ),
             )
         ),
@@ -851,16 +938,251 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
 
 
-def test_prompt_and_schema_freeze_reference_occurrence_contract(schema: dict) -> None:
-    """Teach Sol about local markers and require mention in each closed reference object."""
+def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> None:
+    """Keep marker occurrences local while making provider references semantic searches."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
     assert "{{ref:N}}" in prompt
     assert "own `references` array" in prompt
-    assert "Do not emit Markdown `[[wikilinks]]`" in prompt
+    assert "selection.query" in prompt
+    assert "do not emit Markdown `[[wikilinks]]`" in prompt
+    assert "target.query describes only the subject" in prompt
+    assert "Possessive or first-person context is identity evidence, not write ownership" in prompt
     reference_schema = request_plan_json_schema(schema)["properties"]["actions"]["items"]["anyOf"][
         2
     ]["properties"]["units"]["items"]["properties"]["references"]["items"]
-    assert reference_schema["required"] == ["target_index", "role", "mention"]
+    assert reference_schema["required"] == ["selection", "role", "mention"]
+    assert "target_index" not in reference_schema["properties"]
+    selection_schema = reference_schema["properties"]["selection"]
+    assert selection_schema["required"] == [
+        "entity",
+        "query",
+        "type",
+        "filters",
+        "relational_reference",
+    ]
+    assert "link_scope" not in selection_schema["properties"]
+    assert "self_target" not in selection_schema["properties"]
+    relational_branches = selection_schema["properties"]["relational_reference"]["anyOf"]
+    assert relational_branches[0] == {"type": "null"}
+    assert {
+        branch["properties"]["source_kind"]["enum"][0] for branch in relational_branches[1:]
+    } == {
+        "self",
+        "existing",
+    }
+    assert all(
+        branch["properties"]["members"]["enum"] == ["one"] for branch in relational_branches[1:]
+    )
+    self_branch = next(
+        branch
+        for branch in relational_branches[1:]
+        if branch["properties"]["source_kind"]["enum"] == ["self"]
+    )
+    existing_branch = next(
+        branch
+        for branch in relational_branches[1:]
+        if branch["properties"]["source_kind"]["enum"] == ["existing"]
+    )
+    assert self_branch["properties"]["source_query"] == {"type": "null"}
+    assert existing_branch["properties"]["source_query"] == {"type": "string"}
+    assert "members=one" in prompt
+    assert "must denote a different logical note from its own KnowledgeUnit target" in prompt
+
+
+def test_fact_reference_cannot_select_its_own_unit_target(schema: dict) -> None:
+    """Fail closed when a model redundantly turns the write subject into a fact reference."""
+    target_query = "mi hijo mayor"
+    relation = {
+        "reference": target_query,
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    raw_unit = schema_unit(
+        target_query,
+        note_type="person",
+        facts=["{{ref:0}} fue al cine."],
+        references=[
+            {
+                "selection": reference_selection(
+                    target_query,
+                    note_type="person",
+                    relational_reference=relation,
+                ),
+                "role": "subject",
+                "mention": target_query,
+            }
+        ],
+    )
+    raw_unit["target"]["relational_reference"] = relation
+    payload = provider_output(planner_output(write(raw_unit)))
+
+    assert schema_accepts(payload, planner_result_json_schema(schema))
+    assert schema_accepts(payload, compact_planner_result_json_schema(schema))
+    with pytest.raises(RequestPlanningError, match="cannot select its own") as raised:
+        validate_planner_result(payload["result"], schema)
+    assert raised.value.validation_stage is PlannerValidationStage.KNOWLEDGE_UNIT
+    assert raised.value.validation_code is PlannerValidationCode.INVALID_REFERENCE
+
+
+def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dict) -> None:
+    """Let the provider describe what to search while Core owns mechanical target indexes."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "mi hijo mayor",
+                    note_type="person",
+                    facts=["Fue al cine con {{ref:0}}."],
+                    references=[
+                        {
+                            "selection": reference_selection(
+                                "la amiga que vive en Lyon", note_type="person"
+                            ),
+                            "role": "companion",
+                            "mention": "la amiga que vive en Lyon",
+                        }
+                    ],
+                )
+            )
+        ),
+        schema,
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    assert action.units[0].references[0].target_index == 1
+    assert action.units[0].references[0].selection is None
+    lookup = action.units[1]
+    assert lookup.reference_lookup_only is True
+    assert lookup.target.query == "la amiga que vive en Lyon"
+    assert lookup.target.type == "person"
+    assert lookup.facts == ()
+
+
+def test_relational_reference_selection_lowers_to_bounded_lookup_unit(schema: dict) -> None:
+    """Preserve one bounded relation anchor when a fact reference needs member disambiguation."""
+    query = "la persona de la cena que trabaja en Airbus Test"
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "mi hija mayor",
+                    note_type="person",
+                    facts=["Va al parque con {{ref:0}}."],
+                    references=[
+                        {
+                            "selection": reference_selection(
+                                query,
+                                note_type="person",
+                                relational_reference={
+                                    "reference": "las personas de la cena",
+                                    "source_kind": "existing",
+                                    "source_query": "la cena",
+                                    "members": "one",
+                                },
+                            ),
+                            "role": "companion",
+                            "mention": query,
+                        }
+                    ],
+                )
+            )
+        ),
+        schema,
+    )
+
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    lookup = action.units[1]
+    assert lookup.reference_lookup_only is True
+    assert lookup.target.query == query
+    assert lookup.target.relational_reference is not None
+    assert lookup.target.relational_reference.source_query == "la cena"
+    assert lookup.target.relational_reference.members == "one"
+
+
+def test_fact_reference_rejects_complete_relational_member_set(schema: dict) -> None:
+    """Require every fact marker to bind one canonical note rather than an implicit member set."""
+    raw = output(
+        write(
+            unit(
+                "Cloe",
+                note_type="person",
+                facts=["Fue con {{ref:0}}."],
+                references=[
+                    {
+                        "selection": reference_selection(
+                            "todos los de la cena",
+                            relational_reference={
+                                "reference": "todos los de la cena",
+                                "source_kind": "existing",
+                                "source_query": "la cena",
+                                "members": "complete_set",
+                            },
+                        ),
+                        "role": "companions",
+                        "mention": "todos los de la cena",
+                    }
+                ],
+            )
+        )
+    )
+
+    with pytest.raises(RequestPlanningError, match="must select one identity"):
+        validate_request_plan(raw, schema)
+
+    provider_payload = provider_output(
+        planner_output(
+            write(
+                schema_unit(
+                    "Cloe",
+                    note_type="person",
+                    facts=["Fue con {{ref:0}}."],
+                    references=raw["actions"][0]["units"][0]["references"],
+                )
+            )
+        )
+    )
+    assert not schema_accepts(provider_payload, planner_result_json_schema(schema))
+    assert not schema_accepts(provider_payload, compact_planner_result_json_schema(schema))
+
+
+def test_semantic_reference_reuses_matching_same_request_target(schema: dict) -> None:
+    """Preserve same-request dependency semantics without exposing unit indexes to the model."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "Project brief",
+                    note_type="document",
+                    facts=["Bought {{ref:0}}."],
+                    references=[
+                        {
+                            "selection": reference_selection(
+                                "Faro", entity="Faro", note_type="project"
+                            ),
+                            "role": "project",
+                            "mention": "Faro",
+                        }
+                    ],
+                ),
+                unit(
+                    "Faro",
+                    entity="Faro",
+                    note_type="project",
+                    facts=[],
+                ),
+            )
+        ),
+        schema,
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 2
+    assert action.units[0].references[0].target_index == 1
+    assert action.units[1].reference_lookup_only is False
 
 
 def test_prompt_explains_semantic_atomicity_not_punctuation_segmentation(schema: dict) -> None:
@@ -868,8 +1190,8 @@ def test_prompt_explains_semantic_atomicity_not_punctuation_segmentation(schema:
     prompt = render_request_planner_prompt(schema, CONTEXT)
     assert "Atomicity is semantic, not punctuation-based" in prompt
     assert "keep sentences or clauses together" in prompt
-    assert "Marta vive en Lyon y trabaja en Thales" in prompt
-    assert "Quiero mudarme a Lyon porque" in prompt
+    assert "split independently meaningful knowledge" in prompt
+    assert "one coherent explanation, reflection, or decision" in prompt
 
 
 def test_dynamic_capabilities_reflect_schema_changes_and_controlled_tags(schema: dict) -> None:
@@ -1600,7 +1922,7 @@ def test_local_validation_diagnostics_never_retain_payload_or_request_sentinels(
         planner.plan("SECRET_REQUEST_SENTINEL")
 
     assert planner.last_validation_stage == PlannerValidationStage.KNOWLEDGE_UNIT.value
-    assert planner.last_validation_code == PlannerValidationCode.INVALID_FIELDS.value
+    assert planner.last_validation_code == PlannerValidationCode.INVALID_MUTATION.value
     diagnostics = repr(
         (
             planner.last_error_category,
@@ -1742,6 +2064,24 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     """Do not add a production exception that suppresses valid dated reflections."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
     assert "Do not infer `journal_entry` merely because a reflection says today/hoy" not in prompt
+    assert "relational_reference.members MUST be one" in prompt
+    assert "target.entity MUST remain null" in prompt
+    assert "emit exactly one source-targeted KnowledgeUnit" in prompt
+    assert "NEVER split the relationship into participant-targeted units" in prompt
+    assert "A proper noun or ordinary fact argument is not enough by itself" in prompt
+    assert (
+        "Type-null references are for wording that explicitly denotes an existing Odyssey identity"
+        in prompt
+    )
+    assert "Minimize note mutations without changing semantic ownership" in prompt
+    assert "preserve those subjects as separate write targets" in prompt
+
+
+def test_write_prompt_does_not_embed_live_gate_fixture_examples(schema: dict) -> None:
+    """Keep concrete regression phrases in tests, not as production prompt patches."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    for fixture_text in ("Axel", "Denis", "Cloe", "Cena relacional de prueba", "Airbus Test"):
+        assert fixture_text not in prompt
 
 
 def test_production_planner_does_not_depend_on_frozen_benchmark_assets() -> None:
@@ -1767,6 +2107,81 @@ def test_tag_changes_reject_duplicate_or_conflicting_values(schema: dict) -> Non
             ),
             schema,
         )
+
+
+def test_singular_write_relational_reference_can_anchor_a_richer_target(schema: dict) -> None:
+    """Preserve rich singular qualifiers while using a relationship only as candidate authority."""
+    rich = unit(
+        "mi hija a la que le gusta ver detectives de animales",
+        note_type="person",
+        facts=["Adora el chocolate."],
+    )
+    rich["target"]["relational_reference"] = {
+        "reference": "mi hija",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    parsed = validate_request_plan(output(write(rich)), schema)
+    target = parsed.actions[0].units[0].target
+    assert target.query == "mi hija a la que le gusta ver detectives de animales"
+    assert target.relational_reference is not None
+    assert target.relational_reference.reference == "mi hija"
+
+    contaminated = unit(
+        "Mi hija mayor va a cenar con la persona de la cena relacional de prueba que trabaja en Airbus Test.",
+        note_type="person",
+        facts=["Va a cenar con {{ref:0}}."],
+        references=[
+            {
+                "selection": reference_selection(
+                    "la persona de la cena relacional de prueba que trabaja en Airbus Test"
+                ),
+                "role": "dinner companion",
+                "mention": "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+            }
+        ],
+    )
+    contaminated["target"]["relational_reference"] = {
+        "reference": "mi hija mayor",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "one",
+    }
+    with pytest.raises(RequestPlanningError) as error:
+        validate_request_plan(output(write(contaminated)), schema)
+    assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
+
+    complete_set = unit(
+        "mis hijos que viven en Francia", note_type="person", facts=["Fueron al colegio."]
+    )
+    complete_set["target"]["relational_reference"] = {
+        "reference": "mis hijos",
+        "source_kind": "self",
+        "source_query": None,
+        "members": "complete_set",
+    }
+    with pytest.raises(RequestPlanningError) as error:
+        validate_request_plan(output(write(complete_set)), schema)
+    assert error.value.validation_code is PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT
+
+    event_member = unit(
+        "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+        note_type="person",
+        facts=["Se ha comprado un paraguas rojo."],
+    )
+    event_member["target"]["relational_reference"] = {
+        "reference": "las personas que estuvieron en la cena relacional de prueba",
+        "source_kind": "existing",
+        "source_query": "cena relacional de prueba",
+        "members": "one",
+    }
+    parsed_event = validate_request_plan(output(write(event_member)), schema)
+    event_target = parsed_event.actions[0].units[0].target
+    assert event_target.entity is None
+    assert event_target.relational_reference is not None
+    assert event_target.relational_reference.members == "one"
+    assert event_target.relational_reference.source_query == "cena relacional de prueba"
 
 
 def test_semantic_set_intent_is_retrieval_only_and_legacy_plan_still_parses(schema: dict) -> None:

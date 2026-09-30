@@ -246,6 +246,36 @@ class VaultRepository:
                 except OSError:
                     pass
 
+    def remove_text(self, path: str) -> None:
+        """Remove one existing contained Markdown file without following symlinks.
+
+        This primitive exists for request-local rollback of a just-created canonical note. Domain
+        deletion still uses Odyssey soft-delete semantics; callers must not use this as a user delete.
+        """
+        relative_path = self._validate_note_path(path)
+        candidate = self._root.joinpath(*relative_path.parts)
+        try:
+            parent = candidate.parent.resolve(strict=True)
+            target = parent / candidate.name
+            resolved_target = target.resolve(strict=True)
+        except (FileNotFoundError, RuntimeError):
+            raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
+        except OSError:
+            raise VaultAccessError("Unable to remove note") from None
+        if (
+            not parent.is_relative_to(self._root)
+            or target.is_symlink()
+            or not resolved_target.is_relative_to(self._root)
+            or not resolved_target.is_file()
+        ):
+            raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}")
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
+        except OSError:
+            raise VaultAccessError("Unable to remove note") from None
+
     def list_markdown_paths(self) -> list[str]:
         """List contained regular Markdown files without reading or following symlinks.
 

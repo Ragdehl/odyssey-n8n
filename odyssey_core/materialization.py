@@ -19,7 +19,7 @@ from odyssey_core.atomic_facts import (
     render_atomic_facts,
 )
 from odyssey_core.fact_selection import AtomicFactSelector, FactCandidate, validate_fact_selection
-from odyssey_core.notes import Note, parse_note, validate_note
+from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.observability import normalize_provider_usage
 from odyssey_core.persistence import (
     ActorInput,
@@ -38,7 +38,7 @@ from odyssey_core.reference_binding import (
 )
 from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
-from odyssey_core.storage import VaultRepository
+from odyssey_core.storage import NoteUnavailableError, VaultAccessError, VaultRepository
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
 
 WRITER_MODEL = "gpt-5.6-luna"
@@ -70,6 +70,36 @@ class WriterProviderError(MaterializationError):
 
 class WriterOutputError(MaterializationError):
     """Indicate malformed, unsafe, or conflicting bounded writer operations."""
+
+
+def rollback_created_reference(
+    preflight: UnitTargetPreflight,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> None:
+    """Remove one just-created reference helper when no consuming fact materialized.
+
+    The rollback is intentionally narrower than user-facing deletion: it accepts only a preflighted
+    CREATE identity/path, revalidates the current note, requires revision 1, and then removes that
+    newly created file through the contained storage boundary.
+    """
+    if (
+        preflight.outcome is not WriteTargetOutcome.CREATE
+        or not preflight.stable_id
+        or not preflight.path
+    ):
+        raise MaterializationError("Reference CREATE rollback requires the exact CREATE hand-off")
+    try:
+        note = parse_note(repository.read_text(preflight.path))
+        validate_note(note, schema)
+    except (NoteFormatError, NoteValidationError, NoteUnavailableError, VaultAccessError) as error:
+        raise MaterializationError(
+            "Reference CREATE rollback cannot revalidate the created note"
+        ) from error
+    if note.metadata.get("id") != preflight.stable_id or note.metadata.get("revision") != 1:
+        raise MaterializationError("Reference CREATE rollback identity or revision changed")
+    repository.remove_text(preflight.path)
 
 
 def materialize_create(

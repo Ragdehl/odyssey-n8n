@@ -1,0 +1,35 @@
+{
+  "version": "semantic-write-frontend-gpt6-luna-v1",
+  "comparison_baseline": "semantic-write-frontend-v8",
+  "frozen_before_provider_calls": true,
+  "provider_calls_made": 13,
+  "model": "gpt-6-luna",
+  "reasoning_effort": "low",
+  "max_provider_calls": 13,
+  "retries": 0,
+  "sol_calls": 0,
+  "sha256": {
+    "frozen_swr_cases": "2b0966ea2ba14ea43a1f110ce55b9a9d5050ee0b0582feee86e1d29946a3157c",
+    "sentinels": "d20301398f956457937606a591a22a58434dcd6c781a08707f7a24e989c22bc9"
+  },
+  "evaluator_sha256": "7360d91b179ba68c1243c6829738ec0507a04034c8b6c1cc5cee6ec009a3b9e3",
+  "pricing": {
+    "as_of": "2026-09-29",
+    "source": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+    "input_per_million": "0.10",
+    "cached_input_per_million": "0.01",
+    "cache_write_per_million": "0.125",
+    "output_per_million": "0.50"
+  },
+  "future_artifact": "benchmarks/.live-results/semantic-write-frontend-gpt6-luna-v1.jsonl",
+  "max_cost_usd": "0.00",
+  "artifact_sha256": "896e73337a9a1ffbf2984b8db18c214d7dea03e8f705ad181b6950554a941628",
+  "result": "11_of_13_passed",
+  "failed_cases": [
+    "SWR08-relational-target-described-reference",
+    "SWR10-relational-target-two-bounded-references"
+  ],
+  "actual_cost_usd_estimate": "0.00419596",
+  "consumed_artifact": "benchmarks/.live-results/semantic-write-frontend-gpt6-luna-v1.jsonl",
+  "comparison_conclusion": "retain_gpt-5.6-luna_for_planner"
+}

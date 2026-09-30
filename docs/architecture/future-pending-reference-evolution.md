@@ -83,7 +83,7 @@ A model may contribute bounded identity interpretation, but deterministic Core o
 
 ## Preserve original wording
 
-The original mention is user wording and should remain available. If `Empresa Thales` later becomes a known alias of canonical `Thales`, rendering may preserve that display text in the wikilink. Without such evidence, Odyssey must not assume the two strings are the same identity.
+The original mention is user wording and should remain available for clarification/audit, but once a target is resolved the durable wikilink display uses the canonical note name. If `Empresa Thales` later becomes a known alias of canonical `Thales`, alias evidence may help resolution, but rendering still uses `Thales`; Odyssey never promotes occurrence wording into durable alias text implicitly.
 
 One fact may contain several references. `local_reference_index` (or an equivalent deterministic occurrence address) must allow one resolved reference to be relinked without rewriting neighboring unresolved references/free text.
 

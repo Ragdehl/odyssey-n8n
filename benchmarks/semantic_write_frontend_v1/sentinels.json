@@ -1,0 +1,25 @@
+{
+  "version": "semantic-write-frontend-v1",
+  "fixed_context": {
+    "date": "2026-09-28",
+    "time": "20:30",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "SWF-READ-01",
+      "request": "Which documents mention the migration plan?",
+      "expect_action_kinds": ["retrieve"]
+    },
+    {
+      "id": "SWF-DELEGATE-01",
+      "request": "Count the documents that mention the migration plan.",
+      "expect_action_kinds": ["delegate"]
+    },
+    {
+      "id": "SWF-MIXED-ORDER-01",
+      "request": "Show what I know about Northwind, remember that Marta reviewed the brief, then count documents mentioning the brief.",
+      "expect_action_kinds": ["retrieve", "write", "delegate"]
+    }
+  ]
+}

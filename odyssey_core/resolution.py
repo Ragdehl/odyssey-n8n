@@ -22,6 +22,11 @@ from odyssey_core.identity import (
     resolve_exact_entity,
 )
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
+from odyssey_core.relationship_evidence import (
+    RelationshipEvidence,
+    RelationshipEvidenceProjector,
+    TargetProjectionStatus,
+)
 from odyssey_core.semantic import (
     SemanticEntityCandidate,
     SemanticEntityIndex,
@@ -163,6 +168,8 @@ def resolve_existing_entity(
     contextual_reasoner: ContextualReasoner,
     semantic_limit: int,
     allowed_candidate_ids: frozenset[str] | None = None,
+    expand_relationship_context: bool = False,
+    self_note_id: str | None = None,
 ) -> ExistingEntityResolution:
     """Resolve one extracted entity reference against existing validated notes.
 
@@ -186,6 +193,10 @@ def resolve_existing_entity(
             safe large-vault assumption; callers must make this retrieval decision explicitly.
         allowed_candidate_ids: Optional authoritative deterministic restriction of eligible note
             IDs. It narrows exact and semantic evidence before any candidate is selected.
+        expand_relationship_context: Whether to enrich semantic identity candidates with bounded
+            one-hop canonical relationship evidence and co-targets before the contextual decision.
+        self_note_id: Optional authenticated self identity used only to label canonical relationship
+            evidence for first-person contextual resolution; it never selects a candidate directly.
 
     Returns:
         A typed local or contextual production result.
@@ -199,6 +210,8 @@ def resolve_existing_entity(
         not all(isinstance(note_id, str) and note_id for note_id in allowed_candidate_ids)
     ):
         raise ValueError("Allowed candidate IDs must be non-empty strings")
+    if self_note_id is not None and (not isinstance(self_note_id, str) or not self_note_id):
+        raise ValueError("Self note ID must be a non-empty string")
     exact = _restrict_exact_resolution(
         resolve_exact_entity(repository, schema, reference, type=type), allowed_candidate_ids
     )
@@ -230,6 +243,17 @@ def resolve_existing_entity(
         if _is_current_active_candidate(repository, schema, candidate.path, candidate.id)
     )
     candidates = _merge_candidates(semantic_candidates, exact.candidates)
+    relationship_evidence: dict[str, tuple[str, ...]] = {}
+    if expand_relationship_context and candidates:
+        candidates, relationship_evidence = _expand_relationship_candidates(
+            repository,
+            schema,
+            candidates,
+            note_type=type,
+            expansion_limit=semantic_limit,
+            allowed_candidate_ids=allowed_candidate_ids,
+            self_note_id=self_note_id,
+        )
     if not candidates:
         return ExistingEntityResolution(
             outcome=ExistingEntityOutcome.UNRESOLVED,
@@ -240,7 +264,13 @@ def resolve_existing_entity(
 
     contextual_candidates = tuple(
         ContextualCandidate(
-            candidate.id, _load_provider_evidence(repository, schema, candidate.path)
+            candidate.id,
+            _load_provider_evidence(
+                repository,
+                schema,
+                candidate.path,
+                relationship_evidence=relationship_evidence.get(candidate.id, ()),
+            ),
         )
         for candidate in candidates
     )
@@ -298,8 +328,97 @@ def _merge_candidates(
     return tuple(merged)
 
 
-def _load_provider_evidence(repository: VaultRepository, schema: dict[str, Any], path: str) -> str:
-    """Read, parse, and validate one candidate before constructing external evidence."""
+def _expand_relationship_candidates(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    candidates: tuple[SemanticEntityCandidate | ExactEntityCandidate, ...],
+    *,
+    note_type: str | None,
+    expansion_limit: int,
+    allowed_candidate_ids: frozenset[str] | None,
+    self_note_id: str | None,
+) -> tuple[
+    tuple[SemanticEntityCandidate | ExactEntityCandidate, ...],
+    dict[str, tuple[str, ...]],
+]:
+    """Expand ranked identities through bounded one-hop canonical relationship evidence.
+
+    Expansion never selects an identity. It adds at most ``expansion_limit`` current co-target/source
+    identities that are explicitly connected by the same canonical facts as the locally retrieved
+    candidates. The contextual reasoner still decides whether exactly one supplied candidate is
+    supported by the user's wording.
+    """
+    projector = RelationshipEvidenceProjector(repository, schema)
+    ordered: list[SemanticEntityCandidate | ExactEntityCandidate] = list(candidates)
+    seen = {candidate.id for candidate in ordered}
+    evidence_by_id: dict[str, list[str]] = {candidate.id: [] for candidate in ordered}
+    added = 0
+
+    def eligible(identity: Any) -> bool:
+        return (note_type is None or identity.type == note_type) and (
+            allowed_candidate_ids is None or identity.id in allowed_candidate_ids
+        )
+
+    def add_identity(identity: Any) -> None:
+        nonlocal added
+        if identity.id in seen or added >= expansion_limit or not eligible(identity):
+            return
+        ordered.append(
+            SemanticEntityCandidate(identity.id, identity.path, identity.type, identity.name, 0.0)
+        )
+        seen.add(identity.id)
+        evidence_by_id.setdefault(identity.id, [])
+        added += 1
+
+    for candidate in candidates:
+        projection = projector.project_entity_evidence_candidates(candidate.id)
+        if projection is None:
+            continue
+        for item in (*projection.incoming, *projection.outgoing):
+            rendered = _render_relationship_evidence(item, self_note_id=self_note_id)
+            if rendered not in evidence_by_id[candidate.id]:
+                evidence_by_id[candidate.id].append(rendered)
+            target_projection = projector.project_targets(item.fact.source.id, item.fact.locator)
+            if target_projection.status is not TargetProjectionStatus.COMPLETE:
+                continue
+            if target_projection.source is not None and target_projection.source.id != self_note_id:
+                add_identity(target_projection.source)
+                if target_projection.source.id in evidence_by_id:
+                    if rendered not in evidence_by_id[target_projection.source.id]:
+                        evidence_by_id[target_projection.source.id].append(rendered)
+            for target in target_projection.targets:
+                add_identity(target)
+                if target.id in evidence_by_id and rendered not in evidence_by_id[target.id]:
+                    evidence_by_id[target.id].append(rendered)
+
+    return tuple(ordered), {
+        note_id: tuple(values) for note_id, values in evidence_by_id.items() if values
+    }
+
+
+def _render_relationship_evidence(
+    evidence: RelationshipEvidence, *, self_note_id: str | None
+) -> str:
+    """Render one canonical relationship fact with explicit source provenance for Luna."""
+    source = evidence.fact.source
+    source_label = (
+        "authenticated self"
+        if self_note_id is not None and source.id == self_note_id
+        else f"{source.name} ({source.type})"
+    )
+    visible = _WIKILINK_PATTERN.sub(_humanize_wikilink, evidence.fact.text).strip()
+    direction = evidence.direction.value
+    return f"[{direction}; source={source_label}] {visible}"
+
+
+def _load_provider_evidence(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    path: str,
+    *,
+    relationship_evidence: tuple[str, ...] = (),
+) -> str:
+    """Read, validate, and minimally enrich one candidate before contextual resolution."""
     try:
         note = parse_note(repository.read_text(path))
         validate_note(note, schema)
@@ -307,7 +426,10 @@ def _load_provider_evidence(repository: VaultRepository, schema: dict[str, Any],
         raise ExistingEntityResolutionError(
             "Cannot safely load a contextual candidate note"
         ) from error
-    return build_provider_evidence(note, path)
+    evidence = build_provider_evidence(note, path)
+    if relationship_evidence:
+        evidence += "\nRelated canonical evidence:\n" + "\n".join(relationship_evidence)
+    return evidence
 
 
 def _is_current_active_candidate(

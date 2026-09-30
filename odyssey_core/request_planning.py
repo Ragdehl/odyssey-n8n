@@ -54,9 +54,9 @@ Return outcome PLAN with a RequestPlan when the request contains safely interpre
 Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks to see matching notes as objects; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks both for an answer/synthesis and the matching notes. For writes, delegation, multiple independent actions, clarification, any link_scope, relational_reference, or result_shape=collection, use `answer`; do not discard or weaken meaning merely to produce a note set.
 
 Interpret each requested action in this order. FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person target, set self_target to "self"; this means only the authenticated human's canonical person note, not a name, alias, provider identity, or person mentioned in a relationship. THEN choose what operation the user wants on that set: ordinary retrieval uses RetrieveAction, ordinary knowledge mutation uses WriteAction, and work requiring a specialized capability uses DelegateAction. The action kind changes what happens to the candidate set; it never weakens or erases that set.
-Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. For a complete_set shared-fact write, emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references; relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
+Set relational_reference only when the selected identity is defined by a relationship or complete finite participant set in an existing canonical source, such as "mi hija", "sus hijos", or "todos los que estaban ayer". Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. When descriptive or event context does not have a safely bounded canonical source relationship, preserve the full description in ordinary `query` and leave relational_reference=null so Core can resolve it semantically across Odyssey. For singular WRITE with a bounded canonical relationship source, use relational_reference as a candidate anchor while target.query preserves the complete user description. Put only the relationship wording that defines the initial candidate universe in relational_reference.reference; preserve every additional qualifier in target.query so Core can disambiguate only within that relationship set using current note content and canonical incoming/outgoing evidence. For a qualified request that ultimately selects one member, relational_reference.members MUST be one even when the anchor relationship contains several current members; complete_set means the user targets the whole relationship set, not that the candidate universe initially contains multiple identities. When source_kind=existing, target.entity MUST remain null and the existing anchor source belongs only in relational_reference.source_query. Do not discard qualifiers merely because a relationship anchor exists, and do not invent members or stable identities. For complete_set shared-fact writes, the relational reference must still describe the complete requested set rather than a qualified subset; emit one record KnowledgeUnit with cardinality=one, the asserted fact, and no fabricated member units or references. relational_reference.members carries the complete-set meaning, while cardinality=one denotes the one natural source write. Core expands only a complete current set into the existing safe source-write path.
 For retrieval, use result_shape=collection when the user is asking to enumerate or return multiple semantic members or values that together answer the request; use result_shape=single for ordinary fact retrieval or synthesis. Do not infer collection from grammatical plural alone. SelectionCriteria.query MUST preserve the complete useful request, including every material relation, scope, time, place, state, possession, purpose, context, and request for completeness. collection_subject belongs only to result_shape=collection; set it to null for every result_shape=single regardless of presentation intent. A collection has no direct entity, type, filters, link_scope, self_target, or relational_reference: set those to null or [] as appropriate. Set collection_subject=self only when the authenticated human is itself the semantic membership anchor: membership is directly defined by each member's relationship, action, state, or participation relative to that human. First-person possession, ownership, association, or contextual reference to another subject does not by itself make a collection self-scoped. When another object, concept, source, or set determines membership, set collection_subject=query and preserve the complete self-related context in query. This field contains no identity, name, path, generated subject phrase, relationship type, or inferred ontology. Core binds self and discovers bounded current canonical fact sources, selects only supplied evidence, and validates exact occurrences. Never provide collection members, IDs, paths, fact locators, candidate lists, links, mutation authority, or inferred relationship types. For an explicit list or set of matching Notes as objects, use result_shape=single with presentation_intent=note_set; multiple matching Notes are expected results, not ambiguity. Use ordinary single retrieval for one fact about a subject. Do not use collection shape for writes or delegate actions.
-Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Do not set it merely because a possessive occurs: "Mi hermano vive en Madrid" targets the brother, and "Mi coche es un Scénic" retains its ordinary target semantics. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
+Use self_target only when the direct selected entity is the current human, as in "¿Dónde trabajo?" or "Apunta que vivo en Toulouse". Possessive or first-person context is identity evidence, not write ownership: "Mi hermano vive en Madrid" targets the brother, "Mi coche es un Scénic" retains its ordinary target semantics, and a description such as "mi compañero al que le gusta la bicicleta" targets that described entity rather than self. Never emit a user ID, person note ID, email, provider subject, filename, or other identity value in planner output.
 For every KnowledgeUnit, set `cardinality` to `one` for one logical identity, including when
 resolution may later be ambiguous, or to `all_matching` only when the user means the complete set
 represented by the selection. Do not infer `all_matching` from plural wording alone, from several
@@ -73,15 +73,13 @@ Use DelegateAction only when the requested operation needs a specialized capabil
 
 A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. For writes, put a property mentioned only to identify the target in target.filters when it maps safely to the filter contract; put it in properties only when the user is asking to record/change/remove that property. The same field may appear in target.filters as the old identifying value and properties as a corrected new value. Meaning that cannot safely become a filter stays in target.query.
 
-Every write target query must remain a non-empty human-readable identity query, including when filters also identify an existing target. Do not copy a newly recorded canonical property into target.filters unless its old value is explicitly being used to identify an existing target. Preserve contextual wording that remains part of a fact; do not drop it merely because it also helps identify the target.
+For a write, determine semantic ownership before mutation payload. target.query describes only the subject being selected and must remain a non-empty human-readable identity description with all target-identifying qualifiers preserved; new predicates belong in `facts`, and referred entities belong in semantic references. If relational wording only identifies the subject of a different predicate, target that described subject and record only the new predicate. If the requested knowledge itself asserts one relationship from an explicit source, including self, the natural write target is that source and the related participants belong in the fact as semantic references. When several named or described participants share that one relationship to the same explicit source, emit exactly one source-targeted KnowledgeUnit and represent every participant as a semantic fact reference; NEVER split the relationship into participant-targeted units. By contrast, when the same independently true predicate applies to several distinct subjects and there is no natural shared source that owns the assertion, preserve those subjects as separate write targets. Minimize note mutations without changing semantic ownership: never invent an aggregate source merely to reduce writes, never infer pairwise relations from shared membership, and never move a fact to a less natural owner merely to use fewer notes.
+
+Decompose only the new durable knowledge after ownership is fixed. Group compatible changes for the same logical target; different intents for the same target produce separate KnowledgeUnits. Atomicity is semantic, not punctuation-based: split independently meaningful knowledge into separate atomic `facts` entries, but keep sentences or clauses together when they form one coherent explanation, reflection, or decision with dependent reasons or other meaning that would be lost by splitting. Preserve order and references. A canonical property used only to identify an existing target may constrain `target.filters`; a newly recorded property belongs in `properties` and must not be copied into filters unless its old value is explicitly part of the identity evidence. For conversational knowledge that safely maps to a property, retain the human knowledge fact as well. Use only record, amend, remove, and delete. Explicit correction uses remove for the false prior fact and amend for the corrected knowledge. Amend/remove require at least one mutation across properties or facts. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit. Delete has no mutation payload. Set `destination_type` to null for ordinary writes. Set it only for an explicit reclassification of the same existing note, using intent=amend and cardinality=one.
+
+Decide fact references last. Replace an occurrence with `{{ref:N}}`, where N is the zero-based index in that fact unit's own `references` array, only when that wording denotes another logical Odyssey note identity that can be selected safely under the active capabilities; the reference contains `mention`, `role`, and a compact semantic `selection` of `entity`, `query`, `type`, `filters`, and optional `relational_reference`. Preserve the user's complete identifying wording in `selection.query`. When the referred identity is defined by a bounded current relationship or event membership, use `relational_reference` under the same source rules as target selection, keep only the relationship anchor in `relational_reference.reference`, keep additional qualifiers in `selection.query`, and set `members=one`; Core then disambiguates only inside that grounded member set. A proper noun or ordinary fact argument is not enough by itself. Whenever a fact, event, or action describes a distinct participant that denotes a safely selectable logical Odyssey identity, represent that participant as a semantic reference even when identified only descriptively. Literal preservation is only for non-identity context or values; do not literalize a distinct identity participant. Type-null references are for wording that explicitly denotes an existing Odyssey identity whose exact type need not be asserted, not for speculative entity promotion. Do not create extra model-facing KnowledgeUnits merely to carry reference targets, resolve identities yourself, or emit stable IDs; do not emit Markdown `[[wikilinks]]`. Core owns identity resolution and binding. A fact reference must denote a different logical note from its own KnowledgeUnit target; never encode the unit target itself as `{{ref:N}}`. A mention used only to identify the write target or an incidental name is not automatically a reference, and references never authorize inverse or mirrored writes.
 
 Tags are generic free-form metadata. Emit a tag filter only when the user explicitly asks to search by a tag, using `tags` with `contains`; emit `tag_changes` only when the user explicitly asks to add or remove a tag. Never infer tags from semantic words such as idea, decision, reflection, or review, and never require a registry or controlled vocabulary.
-
-Decompose write knowledge semantically: group changes for the same logical target only when their mutation intent is compatible; different intents for the same target produce separate KnowledgeUnits. Split independently meaningful knowledge into one atomic `facts` entry each, preserving their order and references. Atomicity is semantic, not punctuation-based: keep sentences or clauses together when they form one coherent explanation, reflection, or decision with dependent reasons whose meaning would be lost by splitting; split when each result remains independently meaningful durable knowledge, even if independent facts share one sentence. For example, separate "Marta vive en Lyon y trabaja en Thales" into two facts, but keep "Quiero mudarme a Lyon porque tendríamos más espacio y estaríamos cerca de nuestros amigos" as one coherent decision/reason fact. Use only record, amend, remove, and delete. For an explicit correction, use a remove unit describing the false prior fact plus a separate amend unit with corrected fact(s) and any authorized property change. `properties` contains only canonical type-specific property changes supplied by the write capability contract. Use op=set for record/amend and op=remove with value=null for remove. Do not invent fields. For conversational knowledge that safely maps to a property, emit both the property and its human knowledge fact; properties do not replace retained knowledge. Amend/remove require at least one mutation across properties or facts. Delete uses properties: [] and facts: []. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit in the same WriteAction. Set `destination_type` to null for ordinary writes. Set it only for an explicit request to reclassify the same existing note; it is the resulting canonical type, while target.type constrains the current source note. A migration uses intent=amend and cardinality=one. Do not infer it from prose, represent it as a property change, or use it to resolve identity.
-
-When a fact semantically refers to another KnowledgeUnit, replace that occurrence in the fact with `{{ref:N}}`, where N is the zero-based index in that KnowledgeUnit's own `references` array. Preserve the original human-readable wording in that reference's `mention` field. The marker may occur repeatedly for repeated mentions. Do not emit Markdown `[[wikilinks]]`. Do not create a reference merely because another entity name appears: use a marker only for a semantic relationship that needs a KnowledgeReference. A name used only to identify the write target is not automatically a fact reference. References never authorize an inverse or mirrored write into the referenced unit.
-
-Example: for "La amiga de Marta ahora trabaja en Airbus", use target query "la amiga de Marta" with relational_reference preserving that wording, source_kind=existing, source_query="Marta", and members=one. Use fact "Ahora trabaja en {{ref:0}}." and reference 0 with mention "Airbus". Do not create a reference to Marta because Marta only identifies the relational source. The ordinary named-target example "Marta trabaja en Airbus" uses no relational_reference and retains its explicit Airbus KnowledgeReference. A reference-only target unit may have empty facts when another unit points to it.
 
 Do not infer repository existence, resolve identity, choose CREATE versus UPDATE, generate IDs, paths, Markdown, SQL, or persistence instructions, or execute retrieval, persistence, or entity resolution. Use limitation codes only with their defined meanings. Return strict structured JSON.
 
@@ -92,6 +90,29 @@ Planner retrieval/selection capabilities (derived dynamically from the canonical
 Planner writable type/property capabilities (derived dynamically from the same canonical schema):
 
 {{WRITE_CAPABILITIES}}"""
+
+_SEMANTIC_WRITE_PROMPT_REPLACEMENTS = {
+    "Every PLAN has presentation_intent.": """Every PLAN has presentation_intent. Use `answer` by default. Use `note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks to see matching notes as objects; it never adds retrieval authority or turns a write/delegation into retrieval. Use `answer_and_note_set` only for one direct RetrieveAction with result_shape=single when the user explicitly asks both for an answer/synthesis and the matching notes. For semantic writes, delegation, multiple independent actions, clarification, any retrieval link_scope or relational_reference, any write candidate_scope, or result_shape=collection, use `answer`; do not discard or weaken meaning merely to produce a note set.""",
+    "Interpret each requested action in this order.": """Interpret each requested action in provider order and preserve that order exactly. For retrieval and delegation, FIRST identify the Odyssey knowledge candidate set and preserve every safely representable SelectionCriteria field: entity, query, type, filters, link_scope, self_target, and relational_reference. For a direct first-person retrieval/delegation target, self_target means only the authenticated human's canonical person note. THEN choose retrieve, semantic write, or delegate. The action kind changes what happens to the candidate set; it never weakens or erases that set.
+Set relational_reference only when a retrieval or delegation identity is defined by a relationship or complete finite participant set in an existing canonical source. Preserve the user's reference wording, source_kind=self with source_query=null only when the source is the authenticated human, otherwise source_kind=existing with bounded source_query wording identifying an existing source, and members=one or complete_set. This is language-independent wording, not a relation type or a stable identity. The source may be identified by recent conversation, but current canonical Markdown alone establishes membership. Set entity=null, self_target=null, and link_scope=null for the relational selection; direct self remains self_target. Never enumerate members, invent a source, or assert IDs, filenames, paths, or relationship types. When relational evidence is missing or ambiguous, Core clarifies; relational wording never authorizes CREATE. When descriptive or event context does not have a safely bounded canonical source relationship, preserve the full description in ordinary query and leave relational_reference=null so Core can resolve it semantically across Odyssey.
+For retrieval, use result_shape=collection when the user is asking to enumerate or return multiple semantic members or values that together answer the request; use result_shape=single for ordinary fact retrieval or synthesis. Do not infer collection from grammatical plural alone. SelectionCriteria.query MUST preserve the complete useful request, including every material relation, scope, time, place, state, possession, purpose, context, and request for completeness. collection_subject belongs only to result_shape=collection; set it to null for every result_shape=single regardless of presentation intent. A collection has no direct entity, type, filters, link_scope, self_target, or relational_reference: set those to null or [] as appropriate. Set collection_subject=self only when the authenticated human is itself the semantic membership anchor: membership is directly defined by each member's relationship, action, state, or participation relative to that human. First-person possession, ownership, association, or contextual reference to another subject does not by itself make a collection self-scoped. When another object, concept, source, or set determines membership, set collection_subject=query and preserve the complete self-related context in query. This field contains no identity, name, path, generated subject phrase, relationship type, or inferred ontology. Core binds self and discovers bounded current canonical fact sources, selects only supplied evidence, and validates exact occurrences. Never provide collection members, IDs, paths, fact locators, candidate lists, links, mutation authority, or inferred relationship types. For an explicit list or set of matching Notes as objects, use result_shape=single with presentation_intent=note_set; multiple matching Notes are expected results, not ambiguity. Use ordinary single retrieval for one fact about a subject. Do not use collection shape for writes or delegate actions.
+Use self_target only when the direct retrieval/delegation entity is the current human. Possessive or first-person context is identity evidence, not ownership: a description such as "my colleague who likes cycling" selects that described entity rather than self. Semantic writes express the corresponding distinction with target.binding.
+For a semantic write, describe meaning only. Each write action owns its ordered operations array and compiles independently to one existing Core WriteAction. Never merge separate write actions, never split one write action globally, and never create cross-action bindings. Each operation contains one semantic target, one genuine apply_to value, one mutation intent, and its ordered payload. Use apply_to=one for one logical identity and all_matching only when the user truly requests the complete deterministically selectable set; never infer all_matching from plural grammar, several candidates, or independent names.
+An identity has a complete human-readable description, binding=self or described, optional direct_name, optional canonical note_type, explicit deterministic filters, and optional candidate_scope. binding=self is only for facts whose actual subject is the authenticated human; first-person possession or relationship wording does not make another subject self. A described identity may use candidate_scope when the request defines that identity through membership or relationship to SELF or to one described source. candidate_scope itself does not assert that the source or membership exists; Core must ground it from canonical evidence or clarify. candidate_scope.source is either SELF or one SOURCE_DESCRIPTION with free-text description. SOURCE_DESCRIPTION is the request-provided source description, not an existence claim, and never authorizes creation. member_query names the relationship-bounded candidates and extent is one_member or complete_set. Preserve all additional identity qualifiers in description. Candidate scope is non-recursive, never supplies members, IDs, paths, or a relationship taxonomy, and never itself authorizes CREATE. Use complete_set only when the requested fact applies to that complete current finite set; otherwise use one_member. Use direct_name only for safely explicit name/alias wording, and never combine direct_name or filters with candidate_scope.""",
+    "RetrieveAction.plan and every KnowledgeUnit.target": """RetrieveAction.plan and a non-null DelegateAction.selection obey the same SelectionCriteria rules. Entity is only a safely explicit primary-name/alias candidate from the user's wording; it is never an Odyssey ID and does not assert repository existence. Do not turn every noun phrase or mentioned name into entity: contextual descriptions such as "the corner shop" and "Marta's friend" keep entity=null. A null link_scope means the direct note only, never a graph neighborhood. Ordinary knowledge about one entity uses that direct selection. When the user explicitly selects notes through linked, related, backlink/reference, direction, or bounded-hop graph meaning that the existing LinkScope can represent, link_scope is required; retaining that graph meaning only in query is insufficient. Its non-recursive anchor independently selects the one safe note identity. Do not execute traversal.""",
+    "A RetrieveAction exists only": """A RetrieveAction exists only when the user asks to retrieve or inspect knowledge. A semantic write target is identity evidence for later existing-entity resolution and must not create an extra RetrieveAction. Put a property mentioned only to identify a write target in target.filters when it maps safely to the dynamic filter contract; put it in properties only when the user is asking to record, change, or remove that property. Meaning that cannot safely become a filter stays in target.description.
+
+For every semantic write, determine ownership before mutation payload. target.description describes only the selected subject and preserves all target-identifying qualifiers; new predicates belong in facts, and distinct Odyssey identities mentioned by facts use identity parts. If the requested knowledge asserts one relationship from an explicit source, including self, the natural target is that source and the related participants are identity parts in its fact. Several participants sharing that one source relationship stay in one source-targeted operation. By contrast, one independently true predicate applied to distinct subjects produces separate operations. Minimize note mutations without changing ownership: never invent an aggregate source, infer pairwise relations, or move a fact to a less natural owner.
+
+After ownership is fixed, decompose only the new durable knowledge. Group compatible changes for the same logical target inside one operation; different intents remain distinct operations. Atomicity is semantic, not punctuation-based: use separate facts for independently meaningful knowledge, but keep clauses with dependent reasons, explanation, reflection, or decision wording together. Preserve operation, fact, and part order. Use only record, amend, remove, and delete. Explicit correction uses remove for false prior knowledge and amend for corrected knowledge. Amend/remove require a material payload; delete carries none. destination_type is null except for explicit metadata-only reclassification with intent=amend and apply_to=one.
+
+Facts contain ordered parts. A literal part preserves non-identity wording exactly. An identity part contains the exact occurrence text plus an independently selectable semantic identity. Use identity parts for distinct participants that safely denote Odyssey note identities, including descriptive participants; do not promote ordinary places, dates, URLs, paths, external identifiers, or context into identities merely because they are nouns or proper names. An identity part must not select its own operation target. Reuse the same semantic identity wording within the same write action when occurrences refer to the same identity; Core derives all reference markers, indexes, lookup units, roles, and binding mechanics. Never emit those mechanical fields, stable IDs, Markdown wikilinks, or inferred inverse writes.
+
+Properties, filters, note types, destination types, and property value types come only from the supplied dynamic capabilities. Tags are explicit free-form metadata; never infer tags from semantic words. Candidate complete_set and all_matching are distinct: complete_set is one relationship-bounded source operation, while all_matching is a bulk selection. If safe ownership, action boundaries, candidate scope, correction shape, or identity promotion remains uncertain, ESCALATE instead of approximating.""",
+    "For a write, determine semantic ownership": "",
+    "Decompose only the new durable knowledge": "",
+    "Decide fact references last.": "",
+}
 
 
 class PlannerValidationStage(StrEnum):
@@ -199,7 +220,7 @@ class SelectionCriteria:
 
 @dataclass(frozen=True, slots=True)
 class RelationalReference:
-    """Preserve one source-relative identity request without asserting canonical members."""
+    """Preserve one source-relative candidate relationship without asserting canonical members."""
 
     reference: str
     source_kind: str
@@ -253,11 +274,12 @@ class RetrieveAction:
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeReference:
-    """Represent one semantic in-plan reference and its preserved fact wording."""
+    """Represent one semantic reference before or after Core lowers its lookup selection."""
 
-    target_index: int
+    target_index: int | None
     role: str
     mention: str
+    selection: SelectionCriteria | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +311,7 @@ class KnowledgeUnit:
     references: tuple[KnowledgeReference, ...]
     cardinality: str = "one"
     destination_type: str | None = None
+    reference_lookup_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,16 +393,81 @@ def render_request_planner_prompt(
         ValueError: If the canonical schema cannot be projected safely into planner capabilities.
         RuntimeError: If an internal capability placeholder is missing or duplicated.
     """
+    return _render_request_planner_prompt_template(
+        _PROMPT_TEMPLATE,
+        schema,
+        current_context,
+        conversation_context,
+        size_components=size_components,
+    )
+
+
+def render_semantic_write_planner_prompt(
+    schema: Mapping[str, Any],
+    current_context: Mapping[str, str],
+    conversation_context: Sequence[Mapping[str, str]] = (),
+    *,
+    size_components: dict[str, int] | None = None,
+) -> str:
+    """Render the Luna semantic-WRITE variant while retaining common planner instructions.
+
+    The production Sol renderer continues to consume ``_PROMPT_TEMPLATE`` unchanged. This variant
+    replaces whole legacy WRITE-language paragraphs rather than appending corrective overrides, so
+    Luna sees one coherent semantic contract and the common retrieval/delegation instructions.
+    """
+    paragraphs = _PROMPT_TEMPLATE.split("\n\n")
+    replaced: set[str] = set()
+    rendered: list[str] = []
+    for paragraph in paragraphs:
+        replacement = next(
+            (
+                value
+                for prefix, value in _SEMANTIC_WRITE_PROMPT_REPLACEMENTS.items()
+                if paragraph.startswith(prefix)
+            ),
+            None,
+        )
+        if replacement is None:
+            rendered.append(paragraph)
+            continue
+        prefix = next(
+            prefix for prefix in _SEMANTIC_WRITE_PROMPT_REPLACEMENTS if paragraph.startswith(prefix)
+        )
+        if prefix in replaced:
+            raise RuntimeError("Semantic WRITE prompt replacement is ambiguous")
+        replaced.add(prefix)
+        if replacement:
+            rendered.append(replacement)
+    if replaced != set(_SEMANTIC_WRITE_PROMPT_REPLACEMENTS):
+        raise RuntimeError("Semantic WRITE prompt replacement is incomplete")
+    return _render_request_planner_prompt_template(
+        "\n\n".join(rendered),
+        schema,
+        current_context,
+        conversation_context,
+        size_components=size_components,
+    )
+
+
+def _render_request_planner_prompt_template(
+    template: str,
+    schema: Mapping[str, Any],
+    current_context: Mapping[str, str],
+    conversation_context: Sequence[Mapping[str, str]],
+    *,
+    size_components: dict[str, int] | None,
+) -> str:
+    """Fill one reviewed planner template from current schema capabilities and context."""
     _validate_current_context(current_context)
-    if _PROMPT_TEMPLATE.count(_RETRIEVAL_CAPABILITY_PLACEHOLDER) != 1:
+    if template.count(_RETRIEVAL_CAPABILITY_PLACEHOLDER) != 1:
         raise RuntimeError("Request planner retrieval capability placeholder is invalid")
-    if _PROMPT_TEMPLATE.count(_WRITE_CAPABILITY_PLACEHOLDER) != 1:
+    if template.count(_WRITE_CAPABILITY_PLACEHOLDER) != 1:
         raise RuntimeError("Request planner write capability placeholder is invalid")
     retrieval = build_planner_capabilities(schema, current_context=current_context)
     writable = build_write_capabilities(schema)
     retrieval_json = json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))
     writable_json = json.dumps(writable, ensure_ascii=False, separators=(",", ":"))
-    rendered = _PROMPT_TEMPLATE.replace(
+    rendered = template.replace(
         _RETRIEVAL_CAPABILITY_PLACEHOLDER,
         retrieval_json,
     )
@@ -432,6 +520,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         direct_selection_schema
     )
     collection_selection_schema = _collection_selection_json_schema(direct_selection_schema)
+    reference_selection_schema = _reference_selection_json_schema(retrieval_capabilities)
     property_changes_schema = _property_changes_json_schema(write_capabilities)
     return {
         "type": "object",
@@ -515,14 +604,11 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                                 "items": {
                                                     "type": "object",
                                                     "properties": {
-                                                        "target_index": {
-                                                            "type": "integer",
-                                                            "minimum": 0,
-                                                        },
+                                                        "selection": reference_selection_schema,
                                                         "role": {"type": "string"},
                                                         "mention": {"type": "string"},
                                                     },
-                                                    "required": ["target_index", "role", "mention"],
+                                                    "required": ["selection", "role", "mention"],
                                                     "additionalProperties": False,
                                                 },
                                             },
@@ -779,6 +865,31 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     presentation_intent = payload.get("presentation_intent", "answer")
     if not isinstance(raw_actions, list) or not raw_actions:
         raise RequestPlanningError("RequestPlan actions must be a non-empty list")
+    actions = tuple(
+        _validate_action(action, schema, retrieval_capabilities, write_capabilities)
+        for action in raw_actions
+    )
+    return finalize_request_plan(actions, limitations, presentation_intent)
+
+
+def validate_request_action(action: Any, schema: Mapping[str, Any]) -> RequestAction:
+    """Validate one raw action for adapters that preserve a heterogeneous provider sequence."""
+    return _validate_action(
+        action,
+        schema,
+        build_planner_capabilities(schema),
+        build_write_capabilities(schema),
+    )
+
+
+def finalize_request_plan(
+    actions: Sequence[RequestAction], limitations: Any, presentation_intent: Any
+) -> RequestPlan:
+    """Apply shared plan-level limitations and presentation invariants to validated actions."""
+    if not actions or not all(
+        isinstance(action, (RetrieveAction, WriteAction, DelegateAction)) for action in actions
+    ):
+        raise RequestPlanningError("RequestPlan actions must be a non-empty validated sequence")
     if (
         not isinstance(limitations, list)
         or len(limitations) != len(set(limitations))
@@ -789,10 +900,6 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
             stage=PlannerValidationStage.REQUEST_PLAN,
             code=PlannerValidationCode.INVALID_LIMITATIONS,
         )
-    actions = tuple(
-        _validate_action(action, schema, retrieval_capabilities, write_capabilities)
-        for action in raw_actions
-    )
     if presentation_intent not in PRESENTATION_INTENTS:
         raise RequestPlanningError("RequestPlan presentation intent is invalid")
     if presentation_intent != "answer" and (
@@ -804,7 +911,9 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     ):
         raise RequestPlanningError("Note-set presentation requires one direct retrieval")
     return RequestPlan(
-        actions=actions, limitations=tuple(limitations), presentation_intent=presentation_intent
+        actions=tuple(actions),
+        limitations=tuple(limitations),
+        presentation_intent=presentation_intent,
     )
 
 
@@ -1131,22 +1240,7 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
                 ]
             },
             "self_target": {"type": ["string", "null"], "enum": [SELF_TARGET, None]},
-            "relational_reference": {
-                "anyOf": [
-                    {"type": "null"},
-                    {
-                        "type": "object",
-                        "properties": {
-                            "reference": {"type": "string"},
-                            "source_kind": {"type": "string", "enum": ["self", "existing"]},
-                            "source_query": {"type": ["string", "null"]},
-                            "members": {"type": "string", "enum": ["one", "complete_set"]},
-                        },
-                        "required": ["reference", "source_kind", "source_query", "members"],
-                        "additionalProperties": False,
-                    },
-                ]
-            },
+            "relational_reference": _relational_reference_json_schema(),
             "collection_subject": {
                 "type": ["string", "null"],
                 "enum": ["self", "query", None],
@@ -1164,6 +1258,60 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
         ],
         "additionalProperties": False,
     }
+
+
+def _relational_reference_json_schema() -> dict[str, Any]:
+    """Build the shared bounded relationship-anchor shape for direct and reference selection."""
+    return {
+        "anyOf": [
+            {"type": "null"},
+            {
+                "type": "object",
+                "properties": {
+                    "reference": {"type": "string"},
+                    "source_kind": {"type": "string", "enum": ["self", "existing"]},
+                    "source_query": {"type": ["string", "null"]},
+                    "members": {"type": "string", "enum": ["one", "complete_set"]},
+                },
+                "required": ["reference", "source_kind", "source_query", "members"],
+                "additionalProperties": False,
+            },
+        ]
+    }
+
+
+def _reference_selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the compact fact-reference selector with only singular grounded anchors."""
+    selector = deepcopy(_note_selector_json_schema(capabilities))
+    shared_properties = {
+        "reference": {"type": "string"},
+        "members": {"type": "string", "enum": ["one"]},
+    }
+    self_reference = {
+        "type": "object",
+        "properties": {
+            **shared_properties,
+            "source_kind": {"type": "string", "enum": ["self"]},
+            "source_query": {"type": "null"},
+        },
+        "required": ["reference", "source_kind", "source_query", "members"],
+        "additionalProperties": False,
+    }
+    existing_reference = {
+        "type": "object",
+        "properties": {
+            **shared_properties,
+            "source_kind": {"type": "string", "enum": ["existing"]},
+            "source_query": {"type": "string"},
+        },
+        "required": ["reference", "source_kind", "source_query", "members"],
+        "additionalProperties": False,
+    }
+    selector["properties"]["relational_reference"] = {
+        "anyOf": [{"type": "null"}, self_reference, existing_reference]
+    }
+    selector["required"] = [*selector["required"], "relational_reference"]
+    return selector
 
 
 def _collection_selection_json_schema(direct_selection_schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -1251,6 +1399,14 @@ def _filter_json_schema_alternatives(capabilities: Mapping[str, Any]) -> list[di
     return alternatives
 
 
+def planner_filter_array_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose the shared dynamic closed filter array for alternate provider action branches."""
+    return {
+        "type": "array",
+        "items": {"anyOf": _filter_json_schema_alternatives(capabilities)},
+    }
+
+
 def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict[str, Any]:
     """Build dynamic strict property-change alternatives from type-specific properties.
 
@@ -1304,6 +1460,13 @@ def _property_changes_json_schema(write_capabilities: Mapping[str, Any]) -> dict
         "items": {"type": "object", "properties": {}, "additionalProperties": False},
         "maxItems": 0,
     }
+
+
+def planner_property_changes_json_schema(
+    write_capabilities: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Expose schema-derived property mutations without duplicating their value-type mapping."""
+    return _property_changes_json_schema(write_capabilities)
 
 
 def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]:
@@ -1658,6 +1821,54 @@ def _validate_semantic_set_intent(
     )
 
 
+def _validate_reference_selection(
+    raw: Any,
+    schema: Mapping[str, Any],
+    capabilities: Mapping[str, Any],
+) -> SelectionCriteria:
+    """Validate the compact semantic lookup contract used by fact references.
+
+    References may use the same bounded relationship anchor as a singular write target when their
+    identity is defined by current canonical membership. They still cannot request graph traversal,
+    direct self-binding, collection semantics, or a complete member set.
+    """
+    base_keys = {"entity", "query", "type", "filters"}
+    if not isinstance(raw, dict) or set(raw) not in (
+        base_keys,
+        {*base_keys, "relational_reference"},
+    ):
+        raise RequestPlanningError("KnowledgeReference selection fields are invalid")
+    selector = _validate_note_selector(
+        {key: raw[key] for key in base_keys},
+        schema,
+        capabilities,
+        label="KnowledgeReference selection",
+    )
+    relational = _validate_relational_reference(
+        raw.get("relational_reference"), label="KnowledgeReference selection"
+    )
+    if relational is not None and relational.members != "one":
+        raise RequestPlanningError(
+            "KnowledgeReference relational reference must select one identity"
+        )
+    if relational is not None and (selector.entity is not None or selector.filters):
+        raise RequestPlanningError(
+            "KnowledgeReference relational reference conflicts with direct selection",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
+    return SelectionCriteria(
+        entity=selector.entity,
+        query=selector.query,
+        type=selector.type,
+        filters=selector.filters,
+        link_scope=None,
+        self_target=None,
+        relational_reference=relational,
+        semantic_set=None,
+        collection_subject=None,
+    )
+
+
 def _validate_relational_reference(raw: Any, *, label: str) -> RelationalReference | None:
     """Accept only bounded source-relative wording, never a model-supplied identity."""
     if raw is None:
@@ -1805,9 +2016,14 @@ def _validate_write_action(
         _validate_knowledge_unit(raw, schema, retrieval_capabilities, write_capabilities)
         for raw in raw_units
     )
+    units = _lower_reference_selections(units)
     for index, unit in enumerate(units):
         for reference in unit.references:
-            if reference.target_index >= len(units) or reference.target_index == index:
+            if (
+                reference.target_index is None
+                or reference.target_index >= len(units)
+                or reference.target_index == index
+            ):
                 raise RequestPlanningError(
                     "KnowledgeUnit reference target is invalid",
                     code=PlannerValidationCode.INVALID_REFERENCE,
@@ -1824,7 +2040,12 @@ def _validate_write_action(
                 "KnowledgeReference cannot target an all_matching unit",
                 code=PlannerValidationCode.INVALID_REFERENCE,
             )
-    referenced_targets = {reference.target_index for unit in units for reference in unit.references}
+    referenced_targets = {
+        reference.target_index
+        for unit in units
+        for reference in unit.references
+        if reference.target_index is not None
+    }
     for index, unit in enumerate(units):
         has_payload = bool(
             unit.properties or unit.tag_changes or unit.facts or unit.destination_type
@@ -1840,6 +2061,72 @@ def _validate_write_action(
                 code=PlannerValidationCode.INVALID_MUTATION,
             )
     return WriteAction(units=units)
+
+
+def _lower_reference_selections(units: tuple[KnowledgeUnit, ...]) -> tuple[KnowledgeUnit, ...]:
+    """Lower provider semantic reference selections into existing internal unit indexes.
+
+    Provider output describes what a reference means. Core keeps the established execution contract
+    by turning each unmatched selection into one internal existing-identity lookup unit. An exact
+    same-request target is reused when it is unique, so dependency semantics remain deterministic
+    without asking the model to count unit indexes.
+    """
+    lowered_units: list[KnowledgeUnit] = []
+    synthetic_units: list[KnowledgeUnit] = []
+    synthetic_selections: list[SelectionCriteria] = []
+
+    for source_index, unit in enumerate(units):
+        lowered_references: list[KnowledgeReference] = []
+        for reference in unit.references:
+            if reference.selection is None:
+                lowered_references.append(reference)
+                continue
+            matching_indexes = [
+                index
+                for index, candidate in enumerate(units)
+                if index != source_index
+                and candidate.cardinality == "one"
+                and candidate.target == reference.selection
+            ]
+            if len(matching_indexes) > 1:
+                raise RequestPlanningError(
+                    "KnowledgeReference selection matches multiple write units",
+                    code=PlannerValidationCode.INVALID_REFERENCE,
+                )
+            if matching_indexes:
+                target_index = matching_indexes[0]
+            else:
+                synthetic_offset = next(
+                    (
+                        index
+                        for index, selection in enumerate(synthetic_selections)
+                        if selection == reference.selection
+                    ),
+                    None,
+                )
+                if synthetic_offset is None:
+                    synthetic_offset = len(synthetic_units)
+                    synthetic_selections.append(reference.selection)
+                    synthetic_units.append(
+                        KnowledgeUnit(
+                            target=reference.selection,
+                            intent="record",
+                            properties=(),
+                            tag_changes=(),
+                            facts=(),
+                            references=(),
+                            cardinality="one",
+                            destination_type=None,
+                            reference_lookup_only=True,
+                        )
+                    )
+                target_index = len(units) + synthetic_offset
+            lowered_references.append(
+                KnowledgeReference(target_index, reference.role, reference.mention)
+            )
+        lowered_units.append(replace(unit, references=tuple(lowered_references)))
+
+    return (*lowered_units, *synthetic_units)
 
 
 @_validation_boundary(PlannerValidationStage.KNOWLEDGE_UNIT)
@@ -1882,6 +2169,16 @@ def _validate_knowledge_unit(
     )
     if target.semantic_set is not None:
         raise RequestPlanningError("semantic set requires RetrieveAction")
+    if (
+        target.relational_reference is not None
+        and target.relational_reference.members == "complete_set"
+        and " ".join(target.query.split()).casefold()
+        != " ".join(target.relational_reference.reference.split()).casefold()
+    ):
+        raise RequestPlanningError(
+            "Complete-set relational reference must cover the complete target wording",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
     cardinality = unit.get("cardinality", "one")
     if cardinality not in {"one", "all_matching"}:
         raise RequestPlanningError(
@@ -1890,11 +2187,20 @@ def _validate_knowledge_unit(
             code=PlannerValidationCode.INVALID_CARDINALITY,
         )
     if cardinality == "all_matching" and target.entity is not None:
-        raise RequestPlanningError("all_matching KnowledgeUnit target.entity must be null")
+        raise RequestPlanningError(
+            "all_matching KnowledgeUnit target.entity must be null",
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     if cardinality == "all_matching" and target.self_target is not None:
-        raise RequestPlanningError("self_target requires one direct target")
+        raise RequestPlanningError(
+            "self_target requires one direct target",
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     if cardinality == "all_matching" and target.relational_reference is not None:
-        raise RequestPlanningError("relational member sets use one source unit")
+        raise RequestPlanningError(
+            "relational member sets use one source unit",
+            code=PlannerValidationCode.INVALID_CARDINALITY,
+        )
     intent = unit["intent"]
     if intent not in WRITE_INTENTS:
         raise RequestPlanningError("KnowledgeUnit intent is invalid")
@@ -1903,7 +2209,10 @@ def _validate_knowledge_unit(
     if destination_type is not None and destination_type not in write_capabilities["types"]:
         raise RequestPlanningError("KnowledgeUnit destination_type is invalid")
     if destination_type is not None and (cardinality != "one" or intent != "amend"):
-        raise RequestPlanningError("Type migration requires intent=amend and cardinality=one")
+        raise RequestPlanningError(
+            "Type migration requires intent=amend and cardinality=one",
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
 
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
@@ -1919,14 +2228,19 @@ def _validate_knowledge_unit(
         or len(raw_facts) != len(set(raw_facts))
         or not all(isinstance(fact, str) and fact.strip() for fact in raw_facts)
     ):
-        raise RequestPlanningError("KnowledgeUnit facts must be unique non-empty strings")
+        raise RequestPlanningError(
+            "KnowledgeUnit facts must be unique non-empty strings",
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
     if any("\n" in fact or "\r" in fact or "<!-- odyssey:fact" in fact for fact in raw_facts):
         raise RequestPlanningError(
-            "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers"
+            "KnowledgeUnit facts must be single-line and must not contain Odyssey fact markers",
+            code=PlannerValidationCode.INVALID_MUTATION,
         )
     if intent == "delete" and (raw_properties or tag_changes or raw_facts):
         raise RequestPlanningError(
-            "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts"
+            "KnowledgeUnit delete intent requires empty properties, tag_changes, and facts",
+            code=PlannerValidationCode.INVALID_MUTATION,
         )
 
     raw_references = unit["references"]
@@ -1934,31 +2248,80 @@ def _validate_knowledge_unit(
         raise RequestPlanningError("KnowledgeUnit references must be a list")
     references: list[KnowledgeReference] = []
     for reference in raw_references:
+        if not isinstance(reference, dict):
+            raise RequestPlanningError(
+                "KnowledgeUnit reference is invalid",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
+        keys = set(reference)
+        if keys not in (
+            {"target_index", "role", "mention"},
+            {"selection", "role", "mention"},
+        ):
+            raise RequestPlanningError(
+                "KnowledgeUnit reference is invalid",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
         if (
-            not isinstance(reference, dict)
-            or set(reference) != {"target_index", "role", "mention"}
-            or not isinstance(reference["target_index"], int)
-            or isinstance(reference["target_index"], bool)
-            or reference["target_index"] < 0
-            or not isinstance(reference["role"], str)
+            not isinstance(reference["role"], str)
             or not reference["role"].strip()
             or not isinstance(reference["mention"], str)
             or not reference["mention"].strip()
             or "[[" in reference["mention"]
             or "]]" in reference["mention"]
         ):
-            raise RequestPlanningError("KnowledgeUnit reference is invalid")
+            raise RequestPlanningError(
+                "KnowledgeUnit reference is invalid",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
+        target_index: int | None = None
+        selection: SelectionCriteria | None = None
+        if "target_index" in reference:
+            raw_target_index = reference["target_index"]
+            if (
+                not isinstance(raw_target_index, int)
+                or isinstance(raw_target_index, bool)
+                or raw_target_index < 0
+            ):
+                raise RequestPlanningError(
+                    "KnowledgeUnit reference is invalid",
+                    code=PlannerValidationCode.INVALID_REFERENCE,
+                )
+            target_index = raw_target_index
+        else:
+            selection = _validate_reference_selection(
+                reference["selection"], schema, retrieval_capabilities
+            )
         references.append(
             KnowledgeReference(
-                target_index=reference["target_index"],
+                target_index=target_index,
                 role=reference["role"].strip(),
                 mention=reference["mention"].strip(),
+                selection=selection,
             )
+        )
+    if any(
+        reference.selection is not None and reference.selection == target
+        for reference in references
+    ):
+        raise RequestPlanningError(
+            "KnowledgeReference cannot select its own KnowledgeUnit target",
+            code=PlannerValidationCode.INVALID_REFERENCE,
         )
     marker_indexes = _validate_fact_reference_markers(raw_facts, len(references))
     for reference_index in range(len(references)):
         if reference_index not in marker_indexes:
-            raise RequestPlanningError("KnowledgeReference has no fact occurrence marker")
+            raise RequestPlanningError(
+                "KnowledgeReference has no fact occurrence marker",
+                code=PlannerValidationCode.INVALID_REFERENCE,
+            )
+    if target.relational_reference is not None and _query_repeats_new_fact(
+        target.query, raw_facts, references
+    ):
+        raise RequestPlanningError(
+            "Relational write target query must describe only the selected subject",
+            code=PlannerValidationCode.RELATIONAL_REFERENCE_CONFLICT,
+        )
     return KnowledgeUnit(
         target=target,
         intent=intent,
@@ -1969,6 +2332,21 @@ def _validate_knowledge_unit(
         cardinality=cardinality,
         destination_type=destination_type,
     )
+
+
+def _query_repeats_new_fact(
+    query: str, facts: Sequence[str], references: Sequence[KnowledgeReference]
+) -> bool:
+    """Return whether a relational target query copied the new fact payload."""
+    normalized_query = " ".join(query.split()).casefold()
+    for fact in facts:
+        rendered = fact
+        for index, reference in enumerate(references):
+            rendered = rendered.replace(f"{{{{ref:{index}}}}}", reference.mention)
+        normalized_fact = " ".join(rendered.split()).casefold().strip(" .!?;:")
+        if len(normalized_fact) >= 8 and normalized_fact in normalized_query:
+            return True
+    return False
 
 
 @_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)

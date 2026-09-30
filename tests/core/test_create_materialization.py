@@ -20,6 +20,7 @@ from odyssey_core import (
     create_entity,
     materialize_create,
 )
+from odyssey_core.materialization import rollback_created_reference
 from odyssey_core.notes import Note, parse_note, validate_note
 from odyssey_core.request_planning import PropertyChange
 from odyssey_core.storage import NoteAlreadyExistsError, VaultRepository
@@ -147,6 +148,32 @@ def test_properties_and_tags_are_deterministic_and_body_is_empty(
     assert result.operation is PersistenceOperation.CREATED
     assert note.metadata["tags"] == ["idea", "review"]
     assert note.content == ""
+
+
+def test_reference_create_rollback_removes_only_the_exact_revision_one_note(
+    repository: VaultRepository,
+) -> None:
+    """Compensate a just-created semantic reference without invoking user deletion semantics."""
+    target = preflight(stable_id="project-id", name="Faro", path="Faro - project-id.md")
+    created = create(repository, unit(query="Faro", entity="Faro", note_type="project"), target)
+    assert created.operation is PersistenceOperation.CREATED
+    rollback_created_reference(target, repository=repository, schema=SCHEMA)
+    assert repository.list_markdown_paths() == []
+
+
+def test_reference_create_rollback_refuses_a_changed_revision(
+    repository: VaultRepository,
+) -> None:
+    """Never compensate a reference note after another mutation has changed it."""
+    target = preflight(stable_id="project-id", name="Faro", path="Faro - project-id.md")
+    create(repository, unit(query="Faro", entity="Faro", note_type="project"), target)
+    changed = repository.read_text(target.path or "").replace("revision: 1", "revision: 2", 1)
+    repository.replace_text(target.path or "", changed)
+
+    with pytest.raises(MaterializationError, match="revision changed"):
+        rollback_created_reference(target, repository=repository, schema=SCHEMA)
+
+    assert repository.list_markdown_paths() == ["Faro - project-id.md"]
 
 
 def test_reference_only_create_accepts_bound_facts_or_empty_facts(

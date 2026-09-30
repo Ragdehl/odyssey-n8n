@@ -36,6 +36,13 @@ class NoteSchemaValidationTests(unittest.TestCase):
     def test_schema_version_is_phase17e_v3(self) -> None:
         self.assertEqual(self.schema["schema_version"], 3)
 
+    def test_active_type_registry_contains_only_current_base_creation_authority(self) -> None:
+        """Keep future app-owned domain types deferred until an owning app registers them."""
+        self.assertEqual(
+            [note_type["id"] for note_type in self.schema["types"]],
+            ["concept", "project", "document", "person", "journal_entry"],
+        )
+
     def test_invalid_json_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "invalid.json"

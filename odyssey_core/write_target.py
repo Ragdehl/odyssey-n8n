@@ -122,6 +122,14 @@ def decide_write_target(
         allowed_ids = find_filtered_note_ids(
             repository, schema, target.filters, note_type=target.type
         )
+    self_note_id = None
+    if authenticated_actor is not None and self_binding_repository is not None:
+        try:
+            self_note_id = self_binding_repository.resolve(
+                authenticated_actor.stable_user_id
+            ).person_note_id
+        except SelfBindingError:
+            self_note_id = None
     resolution = resolve_existing_entity(
         reference,
         target.query,
@@ -133,6 +141,8 @@ def decide_write_target(
         contextual_reasoner=contextual_reasoner,
         semantic_limit=semantic_limit,
         allowed_candidate_ids=allowed_ids,
+        expand_relationship_context=True,
+        self_note_id=self_note_id,
     )
     if resolution.outcome is ExistingEntityOutcome.RESOLVED:
         assert resolution.id is not None

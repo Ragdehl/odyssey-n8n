@@ -159,7 +159,7 @@ def test_rebuild_replaces_and_delete_removes_only_derived_index(
         write_note(
             vault,
             "stores/Carrefour Balma.md",
-            valid_note("carrefour-balma", "store", "My normal Carrefour store."),
+            valid_note("carrefour-balma", "project", "My normal Carrefour store."),
         )
         assert index.rebuild(VaultRepository(vault), schema, KeywordEmbedder()) == 2
         assert index.path.stat().st_size == first_size
@@ -214,7 +214,7 @@ def test_type_filter_top_n_context_and_candidate_only_contract(
     write_note(vault, "people/Beatriz A.md", valid_note("a", "person", "The user's wife."))
     write_note(vault, "people/Beatriz B.md", valid_note("b", "person", "Xavi's wife."))
     write_note(vault, "people/Xavi.md", valid_note("xavi", "person", "Partner of Beatriz B."))
-    write_note(vault, "stores/Carrefour.md", valid_note("store", "store", "Carrefour store."))
+    write_note(vault, "stores/Carrefour.md", valid_note("store", "project", "Carrefour store."))
     index = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
     index.rebuild(VaultRepository(vault), schema, KeywordEmbedder())
 

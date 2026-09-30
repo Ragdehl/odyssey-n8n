@@ -157,6 +157,39 @@ def test_exact_link_occurrence_requires_one_current_path_or_basename_target(
     )
 
 
+def test_deleted_link_targets_are_inactive_not_unknown_or_current(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Distinguish known tombstones from broken links without treating them as active identities."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write(
+        vault,
+        "people/retired.md",
+        "retired",
+        "Retired",
+        "",
+        properties={"deleted": True},
+    )
+    write(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/retired|Retired]]."),
+    )
+
+    evidence = projector(vault, schema)
+    source_fact = evidence.facts_for_source("edgar")[0]
+    projection = evidence.project_targets("edgar", source_fact.locator)
+
+    assert projection.status is TargetProjectionStatus.INACTIVE_TARGETS
+    assert projection.complete is False
+    assert [target.id for target in projection.targets] == ["cloe"]
+    assert [item.target.id for item in projection.evidence] == ["cloe"]
+
+
 def test_complete_finite_set_preserves_literal_order_and_rejects_partial_members(
     tmp_path: Path, schema: dict
 ) -> None:

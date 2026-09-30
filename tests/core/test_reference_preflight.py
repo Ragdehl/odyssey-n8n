@@ -177,22 +177,85 @@ def test_create_reference_target_is_preflighted_once_before_any_write(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:
     """Preflight reference-only targets and leave all markers/source files untouched."""
-    target = unit("Leche Pascual", facts=())
-    purchase = unit(
-        "purchase",
-        note_type="purchase",
-        facts=("Bought {{ref:0}}.",),
-        refs=(KnowledgeReference(0, "product", "Leche Pascual"),),
+    target = unit("Faro", note_type="project", facts=())
+    document = unit(
+        "Project brief",
+        note_type="document",
+        facts=("Mentions {{ref:0}}.",),
+        refs=(KnowledgeReference(0, "project", "Faro"),),
     )
-    result = run(tmp_path, schema, action(target, purchase), ids=["product-id", "purchase-id"])
+    result = run(tmp_path, schema, action(target, document), ids=["project-id", "document-id"])
     assert [item.outcome for item in result] == [
         WriteTargetOutcome.CREATE,
         WriteTargetOutcome.CREATE,
     ]
-    assert result[1].stable_id == "purchase-id"
+    assert result[1].stable_id == "document-id"
     assert list(tmp_path.rglob("*.md")) == []
     assert target.facts == ()
-    assert purchase.facts == ("Bought {{ref:0}}.",)
+    assert document.facts == ("Mentions {{ref:0}}.",)
+
+
+def test_semantic_reference_lookup_creates_unresolved_schema_backed_entity(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Let a typed semantic reference create a new canonical entity after resolution finds none."""
+    lookup = KnowledgeUnit(
+        SelectionCriteria("Faro", "el proyecto Faro", "project", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, schema, action(lookup), ids=["project-faro-id"])
+    assert result[0].outcome is WriteTargetOutcome.CREATE
+    assert result[0].stable_id == "project-faro-id"
+    assert result[0].canonical_name == "Faro"
+    assert result[0].path == "Faro - project-faro-id.md"
+    assert result[0].reference_only is False
+    assert list(tmp_path.rglob("*.md")) == []
+
+
+def test_semantic_reference_lookup_without_type_stays_fail_closed(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Do not invent a canonical note type for unresolved wording that has none."""
+    lookup = KnowledgeUnit(
+        SelectionCriteria(None, "los lunes", None, (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, schema, action(lookup), ids=["must-not-be-used"])
+    assert result[0].outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result[0].reason == "unresolved_existing_target"
+    assert result[0].reference_only is True
+    assert result[0].stable_id is None
+    assert list(tmp_path.rglob("*.md")) == []
+
+
+def test_semantic_reference_lookup_reuses_one_exact_existing_note(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Reuse a canonical exact match and mark the synthetic unit as reference-only."""
+    write_existing(tmp_path, "people/Marta.md")
+    lookup = KnowledgeUnit(
+        SelectionCriteria("Marta", "Marta", "person", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, schema, action(lookup))
+    assert result[0].outcome is WriteTargetOutcome.UPDATE
+    assert result[0].stable_id == "existing-marta"
+    assert result[0].reference_only is True
 
 
 def test_ordinary_preflight_exposes_no_exact_id_override(
@@ -285,8 +348,8 @@ def test_mixed_update_and_create_preflight_is_ordered(
     result = run(
         tmp_path,
         schema,
-        action(unit("Marta", entity="Marta"), unit("Leche Pascual", note_type="product")),
-        ids=["product-full-id"],
+        action(unit("Marta", entity="Marta"), unit("Faro", note_type="project")),
+        ids=["project-full-id"],
     )
     assert [item.outcome for item in result] == [
         WriteTargetOutcome.UPDATE,
@@ -294,7 +357,7 @@ def test_mixed_update_and_create_preflight_is_ordered(
     ]
     assert result[0].stable_id == "existing-marta"
     assert result[0].path == "people/Marta.md"
-    assert result[1].path == "Leche Pascual - product-full-id.md"
+    assert result[1].path == "Faro - project-full-id.md"
 
 
 def test_ambiguous_target_preserves_candidates_without_path(

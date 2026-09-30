@@ -83,6 +83,8 @@ If the user says `Marta empezó en Thales en marzo`, `en marzo` belongs to the k
 
 Do not add redundant universal per-fact timestamps merely for convenience when capture provenance can be recovered through the established request/Git path. Optional future capture context such as location is a separate provenance concern; see [Future capture-context provenance](future-capture-context-provenance.md).
 
+**Approved formatting follow-up (not yet implemented):** when a note already contains an Odyssey `# Added DD-MM-YYYY` section for the current capture date, later facts captured on that same date should be grouped under that existing date heading instead of creating another identical heading. This is a human-readability normalization only: fact markers, request/Git provenance, append-first semantics, correction/removal authority, and capture-date meaning must remain unchanged. Multiple historical same-date headings remain valid input and must not be treated as semantic corruption.
+
 ## Identity before creation
 
 Creating another note is not the fallback for uncertain resolution.
@@ -107,6 +109,8 @@ Odyssey uses ordinary Obsidian `[[wikilinks]]` by default. Linked notes already 
 Introduce a structured relationship/property only when a deterministic user-facing capability needs its semantic role explicitly—for example filtering, calculation, authorization, application logic, or another repeated machine behavior.
 
 Do not duplicate every wikilink as a generic `related_to`/inverse relation pair.
+
+Write ownership should minimize canonical note mutations without changing the meaning of the knowledge. A relationship with one natural source is stored once on that source and links its participants; the same independently true predicate applied to several distinct subjects remains separate knowledge on those subjects. Never invent an aggregate/source note merely to reduce the number of writes.
 
 ## Types and properties must unlock user value
 

@@ -1,0 +1,60 @@
+{
+  "version": "semantic-write-resolution-active-schema-2026-09-29",
+  "fixed_context": {
+    "date": "2026-09-28",
+    "time": "20:30",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "SWR01-self-coworkers",
+      "request": "Axel y Denis son mis compañeros de trabajo.",
+      "expect": "self_relationship_references"
+    },
+    {
+      "id": "SWR02-rich-daughter-target",
+      "request": "Mi hija a la que le gusta ver detectives de animales adora el chocolate.",
+      "expect": "descriptive_daughter_target"
+    },
+    {
+      "id": "SWR03-described-friend-target",
+      "request": "La amiga con la que cené ayer se muda a París.",
+      "expect": "descriptive_friend_target"
+    },
+    {
+      "id": "SWR04-target-and-described-reference",
+      "request": "Mi hijo mayor fue al cine con la amiga que vive en Lyon.",
+      "expect": "descriptive_target_and_reference"
+    },
+    {
+      "id": "SWR05-unsafe-pronoun",
+      "request": "Recuerda que ella se muda a París.",
+      "expect": "fail_closed_ambiguous_pronoun"
+    },
+    {
+      "id": "SWR06-existing-source-relational-anchor",
+      "request": "El amigo de Bruno que vive en Lyon se muda a Toulouse.",
+      "expect": "qualified_existing_relation_target"
+    },
+    {
+      "id": "SWR07-qualified-event-member",
+      "request": "De las personas que estuvieron en la cena relacional de prueba, la que trabaja en Airbus Test se ha comprado un paraguas rojo.",
+      "expect": "qualified_existing_event_relation_target"
+    },
+    {
+      "id": "SWR08-relational-target-described-reference",
+      "request": "Mi hija mayor va a cenar con la persona de la cena relacional de prueba que trabaja en Airbus Test.",
+      "expect": "relational_target_and_described_reference"
+    },
+    {
+      "id": "SWR09-independent-shared-predicate",
+      "request": "Denis y Axel son zurdos.",
+      "expect": "independent_shared_predicate"
+    },
+    {
+      "id": "SWR10-relational-target-two-bounded-references",
+      "request": "Mi hija mayor va al parque el sábado con la persona de la cena relacional de prueba que trabaja en Airbus Test y con la persona de la cena relacional de prueba que habla italiano.",
+      "expect": "relational_target_and_two_bounded_references"
+    }
+  ]
+}

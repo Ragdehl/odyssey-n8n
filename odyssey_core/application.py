@@ -25,6 +25,7 @@ from .materialization import (
     materialize_delete,
     materialize_type_migration,
     materialize_update,
+    rollback_created_reference,
 )
 from .observability import (
     OperationalEvidence,
@@ -35,7 +36,11 @@ from .observability import (
     normalize_provider_usage,
 )
 from .persistence import ActorInput
-from .reference_binding import PendingReference, render_reference_facts
+from .reference_binding import (
+    PendingReference,
+    bind_canonical_reference_mentions,
+    render_reference_facts,
+)
 from .reference_preflight import (
     RelationshipWritePreflightError,
     UnitTargetPreflight,
@@ -432,6 +437,7 @@ def execute_request(
                 request_id,
                 unit_ordinals,
                 measured_fact_selector,
+                measured_semantic_set_selector,
                 authenticated_actor,
                 self_binding_repository,
                 action_spans,
@@ -841,13 +847,17 @@ def _execute_write(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    semantic_set_selector: Any | None,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
     clarification_choice: ClarificationChoice | None = None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
-    if any(unit.target.relational_reference is not None for unit in action.units):
+    if any(
+        unit.target.relational_reference is not None and not unit.reference_lookup_only
+        for unit in action.units
+    ):
         if clarification_choice is not None:
             return ActionResult(
                 action_index,
@@ -871,6 +881,7 @@ def _execute_write(
             request_id,
             unit_ordinals,
             fact_selector,
+            semantic_set_selector,
             authenticated_actor,
             self_binding_repository,
             spans,
@@ -918,15 +929,17 @@ def _execute_write(
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
             span_recorder=spans,
+            semantic_set_selector=semantic_set_selector,
             **kwargs,
         )
-        rendering = spans.invoke("reference_render", render_reference_facts, action, preflight)
+        executable = bind_canonical_reference_mentions(action, preflight)
+        rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
     except Exception as error:
         return ActionResult(
             action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
         )
     results = _execute_single_units(
-        action,
+        executable,
         preflight,
         rendering.pending_references,
         rendering.rendered_facts,
@@ -961,6 +974,7 @@ def _execute_relational_write(
     request_id: str,
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
+    semantic_set_selector: Any | None,
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
@@ -969,7 +983,7 @@ def _execute_relational_write(
     relational_indexes = tuple(
         index
         for index, candidate in enumerate(action.units)
-        if candidate.target.relational_reference is not None
+        if candidate.target.relational_reference is not None and not candidate.reference_lookup_only
     )
     if len(relational_indexes) != 1 or any(
         candidate.cardinality != "one" for candidate in action.units
@@ -1003,6 +1017,8 @@ def _execute_relational_write(
             semantic_limit=semantic_limit,
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
+            semantic_set_selector=semantic_set_selector,
+            refine_singular_with_query=True,
         )
         projector = RelationshipEvidenceProjector(repository, schema)
         kwargs: dict[str, Any] = {}
@@ -1027,6 +1043,7 @@ def _execute_relational_write(
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
                 span_recorder=spans,
+                semantic_set_selector=semantic_set_selector,
                 **kwargs,
             )
             ordinals = (unit_ordinals[0], *(((),) * len(resolved.targets)))
@@ -1049,12 +1066,23 @@ def _execute_relational_write(
                 authenticated_actor=authenticated_actor,
                 self_binding_repository=self_binding_repository,
                 span_recorder=spans,
+                semantic_set_selector=semantic_set_selector,
                 **kwargs,
             )
+        executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
         if rendering.pending_references:
             raise RelationshipWritePreflightError("Relationship member binding is incomplete")
-    except (RelationalResolutionError, RelationshipWritePreflightError) as error:
+    except RelationalResolutionError as error:
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason=str(error),
+            candidate_note_ids=error.candidate_ids,
+            relational_evidence_guard=error.evidence_guard,
+        )
+    except RelationshipWritePreflightError as error:
         return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
     except Exception as error:
         return ActionResult(
@@ -1258,7 +1286,58 @@ def _execute_single_units(
                 operation=persisted.operation.value,
                 stable_note_id=persisted.id,
             )
+    _rollback_orphan_reference_creates(action, preflight, results, repository, schema)
     return [results[index] for index in range(len(action.units))]
+
+
+def _rollback_orphan_reference_creates(
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+    results: dict[int, UnitResult],
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> None:
+    """Rollback new reference helpers unless at least one consuming source fact succeeded."""
+    consumers: dict[int, set[int]] = {index: set() for index, _ in enumerate(action.units)}
+    for source_index, unit in enumerate(action.units):
+        for reference in unit.references:
+            consumers[reference.target_index].add(source_index)
+
+    for target_index, unit in enumerate(action.units):
+        target = preflight[target_index]
+        result = results.get(target_index)
+        if (
+            not unit.reference_lookup_only
+            or target.outcome is not WriteTargetOutcome.CREATE
+            or result is None
+            or result.status is not UnitStatus.SUCCEEDED
+            or result.operation != "CREATED"
+        ):
+            continue
+        if any(
+            (source_result := results.get(source_index)) is not None
+            and source_result.status is UnitStatus.SUCCEEDED
+            and source_result.materially_affected
+            for source_index in consumers[target_index]
+        ):
+            continue
+        try:
+            rollback_created_reference(target, repository=repository, schema=schema)
+        except Exception as error:
+            results[target_index] = UnitResult(
+                target_index,
+                UnitStatus.FAILED,
+                operation="CREATE",
+                stable_note_id=target.stable_id,
+                reason=f"REFERENCE_CREATE_ROLLBACK_FAILED: {_safe_reason(error)}",
+            )
+        else:
+            results[target_index] = UnitResult(
+                target_index,
+                UnitStatus.DEFERRED,
+                reason="DEPENDENT_FACT_NOT_WRITTEN",
+                materially_affected=False,
+            )
 
 
 def _fact_ordinal_starts(action: WriteAction, start: int) -> tuple[tuple[int, KnowledgeUnit], ...]:
@@ -1278,7 +1357,10 @@ def _create_dependencies(
     dependencies = {index: set() for index, _ in enumerate(action.units)}
     for source, unit in enumerate(action.units):
         for reference in unit.references:
-            if preflight[reference.target_index].outcome is WriteTargetOutcome.CREATE:
+            target = preflight[reference.target_index]
+            if target.outcome is WriteTargetOutcome.CREATE or (
+                target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION and target.reference_only
+            ):
                 dependencies[source].add(reference.target_index)
     return dependencies
 

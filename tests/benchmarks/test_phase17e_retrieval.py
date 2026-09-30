@@ -25,6 +25,21 @@ from benchmarks.phase17e_retrieval.run_planner_live import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _historical_phase17e_schema() -> dict:
+    """Restore the retired store type only inside the frozen Phase 17E corpus."""
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema["types"].append(
+        {
+            "id": "store",
+            "name": "Store",
+            "description": "Historical benchmark-only store type.",
+            "examples": ["Carrefour Balma"],
+            "properties": [],
+        }
+    )
+    return schema
+
+
 def test_planner_evaluator_counts_reference_mentions_and_query_identity() -> None:
     """Accept preserved references and null entities represented by target queries."""
     case = {
@@ -98,7 +113,7 @@ class KeywordEmbedder:
 def test_corpus_is_schema_valid_and_whole_projection_is_production_projection() -> None:
     """Build all frozen notes and preserve the exact current context projection contract."""
     data = load_cases(ROOT / "benchmarks/phase17e_retrieval/cases.json")
-    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema = _historical_phase17e_schema()
     corpus = build_corpus(data, schema)
     assert len(corpus) == 8
     assert all("Name: " in item.whole_text and "Type: " in item.whole_text for item in corpus)
@@ -109,7 +124,7 @@ def test_corpus_is_schema_valid_and_whole_projection_is_production_projection() 
 def test_fact_projection_retains_identity_and_entity_metrics_deduplicate_units() -> None:
     """Fact ranking exposes multiple units while entity recall counts each note once."""
     data = load_cases(ROOT / "benchmarks/phase17e_retrieval/cases.json")
-    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema = _historical_phase17e_schema()
     corpus = build_corpus(data, schema)
     cases = query_cases(data)
     result = run_strategy(corpus, cases, KeywordEmbedder(), "fact_level")
@@ -126,7 +141,7 @@ def test_fact_projection_retains_identity_and_entity_metrics_deduplicate_units()
 def test_three_strategy_outputs_are_comparable_and_fusion_is_deterministic() -> None:
     """Use the same cases and model boundary for all arms with stable fused ordering."""
     data = load_cases(ROOT / "benchmarks/phase17e_retrieval/cases.json")
-    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema = _historical_phase17e_schema()
     corpus = build_corpus(data, schema)
     cases = query_cases(data)
     whole = run_strategy(corpus, cases, KeywordEmbedder(), "whole_note")
@@ -164,7 +179,7 @@ def test_multi_fact_metrics_distinguish_any_all_and_coverage() -> None:
 def test_scale_corpus_has_meaningful_cutoffs_and_controlled_dilution_tiers() -> None:
     """Keep the stress corpus schema-valid and exercise note/fact length tiers."""
     data = load_cases(ROOT / "benchmarks/phase17e_retrieval/cases.json")
-    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    schema = _historical_phase17e_schema()
     corpus = build_corpus(data, schema, scale_size=1000)
     assert len(corpus) == 1000
     assert [len(corpus[index].facts) for index in (8, 9, 10)] == [21, 51, 101]

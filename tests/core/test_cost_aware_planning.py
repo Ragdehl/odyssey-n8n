@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 
 from odyssey_core import cost_aware_planning
 from odyssey_core.cost_aware_planning import LunaFirstRequestPlanner
-from odyssey_core.experimental_luna_planning import PlannerEscalation
+from odyssey_core.experimental_luna_planning import (
+    OpenAILunaExperimentalPlanner,
+    PlannerEscalation,
+)
 from odyssey_core.request_planning import (
     PlannerClarification,
     RequestPlan,
@@ -200,4 +205,113 @@ def test_unsupported_sol_fallback_result_fails_closed() -> None:
         planner.plan("What do I know about Odyssey?")
 
     assert luna.calls == 1
+    assert sol.calls == 1
+
+
+@pytest.mark.parametrize("output_text", ["not-json", "overlong-semantic-identity"])
+def test_real_luna_parse_or_compile_failure_triggers_exactly_one_sol_call(
+    output_text: str,
+) -> None:
+    """Route parser/compiler RequestPlanningError through the one normal Sol fallback."""
+    if output_text == "overlong-semantic-identity":
+        output_text = json.dumps(
+            {
+                "result": {
+                    "outcome": "PLAN",
+                    "actions": [
+                        {
+                            "kind": "write",
+                            "operations": [
+                                {
+                                    "target": {
+                                        "description": "x" * 257,
+                                        "binding": "described",
+                                        "direct_name": None,
+                                        "note_type": "person",
+                                        "filters": [],
+                                        "candidate_scope": None,
+                                    },
+                                    "apply_to": "one",
+                                    "intent": "record",
+                                    "facts": [
+                                        {"parts": [{"kind": "literal", "text": "Lives in Lyon."}]}
+                                    ],
+                                    "properties": [],
+                                    "tag_changes": [],
+                                    "destination_type": None,
+                                }
+                            ],
+                        }
+                    ],
+                    "limitations": [],
+                    "clarification_code": None,
+                    "presentation_intent": "answer",
+                }
+            }
+        )
+    response = SimpleNamespace(
+        status="completed",
+        id="response-test",
+        output_text=output_text,
+        usage=None,
+    )
+    calls = 0
+
+    def create(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return response
+
+    schema = {
+        "schema_version": 3,
+        "metadata_fields": [
+            {
+                "id": "type",
+                "value_type": "string",
+                "required": True,
+                "description": "type",
+                "constraints": {"registry": "types", "controlled": True},
+                "filterable": True,
+            }
+        ],
+        "types": [
+            {
+                "id": "person",
+                "name": "Person",
+                "description": "person",
+                "examples": ["Marta"],
+                "properties": [],
+            }
+        ],
+    }
+    luna = OpenAILunaExperimentalPlanner(
+        SimpleNamespace(responses=SimpleNamespace(create=create)),
+        schema,
+        {"date": "2026-09-29", "time": "12:00", "timezone": "Europe/Paris"},
+        teaching_examples=[],
+    )
+    # Avoid prompt construction rejecting the intentionally empty injected teaching set; this
+    # test isolates the post-provider parse/compile routing path.
+    luna._teaching_examples = ()
+    sol_result = RequestPlan(actions=(), limitations=())
+    sol = _FakePlanner(sol_result)
+
+    # Supply one minimal valid teaching example only for input construction.
+    luna._teaching_examples = (
+        {
+            "id": "clarify",
+            "request": "?",
+            "result": {
+                "outcome": "CLARIFY",
+                "actions": None,
+                "limitations": None,
+                "clarification_code": "UNRECOGNIZED_REQUEST",
+            },
+            "lesson": "Clarify meaningless input.",
+        },
+    )
+    result = _planner(luna, sol).plan("Remember this safely.")
+
+    assert result is sol_result
+    assert calls == 1
     assert sol.calls == 1

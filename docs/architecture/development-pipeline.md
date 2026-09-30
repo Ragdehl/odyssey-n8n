@@ -116,6 +116,37 @@ rewrite or architecture reset.
 The [Functional Roadmap](functional-roadmap.md) owns when that checkpoint sits in current sequencing.
 This document owns the reusable maintainability discipline applied during every phase.
 
+## Real DEV contract-discovery loop
+
+When deterministic tests are green but a synthetic/manual DEV request exposes a semantic miss, treat the request as a **boundary probe**, not as a reason to patch the visible symptom. The preferred loop is:
+
+```text
+exact user request on isolated DEV
+        |
+        v
+record deployed commit + request/result + vault Git delta
+        |
+        v
+trace adjacent boundaries until the first incorrect decision
+        |
+        v
+challenge contract/oracle as well as implementation
+        |
+        v
+smallest bounded fix
+        |
+        v
+provider-free regression at the owning boundary
+        |
+        v
+redeploy DEV + repeat the same request
+        `--> fresh focused model gate only when model-facing contract changed
+```
+
+For WRITE/relationship work, inspect the actual canonical Markdown and Git delta before inferring what happened from the UI. A useful trace order is planner -> deterministic planner validation -> source/target candidate construction -> relation/fact selection -> contextual resolution -> preflight/dependency atomicity -> canonical rendering/materialization -> Git/index refresh -> UI projection. Incoming backlinks are part of canonical evidence when the contract says they are; derived indexes remain non-authoritative. A request that fails safely with zero vault mutation is evidence about a decision boundary, not permission to weaken that boundary.
+
+Each real failure mode that reveals a durable invariant should become an executable regression, preferably abstracted from the incidental fixture wording. Keep a small number of exact phrases when they capture a model-facing contract that previously failed. Do not add retries to hide semantic ambiguity: retries are appropriate only for bounded structural/transient output failures. Core-only fixes do not require rerunning a planner gate; prompt/schema/structured-output changes do. Keep manual discovery in isolated synthetic DEV, preserve PROD, and use the resulting regressions so later feature work can move faster without rediscovering the same boundary.
+
 ## Close the loop on incidents and debugging
 
 A solved incident should reduce the cost of the next similar incident. After a non-trivial bug, deployment drift, hidden environment precondition, or operational failure is understood, close the loop before declaring the work complete.
