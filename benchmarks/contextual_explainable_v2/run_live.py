@@ -13,9 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from benchmarks.contextual_explainable_v1 import run_live as v1_runner  # noqa: E402
 from odyssey_core.contextual import (  # noqa: E402
-    ContextualCandidate,
-    ContextualResolutionRequest,
     OpenAIContextualReasoner,
     build_openai_payload,
     validate_contextual_decision,
@@ -46,33 +45,25 @@ def load_cases() -> tuple[dict[str, Any], ...]:
     return tuple(rows)
 
 
-def request_from_case(case: dict[str, Any]) -> ContextualResolutionRequest:
-    """Remove oracle fields before constructing one provider request."""
-    value = case["request"]
-    return ContextualResolutionRequest(
-        value["reference"],
-        value["context"],
-        value["entity_type"],
-        tuple(ContextualCandidate(item["id"], item["evidence"]) for item in value["candidates"]),
-    )
-
-
 def conservative_cost_ceiling(cases: tuple[dict[str, Any], ...]) -> tuple[Decimal, int]:
     """Price a no-cache one-token-per-UTF-8-byte input bound plus bounded output."""
     examples = load_contextual_calibration_examples()
     pricing = json.loads(PRICING_PATH.read_text(encoding="utf-8"))
     if pricing.get("model") != MODEL:
         raise ValueError("Explainable v2 pricing snapshot model mismatch")
-    input_tokens = 0
-    for case in cases:
-        payload = build_openai_payload(
-            request_from_case(case),
+    payloads = (
+        build_openai_payload(
+            v1_runner.request_from_case(case),
             MODEL,
             reasoning_effort=REASONING_EFFORT,
             examples=examples,
             max_output_tokens=MAX_OUTPUT_TOKENS,
         )
-        input_tokens += len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        for case in cases
+    )
+    input_tokens = sum(
+        len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) for payload in payloads
+    )
     cost = (
         Decimal(input_tokens) * Decimal(str(pricing["input_per_million"]))
         + Decimal(MAX_PROVIDER_CALLS * MAX_OUTPUT_TOKENS)
@@ -93,11 +84,23 @@ def _passed(case: dict[str, Any], actual: dict[str, Any]) -> bool:
     return actual == expected
 
 
-def _append_row(path: Path, row: dict[str, Any]) -> None:
-    """Append immutable compact evidence without overwriting an earlier artifact."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+def _execute_case(reasoner: OpenAIContextualReasoner, case: dict[str, Any]) -> dict[str, Any]:
+    """Execute and score one frozen provider case without retrying it."""
+    request = v1_runner.request_from_case(case)
+    raw, usage = reasoner.resolve(request)
+    decision = validate_contextual_decision(raw, {item.id for item in request.candidates})
+    actual = {
+        "outcome": decision.outcome,
+        "id": decision.id,
+        "ambiguous_ids": list(decision.ambiguous_ids),
+    }
+    return {
+        "case_id": case["id"],
+        "actual": actual,
+        "expected": case["expected"],
+        "passed": _passed(case, actual),
+        "usage": usage,
+    }
 
 
 def run_cases(cases: tuple[dict[str, Any], ...]) -> None:
@@ -109,24 +112,7 @@ def run_cases(cases: tuple[dict[str, Any], ...]) -> None:
         max_output_tokens=MAX_OUTPUT_TOKENS,
     )
     for case in cases:
-        request = request_from_case(case)
-        raw, usage = reasoner.resolve(request)
-        decision = validate_contextual_decision(raw, {item.id for item in request.candidates})
-        actual = {
-            "outcome": decision.outcome,
-            "id": decision.id,
-            "ambiguous_ids": list(decision.ambiguous_ids),
-        }
-        _append_row(
-            OUTPUT_PATH,
-            {
-                "case_id": case["id"],
-                "actual": actual,
-                "expected": case["expected"],
-                "passed": _passed(case, actual),
-                "usage": usage,
-            },
-        )
+        v1_runner._append_row(OUTPUT_PATH, _execute_case(reasoner, case))
 
 
 def main(argv: list[str] | None = None) -> int:
