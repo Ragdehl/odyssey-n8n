@@ -1,4 +1,4 @@
-"""Prepared GPT-6-first planner regression gate; zero authority until explicitly authorized."""
+"""Prepared production-planner regression gate with explicit bounded live authority."""
 
 from __future__ import annotations
 
@@ -20,20 +20,15 @@ from benchmarks.semantic_write_frontend_v1 import run_live as _v1  # noqa: E402
 from benchmarks.semantic_write_frontend_v8 import run_live as _v8  # noqa: E402
 from odyssey_core.request_planning import RequestPlan, WriteAction  # noqa: E402
 
-FIRST_MODEL = "gpt-6-luna"
 PRODUCTION_MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "low"
-MAX_TOTAL_COST_USD = Decimal("0.00")
-PRICING = {
-    FIRST_MODEL: (Decimal("0.10"), Decimal("0.50")),
-    PRODUCTION_MODEL: (Decimal("0.20"), Decimal("1.20")),
-}
+MAX_TOTAL_COST_USD = Decimal("0.21")
+PRICING = {PRODUCTION_MODEL: (Decimal("0.20"), Decimal("1.20"))}
 ACCEPTED_FAILURE_IDS = frozenset({"SWR07-qualified-event-member"})
 INPUT_OVERHEAD_BYTES = 1024
 SCHEMA_PATH = ROOT / "config/note-schema.json"
 ADDITIONAL_CASES_PATH = Path(__file__).with_name("additional_cases.json")
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
-GPT6_OUTPUT_PATH = ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl"
 GPT56_OUTPUT_PATH = ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna.jsonl"
 TEACHING_PATH = ROOT / "benchmarks/luna_first_planner/teaching_examples_v3.json"
 
@@ -112,14 +107,9 @@ def conservative_cost_ceiling(
 def total_conservative_cost_ceiling(
     cases: list[dict[str, Any]], context: dict[str, str], schema: dict[str, Any]
 ) -> tuple[Decimal, dict[str, Decimal], int]:
-    """Bound GPT-6 first plus the required current-production 5.6 matrix."""
-    costs: dict[str, Decimal] = {}
-    bounds: list[int] = []
-    for model in (FIRST_MODEL, PRODUCTION_MODEL):
-        cost, bound = conservative_cost_ceiling(cases, context, schema, model)
-        costs[model] = cost
-        bounds.append(bound)
-    return sum(costs.values(), Decimal("0")), costs, max(bounds)
+    """Bound the required current-production 5.6 matrix only."""
+    cost, bound = conservative_cost_ceiling(cases, context, schema, PRODUCTION_MODEL)
+    return cost, {PRODUCTION_MODEL: cost}, bound
 
 
 def _clarification_entry_passed(result: Any, case: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -244,10 +234,6 @@ def main(argv: list[str] | None = None) -> int:
     if MAX_TOTAL_COST_USD <= 0 or ceiling > MAX_TOTAL_COST_USD:
         raise SystemExit("Refusing live calls: planner-prompt-regression-v1 has zero authority")
 
-    # GPT-6 is always evaluated first, but while 5.6 remains the deployed planner model
-    # its own matrix is still the merge authority for a prompt change. The GPT-6 result
-    # is comparative evidence only unless a separately reviewed model switch is approved.
-    _run_model(FIRST_MODEL, GPT6_OUTPUT_PATH, schema, context, cases)
     gpt56_rows = _run_model(PRODUCTION_MODEL, GPT56_OUTPUT_PATH, schema, context, cases)
     return 0 if _matrix_acceptable(gpt56_rows) else 1
 
