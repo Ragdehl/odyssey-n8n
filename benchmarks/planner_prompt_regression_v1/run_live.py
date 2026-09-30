@@ -22,14 +22,16 @@ from odyssey_core.request_planning import RequestPlan, WriteAction  # noqa: E402
 
 PRODUCTION_MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "low"
-MAX_TOTAL_COST_USD = Decimal("0.21")
+MAX_TOTAL_COST_USD = Decimal("0.00")
 PRICING = {PRODUCTION_MODEL: (Decimal("0.20"), Decimal("1.20"))}
 ACCEPTED_FAILURE_IDS = frozenset({"SWR07-qualified-event-member"})
 INPUT_OVERHEAD_BYTES = 1024
 SCHEMA_PATH = ROOT / "config/note-schema.json"
 ADDITIONAL_CASES_PATH = Path(__file__).with_name("additional_cases.json")
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
-GPT56_OUTPUT_PATH = ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna.jsonl"
+GPT56_OUTPUT_PATH = (
+    ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna-v2.jsonl"
+)
 TEACHING_PATH = ROOT / "benchmarks/luna_first_planner/teaching_examples_v3.json"
 
 

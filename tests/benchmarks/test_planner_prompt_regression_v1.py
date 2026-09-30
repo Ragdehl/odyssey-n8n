@@ -22,15 +22,15 @@ def test_gate_is_frozen_small_complete_and_bounded_to_production_model() -> None
     ]
     assert runner.PRODUCTION_MODEL == "gpt-5.6-luna"
     assert runner.REASONING_EFFORT == "low"
-    assert runner.MAX_TOTAL_COST_USD == Decimal("0.21")
+    assert runner.MAX_TOTAL_COST_USD == Decimal("0.00")
     assert set(costs) == {runner.PRODUCTION_MODEL}
     assert cost == costs[runner.PRODUCTION_MODEL]
-    assert cost <= runner.MAX_TOTAL_COST_USD
+    assert cost > runner.MAX_TOTAL_COST_USD
     assert bound > 0
     runner.verify_candidate_contract(schema, context)
 
 
-def test_cost_ceiling_refuses_before_provider_construction(
+def test_zero_authority_refuses_before_provider_construction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     called = False
@@ -40,7 +40,6 @@ def test_cost_ceiling_refuses_before_provider_construction(
         called = True
         raise AssertionError("provider must not be constructed")
 
-    monkeypatch.setattr(runner, "MAX_TOTAL_COST_USD", Decimal("0.20"))
     monkeypatch.setattr(runner, "_build_planner", forbidden)
     with pytest.raises(SystemExit, match="zero authority"):
         runner.main(["--confirm-live-provider-calls"])
