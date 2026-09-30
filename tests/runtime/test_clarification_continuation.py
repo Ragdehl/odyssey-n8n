@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import odyssey_core.application as core_application
 from odyssey_core.application import (
     ActionResult,
     ActionStatus,
@@ -15,6 +16,7 @@ from odyssey_core.application import (
     UnitResult,
     UnitStatus,
 )
+from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.clarification import (
     ClarificationOption,
     LocalClarificationStore,
@@ -36,6 +38,7 @@ from odyssey_core.request_planning import (
     SelectionCriteria,
     WriteAction,
 )
+from odyssey_core.semantic_sets import SetEvidenceSelection, SetMemberOccurrence
 from odyssey_core.storage import VaultRepository
 from odyssey_runtime.composition import RuntimeComposition
 
@@ -506,3 +509,153 @@ def test_relational_read_pending_keeps_source_guard_in_version_two_state(tmp_pat
     state = LocalClarificationStore(resolver.resolve(ACTOR.stable_user_id), "main")
     state.replace(pending)
     assert state.read() == pending
+
+
+def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
+    tmp_path: Path,
+) -> None:
+    """Keep one unknown member as CLARIFY end-to-end, then mutate only the human choice."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    schema = json.loads((ROOT / "config/note-schema.json").read_text())
+
+    def write_note(path: str, note_id: str, name: str, body: str) -> None:
+        metadata = {
+            "id": note_id,
+            "name": name,
+            "type": "person",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-09-30T12:00:00Z",
+            "created_by": {"human": None, "app": "test"},
+            "updated_by": {"human": None, "app": "test"},
+            "revision": 1,
+            "schema_version": 3,
+            "aliases": [],
+            "tags": [],
+        }
+        target = vault / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(serialize_note(Note(metadata, body)), encoding="utf-8")
+
+    relation_fact = render_atomic_facts(
+        ("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].",),
+        "fixture",
+        (0,),
+        "2026-09-30T12:00:00Z",
+    )
+    write_note("people/self.md", "self", "Self", relation_fact)
+    write_note("people/cloe.md", "cloe", "Cloe", "")
+    write_note("people/bruno.md", "bruno", "Bruno", "")
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    selection = SelectionCriteria(
+        None,
+        "uno de mis hijos",
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("uno de mis hijos", "self", None, "one"),
+    )
+    plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        selection,
+                        "record",
+                        (),
+                        (),
+                        ("Se ha apuntado a natación.",),
+                        (),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+
+    class EmptyIndex:
+        def find_candidates(self, *_args, **_kwargs):
+            return ()
+
+    class Embedder:
+        model_name = "tests"
+        model_version = "1"
+
+    class AbstainingReasoner:
+        def resolve(self, _request):
+            return {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}, {}
+
+    class RelationSelector:
+        def select(self, request):
+            chosen = request.candidates[0]
+            return SetEvidenceSelection(
+                (chosen.id,),
+                (SetMemberOccurrence(chosen.id, "literal", 0, 1),),
+            )
+
+    class SelfBinding:
+        def resolve(self, stable_user_id):
+            assert stable_user_id == ACTOR.stable_user_id
+            return SimpleNamespace(person_note_id="self")
+
+    pending_root = tmp_path / "pending"
+    pending_root.mkdir()
+    pending = PendingWorkRepository(pending_root)
+    repository = VaultRepository(vault)
+
+    def execute_core(
+        request,
+        request_id,
+        actor=None,
+        _conversation_id=None,
+        resume_plan=None,
+        clarification_choice=None,
+    ):
+        active_plan = resume_plan or plan
+        return core_application.execute_request(
+            request,
+            planner=SimpleNamespace(plan=lambda *_args, **_kwargs: active_plan),
+            repository=repository,
+            schema=schema,
+            context_index=object(),
+            semantic_index=EmptyIndex(),
+            embedder=Embedder(),
+            contextual_reasoner=AbstainingReasoner(),
+            actor="test",
+            now="2026-09-30T12:00:00Z",
+            context_limit=5,
+            request_id_factory=lambda: request_id,
+            authenticated_actor=actor,
+            self_binding_repository=SelfBinding(),
+            semantic_set_selector=RelationSelector(),
+            pending_recorder=pending,
+            clarification_choice=clarification_choice,
+        )
+
+    resolver = ConversationRootResolver(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=execute_core,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        pending_recorder=pending,
+        vault_repository=repository,
+        canonical_schema=schema,
+    )
+
+    first = runtime.execute_product(
+        "Uno de mis hijos se ha apuntado a natación.", "delivery-ambiguous", "main", ACTOR
+    )
+
+    assert first["product_outcome"] == "CLARIFY"
+    assert first["product_reason"] == "AMBIGUOUS_REFERENCE"
+    assert "product_control" not in first
+    assert first["clarification"]["explanation"].startswith("No puedo identificar")
+    assert [option["id"] for option in first["clarification"]["options"]] == ["cloe", "bruno"]
+    assert [option["label"] for option in first["clarification"]["options"]] == ["Cloe", "Bruno"]
+    assert all(path.read_bytes() == content for path, content in before.items())
+    second = runtime.execute_product("Bruno", "delivery-choice", "main", ACTOR)
+
+    assert second["product_outcome"] == "ANSWER"
+    assert "Se ha apuntado a natación." not in (vault / "people/cloe.md").read_text()
+    assert "Se ha apuntado a natación." in (vault / "people/bruno.md").read_text()

@@ -241,9 +241,8 @@ def _selection(value: SelectionCriteria | None) -> dict[str, Any] | None:
         "type": value.type,
         "filters": [_filter(item) for item in value.filters],
         "link_scope": _link_scope(value.link_scope),
+        "self_target": value.self_target,
     }
-    if value.self_target is not None:
-        projected["self_target"] = value.self_target
     if value.relational_reference is not None:
         projected["relational_reference"] = {
             "reference": value.relational_reference.reference,

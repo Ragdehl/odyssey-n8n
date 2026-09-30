@@ -138,6 +138,8 @@ def test_pending_selection_retains_relational_reference_for_safe_future_resume()
     )
     projected = pending_work._selection(target)
     assert projected is not None
+    assert "self_target" in projected
+    assert projected["self_target"] is None
     assert projected["relational_reference"] == {
         "reference": "my daughter",
         "source_kind": "self",
