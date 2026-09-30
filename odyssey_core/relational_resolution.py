@@ -93,6 +93,7 @@ def resolve_relational_reference(
     self_binding_repository: SelfBindingRepository | None,
     semantic_set_selector: Any | None = None,
     allow_identity_clarification: bool = False,
+    fallback_identity_clarification: bool = False,
     chosen_identity_id: str | None = None,
     refine_singular_with_query: bool = False,
 ) -> ResolvedRelationalReference:
@@ -195,10 +196,9 @@ def resolve_relational_reference(
             ),
         )
     )
-    # Mutations retain their existing stricter preflight: repeating the literal
-    # relation in more than one fact is not enough authority to edit either.
-    # Retrieval may instead offer grounded bounded identities through the
-    # established clarification continuation.
+    # Mutations retain strict identity authority: ambiguity never authorizes a write.
+    # A caller may, however, request a bounded fallback that reuses the read-side
+    # relevance selector only to expose grounded identities for human clarification.
     if (
         not allow_identity_clarification
         and sum(
@@ -218,6 +218,16 @@ def resolve_relational_reference(
             for fact, direction in candidates
             if fact.locator in selected.ambiguous_ids
         )
+        if fallback_identity_clarification and relation.members == "one":
+            return _resolve_selected_read_facts(
+                selection,
+                source_id,
+                projector,
+                incoming_projection,
+                selected_facts,
+                evidence_guard,
+                chosen_identity_id,
+            )
         grounded: list[CanonicalIdentity] = []
         evidence_by_id: dict[str, list[str]] = {}
         for fact, direction in selected_facts:
@@ -254,6 +264,20 @@ def resolve_relational_reference(
             "relational_evidence_ambiguous", evidence_guard=evidence_guard
         )
     if selected.outcome != "RESOLVED" or selected.id is None:
+        if fallback_identity_clarification and relation.members == "one":
+            selected_candidates = _select_relevant_read_facts(
+                selection.query, candidates, semantic_set_selector
+            )
+            if selected_candidates:
+                return _resolve_selected_read_facts(
+                    selection,
+                    source_id,
+                    projector,
+                    incoming_projection,
+                    selected_candidates,
+                    evidence_guard,
+                    chosen_identity_id,
+                )
         raise RelationalResolutionError(
             "relational_evidence_ambiguous", evidence_guard=evidence_guard
         )
@@ -274,6 +298,16 @@ def resolve_relational_reference(
     else:
         targets = projection.targets
     if relation.members == "one" and len(targets) != 1:
+        if fallback_identity_clarification:
+            return _resolve_selected_read_facts(
+                selection,
+                source_id,
+                projector,
+                incoming_projection,
+                ((selected_fact, direction),),
+                evidence_guard,
+                chosen_identity_id,
+            )
         options = tuple(target.id for target in targets)
         identities = tuple(targets)
         fact_evidence = _bounded_fact_evidence(selected_fact)

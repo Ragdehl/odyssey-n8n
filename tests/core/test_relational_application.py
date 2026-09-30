@@ -1470,6 +1470,108 @@ def test_existing_relation_source_resolution_ignores_target_only_qualifiers(
     assert reasoner.requests[-1].reference == query
 
 
+def test_bare_singular_relational_write_offers_grounded_members_and_resumes_choice(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A relation that names one unspecified member must clarify before writing."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta pintar."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Le gusta correr."))
+    selection = relational_selection("uno de mis hijos", source_kind="self", source_query=None)
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha apuntado a natación.",), ())
+    plan = RequestPlan((WriteAction((unit,)),), ())
+    selector = RelevantFactSelector("Mis hijos")
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    initial = run(vault, schema, plan, selector=selector)
+
+    assert initial.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert initial.affected_stable_note_ids == ()
+    assert all(path.read_bytes() == content for path, content in before.items())
+    action = initial.action_results[0]
+    assert action.reason == "relational_singular_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.clarification is not None
+    assert [candidate.label for candidate in action.clarification.candidates] == ["Cloe", "Bruno"]
+    assert action.relational_evidence_guard is not None
+
+    choice = ClarificationChoice(
+        "bruno",
+        current_identity_guard(VaultRepository(vault), schema, "bruno"),
+        action.relational_evidence_guard,
+    )
+    resumed = run(
+        vault, schema, plan, selector=RelevantFactSelector("Mis hijos"), clarification_choice=choice
+    )
+
+    assert resumed.status is application.ApplicationStatus.COMPLETED
+    assert resumed.affected_stable_note_ids == ("bruno",)
+    assert (
+        "Se ha apuntado a natación." in parse_note((vault / "people/bruno.md").read_text()).content
+    )
+    assert (
+        "Se ha apuntado a natación."
+        not in parse_note((vault / "people/cloe.md").read_text()).content
+    )
+
+
+def test_bare_singular_relational_write_rejects_choice_after_source_evidence_changes(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A pending member choice cannot survive a changed canonical relationship fact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    original_source = fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].")
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", original_source)
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    selection = relational_selection("uno de mis hijos", source_kind="self", source_query=None)
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha apuntado a natación.",), ())
+    plan = RequestPlan((WriteAction((unit,)),), ())
+    initial = run(vault, schema, plan, selector=RelevantFactSelector("Mis hijos"))
+    action = initial.action_results[0]
+    assert action.relational_evidence_guard is not None
+    choice = ClarificationChoice(
+        "bruno",
+        current_identity_guard(VaultRepository(vault), schema, "bruno"),
+        action.relational_evidence_guard,
+    )
+
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact(
+            "Mis hijos son [[people/cloe|Cloe]], [[people/bruno|Bruno]] y [[people/lucas|Lucas]]."
+        ),
+    )
+    write_note(vault, "people/lucas.md", "lucas", "Lucas", "")
+    resumed = run(
+        vault,
+        schema,
+        plan,
+        selector=RelevantFactSelector("Mis hijos"),
+        clarification_choice=choice,
+    )
+
+    assert resumed.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert resumed.action_results[0].reason == "clarification_evidence_changed"
+    assert resumed.affected_stable_note_ids == ()
+    assert (
+        "Se ha apuntado a natación."
+        not in parse_note((vault / "people/bruno.md").read_text()).content
+    )
+
+
 def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
     tmp_path: Path, schema: dict
 ) -> None:

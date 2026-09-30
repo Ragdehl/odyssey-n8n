@@ -127,7 +127,8 @@ class OpenAILunaSemanticSetSelector:
     reasoning_effort = "low"
 
     def __init__(self) -> None:
-        """Keep provider telemetry local to the latest selector call."""
+        """Keep provider telemetry local and permit an explicit environment model override."""
+        self.model = os.environ.get("ODYSSEY_SEMANTIC_SET_MODEL") or type(self).model
         self.last_call = False
         self.last_usage: dict[str, int] | None = None
 

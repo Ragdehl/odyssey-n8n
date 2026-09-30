@@ -1094,6 +1094,7 @@ def _execute_relational_write(
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
             semantic_set_selector=semantic_set_selector,
+            fallback_identity_clarification=relation.members == "one",
             refine_singular_with_query=True,
             chosen_identity_id=(
                 clarification_choice.stable_id if clarification_choice is not None else None

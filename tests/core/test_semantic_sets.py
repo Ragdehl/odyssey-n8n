@@ -16,6 +16,7 @@ from odyssey_core.request_planning import SemanticSetIntent
 from odyssey_core.semantic_sets import (
     IdentitySetMember,
     LiteralSetMember,
+    OpenAILunaSemanticSetSelector,
     SemanticSetBounds,
     SemanticSetOutcome,
     SetEvidenceSelection,
@@ -166,6 +167,17 @@ def test_collection_uses_lossless_query_without_planner_ontology(tmp_path: Path)
     assert result.grounded_set is not None
     assert result.grounded_set.subject_kind is None
     assert [member.value for member in result.grounded_set.members] == list(values)
+
+
+def test_semantic_set_selector_defaults_to_56_and_allows_explicit_dev_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep production behavior stable while allowing an isolated GPT-6 DEV evaluation."""
+    monkeypatch.delenv("ODYSSEY_SEMANTIC_SET_MODEL", raising=False)
+    assert OpenAILunaSemanticSetSelector().model == "gpt-5.6-luna"
+
+    monkeypatch.setenv("ODYSSEY_SEMANTIC_SET_MODEL", "gpt-6-luna")
+    assert OpenAILunaSemanticSetSelector().model == "gpt-6-luna"
 
 
 def test_selector_contract_contains_only_supplied_ids_exact_spans_and_uncertainty() -> None:

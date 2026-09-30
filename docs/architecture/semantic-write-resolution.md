@@ -209,9 +209,10 @@ Legacy pre-existing index-based internal fixtures may retain their historical no
 
 The active contextual Structured Output strictly requires `{outcome,id,ambiguous_ids}` for all three
 established outcomes. `RESOLVED` still carries exactly one supplied `id` and preserves the complete
-Core-supplied candidate set for established downstream behavior; `UNRESOLVED` carries no model IDs
-while retaining the exact-collision fallback;
-`AMBIGUOUS` carries a unique two-to-four-ID subset of the exact supplied candidate set. Core rejects
+Core-supplied candidate set for established downstream behavior. `UNRESOLVED` may carry either no
+model IDs or a unique two-to-four-ID supplied clarification subset; those IDs remain non-authoritative
+until a human chooses one. `AMBIGUOUS` carries a unique two-to-four-ID subset of the exact supplied
+candidate set. Core rejects
 missing, fabricated, duplicate, contradictory, empty, singleton, or oversized subsets. Semantic rank
 never becomes presentation or identity authority.
 
@@ -255,6 +256,17 @@ calls, has three immutable evidence rows (SHA-256
 `5827bdc7e84bfd70b7ebc2f46afd5c582edd53c7ee2035393946bbc82449ab26`), and is permanently
 consumed at zero authority. This is harness evidence, not a semantic failure; a fresh version and
 separate authorization are required for any later live gate.
+
+A manual DEV acceptance test then exposed one missing write-side continuation: the bare singular
+relation `Uno de mis hijos se ha apuntado a natación` was correctly planned as a SELF relation with
+`members=one`, but the historical mutation path returned `relational_evidence_ambiguous` without
+candidate IDs. The durable fix preserves the existing contextual fact resolution first and activates
+the established bounded semantic-set relevance path only as a clarification fallback when a singular
+WRITE remains ambiguous without options. Core then re-projects current canonical facts into two-to-
+four identities, blocks mutation until one is chosen, and revalidates both source and target guards
+before resuming. Qualified singular writes and complete-set writes keep their previous paths. DEV also
+sets `ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna` for this acceptance cycle; the production default remains
+`gpt-5.6-luna`.
 
 ## Required sentinels
 

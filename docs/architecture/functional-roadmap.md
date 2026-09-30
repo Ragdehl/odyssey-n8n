@@ -166,7 +166,7 @@ Semantic WRITE intent/Core compiler simplification                ✅ complete �
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
-Explainable Clarification UX                                       ➡️ current; candidate-preserving abstention + GPT-6 v2 partial technical evidence + manual DEV pending
+Explainable Clarification UX                                       ➡️ current; candidate-preserving abstention + bare singular WRITE clarification fix + repeat manual DEV pending
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
