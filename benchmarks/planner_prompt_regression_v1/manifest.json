@@ -9,13 +9,23 @@
     "additional_cases": "659b247b8d6ae6b216fb0b7c91b1f9ee502495f173753ce5d6650067e59be57c"
   },
   "logical_cases": 16,
-  "max_provider_calls": 16,
-  "model": "gpt-6-luna",
+  "max_provider_calls": 32,
   "reasoning_effort": "low",
   "retries": 0,
   "sol_calls": 0,
   "max_cost_usd": "0.00",
   "status": "prepared_zero_authority",
   "failure_policy": "collect_complete_matrix",
-  "artifact": "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl"
+  "artifact": "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl",
+  "first_model": "gpt-6-luna",
+  "production_model": "gpt-5.6-luna",
+  "artifacts": {
+    "gpt-6-luna": "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl",
+    "gpt-5.6-luna": "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna.jsonl"
+  },
+  "candidate_contract": {
+    "prompt_sha256": "5a1ab7f8fb615dd3a706eaf96920dfbdc35a4c9319adf4790a319c7fa806d88d",
+    "provider_schema_sha256": "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
+    "teaching_examples_sha256": "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0"
+  }
 }

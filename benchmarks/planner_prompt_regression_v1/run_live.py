@@ -20,16 +20,41 @@ from benchmarks.semantic_write_frontend_v1 import run_live as _v1  # noqa: E402
 from benchmarks.semantic_write_frontend_v8 import run_live as _v8  # noqa: E402
 from odyssey_core.request_planning import RequestPlan, WriteAction  # noqa: E402
 
-MODEL = "gpt-6-luna"
+FIRST_MODEL = "gpt-6-luna"
+PRODUCTION_MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "low"
-MAX_COST_USD = Decimal("0.00")
-INPUT_PER_MILLION = Decimal("0.10")
-OUTPUT_PER_MILLION = Decimal("0.50")
+MAX_TOTAL_COST_USD = Decimal("0.00")
+PRICING = {
+    FIRST_MODEL: (Decimal("0.10"), Decimal("0.50")),
+    PRODUCTION_MODEL: (Decimal("0.20"), Decimal("1.20")),
+}
+ACCEPTED_FAILURE_IDS = frozenset({"SWR07-qualified-event-member"})
 INPUT_OVERHEAD_BYTES = 1024
 SCHEMA_PATH = ROOT / "config/note-schema.json"
 ADDITIONAL_CASES_PATH = Path(__file__).with_name("additional_cases.json")
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
-OUTPUT_PATH = ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl"
+GPT6_OUTPUT_PATH = ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl"
+GPT56_OUTPUT_PATH = ROOT / "benchmarks/.live-results/planner-prompt-regression-v1-gpt56-luna.jsonl"
+TEACHING_PATH = ROOT / "benchmarks/luna_first_planner/teaching_examples_v3.json"
+
+
+def verify_candidate_contract(schema: dict[str, Any], context: dict[str, str]) -> None:
+    """Refuse provider calls unless the exact frozen model-facing candidate is still checked out."""
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    expected = manifest["candidate_contract"]
+    prompt = luna_planning.render_luna_experimental_prompt(schema, context).encode("utf-8")
+    provider_schema = json.dumps(
+        luna_planning.luna_experimental_result_json_schema(schema),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    actual = {
+        "prompt_sha256": hashlib.sha256(prompt).hexdigest(),
+        "provider_schema_sha256": hashlib.sha256(provider_schema).hexdigest(),
+        "teaching_examples_sha256": hashlib.sha256(TEACHING_PATH.read_bytes()).hexdigest(),
+    }
+    if actual != expected:
+        raise SystemExit("Refusing live calls: candidate model-facing contract hash mismatch")
 
 
 def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -55,9 +80,12 @@ def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:
 
 
 def conservative_cost_ceiling(
-    cases: list[dict[str, Any]], context: dict[str, str], schema: dict[str, Any]
+    cases: list[dict[str, Any]],
+    context: dict[str, str],
+    schema: dict[str, Any],
+    model: str,
 ) -> tuple[Decimal, int]:
-    """Bound all calls with no cache credit and the largest case-specific recent context."""
+    """Bound one complete model matrix with no cache credit and maximum recent context."""
     output_schema = json.dumps(
         luna_planning.luna_experimental_result_json_schema(schema),
         ensure_ascii=False,
@@ -73,11 +101,25 @@ def conservative_cost_ceiling(
         size = len((prompt + output_schema + case["request"]).encode("utf-8"))
         maximum_input = max(maximum_input, size)
     input_bound = maximum_input + INPUT_OVERHEAD_BYTES
+    input_rate, output_rate = PRICING[model]
     per_call = (
-        Decimal(input_bound) * INPUT_PER_MILLION
-        + Decimal(luna_planning.LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS) * OUTPUT_PER_MILLION
+        Decimal(input_bound) * input_rate
+        + Decimal(luna_planning.LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS) * output_rate
     ) / Decimal(1_000_000)
     return Decimal(len(cases)) * per_call, input_bound
+
+
+def total_conservative_cost_ceiling(
+    cases: list[dict[str, Any]], context: dict[str, str], schema: dict[str, Any]
+) -> tuple[Decimal, dict[str, Decimal], int]:
+    """Bound GPT-6 first plus the required current-production 5.6 matrix."""
+    costs: dict[str, Decimal] = {}
+    bounds: list[int] = []
+    for model in (FIRST_MODEL, PRODUCTION_MODEL):
+        cost, bound = conservative_cost_ceiling(cases, context, schema, model)
+        costs[model] = cost
+        bounds.append(bound)
+    return sum(costs.values(), Decimal("0")), costs, max(bounds)
 
 
 def _clarification_entry_passed(result: Any, case: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -157,13 +199,36 @@ def run_cases(
     return rows
 
 
-def _build_planner(schema: dict[str, Any], context: dict[str, str]):
-    """Swap only the benchmark process to GPT-6; the production default remains unchanged."""
-    luna_planning.LUNA_EXPERIMENT_MODEL = MODEL
+def _build_planner(schema: dict[str, Any], context: dict[str, str], model: str):
+    """Swap only the benchmark process model; the production default remains unchanged."""
+    luna_planning.LUNA_EXPERIMENT_MODEL = model
     planner = luna_planning.OpenAILunaExperimentalPlanner.from_environment(schema, context)
-    if planner.model != MODEL or planner.reasoning_effort != REASONING_EFFORT:
+    if planner.model != model or planner.reasoning_effort != REASONING_EFFORT:
         raise SystemExit("Refusing live calls: planner model/effort mismatch")
     return planner
+
+
+def _matrix_acceptable(rows: list[dict[str, Any]]) -> bool:
+    """Require every new case and every historical case except the one accepted v8 degradation."""
+    failed = {row["case_id"] for row in rows if not row["passed"]}
+    return failed <= ACCEPTED_FAILURE_IDS and all(
+        row["passed"] for row in rows if row["case_id"].startswith("PPR")
+    )
+
+
+def _run_model(
+    model: str,
+    output_path: Path,
+    schema: dict[str, Any],
+    context: dict[str, str],
+    cases: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if output_path.exists():
+        raise SystemExit(f"Refusing live calls: evidence artifact already exists for {model}")
+    planner = _build_planner(schema, context, model)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("x", encoding="utf-8") as evidence:
+        return run_cases(planner, cases, evidence)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -174,16 +239,17 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Refusing live calls: explicit confirmation flag is required")
     cases, context = load_gate_cases()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    ceiling, _bound = conservative_cost_ceiling(cases, context, schema)
-    if MAX_COST_USD <= 0 or ceiling > MAX_COST_USD:
+    verify_candidate_contract(schema, context)
+    ceiling, _costs, _bound = total_conservative_cost_ceiling(cases, context, schema)
+    if MAX_TOTAL_COST_USD <= 0 or ceiling > MAX_TOTAL_COST_USD:
         raise SystemExit("Refusing live calls: planner-prompt-regression-v1 has zero authority")
-    if OUTPUT_PATH.exists():
-        raise SystemExit("Refusing live calls: evidence artifact already exists")
-    planner = _build_planner(schema, context)
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT_PATH.open("x", encoding="utf-8") as evidence:
-        rows = run_cases(planner, cases, evidence)
-    return 0 if all(row["passed"] for row in rows) else 1
+
+    # GPT-6 is always evaluated first, but while 5.6 remains the deployed planner model
+    # its own matrix is still the merge authority for a prompt change. The GPT-6 result
+    # is comparative evidence only unless a separately reviewed model switch is approved.
+    _run_model(FIRST_MODEL, GPT6_OUTPUT_PATH, schema, context, cases)
+    gpt56_rows = _run_model(PRODUCTION_MODEL, GPT56_OUTPUT_PATH, schema, context, cases)
+    return 0 if _matrix_acceptable(gpt56_rows) else 1
 
 
 if __name__ == "__main__":
