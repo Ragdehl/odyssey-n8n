@@ -442,18 +442,13 @@ def _resolve_qualified_singular_write(
                 (selected_target,),
                 evidence_guard,
             )
-        reason = (
-            "relational_evidence_ambiguous"
-            if 1 < len(options) <= 4
-            else "relational_qualified_target_unresolved"
-            if decision.outcome == "UNRESOLVED"
-            else "relational_evidence_ambiguous"
-        )
-        raise RelationalResolutionError(
-            reason,
-            options if 1 < len(options) <= 4 else (),
-            evidence_guard,
-            _identity_presentation(
+        has_clarification_options = 1 < len(options) <= 4
+        reason = "relational_evidence_ambiguous"
+        if decision.outcome == "UNRESOLVED" and not has_clarification_options:
+            reason = "relational_qualified_target_unresolved"
+        presentation = None
+        if has_clarification_options:
+            presentation = _identity_presentation(
                 selection.query,
                 plausible,
                 {
@@ -461,8 +456,11 @@ def _resolve_qualified_singular_write(
                     for target in plausible
                 },
             )
-            if 1 < len(options) <= 4
-            else None,
+        raise RelationalResolutionError(
+            reason,
+            options if has_clarification_options else (),
+            evidence_guard,
+            presentation,
         )
 
     selected_target = next(target for target in targets if target.id == decision.id)

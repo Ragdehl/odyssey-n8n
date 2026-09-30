@@ -200,7 +200,9 @@ def test_unresolved_reply_preserves_rich_version_three_presentation(tmp_path: Pa
         }
         for option in rich_options
     ]
-    assert state.read() is not None and state.read().options == rich_options
+    stored = state.read()
+    assert stored is not None
+    assert stored.options == rich_options
 
 
 def test_new_request_supersedes_pending_without_cancel_step(tmp_path: Path) -> None:

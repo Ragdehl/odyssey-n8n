@@ -83,6 +83,13 @@ class ExistingEntityResolution:
     has_ambiguous_exact_evidence: bool = False
     clarification: ClarificationPresentation | None = None
 
+    @property
+    def offers_clarification(self) -> bool:
+        """Return whether Core has a bounded grounded choice despite non-resolution."""
+        return self.outcome is ExistingEntityOutcome.AMBIGUOUS or (
+            self.outcome is ExistingEntityOutcome.UNRESOLVED and self.clarification is not None
+        )
+
 
 _TECHNICAL_METADATA = frozenset(
     {

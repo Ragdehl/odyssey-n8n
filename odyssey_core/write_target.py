@@ -149,10 +149,7 @@ def decide_write_target(
     if resolution.outcome is ExistingEntityOutcome.RESOLVED:
         assert resolution.id is not None
         return WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=resolution.id)
-    if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS or (
-        resolution.outcome is ExistingEntityOutcome.UNRESOLVED
-        and resolution.clarification is not None
-    ):
+    if resolution.offers_clarification:
         return _clarification(
             "ambiguous_existing_target", resolution.candidate_ids, resolution.clarification
         )
