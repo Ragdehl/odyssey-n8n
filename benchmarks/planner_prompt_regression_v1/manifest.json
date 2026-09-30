@@ -1,0 +1,21 @@
+{
+  "version": "planner-prompt-regression-v1",
+  "frozen_before_provider_calls": true,
+  "provider_calls_made": 0,
+  "base_gate": "semantic-write-frontend-v8",
+  "sha256": {
+    "base_frozen_swr_cases": "2b0966ea2ba14ea43a1f110ce55b9a9d5050ee0b0582feee86e1d29946a3157c",
+    "base_sentinels": "d20301398f956457937606a591a22a58434dcd6c781a08707f7a24e989c22bc9",
+    "additional_cases": "659b247b8d6ae6b216fb0b7c91b1f9ee502495f173753ce5d6650067e59be57c"
+  },
+  "logical_cases": 16,
+  "max_provider_calls": 16,
+  "model": "gpt-6-luna",
+  "reasoning_effort": "low",
+  "retries": 0,
+  "sol_calls": 0,
+  "max_cost_usd": "0.00",
+  "status": "prepared_zero_authority",
+  "failure_policy": "collect_complete_matrix",
+  "artifact": "benchmarks/.live-results/planner-prompt-regression-v1-gpt6-luna.jsonl"
+}

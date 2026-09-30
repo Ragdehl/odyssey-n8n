@@ -511,19 +511,25 @@ def test_relational_read_pending_keeps_source_guard_in_version_two_state(tmp_pat
     assert state.read() == pending
 
 
-def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
+def _relational_write_e2e_fixture(
     tmp_path: Path,
-) -> None:
-    """Keep one unknown member as CLARIFY end-to-end, then mutate only the human choice."""
+    *,
+    reference: str = "uno de mis hijos",
+    relation_fact_text: str = "Mis hijos son [[items/cloe|Cloe]] y [[items/bruno|Bruno]].",
+    candidate_specs: tuple[tuple[str, str], ...] = (("cloe", "Cloe"), ("bruno", "Bruno")),
+    note_type: str = "person",
+    new_fact: str = "Se ha apuntado a natación.",
+):
+    """Build the real Core→pending→runtime path for one bounded relational WRITE."""
     vault = tmp_path / "vault"
     vault.mkdir()
     schema = json.loads((ROOT / "config/note-schema.json").read_text())
 
-    def write_note(path: str, note_id: str, name: str, body: str) -> None:
+    def write_note(path: str, note_id: str, name: str, body: str, *, kind: str) -> None:
         metadata = {
             "id": note_id,
             "name": name,
-            "type": "person",
+            "type": kind,
             "created_at": "2026-01-01T00:00:00Z",
             "updated_at": "2026-09-30T12:00:00Z",
             "created_by": {"human": None, "app": "test"},
@@ -538,39 +544,26 @@ def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
         target.write_text(serialize_note(Note(metadata, body)), encoding="utf-8")
 
     relation_fact = render_atomic_facts(
-        ("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].",),
-        "fixture",
-        (0,),
-        "2026-09-30T12:00:00Z",
+        (relation_fact_text,), "fixture", (0,), "2026-09-30T12:00:00Z"
     )
-    write_note("people/self.md", "self", "Self", relation_fact)
-    write_note("people/cloe.md", "cloe", "Cloe", "")
-    write_note("people/bruno.md", "bruno", "Bruno", "")
+    write_note("people/self.md", "self", "Self", relation_fact, kind="person")
+    candidate_paths: dict[str, Path] = {}
+    for note_id, label in candidate_specs:
+        relative = f"items/{note_id}.md"
+        write_note(relative, note_id, label, "", kind=note_type)
+        candidate_paths[note_id] = vault / relative
     before = {path: path.read_bytes() for path in vault.rglob("*.md")}
 
     selection = SelectionCriteria(
         None,
-        "uno de mis hijos",
-        "person",
+        reference,
+        note_type,
         (),
         None,
-        relational_reference=RelationalReference("uno de mis hijos", "self", None, "one"),
+        relational_reference=RelationalReference(reference, "self", None, "one"),
     )
     plan = RequestPlan(
-        (
-            WriteAction(
-                (
-                    KnowledgeUnit(
-                        selection,
-                        "record",
-                        (),
-                        (),
-                        ("Se ha apuntado a natación.",),
-                        (),
-                    ),
-                )
-            ),
-        ),
+        (WriteAction((KnowledgeUnit(selection, "record", (), (), (new_fact,), ()),)),),
         (),
     )
 
@@ -590,8 +583,7 @@ def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
         def select(self, request):
             chosen = request.candidates[0]
             return SetEvidenceSelection(
-                (chosen.id,),
-                (SetMemberOccurrence(chosen.id, "literal", 0, 1),),
+                (chosen.id,), (SetMemberOccurrence(chosen.id, "literal", 0, 1),)
             )
 
     class SelfBinding:
@@ -642,20 +634,197 @@ def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
         vault_repository=repository,
         canonical_schema=schema,
     )
-
-    first = runtime.execute_product(
-        "Uno de mis hijos se ha apuntado a natación.", "delivery-ambiguous", "main", ACTOR
+    return SimpleNamespace(
+        runtime=runtime,
+        vault=vault,
+        before=before,
+        paths=candidate_paths,
+        source_path=vault / "people/self.md",
+        write_note=write_note,
+        relation_fact=relation_fact,
+        note_type=note_type,
+        new_fact=new_fact,
+        reference=reference,
+        candidate_specs=candidate_specs,
     )
 
-    assert first["product_outcome"] == "CLARIFY"
-    assert first["product_reason"] == "AMBIGUOUS_REFERENCE"
-    assert "product_control" not in first
-    assert first["clarification"]["explanation"].startswith("No puedo identificar")
-    assert [option["id"] for option in first["clarification"]["options"]] == ["cloe", "bruno"]
-    assert [option["label"] for option in first["clarification"]["options"]] == ["Cloe", "Bruno"]
-    assert all(path.read_bytes() == content for path, content in before.items())
-    second = runtime.execute_product("Bruno", "delivery-choice", "main", ACTOR)
+
+def _assert_initial_relational_clarification(fixture, request: str):
+    """Assert the shared safe first turn before exercising one continuation branch."""
+    response = fixture.runtime.execute_product(request, "delivery-ambiguous", "main", ACTOR)
+    assert response["product_outcome"] == "CLARIFY"
+    assert response["product_reason"] == "AMBIGUOUS_REFERENCE"
+    assert "product_control" not in response
+    assert response["clarification"]["explanation"].startswith("No puedo identificar")
+    assert [item["id"] for item in response["clarification"]["options"]] == [
+        item[0] for item in fixture.candidate_specs
+    ]
+    assert [item["label"] for item in response["clarification"]["options"]] == [
+        item[1] for item in fixture.candidate_specs
+    ]
+    assert all(path.read_bytes() == content for path, content in fixture.before.items())
+    return response
+
+
+def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
+    tmp_path: Path,
+) -> None:
+    """Clarify one unknown member, then mutate only the human-selected canonical Note."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+
+    second = fixture.runtime.execute_product("Bruno", "delivery-choice", "main", ACTOR)
 
     assert second["product_outcome"] == "ANSWER"
-    assert "Se ha apuntado a natación." not in (vault / "people/cloe.md").read_text()
-    assert "Se ha apuntado a natación." in (vault / "people/bruno.md").read_text()
+    assert fixture.new_fact not in fixture.paths["cloe"].read_text()
+    assert fixture.new_fact in fixture.paths["bruno"].read_text()
+
+
+def test_relational_write_cancel_keeps_every_note_unchanged_end_to_end(tmp_path: Path) -> None:
+    """Cancel one real Core-produced clarification without resuming or mutating the write."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+
+    response = fixture.runtime.execute_product("cancel", "delivery-cancel", "main", ACTOR)
+
+    assert response["product_control"] == "CANCEL"
+    assert all(path.read_bytes() == content for path, content in fixture.before.items())
+
+
+def test_relational_write_unresolved_reply_keeps_same_choices_end_to_end(tmp_path: Path) -> None:
+    """Keep a real relational decision pending when free text does not identify one option."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+    first = _assert_initial_relational_clarification(
+        fixture, "Uno de mis hijos se ha apuntado a natación."
+    )
+
+    response = fixture.runtime.execute_product("quizá", "delivery-unresolved", "main", ACTOR)
+
+    assert response["product_outcome"] == "CLARIFY"
+    assert response["clarification"]["options"] == first["clarification"]["options"]
+    assert all(path.read_bytes() == content for path, content in fixture.before.items())
+
+
+def test_relational_write_choice_rejects_changed_target_evidence_end_to_end(tmp_path: Path) -> None:
+    """A human choice cannot authorize a target whose canonical Note changed after clarification."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+    fixture.write_note("items/bruno.md", "bruno", "Bruno", "Información nueva.", kind="person")
+
+    response = fixture.runtime.execute_product("Bruno", "delivery-stale-target", "main", ACTOR)
+
+    assert response["product_outcome"] == "CANNOT_ANSWER"
+    assert fixture.new_fact not in fixture.paths["bruno"].read_text()
+
+
+def test_relational_write_choice_rejects_changed_source_evidence_end_to_end(tmp_path: Path) -> None:
+    """A human choice cannot survive drift in the relationship evidence that formed its options."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+    changed = (
+        fixture.relation_fact
+        + "\n\n"
+        + render_atomic_facts(
+            ("Ahora tengo otra relación relevante.",), "fixture", (1,), "2026-09-30T12:01:00Z"
+        )
+    )
+    fixture.write_note("people/self.md", "self", "Self", changed, kind="person")
+
+    response = fixture.runtime.execute_product("Bruno", "delivery-stale-source", "main", ACTOR)
+
+    assert response["product_outcome"] == "CANNOT_ANSWER"
+    assert fixture.new_fact not in fixture.paths["bruno"].read_text()
+
+
+def test_relational_clarification_is_generic_for_project_notes_end_to_end(tmp_path: Path) -> None:
+    """The same clarification/choice path works for canonical Notes that are not people."""
+    fixture = _relational_write_e2e_fixture(
+        tmp_path,
+        reference="uno de mis proyectos",
+        relation_fact_text=("Mis proyectos son [[items/atlas|Atlas]] y [[items/nova|Nova]]."),
+        candidate_specs=(("atlas", "Atlas"), ("nova", "Nova")),
+        note_type="project",
+        new_fact="Ha cambiado de prioridad.",
+    )
+    first = _assert_initial_relational_clarification(
+        fixture, "Uno de mis proyectos ha cambiado de prioridad."
+    )
+
+    assert {item["note_type"] for item in first["clarification"]["options"]} == {"project"}
+    second = fixture.runtime.execute_product("Atlas", "delivery-project", "main", ACTOR)
+    assert second["product_outcome"] == "ANSWER"
+    assert fixture.new_fact in fixture.paths["atlas"].read_text()
+    assert fixture.new_fact not in fixture.paths["nova"].read_text()
+
+
+def test_relational_write_numeric_choice_replays_without_duplicate_mutation_end_to_end(
+    tmp_path: Path,
+) -> None:
+    """Exercise the browser-style numeric choice and keep same-delivery replay idempotent."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+
+    response = fixture.runtime.execute_product("2", "delivery-numeric", "main", ACTOR)
+    replay = fixture.runtime.execute_product("2", "delivery-numeric", "main", ACTOR)
+
+    assert response["product_outcome"] == "ANSWER"
+    assert replay["delivery_replayed"] is True
+    assert fixture.paths["bruno"].read_text().count(fixture.new_fact) == 1
+    assert fixture.new_fact not in fixture.paths["cloe"].read_text()
+
+
+def test_relational_write_classifier_choice_resumes_real_pending_end_to_end(tmp_path: Path) -> None:
+    """A bounded free-text classifier may choose only one already offered canonical option."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+
+    class Classifier:
+        def classify(self, reply, original_request, options):
+            assert reply == "me refiero al segundo"
+            assert original_request == "Uno de mis hijos se ha apuntado a natación."
+            assert [option.id for option in options] == ["cloe", "bruno"]
+            return "bruno"
+
+    fixture.runtime.clarification_classifier = Classifier()
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+
+    response = fixture.runtime.execute_product(
+        "me refiero al segundo", "delivery-classified", "main", ACTOR
+    )
+
+    assert response["product_outcome"] == "ANSWER"
+    assert fixture.new_fact in fixture.paths["bruno"].read_text()
+    assert fixture.new_fact not in fixture.paths["cloe"].read_text()
+
+
+def test_new_request_supersedes_real_relational_pending_without_old_write_end_to_end(
+    tmp_path: Path,
+) -> None:
+    """Changing topic clears real pending relational work and executes only the new request."""
+    fixture = _relational_write_e2e_fixture(tmp_path)
+
+    class Classifier:
+        def classify(self, reply, original_request, options):
+            assert reply == "¿Dónde está mi bicicleta?"
+            assert original_request == "Uno de mis hijos se ha apuntado a natación."
+            assert len(options) == 2
+            return "NEW_REQUEST"
+
+    fixture.runtime.clarification_classifier = Classifier()
+    original_execute = fixture.runtime.core_execute
+    new_requests: list[str] = []
+
+    def execute(request, request_id, *args, **kwargs):
+        if request == "¿Dónde está mi bicicleta?":
+            new_requests.append(request)
+            return _completed(request_id)
+        return original_execute(request, request_id, *args, **kwargs)
+
+    fixture.runtime.core_execute = execute
+    _assert_initial_relational_clarification(fixture, "Uno de mis hijos se ha apuntado a natación.")
+    response = fixture.runtime.execute_product(
+        "¿Dónde está mi bicicleta?", "delivery-new-topic", "main", ACTOR
+    )
+
+    assert response["product_outcome"] == "ANSWER"
+    assert new_requests == ["¿Dónde está mi bicicleta?"]
+    assert all(path.read_bytes() == content for path, content in fixture.before.items())

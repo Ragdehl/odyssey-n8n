@@ -77,6 +77,10 @@ Whenever a production LLM prompt, model-facing instruction, or structured-output
 4. reuse frozen cases/oracles where possible rather than rerunning unrelated model selection;
 5. if provider access is unavailable, report the missing live-evidence gate explicitly instead of treating the change as validated.
 
+For Odyssey planner changes, CI must also protect the last accepted model-facing contract by hash (rendered Luna prompt, provider schema, teaching examples, production model, and reasoning effort). If any protected value changes, do not update the accepted hash merely to make CI green: prepare a fresh versioned live regression gate, keep it at zero provider authority until explicit bounded cost approval, collect the complete frozen matrix, and update the accepted contract only after the evidence is reviewed. New model evaluations start with GPT-6 Luna when applicable; if the production model is different, the production configuration must still pass its focused regression gate unless the human explicitly approves a model switch backed by its own evidence.
+
+For user-visible clarification or continuation changes, deterministic tests must cover the affected flow vertically rather than only testing isolated functions. Cover every meaningful state transition for the changed workflow (initial clarification, candidate choice, cancellation, unresolved free text, unrelated new request, stale target evidence, stale source evidence, replay/idempotence, and generic non-person Note types when applicable). Provider live gates supplement these tests; they do not replace them.
+
 Before changing a prompt because a sentinel failed, determine whether the model regressed or the oracle is over-constrained.
 
 ## Development autonomy and confirmation

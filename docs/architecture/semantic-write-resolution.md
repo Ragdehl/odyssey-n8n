@@ -268,6 +268,14 @@ before resuming. Qualified singular writes and complete-set writes keep their pr
 sets `ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna` for this acceptance cycle; the production default remains
 `gpt-5.6-luna`.
 
+### Deterministic clarification path matrix
+
+Clarification changes now require vertical, provider-free regression coverage across the meaningful product state machine rather than only isolated resolver tests. The current suite exercises: initial relational WRITE ambiguity with no pre-choice mutation; exact-label choice; browser-style numeric choice; bounded free-text classifier choice; cancellation; unresolved free text that preserves the same rich options; an unrelated new request that supersedes pending work; same-delivery replay/idempotence; stale chosen-target evidence; stale relationship-source evidence; ordinary ambiguous WRITE; singular READ continuation; relational READ source guards; and the same relational WRITE flow over `project` Notes to prove that the UX is not person-specific. Workflow tests preserve direct `CLARIFY` routing and option projection, while browser tests execute choose, inspect-note, cancel, and continued composer use. A final deployed DEV/browser check remains the full network/product gate before merge.
+
+### Planner model-facing regression gate
+
+The accepted Luna planner prompt, provider schema, teaching examples, production model, and reasoning effort are hash-pinned in `benchmarks/planner_model_contract/accepted_contract.json`. A material change to any protected value must not be made green by simply replacing the hash: it requires a fresh versioned live regression gate, explicit bounded-cost authorization, complete-matrix evidence, and review before the accepted contract moves. New model evaluations start with GPT-6 Luna when applicable; if the deployed model differs, its production configuration must still pass the focused regression gate unless a separately evidenced model switch is explicitly approved. `planner_prompt_regression_v1` reuses the 13 frozen Semantic WRITE frontend cases and adds three small clarification-entry sentinels for an unspecified SELF member, the same request after a related conversation turn, and the same semantics over project Notes. The prepared gate has zero provider authority until explicitly authorized.
+
 ## Required sentinels
 
 The focused contract must keep deterministic coverage for at least:

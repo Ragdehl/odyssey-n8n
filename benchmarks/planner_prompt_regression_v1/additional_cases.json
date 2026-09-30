@@ -1,0 +1,45 @@
+{
+  "fixed_context": {
+    "date": "2026-09-28",
+    "time": "20:30",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "PPR14-unknown-self-member-write",
+      "request": "Uno de mis hijos se ha apuntado a natación.",
+      "conversation_context": [],
+      "expect": {
+        "note_type": "person",
+        "source_kind": "self",
+        "members": "one",
+        "fact": "Se ha apuntado a natación."
+      }
+    },
+    {
+      "id": "PPR15-unknown-self-member-after-related-turn",
+      "request": "Uno de mis hijos se ha apuntado a natación.",
+      "conversation_context": [
+        {"role": "user", "text": "Mi hija mayor se ha apuntado a natación."},
+        {"role": "assistant", "text": "La información se ha guardado."}
+      ],
+      "expect": {
+        "note_type": "person",
+        "source_kind": "self",
+        "members": "one",
+        "fact": "Se ha apuntado a natación."
+      }
+    },
+    {
+      "id": "PPR16-unknown-self-project-member-write",
+      "request": "Uno de mis proyectos ha cambiado de prioridad.",
+      "conversation_context": [],
+      "expect": {
+        "note_type": "project",
+        "source_kind": "self",
+        "members": "one",
+        "fact": "Ha cambiado de prioridad."
+      }
+    }
+  ]
+}
