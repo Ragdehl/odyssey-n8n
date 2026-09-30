@@ -87,12 +87,12 @@ class ContextualReasoner(Protocol):
 _SYSTEM_INSTRUCTIONS = """You decide whether one contextual reference identifies a supplied candidate.
 
 RESOLVED: exactly one supplied candidate is uniquely supported by the reference and context.
-AMBIGUOUS: return the two to four supplied candidate IDs that remain genuinely plausible.
-UNRESOLVED: no supplied candidate is sufficiently supported.
+AMBIGUOUS: two to four supplied candidates are supported alternatives that the evidence cannot distinguish; return those IDs.
+UNRESOLVED: no supplied candidate is sufficiently supported to identify one. When two to four supplied candidates remain credible clarification options, return those IDs in ambiguous_ids; otherwise return an empty list.
 
 A false RESOLVED is substantially worse than abstention. Do not invent facts or relationships.
 Respect explicit negative evidence. Semantic similarity and rank are not identity proof. Do not force
-the closest candidate. If evidence is insufficient, abstain. Return only the requested decision."""
+the closest candidate or list mere semantic neighbours as clarification options. Return only the requested decision."""
 
 
 def build_openai_payload(
@@ -260,7 +260,7 @@ def _validate_outcome_contract(
     elif outcome == "AMBIGUOUS":
         _validate_ambiguous_contract(identity, ambiguous_ids, candidate_ids)
     else:
-        _validate_unresolved_contract(identity, ambiguous_ids)
+        _validate_unresolved_contract(identity, ambiguous_ids, candidate_ids)
 
 
 def _validate_resolved_contract(
@@ -289,11 +289,20 @@ def _validate_ambiguous_contract(
         raise ContextualResolutionError("AMBIGUOUS selected an ID outside the candidate set")
 
 
-def _validate_unresolved_contract(identity: str | None, ambiguous_ids: tuple[str, ...]) -> None:
+def _validate_unresolved_contract(
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    """Permit only a bounded supplied clarification subset alongside safe abstention."""
     if identity is not None:
         raise ContextualResolutionError("UNRESOLVED requires a null ID")
-    if ambiguous_ids:
-        raise ContextualResolutionError("UNRESOLVED requires empty ambiguous IDs")
+    if ambiguous_ids and not 1 < len(ambiguous_ids) <= 4:
+        raise ContextualResolutionError(
+            "UNRESOLVED clarification requires two to four candidate IDs"
+        )
+    if any(candidate_id not in candidate_ids for candidate_id in ambiguous_ids):
+        raise ContextualResolutionError("UNRESOLVED selected an ID outside the candidate set")
 
 
 class OpenAIContextualReasoner:

@@ -197,7 +197,11 @@ def test_cache_configuration_does_not_change_semantic_prompt_or_contract() -> No
             "two to four",
         ),
         ({"outcome": "UNRESOLVED", "id": "a", "ambiguous_ids": []}, "null ID"),
-        ({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["a", "b"]}, "empty"),
+        ({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["a"]}, "two to four"),
+        (
+            {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["a", "outside"]},
+            "outside",
+        ),
         ({"outcome": "RESOLVED", "id": "outside", "ambiguous_ids": []}, "outside"),
         ({"outcome": "RESOLVED", "id": "a", "ambiguous_ids": ["a", "b"]}, "empty"),
         ({"outcome": "RESOLVED", "id": "a", "extra": True, "ambiguous_ids": []}, "schema"),
@@ -208,6 +212,18 @@ def test_invalid_model_output_fails_closed(output: object, message: str) -> None
     """Reject malformed, inconsistent, and out-of-candidate model decisions."""
     with pytest.raises(ContextualResolutionError, match=message):
         validate_contextual_decision(output, {"a", "b"})
+
+
+def test_unresolved_can_keep_bounded_supplied_clarification_candidates() -> None:
+    """Abstention may still expose safe supplied alternatives for a human choice."""
+    decision = validate_contextual_decision(
+        {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["a", "b"]},
+        {"a", "b", "c"},
+    )
+
+    assert decision.outcome == "UNRESOLVED"
+    assert decision.id is None
+    assert decision.ambiguous_ids == ("a", "b")
 
 
 @pytest.mark.parametrize(

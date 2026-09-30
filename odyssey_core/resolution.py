@@ -313,7 +313,7 @@ def _decision_candidate_ids(
     """Preserve resolved evidence while narrowing only an ambiguous decision subset."""
     if decision.outcome == "RESOLVED":
         return tuple(candidate.id for candidate in candidates)
-    if decision.outcome == "AMBIGUOUS":
+    if decision.outcome in {"AMBIGUOUS", "UNRESOLVED"} and decision.ambiguous_ids:
         return decision.ambiguous_ids
     if exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH:
         return tuple(candidate.id for candidate in exact.candidates)

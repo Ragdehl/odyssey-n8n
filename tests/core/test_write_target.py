@@ -187,6 +187,32 @@ def test_e05_e11_ambiguity_never_creates(tmp_path: Path, schema: dict) -> None:
     assert result.candidate_note_ids == ("garcia", "lopez")
 
 
+def test_unresolved_with_plausible_existing_candidates_clarifies_instead_of_creating(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A record request cannot CREATE while grounded existing identities remain plausible."""
+    for note_id, name in (("cloe", "Cloe"), ("bruno", "Bruno")):
+        write_note(tmp_path, f"people/{name}.md", note(note_id, "person", name=name))
+    index = FakeIndex(
+        (
+            SemanticEntityCandidate("cloe", "people/Cloe.md", "person", "Cloe", 0.9),
+            SemanticEntityCandidate("bruno", "people/Bruno.md", "person", "Bruno", 0.8),
+        )
+    )
+    result = decide(
+        tmp_path,
+        schema,
+        unit("mi hijo mayor"),
+        index,
+        FakeReasoner({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["cloe", "bruno"]}),
+    )
+
+    assert result.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result.reason == "ambiguous_existing_target"
+    assert result.candidate_note_ids == ("cloe", "bruno")
+    assert result.clarification is not None
+
+
 @pytest.mark.parametrize("intent", ["amend", "remove", "delete"])
 def test_e06_e08_unresolved_non_record_never_creates(
     tmp_path: Path, schema: dict, intent: str

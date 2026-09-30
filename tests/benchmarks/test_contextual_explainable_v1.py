@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from decimal import Decimal
 
 import pytest
@@ -13,7 +14,8 @@ from benchmarks.contextual_explainable_v1 import run_live as runner
 def test_gate_is_frozen_bounded_and_costed() -> None:
     """Pin the case mix, no-retry policy, and conservative maximum cost."""
     cases = runner.load_cases()
-    ceiling, input_tokens = runner.conservative_cost_ceiling(cases)
+    # The consumed v1 artifact belongs to the pre-v2 contextual prompt. Do not recompute its
+    # historical authorization ceiling from the current model-facing contract.
     assert [case["expected"]["outcome"] for case in cases] == [
         "RESOLVED",
         "AMBIGUOUS",
@@ -27,8 +29,10 @@ def test_gate_is_frozen_bounded_and_costed() -> None:
         hashlib.sha256(runner.CASES_PATH.read_bytes()).hexdigest()
         == "ca1e3bfbbf1fe4cffcf31f8e5eacbf4361db4980073e3910fd59dbd1c525384b"
     )
-    assert input_tokens > 0
-    assert ceiling == Decimal("0.01875900")
+    assert (
+        json.loads(runner.MANIFEST_PATH.read_text())["usage_backed_estimated_cost_usd"]
+        == "0.00376700"
+    )
     assert runner.MAX_COST_USD == Decimal("0.00")
     assert runner.GATE_CONSUMED is True
     assert runner.MAX_PROVIDER_CALLS == 6

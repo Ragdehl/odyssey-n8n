@@ -212,7 +212,7 @@ def resolve_relational_reference(
     selected = validate_contextual_decision(
         decision, frozenset(fact.locator for fact, _direction in candidates)
     )
-    if selected.outcome == "AMBIGUOUS":
+    if selected.ambiguous_ids:
         selected_facts = tuple(
             (fact, direction)
             for fact, direction in candidates
@@ -423,11 +423,7 @@ def _resolve_qualified_singular_write(
     )
     decision = validate_contextual_decision(raw_decision, {target.id for target in targets})
     if decision.outcome != "RESOLVED" or decision.id is None:
-        plausible = (
-            tuple(target for target in targets if target.id in decision.ambiguous_ids)
-            if decision.outcome == "AMBIGUOUS"
-            else ()
-        )
+        plausible = tuple(target for target in targets if target.id in decision.ambiguous_ids)
         options = tuple(target.id for target in plausible)
         if chosen_identity_id is not None and chosen_identity_id in options:
             selected_target = next(
@@ -447,7 +443,9 @@ def _resolve_qualified_singular_write(
                 evidence_guard,
             )
         reason = (
-            "relational_qualified_target_unresolved"
+            "relational_evidence_ambiguous"
+            if 1 < len(options) <= 4
+            else "relational_qualified_target_unresolved"
             if decision.outcome == "UNRESOLVED"
             else "relational_evidence_ambiguous"
         )

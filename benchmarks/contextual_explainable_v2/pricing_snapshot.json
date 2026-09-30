@@ -1,0 +1,10 @@
+{
+  "as_of": "2026-09-30",
+  "service_tier": "standard",
+  "source": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+  "model": "gpt-6-luna",
+  "input_per_million": 0.1,
+  "cached_input_per_million": 0.01,
+  "cache_write_per_million": 0.125,
+  "output_per_million": 0.5
+}

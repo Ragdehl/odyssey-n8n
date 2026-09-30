@@ -242,6 +242,15 @@ live output. The gate is permanently consumed at `$0.00`; artifact SHA-256 is
 `f523a7791cc9cfe233f8cb2dacf34e74309ded2b4028648cdb3cd39b87cc093c` and usage-backed estimated
 cost is `$0.00376700`.
 
+Product review then refined the abstention contract: `UNRESOLVED` may retain two to four supplied,
+credible clarification candidates even when none is sufficiently supported for automatic identity
+selection. Those IDs remain non-authoritative until the human chooses one through the existing
+guarded continuation. Mere semantic neighbours are not valid options. A frozen six-case v2 gate uses
+`gpt-6-luna` / medium first, replaces the debatable canonical-fact sentinel with a qualified identity
+case, and accepts either `AMBIGUOUS` or safe `UNRESOLVED` only when the exact grounded Cloe/Bruno
+option set is returned. It is prepared at zero execution authority with a `$0.00845370` conservative
+no-cache ceiling and requires the already-approved bounded live execution before DEV validation.
+
 ## Required sentinels
 
 The focused contract must keep deterministic coverage for at least:

@@ -1522,6 +1522,62 @@ def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
     )
 
 
+def test_qualified_relation_unresolved_with_plausible_ids_offers_grounded_choices(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A safe abstention can still expose bounded relation members for human clarification."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Es mi hija mayor."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Es mi hijo."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    query = "mi hijo mayor"
+    selection = SelectionCriteria(
+        None,
+        query,
+        "person",
+        (),
+        None,
+        relational_reference=RelationalReference("mis hijos", "self", None, "one"),
+    )
+    unit = KnowledgeUnit(selection, "record", (), (), ("Se ha apuntado a natación.",), ())
+
+    class SafeAbstainingReasoner(FactReasoner):
+        def resolve(self, request: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+            self.requests.append(request)
+            return (
+                {
+                    "outcome": "UNRESOLVED",
+                    "id": None,
+                    "ambiguous_ids": [candidate.id for candidate in request.candidates],
+                },
+                {},
+            )
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=SafeAbstainingReasoner(),
+        selector=AllFactSelector(),
+    )
+
+    action_result = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action_result.reason == "relational_evidence_ambiguous"
+    assert action_result.candidate_note_ids == ("cloe", "bruno")
+    assert action_result.clarification is not None
+    assert [item.label for item in action_result.clarification.candidates] == ["Cloe", "Bruno"]
+    assert all(path.read_bytes() == content for path, content in before.items())
+
+
 def test_w2_complete_set_writes_one_source_fact_and_no_member_notes(
     tmp_path: Path, schema: dict
 ) -> None:

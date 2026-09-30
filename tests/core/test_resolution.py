@@ -315,6 +315,34 @@ def test_non_person_ambiguity_exposes_only_validated_subset_with_canonical_evide
     ]
 
 
+def test_unresolved_with_plausible_ids_exposes_grounded_clarification_options(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep safe abstention while surfacing only the model's supplied grounded subset."""
+    for note_id, name, body in (
+        ("cloe", "Cloe", "Es la hija mayor."),
+        ("bruno", "Bruno", "Es hijo del usuario."),
+        ("marc", "Marc", "Es un vecino."),
+    ):
+        write_note(tmp_path, f"people/{note_id}.md", valid_note(note_id, "person", body, name=name))
+    index = FakeIndex(
+        tuple(
+            candidate(note_id, f"people/{note_id}.md", name)
+            for note_id, name in (("cloe", "Cloe"), ("bruno", "Bruno"), ("marc", "Marc"))
+        )
+    )
+    reasoner = FakeReasoner(
+        {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["cloe", "bruno"]}
+    )
+
+    result = run_resolution(tmp_path, schema, "mi hijo mayor", index, reasoner, semantic_limit=5)
+
+    assert result.outcome is ExistingEntityOutcome.UNRESOLVED
+    assert result.candidate_ids == ("cloe", "bruno")
+    assert result.clarification is not None
+    assert [item.label for item in result.clarification.candidates] == ["Cloe", "Bruno"]
+
+
 def test_no_semantic_candidates_is_local_unresolved(tmp_path: Path, schema: dict[str, Any]) -> None:
     """Return a legitimate local abstention without making a provider call."""
     reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "never", "ambiguous_ids": []})

@@ -667,7 +667,10 @@ def _execute_retrieve(
             return ActionResult(
                 action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
             )
-        if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS:
+        if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS or (
+            resolution.outcome is ExistingEntityOutcome.UNRESOLVED
+            and resolution.clarification is not None
+        ):
             if clarification_choice is None:
                 return ActionResult(
                     action_index,
