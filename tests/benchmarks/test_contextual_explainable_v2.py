@@ -30,7 +30,7 @@ def test_gate_is_frozen_bounded_and_costed() -> None:
     )
     assert input_tokens == 76857
     assert ceiling == Decimal("0.00845370")
-    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.MAX_COST_USD == ceiling
     assert runner.GATE_CONSUMED is False
 
 
@@ -45,10 +45,10 @@ def test_gate_accepts_safe_abstention_or_ambiguity_only_with_exact_options() -> 
     assert not runner._passed(case, {"outcome": "RESOLVED", "id": "bruno", "ambiguous_ids": []})
 
 
-def test_zero_authority_refuses_before_provider_construction(
+def test_confirmation_is_still_required_before_provider_construction(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """Credentials and confirmation cannot spend while the frozen gate has zero authority."""
+    """Recorded budget alone cannot spend without the explicit runner confirmation flag."""
     monkeypatch.setattr(runner, "OUTPUT_PATH", tmp_path / "result.jsonl")
     monkeypatch.setattr(
         runner,
@@ -56,7 +56,7 @@ def test_zero_authority_refuses_before_provider_construction(
         lambda *_args, **_kwargs: pytest.fail("provider constructed"),
     )
     with pytest.raises(SystemExit, match="explicit authorization"):
-        runner.main(["--confirm-live-provider-calls"])
+        runner.main([])
 
 
 def test_gate_refuses_to_overwrite_even_when_budget_is_authorized(

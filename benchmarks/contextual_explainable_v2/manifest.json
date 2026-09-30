@@ -9,7 +9,7 @@
   "max_output_tokens_per_call": 256,
   "retries": 0,
   "sol_calls": 0,
-  "max_cost_usd": "0.00",
-  "authorization": "explicit_refusal_until_recorded",
+  "max_cost_usd": "0.00845370",
+  "authorization": "explicit_user_authorization_2026-09-30",
   "artifact": "benchmarks/.live-results/contextual-explainable-v2-gpt6-luna-medium.jsonl"
 }
