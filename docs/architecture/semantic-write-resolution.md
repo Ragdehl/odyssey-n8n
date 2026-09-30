@@ -248,8 +248,13 @@ selection. Those IDs remain non-authoritative until the human chooses one throug
 guarded continuation. Mere semantic neighbours are not valid options. A frozen six-case v2 gate uses
 `gpt-6-luna` / medium first, replaces the debatable canonical-fact sentinel with a qualified identity
 case, and accepts either `AMBIGUOUS` or safe `UNRESOLVED` only when the exact grounded Cloe/Bruno
-option set is returned. It is prepared at zero execution authority with a `$0.00845370` conservative
-no-cache ceiling and requires the already-approved bounded live execution before DEV validation.
+option set is returned. The authorized v2 gate used a `$0.00845370` conservative no-cache ceiling. Its first three
+GPT-6 Luna / medium cases passed; the fourth provider response stopped as `incomplete` before a
+semantic decision because the 256-token output cap was too small. V2 therefore made four provider
+calls, has three immutable evidence rows (SHA-256
+`5827bdc7e84bfd70b7ebc2f46afd5c582edd53c7ee2035393946bbc82449ab26`), and is permanently
+consumed at zero authority. This is harness evidence, not a semantic failure; a fresh version and
+separate authorization are required for any later live gate.
 
 ## Required sentinels
 

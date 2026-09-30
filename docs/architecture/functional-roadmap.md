@@ -121,8 +121,9 @@ canonical-evidence ambiguity options through the existing guarded continuation, 
 workflow, and browser remain presentation boundaries. Its contextual-contract v1 live gate completed 5/6: the only mismatch was a safe `UNRESOLVED`
 on a debatable canonical-fact ambiguity oracle, with no false resolution. Product review now permits a
 safe `UNRESOLVED` decision to retain two to four grounded clarification candidates without granting
-identity authority; the focused v2 adoption gate starts with `gpt-6-luna` / medium and is frozen at
-zero authority before its one authorized run. Manual isolated-DEV validation by the user is required
+identity authority; the focused v2 adoption gate started with `gpt-6-luna` / medium: its first three cases passed before
+the fourth call ended provider-incomplete at the intentionally tight output cap, so v2 is consumed
+without a semantic verdict on the new option case. Manual isolated-DEV validation by the user is required
 before PR #148 may leave Draft. Tasks remains the next application phase after this clarification pass.
 
 ```text
@@ -165,7 +166,7 @@ Semantic WRITE intent/Core compiler simplification                ✅ complete �
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
-Explainable Clarification UX                                       ➡️ current; candidate-preserving abstention + GPT-6 v2 gate + manual DEV pending
+Explainable Clarification UX                                       ➡️ current; candidate-preserving abstention + GPT-6 v2 partial technical evidence + manual DEV pending
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed

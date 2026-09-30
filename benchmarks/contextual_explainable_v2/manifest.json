@@ -1,7 +1,7 @@
 {
   "version": "contextual-explainable-v2",
   "frozen_before_provider_calls": true,
-  "provider_calls_made": 0,
+  "provider_calls_made": 4,
   "model": "gpt-6-luna",
   "reasoning_effort": "medium",
   "logical_cases": 6,
@@ -9,7 +9,12 @@
   "max_output_tokens_per_call": 256,
   "retries": 0,
   "sol_calls": 0,
-  "max_cost_usd": "0.00845370",
-  "authorization": "explicit_user_authorization_2026-09-30",
-  "artifact": "benchmarks/.live-results/contextual-explainable-v2-gpt6-luna-medium.jsonl"
+  "max_cost_usd": "0.00",
+  "authorization": "consumed_after_explicit_user_authorization_2026-09-30",
+  "artifact": "benchmarks/.live-results/contextual-explainable-v2-gpt6-luna-medium.jsonl",
+  "artifact_sha256": "5827bdc7e84bfd70b7ebc2f46afd5c582edd53c7ee2035393946bbc82449ab26",
+  "result": "3_passed_then_ctxe04_provider_incomplete_before_decision",
+  "completed_rows": 3,
+  "usage_backed_estimated_cost_usd_completed_rows_only": "0.00093620",
+  "total_actual_cost_status": "unavailable_for_incomplete_fourth_response"
 }
