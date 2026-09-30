@@ -343,7 +343,7 @@ class OpenAILunaExperimentalPlanner:
             tuple(teaching_examples) if teaching_examples is not None else None
         )
         self._monotonic = monotonic
-        self.model = os.environ.get("ODYSSEY_PLANNER_MODEL", LUNA_EXPERIMENT_MODEL)
+        self.model = LUNA_EXPERIMENT_MODEL
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
         self.max_output_tokens = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS
         self.max_retries = LUNA_EXPERIMENT_AUTOMATIC_RETRIES
@@ -425,7 +425,7 @@ class OpenAILunaExperimentalPlanner:
         provider_started = self._monotonic()
         try:
             response = self._client.responses.create(
-                model=self.model,
+                model=LUNA_EXPERIMENT_MODEL,
                 reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
                 store=False,
                 max_output_tokens=LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,

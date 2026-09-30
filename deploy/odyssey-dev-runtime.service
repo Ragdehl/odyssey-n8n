@@ -24,7 +24,6 @@ Environment=ODYSSEY_RUNTIME_PORT=28765
 Environment=ODYSSEY_ACTOR=odyssey-dev
 Environment=ODYSSEY_CONTEXTUAL_MODEL=gpt-6-luna
 Environment=ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna
-Environment=ODYSSEY_PLANNER_MODEL=gpt-6-luna
 Environment=TZ=Europe/Paris
 
 [Install]

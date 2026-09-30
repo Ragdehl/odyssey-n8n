@@ -315,23 +315,3 @@ def test_real_luna_parse_or_compile_failure_triggers_exactly_one_sol_call(
     assert result is sol_result
     assert calls == 1
     assert sol.calls == 1
-
-
-def test_luna_planner_model_can_be_overridden_per_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Keep production default stable while allowing an isolated DEV model override."""
-    monkeypatch.setenv("ODYSSEY_PLANNER_MODEL", "gpt-6-luna")
-    planner = OpenAILunaExperimentalPlanner(
-        SimpleNamespace(responses=SimpleNamespace()), {}, {"timezone": "Europe/Paris"}
-    )
-    assert planner.model == "gpt-6-luna"
-
-
-def test_luna_planner_model_defaults_to_frozen_56(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An absent override preserves the established production planner model."""
-    monkeypatch.delenv("ODYSSEY_PLANNER_MODEL", raising=False)
-    planner = OpenAILunaExperimentalPlanner(
-        SimpleNamespace(responses=SimpleNamespace()), {}, {"timezone": "Europe/Paris"}
-    )
-    assert planner.model == "gpt-5.6-luna"
