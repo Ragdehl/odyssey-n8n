@@ -29,7 +29,7 @@ def test_gate_is_frozen_bounded_and_costed() -> None:
     )
     assert input_tokens > 0
     assert ceiling == Decimal("0.01875900")
-    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.MAX_COST_USD == ceiling
     assert runner.MAX_PROVIDER_CALLS == 6
 
 
@@ -44,7 +44,7 @@ def test_default_gate_refuses_before_provider_construction(
         lambda *_args, **_kwargs: pytest.fail("provider constructed"),
     )
     with pytest.raises(SystemExit, match="explicit authorization"):
-        runner.main(["--confirm-live-provider-calls"])
+        runner.main([])
 
 
 def test_gate_refuses_to_overwrite_after_separate_authorization(
