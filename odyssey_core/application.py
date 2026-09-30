@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from .bulk_update import BulkUpdateResult, execute_bulk_update
 from .clarification import ClarificationChoice
+from .clarification_presentation import ClarificationPresentation
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
@@ -158,6 +159,7 @@ class UnitResult:
     candidates: tuple[str, ...] = ()
     dependencies: tuple[DependencyEvidence, ...] = ()
     materially_affected: bool = True
+    clarification: ClarificationPresentation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +178,7 @@ class ActionResult:
     semantic_set: SemanticSetResolution | None = None
     candidate_note_ids: tuple[str, ...] = ()
     relational_evidence_guard: str | None = None
+    clarification: ClarificationPresentation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -672,6 +675,7 @@ def _execute_retrieve(
                     ActionStatus.DEFERRED,
                     reason="ambiguous_existing_target",
                     candidate_note_ids=resolution.candidate_ids,
+                    clarification=resolution.clarification,
                 )
             still_offered = clarification_choice.stable_id in resolution.candidate_ids
         elif resolution.outcome is ExistingEntityOutcome.RESOLVED:
@@ -751,6 +755,7 @@ def _execute_retrieve(
                 reason=str(error),
                 candidate_note_ids=error.candidate_ids,
                 relational_evidence_guard=error.evidence_guard,
+                clarification=error.clarification,
             )
         except Exception as error:
             return ActionResult(
@@ -858,13 +863,6 @@ def _execute_write(
         unit.target.relational_reference is not None and not unit.reference_lookup_only
         for unit in action.units
     ):
-        if clarification_choice is not None:
-            return ActionResult(
-                action_index,
-                action.kind,
-                ActionStatus.DEFERRED,
-                reason="clarification_scope_changed",
-            )
         return _execute_relational_write(
             action_index,
             action,
@@ -885,6 +883,7 @@ def _execute_write(
             authenticated_actor,
             self_binding_repository,
             spans,
+            clarification_choice,
         )
     cardinalities = {unit.cardinality for unit in action.units}
     if len(cardinalities) != 1:
@@ -978,6 +977,7 @@ def _execute_relational_write(
     authenticated_actor: AuthenticatedActorContext | None,
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
+    clarification_choice: ClarificationChoice | None = None,
 ) -> ActionResult:
     """Route one relational write through current evidence and relationship-only preflight."""
     relational_indexes = tuple(
@@ -1019,7 +1019,24 @@ def _execute_relational_write(
             self_binding_repository=self_binding_repository,
             semantic_set_selector=semantic_set_selector,
             refine_singular_with_query=True,
+            chosen_identity_id=(
+                clarification_choice.stable_id if clarification_choice is not None else None
+            ),
         )
+        if clarification_choice is not None:
+            if (
+                len(resolved.targets) != 1
+                or resolved.targets[0].id != clarification_choice.stable_id
+                or resolved.evidence_guard != clarification_choice.source_evidence_guard
+                or current_identity_guard(repository, schema, clarification_choice.stable_id)
+                != clarification_choice.evidence_guard
+            ):
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    reason="clarification_evidence_changed",
+                )
         projector = RelationshipEvidenceProjector(repository, schema)
         kwargs: dict[str, Any] = {}
         if id_allocator is not None:
@@ -1081,6 +1098,7 @@ def _execute_relational_write(
             reason=str(error),
             candidate_note_ids=error.candidate_ids,
             relational_evidence_guard=error.evidence_guard,
+            clarification=error.clarification,
         )
     except RelationshipWritePreflightError as error:
         return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
@@ -1177,6 +1195,7 @@ def _execute_single_units(
                 UnitStatus.DEFERRED,
                 reason=target.reason,
                 candidates=target.candidate_note_ids,
+                clarification=target.clarification,
             )
     for cycle_index in _cyclic_nodes(dependencies):
         if cycle_index not in results:

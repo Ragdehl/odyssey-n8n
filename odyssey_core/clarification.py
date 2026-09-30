@@ -42,6 +42,8 @@ class ClarificationOption:
 
     id: str
     label: str
+    note_type: str = ""
+    evidence: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +56,8 @@ class PendingClarification:
     options: tuple[ClarificationOption, ...]
     evidence_guards: tuple[str, ...]
     source_evidence_guard: str | None = None
+    requested_reference: str | None = None
+    explanation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,11 +233,15 @@ class LocalClarificationStore:
             "evidence_guards",
         }
         version_two = {*version_one, "source_evidence_guard"}
+        version_three = {*version_two, "requested_reference", "explanation"}
         if (
             not isinstance(payload, dict)
-            or (set(payload) != version_one and set(payload) != version_two)
-            or payload["version"] not in {1, 2}
+            or frozenset(payload)
+            not in {frozenset(version_one), frozenset(version_two), frozenset(version_three)}
+            or payload["version"] not in {1, 2, 3}
             or (payload["version"] == 1) != (set(payload) == version_one)
+            or (payload["version"] == 2) != (set(payload) == version_two)
+            or (payload["version"] == 3) != (set(payload) == version_three)
         ):
             raise ValueError("clarification record is invalid")
         if (
@@ -264,6 +272,20 @@ class LocalClarificationStore:
             not isinstance(source_guard, str) or re.fullmatch(r"[0-9a-f]{64}", source_guard) is None
         ):
             raise ValueError("clarification source evidence guard is invalid")
+        requested_reference = payload.get("requested_reference")
+        explanation = payload.get("explanation")
+        if payload["version"] == 3 and (
+            not isinstance(requested_reference, str)
+            or not requested_reference.strip()
+            or len(requested_reference) > 240
+            or not isinstance(explanation, str)
+            or not explanation.strip()
+            or len(explanation) > 500
+            or any(
+                not option.note_type.strip() or not option.evidence.strip() for option in options
+            )
+        ):
+            raise ValueError("clarification presentation is invalid")
         return PendingClarification(
             payload["original_request"],
             payload["original_request_id"],
@@ -271,6 +293,8 @@ class LocalClarificationStore:
             options,
             guards,
             source_guard,
+            requested_reference,
+            explanation,
         )
 
     def replace(self, pending: PendingClarification) -> None:
@@ -295,16 +319,37 @@ class LocalClarificationStore:
             re.fullmatch(r"[0-9a-f]{64}", pending.source_evidence_guard) is None
         ):
             raise ValueError("clarification source evidence guard is invalid")
+        rich = pending.requested_reference is not None or pending.explanation is not None
+        if rich and (
+            not isinstance(pending.requested_reference, str)
+            or not pending.requested_reference.strip()
+            or len(pending.requested_reference) > 240
+            or not isinstance(pending.explanation, str)
+            or not pending.explanation.strip()
+            or len(pending.explanation) > 500
+            or any(not option.note_type or not option.evidence for option in pending.options)
+        ):
+            raise ValueError("clarification presentation is invalid")
         payload = {
-            "version": 2 if pending.source_evidence_guard is not None else 1,
+            "version": 3 if rich else 2 if pending.source_evidence_guard is not None else 1,
             "original_request": pending.original_request,
             "original_request_id": pending.original_request_id,
             "pending_record_id": pending.pending_record_id,
-            "options": [{"id": item.id, "label": item.label} for item in pending.options],
+            "options": [
+                {
+                    "id": item.id,
+                    "label": item.label,
+                    **({"note_type": item.note_type, "evidence": item.evidence} if rich else {}),
+                }
+                for item in pending.options
+            ],
             "evidence_guards": list(pending.evidence_guards),
         }
-        if pending.source_evidence_guard is not None:
+        if pending.source_evidence_guard is not None or rich:
             payload["source_evidence_guard"] = pending.source_evidence_guard
+        if rich:
+            payload["requested_reference"] = pending.requested_reference
+            payload["explanation"] = pending.explanation
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         if len(encoded) > 32_768:
             raise ValueError("clarification record is too large")
@@ -378,6 +423,10 @@ def match_clarification_reply(reply: str, options: tuple[ClarificationOption, ..
         or not isinstance(option.label, str)
         or not option.label.strip()
         or len(option.label) > 160
+        or not isinstance(option.note_type, str)
+        or len(option.note_type) > 80
+        or not isinstance(option.evidence, str)
+        or len(option.evidence) > 320
         for option in options
     ) or len({option.id for option in options}) != len(options):
         raise ValueError("Clarification options are invalid")

@@ -24,7 +24,7 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Current functional work — semantic correction and UI polish
+## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
 universal Luna → Sol route was a local Luna planner-result validation mismatch after successful
@@ -114,9 +114,12 @@ which reuses all 21 planner and 4 selector rows with a 25-call maximum and `$0.4
 no-cache ceiling. V10 requires separate Luna/low authorization before production model-facing
 adoption.
 
-[UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) is the current bounded phase in Draft PR #144.
-It finishes the existing Chat + Notes product and may expose only direct mutations that retain Core authority.
-Tasks remains the next application phase after this pass.
+[UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) merged in PR #144, and the
+Luna-only Semantic WRITE compiler simplification merged in PR #147. The semantic WRITE simplification
+is complete. Explainable Clarification UX is the current bounded phase: Core exposes only validated,
+canonical-evidence ambiguity options through the existing guarded continuation, while runtime,
+workflow, and browser remain presentation boundaries. Its contextual-contract live gate is prepared
+but not authorized or run. Tasks remains the next application phase after this clarification pass.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -156,8 +159,9 @@ Reference & Relationship Resolution v1 Slice 2                    ✅ complete
 Reference & Relationship Resolution v1 Slice 3                    ✅ merged in PR #133
 Semantic WRITE intent/Core compiler simplification                ✅ complete — v8 accepted at 12/13; GPT-5.6 Luna retained
 Semantic set resolution and evidence                             ✅ merged in PR #142
-Semantic self scope and clarification correction                   ➡️ v8 failed; prompt correction + v9 gate pending authorization
-UI polish + Notes editing lite                                   ➡️ Draft PR #144; bounded phase before Tasks
+Semantic self scope and clarification correction                   ✅ complete
+UI polish + Notes editing lite                                     ✅ merged in PR #144
+Explainable Clarification UX                                       ➡️ current; deterministic implementation, live gate pending
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -165,7 +169,7 @@ Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
 Projects — compose over Tasks                                     ⬜ planned after checkpoint
 ```
 
-Draft PR #147 now contains the first reversible offline Luna-only semantic WRITE frontend.
+Merged PR #147 contains the first reversible offline Luna-only semantic WRITE frontend.
 Provider-free assertions keep Sol's 25,474-byte prompt and 47,418-byte provider schema identical to
 baseline while Luna compiles each ordered semantic write action immediately into the existing
 `WriteAction` / `RequestPlan` boundary. After the v6 regression review, the teaching data is restored

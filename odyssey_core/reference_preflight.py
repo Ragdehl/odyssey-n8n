@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from .clarification import ClarificationChoice, evidence_digest
+from .clarification_presentation import ClarificationPresentation
 from .identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .observability import SpanRecorder
@@ -48,6 +49,7 @@ class UnitTargetPreflight:
     candidate_note_ids: tuple[str, ...] = ()
     reason: str | None = None
     reference_only: bool = False
+    clarification: ClarificationPresentation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -566,6 +568,7 @@ def _decide_reference_only_target(
                     else "unresolved_existing_reference"
                 ),
                 candidate_note_ids=error.candidate_ids,
+                clarification=error.clarification,
             )
         if len(resolved.targets) == 1:
             return WriteTargetDecision(
@@ -598,6 +601,7 @@ def _decide_reference_only_target(
             WriteTargetOutcome.NEEDS_CLARIFICATION,
             reason="ambiguous_existing_reference",
             candidate_note_ids=decision.candidate_note_ids,
+            clarification=decision.clarification,
         )
     return decision
 
@@ -636,6 +640,7 @@ def _materialize_decision(
             candidate_note_ids=decision.candidate_note_ids,
             reason=decision.reason,
             reference_only=unit.reference_lookup_only,
+            clarification=decision.clarification,
         )
     if decision.outcome is WriteTargetOutcome.UPDATE:
         assert decision.existing_note_id is not None

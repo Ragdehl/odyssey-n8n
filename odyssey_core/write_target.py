@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from odyssey_core.clarification_presentation import ClarificationPresentation
 from odyssey_core.context import find_filtered_note_ids
 from odyssey_core.contextual import ContextualReasoner
 from odyssey_core.identity import find_deleted_exact_entity_candidates
@@ -45,6 +46,7 @@ class WriteTargetDecision:
     target_type: str | None = None
     reason: str | None = None
     candidate_note_ids: tuple[str, ...] = ()
+    clarification: ClarificationPresentation | None = None
 
 
 def decide_write_target(
@@ -148,9 +150,13 @@ def decide_write_target(
         assert resolution.id is not None
         return WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=resolution.id)
     if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS:
-        return _clarification("ambiguous_existing_target", resolution.candidate_ids)
+        return _clarification(
+            "ambiguous_existing_target", resolution.candidate_ids, resolution.clarification
+        )
     if resolution.has_ambiguous_exact_evidence:
-        return _clarification("ambiguous_existing_target", resolution.candidate_ids)
+        return _clarification(
+            "ambiguous_existing_target", resolution.candidate_ids, resolution.clarification
+        )
     if unit.intent == "record" and target.type is not None:
         if not explicit_new_entity:
             deleted = find_deleted_exact_entity_candidates(
@@ -175,10 +181,15 @@ def _canonical_types(schema: dict[str, Any]) -> frozenset[str]:
     return types
 
 
-def _clarification(reason: str, candidate_note_ids: tuple[str, ...] = ()) -> WriteTargetDecision:
+def _clarification(
+    reason: str,
+    candidate_note_ids: tuple[str, ...] = (),
+    presentation: ClarificationPresentation | None = None,
+) -> WriteTargetDecision:
     """Build a fail-closed clarification decision without asserting an identity."""
     return WriteTargetDecision(
         WriteTargetOutcome.NEEDS_CLARIFICATION,
         reason=reason,
         candidate_note_ids=candidate_note_ids,
+        clarification=presentation,
     )

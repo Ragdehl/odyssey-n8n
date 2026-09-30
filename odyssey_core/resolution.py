@@ -9,6 +9,11 @@ from enum import Enum
 from pathlib import PurePosixPath
 from typing import Any
 
+from odyssey_core.clarification_presentation import (
+    MAX_CLARIFICATION_EVIDENCE_CHARS,
+    ClarificationCandidateEvidence,
+    ClarificationPresentation,
+)
 from odyssey_core.contextual import (
     ContextualCandidate,
     ContextualReasoner,
@@ -76,6 +81,7 @@ class ExistingEntityResolution:
     candidate_ids: tuple[str, ...] = ()
     usage: Mapping[str, Any] | None = None
     has_ambiguous_exact_evidence: bool = False
+    clarification: ClarificationPresentation | None = None
 
 
 _TECHNICAL_METADATA = frozenset(
@@ -284,16 +290,81 @@ def resolve_existing_entity(
     decision = validate_contextual_decision(
         raw_decision, {candidate.id for candidate in candidates}
     )
+    candidate_ids: tuple[str, ...]
+    if decision.outcome == "RESOLVED":
+        candidate_ids = tuple(candidate.id for candidate in candidates)
+    elif decision.outcome == "AMBIGUOUS":
+        candidate_ids = decision.ambiguous_ids
+    elif (
+        decision.outcome == "UNRESOLVED"
+        and exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
+    ):
+        candidate_ids = tuple(candidate.id for candidate in exact.candidates)
+    else:
+        candidate_ids = ()
+    clarification = (
+        _build_note_clarification_presentation(
+            reference, candidate_ids, candidates, repository, schema
+        )
+        if 1 < len(candidate_ids) <= 4
+        else None
+    )
     return ExistingEntityResolution(
         outcome=ExistingEntityOutcome(decision.outcome),
         id=decision.id,
         source=ResolutionSource.CONTEXTUAL,
-        candidate_ids=tuple(candidate.id for candidate in candidates),
+        candidate_ids=candidate_ids,
         has_ambiguous_exact_evidence=(
             exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
         ),
         usage=_safe_usage(usage),
+        clarification=clarification,
     )
+
+
+def _build_note_clarification_presentation(
+    reference: str,
+    candidate_ids: tuple[str, ...],
+    candidates: tuple[SemanticEntityCandidate | ExactEntityCandidate, ...],
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> ClarificationPresentation:
+    """Re-read the exact validated subset and derive neutral canonical snippets."""
+    paths = {candidate.id: candidate.path for candidate in candidates}
+    options: list[ClarificationCandidateEvidence] = []
+    for candidate_id in candidate_ids:
+        path = paths.get(candidate_id)
+        if path is None:
+            raise ExistingEntityResolutionError("Clarification candidate is no longer supplied")
+        try:
+            note = parse_note(repository.read_text(path))
+            validate_note(note, schema)
+        except (NoteFormatError, NoteValidationError, OSError) as error:
+            raise ExistingEntityResolutionError(
+                "Cannot safely load a clarification candidate note"
+            ) from error
+        if note.metadata.get("id") != candidate_id or note.metadata.get("deleted") is True:
+            raise ExistingEntityResolutionError("Clarification candidate is no longer current")
+        name = note.metadata.get("name")
+        note_type = note.metadata.get("type")
+        if not isinstance(name, str) or not isinstance(note_type, str):
+            raise ExistingEntityResolutionError("Clarification candidate identity is invalid")
+        visible_body = _WIKILINK_PATTERN.sub(_humanize_wikilink, note.content).strip()
+        first_line = next(
+            (
+                line.strip()
+                for line in visible_body.splitlines()
+                if line.strip()
+                and re.match(r"^#{1,6}(?:\s|$)", line.strip()) is None
+                and not line.strip().startswith("<!--")
+            ),
+            "",
+        )
+        evidence = first_line or f"Nombre canónico: {name}."
+        if len(evidence) > MAX_CLARIFICATION_EVIDENCE_CHARS:
+            evidence = evidence[: MAX_CLARIFICATION_EVIDENCE_CHARS - 1].rstrip() + "…"
+        options.append(ClarificationCandidateEvidence(candidate_id, name, note_type, evidence))
+    return ClarificationPresentation(reference.strip(), tuple(options))
 
 
 def _restrict_exact_resolution(

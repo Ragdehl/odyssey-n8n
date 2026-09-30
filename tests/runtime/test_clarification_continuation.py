@@ -20,6 +20,10 @@ from odyssey_core.clarification import (
     LocalClarificationStore,
     PendingClarification,
 )
+from odyssey_core.clarification_presentation import (
+    ClarificationCandidateEvidence,
+    ClarificationPresentation,
+)
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_core.notes import Note, serialize_note
@@ -161,6 +165,44 @@ def test_unresolved_keeps_same_state_and_options(tmp_path: Path) -> None:
     assert state.read().original_request == "Remember that Marta visited Lyon."
 
 
+def test_unresolved_reply_preserves_rich_version_three_presentation(tmp_path: Path) -> None:
+    """Re-render the same canonical explanation and evidence without another Core execution."""
+    runtime, state = _pending_runtime(
+        tmp_path,
+        lambda *args: (_ for _ in ()).throw(AssertionError("Core must not execute")),
+    )
+    rich_options = (
+        ClarificationOption("marta-1", "Marta in Lyon", "person", "Vive en Lyon."),
+        ClarificationOption("marta-2", "Marta in Madrid", "person", "Vive en Madrid."),
+    )
+    state.replace(
+        PendingClarification(
+            "Remember that Marta visited Lyon.",
+            "request-original",
+            "request-original",
+            rich_options,
+            ("a" * 64, "b" * 64),
+            None,
+            "Marta",
+            "No puedo identificar con seguridad a “Marta”. He encontrado estas posibilidades en tus notas.",
+        )
+    )
+
+    response = runtime.execute_product("quizá", "delivery-rich", "main", ACTOR)
+
+    assert response["clarification"]["explanation"].startswith("No puedo identificar")
+    assert response["clarification"]["options"] == [
+        {
+            "id": option.id,
+            "label": option.label,
+            "note_type": option.note_type,
+            "evidence": option.evidence,
+        }
+        for option in rich_options
+    ]
+    assert state.read() is not None and state.read().options == rich_options
+
+
 def test_new_request_supersedes_pending_without_cancel_step(tmp_path: Path) -> None:
     """A bounded NEW_REQUEST classification clears state then runs the current text normally."""
     calls = []
@@ -252,6 +294,60 @@ def test_ambiguous_write_creates_one_guarded_pending_decision(tmp_path: Path) ->
     )
     assert response["product_outcome"] == "CLARIFY"
     assert state.read() == pending
+
+
+def test_runtime_projects_only_bounded_core_clarification_presentation() -> None:
+    """Expose canonical option fields without retrieval rank or model rationale."""
+    presentation = ClarificationPresentation(
+        "mi descendiente",
+        (
+            ClarificationCandidateEvidence("cloe", "Cloe", "person", "Mis hijos son Cloe y Bruno."),
+            ClarificationCandidateEvidence(
+                "bruno", "Bruno", "person", "Mis hijos son Cloe y Bruno."
+            ),
+        ),
+    )
+    result = ApplicationResult(
+        "relational-rich",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (
+            ActionResult(
+                0,
+                "write",
+                ActionStatus.DEFERRED,
+                reason="relational_evidence_ambiguous",
+                candidate_note_ids=("cloe", "bruno"),
+                clarification=presentation,
+            ),
+        ),
+        (),
+    )
+
+    view = RuntimeComposition(
+        core_execute=lambda *args: result, refresh_indexes=lambda: None
+    )._clarification_view(result)
+
+    assert view == {
+        "request_id": "relational-rich",
+        "reason": "AMBIGUOUS_REFERENCE",
+        "requested_reference": "mi descendiente",
+        "explanation": presentation.explanation,
+        "options": [
+            {
+                "id": "cloe",
+                "label": "Cloe",
+                "note_type": "person",
+                "evidence": "Mis hijos son Cloe y Bruno.",
+            },
+            {
+                "id": "bruno",
+                "label": "Bruno",
+                "note_type": "person",
+                "evidence": "Mis hijos son Cloe y Bruno.",
+            },
+        ],
+        "pending_record_id": None,
+    }
 
 
 def test_singular_read_resumes_without_replaying_a_note_set(tmp_path: Path) -> None:

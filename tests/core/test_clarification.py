@@ -120,6 +120,32 @@ def test_invalid_pending_guard_is_not_persisted(tmp_path: Path) -> None:
     assert store.read() is None
 
 
+def test_rich_pending_version_round_trips_while_legacy_version_remains_readable(
+    tmp_path: Path,
+) -> None:
+    """Persist presentation in v3 without changing the v1/v2 reader contract."""
+    rich_options = (
+        ClarificationOption("note-a", "Marta", "person", "Marta vive en Lyon."),
+        ClarificationOption("note-b", "Marta", "person", "Marta vive en Madrid."),
+    )
+    pending = PendingClarification(
+        "original request",
+        "request-1",
+        "pending-1",
+        rich_options,
+        ("a" * 64, "b" * 64),
+        requested_reference="Marta",
+        explanation="No puedo identificar con seguridad a Marta.",
+    )
+    store = LocalClarificationStore(tmp_path, "main")
+    store.replace(pending)
+
+    assert store.read() == pending
+    payload = json.loads((tmp_path / "clarifications" / "main.json").read_text())
+    assert payload["version"] == 3
+    assert match_clarification_reply("Marta", rich_options) is None
+
+
 def test_relational_source_guard_must_be_a_sha256_digest(tmp_path: Path) -> None:
     """Reject malformed source guards before they can authorize a relational continuation."""
     store = LocalClarificationStore(tmp_path, "main")

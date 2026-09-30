@@ -328,6 +328,7 @@ def _action_result(value: ActionResult) -> dict[str, Any]:
         "delegated_selection": _selection(value.delegated_selection),
         "candidate_note_ids": list(value.candidate_note_ids),
         "relational_evidence_guard": value.relational_evidence_guard,
+        "clarification": _clarification_presentation(value.clarification),
     }
     if value.retrieval is not None:
         payload["retrieval"] = _context(value.retrieval)
@@ -343,6 +344,7 @@ def _unit_result(value: UnitResult) -> dict[str, Any]:
         "stable_note_id": value.stable_note_id,
         "reason": value.reason,
         "candidates": list(value.candidates),
+        "clarification": _clarification_presentation(value.clarification),
         "dependencies": [
             {
                 "source_unit_index": item.source_unit_index,
@@ -351,6 +353,24 @@ def _unit_result(value: UnitResult) -> dict[str, Any]:
                 "candidate_stable_ids": list(item.candidate_stable_ids),
             }
             for item in value.dependencies
+        ],
+    }
+
+
+def _clarification_presentation(value: Any) -> dict[str, Any] | None:
+    """Project only bounded Core-grounded user-safe ambiguity evidence."""
+    if value is None:
+        return None
+    return {
+        "requested_reference": value.requested_reference,
+        "candidates": [
+            {
+                "id": candidate.id,
+                "label": candidate.label,
+                "note_type": candidate.note_type,
+                "evidence": candidate.evidence,
+            }
+            for candidate in value.candidates
         ],
     }
 

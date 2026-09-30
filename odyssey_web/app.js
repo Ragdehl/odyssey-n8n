@@ -22,6 +22,7 @@ const chatSurface = document.querySelector("#chat-surface");
 const notesSurface = document.querySelector("#notes-surface");
 const chatTab = document.querySelector("#chat-tab");
 const notesTab = document.querySelector("#notes-tab");
+const clarificationStatus = document.querySelector("#clarification-status");
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
 let olderCursor = null;
@@ -346,6 +347,64 @@ function renderProductResult(result) {
   }
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
+  appendClarificationCard(message, result.clarification);
+  if (clarificationStatus) clarificationStatus.hidden = result.kind !== "clarification";
+}
+
+function appendClarificationCard(article, clarification) {
+  if (!clarification?.options?.length) return;
+  article.classList.add("message-clarification");
+  if (clarification.explanation) {
+    article.querySelector(".message-text").textContent = clarification.explanation;
+  }
+  const list = document.createElement("div");
+  list.className = "clarification-options";
+  clarification.options.forEach((option, index) => {
+    const row = document.createElement("article");
+    row.className = "clarification-option";
+    const heading = document.createElement("h3");
+    heading.textContent = option.label;
+    const controls = document.createElement("div");
+    controls.className = "clarification-controls";
+    const choose = document.createElement("button");
+    choose.type = "button";
+    choose.textContent = "Elegir";
+    choose.addEventListener("click", () => submitClarificationReply(String(index + 1)));
+    const inspect = document.createElement("button");
+    inspect.type = "button";
+    inspect.textContent = "Ver nota";
+    inspect.addEventListener("click", () => {
+      selectSurface("notes");
+      document.dispatchEvent(new CustomEvent("odyssey:open-note", {detail: {note_id: option.id}}));
+    });
+    controls.append(choose, inspect);
+    row.append(heading);
+    if (option.note_type && option.evidence) {
+      const type = document.createElement("p");
+      type.className = "clarification-type";
+      type.textContent = option.note_type;
+      const evidence = document.createElement("p");
+      evidence.className = "clarification-evidence";
+      evidence.textContent = option.evidence;
+      row.append(type, evidence);
+    }
+    row.append(controls);
+    list.append(row);
+  });
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "clarification-cancel";
+  cancel.textContent = "Cancelar";
+  cancel.addEventListener("click", () => submitClarificationReply("cancel"));
+  article.append(list, cancel);
+}
+
+function submitClarificationReply(reply) {
+  try {
+    void sendSubmission(createSubmission(reply, globalThis.crypto, conversationId));
+  } catch {
+    input.focus();
+  }
 }
 
 function resultLabel(result) {

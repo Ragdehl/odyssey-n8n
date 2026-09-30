@@ -45,7 +45,9 @@ class FakeIndex:
 class FakeReasoner:
     """Provide one injected deterministic Phase 11 contextual decision."""
 
-    def __init__(self, output: object = {"outcome": "UNRESOLVED", "id": None}) -> None:
+    def __init__(
+        self, output: object = {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}
+    ) -> None:
         """Store the raw decision and count calls for boundary assertions."""
         self.output = output
         self.calls = 0
@@ -164,7 +166,7 @@ def test_e04_contextual_identity_resolves_through_existing_stack(
         schema,
         unit("la amiga de Marta", entity=None),
         index,
-        FakeReasoner({"outcome": "RESOLVED", "id": "friend"}),
+        FakeReasoner({"outcome": "RESOLVED", "id": "friend", "ambiguous_ids": []}),
     )
     assert result.outcome is WriteTargetOutcome.UPDATE
     assert result.existing_note_id == "friend"
@@ -178,7 +180,7 @@ def test_e05_e11_ambiguity_never_creates(tmp_path: Path, schema: dict) -> None:
         tmp_path,
         schema,
         unit("Marta", entity="Marta"),
-        reasoner=FakeReasoner({"outcome": "UNRESOLVED", "id": None}),
+        reasoner=FakeReasoner({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}),
     )
     assert result.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
     assert result.reason == "ambiguous_existing_target"

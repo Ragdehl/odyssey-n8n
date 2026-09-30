@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
+from odyssey_core.clarification_presentation import (
+    MAX_CLARIFICATION_EVIDENCE_CHARS,
+    ClarificationCandidateEvidence,
+    ClarificationPresentation,
+)
 from odyssey_core.contextual import (
     ContextualCandidate,
     ContextualResolutionRequest,
@@ -50,12 +55,17 @@ class RelationalResolutionError(RuntimeError):
     """Signal that one relational identity or complete member set cannot be authorized."""
 
     def __init__(
-        self, reason: str, candidate_ids: tuple[str, ...] = (), evidence_guard: str | None = None
+        self,
+        reason: str,
+        candidate_ids: tuple[str, ...] = (),
+        evidence_guard: str | None = None,
+        clarification: ClarificationPresentation | None = None,
     ) -> None:
         """Carry only Core-grounded bounded identity options when clarification is safe."""
         super().__init__(reason)
         self.candidate_ids = candidate_ids
         self.evidence_guard = evidence_guard
+        self.clarification = clarification
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +163,7 @@ def resolve_relational_reference(
             contextual_reasoner=contextual_reasoner,
             semantic_set_selector=semantic_set_selector,
             semantic_limit=semantic_limit,
+            chosen_identity_id=chosen_identity_id,
         )
     if allow_identity_clarification:
         selected_candidates = _select_relevant_read_facts(
@@ -201,11 +212,15 @@ def resolve_relational_reference(
     selected = validate_contextual_decision(
         decision, frozenset(fact.locator for fact, _direction in candidates)
     )
-    if selected.outcome != "RESOLVED" or selected.id is None:
-        grounded: list[str] = []
-        for fact, direction in candidates:
-            if relation.reference.casefold() not in fact.text.casefold():
-                continue
+    if selected.outcome == "AMBIGUOUS":
+        selected_facts = tuple(
+            (fact, direction)
+            for fact, direction in candidates
+            if fact.locator in selected.ambiguous_ids
+        )
+        grounded: list[CanonicalIdentity] = []
+        evidence_by_id: dict[str, list[str]] = {}
+        for fact, direction in selected_facts:
             projection = projector.project_targets(fact.source.id, fact.locator)
             if projection.status is not TargetProjectionStatus.COMPLETE:
                 continue
@@ -215,13 +230,30 @@ def resolve_relational_reference(
                 else projection.targets
             )
             for target in targets:
-                if target is not None and target.id not in grounded:
-                    grounded.append(target.id)
-        options = tuple(grounded)
-        if allow_identity_clarification and relation.members == "one" and 1 < len(options) <= 4:
+                if target is None:
+                    continue
+                if target.id not in {item.id for item in grounded}:
+                    grounded.append(target)
+                evidence_by_id.setdefault(target.id, []).append(_bounded_fact_evidence(fact))
+        options = tuple(target.id for target in grounded)
+        if relation.members == "one" and 1 < len(options) <= 4:
             raise RelationalResolutionError(
-                "relational_evidence_ambiguous", options, evidence_guard
+                "relational_evidence_ambiguous",
+                options,
+                evidence_guard,
+                _identity_presentation(
+                    relation.reference,
+                    tuple(grounded),
+                    {
+                        target.id: _combine_fact_evidence(evidence_by_id[target.id])
+                        for target in grounded
+                    },
+                ),
             )
+        raise RelationalResolutionError(
+            "relational_evidence_ambiguous", evidence_guard=evidence_guard
+        )
+    if selected.outcome != "RESOLVED" or selected.id is None:
         raise RelationalResolutionError(
             "relational_evidence_ambiguous", evidence_guard=evidence_guard
         )
@@ -243,10 +275,19 @@ def resolve_relational_reference(
         targets = projection.targets
     if relation.members == "one" and len(targets) != 1:
         options = tuple(target.id for target in targets)
+        identities = tuple(targets)
+        fact_evidence = _bounded_fact_evidence(selected_fact)
         raise RelationalResolutionError(
             "relational_singular_ambiguous",
             options if allow_identity_clarification and 1 < len(options) <= 4 else (),
             evidence_guard,
+            _identity_presentation(
+                relation.reference,
+                identities,
+                {target.id: fact_evidence for target in identities},
+            )
+            if allow_identity_clarification and 1 < len(options) <= 4
+            else None,
         )
     if selection.type is not None and any(target.type != selection.type for target in targets):
         raise RelationalResolutionError(
@@ -298,6 +339,7 @@ def _resolve_qualified_singular_write(
     contextual_reasoner: Any,
     semantic_set_selector: Any | None,
     semantic_limit: int,
+    chosen_identity_id: str | None,
 ) -> ResolvedRelationalReference:
     """Use a canonical relationship as a candidate anchor, then apply the full WRITE description.
 
@@ -381,7 +423,29 @@ def _resolve_qualified_singular_write(
     )
     decision = validate_contextual_decision(raw_decision, {target.id for target in targets})
     if decision.outcome != "RESOLVED" or decision.id is None:
-        options = tuple(target.id for target in targets)
+        plausible = (
+            tuple(target for target in targets if target.id in decision.ambiguous_ids)
+            if decision.outcome == "AMBIGUOUS"
+            else ()
+        )
+        options = tuple(target.id for target in plausible)
+        if chosen_identity_id is not None and chosen_identity_id in options:
+            selected_target = next(
+                target for target in plausible if target.id == chosen_identity_id
+            )
+            fact, direction, projection = grounding[selected_target.id]
+            source = (
+                incoming_projection.entity if incoming_projection is not None else projection.source
+            )
+            assert source is not None
+            return ResolvedRelationalReference(
+                source,
+                projection.source,
+                fact.locator,
+                direction,
+                (selected_target,),
+                evidence_guard,
+            )
         reason = (
             "relational_qualified_target_unresolved"
             if decision.outcome == "UNRESOLVED"
@@ -391,6 +455,16 @@ def _resolve_qualified_singular_write(
             reason,
             options if 1 < len(options) <= 4 else (),
             evidence_guard,
+            _identity_presentation(
+                selection.query,
+                plausible,
+                {
+                    target.id: _bounded_fact_evidence(grounding[target.id][0])
+                    for target in plausible
+                },
+            )
+            if 1 < len(options) <= 4
+            else None,
         )
 
     selected_target = next(target for target in targets if target.id == decision.id)
@@ -436,6 +510,43 @@ def _qualified_target_evidence(
             f"{_humanize_fact_links(item.fact.text).strip()}"
         )
     return evidence + "\nRelated canonical incoming evidence:\n" + "\n".join(incoming)
+
+
+def _bounded_fact_evidence(fact: CanonicalFact) -> str:
+    """Render one current canonical fact as a short neutral public snippet."""
+    evidence = _humanize_fact_links(fact.text).strip()
+    if len(evidence) > MAX_CLARIFICATION_EVIDENCE_CHARS:
+        return evidence[: MAX_CLARIFICATION_EVIDENCE_CHARS - 1].rstrip() + "…"
+    return evidence
+
+
+def _combine_fact_evidence(snippets: list[str]) -> str:
+    """Dedupe selected canonical fact snippets and keep their public evidence bounded."""
+    unique = tuple(dict.fromkeys(snippet.strip() for snippet in snippets if snippet.strip()))
+    evidence = " · ".join(unique)
+    if len(evidence) > MAX_CLARIFICATION_EVIDENCE_CHARS:
+        return evidence[: MAX_CLARIFICATION_EVIDENCE_CHARS - 1].rstrip() + "…"
+    return evidence
+
+
+def _identity_presentation(
+    reference: str,
+    identities: tuple[CanonicalIdentity, ...],
+    evidence_by_id: dict[str, str],
+) -> ClarificationPresentation:
+    """Build a bounded explanation from re-projected current canonical identities and facts."""
+    return ClarificationPresentation(
+        reference.strip(),
+        tuple(
+            ClarificationCandidateEvidence(
+                identity.id,
+                identity.name,
+                identity.type,
+                evidence_by_id[identity.id],
+            )
+            for identity in identities
+        ),
+    )
 
 
 def _select_relevant_read_facts(
@@ -542,6 +653,7 @@ def _resolve_selected_read_facts(
     """Project complete target sets for all relevant facts before deciding a singular identity."""
     unique_targets: list[CanonicalIdentity] = []
     seen_target_ids: set[str] = set()
+    evidence_by_id: dict[str, list[str]] = {}
     first_projection = None
     first_direction = None
     for fact, direction in selected_candidates:
@@ -565,6 +677,7 @@ def _resolve_selected_read_facts(
         if first_projection is None:
             first_projection, first_direction = projection, direction
         for target in targets:
+            evidence_by_id.setdefault(target.id, []).append(_bounded_fact_evidence(fact))
             if target.id not in seen_target_ids:
                 seen_target_ids.add(target.id)
                 unique_targets.append(target)
@@ -592,7 +705,19 @@ def _resolve_selected_read_facts(
                 if len(selected_candidates) == 1
                 else "relational_evidence_ambiguous"
             )
-            raise RelationalResolutionError(reason, options, evidence_guard)
+            raise RelationalResolutionError(
+                reason,
+                options,
+                evidence_guard,
+                _identity_presentation(
+                    relation.reference,
+                    tuple(unique_targets),
+                    {
+                        target.id: _combine_fact_evidence(evidence_by_id[target.id])
+                        for target in unique_targets
+                    },
+                ),
+            )
         else:
             raise RelationalResolutionError(
                 "relational_evidence_ambiguous", evidence_guard=evidence_guard

@@ -205,11 +205,37 @@ If existing evidence is ambiguous, Core still defers for clarification rather th
 
 Legacy pre-existing index-based internal fixtures may retain their historical non-blocking pending behavior while migration is incomplete. That compatibility path must not re-enter the provider schema.
 
-## Deferred ambiguity explanation
+## Explainable ambiguity clarification
 
-The current contextual resolver can safely return `RESOLVED`, `AMBIGUOUS`, or `UNRESOLVED`, but `AMBIGUOUS` does not yet carry the smaller set of candidates the model considered genuinely plausible. The application therefore cannot reliably explain a conflict such as "Cloe and Bruno Test both match this description" without risking presentation of unrelated candidates from the broader retrieval set.
+The active contextual Structured Output strictly requires `{outcome,id,ambiguous_ids}` for all three
+established outcomes. `RESOLVED` still carries exactly one supplied `id` and preserves the complete
+Core-supplied candidate set for established downstream behavior; `UNRESOLVED` carries no model IDs
+while retaining the exact-collision fallback;
+`AMBIGUOUS` carries a unique two-to-four-ID subset of the exact supplied candidate set. Core rejects
+missing, fabricated, duplicate, contradictory, empty, singleton, or oversized subsets. Semantic rank
+never becomes presentation or identity authority.
 
-A later focused change should let an ambiguous contextual decision return a validated subset of supplied `candidate_ids` together with enough grounded source evidence for a useful user-facing clarification. Core must verify every returned ID was in the supplied candidate set and must never manufacture the explanation from semantic rank alone. This is a model-facing contract change and requires its own deterministic fail-closed coverage and focused live gate; it is intentionally not part of the current atomicity/schema amendment.
+For ordinary identity ambiguity, Core re-reads the exact validated subset from current canonical
+Markdown and derives stable ID, canonical label, note type, and a short neutral evidence snippet. For
+relational ambiguity over canonical fact locators, Core re-reads and projects only the selected facts,
+deduplicates their current targets and snippets when several facts support one identity, and exposes options only when the safe final identity set contains
+two to four members. Zero, one, more than four, dangling, stale, incomplete, or type-invalid options
+remain fail closed. This is generic across canonical note types.
+
+The public explanation is deterministic from the requested reference and those Core-grounded fields;
+model rationale, prompts, scores, rank, filesystem paths, and hidden reasoning are never retained.
+Version 3 pending clarification state preserves the bounded presentation while remaining compatible
+with existing v1/v2 records. Candidate selection resumes the persisted plan through the existing
+identity and source-evidence guards; it does not replan the write. Runtime, n8n, and the browser only
+validate/project this shape. The browser presents an inline card with choose, note-detail, cancel, and
+ordinary free-text reply paths.
+
+Deterministic Core/runtime/workflow/browser evidence is implemented on
+`feat/explainable-clarification`. The immutable `contextual-explainable-v1` gate is prepared for six
+`gpt-5.6-luna` / medium calls (RESOLVED, AMBIGUOUS subset, UNRESOLVED, relational fact-locator
+ambiguity, and two prior-behavior sentinels), zero retries, zero Sol calls, and a conservative
+`$0.01875900` ceiling. Its execution authority remains
+`$0.00`; model-facing readiness is pending a separate explicit authorization and successful live run.
 
 ## Required sentinels
 
@@ -222,7 +248,8 @@ The focused contract must keep deterministic coverage for at least:
 - `El amigo de Bruno que vive en Lyon se muda a Toulouse` — ground Bruno first, admit friend candidates from Bruno's outgoing facts or incoming backlinks, and apply the Lyon qualifier only inside that set;
 - a genuinely ambiguous reference — defer for clarification without guessing, creating an identity, or writing a falsely settled source fact.
 
-The provider-facing schema/prompt change requires focused live evidence under `AGENTS.md`. That live gate is Luna/low only, planner-only, zero retries, zero Sol fallbacks, cost-gated, non-overwriting, and separate from deterministic Core execution tests.
+The contextual provider-facing schema/prompt change requires the focused live evidence above under
+`AGENTS.md`; the Semantic WRITE planner prompt/schema remains unchanged.
 
 ## Live-gate status
 

@@ -306,13 +306,22 @@ class RuntimeComposition:
             source_guard: str | None = None
             relational = False
             if action["kind"] == "write":
-                if (
+                relational = action["units"][0]["target"].get("relational_reference") is not None
+                action_level = relational and execution["reason"] in {
+                    "relational_evidence_ambiguous",
+                    "relational_singular_ambiguous",
+                }
+                if action_level:
+                    candidates = execution["candidate_note_ids"]
+                    source_guard = execution.get("relational_evidence_guard")
+                elif (
                     len(action["units"]) != 1
                     or len(execution["unit_results"]) != 1
                     or execution["unit_results"][0]["reason"] != "ambiguous_existing_target"
                 ):
                     return None
-                candidates = execution["unit_results"][0]["candidates"]
+                else:
+                    candidates = execution["unit_results"][0]["candidates"]
             elif action["kind"] == "retrieve":
                 relational = action["plan"].get("relational_reference") is not None
                 ordinary = (
@@ -350,6 +359,8 @@ class RuntimeComposition:
                 options,
                 tuple(guards),
                 source_guard,
+                view.get("requested_reference"),
+                view.get("explanation"),
             )
         except (
             KeyError,
@@ -378,7 +389,17 @@ class RuntimeComposition:
         evidence = record["incomplete_actions"][0]["execution_result"]
         candidate_ids = tuple(option.id for option in pending.options)
         if action.get("kind") == "write":
+            relational = (
+                len(action.get("units", ())) == 1
+                and action["units"][0].get("target", {}).get("relational_reference") is not None
+            )
             safe = (
+                relational
+                and evidence.get("reason")
+                in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+                and tuple(evidence.get("candidate_note_ids", ())) == candidate_ids
+                and evidence.get("relational_evidence_guard") == pending.source_evidence_guard
+            ) or (
                 len(action.get("units", ())) == 1
                 and len(evidence.get("unit_results", ())) == 1
                 and evidence["unit_results"][0].get("reason") == "ambiguous_existing_target"
@@ -458,7 +479,20 @@ class RuntimeComposition:
             "clarification": {
                 "request_id": pending.original_request_id,
                 "reason": "AMBIGUOUS_REFERENCE",
-                "options": [{"id": item.id, "label": item.label} for item in pending.options],
+                "requested_reference": pending.requested_reference,
+                "explanation": pending.explanation,
+                "options": [
+                    {
+                        "id": item.id,
+                        "label": item.label,
+                        **(
+                            {"note_type": item.note_type, "evidence": item.evidence}
+                            if item.note_type and item.evidence
+                            else {}
+                        ),
+                    }
+                    for item in pending.options
+                ],
             },
             "actions": [],
             "affected_stable_note_ids": [],
@@ -467,6 +501,17 @@ class RuntimeComposition:
 
     def _clarification_view(self, result: ApplicationResult) -> dict[str, object]:
         """Project only current, bounded, actor-local option labels for one unresolved decision."""
+        presentation = next(
+            (
+                action.clarification or (unit.clarification if unit is not None else None)
+                for action in result.action_results
+                for unit in action.unit_results or (None,)
+                if action.clarification is not None
+                or unit is not None
+                and unit.clarification is not None
+            ),
+            None,
+        )
         candidates = next(
             (
                 action.candidate_note_ids or (unit.candidates if unit is not None else ())
@@ -484,15 +529,25 @@ class RuntimeComposition:
             (),
         )
         options: list[dict[str, str]] = []
-        if self.notes_service is not None and 1 < len(candidates) <= 4:
+        if presentation is not None and tuple(
+            candidate.id for candidate in presentation.candidates
+        ) == tuple(candidates):
+            options = [
+                {
+                    "id": candidate.id,
+                    "label": candidate.label,
+                    "note_type": candidate.note_type,
+                    "evidence": candidate.evidence,
+                }
+                for candidate in presentation.candidates
+            ]
+        elif self.notes_service is not None and 1 < len(candidates) <= 4:
             try:
                 for note_id in candidates:
                     note = self.notes_service.detail(note_id).note
                     options.append({"id": note.id, "label": note.name})
             except (NotesQueryError, ValueError):
                 options = []
-        if len({option["label"].casefold() for option in options}) != len(options):
-            options = []
         return {
             "request_id": result.request_id,
             "reason": "AMBIGUOUS_REFERENCE"
@@ -505,6 +560,10 @@ class RuntimeComposition:
             )
             else result.clarification_code or "AMBIGUOUS_REFERENCE",
             "options": options,
+            "requested_reference": presentation.requested_reference
+            if presentation is not None
+            else None,
+            "explanation": presentation.explanation if presentation is not None else None,
             "pending_record_id": result.pending_work.record_id
             if result.pending_work.persisted
             else None,

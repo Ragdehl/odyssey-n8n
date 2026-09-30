@@ -55,7 +55,7 @@ class UnresolvedReasoner:
 
     def resolve(self, request: object) -> tuple[dict[str, object], dict[str, int]]:
         """Abstain while preserving the resolver candidate set."""
-        return {"outcome": "UNRESOLVED", "id": None}, {"output_tokens": 0}
+        return {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}, {"output_tokens": 0}
 
 
 def unit(

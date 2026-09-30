@@ -102,6 +102,7 @@ class FakeDocument {
   constructor() {
     this.documentElement = new FakeElement("html");
     this._elements = new Map();
+    this.events = [];
   }
 
   createElement(tagName) {
@@ -112,7 +113,7 @@ class FakeDocument {
     return this._elements.get(selector) ?? null;
   }
 
-  dispatchEvent() {}
+  dispatchEvent(event) { this.events.push(event); }
 }
 
 function matches(element, selector) {
@@ -135,6 +136,7 @@ function createPage() {
     chatTab: new FakeElement("button"),
     notesTab: new FakeElement("button"),
     brand: new FakeElement("div"),
+    clarificationStatus: new FakeElement("p"),
   };
   for (const [selector, element] of [
     ["#odyssey-form", elements.form],
@@ -149,6 +151,7 @@ function createPage() {
     ["#chat-tab", elements.chatTab],
     ["#notes-tab", elements.notesTab],
     [".brand", elements.brand],
+    ["#clarification-status", elements.clarificationStatus],
   ]) {
     document._elements.set(selector, element);
   }
@@ -158,17 +161,20 @@ function createPage() {
   return {document, elements};
 }
 
-async function mountApp({turns, olderTurns = [], requestProductResult}) {
+async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission}) {
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
   globalThis.document = document;
+  globalThis.CustomEvent = class CustomEvent {
+    constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+  };
   globalThis.ODYSSEY_DEPLOYMENT = undefined;
   globalThis.__odysseyTestClient = {
     ProductRequestError,
-    createSubmission: () => {
+    createSubmission: createSubmission ?? (() => {
       throw new Error("submission is not exercised in this fixture");
-    },
+    }),
     findRecoverableSubmission,
     requestProductResult,
     requestConversation: async ({operation, payload}) => {
@@ -197,7 +203,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult}) {
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
   await globalThis.__odysseyAppReady;
-  return {elements, persisted, renderedWithoutRecovery: () => renderedWithoutRecovery};
+  return {document, elements, persisted, renderedWithoutRecovery: () => renderedWithoutRecovery};
 }
 
 async function flush() {
@@ -261,6 +267,46 @@ test("retryable recovery failure restores its bounded action without a global er
   assert.equal(action.textContent, "Recuperar resultado");
   assert.equal(action.disabled, false);
   assert.equal(page.elements.conversation.children.length, 1);
+});
+
+test("clarification renders grounded controls while leaving the composer usable", async () => {
+  let resolveResult;
+  const submissions = [];
+  const page = await mountApp({
+    turns: [{request_id: "web-rich", role: "user", text: "Guarda esto"}],
+    createSubmission: (request) => ({request, requestId: `choice-${request}`}),
+    requestProductResult: ({submission}) => {
+      submissions.push(submission.request);
+      return new Promise((resolve) => { resolveResult = resolve; });
+    },
+  });
+  page.elements.conversation.querySelector(".recovery-action").click();
+  await flush();
+  resolveResult({
+    request_id: "web-rich", status: "needs_attention", kind: "clarification",
+    message: "Aclara la identidad.", clarification: {
+      request_id: "web-rich", requested_reference: "mi hijo mayor",
+      explanation: "No puedo identificar con seguridad a “mi hijo mayor”. He encontrado estas posibilidades en tus notas.",
+      options: [
+        {id: "cloe", label: "Cloe", note_type: "person", evidence: "Mis hijos son Cloe y Bruno."},
+        {id: "bruno", label: "Bruno", note_type: "person", evidence: "Mis hijos son Cloe y Bruno."},
+      ],
+    },
+  });
+  await flush();
+
+  const card = page.elements.conversation.querySelector(".message-clarification");
+  assert.equal(card.querySelector(".clarification-options").children.length, 2);
+  assert.equal(page.elements.clarificationStatus.hidden, false);
+  assert.equal(page.elements.input.disabled, false);
+  card.querySelector(".clarification-option").querySelector("button").click();
+  assert.deepEqual(submissions, ["Guarda esto", "1"]);
+  const inspect = card.querySelector(".clarification-option").querySelector(".clarification-controls").children[1];
+  inspect.click();
+  assert.equal(page.elements.notes.hidden, false);
+  assert.equal(page.document.events.at(-1).detail.note_id, "cloe");
+  card.querySelector(".clarification-cancel").click();
+  assert.deepEqual(submissions, ["Guarda esto", "1", "cancel"]);
 });
 
 test("conversation reload renders the exact durable affected-note affordance", async () => {

@@ -153,6 +153,11 @@ class FactReasoner:
             {
                 "outcome": self.outcome,
                 "id": request.candidates[0].id if self.outcome == "RESOLVED" else None,
+                "ambiguous_ids": (
+                    [candidate.id for candidate in request.candidates[:4]]
+                    if self.outcome == "AMBIGUOUS"
+                    else []
+                ),
             },
             {},
         )
@@ -247,7 +252,7 @@ class MatchingFactReasoner(FactReasoner):
         candidate = next(
             item for item in request.candidates if self.wording in item.evidence.casefold()
         )
-        return ({"outcome": "RESOLVED", "id": candidate.id}, {})
+        return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
 
 
 class MappedReasoner(FactReasoner):
@@ -262,9 +267,16 @@ class MappedReasoner(FactReasoner):
         self.requests.append(request)
         selected = self.decisions[request.reference]
         if selected is None:
-            return ({"outcome": "AMBIGUOUS", "id": None}, {})
+            return (
+                {
+                    "outcome": "AMBIGUOUS",
+                    "id": None,
+                    "ambiguous_ids": [candidate.id for candidate in request.candidates[:4]],
+                },
+                {},
+            )
         assert selected in {candidate.id for candidate in request.candidates}
-        return ({"outcome": "RESOLVED", "id": selected}, {})
+        return ({"outcome": "RESOLVED", "id": selected, "ambiguous_ids": []}, {})
 
 
 class SourceThenQualifierReasoner(FactReasoner):
@@ -283,7 +295,7 @@ class SourceThenQualifierReasoner(FactReasoner):
             candidate = next(
                 item for item in request.candidates if self.qualifier in item.evidence.casefold()
             )
-        return ({"outcome": "RESOLVED", "id": candidate.id}, {})
+        return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
 
 
 class ForbiddenWriter:
@@ -549,6 +561,48 @@ def test_multi_target_singular_fact_offers_each_grounded_identity_without_guessi
     assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
     assert action.reason == "relational_singular_ambiguous"
     assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.clarification is not None
+    assert [item.evidence for item in action.clarification.candidates] == [
+        "Mis hijos son Cloe y Bruno.",
+        "Mis hijos son Cloe y Bruno.",
+    ]
+
+
+def test_ambiguous_selected_fact_locators_expose_only_grounded_targets_and_evidence(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Ground relational WRITE options in exactly the fact locators selected by the reasoner."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    source_body = (
+        fact("Mis hijos son [[Cloe]] y [[Bruno]].", 0)
+        + "\n\n"
+        + fact("[[Cloe]] es mi hija mayor.", 1)
+    )
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", source_body)
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    target = relational_selection("mi descendiente", source_kind="self", source_query=None)
+    unit = KnowledgeUnit(target, "record", (), (), ("Viaja mañana.",), ())
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        reasoner=FactReasoner("AMBIGUOUS"),
+    )
+
+    action = result.action_results[0]
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.clarification is not None
+    assert [item.label for item in action.clarification.candidates] == ["Cloe", "Bruno"]
+    assert action.clarification.candidates[0].evidence == (
+        "Mis hijos son Cloe y Bruno. · Cloe es mi hija mayor."
+    )
+    assert action.clarification.candidates[1].evidence == "Mis hijos son Cloe y Bruno."
+    assert all(path.read_bytes() == content for path, content in before.items())
 
 
 def test_conflicting_singular_relation_targets_offer_options_only_for_reads(
@@ -1427,19 +1481,19 @@ def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
         "people/edgar.md",
         "edgar",
         "Edgar",
-        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/marta|Marta]]."),
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
     )
     write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Le gusta pintar."))
-    write_note(vault, "people/marta.md", "marta", "Marta", fact("Le gusta pintar."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Le gusta pintar."))
     before = {path: path.read_bytes() for path in vault.rglob("*.md")}
-    query = "mi hija a la que le gusta pintar"
+    query = "mi hijo mayor"
     selection = SelectionCriteria(
         None,
         query,
         "person",
         (),
         None,
-        relational_reference=RelationalReference("mi hija", "self", None, "one"),
+        relational_reference=RelationalReference("mis hijos", "self", None, "one"),
     )
     unit = KnowledgeUnit(selection, "record", (), (), ("Viaja mañana.",), ())
     reasoner = MappedReasoner({query: None})
@@ -1457,8 +1511,15 @@ def test_qualified_relation_ambiguity_never_writes_or_escapes_anchor_scope(
     assert all(path.read_bytes() == content for path, content in before.items())
     action_result = result.action_results[0]
     assert action_result.reason == "relational_evidence_ambiguous"
-    assert set(action_result.candidate_note_ids) == {"cloe", "marta"}
-    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "marta"}
+    assert action_result.candidate_note_ids == ("cloe", "bruno")
+    assert {candidate.id for candidate in reasoner.requests[0].candidates} == {"cloe", "bruno"}
+    assert action_result.clarification is not None
+    assert action_result.clarification.requested_reference == query
+    assert [item.label for item in action_result.clarification.candidates] == ["Cloe", "Bruno"]
+    assert all(
+        "Mis hijos son Cloe y Bruno" in item.evidence
+        for item in action_result.clarification.candidates
+    )
 
 
 def test_w2_complete_set_writes_one_source_fact_and_no_member_notes(

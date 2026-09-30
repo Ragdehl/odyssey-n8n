@@ -173,6 +173,27 @@ async function mountMutationNote({confirmImpl}) {
   return {mounted, calls};
 }
 
+test("generic open-note event opens the stable note ID through the existing detail path", async () => {
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return detail(payload.note_id, "Cloe");
+      return page();
+    },
+  });
+
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "cloe"}});
+  await flush();
+
+  assert.deepEqual(calls.filter(({operation}) => operation === "detail"), [
+    {operation: "detail", payload: {note_id: "cloe"}},
+  ]);
+  assert.equal(mounted.elements.detail.hidden, false);
+  assert.equal(mounted.elements.detail.textContent.includes("Cloe"), true);
+});
+
 function capabilities() {
   return {types: [{id: "person", name: "Persona"}], fields: []};
 }

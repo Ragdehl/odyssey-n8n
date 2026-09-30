@@ -1,0 +1,84 @@
+[
+  {
+    "id": "CTXE01_RESOLVED",
+    "request": {
+      "reference": "my spouse",
+      "context": "She is the mother of my children.",
+      "entity_type": "person",
+      "candidates": [
+        {"id": "clara-ruiz", "evidence": "Name: Clara Ruiz\nType: person\nThe user's neighbour."},
+        {"id": "beatriz-alonso", "evidence": "Name: Beatriz Alonso\nType: person\nThe user's spouse and mother of the user's children."}
+      ]
+    },
+    "expected": {"outcome": "RESOLVED", "id": "beatriz-alonso", "ambiguous_ids": []}
+  },
+  {
+    "id": "CTXE02_AMBIGUOUS_SUBSET",
+    "request": {
+      "reference": "Beatriz",
+      "context": "Tengo que llamar a Beatriz; no recuerdo cuál.",
+      "entity_type": "person",
+      "candidates": [
+        {"id": "beatriz-martin", "evidence": "Name: Beatriz Martín\nType: person\nFormer colleague."},
+        {"id": "beatriz-alonso", "evidence": "Name: Beatriz Alonso\nType: person\nThe user's spouse."},
+        {"id": "xavi-pujol", "evidence": "Name: Xavi Pujol\nType: person\nFriend of the user."},
+        {"id": "beatriz-costa", "evidence": "Name: Beatriz Costa\nType: person\nXavi's partner."}
+      ]
+    },
+    "expected": {"outcome": "AMBIGUOUS", "id": null, "ambiguous_ids": ["beatriz-martin", "beatriz-alonso", "beatriz-costa"]}
+  },
+  {
+    "id": "CTXE03_UNRESOLVED",
+    "request": {
+      "reference": "my cardiologist",
+      "context": "The heart check is tomorrow.",
+      "entity_type": "person",
+      "candidates": [
+        {"id": "lucia-garcia", "evidence": "Name: Lucía García\nType: person\nThe user's dentist."},
+        {"id": "marc-vidal", "evidence": "Name: Marc Vidal\nType: person\nA colleague."}
+      ]
+    },
+    "expected": {"outcome": "UNRESOLVED", "id": null, "ambiguous_ids": []}
+  },
+  {
+    "id": "CTXE04_RELATIONAL_FACT_AMBIGUITY",
+    "request": {
+      "reference": "mi hijo mayor",
+      "context": "Mi hijo mayor se ha apuntado a natación.",
+      "entity_type": "canonical_fact",
+      "candidates": [
+        {"id": "fact-children", "evidence": "Mis hijos son Cloe y Bruno."},
+        {"id": "fact-swimming", "evidence": "Cloe y Bruno quieren probar actividades acuáticas."},
+        {"id": "fact-neighbour", "evidence": "Mi vecino Marc vive en Lyon."}
+      ]
+    },
+    "expected": {"outcome": "AMBIGUOUS", "id": null, "ambiguous_ids": ["fact-children", "fact-swimming"]}
+  },
+  {
+    "id": "CTXE05_FALSE_RESOLVED_SENTINEL",
+    "request": {
+      "reference": "the work project",
+      "context": "No other detail is available.",
+      "entity_type": "project",
+      "candidates": [
+        {"id": "atlas", "evidence": "Name: Atlas\nType: project\nA work project."},
+        {"id": "mercury", "evidence": "Name: Mercury\nType: project\nA work project."},
+        {"id": "odyssey", "evidence": "Name: Odyssey\nType: project\nA personal knowledge project."}
+      ]
+    },
+    "expected": {"outcome": "AMBIGUOUS", "id": null, "ambiguous_ids": ["atlas", "mercury"]}
+  },
+  {
+    "id": "CTXE06_NEGATIVE_EVIDENCE_SENTINEL",
+    "request": {
+      "reference": "my Atlas colleague",
+      "context": "Not the accountant.",
+      "entity_type": "person",
+      "candidates": [
+        {"id": "marc", "evidence": "Name: Marc\nType: person\nAtlas engineer."},
+        {"id": "clara", "evidence": "Name: Clara\nType: person\nAtlas accountant."}
+      ]
+    },
+    "expected": {"outcome": "RESOLVED", "id": "marc", "ambiguous_ids": []}
+  }
+]

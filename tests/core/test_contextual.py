@@ -79,6 +79,7 @@ def test_frozen_examples_are_compact_turns_and_evaluation_stays_blind() -> None:
     assert json.loads(turns[2]["content"]) == {
         "outcome": "RESOLVED",
         "id": "beatriz-costa",
+        "ambiguous_ids": [],
     }
     assert isinstance(turns[1]["content"], str)
     assert "prompt_cache_key" not in payload
@@ -167,12 +168,39 @@ def test_cache_configuration_does_not_change_semantic_prompt_or_contract() -> No
 @pytest.mark.parametrize(
     ("output", "message"),
     [
-        ({"outcome": "MAYBE", "id": None}, "invalid outcome"),
-        ({"outcome": "RESOLVED", "id": None}, "non-null"),
-        ({"outcome": "AMBIGUOUS", "id": "a"}, "null ID"),
-        ({"outcome": "UNRESOLVED", "id": "a"}, "null ID"),
-        ({"outcome": "RESOLVED", "id": "outside"}, "outside"),
-        ({"outcome": "RESOLVED", "id": "a", "extra": True}, "schema"),
+        ({"outcome": "RESOLVED", "id": "a"}, "invalid schema"),
+        ({"outcome": "AMBIGUOUS", "id": None}, "invalid schema"),
+        ({"outcome": "UNRESOLVED", "id": None}, "invalid schema"),
+        ({"outcome": "MAYBE", "id": None, "ambiguous_ids": []}, "invalid outcome"),
+        ({"outcome": "RESOLVED", "id": None, "ambiguous_ids": []}, "non-null"),
+        ({"outcome": "AMBIGUOUS", "id": "a", "ambiguous_ids": ["a", "b"]}, "null ID"),
+        ({"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": []}, "two to four"),
+        ({"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["a"]}, "two to four"),
+        (
+            {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["a", "a"]},
+            "unique",
+        ),
+        (
+            {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["a", "outside"]},
+            "outside",
+        ),
+        (
+            {
+                "outcome": "AMBIGUOUS",
+                "id": None,
+                "ambiguous_ids": ["a", "b", "c", "d", "e"],
+            },
+            "two to four",
+        ),
+        (
+            {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["a", "b", "c", "d", "e"]},
+            "two to four",
+        ),
+        ({"outcome": "UNRESOLVED", "id": "a", "ambiguous_ids": []}, "null ID"),
+        ({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": ["a", "b"]}, "empty"),
+        ({"outcome": "RESOLVED", "id": "outside", "ambiguous_ids": []}, "outside"),
+        ({"outcome": "RESOLVED", "id": "a", "ambiguous_ids": ["a", "b"]}, "empty"),
+        ({"outcome": "RESOLVED", "id": "a", "extra": True, "ambiguous_ids": []}, "schema"),
         (["RESOLVED", "a"], "schema"),
     ],
 )
@@ -185,9 +213,13 @@ def test_invalid_model_output_fails_closed(output: object, message: str) -> None
 @pytest.mark.parametrize(
     ("output", "outcome", "identity"),
     [
-        ({"outcome": "RESOLVED", "id": "a"}, "RESOLVED", "a"),
-        ({"outcome": "AMBIGUOUS", "id": None}, "AMBIGUOUS", None),
-        ({"outcome": "UNRESOLVED", "id": None}, "UNRESOLVED", None),
+        ({"outcome": "RESOLVED", "id": "a", "ambiguous_ids": []}, "RESOLVED", "a"),
+        (
+            {"outcome": "AMBIGUOUS", "id": None, "ambiguous_ids": ["a", "b"]},
+            "AMBIGUOUS",
+            None,
+        ),
+        ({"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}, "UNRESOLVED", None),
     ],
 )
 def test_valid_model_output_is_accepted(output: object, outcome: str, identity: str | None) -> None:
