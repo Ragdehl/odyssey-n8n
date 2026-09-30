@@ -28,7 +28,8 @@ MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "medium"
 MAX_OUTPUT_TOKENS = 512
 MAX_PROVIDER_CALLS = 6
-MAX_COST_USD = Decimal("0.01875900")
+MAX_COST_USD = Decimal("0.00")
+GATE_CONSUMED = True
 CASES_PATH = Path(__file__).with_name("cases.json")
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
 OUTPUT_PATH = ROOT / "benchmarks/.live-results/contextual-explainable-v1-luna-medium.jsonl"
@@ -119,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-live-provider-calls", action="store_true")
     args = parser.parse_args(argv)
+    if GATE_CONSUMED:
+        raise SystemExit("Refusing live calls: contextual-explainable-v1 is permanently consumed")
     cases = load_cases()
     ceiling, _input_tokens = conservative_cost_ceiling(cases)
     if not args.confirm_live_provider_calls or MAX_COST_USD < ceiling:

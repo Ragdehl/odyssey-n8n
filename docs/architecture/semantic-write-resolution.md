@@ -231,11 +231,16 @@ validate/project this shape. The browser presents an inline card with choose, no
 ordinary free-text reply paths.
 
 Deterministic Core/runtime/workflow/browser evidence is implemented on
-`feat/explainable-clarification`. The immutable `contextual-explainable-v1` gate is prepared for six
-`gpt-5.6-luna` / medium calls (RESOLVED, AMBIGUOUS subset, UNRESOLVED, relational fact-locator
-ambiguity, and two prior-behavior sentinels), zero retries, zero Sol calls, and a conservative
-`$0.01875900` ceiling. Its execution authority remains
-`$0.00`; model-facing readiness is pending a separate explicit authorization and successful live run.
+`feat/explainable-clarification`. The immutable `contextual-explainable-v1` gate was authorized and
+executed once with six `gpt-5.6-luna` / medium calls, zero retries, and zero Sol calls. Five of six
+frozen oracles passed. The only mismatch, `CTXE04_RELATIONAL_FACT_AMBIGUITY`, returned the safer
+`UNRESOLVED` outcome instead of the frozen `AMBIGUOUS` subset; it did not falsely resolve or invent an
+ID. That sentinel paired the genuinely relational fact `Mis hijos son Cloe y Bruno` with an aquatic-
+activity fact that does not itself establish the requested `mi hijo mayor` identity, so its original
+ambiguity oracle is intentionally retained as historical evidence rather than weakened after seeing
+live output. The gate is permanently consumed at `$0.00`; artifact SHA-256 is
+`f523a7791cc9cfe233f8cb2dacf34e74309ded2b4028648cdb3cd39b87cc093c` and usage-backed estimated
+cost is `$0.00376700`.
 
 ## Required sentinels
 

@@ -118,8 +118,9 @@ adoption.
 Luna-only Semantic WRITE compiler simplification merged in PR #147. The semantic WRITE simplification
 is complete. Explainable Clarification UX is the current bounded phase: Core exposes only validated,
 canonical-evidence ambiguity options through the existing guarded continuation, while runtime,
-workflow, and browser remain presentation boundaries. Its contextual-contract live gate is prepared
-but not authorized or run. Tasks remains the next application phase after this clarification pass.
+workflow, and browser remain presentation boundaries. Its contextual-contract v1 live gate completed 5/6: the only mismatch was a safe `UNRESOLVED`
+on a debatable canonical-fact ambiguity oracle, with no false resolution. Tasks remains the next
+application phase after this clarification pass.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -161,7 +162,7 @@ Semantic WRITE intent/Core compiler simplification                ✅ complete �
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
-Explainable Clarification UX                                       ➡️ current; deterministic implementation, live gate pending
+Explainable Clarification UX                                       ➡️ current; deterministic implementation, v1 live 5/6 with one safe abstention
 Tasks — first real application + minimal app routing              ⬜ next
 Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed

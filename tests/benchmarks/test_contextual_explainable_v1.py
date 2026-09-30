@@ -29,7 +29,8 @@ def test_gate_is_frozen_bounded_and_costed() -> None:
     )
     assert input_tokens > 0
     assert ceiling == Decimal("0.01875900")
-    assert runner.MAX_COST_USD == ceiling
+    assert runner.MAX_COST_USD == Decimal("0.00")
+    assert runner.GATE_CONSUMED is True
     assert runner.MAX_PROVIDER_CALLS == 6
 
 
@@ -43,18 +44,16 @@ def test_default_gate_refuses_before_provider_construction(
         "OpenAIContextualReasoner",
         lambda *_args, **_kwargs: pytest.fail("provider constructed"),
     )
-    with pytest.raises(SystemExit, match="explicit authorization"):
-        runner.main([])
+    with pytest.raises(SystemExit, match="permanently consumed"):
+        runner.main(["--confirm-live-provider-calls"])
 
 
-def test_gate_refuses_to_overwrite_after_separate_authorization(
+def test_consumed_gate_refuses_even_when_budget_is_monkeypatched(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
-    """A prior immutable result blocks a second execution before a provider call."""
+    """A consumed gate cannot be revived by restoring its former cost ceiling."""
     output = tmp_path / "result.jsonl"
-    output.write_text("existing\n", encoding="utf-8")
-    cases = runner.load_cases()
-    ceiling, _ = runner.conservative_cost_ceiling(cases)
+    ceiling, _ = runner.conservative_cost_ceiling(runner.load_cases())
     monkeypatch.setattr(runner, "MAX_COST_USD", ceiling)
     monkeypatch.setattr(runner, "OUTPUT_PATH", output)
     monkeypatch.setattr(
@@ -62,5 +61,5 @@ def test_gate_refuses_to_overwrite_after_separate_authorization(
         "OpenAIContextualReasoner",
         lambda *_args, **_kwargs: pytest.fail("provider constructed"),
     )
-    with pytest.raises(SystemExit, match="overwrite"):
+    with pytest.raises(SystemExit, match="permanently consumed"):
         runner.main(["--confirm-live-provider-calls"])
