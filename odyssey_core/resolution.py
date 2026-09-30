@@ -290,24 +290,9 @@ def resolve_existing_entity(
     decision = validate_contextual_decision(
         raw_decision, {candidate.id for candidate in candidates}
     )
-    candidate_ids: tuple[str, ...]
-    if decision.outcome == "RESOLVED":
-        candidate_ids = tuple(candidate.id for candidate in candidates)
-    elif decision.outcome == "AMBIGUOUS":
-        candidate_ids = decision.ambiguous_ids
-    elif (
-        decision.outcome == "UNRESOLVED"
-        and exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
-    ):
-        candidate_ids = tuple(candidate.id for candidate in exact.candidates)
-    else:
-        candidate_ids = ()
-    clarification = (
-        _build_note_clarification_presentation(
-            reference, candidate_ids, candidates, repository, schema
-        )
-        if 1 < len(candidate_ids) <= 4
-        else None
+    candidate_ids = _decision_candidate_ids(decision, candidates, exact)
+    clarification = _decision_clarification(
+        reference, candidate_ids, candidates, repository, schema
     )
     return ExistingEntityResolution(
         outcome=ExistingEntityOutcome(decision.outcome),
@@ -319,6 +304,34 @@ def resolve_existing_entity(
         ),
         usage=_safe_usage(usage),
         clarification=clarification,
+    )
+
+
+def _decision_candidate_ids(
+    decision: Any, candidates, exact: ExactEntityResolution
+) -> tuple[str, ...]:
+    """Preserve resolved evidence while narrowing only an ambiguous decision subset."""
+    if decision.outcome == "RESOLVED":
+        return tuple(candidate.id for candidate in candidates)
+    if decision.outcome == "AMBIGUOUS":
+        return decision.ambiguous_ids
+    if exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH:
+        return tuple(candidate.id for candidate in exact.candidates)
+    return ()
+
+
+def _decision_clarification(
+    reference: str,
+    candidate_ids: tuple[str, ...],
+    candidates,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> ClarificationPresentation | None:
+    """Create public ambiguity evidence only for the bounded safe option count."""
+    if not 1 < len(candidate_ids) <= 4:
+        return None
+    return _build_note_clarification_presentation(
+        reference, candidate_ids, candidates, repository, schema
     )
 
 

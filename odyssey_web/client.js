@@ -166,41 +166,65 @@ export function validateProductResponse(value) {
     result.collection_members = value.collection_members;
   }
   if (value.clarification !== undefined) {
-    const clarification = value.clarification;
-    const hasOptions = Array.isArray(clarification?.options) && clarification.options.length > 0;
-    const rich = hasOptions && clarification.options.every((option) =>
-      option && Object.keys(option).length === 4 &&
-      Object.hasOwn(option, "id") && Object.hasOwn(option, "label") &&
-      Object.hasOwn(option, "note_type") && Object.hasOwn(option, "evidence"));
-    const basic = Array.isArray(clarification?.options) && clarification.options.every((option) =>
-      option && Object.keys(option).length === 2 &&
-      Object.hasOwn(option, "id") && Object.hasOwn(option, "label"));
-    const allowedClarificationKeys = rich
-      ? new Set(["request_id", "options", "requested_reference", "explanation"])
-      : new Set(["request_id", "options"]);
-    if (!clarification || typeof clarification.request_id !== "string" ||
-        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(clarification.request_id) ||
-        Object.keys(clarification).some((key) => !allowedClarificationKeys.has(key)) ||
-        !Array.isArray(clarification.options) || clarification.options.length > 4 ||
-        (hasOptions && clarification.options.length < 2) ||
-        (!rich && !basic) ||
-        (rich && (typeof clarification.requested_reference !== "string" ||
-          !clarification.requested_reference.trim() || clarification.requested_reference.length > 240 ||
-          typeof clarification.explanation !== "string" ||
-          !clarification.explanation.trim() || clarification.explanation.length > 500)) ||
-        clarification.options.some((option) => !option || typeof option.id !== "string" ||
-          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(option.id) ||
-          typeof option.label !== "string" || !option.label.trim() || option.label.length > 160 ||
-          (rich && (typeof option.note_type !== "string" || !option.note_type.trim() ||
-            option.note_type.length > 80 || typeof option.evidence !== "string" ||
-            !option.evidence.trim() || option.evidence.length > 320))) ||
-        new Set(clarification.options.map((option) => option.id)).size !==
-          clarification.options.length) {
-      throw new ProductRequestError("Odyssey returned an invalid clarification.");
-    }
-    result.clarification = clarification;
+    result.clarification = validateClarification(value.clarification);
   }
   return result;
+}
+
+function validateClarification(clarification) {
+  if (!clarification || typeof clarification !== "object" || Array.isArray(clarification) ||
+      typeof clarification.request_id !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(clarification.request_id) ||
+      !Array.isArray(clarification.options) || clarification.options.length > 4 ||
+      (clarification.options.length > 0 && clarification.options.length < 2)) {
+    throw new ProductRequestError("Odyssey returned an invalid clarification.");
+  }
+  const shape = clarificationOptionShape(clarification.options);
+  if (!shape || !validClarificationKeys(clarification, shape) ||
+      !validClarificationMetadata(clarification, shape) ||
+      clarification.options.some((option) => !validClarificationOption(option, shape)) ||
+      new Set(clarification.options.map((option) => option.id)).size !== clarification.options.length) {
+    throw new ProductRequestError("Odyssey returned an invalid clarification.");
+  }
+  return clarification;
+}
+
+function clarificationOptionShape(options) {
+  if (options.length === 0) return "basic";
+  if (options.every((option) => hasExactKeys(option, ["id", "label", "note_type", "evidence"]))) {
+    return "rich";
+  }
+  if (options.every((option) => hasExactKeys(option, ["id", "label"]))) return "basic";
+  return null;
+}
+
+function hasExactKeys(value, keys) {
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+
+function validClarificationKeys(value, shape) {
+  const allowed = shape === "rich"
+    ? new Set(["request_id", "options", "requested_reference", "explanation"])
+    : new Set(["request_id", "options"]);
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function validClarificationMetadata(value, shape) {
+  if (shape !== "rich") return true;
+  return typeof value.requested_reference === "string" && value.requested_reference.trim() &&
+    value.requested_reference.length <= 240 && typeof value.explanation === "string" &&
+    value.explanation.trim() && value.explanation.length <= 500;
+}
+
+function validClarificationOption(option, shape) {
+  const basic = typeof option.id === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(option.id) &&
+    typeof option.label === "string" && option.label.trim() && option.label.length <= 160;
+  if (!basic || shape !== "rich") return Boolean(basic);
+  return typeof option.note_type === "string" && option.note_type.trim() &&
+    option.note_type.length <= 80 && typeof option.evidence === "string" &&
+    option.evidence.trim() && option.evidence.length <= 320;
 }
 
 function validateNoteResultSnapshot(value) {

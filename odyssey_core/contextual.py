@@ -223,55 +223,77 @@ def _render_user_evidence(request: ContextualResolutionRequest) -> str:
 def validate_contextual_decision(
     output: object, candidate_ids: set[str] | frozenset[str]
 ) -> ContextualResolutionDecision:
-    """Fail closed unless model output satisfies the complete Odyssey decision contract.
-
-    Args:
-        output: Parsed model output to validate independently of provider enforcement.
-        candidate_ids: Exact identities supplied to the model for this request.
-
-    Returns:
-        Validated contextual-resolution decision.
-
-    Raises:
-        ContextualResolutionError: If schema, outcome, nullability, or candidate membership is invalid.
-    """
+    """Fail closed unless model output satisfies the complete Odyssey decision contract."""
     if not isinstance(output, dict) or set(output) != {"outcome", "id", "ambiguous_ids"}:
         raise ContextualResolutionError("Contextual decision has an invalid schema")
     outcome = output["outcome"]
     identity = output["id"]
-    ambiguous_ids = output["ambiguous_ids"]
     if not isinstance(outcome, str) or outcome not in OUTCOMES:
         raise ContextualResolutionError("Contextual decision has an invalid outcome")
     if identity is not None and not isinstance(identity, str):
         raise ContextualResolutionError("Contextual decision ID must be a string or null")
-    if not isinstance(ambiguous_ids, list) or any(
-        not isinstance(candidate_id, str) or not candidate_id for candidate_id in ambiguous_ids
+    ambiguous_ids = _validated_ambiguous_ids(output["ambiguous_ids"])
+    _validate_outcome_contract(outcome, identity, ambiguous_ids, candidate_ids)
+    return ContextualResolutionDecision(outcome=outcome, id=identity, ambiguous_ids=ambiguous_ids)
+
+
+def _validated_ambiguous_ids(value: object) -> tuple[str, ...]:
+    """Validate the bounded candidate subset independently of outcome semantics."""
+    if not isinstance(value, list) or any(
+        not isinstance(candidate_id, str) or not candidate_id for candidate_id in value
     ):
         raise ContextualResolutionError("Contextual ambiguous IDs must be a string array")
-    if len(ambiguous_ids) != len(set(ambiguous_ids)):
+    if len(value) != len(set(value)):
         raise ContextualResolutionError("Contextual ambiguous IDs must be unique")
+    return tuple(value)
+
+
+def _validate_outcome_contract(
+    outcome: str,
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    """Apply outcome-specific nullability and supplied-candidate constraints."""
     if outcome == "RESOLVED":
-        if identity is None:
-            raise ContextualResolutionError("RESOLVED requires a non-null candidate ID")
-        if identity not in candidate_ids:
-            raise ContextualResolutionError("RESOLVED selected an ID outside the candidate set")
-        if ambiguous_ids:
-            raise ContextualResolutionError("RESOLVED requires empty ambiguous IDs")
+        _validate_resolved_contract(identity, ambiguous_ids, candidate_ids)
     elif outcome == "AMBIGUOUS":
-        if identity is not None:
-            raise ContextualResolutionError("AMBIGUOUS requires a null ID")
-        if not 1 < len(ambiguous_ids) <= 4:
-            raise ContextualResolutionError("AMBIGUOUS requires two to four candidate IDs")
-        if any(candidate_id not in candidate_ids for candidate_id in ambiguous_ids):
-            raise ContextualResolutionError("AMBIGUOUS selected an ID outside the candidate set")
+        _validate_ambiguous_contract(identity, ambiguous_ids, candidate_ids)
     else:
-        if identity is not None:
-            raise ContextualResolutionError("UNRESOLVED requires a null ID")
-        if ambiguous_ids:
-            raise ContextualResolutionError("UNRESOLVED requires empty ambiguous IDs")
-    return ContextualResolutionDecision(
-        outcome=outcome, id=identity, ambiguous_ids=tuple(ambiguous_ids)
-    )
+        _validate_unresolved_contract(identity, ambiguous_ids)
+
+
+def _validate_resolved_contract(
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    if identity is None:
+        raise ContextualResolutionError("RESOLVED requires a non-null candidate ID")
+    if identity not in candidate_ids:
+        raise ContextualResolutionError("RESOLVED selected an ID outside the candidate set")
+    if ambiguous_ids:
+        raise ContextualResolutionError("RESOLVED requires empty ambiguous IDs")
+
+
+def _validate_ambiguous_contract(
+    identity: str | None,
+    ambiguous_ids: tuple[str, ...],
+    candidate_ids: set[str] | frozenset[str],
+) -> None:
+    if identity is not None:
+        raise ContextualResolutionError("AMBIGUOUS requires a null ID")
+    if not 1 < len(ambiguous_ids) <= 4:
+        raise ContextualResolutionError("AMBIGUOUS requires two to four candidate IDs")
+    if any(candidate_id not in candidate_ids for candidate_id in ambiguous_ids):
+        raise ContextualResolutionError("AMBIGUOUS selected an ID outside the candidate set")
+
+
+def _validate_unresolved_contract(identity: str | None, ambiguous_ids: tuple[str, ...]) -> None:
+    if identity is not None:
+        raise ContextualResolutionError("UNRESOLVED requires a null ID")
+    if ambiguous_ids:
+        raise ContextualResolutionError("UNRESOLVED requires empty ambiguous IDs")
 
 
 class OpenAIContextualReasoner:

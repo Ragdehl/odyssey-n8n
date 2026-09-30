@@ -957,6 +957,21 @@ def _execute_write(
     )
 
 
+def _relational_clarification_still_valid(
+    resolved: Any,
+    choice: ClarificationChoice,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> bool:
+    """Revalidate the chosen identity and relationship guard before mutation."""
+    return (
+        len(resolved.targets) == 1
+        and resolved.targets[0].id == choice.stable_id
+        and resolved.evidence_guard == choice.source_evidence_guard
+        and current_identity_guard(repository, schema, choice.stable_id) == choice.evidence_guard
+    )
+
+
 def _execute_relational_write(
     action_index: int,
     action: WriteAction,
@@ -1023,20 +1038,15 @@ def _execute_relational_write(
                 clarification_choice.stable_id if clarification_choice is not None else None
             ),
         )
-        if clarification_choice is not None:
-            if (
-                len(resolved.targets) != 1
-                or resolved.targets[0].id != clarification_choice.stable_id
-                or resolved.evidence_guard != clarification_choice.source_evidence_guard
-                or current_identity_guard(repository, schema, clarification_choice.stable_id)
-                != clarification_choice.evidence_guard
-            ):
-                return ActionResult(
-                    action_index,
-                    action.kind,
-                    ActionStatus.DEFERRED,
-                    reason="clarification_evidence_changed",
-                )
+        if clarification_choice is not None and not _relational_clarification_still_valid(
+            resolved, clarification_choice, repository, schema
+        ):
+            return ActionResult(
+                action_index,
+                action.kind,
+                ActionStatus.DEFERRED,
+                reason="clarification_evidence_changed",
+            )
         projector = RelationshipEvidenceProjector(repository, schema)
         kwargs: dict[str, Any] = {}
         if id_allocator is not None:
