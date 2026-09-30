@@ -27,7 +27,7 @@ from odyssey_core.clarification_presentation import (
     ClarificationPresentation,
 )
 from odyssey_core.identity_boundary import AuthenticatedActorContext
-from odyssey_core.local_conversations import ConversationRootResolver
+from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.request_planning import (
@@ -140,6 +140,30 @@ def test_numeric_reply_resumes_saved_write_without_replanning(tmp_path: Path) ->
     assert calls[0][5].stable_id == "marta-2"
     assert calls[0][5].evidence_guard == "b" * 64
     assert runtime.execute_product("2", "delivery-2", "main", ACTOR)["delivery_replayed"] is True
+    assert len(calls) == 1
+
+
+def test_ui_choice_sentence_resumes_saved_write_without_replanning(tmp_path: Path) -> None:
+    """The rendered choice sentence is a deterministic continuation and durable user turn."""
+    calls = []
+
+    def core(request, request_id, actor, conversation_id, plan, choice):
+        calls.append((request, choice.stable_id))
+        return _completed(request_id)
+
+    runtime, state = _pending_runtime(tmp_path, core)
+    reply = "He elegido a Marta in Madrid."
+    response = runtime.execute_product(reply, "delivery-ui-choice", "main", ACTOR)
+
+    assert response["product_outcome"] == "ANSWER"
+    assert calls == [("Remember that Marta visited Lyon.", "marta-2")]
+    assert state.read() is None
+    turns = LocalConversationStore(
+        ConversationRootResolver(tmp_path / "state").resolve(ACTOR.stable_user_id)
+    ).load_main_page()["turns"]
+    assert turns[-1]["text"] == reply
+    replay = runtime.execute_product(reply, "delivery-ui-choice", "main", ACTOR)
+    assert replay["delivery_replayed"] is True
     assert len(calls) == 1
 
 

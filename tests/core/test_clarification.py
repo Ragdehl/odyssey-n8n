@@ -24,12 +24,20 @@ OPTIONS = (
 
 @pytest.mark.parametrize(
     ("reply", "expected"),
-    [("1", "note-a"), (" 2 ", "note-b"), ("marta in lyon", "note-a"), ("3", None), ("Marta", None)],
+    [
+        ("1", "note-a"),
+        (" 2 ", "note-b"),
+        ("marta in lyon", "note-a"),
+        ("He elegido a Marta in Madrid.", "note-b"),
+        ("3", None),
+        ("Marta", None),
+        ("He elegido a Marta.", None),
+    ],
 )
-def test_only_numeric_or_exact_unique_label_selects_option(
+def test_only_bounded_deterministic_reply_forms_select_option(
     reply: str, expected: str | None
 ) -> None:
-    """Free text and unknown numbers cannot invent a target."""
+    """Only numeric, exact-label, or exact UI-choice forms can select a supplied target."""
     assert match_clarification_reply(reply, OPTIONS) == expected
 
 
@@ -37,6 +45,7 @@ def test_duplicate_labels_remain_unresolved_and_ids_must_be_unique() -> None:
     """Displayed labels cannot silently identify one of two same-named Notes."""
     same_label = (ClarificationOption("note-a", "Marta"), ClarificationOption("note-b", "Marta"))
     assert match_clarification_reply("Marta", same_label) is None
+    assert match_clarification_reply("He elegido a Marta.", same_label) is None
     assert match_clarification_reply("2", same_label) == "note-b"
     with pytest.raises(ValueError):
         match_clarification_reply("1", (OPTIONS[0], OPTIONS[0]))
@@ -73,6 +82,12 @@ def test_reply_precedence_and_bounded_control_outcomes() -> None:
     assert (
         resolve_clarification_reply("Marta in Lyon", OPTIONS, classifier, "original request")
         == "note-a"
+    )
+    assert (
+        resolve_clarification_reply(
+            "He elegido a Marta in Madrid.", OPTIONS, classifier, "original request"
+        )
+        == "note-b"
     )
     assert (
         resolve_clarification_reply("cancel", OPTIONS, classifier, "original request") == "CANCEL"

@@ -430,7 +430,7 @@ def evidence_digest(markdown: str) -> str:
 
 
 def match_clarification_reply(reply: str, options: tuple[ClarificationOption, ...]) -> str | None:
-    """Choose only a numeric or exact unique displayed option; otherwise stay unresolved.
+    """Choose only a bounded deterministic option form; otherwise stay unresolved.
 
     Args:
         reply: The next user message, never treated as canonical identity authority.
@@ -462,7 +462,14 @@ def match_clarification_reply(reply: str, options: tuple[ClarificationOption, ..
     if normalized.isascii() and normalized.isdecimal():
         index = int(normalized)
         return options[index - 1].id if 1 <= index <= len(options) else None
-    matches = [option.id for option in options if option.label.casefold() == normalized.casefold()]
+    normalized_key = normalized.casefold()
+    # The browser emits this exact sentence for its bounded choice button. Treat it as a
+    # deterministic alias of the supplied display label, never as free-text identity authority.
+    matches = [
+        option.id
+        for option in options
+        if normalized_key in {option.label.casefold(), f"He elegido a {option.label}.".casefold()}
+    ]
     return matches[0] if len(matches) == 1 else None
 
 

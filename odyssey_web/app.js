@@ -359,7 +359,7 @@ function appendClarificationCard(article, clarification) {
   }
   const list = document.createElement("div");
   list.className = "clarification-options";
-  clarification.options.forEach((option, index) => {
+  clarification.options.forEach((option) => {
     const row = document.createElement("article");
     row.className = "clarification-option";
     const heading = document.createElement("h3");
@@ -369,7 +369,7 @@ function appendClarificationCard(article, clarification) {
     const choose = document.createElement("button");
     choose.type = "button";
     choose.textContent = "Elegir";
-    choose.addEventListener("click", () => submitClarificationReply(String(index + 1)));
+    choose.addEventListener("click", () => submitClarificationReply(`He elegido a ${option.label}.`));
     const inspect = document.createElement("button");
     inspect.type = "button";
     inspect.textContent = "Ver nota";

@@ -300,13 +300,15 @@ test("clarification renders grounded controls while leaving the composer usable"
   assert.equal(page.elements.clarificationStatus.hidden, false);
   assert.equal(page.elements.input.disabled, false);
   card.querySelector(".clarification-option").querySelector("button").click();
-  assert.deepEqual(submissions, ["Guarda esto", "1"]);
+  assert.deepEqual(submissions, ["Guarda esto", "He elegido a Cloe."]);
+  const visibleChoice = page.elements.conversation.children.at(-2);
+  assert.equal(visibleChoice.querySelector(".message-text").textContent, "He elegido a Cloe.");
   const inspect = card.querySelector(".clarification-option").querySelector(".clarification-controls").children[1];
   inspect.click();
   assert.equal(page.elements.notes.hidden, false);
   assert.equal(page.document.events.at(-1).detail.note_id, "cloe");
   card.querySelector(".clarification-cancel").click();
-  assert.deepEqual(submissions, ["Guarda esto", "1", "cancel"]);
+  assert.deepEqual(submissions, ["Guarda esto", "He elegido a Cloe.", "cancel"]);
 });
 
 test("conversation reload renders the exact durable affected-note affordance", async () => {
