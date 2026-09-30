@@ -26,6 +26,8 @@
   },
   "change_policy": {
     "fresh_versioned_live_gate_required": true,
+    "live_gate_stage": "final_pre_merge",
+    "intermediate_ci_hash_blocking": false,
     "explicit_bounded_cost_authorization_required": true,
     "collect_complete_matrix": true,
     "deterministic_vertical_e2e_required": true

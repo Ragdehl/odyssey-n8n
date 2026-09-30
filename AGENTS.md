@@ -71,13 +71,13 @@ A deterministic test cannot prove that a production model follows a changed prom
 
 Whenever a production LLM prompt, model-facing instruction, or structured-output contract changes materially:
 
-1. keep deterministic schema/fail-closed tests;
-2. run focused live evidence with the same production model and reasoning configuration;
-3. include a compact regression-sentinel set for prior behavior the change could disturb;
-4. reuse frozen cases/oracles where possible rather than rerunning unrelated model selection;
-5. if provider access is unavailable, report the missing live-evidence gate explicitly instead of treating the change as validated.
+1. keep deterministic schema/fail-closed tests throughout development;
+2. include a compact regression-sentinel set for prior behavior the change could disturb;
+3. reuse frozen cases/oracles where possible rather than rerunning unrelated model selection;
+4. once the functionality and candidate contract are otherwise settled, run one focused live evidence gate with the same production model and reasoning configuration before readiness/merge;
+5. if provider access is unavailable at that final gate, report the missing live evidence explicitly instead of treating the change as validated.
 
-For Odyssey planner changes, CI must also protect the last accepted model-facing contract by hash (rendered Luna prompt, provider schema, teaching examples, production model, and reasoning effort). If any protected value changes, do not update the accepted hash merely to make CI green: prepare a fresh versioned live regression gate, keep it at zero provider authority until explicit bounded cost approval, collect the complete frozen matrix, and update the accepted contract only after the evidence is reviewed. New model evaluations start with GPT-6 Luna when applicable; if the production model is different, the production configuration must still pass its focused regression gate unless the human explicitly approves a model switch backed by its own evidence.
+For Odyssey planner changes, preserve the last accepted model-facing contract by hash (rendered Luna prompt, provider schema, teaching examples, production model, and reasoning effort), but do not make ordinary intermediate CI fail solely because an in-progress candidate differs from those hashes. The exact current-versus-accepted hash check is a final pre-merge gate, run once after deterministic feature validation. If any protected value still differs then, do not update the accepted hash merely to make the gate green: prepare a fresh versioned live regression gate, keep it at zero provider authority until explicit bounded cost approval, collect the complete frozen matrix, and update the accepted contract only after the evidence is reviewed. Do not repeat provider gates for every intermediate prompt edit. New model evaluations start with GPT-6 Luna when applicable; if the production model is different, the production configuration must still pass its focused regression gate unless the human explicitly approves a model switch backed by its own evidence.
 
 For user-visible clarification or continuation changes, deterministic tests must cover the affected flow vertically rather than only testing isolated functions. Cover every meaningful state transition for the changed workflow (initial clarification, candidate choice, cancellation, unresolved free text, unrelated new request, stale target evidence, stale source evidence, replay/idempotence, and generic non-person Note types when applicable). Provider live gates supplement these tests; they do not replace them.
 

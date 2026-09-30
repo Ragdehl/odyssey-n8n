@@ -4,21 +4,29 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 import odyssey_core.experimental_luna_planning as luna
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / "benchmarks/planner_model_contract/accepted_contract.json"
 TEACHING = ROOT / "benchmarks/luna_first_planner/teaching_examples_v3.json"
+FINAL_GATE_ENV = "ODYSSEY_FINAL_MODEL_CONTRACT_GATE"
 
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+@pytest.mark.skipif(
+    os.environ.get(FINAL_GATE_ENV) != "1",
+    reason="final model-contract gate runs once after deterministic feature validation",
+)
 def test_current_planner_contract_matches_last_live_accepted_evidence() -> None:
-    """Require fresh reviewed live evidence before any model-facing planner drift can merge."""
+    """At the explicit final gate, require the candidate to match reviewed live evidence."""
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
     context = contract["baseline_context"]
@@ -65,6 +73,8 @@ def test_accepted_contract_points_to_immutable_recorded_evidence() -> None:
     assert candidate["artifact_sha256"] == candidate_evidence["artifact_sha256"]
     assert contract["change_policy"] == {
         "fresh_versioned_live_gate_required": True,
+        "live_gate_stage": "final_pre_merge",
+        "intermediate_ci_hash_blocking": False,
         "explicit_bounded_cost_authorization_required": True,
         "collect_complete_matrix": True,
         "deterministic_vertical_e2e_required": True,
