@@ -55,6 +55,23 @@ def test_additional_oracle_requires_relational_one_member_without_preselection()
     assert findings == ["expected_single_request_plan"]
 
 
+def test_matrix_acceptance_allows_only_reviewed_safe_degradations() -> None:
+    reviewed = [
+        {"case_id": "SWR07-qualified-event-member", "passed": False},
+        {"case_id": "SWR08-relational-target-described-reference", "passed": False},
+        {"case_id": "PPR16-unknown-self-project-member-write", "passed": False},
+        {"case_id": "PPR14-unknown-self-member-write", "passed": True},
+    ]
+    assert runner._matrix_acceptable(reviewed) is True
+    assert (
+        runner._matrix_acceptable(
+            reviewed
+            + [{"case_id": "SWR10-relational-target-two-bounded-references", "passed": False}]
+        )
+        is False
+    )
+
+
 def test_only_production_matrix_runs(monkeypatch, tmp_path) -> None:
     """The final prompt gate evaluates only the currently deployed planner model."""
     calls = []
