@@ -735,6 +735,12 @@ function appendBodySegments(parent, segments, open) {
     link.append(typeIcon(segment.target_type), document.createTextNode(segment.text));
     link.addEventListener("click", (event) => {
       event.preventDefault();
+      if (segment.target_type === "calendar_day" && segment.target_id.startsWith("date:")) {
+        document.dispatchEvent(new CustomEvent("odyssey:open-calendar-day", {
+          detail: {date: segment.target_id.slice(5)},
+        }));
+        return;
+      }
       void open(segment.target_id);
     });
     parent.append(link);

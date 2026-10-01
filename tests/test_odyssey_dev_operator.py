@@ -269,7 +269,10 @@ def valid_publication_rows() -> list[dict[str, object]]:
             "active": 0,
             "activeVersionId": "online-version",
             "activeVersionNodes": active_version_nodes(
-                ("POST", "request"), ("POST", "conversation"), ("POST", "notes")
+                ("POST", "request"),
+                ("POST", "conversation"),
+                ("POST", "notes"),
+                ("POST", "calendar"),
             ),
         },
         {
@@ -285,6 +288,8 @@ def valid_publication_rows() -> list[dict[str, object]]:
                 ("GET", "client.js"),
                 ("GET", "notes.js"),
                 ("GET", "notes-client.js"),
+                ("GET", "calendar.js"),
+                ("GET", "calendar-client.js"),
             ),
         },
     ]
@@ -360,10 +365,13 @@ def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> 
         "/api/client.js",
         "/api/notes.js",
         "/api/notes-client.js",
+        "/api/calendar.js",
+        "/api/calendar-client.js",
         "/api/environment.js",
         "/api/request",
         "/api/conversation",
         "/api/notes",
+        "/api/calendar",
     )
     for route in expected:
         assert route in inventory
@@ -379,9 +387,10 @@ def test_publication_and_readiness_require_the_notes_and_complete_module_routes(
     inventory = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-product-routes.tsv").read_text(
         encoding="utf-8"
     )
-    for route in ("notes.js", "notes-client.js"):
+    for route in ("notes.js", "notes-client.js", "calendar.js", "calendar-client.js"):
         assert route in inventory
     assert '"http://$N8N_HOST:$N8N_PORT/api/notes"' in source
+    assert '"http://$N8N_HOST:$N8N_PORT/api/calendar"' in source
     assert "dev_static_paths" in source
     assert 'for path in "${static_paths[@]}"' in source
 

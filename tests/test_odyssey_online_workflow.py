@@ -323,3 +323,18 @@ def test_answerer_idempotency_key_excludes_request_and_identity_data() -> None:
     assert ".item.json.request +" not in expression
     for forbidden in ("issuer", "subject", "email", "stable_user_id", "person_note_id", "aud"):
         assert forbidden not in expression
+
+
+def test_calendar_route_is_deterministic_bounded_and_provider_free() -> None:
+    """Keep Calendar month/day projection outside the planner/answerer and behind the same identity boundary."""
+    source = SOURCE.read_text(encoding="utf-8")
+    calendar = source[source.index("// Calendar is a deterministic projection route") :]
+    assert "path: 'calendar'" in calendar
+    assert "operation === 'month'" in calendar
+    assert "operation === 'day'" in calendar
+    assert "new Set(['operation', 'month'])" in calendar
+    assert "new Set(['operation', 'date'])" in calendar
+    assert "runtimeBaseUrl}/calendar" in calendar
+    assert "conversationIdentity" in calendar
+    assert "Luna" not in calendar
+    assert "openai.com" not in calendar

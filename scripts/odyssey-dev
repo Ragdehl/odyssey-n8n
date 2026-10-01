@@ -321,7 +321,7 @@ for raw_line in inventory_path.read_text(encoding="utf-8").splitlines():
 if not module_routes <= expected:
     raise SystemExit("browser module graph is absent from the DEV route inventory")
 index = (web_root / "index.html").read_text(encoding="utf-8")
-if any(route not in index for route in {"/api/request", "/api/conversation", "/api/notes"}):
+if any(route not in index for route in {"/api/request", "/api/conversation", "/api/notes", "/api/calendar"}):
     raise SystemExit("browser product endpoints are absent from the DEV route inventory")
 actual = set()
 for workflow_path in workflow_paths:
@@ -434,7 +434,7 @@ assert_published_workflows() {
 }
 
 route_readiness_once() {
-  local response body status notes_response notes_body notes_status
+  local response body status notes_response notes_body notes_status calendar_response calendar_body calendar_status
   response=$(curl --silent --show-error --max-time 10 --write-out $'\n%{http_code}' \
     --request POST "http://$N8N_HOST:$N8N_PORT/api/request" \
     --header 'Content-Type: application/json' \
@@ -468,6 +468,20 @@ payload = json.load(sys.stdin)
 if payload.get("kind") != "page" or payload.get("mode") != "feed" or not isinstance(payload.get("items"), list):
     raise SystemExit(1)
 ' <<<"$notes_body"
+  calendar_response=$(curl --silent --show-error --max-time 10 --write-out $'\n%{http_code}' \
+    --request POST "http://$N8N_HOST:$N8N_PORT/api/calendar" \
+    --header 'Content-Type: application/json' \
+    --data '{"operation":"month","month":"2026-10"}') || return 1
+  calendar_status=${calendar_response##*$'\n'}
+  calendar_body=${calendar_response%$'\n'*}
+  [ "$calendar_status" = 200 ] || return 1
+  "$PYTHON" -c '
+import json
+import sys
+payload = json.load(sys.stdin)
+if payload.get("kind") != "calendar_month" or payload.get("month") != "2026-10" or not isinstance(payload.get("days"), list):
+    raise SystemExit(1)
+' <<<"$calendar_body"
 }
 
 static_route_readiness_once() {

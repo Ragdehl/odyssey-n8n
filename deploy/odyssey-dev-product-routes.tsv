@@ -6,6 +6,9 @@ GET	/api/app.js	static
 GET	/api/client.js	static
 GET	/api/notes.js	static
 GET	/api/notes-client.js	static
+GET	/api/calendar.js	static
+GET	/api/calendar-client.js	static
 POST	/api/request	api
 POST	/api/conversation	api
 POST	/api/notes	api
+POST	/api/calendar	api

@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; implementation in progress (Slices 1-3 complete on the feature branch)**.
+Status: **approved phase contract; implementation in progress (Slices 1-4 complete on the feature branch; DEV visual validation pending)**.
 
 ## Objective
 
@@ -176,6 +176,8 @@ Calendar-owned Day notes do not appear in the ordinary Notes feed by default, al
 Week uses Monday through Sunday in v0. Locale/user-configurable week starts are deferred. Week/month/year are calculated views over date ranges, not separately persisted Notes in this phase.
 
 Hourly week/day/three-day grids are deferred until Events provides timed objects that justify them. Calendar v0 must not create an empty Google-Calendar-style scheduling UI before the event contract exists.
+
+Implementation note after Slice 4: Calendar now has a deterministic private/runtime `month` + `day` projection and a dedicated framework-free browser surface. Month projection scans current validated canonical Markdown and exposes bounded indicators for Day-owned content, Journal `entry_date`, same-day captured facts, and explicit temporal references; Day projection keeps those categories separate and opens virtual dates without materialization. Browser responses contain only Core-resolved presentation blocks and stable Note summaries, never raw vault paths or browser-side Markdown parsing authority. Notes date links hand navigation to Calendar, while Calendar related-note controls hand navigation back to Notes. Provider-free backend and browser end-to-end tests cover real canonical write -> Day chronology/materialization -> index rebuild -> month/Day projection and month -> Day -> related Note navigation. The checked-in DEV route inventory includes the Calendar modules/API, but no live DEV or public-route deployment is implied by the implementation commit.
 
 ## Application sequence and composition
 

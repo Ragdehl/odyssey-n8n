@@ -118,6 +118,14 @@ def _capture_heading_date(match: re.Match[str]) -> str | None:
     return parsed.isoformat() if link_label == expected else None
 
 
+def capture_heading_date(line: str) -> str | None:
+    """Return the ISO date represented by one supported complete Added heading line."""
+    if not isinstance(line, str):
+        return None
+    match = _CAPTURE_HEADING.fullmatch(line.strip())
+    return None if match is None else _capture_heading_date(match)
+
+
 def _fact_blocks(
     facts: tuple[str, ...], request_id: str, ordinals: tuple[int, ...]
 ) -> tuple[str, ...]:

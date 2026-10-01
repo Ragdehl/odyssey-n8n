@@ -420,6 +420,89 @@ def test_http_boundary_rejects_invalid_input_without_calling_core() -> None:
         server.server_close()
 
 
+def test_http_calendar_boundary_projects_month_and_day_with_typed_actor() -> None:
+    """The private Calendar route forwards only one bounded operation and typed actor context."""
+    user = OdysseyUser.new()
+    calls: list[tuple[object, ...]] = []
+
+    class CalendarRuntime:
+        def calendar(self, operation, payload, actor, principal):
+            calls.append((operation, payload, actor.stable_user_id, principal))
+            return {"kind": f"calendar_{operation}", **payload}
+
+    server = _test_server(CalendarRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "month",
+                    "month": "2026-10",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "calendar_month", "month": "2026-10"}
+
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "day",
+                    "date": "2026-10-01",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "calendar_day", "date": "2026-10-01"}
+        assert calls == [
+            ("month", {"month": "2026-10"}, user.stable_user_id, None),
+            ("day", {"date": "2026-10-01"}, user.stable_user_id, None),
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_calendar_boundary_rejects_unknown_or_invalid_operations() -> None:
+    """Calendar exposes only month/day and maps bounded runtime validation to one safe 400."""
+    calls: list[str] = []
+
+    class CalendarRuntime:
+        def calendar(self, operation, payload, actor, principal):
+            del actor, principal
+            calls.append(operation)
+            if operation == "day":
+                raise ValueError("invalid date")
+            return {}
+
+    server = _test_server(CalendarRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/calendar", body=json.dumps({"operation": "unknown"}))
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid calendar request"}
+
+        connection.request(
+            "POST", "/calendar", body=json.dumps({"operation": "day", "date": "bad"})
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid calendar request"}
+        assert calls == ["day"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_http_notes_boundary_projects_one_typed_operation_and_actor() -> None:
     """The private Notes route forwards only the operation payload and typed actor context."""
     user = OdysseyUser.new()

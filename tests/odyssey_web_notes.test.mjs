@@ -63,13 +63,14 @@ class FakeElement {
 }
 
 class FakeDocument {
-  constructor() { this._elements = new Map(); this._listeners = new Map(); }
+  constructor() { this._elements = new Map(); this._listeners = new Map(); this.events = []; }
   createElement(tagName) { return new FakeElement(tagName); }
   createElementNS(_namespace, tagName) { return new FakeElement(tagName); }
   createTextNode(value) { return new FakeText(value); }
   querySelector(selector) { return this._elements.get(selector) ?? null; }
   addEventListener(type, listener) { this._listeners.set(type, listener); }
   emit(type, event = {}) { this._listeners.get(type)?.(event); }
+  dispatchEvent(event) { this.events.push(event); this._listeners.get(event.type)?.(event); return true; }
 }
 
 function matches(element, selector) {
@@ -127,6 +128,9 @@ async function mountNotes({requestNotes, confirmImpl = () => true}) {
     ["#notes-filter-clear", elements.filterClear],
   ]) document._elements.set(selector, element);
   globalThis.document = document;
+  globalThis.CustomEvent = class CustomEvent {
+    constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+  };
   globalThis.__odysseyTestNotesClient = {NotesRequestError, requestNotes};
   const source = await readFile(new URL("../odyssey_web/notes.js", import.meta.url), "utf8");
   const testable = source.replace(
@@ -484,4 +488,27 @@ test("an unsafe intelligent-filter response clears stale rows without installing
   await flush();
   assert.equal(mounted.controller.state.query, "Lara");
   assert.equal(intelligentCalls, 1);
+});
+
+test("Calendar Day inline links hand navigation to Calendar instead of opening managed Notes", async () => {
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return detail(payload.note_id, "Marta", null, [{
+        kind: "heading", segments: [
+          {text: "Added "},
+          {text: "01-10-2026", target_id: "date:2026-10-01", target_type: "calendar_day"},
+        ],
+      }]);
+      if (operation === "backlinks") return {kind: "backlinks", target_id: payload.note_id, items: [], total: 0, next_cursor: null};
+      return page({items: [pageItem("marta", "Marta")]});
+    },
+  });
+  mounted.elements.list.children[0].click();
+  await flush();
+  const dateLink = mounted.elements.detail.querySelector("a");
+  assert.equal(dateLink.textContent.includes("01-10-2026"), true);
+  dateLink.click();
+  assert.equal(mounted.document.events.at(-1).type, "odyssey:open-calendar-day");
+  assert.deepEqual(mounted.document.events.at(-1).detail, {date: "2026-10-01"});
 });
