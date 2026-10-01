@@ -166,7 +166,7 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  ➡️ next; approved phase contract
+Temporal Foundation + Calendar v0                                  🚧 in progress; Slices 1-2 complete on feature branch
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar v0
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed

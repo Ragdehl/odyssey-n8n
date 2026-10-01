@@ -214,6 +214,21 @@ from .semantic_write import (
     SemanticWriteOperation,
     compile_semantic_write,
 )
+from .temporal import (
+    CALENDAR_DAY_TYPE,
+    CalendarDay,
+    CalendarDayCollisionError,
+    CalendarDayRepository,
+    DateRange,
+    TemporalValueError,
+    calendar_day_id,
+    calendar_day_path,
+    day_range,
+    month_range,
+    normalize_iso_date,
+    week_range,
+    year_range,
+)
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
 __all__ = [
@@ -363,6 +378,19 @@ __all__ = [
     "enumerate_semantic_set_candidates",
     "resolve_semantic_set",
     "serialize_semantic_set_candidate_payload",
+    "CALENDAR_DAY_TYPE",
+    "CalendarDay",
+    "CalendarDayCollisionError",
+    "CalendarDayRepository",
+    "DateRange",
+    "TemporalValueError",
+    "calendar_day_id",
+    "calendar_day_path",
+    "day_range",
+    "month_range",
+    "normalize_iso_date",
+    "week_range",
+    "year_range",
     "WriteTargetDecision",
     "WriteTargetOutcome",
     "decide_write_target",

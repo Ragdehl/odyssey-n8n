@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; implementation not started**.
+Status: **approved phase contract; implementation in progress (Slices 1-2 complete on the feature branch)**.
 
 ## Objective
 
@@ -48,7 +48,7 @@ Every valid calendar date has a deterministic logical identity, conceptually:
 date:YYYY-MM-DD
 ```
 
-That identity exists even when no Markdown file exists. Calendar resolves a date directly; it never performs semantic entity search to find “tomorrow's note”.
+That identity exists even when no Markdown file exists. Calendar resolves a date directly; it never performs semantic entity search to find “tomorrow's note”. The current Core implementation uses this same `date:YYYY-MM-DD` value as the stable canonical Note `id` after materialization, so virtual and materialized representations do not undergo an identity transition.
 
 A day is virtual by default and materializes as canonical Markdown only when:
 
