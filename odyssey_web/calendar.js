@@ -1,4 +1,5 @@
 import {CalendarRequestError, requestCalendar} from "./calendar-client.js";
+import {typeBadge, typeLabel} from "./notes.js";
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", {month: "long", year: "numeric", timeZone: "UTC"});
@@ -104,13 +105,22 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
       if (state.monthValue?.month === state.month) renderMonth();
       else void loadMonth(state.month);
     });
+    const navigation = document.createElement("div");
+    navigation.className = "calendar-day-date-nav";
+    const previousDay = button("←", () => void openDay(shiftDate(day.date, -1)));
+    previousDay.className = "calendar-day-step calendar-day-previous";
+    previousDay.setAttribute("aria-label", "Día anterior");
     const heading = document.createElement("h2");
     heading.textContent = dayLabel(day.date);
-    header.append(back, heading);
+    const nextDay = button("→", () => void openDay(shiftDate(day.date, 1)));
+    nextDay.className = "calendar-day-step calendar-day-next";
+    nextDay.setAttribute("aria-label", "Día siguiente");
+    navigation.append(previousDay, heading, nextDay);
+    header.append(back, navigation);
     const sections = document.createElement("div");
     sections.className = "calendar-day-sections";
     if (day.content.length) sections.append(blockSection("Contenido del día", day.content));
-    if (day.journals.length) sections.append(noteSection("Diario", day.journals));
+    if (day.journals.length) sections.append(journalSection(day.journals));
     if (day.captures.length) sections.append(captureSection(day.captures));
     if (day.references.length) sections.append(referenceSection(day.references));
     if (!sections.children.length) {
@@ -131,9 +141,18 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
     return section;
   }
 
-  function noteSection(label, notes) {
-    const section = sectionWithHeading(label);
-    for (const note of notes) section.append(noteButton(note));
+  function journalSection(journals) {
+    const section = sectionWithHeading("Diario");
+    for (const journal of journals) {
+      const group = document.createElement("article");
+      group.className = "calendar-related-group calendar-journal-group";
+      group.append(noteButton(journal.source));
+      const body = document.createElement("div");
+      body.className = "calendar-related-blocks";
+      renderBlocks(body, journal.content);
+      group.append(body);
+      section.append(group);
+    }
     return section;
   }
 
@@ -168,9 +187,10 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
   }
 
   function noteButton(note) {
-    const value = button(note.name, () => openNote(note.id));
+    const value = button("", () => openNote(note.id));
     value.className = "calendar-note-link";
-    value.setAttribute("aria-label", `Abrir ${note.name}`);
+    value.append(typeBadge(note.type), document.createTextNode(note.name));
+    value.setAttribute("aria-label", `Abrir ${typeLabel(note.type)} ${note.name}`);
     return value;
   }
 
@@ -206,8 +226,9 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
       }
       const link = document.createElement("a");
       link.href = "#";
-      link.textContent = segment.text;
       link.className = "calendar-inline-link";
+      link.setAttribute("aria-label", `${typeLabel(segment.target_type)}: ${segment.text}`);
+      link.append(typeBadge(segment.target_type), document.createTextNode(segment.text));
       link.addEventListener("click", (event) => {
         event.preventDefault();
         if (segment.target_type === "calendar_day" && segment.target_id.startsWith("date:")) {
@@ -262,6 +283,11 @@ function button(label, action) {
   value.textContent = label;
   value.addEventListener("click", action);
   return value;
+}
+function shiftDate(value, offset) {
+  const current = new Date(`${value}T00:00:00Z`);
+  current.setUTCDate(current.getUTCDate() + offset);
+  return current.toISOString().slice(0, 10);
 }
 function shiftMonth(value, offset) {
   const [year, month] = value.split("-").map(Number);

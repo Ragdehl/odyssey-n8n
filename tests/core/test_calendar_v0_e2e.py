@@ -116,7 +116,7 @@ def test_real_write_chronology_journal_and_day_projection_end_to_end(tmp_path: P
 
     day = calendar.day("2026-10-01")
     assert day.materialized is True
-    assert [journal.id for journal in day.journals] == ["journal-2026-10-01"]
+    assert [journal.source.id for journal in day.journals] == ["journal-2026-10-01"]
     assert [capture.source.id for capture in day.captures] == ["marta"]
     assert "Compré una bici." in " ".join(
         "".join(segment.text for segment in block.segments) for block in day.content

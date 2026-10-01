@@ -751,14 +751,14 @@ function humanizeBacklinkHeading(segments) {
   const match = /^Added (\d{2})-(\d{2})-(\d{4})$/.exec(raw);
   return match ? [{text: `${match[1]}/${match[2]}/${match[3]}`}] : segments;
 }
-function typeBadge(type) {
+export function typeBadge(type) {
   const badge = document.createElement("span");
   badge.className = `note-type type-${type}`;
   badge.append(typeIcon(type));
   badge.setAttribute("aria-label", typeLabel(type));
   return badge;
 }
-function typeIcon(type) {
+export function typeIcon(type) {
   const presentation = TYPE_PRESENTATION[type] ?? {paths: ["M5 5h14v14H5z", "M8 8h8M8 12h8M8 16h5"]};
   const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   icon.setAttribute("viewBox", "0 0 24 24");
@@ -771,7 +771,7 @@ function typeIcon(type) {
   }
   return icon;
 }
-function typeLabel(type) { return TYPE_PRESENTATION[type]?.label ?? type.replaceAll("_", " "); }
+export function typeLabel(type) { return TYPE_PRESENTATION[type]?.label ?? type.replaceAll("_", " "); }
 function property(parent, key, value) {
   const term = document.createElement("dt");
   term.textContent = key.replaceAll("_", " ");

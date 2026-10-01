@@ -95,7 +95,9 @@ def service(tmp_path: Path, schema: dict) -> CalendarQueryService:
         "journal-one",
         "Diario del jueves",
         "journal_entry",
-        "Hoy fue un buen día.",
+        "# Added [[calendar/days/2026-10-01|01-10-2026]]\n"
+        "- Hoy fue un buen día.\n"
+        "- Hablé con [[people/marta|Marta]].",
         properties={"entry_date": "2026-10-01"},
     )
     write(
@@ -135,7 +137,7 @@ def test_month_projects_materialization_content_and_distinct_temporal_categories
     assert first.materialized is True
     assert first.has_content is True
     assert first.journal_count == 1
-    assert first.captured_fact_count == 2
+    assert first.captured_fact_count == 4
     assert first.reference_count == 1
     second = month.days[1]
     assert second.materialized is False
@@ -154,7 +156,13 @@ def test_day_keeps_own_content_journal_capture_and_explicit_reference_separate(
     assert "Compré una bici." in " ".join(
         "".join(segment.text for segment in block.segments) for block in day.content
     )
-    assert [item.id for item in day.journals] == ["journal-one"]
+    assert [item.source.id for item in day.journals] == ["journal-one"]
+    journal_text = " ".join(
+        "".join(segment.text for segment in block.segments) for block in day.journals[0].content
+    )
+    assert "Hoy fue un buen día." in journal_text
+    assert "Hablé con Marta." in journal_text
+    assert "Added" not in journal_text
     assert [item.source.id for item in day.captures] == ["marta"]
     assert [
         "".join(segment.text for segment in block.segments) for block in day.captures[0].facts
@@ -173,7 +181,7 @@ def test_virtual_day_remains_openable_when_only_property_relationship_exists(
 
     assert day.materialized is False
     assert day.content == ()
-    assert [item.id for item in day.journals] == ["journal-two"]
+    assert [item.source.id for item in day.journals] == ["journal-two"]
     assert day.captures == ()
     assert day.references == ()
     assert not (tmp_path / "vault" / "calendar" / "days" / "2026-10-02.md").exists()

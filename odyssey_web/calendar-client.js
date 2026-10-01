@@ -40,7 +40,7 @@ export function validateCalendarResponse(value) {
     }
     return {
       kind: "calendar_day", date: value.date, materialized: value.materialized,
-      content: value.content.map(validateBlock), journals: value.journals.map(validateSummary),
+      content: value.content.map(validateBlock), journals: value.journals.map(validateJournal),
       captures: value.captures.map(validateCapture), references: value.references.map(validateReference),
     };
   }
@@ -55,6 +55,10 @@ function validateMonthDay(value) {
     journal_count: count(value.journal_count), captured_fact_count: count(value.captured_fact_count),
     reference_count: count(value.reference_count),
   };
+}
+function validateJournal(value) {
+  if (!value || !Array.isArray(value.content)) throw new CalendarRequestError("Diario inválido.");
+  return {source: validateSummary(value.source), content: value.content.map(validateBlock)};
 }
 function validateCapture(value) {
   if (!value || !Array.isArray(value.facts)) throw new CalendarRequestError("Captura inválida.");

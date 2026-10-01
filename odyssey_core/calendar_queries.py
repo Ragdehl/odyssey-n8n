@@ -45,6 +45,12 @@ class CalendarMonth:
 
 
 @dataclass(frozen=True, slots=True)
+class CalendarJournal:
+    source: NoteSummary
+    content: tuple[NoteBodyBlock, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CalendarCapture:
     source: NoteSummary
     facts: tuple[NoteBodyBlock, ...]
@@ -61,7 +67,7 @@ class CalendarDayView:
     date: str
     materialized: bool
     content: tuple[NoteBodyBlock, ...]
-    journals: tuple[NoteSummary, ...]
+    journals: tuple[CalendarJournal, ...]
     captures: tuple[CalendarCapture, ...]
     references: tuple[CalendarReference, ...]
 
@@ -164,6 +170,11 @@ def _reference_blocks(
     )
 
 
+def _journal_blocks(blocks: tuple[NoteBodyBlock, ...]) -> tuple[NoteBodyBlock, ...]:
+    """Return journal content without capture-chronology headings already projected by Calendar."""
+    return tuple(block for block in blocks if _visible_heading_date(block) is None)
+
+
 class CalendarQueryService:
     """Project virtual/materialized Calendar Days without giving the browser Markdown authority."""
 
@@ -263,7 +274,7 @@ class CalendarQueryService:
             except NotesQueryError as error:
                 raise CalendarQueryError("Calendar day detail is unavailable") from error
 
-        journals: list[NoteSummary] = []
+        journals: list[CalendarJournal] = []
         captures: list[CalendarCapture] = []
         references: list[CalendarReference] = []
         for note in self._scan():
@@ -277,12 +288,12 @@ class CalendarQueryService:
             except NotesQueryError as error:
                 raise CalendarQueryError("Calendar related note is unavailable") from error
             if relevant_journal:
-                journals.append(detail.note)
-            if relevant_capture:
+                journals.append(CalendarJournal(detail.note, _journal_blocks(detail.body_blocks)))
+            if relevant_capture and not relevant_journal:
                 facts = _capture_blocks(detail.body_blocks, normalized)
                 if facts:
                     captures.append(CalendarCapture(detail.note, facts))
-            if relevant_reference:
+            if relevant_reference and not relevant_journal:
                 blocks = _reference_blocks(detail.body_blocks, target_id)
                 if blocks:
                     references.append(CalendarReference(detail.note, blocks))
@@ -290,7 +301,7 @@ class CalendarQueryService:
         def summary_key(summary: NoteSummary) -> tuple[str, str]:
             return (summary.name.casefold(), summary.id)
 
-        journals.sort(key=summary_key)
+        journals.sort(key=lambda item: summary_key(item.source))
         captures.sort(key=lambda item: summary_key(item.source))
         references.sort(key=lambda item: summary_key(item.source))
         return CalendarDayView(

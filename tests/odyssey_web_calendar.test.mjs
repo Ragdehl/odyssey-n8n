@@ -7,6 +7,7 @@ import {
   requestCalendar as realRequestCalendar,
   validateCalendarResponse,
 } from "../odyssey_web/calendar-client.js";
+import {typeBadge, typeLabel} from "../odyssey_web/notes.js";
 
 let fixtureNumber = 0;
 
@@ -67,6 +68,7 @@ class FakeElement {
 class FakeDocument {
   constructor() { this._listeners = new Map(); this.events = []; }
   createElement(tagName) { return new FakeElement(tagName); }
+  createElementNS(_namespace, tagName) { return new FakeElement(tagName); }
   createTextNode(value) { return new FakeText(value); }
   addEventListener(type, listener) {
     if (!this._listeners.has(type)) this._listeners.set(type, []);
@@ -93,6 +95,9 @@ function summary(id, name, type = "person") {
 }
 
 function block(text) { return {kind: "list_item", segments: [{text}]}; }
+function linkedBlock(prefix, text, targetId, targetType) {
+  return {kind: "list_item", segments: [{text: prefix}, {text, target_id: targetId, target_type: targetType}]};
+}
 
 async function flush() {
   await Promise.resolve();
@@ -122,11 +127,17 @@ async function mountCalendar(requestCalendar) {
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
   };
   globalThis.__odysseyTestCalendarClient = {CalendarRequestError, requestCalendar};
+  globalThis.__odysseyTestNotePresentation = {typeBadge, typeLabel};
   const source = await readFile(new URL("../odyssey_web/calendar.js", import.meta.url), "utf8");
-  const testable = source.replace(
-    'import {CalendarRequestError, requestCalendar} from "./calendar-client.js";',
-    "const {CalendarRequestError, requestCalendar} = globalThis.__odysseyTestCalendarClient;",
-  );
+  const testable = source
+    .replace(
+      'import {CalendarRequestError, requestCalendar} from "./calendar-client.js";',
+      "const {CalendarRequestError, requestCalendar} = globalThis.__odysseyTestCalendarClient;",
+    )
+    .replace(
+      'import {typeBadge, typeLabel} from "./notes.js";',
+      "const {typeBadge, typeLabel} = globalThis.__odysseyTestNotePresentation;",
+    );
   const {mountCalendar: mount} = await import(
     `data:text/javascript;base64,${Buffer.from(`${testable}\n// fixture ${fixtureNumber += 1}`).toString("base64")}`,
   );
@@ -157,6 +168,13 @@ test("Calendar client sends only the bounded same-origin operation and validates
   assert.equal(requests[0].credentials, "same-origin");
   assert.deepEqual(JSON.parse(requests[0].body), {operation: "month", month: "2026-10"});
 
+  const day = validateCalendarResponse({
+    kind: "calendar_day", date: "2026-10-01", materialized: false, content: [],
+    journals: [{source: summary("journal-1", "Diario", "journal_entry"), content: [block("Texto del diario.")]}],
+    captures: [], references: [],
+  });
+  assert.equal(day.journals[0].source.type, "journal_entry");
+  assert.equal(day.journals[0].content[0].segments[0].text, "Texto del diario.");
   assert.throws(() => validateCalendarResponse({kind: "calendar_day", date: "bad"}), CalendarRequestError);
 });
 
@@ -171,8 +189,11 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   const day = {
     kind: "calendar_day", date: "2026-10-01", materialized: true,
     content: [block("Compré una bici.")],
-    journals: [summary("journal-1", "Diario del jueves", "journal_entry")],
-    captures: [{source: summary("marta", "Marta"), facts: [block("Empezó en Airbus."), block("Confirmó el horario.")]}],
+    journals: [{
+      source: summary("journal-1", "Diario del jueves", "journal_entry"),
+      content: [block("Hoy fue un buen día."), linkedBlock("Hablé con ", "Marta", "marta", "person")],
+    }],
+    captures: [{source: summary("marta", "Marta"), facts: [linkedBlock("Empezó en ", "Airbus", "airbus", "project"), block("Confirmó el horario.")]}],
     references: [{source: summary("trip", "Viaje", "project"), blocks: [block("La reserva corresponde al 1 de octubre.")]}],
   };
   const mounted = await mountCalendar(async ({operation, payload}) => {
@@ -195,15 +216,46 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   assert.equal(mounted.elements.dayView.textContent.includes("Contenido del día"), true);
   assert.equal(mounted.elements.dayView.textContent.includes("Compré una bici."), true);
   assert.equal(mounted.elements.dayView.textContent.includes("Diario"), true);
+  assert.equal(mounted.elements.dayView.textContent.includes("Hoy fue un buen día."), true);
+  assert.equal(mounted.elements.dayView.textContent.split("Diario del jueves").length - 1, 1);
   assert.equal(mounted.elements.dayView.textContent.includes("Capturado este día"), true);
   assert.equal(mounted.elements.dayView.textContent.includes("Referencias a este día"), true);
+
+  const diary = mounted.elements.dayView.querySelectorAll(".calendar-note-link")
+    .find((item) => item.textContent === "Diario del jueves");
+  assert.ok(diary?.querySelector(".note-type"));
+  const inlineLink = mounted.elements.dayView.querySelector(".calendar-inline-link");
+  assert.ok(inlineLink?.querySelector(".note-type"));
 
   const marta = mounted.elements.dayView.querySelectorAll(".calendar-note-link")
     .find((item) => item.textContent === "Marta");
   assert.ok(marta);
+  assert.ok(marta.querySelector(".note-type"));
   marta.click();
   assert.equal(mounted.document.events.at(-1).type, "odyssey:open-note");
   assert.deepEqual(mounted.document.events.at(-1).detail, {note_id: "marta"});
+});
+
+test("Day navigation opens the previous and next natural dates without returning to month", async () => {
+  const calls = [];
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    calls.push({operation, payload});
+    if (operation === "month") {
+      return {kind: "calendar_month", month: "2026-10", days: [{date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0}]};
+    }
+    return {kind: "calendar_day", date: payload.date, materialized: false, content: [], journals: [], captures: [], references: []};
+  });
+
+  mounted.elements.grid.querySelector(".calendar-day-cell").click();
+  await flush();
+  mounted.elements.dayView.querySelector(".calendar-day-previous").click();
+  await flush();
+  assert.deepEqual(calls.at(-1), {operation: "day", payload: {date: "2026-09-30"}});
+  assert.equal(mounted.elements.dayView.hidden, false);
+
+  mounted.elements.dayView.querySelector(".calendar-day-next").click();
+  await flush();
+  assert.deepEqual(calls.at(-1), {operation: "day", payload: {date: "2026-10-01"}});
 });
 
 test("an empty virtual Day opens without materializing content in the browser", async () => {
