@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; implementation in progress (Slices 1-4 complete on the feature branch; DEV visual validation pending)**.
+Status: **approved phase contract; implementation in progress (Slices 1-4 complete on the feature branch; DEV visual validation in progress after bounded UI/query fixes)**.
 
 ## Objective
 
@@ -178,6 +178,23 @@ Week uses Monday through Sunday in v0. Locale/user-configurable week starts are 
 Hourly week/day/three-day grids are deferred until Events provides timed objects that justify them. Calendar v0 must not create an empty Google-Calendar-style scheduling UI before the event contract exists.
 
 Implementation note after Slice 4: Calendar now has a deterministic private/runtime `month` + `day` projection and a dedicated framework-free browser surface. Month projection scans current validated canonical Markdown and exposes bounded indicators for Day-owned content, Journal `entry_date`, same-day captured facts, and explicit temporal references; Day projection keeps those categories separate and opens virtual dates without materialization. Browser responses contain only Core-resolved presentation blocks and stable Note summaries, never raw vault paths or browser-side Markdown parsing authority. Notes date links hand navigation to Calendar, while Calendar related-note controls hand navigation back to Notes. Provider-free backend and browser end-to-end tests cover real canonical write -> Day chronology/materialization -> index rebuild -> month/Day projection and month -> Day -> related Note navigation. The checked-in DEV route inventory includes the Calendar modules/API, but no live DEV or public-route deployment is implied by the implementation commit.
+
+Implementation note after DEV validation: journal entries are projected only onto their semantic `entry_date`; their capture chronology remains available to Odyssey history but no longer duplicates them under another Day's `Captured` section. Day navigation deduplicates identical in-flight requests and gives only the newest navigation request authority to update the visible state, preventing rapid taps from building duplicate work or letting stale responses/errors replace a newer Day. Deterministic regression tests preserve both failure boundaries.
+
+### Deferred temporal index optimization
+
+Calendar v0 intentionally keeps its current Markdown scan while scale remains small and measured query cost is low. The first DEV slowdown investigated during rapid Day navigation was caused by duplicate concurrent browser requests and queueing, not by Core's Markdown scan; the UI concurrency fix therefore remains the correct immediate remedy.
+
+When measurements show vault-size scan cost becoming material, optimize by extending the existing rebuildable `context.sqlite3` index rather than introducing `calendar.sqlite3` or another authority. The intended query shape is:
+
+```text
+Calendar date/month query
+        -> context.sqlite3 selects relevant stable note IDs
+        -> Core hydrates only those canonical Markdown Notes
+        -> Calendar renders the same projection contract
+```
+
+Reuse indexed schema properties for temporal fields such as `journal_entry.entry_date` and later `task.due_date`, and reuse indexed note links for explicit Day backlinks. If capture chronology becomes a measured bottleneck, add the smallest rebuildable Core-owned projection needed to index `Added` dates/fact locators, with SQL indexes suited to date/range lookup. Markdown remains authoritative; every SQLite temporal projection must be disposable and reconstructible from canonical Markdown. Incremental index maintenance is a separate later optimization and should be justified by rebuild measurements rather than bundled speculatively with Calendar.
 
 ## Application sequence and composition
 
