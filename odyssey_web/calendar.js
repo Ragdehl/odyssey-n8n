@@ -15,6 +15,8 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
   const previous = root.querySelector("#calendar-prev");
   const next = root.querySelector("#calendar-next");
   const state = {month: localMonth(), monthValue: null, dayValue: null, loading: false};
+  let dayRequestGeneration = 0;
+  const inFlightDays = new Map();
 
   async function loadMonth(value = state.month) {
     if (state.loading) return;
@@ -78,10 +80,21 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
     return value;
   }
 
+  function requestDay(value) {
+    const current = inFlightDays.get(value);
+    if (current) return current;
+    const pending = requestCalendar({endpoint, operation: "day", payload: {date: value}})
+      .finally(() => { if (inFlightDays.get(value) === pending) inFlightDays.delete(value); });
+    inFlightDays.set(value, pending);
+    return pending;
+  }
+
   async function openDay(value) {
+    const generation = ++dayRequestGeneration;
     status.textContent = "Cargando día…";
     try {
-      const day = await requestCalendar({endpoint, operation: "day", payload: {date: value}});
+      const day = await requestDay(value);
+      if (generation !== dayRequestGeneration) return;
       state.dayValue = day;
       if (state.month !== value.slice(0, 7)) {
         state.month = value.slice(0, 7);
@@ -90,6 +103,7 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
       renderDay();
       status.textContent = "";
     } catch {
+      if (generation !== dayRequestGeneration) return;
       status.textContent = "No se ha podido abrir este día.";
     }
   }
@@ -102,6 +116,8 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
     const header = document.createElement("header");
     header.className = "calendar-day-header";
     const back = button("‹ Mes", () => {
+      dayRequestGeneration += 1;
+      status.textContent = "";
       state.dayValue = null;
       if (state.monthValue?.month === state.month) renderMonth();
       else void loadMonth(state.month);

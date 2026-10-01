@@ -137,7 +137,7 @@ def test_month_projects_materialization_content_and_distinct_temporal_categories
     assert first.materialized is True
     assert first.has_content is True
     assert first.journal_count == 1
-    assert first.captured_fact_count == 4
+    assert first.captured_fact_count == 2
     assert first.reference_count == 1
     second = month.days[1]
     assert second.materialized is False
@@ -185,6 +185,51 @@ def test_virtual_day_remains_openable_when_only_property_relationship_exists(
     assert day.captures == ()
     assert day.references == ()
     assert not (tmp_path / "vault" / "calendar" / "days" / "2026-10-02.md").exists()
+
+
+def test_journals_belong_only_to_entry_date_not_capture_chronology(
+    tmp_path: Path, schema: dict
+) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(
+        vault,
+        "journal/one.md",
+        "journal-one",
+        "Diario A",
+        "journal_entry",
+        "# Added [[calendar/days/2026-10-02|02-10-2026]]\n- Escribí esto un día después.",
+        properties={"entry_date": "2026-10-01"},
+    )
+    write(
+        vault,
+        "journal/two.md",
+        "journal-two",
+        "Diario B",
+        "journal_entry",
+        "# Added [[calendar/days/2026-10-01|01-10-2026]]\n- Otra entrada del mismo día.",
+        properties={"entry_date": "2026-10-01"},
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    index.rebuild(repository, schema, Embedder())
+    calendar = CalendarQueryService(
+        repository, schema, NotesQueryService(repository, schema, index)
+    )
+
+    first = calendar.day("2026-10-01")
+    assert [item.source.id for item in first.journals] == ["journal-one", "journal-two"]
+    assert first.captures == ()
+
+    second = calendar.day("2026-10-02")
+    assert second.journals == ()
+    assert second.captures == ()
+
+    month = calendar.month("2026-10")
+    assert month.days[0].journal_count == 2
+    assert month.days[0].captured_fact_count == 0
+    assert month.days[1].journal_count == 0
+    assert month.days[1].captured_fact_count == 0
 
 
 @pytest.mark.parametrize("value", ["", "2026-1", "2026-13", " 2026-10"])

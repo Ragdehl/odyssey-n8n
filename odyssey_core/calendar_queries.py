@@ -248,9 +248,10 @@ class CalendarQueryService:
                 state[note.calendar_date]["has_content"] = bool(note.body.strip())
             if note.entry_date in state:
                 state[note.entry_date]["journal_count"] += 1
-            for captured_date, count in note.capture_counts.items():
-                if captured_date in state:
-                    state[captured_date]["captured_fact_count"] += count
+            if note.type != "journal_entry":
+                for captured_date, count in note.capture_counts.items():
+                    if captured_date in state:
+                        state[captured_date]["captured_fact_count"] += count
             for referenced_date in note.explicit_dates:
                 if referenced_date in state:
                     state[referenced_date]["reference_count"] += 1
@@ -289,7 +290,10 @@ class CalendarQueryService:
                 raise CalendarQueryError("Calendar related note is unavailable") from error
             if relevant_journal:
                 journals.append(CalendarJournal(detail.note, _journal_blocks(detail.body_blocks)))
-            if relevant_capture and not relevant_journal:
+            # Journal entries belong to their semantic entry_date in Calendar. Their
+            # capture chronology remains available to Odyssey history, but must not
+            # duplicate the journal under another Day's "Captured" projection.
+            if relevant_capture and note.type != "journal_entry":
                 facts = _capture_blocks(detail.body_blocks, normalized)
                 if facts:
                     captures.append(CalendarCapture(detail.note, facts))

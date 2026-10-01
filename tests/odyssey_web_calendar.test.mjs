@@ -106,6 +106,13 @@ async function flush() {
   await Promise.resolve();
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return {promise, resolve, reject};
+}
+
 async function mountCalendar(requestCalendar) {
   const document = new FakeDocument();
   const root = new FakeElement("section");
@@ -289,4 +296,55 @@ test("an empty virtual Day opens without materializing content in the browser", 
   mounted.elements.grid.querySelector(".calendar-day-cell").click();
   await flush();
   assert.equal(mounted.elements.dayView.textContent.includes("No hay información asociada a este día."), true);
+});
+
+test("duplicate in-flight Day navigation shares one request", async () => {
+  const pending = deferred();
+  const calls = [];
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    calls.push({operation, payload});
+    if (operation === "month") return {
+      kind: "calendar_month", month: "2026-10", days: [
+        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+      ],
+    };
+    return pending.promise;
+  });
+
+  const first = mounted.controller.openDay("2026-09-25");
+  const second = mounted.controller.openDay("2026-09-25");
+  await flush();
+  assert.equal(calls.filter((call) => call.operation === "day").length, 1);
+
+  pending.resolve({kind: "calendar_day", date: "2026-09-25", materialized: false, content: [], journals: [], captures: [], references: []});
+  await Promise.all([first, second]);
+  assert.equal(mounted.controller.state.dayValue.date, "2026-09-25");
+  assert.equal(mounted.elements.status.textContent, "");
+});
+
+test("only the newest Day request may update the visible state", async () => {
+  const pending25 = deferred();
+  const pending24 = deferred();
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    if (operation === "month") return {
+      kind: "calendar_month", month: "2026-10", days: [
+        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+      ],
+    };
+    if (payload.date === "2026-09-25") return pending25.promise;
+    if (payload.date === "2026-09-24") return pending24.promise;
+    throw new Error("unexpected date");
+  });
+
+  const first = mounted.controller.openDay("2026-09-25");
+  const second = mounted.controller.openDay("2026-09-24");
+  pending24.resolve({kind: "calendar_day", date: "2026-09-24", materialized: false, content: [], journals: [], captures: [], references: []});
+  await second;
+  assert.equal(mounted.controller.state.dayValue.date, "2026-09-24");
+  assert.equal(mounted.elements.status.textContent, "");
+
+  pending25.reject(new CalendarRequestError("stale failure"));
+  await first;
+  assert.equal(mounted.controller.state.dayValue.date, "2026-09-24");
+  assert.equal(mounted.elements.status.textContent, "");
 });
