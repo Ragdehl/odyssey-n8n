@@ -1,6 +1,6 @@
 # Future Events / Calendar capability
 
-Status: **preserved product direction; prioritized after Tasks proves the minimum application contract**.
+Status: **preserved Events direction; Temporal Foundation + Calendar v0 now precede Tasks**.
 
 ## Why this capability exists
 
@@ -19,10 +19,11 @@ Today Odyssey can preserve such material as canonical knowledge, for example as 
 current canonical schema has no structured `event` type or calendar capability. The future product
 should not solve that gap by pretending every dated occurrence is a task.
 
-Events / Calendar is intentionally treated as a **high-priority product capability adjacent to the
-Core experience**, even if it remains an application/capability rather than Core knowledge
-semantics. After read-only Notes and the first real Tasks application, calendar/event behavior is a
-near-term priority because it turns durable personal knowledge into useful time-aware daily behavior.
+The previously combined Events / Calendar direction is now split deliberately. The approved
+[Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) establishes shared date/day
+identity, navigation, and Calendar-owned daily capture **before Tasks**. Structured Events remain a
+separate later application capability layered onto that temporal foundation. This avoids making Tasks
+reimplement date semantics while preserving the distinction between a day surface and an event.
 
 ## Semantic boundary: Task vs Event vs Reminder
 
@@ -55,9 +56,10 @@ canonical representation of the event it points to.
 
 ## Composition direction
 
-Tasks remains the first real Odyssey application because it is the smallest practical way to prove
-application routing, state, and composition. Events / Calendar should follow once Tasks has
-established that minimum contract rather than expanding Tasks into a mixed task/calendar system.
+Calendar v0 now becomes the first bounded application-managed canonical-type exercise because its
+Day resource is lower-level temporal infrastructure reused by Tasks and Events. Tasks remains the first
+lifecycle-heavy domain application. Events follows Tasks and projects timed occurrences onto the same
+Calendar surface rather than creating a second calendar model.
 
 A useful capability relationship is:
 
@@ -76,13 +78,16 @@ The user should not need to understand this internal composition.
 The current product priority is deliberately:
 
 ```text
-UI-2 read-only Notes
+Temporal Foundation
         |
         v
-Tasks — prove the minimum application contract
+Calendar v0 — Day identity/navigation/capture
         |
         v
-Events / Calendar — high-value time-aware capability
+Tasks — first lifecycle-heavy domain application
+        |
+        v
+Events — timed occurrence semantics on Calendar
         |
         v
 Reminders integration where Tasks/Events need delivery semantics

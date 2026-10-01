@@ -15,7 +15,8 @@ Use these documents as the detailed owners:
 - [Future semantic request history](phase-17-request-records.md) — explicit history of what the user asked and what Odyssey did, correlated through `request_id`, isolated from canonical personal retrieval and operational tracing, and never hidden model reasoning.
 - [Future product usage observability](future-product-usage-observability.md) — safe user/admin usage, timing, token, and cost projections from existing evidence.
 - [Future Odyssey product interface](future-product-interface.md) — mobile-first chat feedback, note browsing/editing, activity/change visualization, and role-aware advanced surfaces.
-- [Future Events / Calendar capability](future-events-calendar.md) — separate event, task, and reminder semantics; preserve source schedules; prioritize time-aware capability work after Tasks proves the minimum application contract.
+- [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) — approved current contract for shared date/Day identity, Calendar-managed daily capture, temporal links, and month/Day navigation before Tasks.
+- [Future Events / Calendar capability](future-events-calendar.md) — later structured Event semantics, source-schedule preservation, timed Calendar projections, and eventual Reminder composition.
 - [Future capture-context provenance](future-capture-context-provenance.md) — optional request/fact capture location/context without confusing it with entity properties.
 - [Future pending-reference evolution](future-pending-reference-evolution.md) — safe relinking, recurrence signals, and advisory schema-evolution evidence.
 - [Future retrieval refinements](future-query-decomposed-retrieval.md) — query decomposition/entity coverage first, then measured candidate reduction/compact evidence if needed.
@@ -41,9 +42,9 @@ cheap/local router or bounded inexpensive model if needed
      `--> NO_MATCH / ambiguity -> fail safely
 ```
 
-The first executable application should define the smallest real routing/manifest contract. Do not build a plugin marketplace, generic package manager, or extra expensive reasoning stage in advance.
+Calendar v0 is the first bounded application-managed type/routing exercise; Tasks remains the first lifecycle-heavy domain application. Do not build a plugin marketplace, generic package manager, or extra expensive reasoning stage in advance.
 
-Capabilities may depend on reusable lower-level capabilities when that prevents duplication, for example `Projects -> Tasks -> Reminders`, while Events / Calendar may independently reuse Reminders for delivery without becoming a task. Dependencies must eventually be explicit, non-circular, and unable to bypass Core mutation/authorization rules. See [Future Events / Calendar capability](future-events-calendar.md) for the detailed time-aware boundary.
+Capabilities may depend on reusable lower-level capabilities when that prevents duplication. The approved near-term dependency direction is shared Temporal Foundation/Calendar behavior -> Tasks -> Events/Reminders as needed, while Projects later composes over Tasks. Dependencies must eventually be explicit, non-circular, and unable to bypass Core mutation/authorization rules. See [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) and [Future Events / Calendar capability](future-events-calendar.md).
 
 ## Shopping/consumption inference and assisted shopping lists
 

@@ -114,17 +114,16 @@ which reuses all 21 planner and 4 selector rows with a 25-call maximum and `$0.4
 no-cache ceiling. V10 requires separate Luna/low authorization before production model-facing
 adoption.
 
-[UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) merged in PR #144, and the
-Luna-only Semantic WRITE compiler simplification merged in PR #147. The semantic WRITE simplification
-is complete. Explainable Clarification UX is the current bounded phase: Core exposes only validated,
-canonical-evidence ambiguity options through the existing guarded continuation, while runtime,
-workflow, and browser remain presentation boundaries. Its contextual-contract v1 live gate completed 5/6: the only mismatch was a safe `UNRESOLVED`
-on a debatable canonical-fact ambiguity oracle, with no false resolution. Product review now permits a
-safe `UNRESOLVED` decision to retain two to four grounded clarification candidates without granting
-identity authority; the focused v2 adoption gate started with `gpt-6-luna` / medium: its first three cases passed before
-the fourth call ended provider-incomplete at the intentionally tight output cap, so v2 is consumed
-without a semantic verdict on the new option case. Manual isolated-DEV validation by the user is required
-before PR #148 may leave Draft. Tasks remains the next application phase after this clarification pass.
+[UI polish + Notes editing lite](ui-polish-notes-editing-lite.md) merged in PR #144, the
+Luna-only Semantic WRITE compiler simplification merged in PR #147, and Explainable Clarification UX
+merged in PR #148. The clarification phase is complete: the user validated the candidate/evidence UI
+and natural-language continuation in isolated DEV, deterministic validation remained green, and the
+final reviewed Luna/low planner evidence fixed the blocking ownership regression while retaining the
+approved fail-closed degradations. PROD has not been promoted to #148.
+
+The next approved functional phase is now [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md).
+Product review determined that shared Day/date identity and navigation are lower-level dependencies for
+Tasks and Events, so the earlier Tasks-first order has been revised before Tasks implementation began.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -166,9 +165,10 @@ Semantic WRITE intent/Core compiler simplification                ✅ complete �
 Semantic set resolution and evidence                             ✅ merged in PR #142
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
-Explainable Clarification UX                                       ➡️ current; candidate-preserving abstention + bare singular WRITE clarification fix + repeat manual DEV pending
-Tasks — first real application + minimal app routing              ⬜ next
-Events / Calendar — high-value time-aware capability              ⬜ prioritized after Tasks
+Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
+Temporal Foundation + Calendar v0                                  ➡️ next; approved phase contract
+Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar v0
+Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
 Projects — compose over Tasks                                     ⬜ planned after checkpoint
@@ -275,13 +275,17 @@ Performance / Latency / Cost P1                       ✅ complete
 Reference & Relationship Resolution v1 Slice 1        ✅ complete
 Reference & Relationship Resolution v1 Slice 2        ✅ complete
 Reference & Relationship Resolution v1 Slice 3        ✅ merged in PR #133
-Semantic set resolution and evidence design           ➡️ Draft PR; live gate complete
+Semantic set resolution and evidence                  ✅ merged in PR #142
+Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Tasks — first application contract
+Temporal Foundation + Calendar v0                     ➡️ next
         |
         v
-Events / Calendar — prioritized time-aware capability
+Tasks — first lifecycle-heavy domain application
+        |
+        v
+Events — timed occurrence semantics on Calendar
         |
         v
 Reminders as needed by Tasks / Events
@@ -344,13 +348,15 @@ Events ------+
 
 The approved user interaction model is **automatic routing by default, explicit routing when useful**. Ordinary users should speak naturally in the main conversation; the relevant capability is selected internally and only that selected capability should execute/respond. Optional syntax such as `@Tasks` may direct or disambiguate a request but must never be required. A capability-specific surface may exist only when a concrete need justifies it, while reusing the same knowledge, identity, and application state rather than becoming a silo. Applications may show a small capability identity in the UI, but should not become independent personalities that all listen to every message. Nested threads and branching chat management are not committed directions.
 
-The first real application is **Tasks**, chosen to prove the smallest practical manifest/routing/state
-contract. Once that contract is proven, **Events / Calendar** is the next prioritized application
-area because time-aware personal behavior is unusually useful in everyday Odyssey use. **Reminders**
-should provide only the lower-level notification/delivery semantics that Tasks and Events actually
-need; it must not collapse tasks and events into one model. **Projects** remains a committed consumer
-of Tasks but can follow the calendar path and the bounded maintainability checkpoint rather than
-blocking Events. See [Future Events / Calendar capability](future-events-calendar.md).
+The approved order now starts with **Temporal Foundation + Calendar v0**: shared date/Day identity,
+navigation, and Calendar-managed daily capture are lower-level behavior that Tasks and Events reuse.
+**Tasks** remains the first lifecycle-heavy domain application. **Events** follows Tasks and projects
+timed occurrences onto the same Calendar surface. **Reminders** should provide only the lower-level
+notification/delivery semantics Tasks and Events actually need; it must not collapse tasks and events
+into one model. **Projects** remains a committed consumer of Tasks but can follow the calendar path and
+the bounded maintainability checkpoint rather than blocking Events. See
+[Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) and
+[Future Events / Calendar capability](future-events-calendar.md).
 
 Do not build a generic plugin platform before Tasks proves what the common application contract actually needs.
 
@@ -361,9 +367,8 @@ Once application work becomes repetitive, evaluate a bounded **agent-assisted de
 ### Maintainability checkpoint after the calendar/application foundation
 
 Maintainability is a continuous acceptance concern during every phase, but Odyssey should not pause
-useful product work now for speculative restructuring. The near-term priority is P1, then bounded
-post-UI-2 knowledge work, then Tasks and Events / Calendar with the minimum Reminder semantics
-those capabilities need.
+useful product work now for speculative restructuring. The near-term priority is the approved Temporal Foundation + Calendar v0, then Tasks and Events
+with the minimum Reminder semantics those capabilities need.
 
 After that path has exercised the application boundary in real code, schedule a **bounded
 maintainability checkpoint** before substantial secondary-app expansion. The checkpoint should use
