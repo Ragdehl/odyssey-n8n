@@ -1323,7 +1323,13 @@ def _calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, o
             "date": value.date,
             "materialized": value.materialized,
             "content": [_calendar_block_to_response(block) for block in value.content],
-            "journals": [_summary_to_response(item) for item in value.journals],
+            "journals": [
+                {
+                    "source": _summary_to_response(item.source),
+                    "content": [_calendar_block_to_response(block) for block in item.content],
+                }
+                for item in value.journals
+            ],
             "captures": [
                 {
                     "source": _summary_to_response(item.source),

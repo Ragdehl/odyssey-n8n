@@ -258,6 +258,29 @@ test("Day navigation opens the previous and next natural dates without returning
   assert.deepEqual(calls.at(-1), {operation: "day", payload: {date: "2026-10-01"}});
 });
 
+test("returning to month clears a stale Day error after failed date navigation", async () => {
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    if (operation === "month") return {
+      kind: "calendar_month", month: "2026-10", days: [
+        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+      ],
+    };
+    if (payload.date === "2026-09-30") throw new CalendarRequestError("broken Day");
+    return {kind: "calendar_day", date: payload.date, materialized: false, content: [], journals: [], captures: [], references: []};
+  });
+
+  mounted.elements.grid.querySelector(".calendar-day-cell").click();
+  await flush();
+  mounted.elements.dayView.querySelector(".calendar-day-previous").click();
+  await flush();
+  assert.equal(mounted.elements.status.textContent, "No se ha podido abrir este día.");
+
+  mounted.elements.dayView.querySelector(".calendar-day-header").querySelector("button").click();
+  await flush();
+  assert.equal(mounted.elements.status.textContent, "");
+  assert.equal(mounted.elements.monthView.hidden, false);
+});
+
 test("an empty virtual Day opens without materializing content in the browser", async () => {
   const mounted = await mountCalendar(async ({operation, payload}) => operation === "month"
     ? {kind: "calendar_month", month: payload.month, days: [{date: "2026-10-02", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0}]}

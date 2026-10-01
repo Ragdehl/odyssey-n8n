@@ -37,6 +37,7 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
 
   function renderMonth() {
     if (!state.monthValue) return;
+    status.textContent = "";
     monthView.hidden = false;
     dayView.hidden = true;
     title.textContent = monthLabel(state.monthValue.month);

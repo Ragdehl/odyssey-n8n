@@ -20,6 +20,7 @@ from odyssey_core.application import (
     UnitStatus,
 )
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
+from odyssey_core.calendar_queries import CalendarDayView, CalendarJournal
 from odyssey_core.context import ContextItem, ContextPackage, RelatedContextItem
 from odyssey_core.direct_note_mutations import DirectNoteMutationError
 from odyssey_core.git_history import GitHistoryResult
@@ -30,7 +31,7 @@ from odyssey_core.identity_boundary import (
     OdysseyUser,
 )
 from odyssey_core.local_conversations import ConversationRootResolver
-from odyssey_core.note_queries import StaleCursorError
+from odyssey_core.note_queries import NoteBodyBlock, NoteBodySegment, NoteSummary, StaleCursorError
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -465,6 +466,70 @@ def test_http_calendar_boundary_projects_month_and_day_with_typed_actor() -> Non
         assert calls == [
             ("month", {"month": "2026-10"}, user.stable_user_id, None),
             ("day", {"date": "2026-10-01"}, user.stable_user_id, None),
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_calendar_boundary_serializes_journal_source_and_content() -> None:
+    """Regression: CalendarJournal crosses Core -> runtime -> HTTP without shape drift."""
+    user = OdysseyUser.new()
+    journal = CalendarJournal(
+        source=NoteSummary(
+            id="journal-2026-10-01",
+            name="Diario 1 octubre",
+            type="journal_entry",
+            tags=(),
+            created_at="2026-10-01T20:00:00+02:00",
+            updated_at="2026-10-01T20:00:00+02:00",
+            properties={"entry_date": "2026-10-01"},
+        ),
+        content=(NoteBodyBlock("paragraph", (NoteBodySegment("Buen día."),)),),
+    )
+    day = CalendarDayView(
+        date="2026-10-01",
+        materialized=False,
+        content=(),
+        journals=(journal,),
+        captures=(),
+        references=(),
+    )
+    runtime = RuntimeComposition(
+        core_execute=lambda *args, **kwargs: _result(),
+        refresh_indexes=lambda: None,
+        calendar_service=SimpleNamespace(day=lambda value: day),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "day",
+                    "date": "2026-10-01",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        payload = json.loads(response.read())
+        assert payload["journals"] == [
+            {
+                "source": {
+                    "id": "journal-2026-10-01",
+                    "name": "Diario 1 octubre",
+                    "type": "journal_entry",
+                    "tags": [],
+                    "created_at": "2026-10-01T20:00:00+02:00",
+                    "updated_at": "2026-10-01T20:00:00+02:00",
+                    "properties": {"entry_date": "2026-10-01"},
+                },
+                "content": [{"kind": "paragraph", "segments": [{"text": "Buen día."}]}],
+            }
         ]
     finally:
         server.shutdown()
