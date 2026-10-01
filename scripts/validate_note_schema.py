@@ -108,6 +108,12 @@ def _validate_types(types: Any) -> None:
         examples = note_type["examples"]
         if not isinstance(examples, list) or any(not isinstance(item, str) for item in examples):
             raise SchemaValidationError(f"type {type_id!r} examples must be an array of strings")
+        if "managed_by" in note_type:
+            managed_by = note_type["managed_by"]
+            if not isinstance(managed_by, str) or ID_PATTERN.fullmatch(managed_by) is None:
+                raise SchemaValidationError(
+                    f"type {type_id!r} managed_by must be a canonical identifier"
+                )
         _validate_properties(note_type["properties"], type_id)
 
 

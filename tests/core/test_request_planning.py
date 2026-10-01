@@ -873,6 +873,22 @@ def test_write_contract_rejects_physical_decisions_and_invalid_semantic_fields(
             validate_request_plan(payload, schema)
 
 
+def test_application_managed_type_does_not_change_generic_model_contract(schema: dict) -> None:
+    """Keep Calendar Day canonical while preserving the accepted generic planner surface."""
+    ordinary_only = deepcopy(schema)
+    ordinary_only["types"] = [item for item in ordinary_only["types"] if "managed_by" not in item]
+
+    assert render_request_planner_prompt(schema, CONTEXT) == render_request_planner_prompt(
+        ordinary_only, CONTEXT
+    )
+    assert planner_result_json_schema(schema) == planner_result_json_schema(ordinary_only)
+    assert luna_experimental_result_json_schema(schema) == luna_experimental_result_json_schema(
+        ordinary_only
+    )
+    with pytest.raises(RequestPlanningError):
+        validate_request_plan(output(retrieve("2026-10-01", note_type="calendar_day")), schema)
+
+
 def test_invalid_model_output_fails_closed(schema: dict) -> None:
     """Reject empty queries, unknown types, bad filters, old write shapes, and invalid actions."""
     invalid = [

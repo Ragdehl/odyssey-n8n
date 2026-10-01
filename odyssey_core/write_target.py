@@ -17,6 +17,7 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.request_planning import KnowledgeUnit
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
+from odyssey_core.schema_types import ordinary_type_ids
 from odyssey_core.semantic import SemanticEntityIndex, TextEmbedder
 from odyssey_core.storage import VaultRepository
 
@@ -171,12 +172,12 @@ def decide_write_target(
 
 
 def _canonical_types(schema: dict[str, Any]) -> frozenset[str]:
-    """Return the current canonical type IDs or reject an unusable schema."""
+    """Return ordinary semantic type IDs or reject an unusable schema."""
     try:
-        types = frozenset(item["id"] for item in schema["types"])
-    except (KeyError, TypeError):
+        types = ordinary_type_ids(schema)
+    except ValueError:
         raise ValueError("Supplied schema is not usable") from None
-    if not types or not all(isinstance(note_type, str) and note_type for note_type in types):
+    if not types:
         raise ValueError("Supplied schema is not usable")
     return types
 

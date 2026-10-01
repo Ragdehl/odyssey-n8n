@@ -23,6 +23,7 @@ from odyssey_core.context import (
 )
 from odyssey_core.filtering import supported_filter_operators
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+from odyssey_core.schema_types import is_application_managed_type, ordinary_type_definitions
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 
@@ -417,14 +418,20 @@ class NotesQueryService:
         self.context_index = context_index
 
     def capabilities(self) -> NoteCapabilities:
-        """Project canonical types and Core-supported filters for browser controls."""
+        """Project ordinary semantic types and their Core-supported browser filters."""
+        visible_types = ordinary_type_definitions(self.schema)
+        universal_fields = {
+            item["id"] for item in self.schema["metadata_fields"] if item.get("filterable") is True
+        }
         fields: list[Mapping[str, Any]] = []
         for field, definition in sorted(_filter_definitions(self.schema).items()):
             applies_to = tuple(
                 item["id"]
-                for item in self.schema["types"]
+                for item in visible_types
                 if any(property_["id"] == field for property_ in item["properties"])
             )
+            if field not in universal_fields and not applies_to:
+                continue
             fields.append(
                 {
                     "id": field,
@@ -435,7 +442,7 @@ class NotesQueryService:
                 }
             )
         return NoteCapabilities(
-            types=tuple({"id": item["id"], "name": item["name"]} for item in self.schema["types"]),
+            types=tuple({"id": item["id"], "name": item["name"]} for item in visible_types),
             fields=tuple(fields),
         )
 
@@ -495,6 +502,12 @@ class NotesQueryService:
                 fingerprint=fingerprint,
             )
         generation, notes = self._grounded_index_notes()
+        if mode == "feed":
+            notes = [
+                note
+                for note in notes
+                if not is_application_managed_type(self.schema, note.summary.type)
+            ]
         offset = 0
         if saved_cursor is not None:
             saved = saved_cursor

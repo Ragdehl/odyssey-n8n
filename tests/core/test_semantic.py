@@ -171,6 +171,32 @@ def test_rebuild_replaces_and_delete_removes_only_derived_index(
         source.chmod(source_mode)
 
 
+def test_semantic_identity_index_excludes_application_managed_notes(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Index only ordinary semantic identities while managed Days remain canonical Markdown."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/Ada.md", valid_note("ada", "person", "Researcher."))
+    write_note(
+        vault,
+        "calendar/days/2026-10-01.md",
+        valid_note(
+            "calendar-day-2026-10-01",
+            "calendar_day",
+            "Vino el fontanero.",
+            name="2026-10-01",
+            date="2026-10-01",
+        ),
+    )
+    index = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
+
+    assert index.rebuild(VaultRepository(vault), schema, KeywordEmbedder()) == 1
+    assert {item.id for item in index.find_candidates(KeywordEmbedder(), "2026-10-01")} == {"ada"}
+    with pytest.raises(ValueError, match="Unknown canonical note type"):
+        index.find_candidates(KeywordEmbedder(), "2026-10-01", type="calendar_day")
+
+
 def test_delete_refuses_arbitrary_existing_file(tmp_path: Path) -> None:
     """Leave an arbitrary configured file untouched when index identity cannot be verified."""
     target = tmp_path / "important.txt"

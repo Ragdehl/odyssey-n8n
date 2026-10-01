@@ -217,8 +217,12 @@ def test_notes_detail_uses_safe_structured_presentation_and_complete_type_icons(
     assert "innerHTML" not in notes
     assert "body_blocks" in client
     assert "isString(value.body)" in client
-    for note_type in schema["types"]:
+    ordinary_types = [note_type for note_type in schema["types"] if "managed_by" not in note_type]
+    managed_types = [note_type for note_type in schema["types"] if "managed_by" in note_type]
+    for note_type in ordinary_types:
         assert f"{note_type['id']}: {{" in notes
+    for note_type in managed_types:
+        assert f"{note_type['id']}: {{" not in notes
 
 
 def test_older_chat_pages_restore_note_snapshot_affordances() -> None:

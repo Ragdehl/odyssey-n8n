@@ -125,6 +125,33 @@ def test_capabilities_and_local_search_are_schema_grounded_and_zero_provider(
     assert [item.id for item in page.items] == ["ada"]
 
 
+def test_calendar_managed_type_is_hidden_from_default_notes_feed(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep Calendar Days canonical and searchable without mixing them into the default feed."""
+    notes = service(tmp_path, schema)
+    vault = tmp_path / "vault"
+    write(
+        vault,
+        "calendar/days/2026-10-01.md",
+        "calendar-day-2026-10-01",
+        "2026-10-01",
+        "- Vino el fontanero.",
+        updated="2026-10-01T08:00:00Z",
+        note_type="calendar_day",
+        properties={"date": "2026-10-01"},
+    )
+    notes.context_index.rebuild(notes.repository, schema, Embedder())
+
+    capabilities = notes.capabilities()
+    assert "calendar_day" not in {item["id"] for item in capabilities.types}
+    assert "date" not in {item["id"] for item in capabilities.fields}
+    assert "calendar-day-2026-10-01" not in {item.id for item in notes.query(mode="feed").items}
+    assert [item.id for item in notes.query(mode="local", query="2026-10-01").items] == [
+        "calendar-day-2026-10-01"
+    ]
+
+
 def test_feed_ties_links_and_chronological_sorts_are_deterministic(
     tmp_path: Path, schema: dict
 ) -> None:

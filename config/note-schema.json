@@ -132,7 +132,9 @@
                 "unique_items": true
             },
             "filterable": true,
-            "filter_operations": ["contains"]
+            "filter_operations": [
+                "contains"
+            ]
         }
     ],
     "types": [
@@ -196,6 +198,24 @@
                         "entradas de diario que escribí ayer -> created_at yesterday range"
                     ],
                     "filterable": true
+                }
+            ]
+        },
+        {
+            "id": "calendar_day",
+            "name": "Calendar Day",
+            "description": "Calendar-managed canonical day surface for literal day-owned knowledge and temporal navigation; not an ordinary semantic planner target.",
+            "examples": [
+                "1 October 2026"
+            ],
+            "managed_by": "calendar",
+            "properties": [
+                {
+                    "id": "date",
+                    "value_type": "date",
+                    "required": true,
+                    "description": "Canonical ISO date represented by this Calendar Day.",
+                    "filterable": false
                 }
             ]
         }

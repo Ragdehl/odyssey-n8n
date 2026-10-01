@@ -125,6 +125,34 @@ def test_incompatible_same_id_filter_fields_fail_closed(schema: dict) -> None:
         build_planner_capabilities(changed)
 
 
+def test_application_managed_types_are_hidden_from_generic_planner(schema: dict) -> None:
+    """Keep Calendar-owned canonical types out of ordinary retrieval/write planning."""
+    without_managed = deepcopy(schema)
+    without_managed["types"] = [
+        item for item in without_managed["types"] if "managed_by" not in item
+    ]
+
+    retrieval = build_planner_capabilities(schema)
+    writes = build_write_capabilities(schema)
+
+    assert "calendar_day" not in retrieval["types"]
+    assert "calendar_day" not in retrieval["filters"]["type"]["controlled_values"]
+    assert "calendar_day" not in writes["types"]
+    assert retrieval == build_planner_capabilities(without_managed)
+    assert writes == build_write_capabilities(without_managed)
+
+
+def test_managed_type_filter_properties_do_not_leak_to_planner(schema: dict) -> None:
+    """Exclude application-owned properties even if they later become internally filterable."""
+    changed = deepcopy(schema)
+    calendar_day = next(item for item in changed["types"] if item["id"] == "calendar_day")
+    calendar_day["properties"][0]["filterable"] = True
+
+    capabilities = build_planner_capabilities(changed)
+
+    assert "date" not in capabilities["filters"]
+
+
 def test_concept_description_is_positive_not_fallback(schema: dict) -> None:
     """Keep concept as a reusable abstraction rather than an underclassification escape hatch."""
     concept = next(item for item in schema["types"] if item["id"] == "concept")

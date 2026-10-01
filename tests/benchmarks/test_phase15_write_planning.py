@@ -119,6 +119,7 @@ def test_frozen_contract_remains_historical_after_active_schema_reduction() -> N
         "document",
         "person",
         "journal_entry",
+        "calendar_day",
     ]
     assert load_contract()["canonical_types"] == [
         "concept",

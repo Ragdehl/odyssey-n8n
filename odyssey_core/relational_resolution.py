@@ -37,6 +37,7 @@ from odyssey_core.resolution import (
     build_provider_evidence,
     resolve_existing_entity,
 )
+from odyssey_core.schema_types import ordinary_type_ids
 from odyssey_core.semantic_sets import (
     DEFAULT_SEMANTIC_SET_BOUNDS,
     SemanticSetCandidate,
@@ -109,6 +110,7 @@ def resolve_relational_reference(
     if relation is None:
         raise ValueError("Selection has no relational reference")
     projector = RelationshipEvidenceProjector(repository, schema)
+    ordinary_types = ordinary_type_ids(schema)
     if relation.source_kind == "self":
         if authenticated_actor is None or self_binding_repository is None:
             raise RelationalResolutionError("relational_source_unavailable")
@@ -184,6 +186,7 @@ def resolve_relational_reference(
             selected_candidates,
             evidence_guard,
             chosen_identity_id,
+            ordinary_types,
         )
     decision, _usage = contextual_reasoner.resolve(
         ContextualResolutionRequest(
@@ -227,6 +230,7 @@ def resolve_relational_reference(
                 selected_facts,
                 evidence_guard,
                 chosen_identity_id,
+                ordinary_types,
             )
         grounded: list[CanonicalIdentity] = []
         evidence_by_id: dict[str, list[str]] = {}
@@ -240,7 +244,7 @@ def resolve_relational_reference(
                 else projection.targets
             )
             for target in targets:
-                if target is None:
+                if target is None or target.type not in ordinary_types:
                     continue
                 if target.id not in {item.id for item in grounded}:
                     grounded.append(target)
@@ -277,6 +281,7 @@ def resolve_relational_reference(
                     selected_candidates,
                     evidence_guard,
                     chosen_identity_id,
+                    ordinary_types,
                 )
         raise RelationalResolutionError(
             "relational_evidence_ambiguous", evidence_guard=evidence_guard
@@ -294,9 +299,13 @@ def resolve_relational_reference(
             raise RelationalResolutionError(
                 "relational_evidence_incomplete", evidence_guard=evidence_guard
             )
-        targets = (projection.source,)
+        targets = (projection.source,) if projection.source.type in ordinary_types else ()
     else:
-        targets = projection.targets
+        targets = tuple(target for target in projection.targets if target.type in ordinary_types)
+    if not targets:
+        raise RelationalResolutionError(
+            "relational_evidence_unavailable", evidence_guard=evidence_guard
+        )
     if relation.members == "one" and len(targets) != 1:
         if fallback_identity_clarification:
             return _resolve_selected_read_facts(
@@ -307,6 +316,7 @@ def resolve_relational_reference(
                 ((selected_fact, direction),),
                 evidence_guard,
                 chosen_identity_id,
+                ordinary_types,
             )
         options = tuple(target.id for target in targets)
         identities = tuple(targets)
@@ -384,6 +394,7 @@ def _resolve_qualified_singular_write(
     """
     relation = selection.relational_reference
     assert relation is not None and relation.members == "one"
+    ordinary_types = ordinary_type_ids(schema)
     selected_facts = _select_relevant_read_facts(
         relation.reference,
         candidates,
@@ -418,9 +429,13 @@ def _resolve_qualified_singular_write(
                 raise RelationalResolutionError(
                     "relational_evidence_incomplete", evidence_guard=evidence_guard
                 )
-            projected_targets = (projection.source,)
+            projected_targets = (
+                (projection.source,) if projection.source.type in ordinary_types else ()
+            )
         else:
-            projected_targets = projection.targets
+            projected_targets = tuple(
+                target for target in projection.targets if target.type in ordinary_types
+            )
         for target in projected_targets:
             if selection.type is not None and target.type != selection.type:
                 raise RelationalResolutionError(
@@ -679,6 +694,7 @@ def _resolve_selected_read_facts(
     selected_candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
     evidence_guard: str,
     chosen_identity_id: str | None,
+    ordinary_types: frozenset[str],
 ) -> ResolvedRelationalReference:
     """Project complete target sets for all relevant facts before deciding a singular identity."""
     unique_targets: list[CanonicalIdentity] = []
@@ -697,9 +713,11 @@ def _resolve_selected_read_facts(
                 raise RelationalResolutionError(
                     "relational_evidence_incomplete", evidence_guard=evidence_guard
                 )
-            targets = (projection.source,)
+            targets = (projection.source,) if projection.source.type in ordinary_types else ()
         else:
-            targets = projection.targets
+            targets = tuple(
+                target for target in projection.targets if target.type in ordinary_types
+            )
         if not targets:
             raise RelationalResolutionError(
                 "relational_evidence_incomplete", evidence_guard=evidence_guard

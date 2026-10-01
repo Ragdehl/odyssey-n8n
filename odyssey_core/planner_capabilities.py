@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from odyssey_core.filtering import supported_filter_operators
+from odyssey_core.schema_types import ordinary_type_definitions
 
 LIMITATIONS = {
     "not_supported": "An exact exclusion / NOT condition cannot currently be represented deterministically.",
@@ -38,10 +39,10 @@ def build_planner_capabilities(
         returns ``"date-time"``.
     """
     try:
-        types = list(schema["types"])
+        types = list(ordinary_type_definitions(schema))
         metadata_fields = list(schema["metadata_fields"])
         type_field = next(field for field in metadata_fields if field["id"] == "type")
-    except (KeyError, StopIteration, TypeError) as error:
+    except (KeyError, StopIteration, TypeError, ValueError) as error:
         raise ValueError("Canonical schema has unusable planner capability data") from error
 
     type_ids = [item["id"] for item in types]
@@ -101,8 +102,8 @@ def build_write_capabilities(schema: Mapping[str, Any]) -> dict[str, Any]:
         ValueError: If the schema is malformed or declares unsupported property semantics.
     """
     try:
-        types = list(schema["types"])
-    except (KeyError, TypeError) as error:
+        types = list(ordinary_type_definitions(schema))
+    except (KeyError, TypeError, ValueError) as error:
         raise ValueError("Canonical schema has unusable write capability data") from error
 
     projected: dict[str, Any] = {"types": {}}

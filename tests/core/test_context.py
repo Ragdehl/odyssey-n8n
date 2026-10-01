@@ -144,6 +144,32 @@ def test_context_projection_includes_tags_and_excludes_lifecycle() -> None:
     assert "Tags:" not in build_semantic_retrieval_text(value, "ideas/Odyssey GUI.md")
 
 
+def test_context_candidates_exclude_application_managed_notes(tmp_path: Path, schema: dict) -> None:
+    """Keep Calendar Days out of ordinary semantic retrieval while retaining them in the vault."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "concepts/other.md", note("other", "concept", "Other knowledge."))
+    write_note(
+        vault,
+        "calendar/days/2026-10-01.md",
+        note(
+            "calendar-day-2026-10-01",
+            "calendar_day",
+            "Odyssey happened today.",
+            name="2026-10-01",
+            date="2026-10-01",
+        ),
+    )
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    index.rebuild(VaultRepository(vault), schema, KeywordEmbedder())
+
+    candidates = index.find_candidates(schema, KeywordEmbedder(), "odyssey", limit=5)
+
+    assert [item.id for item in candidates] == ["other"]
+    with pytest.raises(ValueError, match="Unknown ordinary semantic note type"):
+        index.find_candidates(schema, KeywordEmbedder(), "2026-10-01", type="calendar_day", limit=5)
+
+
 def test_related_context_exposes_one_linked_shared_fact_with_source_provenance(
     tmp_path: Path, schema: dict
 ) -> None:

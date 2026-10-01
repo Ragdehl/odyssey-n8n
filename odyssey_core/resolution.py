@@ -32,6 +32,7 @@ from odyssey_core.relationship_evidence import (
     RelationshipEvidenceProjector,
     TargetProjectionStatus,
 )
+from odyssey_core.schema_types import ordinary_type_ids
 from odyssey_core.semantic import (
     SemanticEntityCandidate,
     SemanticEntityIndex,
@@ -445,9 +446,13 @@ def _expand_relationship_candidates(
     evidence_by_id: dict[str, list[str]] = {candidate.id: [] for candidate in ordered}
     added = 0
 
+    ordinary_types = ordinary_type_ids(schema)
+
     def eligible(identity: Any) -> bool:
-        return (note_type is None or identity.type == note_type) and (
-            allowed_candidate_ids is None or identity.id in allowed_candidate_ids
+        return (
+            identity.type in ordinary_types
+            and (note_type is None or identity.type == note_type)
+            and (allowed_candidate_ids is None or identity.id in allowed_candidate_ids)
         )
 
     def add_identity(identity: Any) -> None:
@@ -534,7 +539,11 @@ def _is_current_active_candidate(
         raise ExistingEntityResolutionError(
             "Cannot safely ground a semantic candidate note"
         ) from error
-    return note.metadata.get("id") == expected_id and note.metadata.get("deleted") is not True
+    return (
+        note.metadata.get("id") == expected_id
+        and note.metadata.get("type") in ordinary_type_ids(schema)
+        and note.metadata.get("deleted") is not True
+    )
 
 
 def _safe_usage(usage: Mapping[str, Any] | None) -> dict[str, Any] | None:
