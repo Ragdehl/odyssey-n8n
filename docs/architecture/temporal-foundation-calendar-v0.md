@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; implementation in progress (Slices 1-2 complete on the feature branch)**.
+Status: **approved phase contract; implementation in progress (Slices 1-3 complete on the feature branch)**.
 
 ## Objective
 
@@ -154,6 +154,8 @@ If knowledge belongs semantically to another date, the fact keeps that date/refe
 The already-approved formatting follow-up for atomic facts remains required: when a Note already has an Odyssey `# Added DD-MM-YYYY` section for the current capture date, later facts captured on the same date group under that one heading rather than adding another identical heading.
 
 The rendered capture date should become navigable to the corresponding Calendar Day without weakening existing fact markers, request provenance, correction/removal authority, or tolerance for historical duplicate same-date headings.
+
+Implementation note after Slice 3: current Odyssey-created capture headings render the date as an ordinary wikilink to `calendar/days/YYYY-MM-DD`, materialize that Day before committing the source link, and append later same-day facts beneath the last matching capture section instead of creating another heading. Legacy plain-date headings and historical duplicate same-date sections remain readable/removable; a same-day append may upgrade only the selected current section to the navigable form. Explicit Day links introduced in other fact text use the same deterministic materialization/backlink path. A provider-free Core end-to-end test covers write -> Markdown -> Day materialization -> context-index rebuild -> detail link resolution -> incoming backlink projection.
 
 ## Calendar v0 product surface
 

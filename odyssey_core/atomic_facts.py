@@ -7,9 +7,16 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import date
 
+from odyssey_core.temporal import calendar_day_wikilink
+
 _MARKER = re.compile(r"^[ \t]*<!-- odyssey:fact request=([^\s>]+) ordinal=(\d+) -->[ \t]*$")
 _MARKER_PREFIX = "<!-- odyssey:fact"
-_CAPTURE_HEADING = re.compile(r"^# Added \d{2}-\d{2}-\d{4}[ \t]*$", re.MULTILINE)
+_CAPTURE_HEADING = re.compile(
+    r"^# Added (?:(?P<plain>\d{2}-\d{2}-\d{4})|"
+    r"\[\[calendar/days/(?P<link_date>\d{4}-\d{2}-\d{2})(?:\.md)?\|"
+    r"(?P<link_label>\d{2}-\d{2}-\d{4})\]\])[ \t]*$",
+    re.MULTILINE,
+)
 _LEVEL_ONE_HEADING = re.compile(r"^# .+$", re.MULTILINE)
 
 
@@ -73,42 +80,59 @@ def normalize_atomic_fact(text: str) -> str:
     return " ".join(unicodedata.normalize("NFC", text).strip().split())
 
 
-def _capture_heading(now: str) -> str:
-    """Render the canonical compact human-visible heading for one capture date.
-
-    Args:
-        now: Canonical ISO date or timestamp whose calendar date identifies when Odyssey captured
-            the facts.
-
-    Returns:
-        A level-one Markdown heading with the capture date in ``DD-MM-YYYY`` form.
-
-    Raises:
-        AtomicFactError: If ``now`` does not begin with a valid ISO calendar date.
-    """
+def _capture_date(now: str) -> date:
+    """Return the calendar date encoded at the start of one capture timestamp."""
     try:
-        captured = date.fromisoformat(now[:10])
+        return date.fromisoformat(now[:10])
     except (TypeError, ValueError) as error:
         raise AtomicFactError(
             "Atomic fact capture time must begin with a valid ISO date"
         ) from error
-    return f"# Added {captured.day:02d}-{captured.month:02d}-{captured.year}"
 
 
-def render_atomic_facts(
-    facts: tuple[str, ...], request_id: str, ordinals: tuple[int, ...], now: str
-) -> str:
-    """Render ordered facts under one capture-date heading with hidden request-derived markers."""
+def _capture_heading(now: str) -> str:
+    """Render one navigable capture-date heading using the deterministic Calendar Day path."""
+    captured = _capture_date(now)
+    visible = f"{captured.day:02d}-{captured.month:02d}-{captured.year}"
+    return f"# Added {calendar_day_wikilink(captured.isoformat(), label=visible)}"
+
+
+def _capture_heading_date(match: re.Match[str]) -> str | None:
+    """Return the normalized day represented by one supported historical/current heading."""
+    plain = match.group("plain")
+    if plain is not None:
+        try:
+            day, month, year = (int(part) for part in plain.split("-"))
+            return date(year, month, day).isoformat()
+        except (TypeError, ValueError):
+            return None
+    link_date = match.group("link_date")
+    link_label = match.group("link_label")
+    if link_date is None or link_label is None:
+        return None
+    try:
+        parsed = date.fromisoformat(link_date)
+    except ValueError:
+        return None
+    expected = f"{parsed.day:02d}-{parsed.month:02d}-{parsed.year}"
+    return parsed.isoformat() if link_label == expected else None
+
+
+def _fact_blocks(
+    facts: tuple[str, ...], request_id: str, ordinals: tuple[int, ...]
+) -> tuple[str, ...]:
+    """Validate and render marker-bearing list items without a capture heading."""
     if len(facts) != len(ordinals) or not request_id.strip():
         raise AtomicFactError(
             "Atomic fact rendering requires matching facts, ordinals, and request_id"
         )
-    heading = _capture_heading(now)
-    blocks = [heading]
+    blocks: list[str] = []
     for text, ordinal in zip(facts, ordinals, strict=True):
         if (
             not isinstance(ordinal, int)
+            or isinstance(ordinal, bool)
             or ordinal < 0
+            or not isinstance(text, str)
             or not text.strip()
             or "\n" in text
             or "\r" in text
@@ -118,15 +142,53 @@ def render_atomic_facts(
         blocks.append(
             f"- {text.strip()}\n  <!-- odyssey:fact request={request_id} ordinal={ordinal} -->"
         )
-    return "\n".join(blocks)
+    return tuple(blocks)
+
+
+def render_atomic_facts(
+    facts: tuple[str, ...], request_id: str, ordinals: tuple[int, ...], now: str
+) -> str:
+    """Render ordered facts under one navigable capture-date heading and hidden markers."""
+    blocks = _fact_blocks(facts, request_id, ordinals)
+    return "\n".join((_capture_heading(now), *blocks))
 
 
 def append_atomic_facts(
     body: str, facts: tuple[str, ...], request_id: str, ordinals: tuple[int, ...], now: str
 ) -> str:
-    """Append one deterministic capture section without modifying legacy or prior fact content."""
-    rendered = render_atomic_facts(facts, request_id, ordinals, now)
-    return rendered if not body else body + ("\n" if body.endswith("\n") else "\n\n") + rendered
+    """Append facts under one capture heading per day without rewriting historical duplicates.
+
+    If the current capture day already has one or more legacy/current Added headings, new facts join
+    the last such section instead of creating another duplicate. A selected legacy plain-date heading
+    is upgraded to the current navigable Calendar link while older duplicate sections remain intact.
+    """
+    heading = _capture_heading(now)
+    blocks = _fact_blocks(facts, request_id, ordinals)
+    rendered = "\n".join((heading, *blocks))
+    if not body:
+        return rendered
+
+    capture_date = _capture_date(now).isoformat()
+    matches = [
+        match
+        for match in _CAPTURE_HEADING.finditer(body)
+        if _capture_heading_date(match) == capture_date
+    ]
+    if not matches:
+        return body + ("\n" if body.endswith("\n") else "\n\n") + rendered
+
+    selected = matches[-1]
+    rest = body[selected.end() :]
+    next_heading = _LEVEL_ONE_HEADING.search(rest)
+    if next_heading is None:
+        section, suffix = rest, ""
+    else:
+        section, suffix = rest[: next_heading.start()], rest[next_heading.start() :]
+    core = section.rstrip("\n")
+    trailing = section[len(core) :]
+    addition = "\n".join(blocks)
+    updated_section = (core + "\n" if core else "\n") + addition + trailing
+    return body[: selected.start()] + heading + updated_section + suffix
 
 
 def remove_atomic_fact(body: str, target: AtomicFact) -> str:

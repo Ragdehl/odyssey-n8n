@@ -39,6 +39,11 @@ from odyssey_core.reference_binding import (
 from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
 from odyssey_core.storage import NoteUnavailableError, VaultAccessError, VaultRepository
+from odyssey_core.temporal import (
+    CalendarDayCollisionError,
+    TemporalValueError,
+    materialize_calendar_day_links,
+)
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
 
 WRITER_MODEL = "gpt-5.6-luna"
@@ -102,6 +107,29 @@ def rollback_created_reference(
     repository.remove_text(preflight.path)
 
 
+def _materialize_new_calendar_links(
+    content: str,
+    *,
+    previous_content: str = "",
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: ActorInput,
+    now: str,
+) -> None:
+    """Materialize newly introduced deterministic Day targets before committing their source link."""
+    try:
+        materialize_calendar_day_links(
+            content,
+            previous_markdown=previous_content,
+            repository=repository,
+            schema=schema,
+            actor=actor,
+            now=now,
+        )
+    except (CalendarDayCollisionError, TemporalValueError, ValueError, OSError) as error:
+        raise MaterializationError("Calendar Day link materialization failed") from error
+
+
 def materialize_create(
     unit: KnowledgeUnit,
     preflight: UnitTargetPreflight,
@@ -155,6 +183,9 @@ def materialize_create(
         else "\n".join(prepared_facts)
     )
     _validate_create_candidate(metadata, content, preflight.stable_id or "", actor, now, schema)
+    _materialize_new_calendar_links(
+        content, repository=repository, schema=schema, actor=actor, now=now
+    )
     return create_entity(
         repository,
         schema,
@@ -542,6 +573,15 @@ def materialize_update(
             decision.existing_note_id or "",
             path,
             existing.metadata["revision"],
+        )
+    if content != existing.content:
+        _materialize_new_calendar_links(
+            content,
+            previous_content=existing.content,
+            repository=repository,
+            schema=schema,
+            actor=actor,
+            now=now,
         )
     return update_entity(
         repository,

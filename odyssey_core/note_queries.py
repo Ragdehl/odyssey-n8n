@@ -388,10 +388,15 @@ def _backlink_occurrences(
     count = 0
     block_count = 0
     for block in _presentation_blocks(body, resolve):
+        occurrences = sum(segment.target_id == target_id for segment in block.segments)
         if block.kind == "heading":
+            if occurrences:
+                count += occurrences
+                block_count += 1
+                if len(snippets) < _BACKLINK_OCCURRENCE_LIMIT:
+                    snippets.append(BacklinkOccurrence(None, block))
             heading = block.segments
             continue
-        occurrences = sum(segment.target_id == target_id for segment in block.segments)
         if not occurrences:
             continue
         count += occurrences

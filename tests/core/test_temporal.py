@@ -15,8 +15,11 @@ from odyssey_core.temporal import (
     DateRange,
     TemporalValueError,
     calendar_day_id,
+    calendar_day_link_dates,
     calendar_day_path,
+    calendar_day_wikilink,
     day_range,
+    materialize_calendar_day_links,
     month_range,
     normalize_iso_date,
     week_range,
@@ -260,3 +263,63 @@ def test_day_repository_requires_calendar_managed_schema(vault: Path, schema: di
 
     with pytest.raises(ValueError, match="not delegated"):
         CalendarDayRepository(VaultRepository(vault), changed)
+
+
+def test_calendar_day_wikilink_uses_deterministic_path_and_safe_label() -> None:
+    """Render ordinary Obsidian-compatible links while keeping the date identity deterministic."""
+    assert calendar_day_wikilink("2026-10-01") == "[[calendar/days/2026-10-01|01-10-2026]]"
+    assert (
+        calendar_day_wikilink("2026-10-01", label="1 October 2026")
+        == "[[calendar/days/2026-10-01|1 October 2026]]"
+    )
+    with pytest.raises(TemporalValueError):
+        calendar_day_wikilink("2026-10-01", label="bad|label")
+
+
+def test_calendar_day_link_dates_extracts_unique_targets_and_rejects_reserved_malformed_links() -> (
+    None
+):
+    """Treat the Calendar path namespace as deterministic authority instead of a fuzzy link target."""
+    markdown = (
+        "See [[calendar/days/2026-10-01|today]] and "
+        "[[people/Ada|Ada]], then [[calendar/days/2026-10-01|again]] and "
+        "[[calendar/days/2026-10-02.md|tomorrow]]."
+    )
+    assert calendar_day_link_dates(markdown) == ("2026-10-01", "2026-10-02")
+
+    with pytest.raises(TemporalValueError):
+        calendar_day_link_dates("[[calendar/days/2026-02-30|bad]]")
+    with pytest.raises(TemporalValueError):
+        calendar_day_link_dates("[[calendar/days/2026-10-01#section|bad]]")
+    with pytest.raises(TemporalValueError):
+        calendar_day_link_dates("[[calendar/days/2026-10-01|unterminated")
+
+
+def test_materialize_calendar_day_links_creates_only_new_explicit_targets(
+    vault: Path, schema: dict
+) -> None:
+    """Materialize newly introduced explicit Day links while preserving already-linked state."""
+    repository = VaultRepository(vault)
+    previous = "Already [[calendar/days/2026-10-01|01-10-2026]]."
+    CalendarDayRepository(repository, schema).materialize(
+        "2026-10-01", actor="calendar", now="2026-10-01T08:00:00+02:00"
+    )
+    markdown = (
+        previous + " New [[calendar/days/2026-10-02|02-10-2026]] and "
+        "[[calendar/days/2026-10-02|same target again]]."
+    )
+
+    materialized = materialize_calendar_day_links(
+        markdown,
+        previous_markdown=previous,
+        repository=repository,
+        schema=schema,
+        actor="calendar",
+        now="2026-10-01T09:00:00+02:00",
+    )
+
+    assert [day.date for day in materialized] == ["2026-10-02"]
+    assert repository.list_markdown_paths() == [
+        "calendar/days/2026-10-01.md",
+        "calendar/days/2026-10-02.md",
+    ]

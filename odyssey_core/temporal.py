@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -69,6 +70,57 @@ def calendar_day_id(value: str) -> str:
 def calendar_day_path(value: str) -> str:
     """Return the Calendar-owned deterministic Markdown path for one date."""
     return f"calendar/days/{normalize_iso_date(value)}.md"
+
+
+def calendar_day_wikilink(value: str, *, label: str | None = None) -> str:
+    """Render one ordinary wikilink to the deterministic Calendar Day path."""
+    normalized = normalize_iso_date(value)
+    if label is None:
+        parsed = date.fromisoformat(normalized)
+        label = f"{parsed.day:02d}-{parsed.month:02d}-{parsed.year}"
+    if (
+        not isinstance(label, str)
+        or not label.strip()
+        or "\n" in label
+        or "\r" in label
+        or "|" in label
+        or "]]" in label
+    ):
+        raise TemporalValueError("Calendar Day link label is invalid")
+    target = calendar_day_path(normalized).removesuffix(".md")
+    return f"[[{target}|{label.strip()}]]"
+
+
+_WIKILINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]*))?\]\]")
+_CALENDAR_LINK_PREFIX = "calendar/days/"
+
+
+def calendar_day_link_dates(markdown: str) -> tuple[str, ...]:
+    """Return unique Calendar Day dates explicitly linked from canonical Markdown.
+
+    A target inside the reserved ``calendar/days/`` namespace must be an exact deterministic Day
+    path. Malformed reserved targets fail closed instead of becoming unresolved ordinary links.
+    """
+    if not isinstance(markdown, str):
+        raise TypeError("Markdown must be text")
+    dates: list[str] = []
+    reserved_occurrences = markdown.count("[[calendar/days/")
+    matched_reserved = 0
+    for match in _WIKILINK.finditer(markdown):
+        target = match.group(1).strip()
+        if not target.startswith(_CALENDAR_LINK_PREFIX):
+            continue
+        matched_reserved += 1
+        without_extension = target.removesuffix(".md")
+        candidate = without_extension.removeprefix(_CALENDAR_LINK_PREFIX)
+        normalized = normalize_iso_date(candidate)
+        if without_extension != calendar_day_path(normalized).removesuffix(".md"):
+            raise TemporalValueError("Calendar Day link target is not canonical")
+        if normalized not in dates:
+            dates.append(normalized)
+    if matched_reserved != reserved_occurrences:
+        raise TemporalValueError("Calendar Day link markup is malformed")
+    return tuple(dates)
 
 
 def _parsed(value: str) -> date:
@@ -267,3 +319,23 @@ class CalendarDayRepository:
                 "Calendar Day identity was claimed during materialization"
             ) from error
         return self.resolve(current.date)
+
+
+def materialize_calendar_day_links(
+    markdown: str,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: ActorInput,
+    now: str,
+    previous_markdown: str = "",
+) -> tuple[CalendarDay, ...]:
+    """Materialize only Calendar Day targets newly introduced by one canonical Markdown write."""
+    current_dates = calendar_day_link_dates(markdown)
+    previous_dates = frozenset(calendar_day_link_dates(previous_markdown))
+    day_repository = CalendarDayRepository(repository, schema)
+    return tuple(
+        day_repository.materialize(value, actor=actor, now=now)
+        for value in current_dates
+        if value not in previous_dates
+    )
