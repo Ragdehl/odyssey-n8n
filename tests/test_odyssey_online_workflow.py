@@ -132,6 +132,13 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
     assert "delete_note: new Set(['operation', 'note_id', 'expected_revision'" in source
 
 
+def test_calendar_boundary_uses_render_stable_digit_patterns() -> None:
+    """Keep Calendar request validation intact after TypeScript template rendering."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "/^[0-9]{4}-[0-9]{2}$/" in source
+    assert "/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/" in source
+
+
 def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
     """Return a typed NoteDetail object intact even though it contains canonical body text."""
 
