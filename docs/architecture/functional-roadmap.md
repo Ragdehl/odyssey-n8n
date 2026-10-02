@@ -121,9 +121,11 @@ and natural-language continuation in isolated DEV, deterministic validation rema
 final reviewed Luna/low planner evidence fixed the blocking ownership regression while retaining the
 approved fail-closed degradations. PROD has not been promoted to #148.
 
-The next approved functional phase is now [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md).
-Product review determined that shared Day/date identity and navigation are lower-level dependencies for
-Tasks and Events, so the earlier Tasks-first order has been revised before Tasks implementation began.
+The current functional phase is [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md).
+Slices 1-4 are implemented and visually validated in isolated DEV. Before Calendar natural-language
+routing, the project is defining the cross-cutting [Application Boundary + Router v0](application-boundary-router-v0.md)
+so new applications do not modify the established Core planner contract. Tasks remains the next
+lifecycle-heavy application after Calendar routing proves that boundary.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -166,8 +168,9 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 in progress; Slices 1-4 complete, DEV visual validation pending
-Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar v0
+Temporal Foundation + Calendar v0                                  🚧 Slices 1-4 DEV validated; natural routing pending
+Application Boundary + Router v0                                    ➡️ draft contract; prerequisite for Calendar Slice 5
+Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
@@ -279,7 +282,13 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     ➡️ next
+Temporal Foundation + Calendar v0                     🚧 Slices 1-4 DEV validated
+        |
+        v
+Application Boundary + Router v0                     ➡️ current design
+        |
+        v
+Calendar natural routing / Slice 5
         |
         v
 Tasks — first lifecycle-heavy domain application

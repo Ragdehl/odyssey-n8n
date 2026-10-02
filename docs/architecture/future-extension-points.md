@@ -25,26 +25,9 @@ Real Odyssey Online use also preserves visual theming as a deferred interface di
 
 ## Application routing and composition
 
-Odyssey should support domain applications/capabilities without loading every app contract into the top-level planner.
+The near-term executable application boundary has been promoted from future direction into the draft [Application Boundary + Router v0](application-boundary-router-v0.md) contract. That document now owns Core-planner isolation, GPT-6 Luna routing, per-application planners, exact-source routing, application disablement, dependencies, and the Calendar-first adoption path.
 
-The existing planner can preserve `DelegateAction`; later routing should happen separately:
-
-```text
-DelegateAction
-     |
-     v
-compact installed-capability candidates
-     |
-     v
-cheap/local router or bounded inexpensive model if needed
-     |
-     +--> selected capability -> load only its detailed contract
-     `--> NO_MATCH / ambiguity -> fail safely
-```
-
-Calendar v0 is the first bounded application-managed type/routing exercise; Tasks remains the first lifecycle-heavy domain application. Do not build a plugin marketplace, generic package manager, or extra expensive reasoning stage in advance.
-
-Capabilities may depend on reusable lower-level capabilities when that prevents duplication. The approved near-term dependency direction is shared Temporal Foundation/Calendar behavior -> Tasks -> Events/Reminders as needed, while Projects later composes over Tasks. Dependencies must eventually be explicit, non-circular, and unable to bypass Core mutation/authorization rules. See [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) and [Future Events / Calendar capability](future-events-calendar.md).
+This future index retains only the longer-horizon direction: a later marketplace/user-created-app product may add package discovery, installation, permissions, signing/sandboxing, versioning, and schema-extension lifecycle. None of those are implied by Router v0. Application dependencies must remain explicit/non-circular and must never bypass Core mutation or authorization rules. See also [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) and [Future Events / Calendar capability](future-events-calendar.md).
 
 ## Shopping/consumption inference and assisted shopping lists
 

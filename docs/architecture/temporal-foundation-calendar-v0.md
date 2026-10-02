@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; implementation in progress (Slices 1-4 complete on the feature branch; DEV visual validation in progress after bounded UI/query fixes)**.
+Status: **approved phase contract; implementation in progress (Slices 1-4 implemented and visually validated in isolated DEV; Slice 5 routing waits on the draft Application Boundary + Router v0 contract)**.
 
 ## Objective
 
@@ -81,11 +81,11 @@ Core owns only reusable temporal primitives needed by multiple capabilities:
 - validation/comparison of normalized temporal values;
 - deterministic Calendar-day identity/reference handling.
 
-Core does **not** become a calendar application, event model, reminder scheduler, or comprehensive natural-language date parser. The planner may interpret natural temporal wording using its current date/time/timezone context; Core validates normalized results and must fail closed when chronology cannot be established safely.
+Core does **not** become a calendar application, event model, reminder scheduler, or comprehensive natural-language date parser. A selected application planner may interpret natural temporal wording using its current date/time/timezone context; Core validates normalized results and must fail closed when chronology cannot be established safely.
 
 ## Routing and knowledge ownership
 
-The generic planner continues to decide semantic ownership before mutation. Calendar is selected as a capability when the requested knowledge belongs naturally to a day rather than to an ordinary entity/application target.
+Natural-language application selection is owned by the cross-cutting [Application Boundary + Router v0](application-boundary-router-v0.md), not by adding Calendar rules to the established Core planner. The router selects Calendar when temporal/domain interpretation is required, while the selected Calendar planner still determines whether canonical knowledge ultimately belongs to a Day or to an ordinary Core-owned entity.
 
 Examples:
 
@@ -103,9 +103,9 @@ Examples:
     -> later Tasks-owned knowledge with due_date/day association
 ```
 
-Calendar routing does not require `calendar_day` to appear among ordinary planner-selectable note types. The planner preserves the specialized temporal-capture intent; Calendar resolves the normalized date deterministically and materializes/reuses exactly that day.
+Calendar routing does not require `calendar_day` to appear among ordinary Core-planner-selectable note types. The Router sees only a compact Calendar routing descriptor; once selected, Calendar's own planner preserves the specialized temporal intent and Calendar/Core resolve the normalized date and canonical owner deterministically.
 
-Applications may resolve their own bounded functionality deterministically or through a separately justified model boundary. Do not load every application's detailed contract into the top-level planner, and do not assume Calendar requires a second model call unless evidence shows deterministic routing plus the existing planner contract is insufficient.
+The established Core planner remains application-agnostic. Detailed Calendar instructions load only after routing, and future applications follow the same boundary. Router and Calendar planner start with GPT-6 Luna under their own separately validated model-facing contracts; neither change reopens the Core planner contract merely to add an application.
 
 ## Literal day capture versus identity resolution
 
@@ -254,13 +254,13 @@ Applications may depend on lower-level capabilities when useful and must keep th
 2. **Temporal/Day Core primitives.** Deterministic date identity, virtual/materialized Day repository behavior, collision/idempotence checks, and strict date/range helpers.
 3. **Temporal links and chronology.** Explicit Day links/backlinks plus the approved same-day `Added` heading grouping/navigation, keeping capture time separate from described/event time.
 4. **Calendar v0 read/UI surface.** Month + Day projections over virtual/materialized Days, Journal temporal properties, explicit links, and useful semantic activity.
-5. **Planner/routing integration.** Add the smallest model-facing specialized temporal-capture contract needed for natural requests, plus regression sentinels and one focused production-model gate only after deterministic behavior is settled.
+5. **Application-routed natural language.** After [Application Boundary + Router v0](application-boundary-router-v0.md) is approved and implemented, route Calendar intents without changing the established Core planner; Calendar owns its GPT-6 Luna planner contract and compiles validated Calendar/shared-Core intents through existing Core safety boundaries.
 
 Each slice must prefer existing Note/storage/link/history primitives over parallel Calendar implementations.
 
 ## Open decisions
 
-None at product-contract level before implementation. Exact schema flag names, internal class/function names, URL/API shapes, and presentation details are implementation choices so long as they preserve this contract.
+Calendar's product semantics remain settled. Cross-cutting routing/application-boundary decisions are now owned by [Application Boundary + Router v0](application-boundary-router-v0.md) and must be resolved there before Slice 5 implementation. Exact schema flag names, internal class/function names, URL/API shapes, and presentation details remain implementation choices so long as they preserve these contracts.
 
 ## Architecture challenge
 
