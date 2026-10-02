@@ -169,6 +169,23 @@ def test_temporal_shapes_preserve_exact_range_and_unresolved_without_fake_day(
     assert result.failure_code is failure
 
 
+def test_fail_closed_normalizes_irrelevant_intent_without_creating_execution_authority() -> None:
+    """Honor a valid non-executable failure even when the flat provider schema carries stale intent."""
+    result = parse_calendar_plan(
+        calendar_payload(
+            outcome="FAIL_CLOSED",
+            intent="DAY_LITERAL_CAPTURE",
+            temporal_kind="UNSPECIFIED",
+            exact_date=None,
+            failure_code="TEMPORAL_UNRESOLVED",
+        )
+    )
+    assert result.outcome is CalendarPlanOutcome.FAIL_CLOSED
+    assert result.intent is None
+    assert result.semantic_write is None
+    assert result.failure_code is CalendarFailureCode.TEMPORAL_UNRESOLVED
+
+
 def test_core_semantic_write_requires_one_correlated_source_grounded_temporal_reference() -> None:
     """Keep Calendar's interpretation exact while Core retains semantic-write authority."""
     result = parse_calendar_plan(

@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 5 passes Router 8/8 and Calendar 7/8; the unexecuted medium candidate was retired and a Luna-low transition-priority successor is now deterministic before DEV adoption**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Router retains Attempt-5 8/8 evidence; Calendar Attempt 7 low passed 8/10 and v8 now addresses only fail-closed correlation noise plus one newly introduced over-broad identity sentinel before DEV adoption**.
 
 ## Objective
 

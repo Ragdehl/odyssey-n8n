@@ -250,6 +250,53 @@ def test_router_to_calendar_entity_write_reaches_compiled_core_plan_e2e(tmp_path
     assert "emit CORE_SEMANTIC_WRITE rather than DAY_LITERAL_CAPTURE" in calendar_prompt
 
 
+def test_router_to_calendar_fail_closed_with_irrelevant_intent_stays_non_executable_e2e() -> None:
+    """Normalize stale provider intent while preserving unresolved Calendar failure end to end."""
+    source = "A finales de mes viene el fontanero"
+    schema = load_schema()
+    catalog = calendar_catalog()
+    router_transport = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_transport = FakeResponses(
+        {
+            "outcome": "FAIL_CLOSED",
+            "intent": "DAY_LITERAL_CAPTURE",
+            "temporal_kind": "UNSPECIFIED",
+            "exact_date": None,
+            "range_start": None,
+            "range_end_exclusive": None,
+            "semantic_write": None,
+            "failure_code": "TEMPORAL_UNRESOLVED",
+        }
+    )
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
+    planner = OpenAICalendarPlanner(
+        SimpleNamespace(responses=calendar_transport),
+        schema,
+        {"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
+    )
+    executor = CalendarRouteExecutor(
+        planner,
+        schema=schema,
+        capture_day_literal=lambda *_args: pytest.fail("fail-closed plan must not capture a Day"),
+        execute_core_write=lambda *_args: pytest.fail("fail-closed plan must not reach Core write"),
+    )
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer-unresolved-calendar",
+        router=router,
+        catalog=catalog,
+        core_execute=lambda *_args, **_kwargs: pytest.fail(
+            "Calendar route must bypass Core planner"
+        ),
+        application_executors={"calendar": executor},
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "TEMPORAL_UNRESOLVED"
+    assert router_transport.calls == 1 and calendar_transport.calls == 1
+
+
 def test_router_needs_capability_never_invokes_calendar_or_mutates_vault(tmp_path: Path) -> None:
     """Keep sibling-app knowledge in Router and stop before Calendar on unsupported ownership."""
     schema = load_schema()

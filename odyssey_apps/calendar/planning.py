@@ -411,6 +411,11 @@ def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
             semantic = _decode_calendar_semantic_write(raw_semantic)
         except SemanticWriteCompileError as error:
             raise CalendarPlannerError("Calendar semantic write is invalid") from error
+    # FAIL_CLOSED is non-executable. Structured Output can still carry an irrelevant intent
+    # because the provider schema cannot correlate these flat fields; normalize that intent
+    # away only when there is no semantic write and a concrete failure reason is present.
+    if outcome is CalendarPlanOutcome.FAIL_CLOSED and semantic is None and failure is not None:
+        intent = None
     plan = CalendarPlan(outcome, intent, temporal, semantic, failure)
     _validate_plan(plan)
     return plan
