@@ -56,6 +56,7 @@ Current DEV/server actor isolation must remain enforced at the outer authenticat
 - Keep components replaceable behind explicit contracts.
 - Never silently change the ontology/schema. Material schema changes require an explicit proposal, compatibility/migration review, deterministic validation, and normally human approval.
 - Never expose, print, commit, or persist credentials/secrets in project files or documentation.
+- For an explicitly authorized one-shot live gate that needs `/home/ragdehl/.config/odyssey/secrets.env`, prefer a transient `systemd --user` unit with `EnvironmentFile=` and `--wait --collect --pipe`. Pass only the gate authorization flag explicitly; never source or print the secret in the remote shell, copy it into tmux, or persist it in the repo. If the user service manager or fixed environment file is unavailable, stop before provider access and ask the human operator rather than inventing another credential path.
 - Explain material architecture/security/data trade-offs before changing those boundaries.
 - Do not delete or overwrite real personal knowledge as part of development evidence.
 
