@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Slice 6 Attempt 5 passes Router 8/8 and Calendar 7/8; the remaining Calendar entity-owned exact-date case is unstable under Luna low, so a Calendar-medium successor is the next provider-free candidate**.
+Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Slice 6 Attempt 5 passes Router 8/8 and Calendar 7/8; the remaining Calendar entity-owned exact-date case is unstable under Luna low, so a Calendar-medium successor is now the provider-free candidate**.
 
 ## Objective
 
@@ -215,7 +215,7 @@ Application work therefore carries router/app regression responsibility without 
 
 Calendar is the first consumer of this boundary. Slice 4 moved Calendar-specific deterministic query, presentation, and compact descriptor ownership into `odyssey_apps/calendar/`, while the shared Day/date identity, links, ranges, and materialization primitives remain in `odyssey_core/temporal.py`. Runtime composes the read-only Calendar surface instead of owning Calendar projection semantics. Slice 5 now adds the provider-free natural-language Calendar planner/executor contract, but production routing remains deliberately disabled until the focused live gates and later DEV adoption.
 
-Slice 5 is implemented provider-free. Calendar now has its own closed GPT-6 Luna/low planner
+Slice 5 is implemented provider-free. Calendar has its own closed GPT-6 Luna planner; after Slice 6 live evidence its current candidate reasoning effort is `medium`
 contract, exact-date/DATE_RANGE/UNSPECIFIED temporal result shapes, strict local response parsing,
 and a routed executor. Exact Day literals are persisted through a small Core-owned Day-capture
 primitive using canonical validation, atomic provenance, link materialization, and revision-safe

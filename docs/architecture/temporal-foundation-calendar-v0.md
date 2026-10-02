@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 5 passes Router 8/8 and Calendar 7/8; a Calendar Luna-medium successor is required before DEV adoption**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 5 passes Router 8/8 and Calendar 7/8; a Calendar Luna-medium successor is now deterministic before DEV adoption**.
 
 ## Objective
 
@@ -258,7 +258,7 @@ Applications may depend on lower-level capabilities when useful and must keep th
 4. **Calendar v0 read/UI surface.** Month + Day projections over virtual/materialized Days, Journal temporal properties, explicit links, and useful semantic activity.
 5. **Application-routed natural language.** After [Application Boundary + Router v0](application-boundary-router-v0.md) is approved and implemented, route Calendar intents without changing the established Core planner; Calendar owns its GPT-6 Luna planner contract and compiles validated Calendar/shared-Core intents through existing Core safety boundaries.
 
-Implementation note after Slice 5 deterministic work: Calendar's separate GPT-6 Luna/low planner
+Implementation note after Slice 5 deterministic work: Calendar's separate GPT-6 Luna planner (current Slice 6 candidate effort: `medium`)
 contract retains `EXACT_DATE`, `DATE_RANGE`, and `UNSPECIFIED` temporal evidence. Exact Day literal
 captures use the exact routed source wording and a Core-owned capture primitive; ranges and vague
 time never become an invented Day, and unsupported Tasks-like lifecycle intent fails closed. Range

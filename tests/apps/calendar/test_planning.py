@@ -333,7 +333,7 @@ class FakeResponses:
         return self.response
 
 
-def test_fake_provider_uses_gpt6_luna_low_one_call_and_exact_current_source(
+def test_fake_provider_uses_gpt6_luna_medium_one_call_and_exact_current_source(
     schema: dict[str, Any],
 ) -> None:
     """Keep Calendar's provider boundary separate, bounded, and source-preserving."""
@@ -355,7 +355,9 @@ def test_fake_provider_uses_gpt6_luna_low_one_call_and_exact_current_source(
     assert len(fake.calls) == 1
     call = fake.calls[0]
     assert call["model"] == CALENDAR_PLANNER_MODEL == "gpt-6-luna"
-    assert call["reasoning"] == {"effort": CALENDAR_PLANNER_REASONING_EFFORT} == {"effort": "low"}
+    assert (
+        call["reasoning"] == {"effort": CALENDAR_PLANNER_REASONING_EFFORT} == {"effort": "medium"}
+    )
     assert call["store"] is False
     assert call["text"]["format"]["strict"] is True
     assert call["input"][1] == {

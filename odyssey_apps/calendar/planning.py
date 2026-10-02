@@ -32,7 +32,7 @@ from odyssey_core.semantic_write import (
 from odyssey_core.temporal import DateRange, TemporalValueError, normalize_iso_date
 
 CALENDAR_PLANNER_MODEL = "gpt-6-luna"
-CALENDAR_PLANNER_REASONING_EFFORT = "low"
+CALENDAR_PLANNER_REASONING_EFFORT = "medium"
 CALENDAR_PLANNER_MAX_OUTPUT_TOKENS = 1_024
 CALENDAR_PLANNER_MAX_RECENT_TURNS = 8
 CALENDAR_PLANNER_MAX_CONTEXT_CHARS = 1_000
