@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **draft architecture contract for human review; no implementation approved by this document**.
+Status: **approved architecture contract; implementation not started; architecture-challenge corrections incorporated before code**.
 
 ## Objective
 
@@ -65,7 +65,7 @@ Router (GPT-6 Luna)
     `--> no safe route ---> fail closed / clarify
 ```
 
-Explicit application entry points or future `@App` syntax may bypass model routing deterministically when the destination is unambiguous and enabled. With no applications enabled, runtime may bypass the router and call Core directly.
+Explicit application entry points or future `@App` syntax may bypass model routing deterministically when the destination is unambiguous and enabled. Runtime may bypass the router only when no specialized application is registered at all. A registered but disabled capability remains visible to routing as unavailable evidence so specialized intent cannot silently fall through to Core.
 
 ## Router model boundary
 
@@ -84,15 +84,16 @@ It must not resolve identities, inspect the vault, invent facts, choose canonica
 
 ## Minimal application manifest
 
-Router input is generated from enabled application manifests. A v0 manifest needs only compact routing metadata, for example conceptually:
+Router input is generated from registered application manifests plus runtime availability. A v0 manifest needs only compact routing metadata, for example conceptually:
 
 ```text
 id: calendar
 routing_description: day/date-owned occurrences and Calendar navigation
 dependencies: [temporal]
+enabled: true | false   # runtime state, not app prompt detail
 ```
 
-Detailed application prompts, schemas, lifecycle states, storage details, examples, and UI instructions are not included in router context.
+Detailed application prompts, schemas, lifecycle states, storage details, examples, and UI instructions are not included in router context. Disabled registered applications may contribute only this same compact descriptor plus `enabled=false`; they are not routable execution targets. This lets Router return `NEEDS_CAPABILITY` instead of silently forcing specialized intent through Core. A future true uninstall/package lifecycle is outside v0.
 
 `core` is a built-in routing destination rather than an installable application. Its compact description covers ordinary Odyssey retrieval/mutation and existing generic delegation semantics not owned by an enabled application.
 
@@ -108,7 +109,7 @@ RoutePlan
       source_text
 ```
 
-For `ROUTE`, every `source_text` must be an exact substring of the original request. Local validation maps those substrings back to the request in order and rejects rewritten, overlapping, fabricated, or out-of-order route text. Collectively, ordered routes must cover every non-whitespace character of the request exactly once; only whitespace may remain between adjacent route spans. This makes dropped negations, qualifiers, conjunctions, or punctuation a local validation failure rather than silent semantic loss. The downstream planner may also receive the original request as read-only context so pronouns and cross-clause wording are not lost, but it receives authority only for its routed source text.
+For `ROUTE`, every `source_text` must be an exact substring of the original request. Local validation maps those substrings back to the request in order and rejects rewritten, overlapping, fabricated, or out-of-order route text. Collectively, ordered routes must cover every non-whitespace character of the request exactly once; only whitespace may remain between adjacent route spans. This makes dropped negations, qualifiers, conjunctions, or punctuation a local validation failure rather than silent semantic loss. Each downstream planner receives its exact routed `source_text` as the current authoritative request plus the normal bounded prior-turn conversation context. It does not receive sibling route text or the full current message as an alternate semantic authority. If current-message wording is required to interpret another clause safely, those clauses are dependent and must remain in one route.
 
 `CLARIFY` means the enabled capability set admits more than one materially different safe route and guessing would change behavior. `NEEDS_CAPABILITY` means the request is understandable but clearly requires specialized lifecycle/operation semantics that neither Core nor an enabled application can safely provide. Neither outcome executes work.
 
@@ -175,7 +176,7 @@ The runtime executes routed units in original request order. Application results
 
 An application receives only the Core services its contract needs. Direct filesystem writes or a parallel application database must not become an alternate canonical knowledge path. Canonical personal knowledge continues to mutate only through validated Core boundaries.
 
-Application failure is bounded to that route. A missing/disabled/failing application must not prevent Core startup or ordinary Core requests from functioning.
+The complete RoutePlan is locally validated before any route executes. One outer delivery/request ID remains the idempotence and user-visible request boundary; routed subexecution must not become an independent competing delivery authority. Safe independent routes execute in original order and may complete even when another route later defers or fails. Application failure is bounded to that route. A missing/disabled/failing application must not prevent Core startup or ordinary Core requests from functioning.
 
 A future untrusted marketplace requires a separate permissions/sandbox/signing design. Router v0 establishes logical/module isolation only; it does not claim that arbitrary third-party Python is safe to execute in-process.
 
@@ -185,7 +186,7 @@ V0 must be testable with Calendar enabled and disabled even though it does not i
 
 When an application is disabled:
 
-- it is absent from the router capability catalog;
+- while registered, it remains only as compact `enabled=false` routing evidence and cannot be selected as an executable route;
 - its planner/executor/UI entry points are unavailable;
 - Core still starts and ordinary Core READ/WRITE works;
 - previously created canonical knowledge is not deleted;
@@ -271,12 +272,28 @@ Before either live gate, calculate a bounded maximum call count/cost and request
 
 Before Slice 1 code, run the repository architecture challenge against this contract. The challenge must specifically test whether the proposed router is doing planning work, whether application code can become a second mutation authority, whether disabling Calendar truly leaves Core usable, and whether the physical module boundary matches the dependency direction.
 
-## Open decisions for human review
+## Architecture challenge result
 
-The following are deliberately not settled by this draft:
+**PROCEED**, after three bounded corrections incorporated into this contract before implementation.
 
-1. **Partial execution:** if one independent routed intent needs clarification, should already-safe independent routes execute immediately or should the whole user message wait?
-2. **Router conversation context:** whether Router v0 receives bounded recent conversation evidence or only the current message; downstream planners can still receive their established context.
-3. **Explicit app syntax:** whether `@Calendar`/`@Tasks` is introduced in v0 or deferred until a real ambiguity/user-control need appears.
+The challenge confirmed that a pre-planning router is justified: the existing `DelegateAction` occurs only after the Core planner has already interpreted the request, so using it as the application selector would either require application rules inside the Core planner or allow confident Core misrouting. n8n remains integration/orchestration and must not become the semantic router. No new service, database, generic DAG, or plugin framework is needed.
 
-Everything else above is intended as the proposed v0 architecture, not as implementation evidence.
+The challenge found and corrected three boundary risks:
+
+1. A disabled registered capability cannot simply disappear from all routing evidence while `NEEDS_CAPABILITY` is expected to distinguish specialized unsupported work. Registered disabled apps therefore expose only compact `enabled=false` routing evidence and can never be execution targets.
+2. Passing the full current message to every downstream planner would weaken route authority and risk sibling-intent leakage. A downstream planner receives only its exact current route plus normal bounded prior-turn conversation context; clauses needing each other must remain one route.
+3. Multi-route execution must not create competing delivery/idempotence authorities. The whole RoutePlan validates before execution and one outer request/delivery ID owns the aggregate result while independent routes may complete or defer separately.
+
+The current Core temporal/Day-reference primitives remain justified shared infrastructure: Core atomic-fact capture chronology and canonical materialization already use the deterministic Day-link contract, and later Calendar/Tasks/Events reuse the same temporal identity. Calendar-specific query, planner, routing, executor, and UI ownership should nevertheless move behind the application boundary where currently coupled.
+
+No further material product, source-of-truth, schema, security, or infrastructure decision is required before Slice 1.
+
+## Resolved v0 product decisions
+
+Human review settled the remaining v0 choices before implementation:
+
+1. **Partial execution:** independent safe routes may execute even when another independent route needs clarification or fails. The aggregate result reports partial completion; no unrelated successful route is rolled back merely to preserve all-or-nothing behavior that the user did not request.
+2. **Router conversation context:** Router receives the same bounded recent visible conversation evidence needed for continuity, but that evidence is routing-only and never canonical truth or mutation authority. Routed current-message source text remains exact and locally validated.
+3. **Explicit app syntax:** `@Calendar` / `@Tasks` routing is deferred. Automatic routing is the v0 product behavior; explicit bypass syntax should be added only if real use demonstrates a control/disambiguation need.
+
+These decisions close the product-contract questions required before implementation.
