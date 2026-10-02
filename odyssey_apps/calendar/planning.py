@@ -1,7 +1,8 @@
-"""Closed Calendar planner contract and routed executor for Calendar v0.
+"""Minimal Calendar interpretation and routed execution.
 
-Calendar owns temporal interpretation after routing.  It never receives sibling current-message
-text, and it delegates canonical writes back to injected Core boundaries.
+Calendar owns only temporal interpretation and the choice between a Day-owned occurrence and
+a request that must return to the ordinary Core planner. It never plans Core identities, facts,
+targets, references, or mutations.
 """
 
 from __future__ import annotations
@@ -20,6 +21,11 @@ from odyssey_core.application import (
     ApplicationResult,
     ApplicationStatus,
 )
+from odyssey_core.domain_interpretation import (
+    TEMPORAL_REFERENCE_EVIDENCE,
+    DomainEvidence,
+    DomainInterpretation,
+)
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -27,32 +33,22 @@ from odyssey_core.observability import (
     ProviderCallEvidence,
     normalize_provider_usage,
 )
-from odyssey_core.request_planning import RequestPlan
-from odyssey_core.semantic_write import (
-    ApplyTo,
-    IdentityPart,
-    SemanticWriteCompileError,
-    SemanticWriteIntent,
-    TemporalReferencePart,
-    compile_semantic_write,
-    decode_semantic_write_action,
-)
 from odyssey_core.temporal import DateRange, TemporalValueError, normalize_iso_date
 
 CALENDAR_PLANNER_MODEL = "gpt-6-luna"
 CALENDAR_PLANNER_REASONING_EFFORT = "low"
-CALENDAR_PLANNER_MAX_OUTPUT_TOKENS = 1_024
+CALENDAR_PLANNER_MAX_OUTPUT_TOKENS = 512
 CALENDAR_PLANNER_MAX_RECENT_TURNS = 8
 CALENDAR_PLANNER_MAX_CONTEXT_CHARS = 1_000
 CALENDAR_PLANNER_TIMEOUT_SECONDS = 30.0
 
 
 class CalendarPlannerError(ValueError):
-    """Report an invalid or unavailable Calendar planning result without executing it."""
+    """Report an invalid or unavailable Calendar interpretation without executing it."""
 
 
 class TemporalResolutionKind(StrEnum):
-    """Name the only v0 temporal-resolution shapes preserved by Calendar."""
+    """Name the only temporal-resolution shapes preserved by Calendar."""
 
     EXACT_DATE = "EXACT_DATE"
     DATE_RANGE = "DATE_RANGE"
@@ -60,17 +56,17 @@ class TemporalResolutionKind(StrEnum):
 
 
 class CalendarPlanOutcome(StrEnum):
-    """Name whether Calendar has a complete executable intent or withheld it."""
+    """Name whether Calendar has a safe domain interpretation or withholds execution."""
 
     PLAN = "PLAN"
     FAIL_CLOSED = "FAIL_CLOSED"
 
 
 class CalendarIntentKind(StrEnum):
-    """Name Calendar's narrow Day capture and Core-owned semantic write choices."""
+    """Choose only between Calendar-owned capture and ordinary Core planning."""
 
     DAY_LITERAL_CAPTURE = "DAY_LITERAL_CAPTURE"
-    CORE_SEMANTIC_WRITE = "CORE_SEMANTIC_WRITE"
+    DELEGATE_TO_CORE = "DELEGATE_TO_CORE"
 
 
 class CalendarFailureCode(StrEnum):
@@ -83,7 +79,7 @@ class CalendarFailureCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TemporalResolution:
-    """Carry exact, range, or unresolved temporal evidence without guessing an exact Day."""
+    """Carry exact, range, or unresolved temporal evidence without guessing one Day."""
 
     kind: TemporalResolutionKind
     exact_date: str | None = None
@@ -92,17 +88,17 @@ class TemporalResolution:
 
 @dataclass(frozen=True, slots=True)
 class CalendarPlan:
-    """Represent one validated Calendar result before any Core mutation is attempted."""
+    """Contain only Calendar-owned interpretation before Core or Day execution."""
 
     outcome: CalendarPlanOutcome
     intent: CalendarIntentKind | None
     temporal: TemporalResolution
-    semantic_write: SemanticWriteIntent | None = None
+    temporal_text: str | None = None
     failure_code: CalendarFailureCode | None = None
 
 
 class ResponsesClient(Protocol):
-    """Describe the injected Responses API subset required for one planner call."""
+    """Describe the injected Responses API subset required for one Calendar call."""
 
     responses: Any
 
@@ -122,141 +118,13 @@ def _bounded_context(conversation_context: Sequence[Mapping[str, str]]) -> list[
     return result
 
 
-def _calendar_semantic_write_definitions() -> dict[str, Any]:
-    """Build Calendar's app-native fact-write schema without generic Core mutation fields."""
-    candidate_scope = {
-        "type": "object",
-        "properties": {
-            "source": {
-                "anyOf": [
-                    {
-                        "type": "object",
-                        "properties": {"kind": {"type": "string", "enum": ["SELF"]}},
-                        "required": ["kind"],
-                        "additionalProperties": False,
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "kind": {"type": "string", "enum": ["SOURCE_DESCRIPTION"]},
-                            "description": {"type": "string"},
-                        },
-                        "required": ["kind", "description"],
-                        "additionalProperties": False,
-                    },
-                ]
-            },
-            "member_query": {"type": "string"},
-            "extent": {"type": "string", "enum": ["one_member"]},
-        },
-        "required": ["source", "member_query", "extent"],
-        "additionalProperties": False,
-    }
-    identity = {
-        "type": "object",
-        "properties": {
-            "description": {"type": "string"},
-            "binding": {"type": "string", "enum": ["self", "described"]},
-            "direct_name": {"type": ["string", "null"]},
-            "candidate_scope": {
-                "anyOf": [
-                    {"type": "null"},
-                    {"$ref": "#/$defs/calendar_candidate_scope"},
-                ]
-            },
-        },
-        "required": ["description", "binding", "direct_name", "candidate_scope"],
-        "additionalProperties": False,
-    }
-    literal_part = {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "enum": ["literal"]},
-            "text": {"type": "string"},
-        },
-        "required": ["kind", "text"],
-        "additionalProperties": False,
-    }
-    identity_part = {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "enum": ["identity"]},
-            "text": {"type": "string"},
-            "identity": {"$ref": "#/$defs/calendar_identity"},
-        },
-        "required": ["kind", "text", "identity"],
-        "additionalProperties": False,
-    }
-    temporal_part = {
-        "type": "object",
-        "properties": {
-            "kind": {"type": "string", "enum": ["temporal_reference"]},
-            "text": {"type": "string"},
-            "date": {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"},
-        },
-        "required": ["kind", "text", "date"],
-        "additionalProperties": False,
-    }
-    fact = {
-        "type": "object",
-        "properties": {
-            "parts": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "anyOf": [
-                        {"$ref": "#/$defs/calendar_literal_part"},
-                        {"$ref": "#/$defs/calendar_identity_part"},
-                        {"$ref": "#/$defs/calendar_temporal_reference_part"},
-                    ]
-                },
-            }
-        },
-        "required": ["parts"],
-        "additionalProperties": False,
-    }
-    operation = {
-        "type": "object",
-        "properties": {
-            "target": {"$ref": "#/$defs/calendar_identity"},
-            "facts": {
-                "type": "array",
-                "minItems": 1,
-                "items": {"$ref": "#/$defs/calendar_fact"},
-            },
-        },
-        "required": ["target", "facts"],
-        "additionalProperties": False,
-    }
-    write = {
-        "type": "object",
-        "properties": {
-            "operations": {
-                "type": "array",
-                "minItems": 1,
-                "items": {"$ref": "#/$defs/calendar_operation"},
-            }
-        },
-        "required": ["operations"],
-        "additionalProperties": False,
-    }
+def calendar_plan_json_schema(_legacy_schema: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Return Calendar's strict domain-only provider schema.
+
+    The ignored optional argument keeps consumed historical benchmark modules importable; current
+    production composition never supplies the canonical note schema to Calendar.
+    """
     return {
-        "calendar_candidate_scope": candidate_scope,
-        "calendar_identity": identity,
-        "calendar_literal_part": literal_part,
-        "calendar_identity_part": identity_part,
-        "calendar_temporal_reference_part": temporal_part,
-        "calendar_fact": fact,
-        "calendar_operation": operation,
-        "calendar_semantic_write": write,
-    }
-
-
-def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Build Calendar's app-native strict schema without exposing generic Core mutation vocabulary."""
-    del schema
-    definitions = _calendar_semantic_write_definitions()
-    root = {
         "type": "object",
         "properties": {
             "outcome": {"type": "string", "enum": [item.value for item in CalendarPlanOutcome]},
@@ -273,12 +141,7 @@ def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
             "exact_date": {"type": ["string", "null"]},
             "range_start": {"type": ["string", "null"]},
             "range_end_exclusive": {"type": ["string", "null"]},
-            "semantic_write": {
-                "anyOf": [
-                    {"type": "null"},
-                    {"$ref": "#/$defs/calendar_semantic_write"},
-                ]
-            },
+            "temporal_text": {"type": ["string", "null"]},
             "failure_code": {
                 "anyOf": [
                     {"type": "null"},
@@ -293,114 +156,15 @@ def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
             "exact_date",
             "range_start",
             "range_end_exclusive",
-            "semantic_write",
+            "temporal_text",
             "failure_code",
         ],
         "additionalProperties": False,
     }
-    return {"$defs": definitions, **root}
-
-
-def _expand_calendar_identity(raw: Any) -> dict[str, Any]:
-    """Translate one app-local identity into the full shared Core semantic identity shape."""
-    required = {"description", "binding", "direct_name", "candidate_scope"}
-    if not isinstance(raw, Mapping) or set(raw) != required:
-        raise SemanticWriteCompileError("Calendar semantic identity fields are invalid")
-    scope = raw["candidate_scope"]
-    if scope is not None:
-        if not isinstance(scope, Mapping) or set(scope) != {"source", "member_query", "extent"}:
-            raise SemanticWriteCompileError("Calendar candidate scope fields are invalid")
-        if scope["extent"] != "one_member" or not isinstance(scope["member_query"], str):
-            raise SemanticWriteCompileError("Calendar candidate scope is not singular")
-        source = scope["source"]
-        if not isinstance(source, Mapping):
-            raise SemanticWriteCompileError("Calendar candidate source is invalid")
-        if not (
-            (set(source) == {"kind"} and source["kind"] == "SELF")
-            or (
-                set(source) == {"kind", "description"}
-                and source["kind"] == "SOURCE_DESCRIPTION"
-                and isinstance(source["description"], str)
-            )
-        ):
-            raise SemanticWriteCompileError("Calendar candidate source fields are invalid")
-        if raw["direct_name"] is not None:
-            raise SemanticWriteCompileError("Calendar direct identity cannot use candidate scope")
-        if source.get("kind") == "SOURCE_DESCRIPTION":
-            source_description = source["description"].strip().casefold()
-            identity_description = str(raw["description"]).strip().casefold()
-            member_query = scope["member_query"].strip().casefold()
-            if source_description in {identity_description, member_query}:
-                raise SemanticWriteCompileError(
-                    "Calendar candidate scope cannot select from itself"
-                )
-    return {
-        "description": raw["description"],
-        "binding": raw["binding"],
-        "direct_name": raw["direct_name"],
-        "note_type": None,
-        "filters": [],
-        "candidate_scope": scope,
-    }
-
-
-def _expand_calendar_fact(raw: Any) -> dict[str, Any]:
-    """Translate app-local fact parts while expanding only nested identities."""
-    if not isinstance(raw, Mapping) or set(raw) != {"parts"} or not isinstance(raw["parts"], list):
-        raise SemanticWriteCompileError("Calendar semantic fact fields are invalid")
-    parts: list[dict[str, Any]] = []
-    for part in raw["parts"]:
-        if not isinstance(part, Mapping):
-            raise SemanticWriteCompileError("Calendar semantic fact part is invalid")
-        if set(part) == {"kind", "text"} and part["kind"] == "literal":
-            parts.append(dict(part))
-        elif set(part) == {"kind", "text", "date"} and part["kind"] == "temporal_reference":
-            parts.append(dict(part))
-        elif set(part) == {"kind", "text", "identity"} and part["kind"] == "identity":
-            parts.append(
-                {
-                    "kind": "identity",
-                    "text": part["text"],
-                    "identity": _expand_calendar_identity(part["identity"]),
-                }
-            )
-        else:
-            raise SemanticWriteCompileError("Calendar semantic fact part fields are invalid")
-    return {"parts": parts}
-
-
-def _decode_calendar_semantic_write(raw: Any) -> SemanticWriteIntent:
-    """Lower Calendar's minimal write contract into the existing full Core semantic-write contract."""
-    if not isinstance(raw, Mapping) or set(raw) != {"operations"}:
-        raise SemanticWriteCompileError("Calendar semantic write fields are invalid")
-    operations = raw["operations"]
-    if not isinstance(operations, list) or not operations:
-        raise SemanticWriteCompileError("Calendar semantic write operations are invalid")
-    expanded: list[dict[str, Any]] = []
-    for operation in operations:
-        if not isinstance(operation, Mapping) or set(operation) != {"target", "facts"}:
-            raise SemanticWriteCompileError("Calendar semantic operation fields are invalid")
-        facts = operation["facts"]
-        if not isinstance(facts, list) or not facts:
-            raise SemanticWriteCompileError("Calendar semantic operation facts are invalid")
-        expanded.append(
-            {
-                "target": _expand_calendar_identity(operation["target"]),
-                "apply_to": "one",
-                "intent": "record",
-                "facts": [_expand_calendar_fact(fact) for fact in facts],
-                "properties": [],
-                "tag_changes": [],
-                "destination_type": None,
-            }
-        )
-    return decode_semantic_write_action(
-        {"kind": "write", "operations": expanded}, allow_temporal_reference=True
-    )
 
 
 def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
-    """Decode one closed provider payload and enforce cross-field Calendar safety invariants."""
+    """Decode one closed provider payload and enforce Calendar-only cross-field invariants."""
     required = {
         "outcome",
         "intent",
@@ -408,7 +172,7 @@ def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
         "exact_date",
         "range_start",
         "range_end_exclusive",
-        "semantic_write",
+        "temporal_text",
         "failure_code",
     }
     if not isinstance(payload, Mapping) or set(payload) != required:
@@ -421,20 +185,15 @@ def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
     temporal = _parse_temporal(temporal_kind, payload)
     intent = _enum_or_none(CalendarIntentKind, payload["intent"], "Calendar intent")
     failure = _enum_or_none(CalendarFailureCode, payload["failure_code"], "Calendar failure")
-    raw_semantic = payload["semantic_write"]
-    if raw_semantic is None:
-        semantic = None
-    else:
-        try:
-            semantic = _decode_calendar_semantic_write(raw_semantic)
-        except SemanticWriteCompileError as error:
-            raise CalendarPlannerError("Calendar semantic write is invalid") from error
-    # FAIL_CLOSED is non-executable. Structured Output can still carry an irrelevant intent
-    # because the provider schema cannot correlate these flat fields; normalize that intent
-    # away only when there is no semantic write and a concrete failure reason is present.
-    if outcome is CalendarPlanOutcome.FAIL_CLOSED and semantic is None and failure is not None:
+    temporal_text = payload["temporal_text"]
+    if temporal_text is not None and (
+        not isinstance(temporal_text, str) or not temporal_text.strip()
+    ):
+        raise CalendarPlannerError("Calendar temporal text is invalid")
+    if outcome is CalendarPlanOutcome.FAIL_CLOSED and failure is not None:
         intent = None
-    plan = CalendarPlan(outcome, intent, temporal, semantic, failure)
+        temporal_text = None
+    plan = CalendarPlan(outcome, intent, temporal, temporal_text, failure)
     _validate_plan(plan)
     return plan
 
@@ -472,9 +231,9 @@ def _parse_temporal(kind: TemporalResolutionKind, raw: Mapping[str, Any]) -> Tem
 
 
 def _validate_plan(plan: CalendarPlan) -> None:
-    """Enforce executable temporal ownership and semantic-write correlation locally."""
+    """Reject any Calendar output that exceeds temporal/domain classification authority."""
     if plan.outcome is CalendarPlanOutcome.FAIL_CLOSED:
-        if plan.intent is not None or plan.semantic_write is not None or plan.failure_code is None:
+        if plan.intent is not None or plan.temporal_text is not None or plan.failure_code is None:
             raise CalendarPlannerError("Fail-closed Calendar plan correlation is invalid")
         if (
             plan.failure_code is CalendarFailureCode.RANGE_REQUIRES_RANGE_AWARE_OPERATION
@@ -489,74 +248,27 @@ def _validate_plan(plan: CalendarPlan) -> None:
         return
     if plan.failure_code is not None or plan.intent is None:
         raise CalendarPlannerError("Executable Calendar plan correlation is invalid")
+    if plan.temporal.kind is not TemporalResolutionKind.EXACT_DATE:
+        raise CalendarPlannerError("Executable Calendar interpretation requires one exact date")
     if plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE:
-        if (
-            plan.temporal.kind is not TemporalResolutionKind.EXACT_DATE
-            or plan.semantic_write is not None
-        ):
-            raise CalendarPlannerError("Calendar Day literal capture requires one exact date")
+        if plan.temporal_text is not None:
+            raise CalendarPlannerError("Day capture must not carry Core temporal evidence")
         return
-    if plan.intent is CalendarIntentKind.CORE_SEMANTIC_WRITE:
-        if (
-            plan.temporal.kind is not TemporalResolutionKind.EXACT_DATE
-            or plan.semantic_write is None
-        ):
-            raise CalendarPlannerError("Calendar Core write requires exact temporal reference")
-        _validate_calendar_core_write(plan.semantic_write)
-        dates = [
-            part.date
-            for operation in plan.semantic_write.operations
-            for fact in operation.facts
-            for part in fact.parts
-            if isinstance(part, TemporalReferencePart)
-        ]
-        if dates != [plan.temporal.exact_date]:
-            raise CalendarPlannerError(
-                "Calendar temporal reference does not correlate to exact date"
-            )
+    if plan.intent is CalendarIntentKind.DELEGATE_TO_CORE:
+        if plan.temporal_text is None:
+            raise CalendarPlannerError("Core delegation requires the exact temporal wording")
         return
     raise CalendarPlannerError("Calendar intent is unsupported")
 
 
-def _validate_calendar_core_write(write: SemanticWriteIntent) -> None:
-    """Keep Calendar's Core delegation to fact-only writes over generic identities."""
-    if not write.operations:
-        raise CalendarPlannerError("Calendar Core write requires at least one operation")
-    for operation in write.operations:
-        if (
-            operation.apply_to is not ApplyTo.ONE
-            or operation.intent != "record"
-            or operation.properties
-            or operation.tag_changes
-            or operation.destination_type is not None
-            or operation.target.note_type is not None
-            or operation.target.filters
-        ):
-            raise CalendarPlannerError("Calendar Core write exceeds app-local authority")
-        for fact in operation.facts:
-            for part in fact.parts:
-                if isinstance(part, IdentityPart) and (
-                    part.identity.note_type is not None or part.identity.filters
-                ):
-                    raise CalendarPlannerError("Calendar identity exceeds app-local authority")
-
-
 def validate_calendar_plan_for_source(plan: CalendarPlan, source_text: str) -> CalendarPlan:
-    """Correlate model-owned temporal evidence to the exact routed current source."""
+    """Correlate Calendar-owned evidence to the exact routed current source."""
     if not isinstance(plan, CalendarPlan):
         raise CalendarPlannerError("Calendar plan is invalid")
     if not isinstance(source_text, str) or not source_text.strip():
         raise CalendarPlannerError("Calendar source text must be non-empty")
-    if plan.intent is CalendarIntentKind.CORE_SEMANTIC_WRITE and plan.semantic_write is not None:
-        parts = [
-            part
-            for operation in plan.semantic_write.operations
-            for fact in operation.facts
-            for part in fact.parts
-            if isinstance(part, TemporalReferencePart)
-        ]
-        if len(parts) != 1 or parts[0].text not in source_text:
-            raise CalendarPlannerError("Calendar temporal reference is not grounded in source")
+    if plan.temporal_text is not None and plan.temporal_text not in source_text:
+        raise CalendarPlannerError("Calendar temporal evidence is not grounded in source")
     return plan
 
 
@@ -580,51 +292,37 @@ def render_calendar_prompt(
         "prior_conversation_only": _bounded_context(conversation_context),
     }
     return (
-        "You are Odyssey Calendar's planner after routing. Interpret only the exact current routed "
-        "source supplied as the user message; prior conversation is bounded continuity evidence, not "
-        "a substitute current request. Preserve the source wording: DAY_LITERAL_CAPTURE carries no "
-        "rewritten literal because execution records the exact routed source text. First decide whether "
-        "the source is within Calendar's own supported semantics: a temporal occurrence, or a durable "
-        "fact whose temporal wording qualifies a reusable subject identity. Instructions to create or "
-        "write into another record/surface, obligations or intended work, and other foreign semantics "
-        "are OUT_OF_SCOPE; do not identify which other capability owns them. Only for in-scope input, "
-        "resolve the temporal shape from the supplied date/time/timezone: EXACT_DATE means one "
-        "determinate date; DATE_RANGE means a bounded interval and uses a half-open "
+        "You are Odyssey Calendar's domain interpreter after routing. Interpret only the exact "
+        "current routed source supplied as the user message; prior conversation is bounded continuity "
+        "evidence, not a substitute current request. Your authority is deliberately minimal: resolve "
+        "temporal wording and decide only whether the meaning is a Day-owned occurrence or must return "
+        "to the ordinary Core planner. Never choose or describe Core targets, identities, candidate "
+        "scopes, facts, references, note types, properties, tags, write intents, Markdown, or mutation "
+        "structure. First decide whether the source is within Calendar's supported semantics: a temporal "
+        "occurrence, or a durable statement whose temporal wording changes or qualifies durable "
+        "knowledge. Instructions to create or write into another record/surface, obligations or intended "
+        "work, and other foreign semantics are OUT_OF_SCOPE; do not identify a sibling capability. Only "
+        "for in-scope input, resolve the temporal shape from the supplied date/time/timezone: EXACT_DATE "
+        "means one determinate date; DATE_RANGE means a bounded interval using a half-open "
         "range_end_exclusive; UNSPECIFIED means the wording is too vague to normalize safely. Never "
-        "collapse a range or vague phrase into one Day. Tense or a future date alone never changes the "
-        "semantic kind. If the same statement can be read both as a Day occurrence and as the start, "
-        "end, or change of durable knowledge owned by a reusable identity, the entity-owned durable "
-        "interpretation takes precedence: emit CORE_SEMANTIC_WRITE rather than DAY_LITERAL_CAPTURE. "
-        "DAY_LITERAL_CAPTURE is only for occurrences whose semantic content belongs to the Day and does "
-        "not establish, end, or change durable knowledge about a reusable identity. For an entity-owned "
-        "durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly one "
-        "temporal_reference part using the original temporal mention and the same normalized date. "
-        "Within that semantic write, preserve distinct logical participants as identity parts when they "
-        "are safely selectable Odyssey identities. Use direct_name for an identity explicitly named by "
-        "a proper name or alias. Use candidate_scope only when the wording defines the identity by "
-        "membership or relationship to SELF or to another distinct source; never use candidate_scope "
-        "merely to restate an explicit name, and never make the selected identity its own source. "
-        "Literal parts are for non-identity context or values, and ordinary context must not be promoted "
-        "speculatively. Calendar Core writes are fact-only: "
-        "never emit type constraints, filters, properties, tags, destination types, reclassification, "
-        "or bulk selection. For remaining Day-owned occurrences, "
-        "EXACT_DATE uses DAY_LITERAL_CAPTURE, DATE_RANGE uses "
-        "FAIL_CLOSED/RANGE_REQUIRES_RANGE_AWARE_OPERATION, and UNSPECIFIED uses "
-        "FAIL_CLOSED/TEMPORAL_UNRESOLVED. Core owns identity resolution, validation, Markdown, "
-        "history, and mutation. Return only the strict JSON object.\n"
+        "collapse a range or vague phrase into one Day. If a statement establishes, ends, or changes "
+        "durable knowledge while also describing an occurrence on a date, durable knowledge takes "
+        "precedence: emit DELEGATE_TO_CORE, preserve the exact temporal wording in temporal_text, and "
+        "supply only its normalized exact date. Core will independently decide semantic ownership, "
+        "targets, identities, facts, references, and mutation semantics. Use DAY_LITERAL_CAPTURE only "
+        "when the semantic content itself belongs to the Day; temporal_text must then be null because "
+        "execution stores the exact routed source. Remaining Day-owned EXACT_DATE uses "
+        "DAY_LITERAL_CAPTURE, DATE_RANGE uses FAIL_CLOSED/RANGE_REQUIRES_RANGE_AWARE_OPERATION, and "
+        "UNSPECIFIED uses FAIL_CLOSED/TEMPORAL_UNRESOLVED. Return only the strict JSON object.\n"
         + json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
     )
 
 
 class OpenAICalendarPlanner:
-    """Make exactly one bounded GPT-6 Luna Calendar planning call with no retries."""
+    """Make exactly one bounded GPT-6 Luna Calendar interpretation call with no retries."""
 
-    def __init__(
-        self, client: ResponsesClient, schema: Mapping[str, Any], current_context: Mapping[str, str]
-    ) -> None:
-        """Bind injected transport, canonical Core schema, and explicit current temporal context."""
+    def __init__(self, client: ResponsesClient, current_context: Mapping[str, str]) -> None:
         self._client = client
-        self._schema = schema
         self._current_context = dict(current_context)
         self.model = CALENDAR_PLANNER_MODEL
         self.reasoning_effort = CALENDAR_PLANNER_REASONING_EFFORT
@@ -635,24 +333,20 @@ class OpenAICalendarPlanner:
         self.last_error_category = None
 
     @classmethod
-    def from_environment(
-        cls, schema: Mapping[str, Any], current_context: Mapping[str, str]
-    ) -> OpenAICalendarPlanner:
-        """Build the one-call adapter with SDK retries disabled when execution is configured."""
+    def from_environment(cls, current_context: Mapping[str, str]) -> OpenAICalendarPlanner:
+        """Build the one-call adapter with SDK retries disabled."""
         if not os.environ.get("OPENAI_API_KEY"):
             raise CalendarPlannerError("OPENAI_API_KEY is required for Calendar planning")
         try:
             from openai import OpenAI
         except ImportError as error:
             raise CalendarPlannerError("Install the OpenAI SDK for Calendar planning") from error
-        return cls(
-            OpenAI(max_retries=0, timeout=CALENDAR_PLANNER_TIMEOUT_SECONDS), schema, current_context
-        )
+        return cls(OpenAI(max_retries=0, timeout=CALENDAR_PLANNER_TIMEOUT_SECONDS), current_context)
 
     def plan(
         self, source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()
     ) -> CalendarPlan:
-        """Interpret one exact routed source once, rejecting incomplete or malformed output locally."""
+        """Interpret one exact routed source once, rejecting malformed output locally."""
         if not isinstance(source_text, str) or not source_text.strip():
             raise CalendarPlannerError("Calendar source text must be non-empty")
         self.last_call = False
@@ -679,7 +373,7 @@ class OpenAICalendarPlanner:
                         "type": "json_schema",
                         "name": "odyssey_calendar_plan",
                         "strict": True,
-                        "schema": calendar_plan_json_schema(self._schema),
+                        "schema": calendar_plan_json_schema(),
                     }
                 },
             )
@@ -699,23 +393,27 @@ class OpenAICalendarPlanner:
 
 
 class CalendarRouteExecutor:
-    """Adapt validated Calendar plans to the existing routed application-result contract."""
+    """Execute Calendar-owned Day capture or return specialized evidence to the Core planner."""
 
     def __init__(
         self,
         planner: Any,
         *,
-        schema: Mapping[str, Any],
         capture_day_literal: Callable[[str, str, str, object | None], ApplicationResult],
-        execute_core_write: Callable[
-            [RequestPlan, str, str, object | None, Sequence[Mapping[str, str]]], ApplicationResult
+        execute_core: Callable[
+            [
+                str,
+                str,
+                object | None,
+                Sequence[Mapping[str, str]],
+                DomainInterpretation,
+            ],
+            ApplicationResult,
         ],
     ) -> None:
-        """Bind Calendar planning to injected Core-owned execution services only."""
         self._planner = planner
-        self._schema = schema
         self._capture_day_literal = capture_day_literal
-        self._execute_core_write = execute_core_write
+        self._execute_core = execute_core
 
     def __call__(
         self,
@@ -724,7 +422,7 @@ class CalendarRouteExecutor:
         authenticated_actor: object | None = None,
         conversation_context: Sequence[Mapping[str, str]] = (),
     ) -> ApplicationResult:
-        """Execute one exact routed Calendar span and retain bounded planner telemetry."""
+        """Interpret one routed Calendar span and retain bounded planner telemetry."""
         planner_started = perf_counter()
         try:
             plan = self._planner.plan(source_text, conversation_context)
@@ -745,17 +443,25 @@ class CalendarRouteExecutor:
                     plan.temporal.exact_date or "", source_text, request_id, authenticated_actor
                 )
                 return _prepend_operational_stage(result, stage)
-            if (
-                plan.intent is CalendarIntentKind.CORE_SEMANTIC_WRITE
-                and plan.semantic_write is not None
-            ):
-                write = compile_semantic_write(plan.semantic_write, self._schema)
-                result = self._execute_core_write(
-                    RequestPlan((write,), ()),
+            if plan.intent is CalendarIntentKind.DELEGATE_TO_CORE:
+                interpretation = DomainInterpretation(
+                    capability_id="calendar",
+                    source_text=source_text,
+                    intent="TEMPORAL_ANNOTATION",
+                    evidence=(
+                        DomainEvidence(
+                            TEMPORAL_REFERENCE_EVIDENCE,
+                            plan.temporal_text or "",
+                            plan.temporal.exact_date or "",
+                        ),
+                    ),
+                )
+                result = self._execute_core(
                     source_text,
                     request_id,
                     authenticated_actor,
                     conversation_context,
+                    interpretation,
                 )
                 return _prepend_operational_stage(result, stage)
         except Exception:

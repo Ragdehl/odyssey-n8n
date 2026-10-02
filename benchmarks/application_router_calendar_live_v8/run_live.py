@@ -15,11 +15,10 @@ from odyssey_apps.calendar.planning import (
     CALENDAR_PLANNER_MODEL,
     CALENDAR_PLANNER_REASONING_EFFORT,
     OpenAICalendarPlanner,
-    TemporalReferencePart,
     calendar_plan_json_schema,
     render_calendar_prompt,
 )
-from odyssey_core.semantic_write import IdentityPart
+from odyssey_core.semantic_write import IdentityPart, TemporalReferencePart
 
 ROOT = Path(__file__).resolve().parents[2]
 CALENDAR_MATRIX = ROOT / "benchmarks/calendar_planner/regression_v4.json"

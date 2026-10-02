@@ -29,20 +29,18 @@ def test_v6_gate_uses_the_production_calendar_descriptor() -> None:
     assert "temporal interpretation of date-qualified statements" in calendar.routing_description
 
 
-def test_retired_v6_budget_no_longer_matches_its_old_authorization() -> None:
-    """The unexecuted historical candidate cannot be revived under today's longer prompt."""
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 16
-    assert budget["regional_usd_upper"] >= run_live.AUTHORIZED_CEILING_USD == 0.014
+def test_v6_is_explicitly_retired_independent_of_current_prompt_or_budget() -> None:
+    """Never let an unexecuted historical runner regain provider authority after later refactors."""
+    assert run_live.RETIRED is True
+    assert run_live.MAX_CALLS == 16
 
 
-def test_retired_v6_preflight_requires_fresh_authorization_before_any_provider_use(
+def test_retired_v6_preflight_always_refuses_before_provider_use(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Refuse the retired runner before credential use after its model-facing input drifted."""
-    monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
+    monkeypatch.setenv(run_live.AUTH_ENV, "1")
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match="fresh authorization required"):
+    with pytest.raises(SystemExit, match="retired"):
         run_live._preflight()
 
 

@@ -517,7 +517,7 @@ def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any
         plan = validate_request_plan(
             {"actions": [{"kind": "write", "units": units}], "limitations": []},
             schema,
-            allow_calendar_day_links=any(
+            allow_temporal_reference_links=any(
                 isinstance(part, TemporalReferencePart)
                 for operation in intent.operations
                 for fact in operation.facts

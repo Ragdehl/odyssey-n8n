@@ -38,13 +38,13 @@ def test_retained_v5_artifact_records_its_original_authorized_budget() -> None:
     assert artifact["estimated_regional_upper_usd"] < run_live.AUTHORIZED_CEILING_USD == 0.014
 
 
-def test_consumed_v5_preflight_refuses_after_current_prompt_budget_drift(
+def test_consumed_v5_preflight_has_no_implicit_provider_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Historical v5 cannot regain provider authority after its model-facing input changes."""
+    """Historical v5 remains gated by explicit authority and retained one-shot evidence."""
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match="fresh authorization required"):
+    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
         run_live._preflight()
 
 

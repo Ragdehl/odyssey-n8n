@@ -59,6 +59,7 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationError,
     DirectNoteMutationService,
 )
+from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
@@ -118,10 +119,9 @@ _TASKS_DESCRIPTOR = ApplicationDescriptor(
 
 
 class _FreshCalendarPlanner:
-    """Create one Calendar planner with request-time temporal context for every routed span."""
+    """Create one domain-only Calendar planner with request-time temporal context per routed span."""
 
-    def __init__(self, schema: Mapping[str, object]) -> None:
-        self._schema = schema
+    def __init__(self) -> None:
         self.model = CALENDAR_PLANNER_MODEL
         self.reasoning_effort = CALENDAR_PLANNER_REASONING_EFFORT
         self.last_call = False
@@ -139,7 +139,7 @@ class _FreshCalendarPlanner:
         self.last_error_category = None
         clock = _current_time()
         planner = OpenAICalendarPlanner.from_environment(
-            self._schema, {key: clock[key] for key in ("date", "time", "timezone")}
+            {key: clock[key] for key in ("date", "time", "timezone")}
         )
         try:
             return planner.plan(source_text, conversation_context)
@@ -1217,15 +1217,23 @@ def build_runtime_from_environment() -> RuntimeComposition:
         clarification_choice: ClarificationChoice | None = None,
         *,
         conversation_context_override: Sequence[Mapping[str, str]] | None = None,
+        domain_interpretation: DomainInterpretation | None = None,
     ) -> ApplicationResult:
-        """Execute Core with fresh planning and an optional routed prior-context override."""
+        """Execute Core with optional prior context and app-specialized interpretation evidence."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
-        planner = (
-            _FixedRequestPlanner(resume_plan)
-            if resume_plan is not None
-            else OpenAIRequestPlanner.from_environment(schema, planner_context)
-        )
+        if resume_plan is not None:
+            planner = _FixedRequestPlanner(resume_plan)
+        elif domain_interpretation is None:
+            planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
+        else:
+            planner = OpenAIRequestPlanner.from_environment(
+                schema, planner_context, domain_interpretation=domain_interpretation
+            )
+        if resume_plan is not None and domain_interpretation is not None:
+            raise ValueError("resume plan cannot carry fresh domain interpretation")
+        if domain_interpretation is not None and domain_interpretation.source_text != user_request:
+            raise ValueError("domain interpretation does not match Core source")
         request_id_factory = (lambda: request_id) if request_id is not None else allocate_request_id
         if authenticated_actor is not None and not isinstance(
             authenticated_actor, AuthenticatedActorContext
@@ -1440,14 +1448,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     history=captured.history,
                 )
 
-            def execute_calendar_core_write(
-                plan: RequestPlan,
+            def execute_calendar_core(
                 source_text: str,
                 request_id: str,
                 authenticated_actor: object | None,
                 conversation_context: Sequence[Mapping[str, str]],
+                domain_interpretation: DomainInterpretation,
             ) -> ApplicationResult:
-                """Execute a Calendar-compiled Core write without invoking another planner."""
+                """Return Calendar evidence to the ordinary Core planner without preplanning writes."""
                 if authenticated_actor is not None and not isinstance(
                     authenticated_actor, AuthenticatedActorContext
                 ):
@@ -1456,15 +1464,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     source_text,
                     request_id,
                     authenticated_actor,
-                    resume_plan=plan,
                     conversation_context_override=conversation_context,
+                    domain_interpretation=domain_interpretation,
                 )
 
             application_executors["calendar"] = CalendarRouteExecutor(
-                _FreshCalendarPlanner(schema),
-                schema=schema,
+                _FreshCalendarPlanner(),
                 capture_day_literal=capture_calendar_literal,
-                execute_core_write=execute_calendar_core_write,
+                execute_core=execute_calendar_core,
             )
 
     return RuntimeComposition(

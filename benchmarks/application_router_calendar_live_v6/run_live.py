@@ -17,7 +17,6 @@ from odyssey_apps.calendar.planning import (
     CALENDAR_PLANNER_MODEL,
     CALENDAR_PLANNER_REASONING_EFFORT,
     OpenAICalendarPlanner,
-    TemporalReferencePart,
     calendar_plan_json_schema,
     render_calendar_prompt,
 )
@@ -29,7 +28,7 @@ from odyssey_apps.router import (
     render_router_prompt,
     route_plan_json_schema,
 )
-from odyssey_core.semantic_write import IdentityPart
+from odyssey_core.semantic_write import IdentityPart, TemporalReferencePart
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTER_MATRIX = ROOT / "benchmarks/application_router/regression_v2.json"
@@ -44,6 +43,7 @@ STANDARD_OUTPUT_USD_PER_M = 0.50
 REGIONAL_MULTIPLIER = 1.10
 MAX_CALLS = 16
 AUTHORIZED_CEILING_USD = 0.014
+RETIRED = True
 
 
 def _sha256(path: Path) -> str:
@@ -235,6 +235,8 @@ def _git_head() -> str:
 
 def _preflight() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Refuse execution unless frozen inputs, budget, authorization, and Git state are exact."""
+    if RETIRED:
+        raise SystemExit("Attempt v6 is retired and has no provider authority")
     if _sha256(ROUTER_MATRIX) != ROUTER_MATRIX_SHA256:
         raise SystemExit("Router matrix changed; refusing live gate")
     router_matrix = _load_json(ROUTER_MATRIX)

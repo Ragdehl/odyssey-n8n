@@ -16,7 +16,6 @@ from odyssey_apps.calendar.planning import (
     CALENDAR_PLANNER_MODEL,
     CALENDAR_PLANNER_REASONING_EFFORT,
     OpenAICalendarPlanner,
-    TemporalReferencePart,
     calendar_plan_json_schema,
     render_calendar_prompt,
 )
@@ -28,7 +27,7 @@ from odyssey_apps.router import (
     render_router_prompt,
     route_plan_json_schema,
 )
-from odyssey_core.semantic_write import IdentityPart
+from odyssey_core.semantic_write import IdentityPart, TemporalReferencePart
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTER_MATRIX = ROOT / "benchmarks/application_router/regression_v2.json"

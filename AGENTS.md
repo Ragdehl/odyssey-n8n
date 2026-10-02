@@ -34,6 +34,10 @@ The current standalone consumer source lives under `odyssey_web/` as part of Pha
 - `config/note-schema.json` is the machine-readable canonical schema.
 - n8n, browser code, and model providers must not become alternate semantic authorities.
 
+### Application specialization invariant
+
+Applications are narrow domain interpreters/executors, never miniature copies of Core. An application planner may emit only the minimum app-owned interpretation or operation needed for its specialty. When the remaining request uses shared Odyssey semantics, the app must return the exact routed source plus bounded Core-owned `DomainInterpretation` evidence and let the ordinary Core planner decide semantic ownership, targets, identities, references, facts, cardinality, mutation intent, and validation. Applications must not construct `RequestPlan`, `SemanticWriteIntent`, Core selections/candidate scopes, note types, generic properties/tags, Markdown, persistence instructions, or shared identity-resolution logic. App-owned direct operations such as a Calendar Day capture may execute through a narrow Core persistence boundary, but shared planning and mechanics stay in Core. Apps may depend on Core contracts; `odyssey_core/` must never import `odyssey_apps/`. Apply this invariant to every current and future application, including Calendar and Tasks.
+
 Do not introduce LangGraph, a vector service, graph database, queue, additional application server, or other infrastructure unless a concrete requirement cannot be handled cleanly by the current boundaries.
 
 ## Local-first ownership boundary

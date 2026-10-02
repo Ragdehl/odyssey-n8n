@@ -8,7 +8,6 @@ import json
 import pytest
 
 from benchmarks.application_router_calendar_live_v9 import run_live
-from odyssey_apps.calendar.planning import CALENDAR_PLANNER_REASONING_EFFORT
 
 
 def test_v9_freezes_calendar_v5_matrix() -> None:
@@ -60,19 +59,16 @@ def test_v5_entity_cases_require_executable_direct_identity_selection() -> None:
         assert cases[case_id]["expect"]["core_compile"] == "ok"
 
 
-def test_v9_budget_is_bounded_to_twenty_zero_retry_calls() -> None:
-    assert CALENDAR_PLANNER_REASONING_EFFORT == "low"
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 20
-    assert budget["regional_usd_upper"] < run_live.AUTHORIZED_CEILING_USD == 0.020
+def test_v9_is_retired_unexecuted_after_app_to_core_boundary_redesign() -> None:
+    """The discarded mini-Core Calendar gate can never regain provider authority."""
+    assert run_live.RETIRED is True
+    assert run_live.MAX_CALLS == 20
 
 
-def test_v9_has_no_provider_authority_without_explicit_flag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
+def test_v9_preflight_always_refuses_provider_use(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(run_live.AUTH_ENV, "1")
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="retired"):
         run_live._preflight()
 
 
