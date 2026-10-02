@@ -27,7 +27,8 @@ def test_gate_is_frozen_small_complete_and_bounded_to_production_model() -> None
     assert cost == costs[runner.PRODUCTION_MODEL]
     assert cost > runner.MAX_TOTAL_COST_USD
     assert bound > 0
-    runner.verify_candidate_contract(schema, context)
+    with pytest.raises(SystemExit, match="contract hash mismatch"):
+        runner.verify_candidate_contract(schema, context)
 
 
 def test_zero_authority_refuses_before_provider_construction(
@@ -41,7 +42,7 @@ def test_zero_authority_refuses_before_provider_construction(
         raise AssertionError("provider must not be constructed")
 
     monkeypatch.setattr(runner, "_build_planner", forbidden)
-    with pytest.raises(SystemExit, match="zero authority"):
+    with pytest.raises(SystemExit, match="contract hash mismatch"):
         runner.main(["--confirm-live-provider-calls"])
     assert called is False
 

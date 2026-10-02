@@ -123,11 +123,27 @@ def test_domain_interpretation_rejects_invalid_or_ungrounded_evidence(factory) -
         factory()
 
 
-def test_domain_handoff_does_not_change_pre_redesign_ordinary_luna_prompt() -> None:
-    """Pin the ordinary Core prompt to the exact e78781b pre-redesign checkpoint."""
+def test_core_prompt_diff_from_pre_fix_checkpoint_is_only_relationship_lifecycle_rule() -> None:
+    """Prove the Core prompt changed only by the generic participant-lifecycle clarification."""
     baseline = {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
-    prompt = render_luna_experimental_prompt(schema(), baseline).encode("utf-8")
-    assert hashlib.sha256(prompt).hexdigest() == (
+    prompt = render_luna_experimental_prompt(schema(), baseline)
+    previous = (
+        "Use identity parts for distinct participants that safely denote Odyssey note identities, "
+        "including descriptive participants; do not promote ordinary places, dates, URLs, paths, "
+        "external identifiers, or context into identities merely because they are nouns or proper names."
+    )
+    current = (
+        "Use identity parts for distinct participants that safely denote Odyssey note identities, "
+        "including descriptive participants. Participant decomposition is invariant across a "
+        "relationship or state beginning, continuing, ending, being negated, or being corrected: "
+        "a participant that is an identity in the durable meaning does not become literal text merely "
+        "because that relationship or state changes polarity or lifecycle. Do not promote ordinary "
+        "places, dates, URLs, paths, external identifiers, or context into identities merely because "
+        "they are nouns or proper names."
+    )
+    assert current in prompt
+    reconstructed = prompt.replace(current, previous, 1).encode("utf-8")
+    assert hashlib.sha256(reconstructed).hexdigest() == (
         "d60c7605f0f3751cf7c5394e90daa8b92df9c10e6e9d949b447ab50907bdcd4b"
     )
 
@@ -167,6 +183,8 @@ def test_specialized_evidence_is_additive_and_never_grants_core_semantics() -> N
     assert '"value":"2026-10-03"' in prompt
     assert "Core still owns action choice, semantic ownership, targets, identities" in prompt
     assert "never as mutation authority" in prompt
+    assert "Participant decomposition is invariant" in prompt
+    assert "beginning, continuing, ending, being negated, or being corrected" in prompt
 
 
 def test_luna_core_schema_gains_only_shared_temporal_part_when_evidence_requires_it() -> None:

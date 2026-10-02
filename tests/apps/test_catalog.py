@@ -123,14 +123,13 @@ def test_enablement_only_changes_catalog_not_core_planner_artifacts() -> None:
     assert core_planner_artifacts() == before
 
 
-def test_calendar_opt_in_compiler_does_not_change_accepted_core_planner_artifacts() -> None:
-    """Freeze the pre-Slice-5 Core prompt/schema/examples/model contract by content hash."""
-    assert core_planner_artifacts() == (
-        "717c9fea6a7d278be3284146b829a51fc8c7ed38549fe52ae17df2fd26585df9",
-        "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
-        "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
-        ("gpt-5.6-luna", "low"),
-    )
+def test_core_lifecycle_candidate_changes_only_prompt_artifact() -> None:
+    """Pin the v11 prompt candidate while schema, examples, model, and effort stay unchanged."""
+    prompt, provider_schema, teaching, model = core_planner_artifacts()
+    assert prompt == "9d74e59d983aa5c0ca7af475ce63406b4b670ab33ba7f4f226c192bc922756c1"
+    assert provider_schema == "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce"
+    assert teaching == "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0"
+    assert model == ("gpt-5.6-luna", "low")
 
 
 def test_core_only_runtime_remains_usable_with_empty_or_disabled_calendar_catalog() -> None:
