@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Router retains Attempt-5 8/8 evidence; Calendar Attempt 7 low passed 8/10 and v8 now addresses only fail-closed correlation noise plus one newly introduced over-broad identity sentinel before DEV adoption**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Router retains Attempt-5 8/8 evidence and Calendar Attempt 8 passes 10/10 on GPT-6 Luna low; focused live validation is complete before DEV adoption**.
 
 ## Objective
 

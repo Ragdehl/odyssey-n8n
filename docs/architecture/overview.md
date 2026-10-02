@@ -261,3 +261,5 @@ Odyssey now has a compact application registry/catalog, exact-source routing con
 Application planners are domain-local: they do not classify or name sibling applications. The Router alone knows the application catalog; a planner that receives foreign-domain semantics fails closed with a generic app-local `OUT_OF_SCOPE` result.
 
 Model names, reasoning effort, output schemas, and generic safety instructions may still be explicit component configuration. That is distinct from hard-coding the user's ontology or application vocabulary into model logic.
+
+Attempt 8 then ran once at `32dce15a44362c4bac052c0870ccf2e2ebef5d2e`: Calendar GPT-6 Luna `low` completed all 10 calls with zero retries and passed 10/10. The retained Router Attempt-5 boundary remains unchanged and already passed 8/8. Focused Router + Calendar live validation is therefore complete; no DEV deployment is implied by this evidence checkpoint.

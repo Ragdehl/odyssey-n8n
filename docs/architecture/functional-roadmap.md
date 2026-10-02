@@ -168,7 +168,7 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 Attempt 7 Calendar low 8/10; v8 focused cleanup deterministic
+Temporal Foundation + Calendar v0                                  ✅ Attempt 8 Calendar low live gate 10/10; DEV adoption next
 Application Boundary + Router v0                                    ✅ Attempt 5 Router live gate 8/8
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
@@ -282,10 +282,10 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     🚧 Attempt 7 Calendar low 8/10; v8 focused cleanup ready provider-free
+Temporal Foundation + Calendar v0                     ✅ Attempt 8 Calendar low live gate 10/10; DEV adoption next
         |
         v
-Application Boundary + Router v0                     🚧 Router medium candidate + whitespace-aware v2 oracle ready provider-free
+Application Boundary + Router v0                     ✅ Attempt 5 Router 8/8 + Calendar Attempt 8 10/10 live gates complete
         |
         v
 Router + Calendar focused live gates / Slice 6

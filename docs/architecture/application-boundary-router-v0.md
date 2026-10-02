@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Router retains its Attempt-5 8/8 pass; Calendar Attempt 7 ran Luna low on 10 cases and passed 8/10, with durable-transition precedence validated and two orthogonal provider-free cleanups isolated for v8**.
+Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Router retains its Attempt-5 8/8 pass and Calendar Attempt 8 now passes its full 10/10 Luna-low gate; focused Router + Calendar live validation is complete before DEV adoption**.
 
 ## Objective
 

@@ -6,4 +6,4 @@ v8 keeps Calendar on GPT-6 Luna `low` and does not change the precedence prompt 
 
 Router is not re-called: its retained Attempt-5 8/8 boundary is still required to be unchanged. The gate remains one-shot, Calendar-only, zero-retry, clean-commit-only, explicitly authorized, and capped at 10 provider attempts.
 
-Provider-free budget for the 10-case gate is $0.01084590 Standard / $0.01193049 with regional uplift; hard stop remains $0.012. No v8 provider call has been made.
+Attempt 8 ran once at commit `32dce15a44362c4bac052c0870ccf2e2ebef5d2e`: all 10 provider attempts completed, zero retries, and all 10 cases passed. Usage-backed estimated cost was $0.00212180 Standard / $0.00233398 with regional uplift. The retained evidence is `results/32dce15a4436.json`; this v8 runner/result path is now consumed and must not be reused.
