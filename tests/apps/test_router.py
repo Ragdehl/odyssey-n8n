@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -270,3 +271,42 @@ def test_router_accepts_runtime_role_text_prior_context_shape() -> None:
     prompt = render_router_prompt(catalog(), ({"role": "user", "text": "earlier"},))
     evidence = json.loads(prompt.partition("\n")[2])
     assert evidence["recent_routing_context"] == [{"role": "user", "content": "earlier"}]
+
+
+def test_frozen_router_live_gate_matrix_is_closed_and_locally_valid() -> None:
+    """Freeze the eight-case Router oracle before any paid provider evidence is collected."""
+    matrix = json.loads(
+        (
+            Path(__file__).resolve().parents[2] / "benchmarks/application_router/regression_v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert matrix["version"] == 1
+    assert matrix["catalog"] == {"enabled": ["calendar"], "disabled": ["tasks"]}
+    assert [case["id"] for case in matrix["cases"]] == [
+        "core-only",
+        "calendar-only",
+        "independent-split",
+        "dependent-calendar",
+        "journal-stays-core",
+        "tasks-disabled",
+        "ambiguous-owner",
+        "meaningless-input",
+    ]
+    gate_catalog = ApplicationRegistry.from_descriptors(
+        (
+            ApplicationDescriptor(
+                "calendar", "day/date-owned occurrences and navigation", ("temporal",)
+            ),
+            ApplicationDescriptor(
+                "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
+            ),
+        )
+    ).catalog(enabled_ids=("calendar",))
+    for case in matrix["cases"]:
+        expected = case["expect"]
+        routes = tuple(
+            Route(capability_id, source_text) for capability_id, source_text in expected["routes"]
+        )
+        validate_route_plan(
+            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], gate_catalog
+        )
