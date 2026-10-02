@@ -1076,6 +1076,31 @@ def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dic
     assert lookup.facts == ()
 
 
+def test_calendar_day_link_alias_is_canonicalized_before_request_plan_execution(
+    schema: dict,
+) -> None:
+    """Keep provider temporal wording out of durable Markdown even on the fallback planner path."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "Marta Test",
+                    entity="Marta Test",
+                    facts=[
+                        "Empieza [[calendar/days/2026-10-03|"
+                        "Marta Test empieza mañana a vivir con Daniel Test.]]"
+                    ],
+                )
+            )
+        ),
+        schema,
+        allow_temporal_reference_links=True,
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert action.units[0].facts == ("Empieza [[calendar/days/2026-10-03|03-10-2026]]",)
+
+
 def test_relational_reference_selection_lowers_to_bounded_lookup_unit(schema: dict) -> None:
     """Preserve one bounded relation anchor when a fact reference needs member disambiguation."""
     query = "la persona de la cena que trabaja en Airbus Test"

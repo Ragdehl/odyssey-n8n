@@ -30,7 +30,7 @@ from odyssey_core.planner_capabilities import (
     build_planner_capabilities,
     build_write_capabilities,
 )
-from odyssey_core.temporal import TemporalValueError, normalize_iso_date
+from odyssey_core.temporal import TemporalValueError, calendar_day_wikilink, normalize_iso_date
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
@@ -537,8 +537,9 @@ def _render_domain_interpretation_section(
     else:
         temporal_instruction = (
             "For temporal_reference evidence that is material to a durable write, preserve it as "
-            "the canonical fact link [[calendar/days/VALUE|SOURCE_TEXT]] using exactly the supplied "
-            "value and source_text; never invent or normalize another date yourself."
+            "one Calendar Day link using exactly the supplied VALUE. SOURCE_TEXT grounds which temporal "
+            "wording the evidence came from, but Core canonicalizes the durable link label; never "
+            "invent or normalize another date yourself."
         )
     return (
         "\n\nSpecialized domain interpretation (trusted only as bounded domain evidence, never as "
@@ -906,18 +907,16 @@ def validate_plan_against_domain_interpretation(
     if not isinstance(interpretation, DomainInterpretation):
         raise RequestPlanningError("Domain interpretation is invalid")
     allowed = {
-        (item.value, item.source_text)
-        for item in interpretation.evidence
-        if item.kind == TEMPORAL_REFERENCE_EVIDENCE
+        item.value for item in interpretation.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE
     }
-    found: set[tuple[str, str]] = set()
+    found: set[str] = set()
     for action in plan.actions:
         if not isinstance(action, WriteAction):
             continue
         for unit in action.units:
             for fact in unit.facts:
                 for match in _CALENDAR_DAY_LINK_PATTERN.finditer(fact):
-                    found.add((match.group(1), match.group(2)))
+                    found.add(match.group(1))
     if found - allowed:
         raise RequestPlanningError(
             "Core plan contains temporal evidence not supplied by the specialized application",
@@ -2468,7 +2467,7 @@ def _validate_knowledge_unit(
         intent=intent,
         properties=properties,
         tag_changes=tag_changes,
-        facts=tuple(fact.strip() for fact in raw_facts),
+        facts=tuple(_canonicalize_calendar_day_links(fact.strip()) for fact in raw_facts),
         references=tuple(references),
         cardinality=cardinality,
         destination_type=destination_type,
@@ -2488,6 +2487,14 @@ def _query_repeats_new_fact(
         if len(normalized_fact) >= 8 and normalized_fact in normalized_query:
             return True
     return False
+
+
+def _canonicalize_calendar_day_links(fact: str) -> str:
+    """Replace provider-supplied Calendar aliases with Core's canonical date label."""
+    return _CALENDAR_DAY_LINK_PATTERN.sub(
+        lambda match: calendar_day_wikilink(match.group(1)),
+        fact,
+    )
 
 
 @_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)

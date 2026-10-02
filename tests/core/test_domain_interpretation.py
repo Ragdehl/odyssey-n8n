@@ -192,7 +192,7 @@ def test_core_semantic_planning_with_domain_evidence_still_owns_identity_and_fac
     assert referenced.target.entity == "Daniel Test"
     assert referenced.reference_lookup_only is True
     assert target.references[0].target_index == 1
-    assert "[[calendar/days/2026-10-03|mañana]]" in target.facts[0]
+    assert "[[calendar/days/2026-10-03|03-10-2026]]" in target.facts[0]
 
 
 @pytest.mark.parametrize(

@@ -468,7 +468,7 @@ def _decode_fact(raw: Any, *, allow_temporal_reference: bool) -> SemanticFact:
             try:
                 _safe_text(part["text"])
                 normalized = normalize_iso_date(part["date"])
-                calendar_day_wikilink(normalized, label=part["text"])
+                calendar_day_wikilink(normalized)
                 parts.append(TemporalReferencePart(part["text"], normalized))
             except (TypeError, ValueError) as error:
                 raise SemanticWriteCompileError("Temporal reference is invalid") from error
@@ -666,7 +666,7 @@ def _compile_facts(
             if isinstance(part, TemporalReferencePart):
                 try:
                     _safe_text(part.text)
-                    pieces.append(calendar_day_wikilink(part.date, label=part.text))
+                    pieces.append(calendar_day_wikilink(part.date))
                 except (TypeError, ValueError) as error:
                     raise SemanticWriteCompileError("Temporal reference is invalid") from error
                 continue

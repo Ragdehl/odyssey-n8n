@@ -33,7 +33,12 @@ from odyssey_core.observability import (
     ProviderCallEvidence,
     normalize_provider_usage,
 )
-from odyssey_core.temporal import DateRange, TemporalValueError, normalize_iso_date
+from odyssey_core.temporal import (
+    DateRange,
+    TemporalValueError,
+    calendar_day_label,
+    normalize_iso_date,
+)
 
 CALENDAR_PLANNER_MODEL = "gpt-6-luna"
 CALENDAR_PLANNER_REASONING_EFFORT = "low"
@@ -251,8 +256,8 @@ def _validate_plan(plan: CalendarPlan) -> None:
     if plan.temporal.kind is not TemporalResolutionKind.EXACT_DATE:
         raise CalendarPlannerError("Executable Calendar interpretation requires one exact date")
     if plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE:
-        if plan.temporal_text is not None:
-            raise CalendarPlannerError("Day capture must not carry Core temporal evidence")
+        if plan.temporal_text is None:
+            raise CalendarPlannerError("Day capture requires the exact temporal wording")
         return
     if plan.intent is CalendarIntentKind.DELEGATE_TO_CORE:
         if plan.temporal_text is None:
@@ -269,6 +274,14 @@ def validate_calendar_plan_for_source(plan: CalendarPlan, source_text: str) -> C
         raise CalendarPlannerError("Calendar source text must be non-empty")
     if plan.temporal_text is not None and plan.temporal_text not in source_text:
         raise CalendarPlannerError("Calendar temporal evidence is not grounded in source")
+    if (
+        plan.intent is CalendarIntentKind.DELEGATE_TO_CORE
+        and plan.temporal_text is not None
+        and plan.temporal_text.strip() == source_text.strip()
+    ):
+        raise CalendarPlannerError(
+            "Delegated Calendar temporal evidence cannot consume the whole source"
+        )
     return plan
 
 
@@ -307,11 +320,14 @@ def render_calendar_prompt(
         "range_end_exclusive; UNSPECIFIED means the wording is too vague to normalize safely. Never "
         "collapse a range or vague phrase into one Day. If a statement establishes, ends, or changes "
         "durable knowledge while also describing an occurrence on a date, durable knowledge takes "
-        "precedence: emit DELEGATE_TO_CORE, preserve the exact temporal wording in temporal_text, and "
-        "supply only its normalized exact date. Core will independently decide semantic ownership, "
+        "precedence: emit DELEGATE_TO_CORE, preserve only the exact temporal wording in temporal_text, and "
+        "supply only its normalized exact date. For every executable exact-date result, temporal_text "
+        "must be the exact temporal phrase from the routed source, never the whole durable statement. "
+        "Core will independently decide semantic ownership, "
         "targets, identities, facts, references, and mutation semantics. Use DAY_LITERAL_CAPTURE only "
-        "when the semantic content itself belongs to the Day; temporal_text must then be null because "
-        "execution stores the exact routed source. Remaining Day-owned EXACT_DATE uses "
+        "when the semantic content itself belongs to the Day; preserve its exact temporal wording in "
+        "temporal_text so execution can replace only that occurrence with the canonical date label. "
+        "Remaining Day-owned EXACT_DATE uses "
         "DAY_LITERAL_CAPTURE, DATE_RANGE uses FAIL_CLOSED/RANGE_REQUIRES_RANGE_AWARE_OPERATION, and "
         "UNSPECIFIED uses FAIL_CLOSED/TEMPORAL_UNRESOLVED. Return only the strict JSON object.\n"
         + json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
@@ -439,8 +455,13 @@ class CalendarRouteExecutor:
             return _prepend_operational_stage(_fail_closed(request_id, plan.failure_code), stage)
         try:
             if plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE:
+                exact_date = plan.temporal.exact_date or ""
+                temporal_text = plan.temporal_text or ""
+                canonical_literal = source_text.replace(
+                    temporal_text, calendar_day_label(exact_date), 1
+                )
                 result = self._capture_day_literal(
-                    plan.temporal.exact_date or "", source_text, request_id, authenticated_actor
+                    exact_date, canonical_literal, request_id, authenticated_actor
                 )
                 return _prepend_operational_stage(result, stage)
             if plan.intent is CalendarIntentKind.DELEGATE_TO_CORE:

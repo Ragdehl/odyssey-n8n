@@ -1549,7 +1549,7 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
             "exact_date": "2026-10-03",
             "range_start": None,
             "range_end_exclusive": None,
-            "temporal_text": None,
+            "temporal_text": "Mañana",
             "failure_code": None,
         },
         response_id="resp-calendar-e2e",
@@ -1618,7 +1618,8 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
         {"date": "2026-10-02", "time": "18:30:00", "timezone": "Europe/Paris"}
     ]
     note = parse_note((vault_root / "calendar/days/2026-10-03.md").read_text(encoding="utf-8"))
-    assert source in note.content
+    assert "03-10-2026 viene el fontanero" in note.content
+    assert source not in note.content
     public = application_result_to_response(result)
     assert public["product_outcome"] == "ANSWER"
     assert public["actions"][0]["units"][0]["status"] == "succeeded"

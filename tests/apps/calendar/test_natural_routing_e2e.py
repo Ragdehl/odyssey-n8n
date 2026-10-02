@@ -271,7 +271,10 @@ def test_router_calendar_day_occurrence_persists_exact_source_e2e(tmp_path: Path
     )
     calendar_transport = FakeResponses(
         calendar_payload(
-            intent="DAY_LITERAL_CAPTURE", temporal_kind="EXACT_DATE", exact_date="2026-10-03"
+            intent="DAY_LITERAL_CAPTURE",
+            temporal_kind="EXACT_DATE",
+            exact_date="2026-10-03",
+            temporal_text="Mañana",
         )
     )
     router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
@@ -314,7 +317,8 @@ def test_router_calendar_day_occurrence_persists_exact_source_e2e(tmp_path: Path
     assert result.status is ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("date:2026-10-03",)
     note = parse_note((vault / "calendar/days/2026-10-03.md").read_text(encoding="utf-8"))
-    assert source in note.content
+    assert "03-10-2026 viene el fontanero" in note.content
+    assert "Mañana viene el fontanero" not in note.content
 
 
 def test_router_calendar_durable_statement_returns_to_ordinary_core_planner_e2e() -> None:
@@ -367,7 +371,7 @@ def test_router_calendar_durable_statement_returns_to_ordinary_core_planner_e2e(
         assert unit.references[0].selection is None
         assert action.units[1].target.entity == "Daniel Test"
         assert action.units[1].reference_lookup_only is True
-        assert "[[calendar/days/2026-10-03|mañana]]" in unit.facts[0]
+        assert "[[calendar/days/2026-10-03|03-10-2026]]" in unit.facts[0]
         return ApplicationResult(
             request_id,
             ApplicationStatus.COMPLETED,
@@ -444,7 +448,7 @@ def test_router_calendar_ending_relation_keeps_participant_identity_e2e() -> Non
         assert action.units[0].target.entity == "Lucía Test"
         assert action.units[0].references[0].mention == "Daniel Test"
         assert action.units[1].target.entity == "Daniel Test"
-        assert "[[calendar/days/2026-10-03|mañana]]" in action.units[0].facts[0]
+        assert "[[calendar/days/2026-10-03|03-10-2026]]" in action.units[0].facts[0]
         return ApplicationResult(
             request_id,
             ApplicationStatus.COMPLETED,
@@ -516,7 +520,7 @@ def test_router_calendar_non_schema_company_stays_literal_e2e() -> None:
         assert unit.target.entity == "Marta Test"
         assert unit.references == ()
         assert "Airbus Test" in unit.facts[0]
-        assert "[[calendar/days/2026-10-03|mañana]]" in unit.facts[0]
+        assert "[[calendar/days/2026-10-03|03-10-2026]]" in unit.facts[0]
         return ApplicationResult(
             request_id,
             ApplicationStatus.COMPLETED,

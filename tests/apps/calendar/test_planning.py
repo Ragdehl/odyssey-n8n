@@ -37,7 +37,7 @@ def calendar_payload(
     exact_date: str | None = "2026-10-03",
     range_start: str | None = None,
     range_end_exclusive: str | None = None,
-    temporal_text: str | None = None,
+    temporal_text: str | None = "mañana",
     failure_code: str | None = None,
 ) -> dict[str, Any]:
     """Build one complete domain-only Calendar Structured Output payload."""
@@ -112,6 +112,16 @@ def test_durable_statement_returns_only_grounded_temporal_evidence_for_core() ->
     assert validated.temporal_text == "mañana"
     with pytest.raises(CalendarPlannerError, match="grounded"):
         validate_calendar_plan_for_source(plan, "Marta empieza el viernes a trabajar en Airbus.")
+    whole_source = parse_calendar_plan(
+        calendar_payload(
+            intent="DELEGATE_TO_CORE",
+            temporal_text="Marta empieza mañana a trabajar en Airbus.",
+        )
+    )
+    with pytest.raises(CalendarPlannerError, match="whole source"):
+        validate_calendar_plan_for_source(
+            whole_source, "Marta empieza mañana a trabajar en Airbus."
+        )
 
 
 def test_calendar_schema_contains_no_core_planning_or_mutation_vocabulary() -> None:
@@ -161,7 +171,7 @@ def test_calendar_schema_is_closed_and_requires_every_domain_field() -> None:
         {**calendar_payload(), "target": "Marta"},
         {**calendar_payload(), "semantic_write": {}},
         calendar_payload(intent="DELEGATE_TO_CORE", temporal_text=None),
-        calendar_payload(intent="DAY_LITERAL_CAPTURE", temporal_text="mañana"),
+        calendar_payload(intent="DAY_LITERAL_CAPTURE", temporal_text=None),
         calendar_payload(temporal_kind="DATE_RANGE"),
         calendar_payload(
             outcome="FAIL_CLOSED",
@@ -239,7 +249,9 @@ def test_provider_uses_luna_low_once_without_receiving_core_schema() -> None:
     fake = FakeResponses(
         SimpleNamespace(
             status="completed",
-            output_text=json.dumps(calendar_payload(exact_date="2026-10-05")),
+            output_text=json.dumps(
+                calendar_payload(exact_date="2026-10-05", temporal_text="Dentro de tres días")
+            ),
         )
     )
     planner = OpenAICalendarPlanner(
@@ -276,7 +288,7 @@ def test_calendar_planner_retains_safe_provider_metadata_for_runtime_telemetry()
             id="resp-calendar",
             status="completed",
             usage=usage,
-            output_text=json.dumps(calendar_payload()),
+            output_text=json.dumps(calendar_payload(temporal_text="Mañana")),
         )
     )
     planner = OpenAICalendarPlanner(

@@ -44,6 +44,7 @@ def exact_day_plan(date: str = "2026-10-03") -> CalendarPlan:
         CalendarPlanOutcome.PLAN,
         CalendarIntentKind.DAY_LITERAL_CAPTURE,
         TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date=date),
+        temporal_text="Mañana",
     )
 
 
@@ -60,7 +61,7 @@ def fail_plan(code: CalendarFailureCode, temporal: TemporalResolution) -> Calend
     return CalendarPlan(CalendarPlanOutcome.FAIL_CLOSED, None, temporal, failure_code=code)
 
 
-def test_day_owned_occurrence_preserves_exact_source_and_never_calls_core() -> None:
+def test_day_owned_occurrence_replaces_relative_wording_with_canonical_date() -> None:
     planner = FixedPlanner(exact_day_plan())
     captures: list[tuple[object, ...]] = []
     source = "Mañana viene el fontanero"
@@ -77,7 +78,7 @@ def test_day_owned_occurrence_preserves_exact_source_and_never_calls_core() -> N
     )
     result = executor(source, "route-1", None, prior)
     assert result.status is ApplicationStatus.COMPLETED
-    assert captures == [("2026-10-03", source, "route-1", None)]
+    assert captures == [("2026-10-03", "03-10-2026 viene el fontanero", "route-1", None)]
     assert planner.calls == [(source, prior)]
 
 

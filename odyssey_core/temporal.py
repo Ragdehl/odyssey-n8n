@@ -72,12 +72,18 @@ def calendar_day_path(value: str) -> str:
     return f"calendar/days/{normalize_iso_date(value)}.md"
 
 
+def calendar_day_label(value: str) -> str:
+    """Return the canonical human-readable label for one Calendar Day."""
+    normalized = normalize_iso_date(value)
+    parsed = date.fromisoformat(normalized)
+    return f"{parsed.day:02d}-{parsed.month:02d}-{parsed.year}"
+
+
 def calendar_day_wikilink(value: str, *, label: str | None = None) -> str:
     """Render one ordinary wikilink to the deterministic Calendar Day path."""
     normalized = normalize_iso_date(value)
     if label is None:
-        parsed = date.fromisoformat(normalized)
-        label = f"{parsed.day:02d}-{parsed.month:02d}-{parsed.year}"
+        label = calendar_day_label(normalized)
     if (
         not isinstance(label, str)
         or not label.strip()
