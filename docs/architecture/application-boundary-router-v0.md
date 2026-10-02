@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; implementation not started; architecture-challenge corrections incorporated before code**.
+Status: **approved architecture contract; Slice 1 boundary skeleton implemented; later slices not started; architecture-challenge corrections incorporated before code**.
 
 ## Objective
 

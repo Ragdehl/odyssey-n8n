@@ -15,6 +15,7 @@ from time import perf_counter
 from typing import cast
 from zoneinfo import ZoneInfo
 
+from odyssey_apps import ApplicationCatalog
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
 from odyssey_core.calendar_queries import (
     CalendarDayView,
@@ -120,6 +121,7 @@ class RuntimeComposition:
 
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
+    application_catalog: ApplicationCatalog = field(default_factory=ApplicationCatalog.empty)
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
