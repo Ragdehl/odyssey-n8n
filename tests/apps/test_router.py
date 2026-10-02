@@ -22,20 +22,13 @@ from odyssey_apps import (
     route_plan_json_schema,
     validate_route_plan,
 )
+from odyssey_apps.calendar import CALENDAR_DESCRIPTOR
 from odyssey_apps.router import ROUTER_PROVIDER_TIMEOUT_SECONDS, render_router_prompt
 
 
 def catalog(*, enabled: bool = True):  # type: ignore[no-untyped-def]
     """Return the small Calendar catalog used by closed router tests."""
-    registry = ApplicationRegistry.from_descriptors(
-        (
-            ApplicationDescriptor(
-                "calendar",
-                "day/date-owned occurrences and navigation",
-                ("temporal",),
-            ),
-        )
-    )
+    registry = ApplicationRegistry.from_descriptors((CALENDAR_DESCRIPTOR,))
     return registry.catalog(enabled_ids=("calendar",) if enabled else ())
 
 
@@ -212,6 +205,10 @@ def test_prompt_allows_temporal_routing_without_date_normalization_or_context_au
     assert '"dependencies":["temporal"]' in prompt
     assert set(evidence["capabilities"][0]) == {"id", "routing_description", "enabled"}
     assert evidence["capabilities"][1]["dependencies"] == ["temporal"]
+    assert evidence["capabilities"][1]["routing_description"] == (
+        "temporal interpretation of date-qualified statements, day/date-owned occurrences, "
+        "and Calendar navigation"
+    )
 
 
 def test_from_environment_disables_retries_and_sets_finite_timeout(

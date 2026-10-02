@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 4 passes the Calendar live gate 8/8 with the app-native schema, while Router remains 7/8 on one dependent temporal-owner case; DEV adoption remains pending until routing passes**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 4 passes Calendar 8/8, while Router remains 7/8; Attempt 5 corrects only Calendar routing-description evidence and DEV adoption remains pending until Router passes**.
 
 ## Objective
 

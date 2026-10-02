@@ -169,7 +169,7 @@ Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
 Temporal Foundation + Calendar v0                                  ✅ Attempt 4 Calendar live gate 8/8; Router adoption dependency still open
-Application Boundary + Router v0                                    🚧 Attempt 4 Router 7/8; capability description too narrow for dependent temporal facts
+Application Boundary + Router v0                                    🚧 Attempt 5 descriptor-only successor deterministic; live recheck pending authorization
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed

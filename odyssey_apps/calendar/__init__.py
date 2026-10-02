@@ -36,7 +36,7 @@ from .queries import (
 
 CALENDAR_DESCRIPTOR = ApplicationDescriptor(
     id="calendar",
-    routing_description="day/date-owned occurrences and Calendar navigation",
+    routing_description="temporal interpretation of date-qualified statements, day/date-owned occurrences, and Calendar navigation",
     dependencies=("temporal",),
 )
 

@@ -36,10 +36,12 @@ class FakeResponses:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
         self.calls = 0
+        self.last_kwargs: dict[str, Any] | None = None
 
-    def create(self, **_kwargs: Any) -> object:
+    def create(self, **kwargs: Any) -> object:
         """Return the configured synthetic provider response without network access."""
         self.calls += 1
+        self.last_kwargs = kwargs
         return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
 
 
@@ -137,6 +139,11 @@ def test_router_to_calendar_to_runtime_to_core_persistence_e2e(tmp_path: Path) -
     assert result.status is ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("date:2026-10-03",)
     assert router_transport.calls == 1 and calendar_transport.calls == 1
+    assert router_transport.last_kwargs is not None
+    assert (
+        CALENDAR_DESCRIPTOR.routing_description
+        in router_transport.last_kwargs["input"][0]["content"]
+    )
     note_path = vault / "calendar/days/2026-10-03.md"
     note = parse_note(note_path.read_text(encoding="utf-8"))
     assert source in note.content
