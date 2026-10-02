@@ -1,5 +1,7 @@
 # Application → Core handoff live gate v11
 
+> **Invalidated acceptance gate.** The employment case expected `Airbus Test` to become an Odyssey identity, but the canonical `note-schema` has no company/organization type. That oracle was wrong. The retained provider evidence is kept only for audit history; v11 must not justify prompt or deployment decisions.
+
 v10 proved the redesigned boundary: Router retained 8/8, Calendar passed 8/8, and the Core start-transition handoff passed. Its only failure was the end-transition case, where GPT-5.6 Luna low kept `Airbus Test` as literal text instead of an identity participant.
 
 v11 changes only the existing generic Core identity-decomposition instruction. Participant decomposition must remain stable when a durable relationship or state begins, continues, ends, is negated, or is corrected. No concrete person, employer, or Calendar-specific semantic rule is added.

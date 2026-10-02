@@ -1640,7 +1640,7 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
     monkeypatch, tmp_path: Path
 ) -> None:
     """Prove production wiring returns durable Calendar meaning to Core instead of preplanning it."""
-    source = "Marta Test empieza mañana a trabajar en Airbus Test."
+    source = "Marta Test empieza mañana a vivir con Daniel Test."
     vault_root = tmp_path / "vault-domain"
     vault_root.mkdir()
     runtime_root = tmp_path / "runtime-domain"

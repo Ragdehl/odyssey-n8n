@@ -10,7 +10,7 @@ import pytest
 from benchmarks.application_core_handoff_live_v11 import run_live
 
 
-def test_v11_freezes_two_generic_end_transition_cases() -> None:
+def test_v11_retains_historical_matrix_but_flags_invalid_employment_oracle() -> None:
     assert hashlib.sha256(run_live.MATRIX.read_bytes()).hexdigest() == run_live.MATRIX_SHA256
     matrix = json.loads(run_live.MATRIX.read_text(encoding="utf-8"))
     assert matrix["version"] == 11
@@ -19,6 +19,11 @@ def test_v11_freezes_two_generic_end_transition_cases() -> None:
         "dev-end-employment-participant",
         "end-person-relation-participant",
     }
+    readme = (run_live.ROOT / "benchmarks/application_core_handoff_live_v11/README.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Invalidated acceptance gate" in readme
+    assert "no company/organization type" in readme
 
 
 def test_v11_handoff_contains_only_bounded_temporal_evidence() -> None:

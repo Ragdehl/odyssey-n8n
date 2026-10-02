@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     )
     assert write_branch_bytes == 3_378
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 33_553
+    assert prompt_bytes == 33_258
     assert schema_bytes == 18_539
 
 

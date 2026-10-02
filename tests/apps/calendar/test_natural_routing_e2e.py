@@ -93,14 +93,14 @@ def calendar_payload(
 
 
 def core_semantic_result() -> dict[str, Any]:
-    """Represent the Core planner deciding all non-temporal semantics itself."""
+    """Represent Core choosing a valid person participant independently of Calendar."""
 
     def identity(name: str) -> dict[str, Any]:
         return {
             "description": name,
             "binding": "described",
             "direct_name": name,
-            "note_type": None,
+            "note_type": "person",
             "filters": [],
             "candidate_scope": None,
         }
@@ -125,11 +125,11 @@ def core_semantic_result() -> dict[str, Any]:
                                             "text": "mañana",
                                             "date": "2026-10-03",
                                         },
-                                        {"kind": "literal", "text": " a trabajar en "},
+                                        {"kind": "literal", "text": " a vivir con "},
                                         {
                                             "kind": "identity",
-                                            "text": "Airbus Test",
-                                            "identity": identity("Airbus Test"),
+                                            "text": "Daniel Test",
+                                            "identity": identity("Daniel Test"),
                                         },
                                         {"kind": "literal", "text": "."},
                                     ]
@@ -150,14 +150,14 @@ def core_semantic_result() -> dict[str, Any]:
 
 
 def core_semantic_end_result() -> dict[str, Any]:
-    """Represent Core retaining an identity participant when a durable relation ends."""
+    """Represent Core retaining a valid person participant when a relation ends."""
 
     def identity(name: str) -> dict[str, Any]:
         return {
             "description": name,
             "binding": "described",
             "direct_name": name,
-            "note_type": None,
+            "note_type": "person",
             "filters": [],
             "candidate_scope": None,
         }
@@ -170,7 +170,7 @@ def core_semantic_end_result() -> dict[str, Any]:
                     "kind": "write",
                     "operations": [
                         {
-                            "target": identity("Bruno Test"),
+                            "target": identity("Lucía Test"),
                             "apply_to": "one",
                             "intent": "record",
                             "facts": [
@@ -182,13 +182,67 @@ def core_semantic_end_result() -> dict[str, Any]:
                                             "text": "mañana",
                                             "date": "2026-10-03",
                                         },
-                                        {"kind": "literal", "text": " de trabajar en "},
+                                        {"kind": "literal", "text": " de vivir con "},
                                         {
                                             "kind": "identity",
-                                            "text": "Airbus Test",
-                                            "identity": identity("Airbus Test"),
+                                            "text": "Daniel Test",
+                                            "identity": identity("Daniel Test"),
                                         },
                                         {"kind": "literal", "text": "."},
+                                    ]
+                                }
+                            ],
+                            "properties": [],
+                            "tag_changes": [],
+                            "destination_type": None,
+                        }
+                    ],
+                }
+            ],
+            "limitations": [],
+            "clarification_code": None,
+            "presentation_intent": "answer",
+        }
+    }
+
+
+def core_semantic_company_literal_result() -> dict[str, Any]:
+    """Keep a company literal because company/organization is absent from note-schema."""
+
+    def person(name: str) -> dict[str, Any]:
+        return {
+            "description": name,
+            "binding": "described",
+            "direct_name": name,
+            "note_type": "person",
+            "filters": [],
+            "candidate_scope": None,
+        }
+
+    return {
+        "result": {
+            "outcome": "PLAN",
+            "actions": [
+                {
+                    "kind": "write",
+                    "operations": [
+                        {
+                            "target": person("Marta Test"),
+                            "apply_to": "one",
+                            "intent": "record",
+                            "facts": [
+                                {
+                                    "parts": [
+                                        {"kind": "literal", "text": "Empieza "},
+                                        {
+                                            "kind": "temporal_reference",
+                                            "text": "mañana",
+                                            "date": "2026-10-03",
+                                        },
+                                        {
+                                            "kind": "literal",
+                                            "text": " a trabajar en Airbus Test.",
+                                        },
                                     ]
                                 }
                             ],
@@ -264,8 +318,8 @@ def test_router_calendar_day_occurrence_persists_exact_source_e2e(tmp_path: Path
 
 
 def test_router_calendar_durable_statement_returns_to_ordinary_core_planner_e2e() -> None:
-    """Calendar resolves only time; Core independently plans Marta, Airbus, fact and references."""
-    source = "Marta Test empieza mañana a trabajar en Airbus Test."
+    """Calendar resolves only time; Core independently plans two schema-valid people."""
+    source = "Marta Test empieza mañana a vivir con Daniel Test."
     schema = load_schema()
     catalog = calendar_catalog()
     router_transport = FakeResponses(
@@ -308,10 +362,10 @@ def test_router_calendar_durable_statement_returns_to_ordinary_core_planner_e2e(
         unit = action.units[0]
         # These semantic choices came from Core's output, not Calendar's schema.
         assert unit.target.entity == "Marta Test"
-        assert unit.references[0].mention == "Airbus Test"
+        assert unit.references[0].mention == "Daniel Test"
         assert unit.references[0].target_index == 1
         assert unit.references[0].selection is None
-        assert action.units[1].target.entity == "Airbus Test"
+        assert action.units[1].target.entity == "Daniel Test"
         assert action.units[1].reference_lookup_only is True
         assert "[[calendar/days/2026-10-03|mañana]]" in unit.facts[0]
         return ApplicationResult(
@@ -351,7 +405,7 @@ def test_router_calendar_durable_statement_returns_to_ordinary_core_planner_e2e(
 
 def test_router_calendar_ending_relation_keeps_participant_identity_e2e() -> None:
     """Keep participant decomposition in Core when temporal evidence qualifies an ending relation."""
-    source = "Bruno Test deja mañana de trabajar en Airbus Test."
+    source = "Lucía Test deja mañana de vivir con Daniel Test."
     schema = load_schema()
     catalog = calendar_catalog()
     router_transport = FakeResponses(
@@ -387,9 +441,9 @@ def test_router_calendar_ending_relation_keeps_participant_identity_e2e() -> Non
         assert isinstance(plan, RequestPlan)
         action = plan.actions[0]
         assert isinstance(action, WriteAction)
-        assert action.units[0].target.entity == "Bruno Test"
-        assert action.units[0].references[0].mention == "Airbus Test"
-        assert action.units[1].target.entity == "Airbus Test"
+        assert action.units[0].target.entity == "Lucía Test"
+        assert action.units[0].references[0].mention == "Daniel Test"
+        assert action.units[1].target.entity == "Daniel Test"
         assert "[[calendar/days/2026-10-03|mañana]]" in action.units[0].facts[0]
         return ApplicationResult(
             request_id,
@@ -415,6 +469,76 @@ def test_router_calendar_ending_relation_keeps_participant_identity_e2e() -> Non
     assert router_transport.calls == 1
     assert calendar_transport.calls == 1
     assert core_transport.calls == 1
+
+
+def test_router_calendar_non_schema_company_stays_literal_e2e() -> None:
+    """Do not promote a company to an Odyssey identity when note-schema has no company type."""
+    source = "Marta Test empieza mañana a trabajar en Airbus Test."
+    schema = load_schema()
+    assert "company" not in {item["id"] for item in schema["types"]}
+    assert "organization" not in {item["id"] for item in schema["types"]}
+    catalog = calendar_catalog()
+    router_transport = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_transport = FakeResponses(
+        calendar_payload(
+            intent="DELEGATE_TO_CORE",
+            temporal_kind="EXACT_DATE",
+            exact_date="2026-10-03",
+            temporal_text="mañana",
+        )
+    )
+    core_transport = FakeResponses(core_semantic_company_literal_result())
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
+    calendar = OpenAICalendarPlanner(SimpleNamespace(responses=calendar_transport), CURRENT)
+
+    def execute_core(
+        routed_source: str,
+        request_id: str,
+        _actor: object | None,
+        _context: object,
+        interpretation: DomainInterpretation,
+    ) -> ApplicationResult:
+        planner = OpenAILunaExperimentalPlanner(
+            SimpleNamespace(responses=core_transport),
+            schema,
+            CURRENT,
+            teaching_examples=None,
+            domain_interpretation=interpretation,
+        )
+        plan = planner.plan(routed_source)
+        assert isinstance(plan, RequestPlan)
+        action = plan.actions[0]
+        assert isinstance(action, WriteAction)
+        assert len(action.units) == 1
+        unit = action.units[0]
+        assert unit.target.entity == "Marta Test"
+        assert unit.references == ()
+        assert "Airbus Test" in unit.facts[0]
+        assert "[[calendar/days/2026-10-03|mañana]]" in unit.facts[0]
+        return ApplicationResult(
+            request_id,
+            ApplicationStatus.COMPLETED,
+            (ActionResult(0, "write", ActionStatus.COMPLETED),),
+            (),
+        )
+
+    executor = CalendarRouteExecutor(
+        calendar,
+        capture_day_literal=lambda *_args: pytest.fail("durable knowledge is not Day-owned"),
+        execute_core=execute_core,
+    )
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer-company-literal",
+        router=router,
+        catalog=catalog,
+        core_execute=lambda *_args, **_kwargs: pytest.fail("route stays app-owned until handoff"),
+        application_executors={"calendar": executor},
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert router_transport.calls == calendar_transport.calls == core_transport.calls == 1
 
 
 def test_router_calendar_unresolved_time_stays_non_executable_e2e() -> None:
