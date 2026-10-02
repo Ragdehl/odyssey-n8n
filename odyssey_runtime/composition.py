@@ -16,12 +16,8 @@ from typing import cast
 from zoneinfo import ZoneInfo
 
 from odyssey_apps import ApplicationCatalog
+from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
 from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
-from odyssey_core.calendar_queries import (
-    CalendarDayView,
-    CalendarMonth,
-    CalendarQueryService,
-)
 from odyssey_core.clarification import (
     ClarificationChoice,
     ClarificationClassifier,
@@ -133,7 +129,7 @@ class RuntimeComposition:
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
-    calendar_service: CalendarQueryService | None = None
+    calendar_application: CalendarApplication | None = None
     notes_embedder: object | None = None
     pending_recorder: PendingWorkRepository | None = None
     vault_repository: VaultRepository | None = None
@@ -734,17 +730,9 @@ class RuntimeComposition:
     ) -> dict[str, object]:
         """Execute one deterministic Calendar projection for the authenticated actor boundary."""
         self._resolve_actor(authenticated_actor, external_principal)
-        if self.calendar_service is None:
-            raise ValueError("Calendar service is unavailable")
-        if operation == "month":
-            if set(payload) != {"month"} or not isinstance(payload.get("month"), str):
-                raise ValueError("Calendar month payload is invalid")
-            return _calendar_to_response(self.calendar_service.month(payload["month"]))
-        if operation == "day":
-            if set(payload) != {"date"} or not isinstance(payload.get("date"), str):
-                raise ValueError("Calendar day payload is invalid")
-            return _calendar_to_response(self.calendar_service.day(payload["date"]))
-        raise ValueError("Calendar operation is unsupported")
+        if self.calendar_application is None:
+            raise ValueError("Calendar application is unavailable")
+        return self.calendar_application.query(operation, payload)
 
     def execute(
         self,
@@ -1321,14 +1309,16 @@ def build_runtime_from_environment() -> RuntimeComposition:
         return _persistence_actor(actor, authenticated_actor)
 
     notes_service = NotesQueryService(repository, schema, context_index)
-    calendar_service = CalendarQueryService(repository, schema, notes_service)
+    calendar_application = CalendarApplication(
+        CalendarQueryService(repository, schema, notes_service)
+    )
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
         notes_service=notes_service,
-        calendar_service=calendar_service,
+        calendar_application=calendar_application,
         notes_embedder=embedder,
         pending_recorder=pending_recorder,
         vault_repository=repository,
@@ -1363,63 +1353,6 @@ def _unique_note_filters(filters: Sequence[object]) -> tuple[object, ...]:
             seen.add(key)
             result.append(item)
     return tuple(result)
-
-
-def _calendar_block_to_response(block: object) -> dict[str, object]:
-    """Serialize one presentation-safe Calendar block using Core-resolved stable targets."""
-    return {
-        "kind": block.kind,
-        "segments": _segments_to_response(block.segments),
-    }
-
-
-def _calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, object]:
-    """Serialize the narrow Calendar v0 response union."""
-    if isinstance(value, CalendarMonth):
-        return {
-            "kind": "calendar_month",
-            "month": value.month,
-            "days": [
-                {
-                    "date": item.date,
-                    "materialized": item.materialized,
-                    "has_content": item.has_content,
-                    "journal_count": item.journal_count,
-                    "captured_fact_count": item.captured_fact_count,
-                    "reference_count": item.reference_count,
-                }
-                for item in value.days
-            ],
-        }
-    if isinstance(value, CalendarDayView):
-        return {
-            "kind": "calendar_day",
-            "date": value.date,
-            "materialized": value.materialized,
-            "content": [_calendar_block_to_response(block) for block in value.content],
-            "journals": [
-                {
-                    "source": _summary_to_response(item.source),
-                    "content": [_calendar_block_to_response(block) for block in item.content],
-                }
-                for item in value.journals
-            ],
-            "captures": [
-                {
-                    "source": _summary_to_response(item.source),
-                    "facts": [_calendar_block_to_response(block) for block in item.facts],
-                }
-                for item in value.captures
-            ],
-            "references": [
-                {
-                    "source": _summary_to_response(item.source),
-                    "blocks": [_calendar_block_to_response(block) for block in item.blocks],
-                }
-                for item in value.references
-            ],
-        }
-    raise TypeError("Calendar response is invalid")
 
 
 def _notes_to_response(

@@ -30,6 +30,8 @@ class CalendarQueryError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class CalendarMonthDay:
+    """Represent bounded Calendar activity indicators for one date."""
+
     date: str
     materialized: bool
     has_content: bool
@@ -40,30 +42,40 @@ class CalendarMonthDay:
 
 @dataclass(frozen=True, slots=True)
 class CalendarMonth:
+    """Represent Calendar's deterministic projection for one calendar month."""
+
     month: str
     days: tuple[CalendarMonthDay, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class CalendarJournal:
+    """Represent a journal's semantic association with one Calendar day."""
+
     source: NoteSummary
     content: tuple[NoteBodyBlock, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class CalendarCapture:
+    """Represent atomic facts captured on one Calendar day."""
+
     source: NoteSummary
     facts: tuple[NoteBodyBlock, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class CalendarReference:
+    """Represent explicit canonical references to one Calendar day."""
+
     source: NoteSummary
     blocks: tuple[NoteBodyBlock, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class CalendarDayView:
+    """Represent Calendar's category-preserving projection for one virtual or materialized day."""
+
     date: str
     materialized: bool
     content: tuple[NoteBodyBlock, ...]
@@ -74,6 +86,8 @@ class CalendarDayView:
 
 @dataclass(frozen=True, slots=True)
 class _ScannedNote:
+    """Hold validated Markdown facts needed by the bounded Calendar scan."""
+
     id: str
     type: str
     entry_date: str | None
@@ -97,6 +111,7 @@ def normalize_month(value: str) -> str:
 
 
 def _month_dates(value: str) -> tuple[str, ...]:
+    """Return every ISO date within one validated calendar month."""
     month = normalize_month(value)
     current = date.fromisoformat(f"{month}-01")
     result: list[str] = []
@@ -126,11 +141,12 @@ def _capture_counts(body: str) -> dict[str, int]:
 
 
 def _without_capture_headings(body: str) -> str:
-    """Remove only Added heading lines so their chronology links are not semantic references."""
+    """Remove only chronology headings so they are not semantic temporal references."""
     return "\n".join(raw for raw in body.splitlines() if capture_heading_date(raw.strip()) is None)
 
 
 def _visible_heading_date(block: NoteBodyBlock) -> str | None:
+    """Return the normalized date from one rendered Added heading, if present."""
     if block.kind != "heading":
         return None
     text = "".join(segment.text for segment in block.segments).strip()
@@ -147,6 +163,7 @@ def _visible_heading_date(block: NoteBodyBlock) -> str | None:
 def _capture_blocks(
     blocks: tuple[NoteBodyBlock, ...], target_date: str
 ) -> tuple[NoteBodyBlock, ...]:
+    """Return fact blocks captured beneath one requested Added heading."""
     result: list[NoteBodyBlock] = []
     current: str | None = None
     for block in blocks:
@@ -162,6 +179,7 @@ def _capture_blocks(
 def _reference_blocks(
     blocks: tuple[NoteBodyBlock, ...], target_id: str
 ) -> tuple[NoteBodyBlock, ...]:
+    """Return visible blocks with a Core-resolved link to the requested day."""
     return tuple(
         block
         for block in blocks
@@ -171,7 +189,7 @@ def _reference_blocks(
 
 
 def _journal_blocks(blocks: tuple[NoteBodyBlock, ...]) -> tuple[NoteBodyBlock, ...]:
-    """Return journal content without capture-chronology headings already projected by Calendar."""
+    """Return journal content without capture chronology already projected separately."""
     return tuple(block for block in blocks if _visible_heading_date(block) is None)
 
 
@@ -184,11 +202,13 @@ class CalendarQueryService:
         schema: dict[str, Any],
         notes_service: NotesQueryService,
     ) -> None:
+        """Bind validated Core read services used by Calendar's deterministic projections."""
         self.repository = repository
         self.schema = schema
         self.notes_service = notes_service
 
     def _scan(self) -> tuple[_ScannedNote, ...]:
+        """Read validated canonical Markdown into Calendar's bounded projection inputs."""
         scanned: list[_ScannedNote] = []
         for path in self.repository.list_markdown_paths():
             try:
@@ -233,14 +253,14 @@ class CalendarQueryService:
         month = normalize_month(value)
         dates = _month_dates(month)
         state = {
-            value: {
+            item: {
                 "materialized": False,
                 "has_content": False,
                 "journal_count": 0,
                 "captured_fact_count": 0,
                 "reference_count": 0,
             }
-            for value in dates
+            for item in dates
         }
         for note in self._scan():
             if note.calendar_date in state:
@@ -257,11 +277,11 @@ class CalendarQueryService:
                     state[referenced_date]["reference_count"] += 1
         return CalendarMonth(
             month,
-            tuple(CalendarMonthDay(date=value, **state[value]) for value in dates),
+            tuple(CalendarMonthDay(date=item, **state[item]) for item in dates),
         )
 
     def day(self, value: str) -> CalendarDayView:
-        """Return one virtual or materialized Day split into the approved semantic categories."""
+        """Return one virtual or materialized Day split into approved semantic categories."""
         try:
             normalized = normalize_iso_date(value)
             resolved = CalendarDayRepository(self.repository, self.schema).resolve(normalized)

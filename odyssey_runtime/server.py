@@ -10,7 +10,7 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import urlsplit
 
-from odyssey_core.calendar_queries import CalendarQueryError
+from odyssey_apps.calendar import CalendarQueryError
 from odyssey_core.conversations import ConversationError
 from odyssey_core.direct_note_mutations import DirectNoteMutationError
 from odyssey_core.identity_boundary import (

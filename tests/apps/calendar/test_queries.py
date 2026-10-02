@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from odyssey_core.calendar_queries import CalendarQueryError, CalendarQueryService, normalize_month
+from odyssey_apps.calendar import CalendarQueryError, CalendarQueryService, normalize_month
 from odyssey_core.context import ContextIndex
 from odyssey_core.note_queries import NotesQueryService
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.storage import VaultRepository
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 class Embedder:

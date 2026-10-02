@@ -6,6 +6,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from odyssey_apps.calendar import CalendarQueryService
 from odyssey_core import (
     KnowledgeUnit,
     SelectionCriteria,
@@ -15,13 +16,12 @@ from odyssey_core import (
     materialize_update,
     update_entity,
 )
-from odyssey_core.calendar_queries import CalendarQueryService
 from odyssey_core.context import ContextIndex
 from odyssey_core.note_queries import NotesQueryService
 from odyssey_core.notes import parse_note
 from odyssey_core.storage import VaultRepository
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 class ConstantEmbedder:

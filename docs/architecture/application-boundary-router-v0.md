@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-3 implemented and deterministically validated; Calendar extraction is next; architecture-challenge corrections incorporated before code**.
+Status: **approved architecture contract; Slices 1-4 implemented and deterministically validated; Calendar natural routing is next; architecture-challenge corrections incorporated before code**.
 
 ## Objective
 
@@ -45,7 +45,7 @@ The intended dependency graph is one-way:
 
 The current Temporal Foundation remains a valid Core dependency: normalized dates/date-times, timezone context, ranges, and deterministic Day-reference primitives are reusable below Calendar, Tasks, and Events. Calendar-specific routing/query/presentation logic is not a reason to move more domain behavior into Core.
 
-A future implementation should introduce an application package boundary such as `odyssey_apps/` (exact module names are implementation details). Runtime composition may discover/enable applications; `odyssey_core/` must not import application packages.
+The implementation uses `odyssey_apps/` as the application package boundary. Runtime composition may discover/enable applications; `odyssey_core/` must not import application packages.
 
 ## Request flow
 
@@ -213,7 +213,9 @@ Application work therefore carries router/app regression responsibility without 
 
 ## First Calendar consumer
 
-Calendar is the first consumer of this boundary. Slice 5 should no longer add Calendar-specific intent fields to the Core planner.
+Calendar is the first consumer of this boundary. Slice 4 moved Calendar-specific deterministic query, presentation, and compact descriptor ownership into `odyssey_apps/calendar/`, while the shared Day/date identity, links, ranges, and materialization primitives remain in `odyssey_core/temporal.py`. Runtime now composes the read-only Calendar application instead of owning Calendar projection semantics. Natural-language Calendar execution remains deliberately unavailable until Slice 5 supplies the validated Calendar planner; the extraction does not approximate Calendar requests through the Core planner.
+
+Slice 5 should no longer add Calendar-specific intent fields to the Core planner.
 
 Representative routing expectations:
 

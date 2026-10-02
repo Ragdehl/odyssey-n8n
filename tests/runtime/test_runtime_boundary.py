@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from odyssey_apps.calendar import CalendarApplication, CalendarDayView, CalendarJournal
 from odyssey_core.application import (
     ActionResult,
     ActionStatus,
@@ -20,7 +21,6 @@ from odyssey_core.application import (
     UnitStatus,
 )
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
-from odyssey_core.calendar_queries import CalendarDayView, CalendarJournal
 from odyssey_core.context import ContextItem, ContextPackage, RelatedContextItem
 from odyssey_core.direct_note_mutations import DirectNoteMutationError
 from odyssey_core.git_history import GitHistoryResult
@@ -498,7 +498,7 @@ def test_http_calendar_boundary_serializes_journal_source_and_content() -> None:
     runtime = RuntimeComposition(
         core_execute=lambda *args, **kwargs: _result(),
         refresh_indexes=lambda: None,
-        calendar_service=SimpleNamespace(day=lambda value: day),
+        calendar_application=CalendarApplication(SimpleNamespace(day=lambda value: day)),
     )
     server = _test_server(runtime)
     try:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import subprocess
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from odyssey_apps import ApplicationDescriptor, ApplicationRegistry, RoutingCapability
+from odyssey_apps.calendar import CALENDAR_DESCRIPTOR
 from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
     LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -23,12 +25,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def calendar_descriptor() -> ApplicationDescriptor:
-    """Create the minimal Calendar routing descriptor without moving Calendar implementation."""
-    return ApplicationDescriptor(
-        id="calendar",
-        routing_description="day/date-owned occurrences and Calendar navigation",
-        dependencies=("temporal",),
-    )
+    """Return Calendar's app-owned compact routing descriptor."""
+    return CALENDAR_DESCRIPTOR
 
 
 def core_planner_artifacts() -> tuple[str, str, str, tuple[str, str]]:
@@ -62,6 +60,24 @@ def test_core_import_has_no_application_package_dependency() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_core_sources_never_import_application_packages() -> None:
+    """Protect the physical Apps -> Core dependency direction across every Core module."""
+    violations: list[str] = []
+    for path in sorted((ROOT / "odyssey_core").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = (alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                names = (node.module or "",)
+            else:
+                continue
+            if any(name == "odyssey_apps" or name.startswith("odyssey_apps.") for name in names):
+                violations.append(str(path.relative_to(ROOT)))
+                break
+    assert violations == []
 
 
 def test_registry_rejects_malformed_and_duplicate_descriptors() -> None:
@@ -127,5 +143,7 @@ def test_core_only_runtime_remains_usable_with_empty_or_disabled_calendar_catalo
 
     assert empty.application_catalog.capabilities() == ()
     assert disabled.application_catalog.executable("calendar") is None
+    with pytest.raises(ValueError, match="Calendar application is unavailable"):
+        disabled.calendar("month", {"month": "2026-10"})
     assert empty.core_execute("ordinary Core request") is None
     assert disabled.core_execute("ordinary Core request") is None
