@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Router/Calendar focused live gates and later DEV adoption remain pending**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 1 failed the focused GPT-6 Luna gate and a general prompt revision is prepared for a separately authorized Attempt 2; DEV adoption remains pending**.
 
 ## Objective
 
@@ -264,8 +264,9 @@ resolution is therefore preserved now, but a natural-language range-aware read/w
 not yet enabled in this slice. An entity-owned exact-date statement may use the opt-in shared Core
 temporal-reference compiler part, so Core still resolves identity and renders/persists the canonical
 Day link. The default Core planner contract is hash-pinned unchanged. The frozen provider-free
-regression matrix is ready for one later explicitly authorized Luna live gate; no such call or live
-adoption has occurred.
+regression matrix was consumed unchanged by Slice 6 Attempt 1. That gate retained 11/16 passes and
+failed overall; no live adoption occurred. The same frozen matrix now guards a general prompt revision
+whose successor live attempt still requires separate authorization.
 
 Each slice must prefer existing Note/storage/link/history primitives over parallel Calendar implementations.
 

@@ -168,8 +168,8 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 Slices 1-5 deterministic implementation complete; Calendar Luna live gate pending
-Application Boundary + Router v0                                    🚧 Slices 1-5 implemented; Router/Calendar live gates pending
+Temporal Foundation + Calendar v0                                  🚧 Slice 6 Attempt 1 failed; successor Luna gate pending authorization
+Application Boundary + Router v0                                    🚧 Slice 6 Attempt 1 11/16; general prompt revision prepared
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -282,10 +282,10 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     🚧 Slices 1-5 deterministic; Slices 1-4 DEV validated
+Temporal Foundation + Calendar v0                     🚧 Slice 6 Attempt 1 failed; successor gate not yet authorized
         |
         v
-Application Boundary + Router v0                     🚧 Slices 1-5 deterministic; focused live gates next
+Application Boundary + Router v0                     🚧 Attempt 2 candidate deterministic; live recheck pending authorization
         |
         v
 Router + Calendar focused live gates / Slice 6

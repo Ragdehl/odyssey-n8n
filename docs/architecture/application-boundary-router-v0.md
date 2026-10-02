@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Calendar natural-routing live gate remains pending; architecture-challenge corrections incorporated before code**.
+Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Slice 6 Attempt 1 retained 11/16 GPT-6 Luna passes and failed the focused live gate; a general prompt revision is deterministically prepared for a separately authorized Attempt 2**.
 
 ## Objective
 
@@ -269,6 +269,8 @@ Router v0 should freeze a compact GPT-6 Luna regression matrix covering at least
 - meaningless input that produces no executable route.
 
 Calendar planner gets its own separate GPT-6 Luna gate for its detailed semantics. A router pass is not evidence that the Calendar planner is safe, and vice versa.
+
+Slice 6 Attempt 1 ran at commit `f5949ec` after explicit bounded-cost authorization: 16/16 permitted Luna/low calls, zero retries, Router 7/8 and Calendar 4/8, for 11/16 overall. Review found all five failures to be candidate-contract/model failures rather than oracle drift. The retained evidence is owned by `benchmarks/application_router_calendar_live_v1/`. A successor candidate strengthens only general ownership, lifecycle-versus-occurrence, and shared semantic-reference instructions; the frozen Router and Calendar matrices remain unchanged. Attempt 2 requires fresh authorization before any provider call.
 
 Before either live gate, calculate a bounded maximum call count/cost and request explicit human authorization. No live gate gets mutation authority over personal data.
 

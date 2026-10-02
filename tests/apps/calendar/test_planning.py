@@ -232,8 +232,10 @@ def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
         current_context={"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
         conversation_context=({"role": "user", "text": "previous"},) * 10,
     )
-    assert "Resolve time using the supplied date/time/timezone" in prompt
-    assert "Never turn a range or vague expression into one Day" in prompt
+    assert "First resolve the temporal shape" in prompt
+    assert "Never collapse a range or vague phrase into one Day" in prompt
+    assert "a dated or future occurrence is not a Task merely" in prompt
+    assert "distinct logical participants as identity parts" in prompt
     assert prompt.count('"text":"previous"') == 8
     assert '"current_date":"2026-10-02"' in prompt
     with pytest.raises(CalendarPlannerError):

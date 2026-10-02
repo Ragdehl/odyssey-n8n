@@ -205,6 +205,8 @@ def test_prompt_allows_temporal_routing_without_date_normalization_or_context_au
     evidence = json.loads(prompt.partition("\n")[2])
 
     assert "Temporal wording may be considered only to choose capability ownership" in prompt
+    assert "routing owner by the domain interpretation required" in prompt
+    assert "do not CLARIFY merely because the application may later delegate" in prompt
     assert "never normalize or resolve dates or times into structured values" in prompt
     assert "routing continuity evidence only, never canonical truth or mutation authority" in prompt
     assert '"dependencies":["temporal"]' in prompt
