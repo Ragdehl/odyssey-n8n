@@ -130,8 +130,8 @@ def test_exact_day_route_preserves_source_and_prior_context(schema: dict) -> Non
     assert planner.calls == [(source, prior)]
 
 
-def test_range_vague_and_task_fail_closed_without_any_mutation(schema: dict) -> None:
-    """Never coerce ranges/vagueness/tasks into a fake exact Day capture."""
+def test_range_vague_and_out_of_scope_fail_closed_without_any_mutation(schema: dict) -> None:
+    """Never coerce ranges, vagueness, or foreign semantics into a fake exact Day capture."""
     cases = [
         (
             fail_plan(
@@ -154,10 +154,10 @@ def test_range_vague_and_task_fail_closed_without_any_mutation(schema: dict) -> 
         ),
         (
             fail_plan(
-                CalendarFailureCode.TASKS_CAPABILITY_REQUIRED,
+                CalendarFailureCode.OUT_OF_SCOPE,
                 TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-09"),
             ),
-            "TASKS_CAPABILITY_REQUIRED",
+            "OUT_OF_SCOPE",
             False,
         ),
     ]

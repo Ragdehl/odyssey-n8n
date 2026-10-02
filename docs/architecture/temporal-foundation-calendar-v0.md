@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 1 failed the focused GPT-6 Luna gate and a general prompt revision is prepared for a separately authorized Attempt 2; DEV adoption remains pending**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 1 failed the focused GPT-6 Luna gate and a domain-local boundary correction is prepared for a separately authorized Attempt 2; DEV adoption remains pending**.
 
 ## Objective
 
@@ -106,6 +106,8 @@ Examples:
 Calendar routing does not require `calendar_day` to appear among ordinary Core-planner-selectable note types. The Router sees only a compact Calendar routing descriptor; once selected, Calendar's own planner preserves the specialized temporal intent and Calendar/Core resolve the normalized date and canonical owner deterministically.
 
 The established Core planner remains application-agnostic. Detailed Calendar instructions load only after routing, and future applications follow the same boundary. Router and Calendar planner start with GPT-6 Luna under their own separately validated model-facing contracts; neither change reopens the Core planner contract merely to add an application.
+
+Application planners are domain-local: they do not classify or name sibling applications. The Router alone knows the application catalog; a planner that receives foreign-domain semantics fails closed with a generic app-local `OUT_OF_SCOPE` result.
 
 ## Literal day capture versus identity resolution
 

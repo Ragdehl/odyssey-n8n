@@ -70,8 +70,7 @@ class CalendarFailureCode(StrEnum):
 
     RANGE_REQUIRES_RANGE_AWARE_OPERATION = "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
     TEMPORAL_UNRESOLVED = "TEMPORAL_UNRESOLVED"
-    TASKS_CAPABILITY_REQUIRED = "TASKS_CAPABILITY_REQUIRED"
-    UNSAFE_INTENT = "UNSAFE_INTENT"
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,19 +321,19 @@ def render_calendar_prompt(
         "temporal shape from the supplied date/time/timezone: EXACT_DATE means one determinate date; "
         "DATE_RANGE means a bounded interval and uses a half-open range_end_exclusive; UNSPECIFIED "
         "means the wording is too vague to normalize safely. Never collapse a range or vague phrase "
-        "into one Day. Then classify the requested semantics independently from tense. Journal/diary "
-        "semantics use FAIL_CLOSED/UNSAFE_INTENT. Tasks semantics require actual lifecycle meaning "
-        "such as an obligation, intention/to-do, due/completion state, or reminder; a dated or future "
-        "occurrence is not a Task merely because it is in the future or describes an action. For an "
-        "entity-owned durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly "
+        "into one Day. Then decide only whether the request is representable by Calendar's own "
+        "supported semantics. Calendar does not classify, name, or redirect other application "
+        "domains; application ownership belongs exclusively to the Router. If the routed request is "
+        "not a supported Calendar occurrence or temporally-qualified durable statement, use "
+        "FAIL_CLOSED/OUT_OF_SCOPE. Tense or a future date alone never changes the semantic kind. For "
+        "an entity-owned durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly "
         "one temporal_reference part using the original temporal mention and the same normalized date. "
         "Within that semantic write, preserve distinct logical participants as identity parts when they "
         "are safely selectable Odyssey identities; literal parts are for non-identity context or values, "
         "and ordinary context must not be promoted speculatively. For remaining Day-owned occurrences, "
         "EXACT_DATE uses DAY_LITERAL_CAPTURE, DATE_RANGE uses "
         "FAIL_CLOSED/RANGE_REQUIRES_RANGE_AWARE_OPERATION, and UNSPECIFIED uses "
-        "FAIL_CLOSED/TEMPORAL_UNRESOLVED. Task lifecycle semantics use "
-        "FAIL_CLOSED/TASKS_CAPABILITY_REQUIRED. Core owns identity resolution, validation, Markdown, "
+        "FAIL_CLOSED/TEMPORAL_UNRESOLVED. Core owns identity resolution, validation, Markdown, "
         "history, and mutation. Return only the strict JSON object.\n"
         + json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
     )

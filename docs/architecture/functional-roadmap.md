@@ -285,7 +285,7 @@ Explainable Clarification UX                           ✅ merged in PR #148
 Temporal Foundation + Calendar v0                     🚧 Slice 6 Attempt 1 failed; successor gate not yet authorized
         |
         v
-Application Boundary + Router v0                     🚧 Attempt 2 candidate deterministic; live recheck pending authorization
+Application Boundary + Router v0                     🚧 Attempt 2 boundary-corrected candidate deterministic; live recheck pending authorization
         |
         v
 Router + Calendar focused live gates / Slice 6

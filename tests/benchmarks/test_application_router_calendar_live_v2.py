@@ -9,8 +9,8 @@ import pytest
 from benchmarks.application_router_calendar_live_v2 import run_live
 
 
-def test_successor_gate_reuses_frozen_attempt_one_matrices() -> None:
-    """Keep the failed Attempt-1 oracles immutable while only prompts evolve."""
+def test_successor_gate_keeps_router_v1_and_uses_versioned_calendar_v2_matrix() -> None:
+    """Keep Attempt-1 evidence immutable while testing the corrected app-boundary contract separately."""
     assert (
         hashlib.sha256(run_live.ROUTER_MATRIX.read_bytes()).hexdigest()
         == run_live.ROUTER_MATRIX_SHA256

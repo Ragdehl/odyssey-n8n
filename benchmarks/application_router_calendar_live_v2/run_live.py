@@ -32,12 +32,12 @@ from odyssey_core.semantic_write import IdentityPart
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTER_MATRIX = ROOT / "benchmarks/application_router/regression_v1.json"
-CALENDAR_MATRIX = ROOT / "benchmarks/calendar_planner/regression_v1.json"
+CALENDAR_MATRIX = ROOT / "benchmarks/calendar_planner/regression_v2.json"
 SCHEMA_PATH = ROOT / "config/note-schema.json"
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 AUTH_ENV = "ODYSSEY_RUN_APPLICATION_ROUTER_CALENDAR_V2"
 ROUTER_MATRIX_SHA256 = "8153847b0bd31ef45dd72ae31326f0d785b951a79811068296c29a5ea3db4bcf"
-CALENDAR_MATRIX_SHA256 = "7a7b22790db10a05a3940f0f547d91a851eb56f60440753f1a5b75852c52f7a6"
+CALENDAR_MATRIX_SHA256 = "34c552e2717e7748526941d6e98ed7bef5e5f5ede3e7cbd74736de0888a7a3f8"
 STANDARD_INPUT_USD_PER_M = 0.10
 STANDARD_OUTPUT_USD_PER_M = 0.50
 REGIONAL_MULTIPLIER = 1.10

@@ -234,7 +234,9 @@ def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
     )
     assert "First resolve the temporal shape" in prompt
     assert "Never collapse a range or vague phrase into one Day" in prompt
-    assert "a dated or future occurrence is not a Task merely" in prompt
+    assert "OUT_OF_SCOPE" in prompt
+    assert "Tasks" not in prompt and "Journal" not in prompt and "diary" not in prompt
+    assert "other application" in prompt
     assert "distinct logical participants as identity parts" in prompt
     assert prompt.count('"text":"previous"') == 8
     assert '"current_date":"2026-10-02"' in prompt
@@ -403,3 +405,23 @@ def test_frozen_calendar_live_gate_matrix_covers_temporal_and_ownership_boundari
     }
     assert cases["next-week-range"]["expect"]["range_end_exclusive"] == "2026-10-12"
     assert cases["entity-owned-exact-date"]["expect"]["temporal_text"] == "mañana"
+
+
+def test_current_calendar_v2_matrix_uses_only_generic_out_of_scope_for_foreign_domains() -> None:
+    """Keep app ownership in Router while Calendar exposes no sibling-app failure vocabulary."""
+    matrix = json.loads(
+        (ROOT / "benchmarks/calendar_planner/regression_v2.json").read_text(encoding="utf-8")
+    )
+    assert matrix["version"] == 2
+    cases = {item["id"]: item for item in matrix["cases"]}
+    assert cases["task-lifecycle-not-calendar-literal"]["expect"] == {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE",
+    }
+    assert cases["journal-not-calendar"]["expect"] == {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE",
+    }
+    serialized = json.dumps(matrix)
+    assert "TASKS_CAPABILITY_REQUIRED" not in serialized
+    assert "UNSAFE_INTENT" not in serialized

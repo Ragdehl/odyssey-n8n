@@ -63,6 +63,8 @@ Production Python is for human readers. Functions and methods must have useful f
 
 Ruff is the Python lint/format authority and pytest is the Python test runner. Preserve existing unittest tests unless functional work already makes migration useful.
 
+Every functional behavior change must ship with both **focused unit/contract tests** and **vertical end-to-end regression coverage** for the affected user path. The end-to-end layer must exercise the real production boundaries as far as safely possible (for example Router → application planner → runtime → Core/persistence) while replacing only external providers, credentials, or real personal data with deterministic fakes/isolated fixtures. Keep these tests as future regression sentinels. If a true vertical path cannot yet be exercised, document why and add the closest integration test before declaring the change ready; unit tests alone are never sufficient evidence for a functional change.
+
 ## Model-facing changes
 
 Prompt evolution is inheritance-first. When introducing a model-specific, cheaper-model, experimental, or revised prompt for an existing capability/contract, start from the strongest existing validated prompt for that same behavior. Preserve established safety, semantic, and edge-case instructions by default; improve or adapt them rather than silently recreating the prompt from scratch. Any deliberate omission or simplification must be explicitly diffed, justified, and covered by regression sentinels before live evaluation. Model-specific wording may be shortened or reorganized, but previously validated behavior must not be dropped accidentally.
