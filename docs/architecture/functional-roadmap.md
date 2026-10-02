@@ -168,8 +168,8 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 Attempt 4 app-native Calendar schema deterministic; live gate pending authorization
-Application Boundary + Router v0                                    🚧 Router Luna-medium successor deterministic; Attempt 4 pending authorization
+Temporal Foundation + Calendar v0                                  ✅ Attempt 4 Calendar live gate 8/8; Router adoption dependency still open
+Application Boundary + Router v0                                    🚧 Attempt 4 Router 7/8; capability description too narrow for dependent temporal facts
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -282,7 +282,7 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     🚧 Attempt 4 provider-free ready; Calendar app-native schema + local decoder
+Temporal Foundation + Calendar v0                     ✅ Attempt 4 Calendar 8/8 live; waiting on Router pass before DEV adoption
         |
         v
 Application Boundary + Router v0                     🚧 Router medium candidate + whitespace-aware v2 oracle ready provider-free
