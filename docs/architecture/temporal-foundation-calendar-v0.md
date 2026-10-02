@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 1 failed the focused GPT-6 Luna gate and a domain-local boundary correction is prepared for a separately authorized Attempt 2; DEV adoption remains pending**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 2 passed Router 8/8 but Calendar 6/8 and failed overall; a fact-only Calendar authority reduction is prepared provider-free for a separately authorized Attempt 3; DEV adoption remains pending**.
 
 ## Objective
 

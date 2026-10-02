@@ -179,3 +179,84 @@ def test_router_needs_capability_never_invokes_calendar_or_mutates_vault(tmp_pat
     assert result.planning_error == "ROUTER_NEEDS_CAPABILITY"
     assert router_transport.calls == 1
     assert not (vault / "calendar").exists()
+
+
+def test_misrouted_foreign_surface_cannot_reach_core_or_persistence_e2e(tmp_path: Path) -> None:
+    """Reject foreign write authority even when a synthetic provider bypasses Calendar's schema."""
+    source = "Escribe en mi diario que hoy fui al trabajo"
+    schema = load_schema()
+    vault = tmp_path / "vault-foreign-surface"
+    vault.mkdir()
+    catalog = calendar_catalog()
+    router_transport = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_transport = FakeResponses(
+        {
+            "outcome": "PLAN",
+            "intent": "CORE_SEMANTIC_WRITE",
+            "temporal_kind": "EXACT_DATE",
+            "exact_date": "2026-10-02",
+            "range_start": None,
+            "range_end_exclusive": None,
+            "semantic_write": {
+                "kind": "write",
+                "operations": [
+                    {
+                        "target": {
+                            "description": "mi diario",
+                            "binding": "described",
+                            "direct_name": None,
+                            "note_type": "journal_entry",
+                            "filters": [],
+                            "candidate_scope": None,
+                        },
+                        "apply_to": "one",
+                        "intent": "record",
+                        "facts": [
+                            {
+                                "parts": [
+                                    {
+                                        "kind": "temporal_reference",
+                                        "text": "hoy",
+                                        "date": "2026-10-02",
+                                    },
+                                    {"kind": "literal", "text": " Fui al trabajo"},
+                                ]
+                            }
+                        ],
+                        "properties": [],
+                        "tag_changes": [],
+                        "destination_type": "journal_entry",
+                    }
+                ],
+            },
+            "failure_code": None,
+        }
+    )
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
+    planner = OpenAICalendarPlanner(
+        SimpleNamespace(responses=calendar_transport),
+        schema,
+        {"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
+    )
+    executor = CalendarRouteExecutor(
+        planner,
+        schema=schema,
+        capture_day_literal=lambda *_args: pytest.fail("foreign surface must not capture a Day"),
+        execute_core_write=lambda *_args: pytest.fail("foreign surface must not reach Core write"),
+    )
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer-foreign-surface",
+        router=router,
+        catalog=catalog,
+        core_execute=lambda *_args, **_kwargs: pytest.fail(
+            "misrouted Calendar source must not use Core planner"
+        ),
+        application_executors={"calendar": executor},
+    )
+    assert result.status is ApplicationStatus.FAILED
+    assert result.planning_error == "CALENDAR_PLANNER_INVALID"
+    assert router_transport.calls == 1 and calendar_transport.calls == 1
+    assert not (vault / "calendar").exists()

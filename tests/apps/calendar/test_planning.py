@@ -87,7 +87,7 @@ def marta_write() -> dict[str, Any]:
         "kind": "write",
         "operations": [
             {
-                "target": identity("Marta", "Marta", "person"),
+                "target": identity("Marta", "Marta", None),
                 "apply_to": "one",
                 "intent": "record",
                 "facts": [
@@ -224,6 +224,37 @@ def test_calendar_schema_adds_temporal_part_only_inside_calendar_contract(
     temporal = provider["$defs"]["semantic_temporal_reference_part"]
     assert set(temporal["properties"]) == {"kind", "text", "date"}
     assert temporal["properties"]["kind"]["enum"] == ["temporal_reference"]
+    identity_schema = provider["$defs"]["semantic_identity"]
+    assert identity_schema["properties"]["note_type"] == {"type": "null"}
+    assert identity_schema["properties"]["filters"] == {"type": "array", "maxItems": 0}
+    operation = provider["$defs"]["semantic_operation"]
+    assert operation["properties"]["apply_to"]["enum"] == ["one"]
+    assert operation["properties"]["intent"]["enum"] == ["record"]
+    assert operation["properties"]["properties"] == {"type": "array", "maxItems": 0}
+    assert operation["properties"]["tag_changes"] == {"type": "array", "maxItems": 0}
+    assert operation["properties"]["destination_type"] == {"type": "null"}
+    assert "filter_array" not in provider["$defs"]
+    assert "semantic_property_changes" not in provider["$defs"]
+    assert "journal_entry" not in json.dumps(provider)
+
+
+def test_calendar_core_write_rejects_core_surface_authority_even_if_schema_is_bypassed() -> None:
+    """Fail locally if a provider bypass tries type/property/destination authority."""
+    variants = []
+    typed = marta_write()
+    typed["operations"][0]["target"]["note_type"] = "journal_entry"
+    variants.append(typed)
+    destination = marta_write()
+    destination["operations"][0]["destination_type"] = "journal_entry"
+    variants.append(destination)
+    bulk = marta_write()
+    bulk["operations"][0]["apply_to"] = "all_matching"
+    variants.append(bulk)
+    for semantic_write in variants:
+        with pytest.raises(CalendarPlannerError, match="app-local authority"):
+            parse_calendar_plan(
+                calendar_payload(intent="CORE_SEMANTIC_WRITE", semantic_write=semantic_write)
+            )
 
 
 def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
@@ -232,11 +263,12 @@ def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
         current_context={"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
         conversation_context=({"role": "user", "text": "previous"},) * 10,
     )
-    assert "First resolve the temporal shape" in prompt
     assert "Never collapse a range or vague phrase into one Day" in prompt
     assert "OUT_OF_SCOPE" in prompt
+    assert "First decide whether" in prompt
+    assert "fact-only" in prompt
     assert "Tasks" not in prompt and "Journal" not in prompt and "diary" not in prompt
-    assert "other application" in prompt
+    assert "other capability" in prompt
     assert "distinct logical participants as identity parts" in prompt
     assert prompt.count('"text":"previous"') == 8
     assert '"current_date":"2026-10-02"' in prompt

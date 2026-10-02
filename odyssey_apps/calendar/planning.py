@@ -21,6 +21,8 @@ from odyssey_core.application import (
 )
 from odyssey_core.request_planning import RequestPlan
 from odyssey_core.semantic_write import (
+    ApplyTo,
+    IdentityPart,
     SemanticWriteCompileError,
     SemanticWriteIntent,
     TemporalReferencePart,
@@ -117,6 +119,17 @@ def _bounded_context(conversation_context: Sequence[Mapping[str, str]]) -> list[
 def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     """Build Calendar's strict provider schema without changing the Core planner schema."""
     definitions = semantic_write_schema_definitions(schema, include_temporal_reference=True)
+    identity = definitions["semantic_identity"]
+    identity["properties"]["note_type"] = {"type": "null"}
+    identity["properties"]["filters"] = {"type": "array", "maxItems": 0}
+    operation = definitions["semantic_operation"]
+    operation["properties"]["apply_to"] = {"type": "string", "enum": ["one"]}
+    operation["properties"]["intent"] = {"type": "string", "enum": ["record"]}
+    operation["properties"]["properties"] = {"type": "array", "maxItems": 0}
+    operation["properties"]["tag_changes"] = {"type": "array", "maxItems": 0}
+    operation["properties"]["destination_type"] = {"type": "null"}
+    definitions.pop("filter_array", None)
+    definitions.pop("semantic_property_changes", None)
     root = {
         "type": "object",
         "properties": {
@@ -260,6 +273,7 @@ def _validate_plan(plan: CalendarPlan) -> None:
             or plan.semantic_write is None
         ):
             raise CalendarPlannerError("Calendar Core write requires exact temporal reference")
+        _validate_calendar_core_write(plan.semantic_write)
         dates = [
             part.date
             for operation in plan.semantic_write.operations
@@ -273,6 +287,29 @@ def _validate_plan(plan: CalendarPlan) -> None:
             )
         return
     raise CalendarPlannerError("Calendar intent is unsupported")
+
+
+def _validate_calendar_core_write(write: SemanticWriteIntent) -> None:
+    """Keep Calendar's Core delegation to fact-only writes over generic identities."""
+    if not write.operations:
+        raise CalendarPlannerError("Calendar Core write requires at least one operation")
+    for operation in write.operations:
+        if (
+            operation.apply_to is not ApplyTo.ONE
+            or operation.intent != "record"
+            or operation.properties
+            or operation.tag_changes
+            or operation.destination_type is not None
+            or operation.target.note_type is not None
+            or operation.target.filters
+        ):
+            raise CalendarPlannerError("Calendar Core write exceeds app-local authority")
+        for fact in operation.facts:
+            for part in fact.parts:
+                if isinstance(part, IdentityPart) and (
+                    part.identity.note_type is not None or part.identity.filters
+                ):
+                    raise CalendarPlannerError("Calendar identity exceeds app-local authority")
 
 
 def validate_calendar_plan_for_source(plan: CalendarPlan, source_text: str) -> CalendarPlan:
@@ -317,20 +354,23 @@ def render_calendar_prompt(
         "You are Odyssey Calendar's planner after routing. Interpret only the exact current routed "
         "source supplied as the user message; prior conversation is bounded continuity evidence, not "
         "a substitute current request. Preserve the source wording: DAY_LITERAL_CAPTURE carries no "
-        "rewritten literal because execution records the exact routed source text. First resolve the "
-        "temporal shape from the supplied date/time/timezone: EXACT_DATE means one determinate date; "
-        "DATE_RANGE means a bounded interval and uses a half-open range_end_exclusive; UNSPECIFIED "
-        "means the wording is too vague to normalize safely. Never collapse a range or vague phrase "
-        "into one Day. Then decide only whether the request is representable by Calendar's own "
-        "supported semantics. Calendar does not classify, name, or redirect other application "
-        "domains; application ownership belongs exclusively to the Router. If the routed request is "
-        "not a supported Calendar occurrence or temporally-qualified durable statement, use "
-        "FAIL_CLOSED/OUT_OF_SCOPE. Tense or a future date alone never changes the semantic kind. For "
+        "rewritten literal because execution records the exact routed source text. First decide whether "
+        "the source is within Calendar's own supported semantics: a temporal occurrence, or a durable "
+        "fact whose temporal wording qualifies a reusable subject identity. Instructions to create or "
+        "write into another record/surface, obligations or intended work, and other foreign semantics "
+        "are OUT_OF_SCOPE; do not identify which other capability owns them. Only for in-scope input, "
+        "resolve the temporal shape from the supplied date/time/timezone: EXACT_DATE means one "
+        "determinate date; DATE_RANGE means a bounded interval and uses a half-open "
+        "range_end_exclusive; UNSPECIFIED means the wording is too vague to normalize safely. Never "
+        "collapse a range or vague phrase into one Day. Tense or a future date alone never changes the "
+        "semantic kind. For "
         "an entity-owned durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly "
         "one temporal_reference part using the original temporal mention and the same normalized date. "
         "Within that semantic write, preserve distinct logical participants as identity parts when they "
         "are safely selectable Odyssey identities; literal parts are for non-identity context or values, "
-        "and ordinary context must not be promoted speculatively. For remaining Day-owned occurrences, "
+        "and ordinary context must not be promoted speculatively. Calendar Core writes are fact-only: "
+        "never emit type constraints, filters, properties, tags, destination types, reclassification, "
+        "or bulk selection. For remaining Day-owned occurrences, "
         "EXACT_DATE uses DAY_LITERAL_CAPTURE, DATE_RANGE uses "
         "FAIL_CLOSED/RANGE_REQUIRES_RANGE_AWARE_OPERATION, and UNSPECIFIED uses "
         "FAIL_CLOSED/TEMPORAL_UNRESOLVED. Core owns identity resolution, validation, Markdown, "
