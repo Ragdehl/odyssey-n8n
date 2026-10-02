@@ -156,6 +156,7 @@ def test_reboot_persistent_service_contract_is_structurally_present() -> None:
     assert "WantedBy=default.target" in service
     assert "ODYSSEY_RUNTIME_HOST=172.18.0.1" in service
     assert "ODYSSEY_RUNTIME_PORT=8765" in service
+    assert "ODYSSEY_ENABLED_APPLICATIONS" not in service
     assert "ReadWritePaths=/data/odyssey" in service
     assert "WorkingDirectory=/home/ragdehl/projects/odyssey-prod-release" in service
     assert (

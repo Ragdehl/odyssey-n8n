@@ -32,6 +32,7 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_core.note_queries import NoteBodyBlock, NoteBodySegment, NoteSummary, StaleCursorError
+from odyssey_core.notes import parse_note
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -1475,3 +1476,129 @@ def _test_server(runtime: RuntimeComposition):
     server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(runtime))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
+
+
+def test_enabled_application_ids_are_explicit_and_reject_duplicates(monkeypatch) -> None:
+    """Keep application adoption opt-in so PROD does not inherit DEV routing implicitly."""
+    monkeypatch.delenv("ODYSSEY_ENABLED_APPLICATIONS", raising=False)
+    assert composition._enabled_application_ids() == ()
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    assert composition._enabled_application_ids() == ("calendar",)
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar,calendar")
+    with pytest.raises(ValueError, match="duplicates"):
+        composition._enabled_application_ids()
+
+
+def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Exercise the real composition root through Router, Calendar planner, and Day persistence."""
+    source = "Mañana viene el fontanero"
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    runtime_root = tmp_path / "runtime"
+    state_root = tmp_path / "state"
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
+    monkeypatch.setenv("ODYSSEY_SCHEMA_PATH", str(schema_path))
+    monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(state_root / "pending"))
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
+    monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault_root))
+    monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings"))
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    monkeypatch.setenv("ODYSSEY_ACTOR", "odyssey-dev-test")
+
+    class FakeIndex:
+        def __init__(self, path):
+            self.path = path
+
+        def rebuild(self, repository, schema, embedder):
+            return None
+
+    class FakeResponses:
+        def __init__(self, payload):
+            self.payload = payload
+            self.calls = 0
+
+        def create(self, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
+
+    router_responses = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_responses = FakeResponses(
+        {
+            "outcome": "PLAN",
+            "intent": "DAY_LITERAL_CAPTURE",
+            "temporal_kind": "EXACT_DATE",
+            "exact_date": "2026-10-03",
+            "range_start": None,
+            "range_end_exclusive": None,
+            "semantic_write": None,
+            "failure_code": None,
+        }
+    )
+    calendar_contexts: list[dict[str, str]] = []
+
+    def build_router(cls, catalog):
+        return cls(SimpleNamespace(responses=router_responses), catalog)
+
+    def build_calendar(cls, schema, current_context):
+        calendar_contexts.append(dict(current_context))
+        return cls(SimpleNamespace(responses=calendar_responses), schema, current_context)
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
+    )
+    monkeypatch.setattr(
+        composition.OpenAICalendarPlanner, "from_environment", classmethod(build_calendar)
+    )
+    monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **_kwargs: object())
+    monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
+    monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
+    monkeypatch.setattr(composition, "_build_contextual_reasoner", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaWriter", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaSemanticSetSelector", lambda: object())
+    monkeypatch.setattr(composition, "GitHistoryRecorder", lambda _root: None)
+    monkeypatch.setattr(
+        composition,
+        "_current_time",
+        lambda: {
+            "date": "2026-10-02",
+            "time": "18:30:00",
+            "timezone": "Europe/Paris",
+            "timestamp": "2026-10-02T18:30:00+02:00",
+        },
+    )
+
+    runtime = composition.build_runtime_from_environment()
+    capabilities = {item.id: item for item in runtime.application_catalog.capabilities()}
+    assert capabilities["calendar"].enabled is True
+    assert capabilities["tasks"].enabled is False
+    assert runtime.application_router is not None
+    assert set(runtime.application_executors) == {"calendar"}
+
+    result = runtime.execute(
+        source,
+        "outer-production-wiring",
+        authenticated_actor=AuthenticatedActorContext("123e4567-e89b-42d3-a456-426614174000"),
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.affected_stable_note_ids == ("date:2026-10-03",)
+    assert len(result.action_results) == 1
+    unit = result.action_results[0].unit_results[0]
+    assert unit.status is UnitStatus.SUCCEEDED
+    assert unit.operation == "calendar_capture"
+    assert unit.stable_note_id == "date:2026-10-03"
+    assert router_responses.calls == 1 and calendar_responses.calls == 1
+    assert calendar_contexts == [
+        {"date": "2026-10-02", "time": "18:30:00", "timezone": "Europe/Paris"}
+    ]
+    note = parse_note((vault_root / "calendar/days/2026-10-03.md").read_text(encoding="utf-8"))
+    assert source in note.content
+    public = application_result_to_response(result)
+    assert public["product_outcome"] == "ANSWER"
+    assert public["actions"][0]["units"][0]["status"] == "succeeded"

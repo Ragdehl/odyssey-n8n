@@ -56,6 +56,7 @@ def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
     assert "EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env" in service
     assert "Environment=ODYSSEY_CONTEXTUAL_MODEL=gpt-6-luna" in service
     assert "Environment=ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna" in service
+    assert "Environment=ODYSSEY_ENABLED_APPLICATIONS=calendar" in service
 
 
 def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> None:

@@ -15,9 +15,30 @@ from time import perf_counter
 from typing import cast
 from zoneinfo import ZoneInfo
 
-from odyssey_apps import ApplicationCatalog
-from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
-from odyssey_core.application import ApplicationResult, allocate_request_id, execute_request
+from odyssey_apps import (
+    ApplicationCatalog,
+    ApplicationDescriptor,
+    ApplicationRegistry,
+    OpenAIApplicationRouter,
+)
+from odyssey_apps.calendar import (
+    CALENDAR_DESCRIPTOR,
+    CalendarApplication,
+    CalendarLiteralCaptureService,
+    CalendarQueryService,
+    CalendarRouteExecutor,
+    OpenAICalendarPlanner,
+)
+from odyssey_core.application import (
+    ActionResult,
+    ActionStatus,
+    ApplicationResult,
+    ApplicationStatus,
+    UnitResult,
+    UnitStatus,
+    allocate_request_id,
+    execute_request,
+)
 from odyssey_core.clarification import (
     ClarificationChoice,
     ClarificationClassifier,
@@ -86,6 +107,39 @@ from .routing import (
 from .serialization import application_result_to_response, operational_to_response
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
+
+_TASKS_DESCRIPTOR = ApplicationDescriptor(
+    id="tasks",
+    routing_description="task lifecycle, due dates, completion and obligations",
+    dependencies=("temporal",),
+)
+
+
+class _FreshCalendarPlanner:
+    """Create one Calendar planner with request-time temporal context for every routed span."""
+
+    def __init__(self, schema: Mapping[str, object]) -> None:
+        self._schema = schema
+
+    def plan(self, source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()):  # type: ignore[no-untyped-def]
+        """Plan one routed Calendar source using the current date/time rather than process startup."""
+        clock = _current_time()
+        planner = OpenAICalendarPlanner.from_environment(
+            self._schema, {key: clock[key] for key in ("date", "time", "timezone")}
+        )
+        return planner.plan(source_text, conversation_context)
+
+
+def _enabled_application_ids() -> tuple[str, ...]:
+    """Read explicit application adoption without silently enabling new production behavior."""
+    raw = os.environ.get("ODYSSEY_ENABLED_APPLICATIONS", "").strip()
+    if not raw:
+        return ()
+    values = tuple(item.strip() for item in raw.split(",") if item.strip())
+    if len(values) != len(set(values)):
+        raise ValueError("ODYSSEY_ENABLED_APPLICATIONS must not contain duplicates")
+    return values
+
 
 # Preserve the existing runtime composition injection seam while changing its production target.
 # Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
@@ -1312,9 +1366,92 @@ def build_runtime_from_environment() -> RuntimeComposition:
     calendar_application = CalendarApplication(
         CalendarQueryService(repository, schema, notes_service)
     )
+
+    application_catalog = ApplicationCatalog.empty()
+    application_router = None
+    application_executors: dict[str, ApplicationExecutor] = {}
+    enabled_application_ids = _enabled_application_ids()
+    if enabled_application_ids:
+        application_catalog = ApplicationRegistry.from_descriptors(
+            (CALENDAR_DESCRIPTOR, _TASKS_DESCRIPTOR)
+        ).catalog(enabled_ids=enabled_application_ids)
+        application_router = OpenAIApplicationRouter.from_environment(application_catalog)
+        if application_catalog.executable("calendar") is not None:
+            captures = CalendarLiteralCaptureService(repository, schema, history_recorder)
+
+            def capture_calendar_literal(
+                date: str,
+                literal: str,
+                request_id: str,
+                authenticated_actor: object | None,
+            ) -> ApplicationResult:
+                """Persist one routed Day literal through the canonical Calendar/Core boundary."""
+                if authenticated_actor is not None and not isinstance(
+                    authenticated_actor, AuthenticatedActorContext
+                ):
+                    raise ValueError("authenticated actor context is invalid")
+                captured = captures.capture(
+                    date=date,
+                    literal=literal,
+                    request_id=request_id,
+                    actor=_persistence_actor("calendar", authenticated_actor),
+                    now=_current_time()["timestamp"],
+                )
+                unit = UnitResult(
+                    0,
+                    UnitStatus.SUCCEEDED,
+                    operation="calendar_capture",
+                    stable_note_id=captured.note_id,
+                    materially_affected=captured.changed,
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.COMPLETED,
+                    (
+                        ActionResult(
+                            0,
+                            "calendar",
+                            ActionStatus.COMPLETED,
+                            unit_results=(unit,),
+                        ),
+                    ),
+                    (captured.note_id,) if captured.changed else (),
+                    history=captured.history,
+                )
+
+            def execute_calendar_core_write(
+                plan: RequestPlan,
+                source_text: str,
+                request_id: str,
+                authenticated_actor: object | None,
+                conversation_context: Sequence[Mapping[str, str]],
+            ) -> ApplicationResult:
+                """Execute a Calendar-compiled Core write without invoking another planner."""
+                if authenticated_actor is not None and not isinstance(
+                    authenticated_actor, AuthenticatedActorContext
+                ):
+                    raise ValueError("authenticated actor context is invalid")
+                return core_execute(
+                    source_text,
+                    request_id,
+                    authenticated_actor,
+                    resume_plan=plan,
+                    conversation_context_override=conversation_context,
+                )
+
+            application_executors["calendar"] = CalendarRouteExecutor(
+                _FreshCalendarPlanner(schema),
+                schema=schema,
+                capture_day_literal=capture_calendar_literal,
+                execute_core_write=execute_calendar_core_write,
+            )
+
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
+        application_catalog=application_catalog,
+        application_router=application_router,
+        application_executors=application_executors,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
         notes_service=notes_service,
