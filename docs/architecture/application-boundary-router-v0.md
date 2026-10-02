@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-4 implemented and deterministically validated; Calendar natural routing is next; architecture-challenge corrections incorporated before code**.
+Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Calendar natural-routing live gate remains pending; architecture-challenge corrections incorporated before code**.
 
 ## Objective
 
@@ -213,9 +213,19 @@ Application work therefore carries router/app regression responsibility without 
 
 ## First Calendar consumer
 
-Calendar is the first consumer of this boundary. Slice 4 moved Calendar-specific deterministic query, presentation, and compact descriptor ownership into `odyssey_apps/calendar/`, while the shared Day/date identity, links, ranges, and materialization primitives remain in `odyssey_core/temporal.py`. Runtime now composes the read-only Calendar application instead of owning Calendar projection semantics. Natural-language Calendar execution remains deliberately unavailable until Slice 5 supplies the validated Calendar planner; the extraction does not approximate Calendar requests through the Core planner.
+Calendar is the first consumer of this boundary. Slice 4 moved Calendar-specific deterministic query, presentation, and compact descriptor ownership into `odyssey_apps/calendar/`, while the shared Day/date identity, links, ranges, and materialization primitives remain in `odyssey_core/temporal.py`. Runtime composes the read-only Calendar surface instead of owning Calendar projection semantics. Slice 5 now adds the provider-free natural-language Calendar planner/executor contract, but production routing remains deliberately disabled until the focused live gates and later DEV adoption.
 
-Slice 5 should no longer add Calendar-specific intent fields to the Core planner.
+Slice 5 is implemented provider-free. Calendar now has its own closed GPT-6 Luna/low planner
+contract, exact-date/DATE_RANGE/UNSPECIFIED temporal result shapes, strict local response parsing,
+and a routed executor. Exact Day literals are persisted through a small Core-owned Day-capture
+primitive using canonical validation, atomic provenance, link materialization, and revision-safe
+persistence; Calendar does not write Markdown directly. Entity-owned temporal statements compile
+through the existing Core semantic-write path using an opt-in Core temporal-reference fact part,
+which renders the canonical Day wikilink only after Calendar has supplied a validated exact date.
+The default Core planner prompt/schema/model/examples remain hash-pinned unchanged. `DATE_RANGE`
+is preserved as temporal evidence but range-aware natural execution remains deferred; it is never
+collapsed to one Day. No provider call or live deployment is implied: the compact Calendar matrix
+is frozen for its later bounded GPT-6 Luna gate.
 
 Representative routing expectations:
 

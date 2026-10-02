@@ -19,6 +19,7 @@ from odyssey_core.request_planning import (
     planner_property_changes_json_schema,
     validate_request_plan,
 )
+from odyssey_core.temporal import calendar_day_wikilink, normalize_iso_date
 
 
 class SemanticWriteCompileError(ValueError):
@@ -90,10 +91,23 @@ class IdentityPart:
 
 
 @dataclass(frozen=True, slots=True)
+class TemporalReferencePart:
+    """Represent one exact temporal mention whose canonical Day link is rendered only by Core.
+
+    The visible ``text`` preserves the user's temporal wording while ``date`` carries the
+    application-normalized exact date. The ordinary Core planner schema does not expose this
+    opt-in vocabulary.
+    """
+
+    text: str
+    date: str
+
+
+@dataclass(frozen=True, slots=True)
 class SemanticFact:
     """Represent one ordered fact before Core assigns local reference markers."""
 
-    parts: tuple[LiteralPart | IdentityPart, ...]
+    parts: tuple[LiteralPart | IdentityPart | TemporalReferencePart, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +130,9 @@ class SemanticWriteIntent:
     operations: tuple[SemanticWriteOperation, ...]
 
 
-def semantic_write_schema_definitions(schema: Mapping[str, Any]) -> dict[str, Any]:
+def semantic_write_schema_definitions(
+    schema: Mapping[str, Any], *, include_temporal_reference: bool = False
+) -> dict[str, Any]:
     """Build the closed dynamic Structured Outputs definitions for Luna semantic WRITE.
 
     Note types, filters, writable properties, property value types, and destination types are
@@ -209,18 +225,30 @@ def semantic_write_schema_definitions(schema: Mapping[str, Any]) -> dict[str, An
         "required": ["kind", "text", "identity"],
         "additionalProperties": False,
     }
+    fact_parts: list[dict[str, Any]] = [
+        {"$ref": "#/$defs/semantic_literal_part"},
+        {"$ref": "#/$defs/semantic_identity_part"},
+    ]
+    temporal_reference_part: dict[str, Any] | None = None
+    if include_temporal_reference:
+        temporal_reference_part = {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "enum": ["temporal_reference"]},
+                "text": {"type": "string", "maxLength": 256},
+                "date": {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"},
+            },
+            "required": ["kind", "text", "date"],
+            "additionalProperties": False,
+        }
+        fact_parts.append({"$ref": "#/$defs/semantic_temporal_reference_part"})
     fact = {
         "type": "object",
         "properties": {
             "parts": {
                 "type": "array",
                 "minItems": 1,
-                "items": {
-                    "anyOf": [
-                        {"$ref": "#/$defs/semantic_literal_part"},
-                        {"$ref": "#/$defs/semantic_identity_part"},
-                    ]
-                },
+                "items": {"anyOf": fact_parts},
             }
         },
         "required": ["parts"],
@@ -267,7 +295,7 @@ def semantic_write_schema_definitions(schema: Mapping[str, Any]) -> dict[str, An
         ],
         "additionalProperties": False,
     }
-    return {
+    definitions: dict[str, Any] = {
         "filter_array": planner_filter_array_json_schema(retrieval),
         "semantic_candidate_scope": candidate_scope,
         "semantic_identity": identity,
@@ -277,6 +305,9 @@ def semantic_write_schema_definitions(schema: Mapping[str, Any]) -> dict[str, An
         "semantic_property_changes": planner_property_changes_json_schema(writable),
         "semantic_operation": operation,
     }
+    if temporal_reference_part is not None:
+        definitions["semantic_temporal_reference_part"] = temporal_reference_part
+    return definitions
 
 
 def semantic_write_action_json_schema() -> dict[str, Any]:
@@ -296,7 +327,9 @@ def semantic_write_action_json_schema() -> dict[str, Any]:
     }
 
 
-def decode_semantic_write_action(raw: Any) -> SemanticWriteIntent:
+def decode_semantic_write_action(
+    raw: Any, *, allow_temporal_reference: bool = False
+) -> SemanticWriteIntent:
     """Decode one closed provider write action without accepting Core mechanical fields.
 
     Args:
@@ -312,10 +345,15 @@ def decode_semantic_write_action(raw: Any) -> SemanticWriteIntent:
         raise SemanticWriteCompileError("Semantic write action fields are invalid")
     if raw["kind"] != "write" or not isinstance(raw["operations"], list):
         raise SemanticWriteCompileError("Semantic write action is invalid")
-    return SemanticWriteIntent(tuple(_decode_operation(item) for item in raw["operations"]))
+    return SemanticWriteIntent(
+        tuple(
+            _decode_operation(item, allow_temporal_reference=allow_temporal_reference)
+            for item in raw["operations"]
+        )
+    )
 
 
-def _decode_operation(raw: Any) -> SemanticWriteOperation:
+def _decode_operation(raw: Any, *, allow_temporal_reference: bool) -> SemanticWriteOperation:
     """Decode one closed semantic operation while retaining provider order."""
     required = {
         "target",
@@ -345,7 +383,9 @@ def _decode_operation(raw: Any) -> SemanticWriteOperation:
         target=_decode_identity(raw["target"]),
         apply_to=apply_to,
         intent=raw["intent"],
-        facts=tuple(_decode_fact(item) for item in facts),
+        facts=tuple(
+            _decode_fact(item, allow_temporal_reference=allow_temporal_reference) for item in facts
+        ),
         properties=tuple(_decode_property(item) for item in properties),
         tag_changes=tuple(_decode_tag(item) for item in tags),
         destination_type=raw["destination_type"],
@@ -408,11 +448,11 @@ def _decode_candidate_scope(raw: Any) -> CandidateScope | None:
     return CandidateScope(decoded_source, raw["member_query"], extent)
 
 
-def _decode_fact(raw: Any) -> SemanticFact:
+def _decode_fact(raw: Any, *, allow_temporal_reference: bool) -> SemanticFact:
     """Decode one fact and its closed ordered part union."""
     if not isinstance(raw, dict) or set(raw) != {"parts"} or not isinstance(raw["parts"], list):
         raise SemanticWriteCompileError("Semantic fact fields are invalid")
-    parts: list[LiteralPart | IdentityPart] = []
+    parts: list[LiteralPart | IdentityPart | TemporalReferencePart] = []
     for part in raw["parts"]:
         if not isinstance(part, dict):
             raise SemanticWriteCompileError("Semantic fact part is invalid")
@@ -420,6 +460,18 @@ def _decode_fact(raw: Any) -> SemanticFact:
             parts.append(LiteralPart(part["text"]))
         elif set(part) == {"kind", "text", "identity"} and part["kind"] == "identity":
             parts.append(IdentityPart(part["text"], _decode_identity(part["identity"])))
+        elif (
+            allow_temporal_reference
+            and set(part) == {"kind", "text", "date"}
+            and part["kind"] == "temporal_reference"
+        ):
+            try:
+                _safe_text(part["text"])
+                normalized = normalize_iso_date(part["date"])
+                calendar_day_wikilink(normalized, label=part["text"])
+                parts.append(TemporalReferencePart(part["text"], normalized))
+            except (TypeError, ValueError) as error:
+                raise SemanticWriteCompileError("Temporal reference is invalid") from error
         else:
             raise SemanticWriteCompileError("Semantic fact part fields are invalid")
     return SemanticFact(tuple(parts))
@@ -463,7 +515,14 @@ def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any
     try:
         units = [_compile_operation(operation) for operation in intent.operations]
         plan = validate_request_plan(
-            {"actions": [{"kind": "write", "units": units}], "limitations": []}, schema
+            {"actions": [{"kind": "write", "units": units}], "limitations": []},
+            schema,
+            allow_calendar_day_links=any(
+                isinstance(part, TemporalReferencePart)
+                for operation in intent.operations
+                for fact in operation.facts
+                for part in fact.parts
+            ),
         )
     except (RequestPlanningError, TypeError, ValueError) as error:
         raise SemanticWriteCompileError(
@@ -603,6 +662,13 @@ def _compile_facts(
             if isinstance(part, LiteralPart):
                 _safe_literal_text(part.text)
                 pieces.append(part.text)
+                continue
+            if isinstance(part, TemporalReferencePart):
+                try:
+                    _safe_text(part.text)
+                    pieces.append(calendar_day_wikilink(part.date, label=part.text))
+                except (TypeError, ValueError) as error:
+                    raise SemanticWriteCompileError("Temporal reference is invalid") from error
                 continue
             if not isinstance(part, IdentityPart):
                 raise SemanticWriteCompileError("Semantic fact part is invalid")

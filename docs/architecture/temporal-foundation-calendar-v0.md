@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; implementation in progress (Slices 1-4 implemented and visually validated in isolated DEV; the Application Boundary + Router v0 extraction is complete and Slice 5 natural routing/planning is next)**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Router/Calendar focused live gates and later DEV adoption remain pending**.
 
 ## Objective
 
@@ -255,6 +255,17 @@ Applications may depend on lower-level capabilities when useful and must keep th
 3. **Temporal links and chronology.** Explicit Day links/backlinks plus the approved same-day `Added` heading grouping/navigation, keeping capture time separate from described/event time.
 4. **Calendar v0 read/UI surface.** Month + Day projections over virtual/materialized Days, Journal temporal properties, explicit links, and useful semantic activity.
 5. **Application-routed natural language.** After [Application Boundary + Router v0](application-boundary-router-v0.md) is approved and implemented, route Calendar intents without changing the established Core planner; Calendar owns its GPT-6 Luna planner contract and compiles validated Calendar/shared-Core intents through existing Core safety boundaries.
+
+Implementation note after Slice 5 deterministic work: Calendar's separate GPT-6 Luna/low planner
+contract retains `EXACT_DATE`, `DATE_RANGE`, and `UNSPECIFIED` temporal evidence. Exact Day literal
+captures use the exact routed source wording and a Core-owned capture primitive; ranges and vague
+time never become an invented Day, and unsupported Tasks-like lifecycle intent fails closed. Range
+resolution is therefore preserved now, but a natural-language range-aware read/write operation is
+not yet enabled in this slice. An entity-owned exact-date statement may use the opt-in shared Core
+temporal-reference compiler part, so Core still resolves identity and renders/persists the canonical
+Day link. The default Core planner contract is hash-pinned unchanged. The frozen provider-free
+regression matrix is ready for one later explicitly authorized Luna live gate; no such call or live
+adoption has occurred.
 
 Each slice must prefer existing Note/storage/link/history primitives over parallel Calendar implementations.
 

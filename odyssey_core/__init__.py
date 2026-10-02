@@ -69,6 +69,7 @@ from .materialization import (
     WriterRequest,
     apply_writer_operations,
     build_openai_writer_payload,
+    capture_calendar_day_literal,
     is_exact_normalized_duplicate,
     materialize_create,
     materialize_delete,
@@ -212,6 +213,7 @@ from .semantic_write import (
     SemanticWriteCompileError,
     SemanticWriteIntent,
     SemanticWriteOperation,
+    TemporalReferencePart,
     compile_semantic_write,
 )
 from .temporal import (
@@ -297,6 +299,7 @@ __all__ = [
     "IdentityIntent",
     "IdentityPart",
     "LiteralPart",
+    "TemporalReferencePart",
     "SemanticFact",
     "SemanticWriteCompileError",
     "SemanticWriteIntent",
@@ -434,6 +437,7 @@ __all__ = [
     "WriterRequest",
     "apply_writer_operations",
     "build_openai_writer_payload",
+    "capture_calendar_day_literal",
     "is_exact_normalized_duplicate",
     "materialize_create",
     "materialize_delete",

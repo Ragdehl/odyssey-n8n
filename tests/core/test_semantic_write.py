@@ -915,3 +915,62 @@ def test_semantic_identity_256_character_bound_fails_locally(schema: dict) -> No
     )
     with pytest.raises(SemanticWriteCompileError):
         compile_semantic_write(intent, schema)
+
+
+def test_temporal_reference_is_opt_in_and_default_core_schema_stays_closed(schema: dict) -> None:
+    """Expose exact-Day fact parts only to application compilers, never the ordinary Core planner."""
+    ordinary = semantic_write_schema_definitions(schema)
+    assert list(ordinary) == [
+        "filter_array",
+        "semantic_candidate_scope",
+        "semantic_identity",
+        "semantic_literal_part",
+        "semantic_identity_part",
+        "semantic_fact",
+        "semantic_property_changes",
+        "semantic_operation",
+    ]
+    assert "semantic_temporal_reference_part" not in ordinary
+
+    calendar = semantic_write_schema_definitions(schema, include_temporal_reference=True)
+    assert "semantic_temporal_reference_part" in calendar
+    raw = raw_action(
+        raw_operation(
+            facts=[
+                {
+                    "parts": [
+                        {"kind": "literal", "text": "Empieza "},
+                        {"kind": "temporal_reference", "text": "mañana", "date": "2026-10-03"},
+                    ]
+                }
+            ]
+        )
+    )
+    with pytest.raises(SemanticWriteCompileError):
+        decode_semantic_write_action(raw)
+    intent = decode_semantic_write_action(raw, allow_temporal_reference=True)
+    action = compile_semantic_write(intent, schema)
+    assert action.units[0].facts == ("Empieza [[calendar/days/2026-10-03|mañana]]",)
+
+
+def test_calendar_opt_in_rejects_noncanonical_or_arbitrary_wikilinks(schema: dict) -> None:
+    """Do not turn the temporal compiler opt-in into general application-supplied Markdown authority."""
+    with pytest.raises(SemanticWriteCompileError):
+        decode_semantic_write_action(
+            raw_action(
+                raw_operation(
+                    facts=[
+                        {
+                            "parts": [
+                                {
+                                    "kind": "temporal_reference",
+                                    "text": "bad|label",
+                                    "date": "2026-10-03",
+                                }
+                            ]
+                        }
+                    ]
+                )
+            ),
+            allow_temporal_reference=True,
+        )

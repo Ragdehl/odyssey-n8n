@@ -22,6 +22,7 @@ from odyssey_core import (
     WriteTargetDecision,
     WriteTargetOutcome,
     build_openai_writer_payload,
+    capture_calendar_day_literal,
     create_entity,
     materialize_update,
     update_entity,
@@ -186,6 +187,37 @@ def test_same_request_fact_ordinal_skips_planner_variation_on_replay(
     assert writer.requests == []
     assert calls == [1]
     assert repository.read_text("people/bea.md").count("Bea works at Thales.") == 1
+
+
+def test_calendar_day_literal_capture_uses_core_validation_atomic_provenance_and_replay(
+    repository: VaultRepository,
+) -> None:
+    """Materialize one Day only through Core persistence and retain the exact literal verbatim."""
+    first = capture_calendar_day_literal(
+        repository=repository,
+        schema=SCHEMA,
+        date="2026-08-27",
+        literal="Mañana viene el fontanero",
+        actor="calendar",
+        now=NOW,
+        request_id="route-1",
+    )
+    second = capture_calendar_day_literal(
+        repository=repository,
+        schema=SCHEMA,
+        date="2026-08-27",
+        literal="rewritten provider text must not replace the original",
+        actor="calendar",
+        now=NOW,
+        request_id="route-1",
+    )
+    body = parse_note(repository.read_text("calendar/days/2026-08-27.md")).content
+
+    assert first.operation is PersistenceOperation.CREATED
+    assert second.operation is PersistenceOperation.NO_CHANGE
+    assert "Mañana viene el fontanero" in body
+    assert "rewritten provider text" not in body
+    assert "<!-- odyssey:fact request=route-1 ordinal=0 -->" in body
 
 
 def test_production_writer_payload_is_luna_medium_full_note_and_no_storage() -> None:

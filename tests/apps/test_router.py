@@ -263,3 +263,10 @@ def test_schema_allows_only_enabled_destination_ids() -> None:
     schema = route_plan_json_schema(catalog())
     enum = schema["properties"]["routes"]["items"]["properties"]["capability_id"]["enum"]
     assert enum == ["core", "calendar"]
+
+
+def test_router_accepts_runtime_role_text_prior_context_shape() -> None:
+    """Match LocalConversationStore's role/text evidence without changing Router authority."""
+    prompt = render_router_prompt(catalog(), ({"role": "user", "text": "earlier"},))
+    evidence = json.loads(prompt.partition("\n")[2])
+    assert evidence["recent_routing_context"] == [{"role": "user", "content": "earlier"}]

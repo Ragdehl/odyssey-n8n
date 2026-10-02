@@ -285,8 +285,12 @@ class CalendarDayRepository:
         note = _load_day_note(self.repository, self.schema, path, normalized)
         return CalendarDay(normalized, identity, path, True, note)
 
-    def materialize(self, value: str, *, actor: ActorInput, now: str) -> CalendarDay:
-        """Create exactly one empty canonical Day, or return the current matching Day unchanged."""
+    def materialize(
+        self, value: str, *, actor: ActorInput, now: str, content: str = ""
+    ) -> CalendarDay:
+        """Create one canonical Day with optional initial content, or return an existing Day."""
+        if not isinstance(content, str):
+            raise TypeError("Calendar Day content must be text")
         current = self.resolve(value)
         if current.materialized:
             return current
@@ -302,7 +306,7 @@ class CalendarDayRepository:
                     "type": CALENDAR_DAY_TYPE,
                     "date": current.date,
                 },
-                content="",
+                content=content,
                 actor=actor,
                 now=now,
             )
@@ -331,11 +335,34 @@ def materialize_calendar_day_links(
     previous_markdown: str = "",
 ) -> tuple[CalendarDay, ...]:
     """Materialize only Calendar Day targets newly introduced by one canonical Markdown write."""
+    return _materialize_calendar_day_links(
+        markdown,
+        repository=repository,
+        schema=schema,
+        actor=actor,
+        now=now,
+        previous_markdown=previous_markdown,
+        skip_dates=(),
+    )
+
+
+def _materialize_calendar_day_links(
+    markdown: str,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: ActorInput,
+    now: str,
+    previous_markdown: str,
+    skip_dates: tuple[str, ...],
+) -> tuple[CalendarDay, ...]:
+    """Support atomic self-linking Day creation without exposing a public materialization bypass."""
+    skipped = frozenset(normalize_iso_date(value) for value in skip_dates)
     current_dates = calendar_day_link_dates(markdown)
     previous_dates = frozenset(calendar_day_link_dates(previous_markdown))
     day_repository = CalendarDayRepository(repository, schema)
     return tuple(
         day_repository.materialize(value, actor=actor, now=now)
         for value in current_dates
-        if value not in previous_dates
+        if value not in previous_dates and value not in skipped
     )

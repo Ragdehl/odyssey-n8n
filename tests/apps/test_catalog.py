@@ -123,6 +123,16 @@ def test_enablement_only_changes_catalog_not_core_planner_artifacts() -> None:
     assert core_planner_artifacts() == before
 
 
+def test_calendar_opt_in_compiler_does_not_change_accepted_core_planner_artifacts() -> None:
+    """Freeze the pre-Slice-5 Core prompt/schema/examples/model contract by content hash."""
+    assert core_planner_artifacts() == (
+        "717c9fea6a7d278be3284146b829a51fc8c7ed38549fe52ae17df2fd26585df9",
+        "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
+        "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
+        ("gpt-5.6-luna", "low"),
+    )
+
+
 def test_core_only_runtime_remains_usable_with_empty_or_disabled_calendar_catalog() -> None:
     """Keep Slice 1 catalog state inert for the established Core request execution seam."""
 

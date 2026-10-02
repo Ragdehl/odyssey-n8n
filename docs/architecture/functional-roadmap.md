@@ -168,8 +168,8 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 Slices 1-4 DEV validated; natural routing pending
-Application Boundary + Router v0                                    🚧 Slices 1-4 implemented; Calendar natural routing next
+Temporal Foundation + Calendar v0                                  🚧 Slices 1-5 deterministic implementation complete; Calendar Luna live gate pending
+Application Boundary + Router v0                                    🚧 Slices 1-5 implemented; Router/Calendar live gates pending
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -282,13 +282,16 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     🚧 Slices 1-4 DEV validated
+Temporal Foundation + Calendar v0                     🚧 Slices 1-5 deterministic; Slices 1-4 DEV validated
         |
         v
-Application Boundary + Router v0                     🚧 Slices 1-4 implemented; Calendar natural routing next
+Application Boundary + Router v0                     🚧 Slices 1-5 deterministic; focused live gates next
         |
         v
-Calendar natural routing / Slice 5
+Router + Calendar focused live gates / Slice 6
+        |
+        v
+Calendar DEV adoption / Slice 7
         |
         v
 Tasks — first lifecycle-heavy domain application

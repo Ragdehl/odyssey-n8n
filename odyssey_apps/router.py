@@ -165,7 +165,8 @@ def _routing_context(conversation_context: Sequence[Mapping[str, str]]) -> list[
     for turn in conversation_context[-ROUTER_MAX_RECENT_TURNS:]:
         if not isinstance(turn, Mapping):
             raise RouterError("Conversation context turns must be mappings")
-        role, content = turn.get("role"), turn.get("content")
+        role = turn.get("role")
+        content = turn.get("content", turn.get("text"))
         if role not in {"user", "assistant"} or not isinstance(content, str):
             raise RouterError("Conversation context must contain user or assistant text")
         context.append({"role": role, "content": content[:ROUTER_MAX_CONTEXT_CHARS]})

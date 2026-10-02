@@ -26,6 +26,7 @@ from odyssey_core.planner_capabilities import (
     build_planner_capabilities,
     build_write_capabilities,
 )
+from odyssey_core.temporal import TemporalValueError, normalize_iso_date
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
@@ -42,6 +43,7 @@ _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
+_CALENDAR_DAY_LINK_PATTERN = re.compile(r"\[\[calendar/days/(\d{4}-\d{2}-\d{2})\|([^\]\r\n|]+)\]\]")
 _STABLE_ID_PATTERN = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I
 )
@@ -839,7 +841,9 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
 
 
 @_validation_boundary(PlannerValidationStage.REQUEST_PLAN)
-def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPlan:
+def validate_request_plan(
+    payload: Any, schema: Mapping[str, Any], *, allow_calendar_day_links: bool = False
+) -> RequestPlan:
     """Validate untrusted model output and return an immutable non-executing plan.
 
     Args:
@@ -866,7 +870,13 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     if not isinstance(raw_actions, list) or not raw_actions:
         raise RequestPlanningError("RequestPlan actions must be a non-empty list")
     actions = tuple(
-        _validate_action(action, schema, retrieval_capabilities, write_capabilities)
+        _validate_action(
+            action,
+            schema,
+            retrieval_capabilities,
+            write_capabilities,
+            allow_calendar_day_links=allow_calendar_day_links,
+        )
         for action in raw_actions
     )
     return finalize_request_plan(actions, limitations, presentation_intent)
@@ -1506,12 +1516,20 @@ def _validate_action(
     schema: Mapping[str, Any],
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
+    *,
+    allow_calendar_day_links: bool = False,
 ) -> RequestAction:
     """Validate one discriminated action without executing retrieval or persistence."""
     if not isinstance(action, dict):
         raise RequestPlanningError("RequestPlan action must be an object")
     if action.get("kind") == "write":
-        return _validate_write_action(action, schema, retrieval_capabilities, write_capabilities)
+        return _validate_write_action(
+            action,
+            schema,
+            retrieval_capabilities,
+            write_capabilities,
+            allow_calendar_day_links=allow_calendar_day_links,
+        )
     if action.get("kind") == "delegate":
         return _validate_delegate_action(action, schema, retrieval_capabilities)
     if action.get("kind") != "retrieve" or set(action) not in (
@@ -1993,6 +2011,8 @@ def _validate_write_action(
     schema: Mapping[str, Any],
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
+    *,
+    allow_calendar_day_links: bool = False,
 ) -> WriteAction:
     """Validate one semantic write action without resolving identity or persisting data.
 
@@ -2013,7 +2033,13 @@ def _validate_write_action(
     if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
         raise RequestPlanningError("WriteAction must contain non-empty units")
     units = tuple(
-        _validate_knowledge_unit(raw, schema, retrieval_capabilities, write_capabilities)
+        _validate_knowledge_unit(
+            raw,
+            schema,
+            retrieval_capabilities,
+            write_capabilities,
+            allow_calendar_day_links=allow_calendar_day_links,
+        )
         for raw in raw_units
     )
     units = _lower_reference_selections(units)
@@ -2135,6 +2161,8 @@ def _validate_knowledge_unit(
     schema: Mapping[str, Any],
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
+    *,
+    allow_calendar_day_links: bool = False,
 ) -> KnowledgeUnit:
     """Validate one write target, mutation payload, and local reference set.
 
@@ -2308,7 +2336,9 @@ def _validate_knowledge_unit(
             "KnowledgeReference cannot select its own KnowledgeUnit target",
             code=PlannerValidationCode.INVALID_REFERENCE,
         )
-    marker_indexes = _validate_fact_reference_markers(raw_facts, len(references))
+    marker_indexes = _validate_fact_reference_markers(
+        raw_facts, len(references), allow_calendar_day_links=allow_calendar_day_links
+    )
     for reference_index in range(len(references)):
         if reference_index not in marker_indexes:
             raise RequestPlanningError(
@@ -2350,7 +2380,9 @@ def _query_repeats_new_fact(
 
 
 @_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)
-def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int) -> set[int]:
+def _validate_fact_reference_markers(
+    facts: Sequence[Any], reference_count: int, *, allow_calendar_day_links: bool = False
+) -> set[int]:
     """Validate internal reference markers and return their local reference indexes.
 
     Args:
@@ -2366,7 +2398,21 @@ def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int)
     indexes: set[int] = set()
     for fact in facts:
         if "[[" in fact or "]]" in fact:
-            raise RequestPlanningError("Planner facts must not contain Markdown wikilinks")
+            if not allow_calendar_day_links:
+                raise RequestPlanningError("Planner facts must not contain Markdown wikilinks")
+            remainder = fact
+            for match in _CALENDAR_DAY_LINK_PATTERN.finditer(fact):
+                try:
+                    normalize_iso_date(match.group(1))
+                except TemporalValueError as error:
+                    raise RequestPlanningError(
+                        "Planner Calendar Day wikilink date is invalid"
+                    ) from error
+            remainder = _CALENDAR_DAY_LINK_PATTERN.sub("", remainder)
+            if "[[" in remainder or "]]" in remainder:
+                raise RequestPlanningError(
+                    "Only canonical Calendar Day wikilinks are allowed in this Core path"
+                )
         cursor = 0
         while True:
             start = fact.find("{{ref", cursor)
