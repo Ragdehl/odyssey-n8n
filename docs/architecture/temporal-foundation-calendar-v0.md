@@ -1,6 +1,6 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 2 passed Router 8/8 but Calendar 6/8 and failed overall; a fact-only Calendar authority reduction is prepared provider-free for a separately authorized Attempt 3; DEV adoption remains pending**.
+Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Slice 6 Attempt 3 yielded no Calendar model evidence because its provider schema was rejected; a provider-free app-native schema successor is required and DEV adoption remains pending**.
 
 ## Objective
 

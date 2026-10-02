@@ -168,8 +168,8 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 Slice 6 Attempt 2 failed; structural Attempt 3 prepared provider-free
-Application Boundary + Router v0                                    🚧 Router 8/8 in Attempt 2; Calendar 6/8; Attempt 3 prepared provider-free
+Temporal Foundation + Calendar v0                                  🚧 Slice 6 Attempt 3 blocked at Calendar provider-schema boundary; successor provider-free
+Application Boundary + Router v0                                    🚧 Router low unstable on dependent route; Attempt 3 Calendar schema rejected
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -282,10 +282,10 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     🚧 Slice 6 Attempt 2 failed; Attempt 3 prepared, live gate not yet authorized
+Temporal Foundation + Calendar v0                     🚧 Attempt 3 has no Calendar model evidence; app-native schema successor required
         |
         v
-Application Boundary + Router v0                     🚧 Attempt 2 Router 8/8, Calendar 6/8; structural Attempt 3 prepared provider-free
+Application Boundary + Router v0                     🚧 Router low repeated dependent-route miss; reasoning effort reevaluation next
         |
         v
 Router + Calendar focused live gates / Slice 6
