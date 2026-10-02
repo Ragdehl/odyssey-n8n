@@ -311,6 +311,12 @@ def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
     assert "Tasks" not in prompt and "Journal" not in prompt and "diary" not in prompt
     assert "other capability" in prompt
     assert "distinct logical participants as identity parts" in prompt
+    assert "the entity-owned durable interpretation takes precedence" in prompt
+    assert "emit CORE_SEMANTIC_WRITE rather than DAY_LITERAL_CAPTURE" in prompt
+    assert (
+        "DAY_LITERAL_CAPTURE is only for occurrences whose semantic content belongs to the Day"
+        in prompt
+    )
     assert prompt.count('"text":"previous"') == 8
     assert '"current_date":"2026-10-02"' in prompt
     with pytest.raises(CalendarPlannerError):
@@ -333,7 +339,7 @@ class FakeResponses:
         return self.response
 
 
-def test_fake_provider_uses_gpt6_luna_medium_one_call_and_exact_current_source(
+def test_fake_provider_uses_gpt6_luna_low_one_call_and_exact_current_source(
     schema: dict[str, Any],
 ) -> None:
     """Keep Calendar's provider boundary separate, bounded, and source-preserving."""
@@ -355,9 +361,7 @@ def test_fake_provider_uses_gpt6_luna_medium_one_call_and_exact_current_source(
     assert len(fake.calls) == 1
     call = fake.calls[0]
     assert call["model"] == CALENDAR_PLANNER_MODEL == "gpt-6-luna"
-    assert (
-        call["reasoning"] == {"effort": CALENDAR_PLANNER_REASONING_EFFORT} == {"effort": "medium"}
-    )
+    assert call["reasoning"] == {"effort": CALENDAR_PLANNER_REASONING_EFFORT} == {"effort": "low"}
     assert call["store"] is False
     assert call["text"]["format"]["strict"] is True
     assert call["input"][1] == {

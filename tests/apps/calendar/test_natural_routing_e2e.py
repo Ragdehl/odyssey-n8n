@@ -244,6 +244,10 @@ def test_router_to_calendar_entity_write_reaches_compiled_core_plan_e2e(tmp_path
     assert result.status is ApplicationStatus.COMPLETED
     assert len(seen) == 1
     assert router_transport.calls == 1 and calendar_transport.calls == 1
+    assert calendar_transport.last_kwargs is not None
+    calendar_prompt = calendar_transport.last_kwargs["input"][0]["content"]
+    assert "the entity-owned durable interpretation takes precedence" in calendar_prompt
+    assert "emit CORE_SEMANTIC_WRITE rather than DAY_LITERAL_CAPTURE" in calendar_prompt
 
 
 def test_router_needs_capability_never_invokes_calendar_or_mutates_vault(tmp_path: Path) -> None:

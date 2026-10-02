@@ -32,7 +32,7 @@ from odyssey_core.semantic_write import (
 from odyssey_core.temporal import DateRange, TemporalValueError, normalize_iso_date
 
 CALENDAR_PLANNER_MODEL = "gpt-6-luna"
-CALENDAR_PLANNER_REASONING_EFFORT = "medium"
+CALENDAR_PLANNER_REASONING_EFFORT = "low"
 CALENDAR_PLANNER_MAX_OUTPUT_TOKENS = 1_024
 CALENDAR_PLANNER_MAX_RECENT_TURNS = 8
 CALENDAR_PLANNER_MAX_CONTEXT_CHARS = 1_000
@@ -569,9 +569,13 @@ def render_calendar_prompt(
         "determinate date; DATE_RANGE means a bounded interval and uses a half-open "
         "range_end_exclusive; UNSPECIFIED means the wording is too vague to normalize safely. Never "
         "collapse a range or vague phrase into one Day. Tense or a future date alone never changes the "
-        "semantic kind. For "
-        "an entity-owned durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly "
-        "one temporal_reference part using the original temporal mention and the same normalized date. "
+        "semantic kind. If the same statement can be read both as a Day occurrence and as the start, "
+        "end, or change of durable knowledge owned by a reusable identity, the entity-owned durable "
+        "interpretation takes precedence: emit CORE_SEMANTIC_WRITE rather than DAY_LITERAL_CAPTURE. "
+        "DAY_LITERAL_CAPTURE is only for occurrences whose semantic content belongs to the Day and does "
+        "not establish, end, or change durable knowledge about a reusable identity. For an entity-owned "
+        "durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly one "
+        "temporal_reference part using the original temporal mention and the same normalized date. "
         "Within that semantic write, preserve distinct logical participants as identity parts when they "
         "are safely selectable Odyssey identities; literal parts are for non-identity context or values, "
         "and ordinary context must not be promoted speculatively. Calendar Core writes are fact-only: "
