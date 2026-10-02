@@ -28,8 +28,6 @@ from odyssey_core.semantic_write import (
     TemporalReferencePart,
     compile_semantic_write,
     decode_semantic_write_action,
-    semantic_write_action_json_schema,
-    semantic_write_schema_definitions,
 )
 from odyssey_core.temporal import DateRange, TemporalValueError, normalize_iso_date
 
@@ -116,20 +114,140 @@ def _bounded_context(conversation_context: Sequence[Mapping[str, str]]) -> list[
     return result
 
 
+def _calendar_semantic_write_definitions() -> dict[str, Any]:
+    """Build Calendar's app-native fact-write schema without generic Core mutation fields."""
+    candidate_scope = {
+        "type": "object",
+        "properties": {
+            "source": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {"kind": {"type": "string", "enum": ["SELF"]}},
+                        "required": ["kind"],
+                        "additionalProperties": False,
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "kind": {"type": "string", "enum": ["SOURCE_DESCRIPTION"]},
+                            "description": {"type": "string"},
+                        },
+                        "required": ["kind", "description"],
+                        "additionalProperties": False,
+                    },
+                ]
+            },
+            "member_query": {"type": "string"},
+            "extent": {"type": "string", "enum": ["one_member"]},
+        },
+        "required": ["source", "member_query", "extent"],
+        "additionalProperties": False,
+    }
+    identity = {
+        "type": "object",
+        "properties": {
+            "description": {"type": "string"},
+            "binding": {"type": "string", "enum": ["self", "described"]},
+            "direct_name": {"type": ["string", "null"]},
+            "candidate_scope": {
+                "anyOf": [
+                    {"type": "null"},
+                    {"$ref": "#/$defs/calendar_candidate_scope"},
+                ]
+            },
+        },
+        "required": ["description", "binding", "direct_name", "candidate_scope"],
+        "additionalProperties": False,
+    }
+    literal_part = {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["literal"]},
+            "text": {"type": "string"},
+        },
+        "required": ["kind", "text"],
+        "additionalProperties": False,
+    }
+    identity_part = {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["identity"]},
+            "text": {"type": "string"},
+            "identity": {"$ref": "#/$defs/calendar_identity"},
+        },
+        "required": ["kind", "text", "identity"],
+        "additionalProperties": False,
+    }
+    temporal_part = {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["temporal_reference"]},
+            "text": {"type": "string"},
+            "date": {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"},
+        },
+        "required": ["kind", "text", "date"],
+        "additionalProperties": False,
+    }
+    fact = {
+        "type": "object",
+        "properties": {
+            "parts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/calendar_literal_part"},
+                        {"$ref": "#/$defs/calendar_identity_part"},
+                        {"$ref": "#/$defs/calendar_temporal_reference_part"},
+                    ]
+                },
+            }
+        },
+        "required": ["parts"],
+        "additionalProperties": False,
+    }
+    operation = {
+        "type": "object",
+        "properties": {
+            "target": {"$ref": "#/$defs/calendar_identity"},
+            "facts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/calendar_fact"},
+            },
+        },
+        "required": ["target", "facts"],
+        "additionalProperties": False,
+    }
+    write = {
+        "type": "object",
+        "properties": {
+            "operations": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/calendar_operation"},
+            }
+        },
+        "required": ["operations"],
+        "additionalProperties": False,
+    }
+    return {
+        "calendar_candidate_scope": candidate_scope,
+        "calendar_identity": identity,
+        "calendar_literal_part": literal_part,
+        "calendar_identity_part": identity_part,
+        "calendar_temporal_reference_part": temporal_part,
+        "calendar_fact": fact,
+        "calendar_operation": operation,
+        "calendar_semantic_write": write,
+    }
+
+
 def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
-    """Build Calendar's strict provider schema without changing the Core planner schema."""
-    definitions = semantic_write_schema_definitions(schema, include_temporal_reference=True)
-    identity = definitions["semantic_identity"]
-    identity["properties"]["note_type"] = {"type": "null"}
-    identity["properties"]["filters"] = {"type": "array", "maxItems": 0}
-    operation = definitions["semantic_operation"]
-    operation["properties"]["apply_to"] = {"type": "string", "enum": ["one"]}
-    operation["properties"]["intent"] = {"type": "string", "enum": ["record"]}
-    operation["properties"]["properties"] = {"type": "array", "maxItems": 0}
-    operation["properties"]["tag_changes"] = {"type": "array", "maxItems": 0}
-    operation["properties"]["destination_type"] = {"type": "null"}
-    definitions.pop("filter_array", None)
-    definitions.pop("semantic_property_changes", None)
+    """Build Calendar's app-native strict schema without exposing generic Core mutation vocabulary."""
+    del schema
+    definitions = _calendar_semantic_write_definitions()
     root = {
         "type": "object",
         "properties": {
@@ -150,7 +268,7 @@ def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
             "semantic_write": {
                 "anyOf": [
                     {"type": "null"},
-                    semantic_write_action_json_schema(),
+                    {"$ref": "#/$defs/calendar_semantic_write"},
                 ]
             },
             "failure_code": {
@@ -173,6 +291,94 @@ def calendar_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
         "additionalProperties": False,
     }
     return {"$defs": definitions, **root}
+
+
+def _expand_calendar_identity(raw: Any) -> dict[str, Any]:
+    """Translate one app-local identity into the full shared Core semantic identity shape."""
+    required = {"description", "binding", "direct_name", "candidate_scope"}
+    if not isinstance(raw, Mapping) or set(raw) != required:
+        raise SemanticWriteCompileError("Calendar semantic identity fields are invalid")
+    scope = raw["candidate_scope"]
+    if scope is not None:
+        if not isinstance(scope, Mapping) or set(scope) != {"source", "member_query", "extent"}:
+            raise SemanticWriteCompileError("Calendar candidate scope fields are invalid")
+        if scope["extent"] != "one_member" or not isinstance(scope["member_query"], str):
+            raise SemanticWriteCompileError("Calendar candidate scope is not singular")
+        source = scope["source"]
+        if not isinstance(source, Mapping):
+            raise SemanticWriteCompileError("Calendar candidate source is invalid")
+        if not (
+            (set(source) == {"kind"} and source["kind"] == "SELF")
+            or (
+                set(source) == {"kind", "description"}
+                and source["kind"] == "SOURCE_DESCRIPTION"
+                and isinstance(source["description"], str)
+            )
+        ):
+            raise SemanticWriteCompileError("Calendar candidate source fields are invalid")
+    return {
+        "description": raw["description"],
+        "binding": raw["binding"],
+        "direct_name": raw["direct_name"],
+        "note_type": None,
+        "filters": [],
+        "candidate_scope": scope,
+    }
+
+
+def _expand_calendar_fact(raw: Any) -> dict[str, Any]:
+    """Translate app-local fact parts while expanding only nested identities."""
+    if not isinstance(raw, Mapping) or set(raw) != {"parts"} or not isinstance(raw["parts"], list):
+        raise SemanticWriteCompileError("Calendar semantic fact fields are invalid")
+    parts: list[dict[str, Any]] = []
+    for part in raw["parts"]:
+        if not isinstance(part, Mapping):
+            raise SemanticWriteCompileError("Calendar semantic fact part is invalid")
+        if set(part) == {"kind", "text"} and part["kind"] == "literal":
+            parts.append(dict(part))
+        elif set(part) == {"kind", "text", "date"} and part["kind"] == "temporal_reference":
+            parts.append(dict(part))
+        elif set(part) == {"kind", "text", "identity"} and part["kind"] == "identity":
+            parts.append(
+                {
+                    "kind": "identity",
+                    "text": part["text"],
+                    "identity": _expand_calendar_identity(part["identity"]),
+                }
+            )
+        else:
+            raise SemanticWriteCompileError("Calendar semantic fact part fields are invalid")
+    return {"parts": parts}
+
+
+def _decode_calendar_semantic_write(raw: Any) -> SemanticWriteIntent:
+    """Lower Calendar's minimal write contract into the existing full Core semantic-write contract."""
+    if not isinstance(raw, Mapping) or set(raw) != {"operations"}:
+        raise SemanticWriteCompileError("Calendar semantic write fields are invalid")
+    operations = raw["operations"]
+    if not isinstance(operations, list) or not operations:
+        raise SemanticWriteCompileError("Calendar semantic write operations are invalid")
+    expanded: list[dict[str, Any]] = []
+    for operation in operations:
+        if not isinstance(operation, Mapping) or set(operation) != {"target", "facts"}:
+            raise SemanticWriteCompileError("Calendar semantic operation fields are invalid")
+        facts = operation["facts"]
+        if not isinstance(facts, list) or not facts:
+            raise SemanticWriteCompileError("Calendar semantic operation facts are invalid")
+        expanded.append(
+            {
+                "target": _expand_calendar_identity(operation["target"]),
+                "apply_to": "one",
+                "intent": "record",
+                "facts": [_expand_calendar_fact(fact) for fact in facts],
+                "properties": [],
+                "tag_changes": [],
+                "destination_type": None,
+            }
+        )
+    return decode_semantic_write_action(
+        {"kind": "write", "operations": expanded}, allow_temporal_reference=True
+    )
 
 
 def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
@@ -202,7 +408,7 @@ def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
         semantic = None
     else:
         try:
-            semantic = decode_semantic_write_action(raw_semantic, allow_temporal_reference=True)
+            semantic = _decode_calendar_semantic_write(raw_semantic)
         except SemanticWriteCompileError as error:
             raise CalendarPlannerError("Calendar semantic write is invalid") from error
     plan = CalendarPlan(outcome, intent, temporal, semantic, failure)

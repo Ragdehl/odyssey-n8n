@@ -143,6 +143,102 @@ def test_router_to_calendar_to_runtime_to_core_persistence_e2e(tmp_path: Path) -
     assert note.metadata["id"] == "date:2026-10-03"
 
 
+def test_router_to_calendar_entity_write_reaches_compiled_core_plan_e2e(tmp_path: Path) -> None:
+    """Carry one temporal entity fact from app-local Structured Output into Core's write contract."""
+    source = "Marta empieza mañana a trabajar en Airbus."
+    schema = load_schema()
+    catalog = calendar_catalog()
+    router_transport = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_transport = FakeResponses(
+        {
+            "outcome": "PLAN",
+            "intent": "CORE_SEMANTIC_WRITE",
+            "temporal_kind": "EXACT_DATE",
+            "exact_date": "2026-10-03",
+            "range_start": None,
+            "range_end_exclusive": None,
+            "semantic_write": {
+                "operations": [
+                    {
+                        "target": {
+                            "description": "Marta",
+                            "binding": "described",
+                            "direct_name": "Marta",
+                            "candidate_scope": None,
+                        },
+                        "facts": [
+                            {
+                                "parts": [
+                                    {"kind": "literal", "text": "empieza "},
+                                    {
+                                        "kind": "temporal_reference",
+                                        "text": "mañana",
+                                        "date": "2026-10-03",
+                                    },
+                                    {"kind": "literal", "text": " a trabajar en "},
+                                    {
+                                        "kind": "identity",
+                                        "text": "Airbus",
+                                        "identity": {
+                                            "description": "Airbus",
+                                            "binding": "described",
+                                            "direct_name": "Airbus",
+                                            "candidate_scope": None,
+                                        },
+                                    },
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            },
+            "failure_code": None,
+        }
+    )
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
+    planner = OpenAICalendarPlanner(
+        SimpleNamespace(responses=calendar_transport),
+        schema,
+        {"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
+    )
+    seen = []
+
+    def execute_core(plan, routed_source, request_id, _actor, _context):  # type: ignore[no-untyped-def]
+        seen.append(plan)
+        unit = plan.actions[0].units[0]
+        assert routed_source == source
+        assert "[[calendar/days/2026-10-03|mañana]]" in unit.facts[0]
+        assert unit.references[0].mention == "Airbus"
+        return ApplicationResult(
+            request_id,
+            ApplicationStatus.COMPLETED,
+            (ActionResult(0, "write", ActionStatus.COMPLETED),),
+            (),
+        )
+
+    executor = CalendarRouteExecutor(
+        planner,
+        schema=schema,
+        capture_day_literal=lambda *_args: pytest.fail(
+            "entity write must not capture a Day literal"
+        ),
+        execute_core_write=execute_core,
+    )
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer-entity-write",
+        router=router,
+        catalog=catalog,
+        core_execute=lambda *_args, **_kwargs: pytest.fail("Calendar owns temporal interpretation"),
+        application_executors={"calendar": executor},
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert len(seen) == 1
+    assert router_transport.calls == 1 and calendar_transport.calls == 1
+
+
 def test_router_needs_capability_never_invokes_calendar_or_mutates_vault(tmp_path: Path) -> None:
     """Keep sibling-app knowledge in Router and stop before Calendar on unsupported ownership."""
     schema = load_schema()

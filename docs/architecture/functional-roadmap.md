@@ -168,8 +168,8 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  🚧 Slice 6 Attempt 3 blocked at Calendar provider-schema boundary; successor provider-free
-Application Boundary + Router v0                                    🚧 Router low unstable on dependent route; Attempt 3 Calendar schema rejected
+Temporal Foundation + Calendar v0                                  🚧 Attempt 4 app-native Calendar schema deterministic; live gate pending authorization
+Application Boundary + Router v0                                    🚧 Router Luna-medium successor deterministic; Attempt 4 pending authorization
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -282,10 +282,10 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     🚧 Attempt 3 has no Calendar model evidence; app-native schema successor required
+Temporal Foundation + Calendar v0                     🚧 Attempt 4 provider-free ready; Calendar app-native schema + local decoder
         |
         v
-Application Boundary + Router v0                     🚧 Router low repeated dependent-route miss; reasoning effort reevaluation next
+Application Boundary + Router v0                     🚧 Router medium candidate + whitespace-aware v2 oracle ready provider-free
         |
         v
 Router + Calendar focused live gates / Slice 6

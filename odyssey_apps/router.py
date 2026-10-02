@@ -16,7 +16,7 @@ from typing import Any, Protocol
 from .catalog import CORE_CAPABILITY_ID, ApplicationCatalog
 
 ROUTER_MODEL = "gpt-6-luna"
-ROUTER_REASONING_EFFORT = "low"
+ROUTER_REASONING_EFFORT = "medium"
 ROUTER_MAX_OUTPUT_TOKENS = 512
 ROUTER_MAX_RECENT_TURNS = 8
 ROUTER_MAX_CONTEXT_CHARS = 1_000

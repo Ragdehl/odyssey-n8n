@@ -69,27 +69,22 @@ def calendar_payload(
     }
 
 
-def identity(description: str, direct_name: str | None, note_type: str | None) -> dict[str, Any]:
-    """Build one complete semantic identity used by the Calendar Core-write branch."""
+def identity(description: str, direct_name: str | None) -> dict[str, Any]:
+    """Build one app-local identity used by Calendar's minimal Core-write branch."""
     return {
         "description": description,
         "binding": "described",
         "direct_name": direct_name,
-        "note_type": note_type,
-        "filters": [],
         "candidate_scope": None,
     }
 
 
 def marta_write() -> dict[str, Any]:
-    """Build a semantic write with one exact temporal reference and Airbus identity."""
+    """Build an app-local fact write with one temporal reference and one identity participant."""
     return {
-        "kind": "write",
         "operations": [
             {
-                "target": identity("Marta", "Marta", None),
-                "apply_to": "one",
-                "intent": "record",
+                "target": identity("Marta", "Marta"),
                 "facts": [
                     {
                         "parts": [
@@ -99,17 +94,14 @@ def marta_write() -> dict[str, Any]:
                             {
                                 "kind": "identity",
                                 "text": "Airbus",
-                                "identity": identity("Airbus", "Airbus", None),
+                                "identity": identity("Airbus", "Airbus"),
                             },
                             {"kind": "literal", "text": "."},
                         ]
                     }
                 ],
-                "properties": [],
-                "tag_changes": [],
-                "destination_type": None,
             }
-        ],
+        ]
     }
 
 
@@ -215,31 +207,76 @@ def test_malformed_or_cross_correlated_calendar_payloads_fail_locally(
         parse_calendar_plan(payload)
 
 
-def test_calendar_schema_adds_temporal_part_only_inside_calendar_contract(
+def test_calendar_schema_is_app_native_and_excludes_generic_core_mutation_vocabulary(
     schema: dict[str, Any],
 ) -> None:
-    """Expose the app-only temporal vocabulary without making it a generic Core planner field."""
+    """Expose only identity/fact/time semantics rather than a constrained copy of Core's write schema."""
     provider = calendar_plan_json_schema(schema)
-    assert "semantic_temporal_reference_part" in provider["$defs"]
-    temporal = provider["$defs"]["semantic_temporal_reference_part"]
-    assert set(temporal["properties"]) == {"kind", "text", "date"}
+    assert set(provider["$defs"]) == {
+        "calendar_candidate_scope",
+        "calendar_identity",
+        "calendar_literal_part",
+        "calendar_identity_part",
+        "calendar_temporal_reference_part",
+        "calendar_fact",
+        "calendar_operation",
+        "calendar_semantic_write",
+    }
+    identity_schema = provider["$defs"]["calendar_identity"]
+    assert set(identity_schema["properties"]) == {
+        "description",
+        "binding",
+        "direct_name",
+        "candidate_scope",
+    }
+    operation = provider["$defs"]["calendar_operation"]
+    assert set(operation["properties"]) == {"target", "facts"}
+    scope = provider["$defs"]["calendar_candidate_scope"]
+    assert scope["properties"]["extent"]["enum"] == ["one_member"]
+    temporal = provider["$defs"]["calendar_temporal_reference_part"]
     assert temporal["properties"]["kind"]["enum"] == ["temporal_reference"]
-    identity_schema = provider["$defs"]["semantic_identity"]
-    assert identity_schema["properties"]["note_type"] == {"type": "null"}
-    assert identity_schema["properties"]["filters"] == {"type": "array", "maxItems": 0}
-    operation = provider["$defs"]["semantic_operation"]
-    assert operation["properties"]["apply_to"]["enum"] == ["one"]
-    assert operation["properties"]["intent"]["enum"] == ["record"]
-    assert operation["properties"]["properties"] == {"type": "array", "maxItems": 0}
-    assert operation["properties"]["tag_changes"] == {"type": "array", "maxItems": 0}
-    assert operation["properties"]["destination_type"] == {"type": "null"}
-    assert "filter_array" not in provider["$defs"]
-    assert "semantic_property_changes" not in provider["$defs"]
-    assert "journal_entry" not in json.dumps(provider)
+    serialized = json.dumps(provider)
+    for forbidden in (
+        "journal_entry",
+        "note_type",
+        "filters",
+        "tag_changes",
+        "destination_type",
+        "all_matching",
+        "semantic_property_changes",
+    ):
+        assert forbidden not in serialized
 
 
-def test_calendar_core_write_rejects_core_surface_authority_even_if_schema_is_bypassed() -> None:
-    """Fail locally if a provider bypass tries type/property/destination authority."""
+def test_calendar_provider_schema_has_closed_required_objects_and_resolved_local_refs(
+    schema: dict[str, Any],
+) -> None:
+    """Catch provider-schema shape regressions before any live gate reaches the API."""
+    provider = calendar_plan_json_schema(schema)
+    defs = provider["$defs"]
+
+    def visit(node: object) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                properties = node.get("properties", {})
+                assert node.get("additionalProperties") is False
+                assert set(node.get("required", [])) == set(properties)
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                assert ref.removeprefix("#/$defs/") in defs
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(provider)
+
+
+def test_calendar_decoder_rejects_generic_core_surface_fields_even_if_provider_schema_is_bypassed() -> (
+    None
+):
+    """Reject old/broad Core write fields before the app-local intent can reach Core."""
     variants = []
     typed = marta_write()
     typed["operations"][0]["target"]["note_type"] = "journal_entry"
@@ -247,11 +284,15 @@ def test_calendar_core_write_rejects_core_surface_authority_even_if_schema_is_by
     destination = marta_write()
     destination["operations"][0]["destination_type"] = "journal_entry"
     variants.append(destination)
-    bulk = marta_write()
-    bulk["operations"][0]["apply_to"] = "all_matching"
-    variants.append(bulk)
+    bulk_scope = marta_write()
+    bulk_scope["operations"][0]["target"]["candidate_scope"] = {
+        "source": {"kind": "SELF"},
+        "member_query": "mis hijos",
+        "extent": "complete_set",
+    }
+    variants.append(bulk_scope)
     for semantic_write in variants:
-        with pytest.raises(CalendarPlannerError, match="app-local authority"):
+        with pytest.raises(CalendarPlannerError):
             parse_calendar_plan(
                 calendar_payload(intent="CORE_SEMANTIC_WRITE", semantic_write=semantic_write)
             )
