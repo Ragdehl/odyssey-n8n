@@ -316,7 +316,48 @@ def test_nonexecuting_router_outcomes_have_distinct_product_semantics(
 
     assert getattr(result, field) == code
     assert response["product_outcome"] == expected_product
+    assert response["product_reason"] == code
     assert response["actions"] == []
+
+
+def test_router_provider_usage_is_retained_as_operational_stage() -> None:
+    """Carry Router model/tokens into public operational evidence for cost calculation."""
+
+    class TelemetryRouter(FixedRouter):
+        model = "gpt-6-luna"
+        reasoning_effort = "medium"
+        last_call = True
+        last_provider_status = "completed"
+        last_response_id = "resp-router"
+        last_error_category = None
+        last_usage = {
+            "input_tokens": 100,
+            "output_tokens": 25,
+            "input_tokens_details": {"cached_tokens": 20},
+            "output_tokens_details": {"reasoning_tokens": 7},
+        }
+
+    router = TelemetryRouter(RoutePlan(RouteOutcome.ROUTE, (Route("core", "Remember tea."),)))
+    result = execute_routed_request(
+        user_request="Remember tea.",
+        outer_request_id="outer",
+        router=router,
+        catalog=_catalog(),
+        core_execute=lambda source, locator, actor, **kwargs: _result(locator),
+        application_executors={},
+    )
+
+    stage = result.operational.stages[0]
+    assert stage.name == "application.router"
+    assert stage.model == "gpt-6-luna"
+    assert stage.reasoning_effort == "medium"
+    assert stage.usage == {
+        "input_tokens": 100,
+        "cached_input_tokens": 20,
+        "output_tokens": 25,
+        "reasoning_tokens": 7,
+    }
+    assert stage.provider_calls[0].response_id == "resp-router"
 
 
 def test_scalar_pending_and_history_fail_closed_when_multiple_routes_provide_them() -> None:

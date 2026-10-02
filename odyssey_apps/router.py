@@ -227,6 +227,10 @@ class OpenAIApplicationRouter:
         self.model = ROUTER_MODEL
         self.reasoning_effort = ROUTER_REASONING_EFFORT
         self.last_call = False
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
 
     @classmethod
     def from_environment(cls, catalog: ApplicationCatalog) -> OpenAIApplicationRouter:
@@ -249,6 +253,10 @@ class OpenAIApplicationRouter:
         if not isinstance(original_request, str) or not original_request.strip():
             raise RouterError("Original request must be a non-empty string")
         self.last_call = False
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
         prompt = render_router_prompt(self._catalog, conversation_context)
         self.last_call = True
         try:
@@ -271,8 +279,12 @@ class OpenAIApplicationRouter:
                 },
             )
         except Exception as error:
+            self.last_error_category = type(error).__name__
             raise RouterError("Application router provider call failed") from error
-        if getattr(response, "status", None) != "completed":
+        self.last_usage = getattr(response, "usage", None)
+        self.last_response_id = getattr(response, "id", None)
+        self.last_provider_status = getattr(response, "status", None)
+        if self.last_provider_status != "completed":
             raise RouterError("Application router provider response was not completed")
         try:
             payload = json.loads(response.output_text)

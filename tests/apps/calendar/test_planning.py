@@ -315,6 +315,23 @@ def test_calendar_decoder_rejects_generic_core_surface_fields_even_if_provider_s
             )
 
 
+def test_calendar_rejects_candidate_scope_that_selects_identity_from_itself() -> None:
+    """Do not turn an explicit identity into a meaningless self-referential relationship scope."""
+    semantic_write = marta_write()
+    target = semantic_write["operations"][0]["target"]
+    target["direct_name"] = None
+    target["candidate_scope"] = {
+        "source": {"kind": "SOURCE_DESCRIPTION", "description": "Marta"},
+        "member_query": "Marta",
+        "extent": "one_member",
+    }
+
+    with pytest.raises(CalendarPlannerError):
+        parse_calendar_plan(
+            calendar_payload(intent="CORE_SEMANTIC_WRITE", semantic_write=semantic_write)
+        )
+
+
 def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
     """Keep language interpretation in Calendar while prior conversation remains bounded evidence."""
     prompt = render_calendar_prompt(
@@ -328,6 +345,8 @@ def test_prompt_uses_current_context_and_only_bounded_prior_turns() -> None:
     assert "Tasks" not in prompt and "Journal" not in prompt and "diary" not in prompt
     assert "other capability" in prompt
     assert "distinct logical participants as identity parts" in prompt
+    assert "Use direct_name for an identity explicitly named by a proper name or alias" in prompt
+    assert "never make the selected identity its own source" in prompt
     assert "the entity-owned durable interpretation takes precedence" in prompt
     assert "emit CORE_SEMANTIC_WRITE rather than DAY_LITERAL_CAPTURE" in prompt
     assert (
@@ -386,6 +405,39 @@ def test_fake_provider_uses_gpt6_luna_low_one_call_and_exact_current_source(
         "content": "Dentro de tres días viene el fontanero",
     }
     assert '"text":"prior"' in call["input"][0]["content"]
+
+
+def test_calendar_planner_retains_bounded_provider_usage_for_runtime_telemetry(
+    schema: dict[str, Any],
+) -> None:
+    """Expose only safe call metadata needed for the runtime info panel and cost estimate."""
+    usage = {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "input_tokens_details": {"cached_tokens": 20},
+        "output_tokens_details": {"reasoning_tokens": 10},
+    }
+    fake = FakeResponses(
+        SimpleNamespace(
+            id="resp-calendar",
+            status="completed",
+            usage=usage,
+            output_text=json.dumps(calendar_payload()),
+        )
+    )
+    planner = OpenAICalendarPlanner(
+        SimpleNamespace(responses=fake),
+        schema,
+        {"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
+    )
+
+    planner.plan("Mañana viene el fontanero")
+
+    assert planner.last_call is True
+    assert planner.last_usage is usage
+    assert planner.last_response_id == "resp-calendar"
+    assert planner.last_provider_status == "completed"
+    assert planner.last_error_category is None
 
 
 @pytest.mark.parametrize(

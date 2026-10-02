@@ -55,12 +55,29 @@ def test_request_cost_handles_cached_input_and_fails_closed() -> None:
 def test_request_cost_supports_luna_and_bounded_sol_calls() -> None:
     """Use the dated snapshot for every allowlisted provider model, including Sol fallback."""
     source = SOURCE.read_text(encoding="utf-8")
-    snapshot = (
-        Path(__file__).parents[1] / "benchmarks/phase20_answerer/pricing_snapshot.json"
-    ).read_text(encoding="utf-8")
+    snapshot = (Path(__file__).parents[1] / "config/runtime-pricing-snapshot.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"gpt-6-luna"' in snapshot
     assert '"gpt-5.6-luna"' in snapshot
     assert '"gpt-5.6-sol"' in snapshot
     assert "pricing.as_of" in source
+
+
+def test_routed_application_failures_keep_specific_user_facing_messages() -> None:
+    """Do not collapse known Router/Calendar outcomes back into generic evidence failures."""
+    source = SOURCE.read_text(encoding="utf-8")
+    for code in (
+        "ROUTER_NEEDS_CAPABILITY",
+        "ROUTER_INVALID",
+        "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "TEMPORAL_UNRESOLVED",
+        "CALENDAR_PLANNER_INVALID",
+        "CALENDAR_EXECUTION_FAILED",
+    ):
+        assert code in source
+    assert "No he guardado nada." in source
+    assert "No puedo convertir esa referencia temporal en una fecha exacta sin adivinar" in source
 
 
 def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> None:

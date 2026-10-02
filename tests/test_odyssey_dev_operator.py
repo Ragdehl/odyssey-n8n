@@ -48,6 +48,18 @@ def test_render_binds_the_isolated_answerer_credential_id() -> None:
     assert 'name: "Odyssey DEV OpenAI Answerer"' in source
 
 
+def test_dev_workflow_pricing_uses_runtime_snapshot_with_gpt6_luna() -> None:
+    """Keep operational cost display separate from frozen benchmark pricing evidence."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    pricing = (Path(__file__).parents[1] / "config" / "runtime-pricing-snapshot.json").read_text(
+        encoding="utf-8"
+    )
+    assert "DEV_PRICING=$DEV_SOURCE/config/runtime-pricing-snapshot.json" in source
+    assert "phase20_answerer/pricing_snapshot.json" not in source
+    assert '"gpt-6-luna"' in pricing
+    assert '"as_of": "2026-10-02"' in pricing
+
+
 def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
     """Keep the isolated DEV planner able to use the existing protected provider key."""
     service = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-runtime.service").read_text(

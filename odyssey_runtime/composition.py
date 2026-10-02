@@ -23,6 +23,8 @@ from odyssey_apps import (
 )
 from odyssey_apps.calendar import (
     CALENDAR_DESCRIPTOR,
+    CALENDAR_PLANNER_MODEL,
+    CALENDAR_PLANNER_REASONING_EFFORT,
     CalendarApplication,
     CalendarLiteralCaptureService,
     CalendarQueryService,
@@ -120,14 +122,33 @@ class _FreshCalendarPlanner:
 
     def __init__(self, schema: Mapping[str, object]) -> None:
         self._schema = schema
+        self.model = CALENDAR_PLANNER_MODEL
+        self.reasoning_effort = CALENDAR_PLANNER_REASONING_EFFORT
+        self.last_call = False
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
 
     def plan(self, source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()):  # type: ignore[no-untyped-def]
         """Plan one routed Calendar source using the current date/time rather than process startup."""
+        self.last_call = False
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
         clock = _current_time()
         planner = OpenAICalendarPlanner.from_environment(
             self._schema, {key: clock[key] for key in ("date", "time", "timezone")}
         )
-        return planner.plan(source_text, conversation_context)
+        try:
+            return planner.plan(source_text, conversation_context)
+        finally:
+            self.last_call = planner.last_call
+            self.last_usage = planner.last_usage
+            self.last_response_id = planner.last_response_id
+            self.last_provider_status = planner.last_provider_status
+            self.last_error_category = planner.last_error_category
 
 
 def _enabled_application_ids() -> tuple[str, ...]:

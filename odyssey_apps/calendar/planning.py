@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from time import perf_counter
 from typing import Any, Protocol
 
 from odyssey_core.application import (
@@ -18,6 +19,13 @@ from odyssey_core.application import (
     ActionStatus,
     ApplicationResult,
     ApplicationStatus,
+)
+from odyssey_core.observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    ProviderCallEvidence,
+    normalize_provider_usage,
 )
 from odyssey_core.request_planning import RequestPlan
 from odyssey_core.semantic_write import (
@@ -316,6 +324,16 @@ def _expand_calendar_identity(raw: Any) -> dict[str, Any]:
             )
         ):
             raise SemanticWriteCompileError("Calendar candidate source fields are invalid")
+        if raw["direct_name"] is not None:
+            raise SemanticWriteCompileError("Calendar direct identity cannot use candidate scope")
+        if source.get("kind") == "SOURCE_DESCRIPTION":
+            source_description = source["description"].strip().casefold()
+            identity_description = str(raw["description"]).strip().casefold()
+            member_query = scope["member_query"].strip().casefold()
+            if source_description in {identity_description, member_query}:
+                raise SemanticWriteCompileError(
+                    "Calendar candidate scope cannot select from itself"
+                )
     return {
         "description": raw["description"],
         "binding": raw["binding"],
@@ -582,8 +600,12 @@ def render_calendar_prompt(
         "durable statement with EXACT_DATE, emit CORE_SEMANTIC_WRITE and include exactly one "
         "temporal_reference part using the original temporal mention and the same normalized date. "
         "Within that semantic write, preserve distinct logical participants as identity parts when they "
-        "are safely selectable Odyssey identities; literal parts are for non-identity context or values, "
-        "and ordinary context must not be promoted speculatively. Calendar Core writes are fact-only: "
+        "are safely selectable Odyssey identities. Use direct_name for an identity explicitly named by "
+        "a proper name or alias. Use candidate_scope only when the wording defines the identity by "
+        "membership or relationship to SELF or to another distinct source; never use candidate_scope "
+        "merely to restate an explicit name, and never make the selected identity its own source. "
+        "Literal parts are for non-identity context or values, and ordinary context must not be promoted "
+        "speculatively. Calendar Core writes are fact-only: "
         "never emit type constraints, filters, properties, tags, destination types, reclassification, "
         "or bulk selection. For remaining Day-owned occurrences, "
         "EXACT_DATE uses DAY_LITERAL_CAPTURE, DATE_RANGE uses "
@@ -607,6 +629,10 @@ class OpenAICalendarPlanner:
         self.model = CALENDAR_PLANNER_MODEL
         self.reasoning_effort = CALENDAR_PLANNER_REASONING_EFFORT
         self.last_call = False
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
 
     @classmethod
     def from_environment(
@@ -630,6 +656,10 @@ class OpenAICalendarPlanner:
         if not isinstance(source_text, str) or not source_text.strip():
             raise CalendarPlannerError("Calendar source text must be non-empty")
         self.last_call = False
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
         prompt = render_calendar_prompt(
             current_context=self._current_context, conversation_context=conversation_context
         )
@@ -654,8 +684,12 @@ class OpenAICalendarPlanner:
                 },
             )
         except Exception as error:
+            self.last_error_category = type(error).__name__
             raise CalendarPlannerError("Calendar planner provider call failed") from error
-        if getattr(response, "status", None) != "completed":
+        self.last_usage = getattr(response, "usage", None)
+        self.last_response_id = getattr(response, "id", None)
+        self.last_provider_status = getattr(response, "status", None)
+        if self.last_provider_status != "completed":
             raise CalendarPlannerError("Calendar planner provider response was not completed")
         try:
             payload = json.loads(response.output_text)
@@ -690,36 +724,112 @@ class CalendarRouteExecutor:
         authenticated_actor: object | None = None,
         conversation_context: Sequence[Mapping[str, str]] = (),
     ) -> ApplicationResult:
-        """Execute one exact routed Calendar span or return bounded content-free failure evidence."""
+        """Execute one exact routed Calendar span and retain bounded planner telemetry."""
+        planner_started = perf_counter()
         try:
             plan = self._planner.plan(source_text, conversation_context)
             if not isinstance(plan, CalendarPlan):
                 raise CalendarPlannerError("Calendar planner returned an invalid plan")
             validate_calendar_plan_for_source(plan, source_text)
-        except Exception:
-            return _failure(request_id, "CALENDAR_PLANNER_INVALID")
+        except Exception as error:
+            stage = _calendar_planner_stage(self._planner, planner_started, error)
+            return _prepend_operational_stage(
+                _failure(request_id, "CALENDAR_PLANNER_INVALID"), stage
+            )
+        stage = _calendar_planner_stage(self._planner, planner_started)
         if plan.outcome is CalendarPlanOutcome.FAIL_CLOSED:
-            return _fail_closed(request_id, plan.failure_code)
+            return _prepend_operational_stage(_fail_closed(request_id, plan.failure_code), stage)
         try:
             if plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE:
-                return self._capture_day_literal(
+                result = self._capture_day_literal(
                     plan.temporal.exact_date or "", source_text, request_id, authenticated_actor
                 )
+                return _prepend_operational_stage(result, stage)
             if (
                 plan.intent is CalendarIntentKind.CORE_SEMANTIC_WRITE
                 and plan.semantic_write is not None
             ):
                 write = compile_semantic_write(plan.semantic_write, self._schema)
-                return self._execute_core_write(
+                result = self._execute_core_write(
                     RequestPlan((write,), ()),
                     source_text,
                     request_id,
                     authenticated_actor,
                     conversation_context,
                 )
+                return _prepend_operational_stage(result, stage)
         except Exception:
-            return _failure(request_id, "CALENDAR_EXECUTION_FAILED")
-        return _failure(request_id, "CALENDAR_PLAN_INVALID")
+            return _prepend_operational_stage(
+                _failure(request_id, "CALENDAR_EXECUTION_FAILED"), stage
+            )
+        return _prepend_operational_stage(_failure(request_id, "CALENDAR_PLAN_INVALID"), stage)
+
+
+def _calendar_planner_stage(
+    planner: Any, started: float, error: Exception | None = None
+) -> OperationalStage:
+    """Expose one bounded Calendar provider call without retaining prompt or response content."""
+    duration_ms = max(0.0, (perf_counter() - started) * 1000)
+    usage = normalize_provider_usage(getattr(planner, "last_usage", None))
+    provider_status = getattr(planner, "last_provider_status", None)
+    attempted = bool(getattr(planner, "last_call", False))
+    calls: tuple[ProviderCallEvidence, ...] = ()
+    if attempted:
+        call_outcome = (
+            OperationalOutcome.COMPLETED
+            if provider_status == "completed"
+            else OperationalOutcome.FAILED
+        )
+        calls = (
+            ProviderCallEvidence(
+                name="calendar.planner",
+                outcome=call_outcome,
+                duration_ms=duration_ms,
+                model=getattr(planner, "model", None),
+                reasoning_effort=getattr(planner, "reasoning_effort", None),
+                usage=usage,
+                error_category=getattr(planner, "last_error_category", None),
+                response_id=getattr(planner, "last_response_id", None),
+                provider_status=provider_status,
+                attempt_count=1,
+                ordinal=1,
+            ),
+        )
+    return OperationalStage(
+        "calendar.planner",
+        OperationalOutcome.FAILED if error is not None else OperationalOutcome.COMPLETED,
+        duration_ms,
+        model=getattr(planner, "model", None),
+        reasoning_effort=getattr(planner, "reasoning_effort", None),
+        usage=usage,
+        error_category=type(error).__name__ if error is not None else None,
+        provider_calls=calls,
+        start_offset_ms=0.0,
+    )
+
+
+def _prepend_operational_stage(
+    result: ApplicationResult, stage: OperationalStage
+) -> ApplicationResult:
+    """Prepend Calendar planning and shift existing route-local stages after it."""
+    shift = stage.duration_ms or 0.0
+    shifted = tuple(
+        replace(
+            item,
+            start_offset_ms=(
+                item.start_offset_ms + shift if item.start_offset_ms is not None else None
+            ),
+        )
+        for item in result.operational.stages
+    )
+    total = result.operational.total_duration_ms
+    return replace(
+        result,
+        operational=OperationalEvidence(
+            total_duration_ms=(shift + total if total is not None else None),
+            stages=(stage, *shifted),
+        ),
+    )
 
 
 def _fail_closed(request_id: str, failure_code: CalendarFailureCode | None) -> ApplicationResult:

@@ -10,6 +10,7 @@ import hashlib
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from time import perf_counter
 from typing import Protocol
 
 from odyssey_apps import (
@@ -29,7 +30,13 @@ from odyssey_core.application import (
 )
 from odyssey_core.git_history import GitHistoryResult, HistoryStatus
 from odyssey_core.identity_boundary import AuthenticatedActorContext
-from odyssey_core.observability import OperationalEvidence
+from odyssey_core.observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    ProviderCallEvidence,
+    normalize_provider_usage,
+)
 
 
 class ApplicationRouter(Protocol):
@@ -107,17 +114,27 @@ def execute_routed_request(
     and invalid correlations become bounded failed route evidence, allowing later independent
     routes to continue.  No route receives sibling current-message text.
     """
+    router_started = perf_counter()
     try:
         plan = router.route(user_request, conversation_context)
         plan = validate_route_plan(plan, user_request, catalog)
     except Exception as error:
-        return _router_failure(outer_request_id, "ROUTER_INVALID", error)
+        stage = _router_stage(router, router_started, error)
+        return _prepend_router_stage(
+            _router_failure(outer_request_id, "ROUTER_INVALID", error), stage
+        )
+    stage = _router_stage(router, router_started)
     if plan.outcome is RouteOutcome.CLARIFY:
-        return _router_outcome(outer_request_id, "ROUTER_CLARIFY")
+        return _prepend_router_stage(_router_outcome(outer_request_id, "ROUTER_CLARIFY"), stage)
     if plan.outcome is RouteOutcome.NEEDS_CAPABILITY:
-        return _router_outcome(outer_request_id, "ROUTER_NEEDS_CAPABILITY")
+        return _prepend_router_stage(
+            _router_outcome(outer_request_id, "ROUTER_NEEDS_CAPABILITY"), stage
+        )
     if plan.outcome is not RouteOutcome.ROUTE:  # Defensive against a malicious Protocol adapter.
-        return _router_failure(outer_request_id, "ROUTER_INVALID", TypeError("unknown outcome"))
+        return _prepend_router_stage(
+            _router_failure(outer_request_id, "ROUTER_INVALID", TypeError("unknown outcome")),
+            stage,
+        )
 
     subresults: list[ApplicationResult] = []
     for ordinal, route in enumerate(plan.routes):
@@ -132,7 +149,59 @@ def execute_routed_request(
                 conversation_context,
             )
         )
-    return _aggregate(outer_request_id, subresults)
+    return _prepend_router_stage(_aggregate(outer_request_id, subresults), stage)
+
+
+def _router_stage(
+    router: ApplicationRouter, started: float, error: Exception | None = None
+) -> OperationalStage:
+    """Expose bounded router provider metadata without retaining route prompt or response content."""
+    duration_ms = max(0.0, (perf_counter() - started) * 1000)
+    usage = normalize_provider_usage(getattr(router, "last_usage", None))
+    provider_status = getattr(router, "last_provider_status", None)
+    attempted = bool(getattr(router, "last_call", False))
+    calls: tuple[ProviderCallEvidence, ...] = ()
+    if attempted:
+        calls = (
+            ProviderCallEvidence(
+                name="application.router",
+                outcome=(
+                    OperationalOutcome.COMPLETED
+                    if provider_status == "completed"
+                    else OperationalOutcome.FAILED
+                ),
+                duration_ms=duration_ms,
+                model=getattr(router, "model", None),
+                reasoning_effort=getattr(router, "reasoning_effort", None),
+                usage=usage,
+                error_category=getattr(router, "last_error_category", None),
+                response_id=getattr(router, "last_response_id", None),
+                provider_status=provider_status,
+                attempt_count=1,
+                ordinal=1,
+            ),
+        )
+    return OperationalStage(
+        "application.router",
+        OperationalOutcome.FAILED if error is not None else OperationalOutcome.COMPLETED,
+        duration_ms,
+        model=getattr(router, "model", None),
+        reasoning_effort=getattr(router, "reasoning_effort", None),
+        usage=usage,
+        error_category=type(error).__name__ if error is not None else None,
+        provider_calls=calls,
+    )
+
+
+def _prepend_router_stage(result: ApplicationResult, stage: OperationalStage) -> ApplicationResult:
+    """Retain one router stage ahead of all route-local operational evidence."""
+    return replace(
+        result,
+        operational=OperationalEvidence(
+            total_duration_ms=result.operational.total_duration_ms,
+            stages=(stage, *result.operational.stages),
+        ),
+    )
 
 
 def _execute_route(

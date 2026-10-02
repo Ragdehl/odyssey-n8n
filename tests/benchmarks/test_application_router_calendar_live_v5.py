@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 import pytest
 
@@ -29,20 +30,21 @@ def test_v5_gate_uses_the_production_calendar_descriptor() -> None:
     assert "temporal interpretation of date-qualified statements" in calendar.routing_description
 
 
-def test_v5_gate_ceiling_remains_below_authorized_scale() -> None:
-    """Compute the full 8+8 worst-case budget without constructing a provider client."""
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 16
-    assert budget["regional_usd_upper"] < run_live.AUTHORIZED_CEILING_USD == 0.014
+def test_retained_v5_artifact_records_its_original_authorized_budget() -> None:
+    """Judge the consumed 8+8 experiment from retained usage, not today's longer prompt."""
+    artifact = json.loads((run_live.RESULTS_DIR / "e186cf48561c.json").read_text(encoding="utf-8"))
+    assert artifact["provider_attempts"] == run_live.MAX_CALLS == 16
+    assert artifact["automatic_retries"] == 0
+    assert artifact["estimated_regional_upper_usd"] < run_live.AUTHORIZED_CEILING_USD == 0.014
 
 
-def test_v5_gate_has_zero_provider_authority_without_explicit_flag(
+def test_consumed_v5_preflight_refuses_after_current_prompt_budget_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Refuse provider execution before checking credentials or constructing OpenAI."""
+    """Historical v5 cannot regain provider authority after its model-facing input changes."""
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="fresh authorization required"):
         run_live._preflight()
 
 

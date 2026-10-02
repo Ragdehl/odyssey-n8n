@@ -8,7 +8,11 @@ import json
 import pytest
 
 from benchmarks.application_router_calendar_live_v8 import run_live
-from odyssey_apps.calendar.planning import CALENDAR_PLANNER_REASONING_EFFORT
+from odyssey_apps.calendar.planning import (
+    CALENDAR_PLANNER_REASONING_EFFORT,
+    CalendarPlannerError,
+    parse_calendar_plan,
+)
 
 
 def test_v8_gate_freezes_calendar_v4_matrix() -> None:
@@ -37,27 +41,48 @@ def test_calendar_v4_preserves_consumed_v3_except_clearer_state_start_identity_s
     assert new_by_id[changed]["expect"]["intent"] == "CORE_SEMANTIC_WRITE"
 
 
-def test_v8_reuses_router_v5_only_while_router_boundary_is_unchanged() -> None:
-    """Do not spend Router calls when its exact previously passing boundary is unchanged."""
-    assert run_live._router_boundary_unchanged_since_v5()
+def test_retained_v8_entity_pass_documents_the_old_executability_oracle_gap() -> None:
+    """The retained PASS contained a self-referential scope that current validation rejects."""
+    artifact = json.loads((run_live.RESULTS_DIR / "32dce15a4436.json").read_text(encoding="utf-8"))
+    row = next(item for item in artifact["rows"] if item["id"] == "entity-owned-exact-date")
+
+    assert row["passed"] is True
+    assert row["raw_output"]["semantic_write"]["operations"][0]["target"] == {
+        "description": "Marta",
+        "binding": "described",
+        "direct_name": None,
+        "candidate_scope": {
+            "source": {"kind": "SOURCE_DESCRIPTION", "description": "Marta"},
+            "member_query": "Marta",
+            "extent": "one_member",
+        },
+    }
+    with pytest.raises(CalendarPlannerError):
+        parse_calendar_plan(row["raw_output"])
+
+
+def test_v8_router_reuse_is_retired_after_the_successor_boundary_changed() -> None:
+    """Consumed v8 evidence must not be reused after Router/Calendar production files change."""
+    assert not run_live._router_boundary_unchanged_since_v5()
     assert run_live.ROUTER_V5_PASS_COMMIT == "e186cf48561cfda9097f42268c8efaa82bab18bf"
 
 
-def test_v8_is_calendar_low_and_budgeted_for_ten_calls() -> None:
-    """Keep the reviewed experiment on Luna low and below its one-shot ceiling."""
+def test_retained_v8_artifact_records_the_authorized_ten_call_budget() -> None:
+    """Judge the consumed experiment from retained usage rather than today's longer prompt."""
+    artifact = json.loads((run_live.RESULTS_DIR / "32dce15a4436.json").read_text(encoding="utf-8"))
     assert CALENDAR_PLANNER_REASONING_EFFORT == "low"
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 10
-    assert budget["regional_usd_upper"] < run_live.AUTHORIZED_CEILING_USD == 0.012
+    assert artifact["provider_attempts"] == 10
+    assert artifact["automatic_retries"] == 0
+    assert artifact["estimated_regional_upper_usd"] < run_live.AUTHORIZED_CEILING_USD == 0.012
 
 
-def test_v8_has_zero_provider_authority_without_explicit_flag(
+def test_consumed_v8_preflight_refuses_current_changed_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Refuse provider execution before credential use when authorization is absent."""
+    """A historical runner cannot regain provider authority after its boundary changes."""
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="Router boundary changed"):
         run_live._preflight()
 
 

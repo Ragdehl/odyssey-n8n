@@ -1516,16 +1516,29 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
             return None
 
     class FakeResponses:
-        def __init__(self, payload):
+        def __init__(self, payload, *, response_id: str, usage: dict[str, object]):
             self.payload = payload
+            self.response_id = response_id
+            self.usage = usage
             self.calls = 0
 
         def create(self, **_kwargs):
             self.calls += 1
-            return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
+            return SimpleNamespace(
+                id=self.response_id,
+                status="completed",
+                usage=self.usage,
+                output_text=json.dumps(self.payload),
+            )
 
     router_responses = FakeResponses(
-        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]},
+        response_id="resp-router-e2e",
+        usage={
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "input_tokens_details": {"cached_tokens": 10},
+        },
     )
     calendar_responses = FakeResponses(
         {
@@ -1537,7 +1550,13 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
             "range_end_exclusive": None,
             "semantic_write": None,
             "failure_code": None,
-        }
+        },
+        response_id="resp-calendar-e2e",
+        usage={
+            "input_tokens": 140,
+            "output_tokens": 30,
+            "input_tokens_details": {"cached_tokens": 20},
+        },
     )
     calendar_contexts: list[dict[str, str]] = []
 
@@ -1602,3 +1621,15 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
     public = application_result_to_response(result)
     assert public["product_outcome"] == "ANSWER"
     assert public["actions"][0]["units"][0]["status"] == "succeeded"
+    stages = public["operational"]["stages"]
+    assert [stage["name"] for stage in stages] == [
+        "application.router",
+        "calendar.planner",
+        "index_refresh",
+    ]
+    assert stages[0]["model"] == "gpt-6-luna"
+    assert stages[0]["usage"]["input_tokens"] == 100
+    assert stages[0]["provider_calls"][0]["response_id"] == "resp-router-e2e"
+    assert stages[1]["model"] == "gpt-6-luna"
+    assert stages[1]["usage"]["input_tokens"] == 140
+    assert stages[1]["provider_calls"][0]["response_id"] == "resp-calendar-e2e"

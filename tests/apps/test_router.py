@@ -192,6 +192,35 @@ def test_fake_provider_uses_exact_luna_medium_strict_schema_and_bounded_context(
     assert "note-schema" not in prompt and "vault" not in prompt
 
 
+def test_router_retains_bounded_provider_usage_for_runtime_telemetry() -> None:
+    """Expose safe router call metadata without retaining prompt or response content."""
+    usage = {
+        "input_tokens": 90,
+        "output_tokens": 20,
+        "input_tokens_details": {"cached_tokens": 10},
+        "output_tokens_details": {"reasoning_tokens": 5},
+    }
+    fake = FakeResponses(
+        SimpleNamespace(
+            id="resp-router",
+            status="completed",
+            usage=usage,
+            output_text=json.dumps(
+                plan("ROUTE", [{"capability_id": "core", "source_text": "Remember tea."}])
+            ),
+        )
+    )
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=fake), catalog(enabled=False))
+
+    router.route("Remember tea.")
+
+    assert router.last_call is True
+    assert router.last_usage is usage
+    assert router.last_response_id == "resp-router"
+    assert router.last_provider_status == "completed"
+    assert router.last_error_category is None
+
+
 def test_prompt_allows_temporal_routing_without_date_normalization_or_context_authority() -> None:
     """Keep temporal ownership evidence separate from date interpretation and write authority."""
     prompt = render_router_prompt(catalog(), ({"role": "user", "content": "earlier"},))
