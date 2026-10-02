@@ -81,6 +81,12 @@ from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.storage import VaultRepository
 
 from .delivery_results import LocalDeliveryResultStore
+from .routing import (
+    ApplicationExecutor,
+    ApplicationRouter,
+    execute_routed_request,
+    is_route_execution_id,
+)
 from .serialization import application_result_to_response, operational_to_response
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
@@ -122,6 +128,8 @@ class RuntimeComposition:
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
     application_catalog: ApplicationCatalog = field(default_factory=ApplicationCatalog.empty)
+    application_router: ApplicationRouter | None = None
+    application_executors: Mapping[str, ApplicationExecutor] = field(default_factory=dict)
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
@@ -298,14 +306,26 @@ class RuntimeComposition:
             or self.canonical_schema is None
             or not result.pending_work.persisted
             or result.pending_work.record_id is None
-            or result.affected_stable_note_ids
-            or len(result.action_results) != 1
             or not isinstance(view["options"], list)
             or not 1 < len(view["options"]) <= 4
         ):
             return None
         try:
             record = self.pending_recorder.read(result.pending_work.record_id)
+            record_id = result.pending_work.record_id
+            routed = record["request_id"] == record_id and is_route_execution_id(
+                result.request_id, record_id
+            )
+            if not routed and (
+                record["request_id"] != result.request_id
+                or result.affected_stable_note_ids
+                or len(result.action_results) != 1
+            ):
+                return None
+            if routed and (
+                result.clarification_code is not None or self._ambiguous_action_count(result) != 1
+            ):
+                return None
             incomplete = record["incomplete_actions"]
             if len(incomplete) != 1:
                 return None
@@ -362,8 +382,8 @@ class RuntimeComposition:
                 return None
             return PendingClarification(
                 record["user_request"],
-                result.request_id,
-                result.pending_work.record_id,
+                record["request_id"],
+                record_id,
                 options,
                 tuple(guards),
                 source_guard,
@@ -380,6 +400,20 @@ class RuntimeComposition:
             ReferencePreflightError,
         ):
             return None
+
+    @staticmethod
+    def _ambiguous_action_count(result: ApplicationResult) -> int:
+        """Count action-level ambiguities so one scalar clarification cannot hide siblings."""
+        ambiguous_reasons = {
+            "ambiguous_existing_target",
+            "relational_evidence_ambiguous",
+            "relational_singular_ambiguous",
+        }
+        return sum(
+            action.reason in ambiguous_reasons
+            or any(unit.reason == "ambiguous_existing_target" for unit in action.unit_results)
+            for action in result.action_results
+        )
 
     def _validated_resume_plan(self, pending: PendingClarification) -> RequestPlan:
         """Revalidate the one incomplete action; completed work is never replayed."""
@@ -760,6 +794,8 @@ class RuntimeComposition:
                     text=user_request,
                     created_at=_current_time()["timestamp"],
                 )
+        elif self.application_router is not None:
+            request_id = request_id or allocate_request_id()
         started = self.monotonic()
         core_started = self.monotonic()
         if resume_plan is not None:
@@ -772,6 +808,21 @@ class RuntimeComposition:
                 conversation_id,
                 resume_plan,
                 clarification_choice,
+            )
+        elif self.application_router is not None:
+            if request_id is None:  # Kept explicit for type narrowing and defensive clarity.
+                raise ValueError("routed execution requires an outer request ID")
+            result = execute_routed_request(
+                user_request=user_request,
+                outer_request_id=request_id,
+                router=self.application_router,
+                catalog=self.application_catalog,
+                core_execute=self.core_execute,
+                application_executors=self.application_executors,
+                authenticated_actor=authenticated_actor,
+                conversation_context=self._routing_conversation_context(
+                    authenticated_actor, conversation_id, request_id
+                ),
             )
         elif conversation_id is None:
             if authenticated_actor is None:
@@ -842,6 +893,23 @@ class RuntimeComposition:
                 ),
             ),
         )
+
+    def _routing_conversation_context(
+        self,
+        authenticated_actor: AuthenticatedActorContext | None,
+        conversation_id: str | None,
+        request_id: str,
+    ) -> Sequence[Mapping[str, str]]:
+        """Return bounded prior turns for routing while excluding the just-appended outer message."""
+        if conversation_id is None:
+            return ()
+        actor = (
+            authenticated_actor.stable_user_id
+            if authenticated_actor is not None
+            else "odyssey-runtime"
+        )
+        with self._conversation_lock:
+            return self._conversation_store(actor).recent_context(exclude_request_id=request_id)
 
     def _attach_note_result_snapshot(self, result: ApplicationResult) -> ApplicationResult:
         """Build bounded durable membership from Core-authorized search or mutation evidence.
@@ -1084,8 +1152,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
         conversation_id: str | None = None,
         resume_plan: RequestPlan | None = None,
         clarification_choice: ClarificationChoice | None = None,
+        *,
+        conversation_context_override: Sequence[Mapping[str, str]] | None = None,
     ) -> ApplicationResult:
-        """Execute one request with fresh Luna-first planning and persistence clock context."""
+        """Execute Core with fresh planning and an optional routed prior-context override."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         planner = (
@@ -1120,7 +1190,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
             authenticated_actor=authenticated_actor,
             self_binding_repository=self_binding_repository,
             conversation_context=(
-                LocalConversationStore(
+                conversation_context_override
+                if conversation_context_override is not None
+                else LocalConversationStore(
                     conversation_root_resolver.resolve(
                         authenticated_actor.stable_user_id
                         if authenticated_actor is not None

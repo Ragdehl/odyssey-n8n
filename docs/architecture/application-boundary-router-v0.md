@@ -1,6 +1,6 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-2 implemented and deterministically validated; runtime composition is next; architecture-challenge corrections incorporated before code**.
+Status: **approved architecture contract; Slices 1-3 implemented and deterministically validated; Calendar extraction is next; architecture-challenge corrections incorporated before code**.
 
 ## Objective
 
@@ -177,6 +177,8 @@ The runtime executes routed units in original request order. Application results
 An application receives only the Core services its contract needs. Direct filesystem writes or a parallel application database must not become an alternate canonical knowledge path. Canonical personal knowledge continues to mutate only through validated Core boundaries.
 
 The complete RoutePlan is locally validated before any route executes. One outer delivery/request ID remains the idempotence and user-visible request boundary; routed subexecution must not become an independent competing delivery authority. Safe independent routes execute in original order and may complete even when another route later defers or fails. Application failure is bounded to that route. A missing/disabled/failing application must not prevent Core startup or ordinary Core requests from functioning.
+
+Slice 3 preserves that ownership by deriving deterministic internal route locators from the outer request ID plus route ordinal. These locators exist only so request-scoped Core finalizers such as pending work and Git history cannot collide across routed subexecutions; they are never delivery IDs, and the aggregate `ApplicationResult.request_id` remains the outer ID. The current user message is appended to conversation history at most once. Router and every downstream planner receive the same bounded prior-turn context captured before routing. If exactly one routed subexecution produces resumable pending work, clarification state points to that route-local durable record so only that saved route resumes. Multiple route-local pending projections remain fail-closed because the current public result has only one scalar pending-work field.
 
 A future untrusted marketplace requires a separate permissions/sandbox/signing design. Router v0 establishes logical/module isolation only; it does not claim that arbitrary third-party Python is safe to execute in-process.
 

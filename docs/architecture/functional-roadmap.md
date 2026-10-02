@@ -169,7 +169,7 @@ Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
 Temporal Foundation + Calendar v0                                  🚧 Slices 1-4 DEV validated; natural routing pending
-Application Boundary + Router v0                                    🚧 Slices 1-2 implemented; runtime composition next
+Application Boundary + Router v0                                    🚧 Slices 1-3 implemented; Calendar extraction next
 Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
@@ -285,7 +285,7 @@ Explainable Clarification UX                           ✅ merged in PR #148
 Temporal Foundation + Calendar v0                     🚧 Slices 1-4 DEV validated
         |
         v
-Application Boundary + Router v0                     🚧 Slices 1-2 implemented; runtime composition next
+Application Boundary + Router v0                     🚧 Slices 1-3 implemented; Calendar extraction next
         |
         v
 Calendar natural routing / Slice 5
