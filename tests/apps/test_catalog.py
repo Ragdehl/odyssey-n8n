@@ -70,6 +70,8 @@ def test_registry_rejects_malformed_and_duplicate_descriptors() -> None:
         ApplicationDescriptor(id="calendar", routing_description=" ")
     with pytest.raises(ValueError, match="Duplicate application id"):
         ApplicationRegistry.from_descriptors((calendar_descriptor(), calendar_descriptor()))
+    with pytest.raises(ValueError, match="reserved"):
+        ApplicationDescriptor(id="core", routing_description="shadow Core")
 
 
 def test_catalog_keeps_disabled_evidence_but_never_makes_it_executable() -> None:
