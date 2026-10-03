@@ -1,0 +1,106 @@
+{
+  "case_id": "SWF-MIXED-ORDER-01",
+  "passed": true,
+  "findings": [],
+  "result": {
+    "actions": [
+      {
+        "plan": {
+          "entity": "Northwind",
+          "query": "what I know about Northwind",
+          "type": null,
+          "filters": [],
+          "link_scope": null,
+          "self_target": null,
+          "relational_reference": null,
+          "semantic_set": null,
+          "collection_subject": null
+        },
+        "kind": "retrieve",
+        "result_shape": "single"
+      },
+      {
+        "units": [
+          {
+            "target": {
+              "entity": "Marta",
+              "query": "Marta",
+              "type": "person",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "intent": "record",
+            "properties": [],
+            "tag_changes": [],
+            "facts": [
+              "Reviewed {{ref:0}}."
+            ],
+            "references": [
+              {
+                "target_index": 1,
+                "role": "identity",
+                "mention": "the brief",
+                "selection": null
+              }
+            ],
+            "cardinality": "one",
+            "destination_type": null,
+            "reference_lookup_only": false
+          },
+          {
+            "target": {
+              "entity": null,
+              "query": "the brief",
+              "type": "document",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "intent": "record",
+            "properties": [],
+            "tag_changes": [],
+            "facts": [],
+            "references": [],
+            "cardinality": "one",
+            "destination_type": null,
+            "reference_lookup_only": true
+          }
+        ],
+        "kind": "write"
+      },
+      {
+        "request": "count documents mentioning the brief",
+        "selection": {
+          "entity": null,
+          "query": "documents mentioning the brief",
+          "type": "document",
+          "filters": [],
+          "link_scope": null,
+          "self_target": null,
+          "relational_reference": null,
+          "semantic_set": null,
+          "collection_subject": null
+        },
+        "kind": "delegate"
+      }
+    ],
+    "limitations": [],
+    "presentation_intent": "answer"
+  },
+  "usage": {
+    "input_tokens": 9757,
+    "output_tokens": 362,
+    "cached_input_tokens": 9754,
+    "reasoning_tokens": 86
+  },
+  "validation_stage": null,
+  "validation_code": null,
+  "error": null
+}

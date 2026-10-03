@@ -1,0 +1,110 @@
+{
+  "case_id": "SWR10-relational-target-two-bounded-references",
+  "passed": false,
+  "findings": [
+    "both_references_bounded_to_event"
+  ],
+  "result": {
+    "actions": [
+      {
+        "units": [
+          {
+            "target": {
+              "entity": null,
+              "query": "mi hija mayor",
+              "type": "person",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": {
+                "reference": "mi hija mayor",
+                "source_kind": "self",
+                "source_query": null,
+                "members": "one"
+              },
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "intent": "record",
+            "properties": [],
+            "tag_changes": [],
+            "facts": [
+              "Va al parque el sábado con {{ref:0}} y con {{ref:1}}."
+            ],
+            "references": [
+              {
+                "target_index": 1,
+                "role": "identity",
+                "mention": "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+                "selection": null
+              },
+              {
+                "target_index": 2,
+                "role": "identity",
+                "mention": "la persona de la cena relacional de prueba que habla italiano",
+                "selection": null
+              }
+            ],
+            "cardinality": "one",
+            "destination_type": null,
+            "reference_lookup_only": false
+          },
+          {
+            "target": {
+              "entity": null,
+              "query": "la persona de la cena relacional de prueba que trabaja en Airbus Test",
+              "type": "person",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "intent": "record",
+            "properties": [],
+            "tag_changes": [],
+            "facts": [],
+            "references": [],
+            "cardinality": "one",
+            "destination_type": null,
+            "reference_lookup_only": true
+          },
+          {
+            "target": {
+              "entity": null,
+              "query": "la persona de la cena relacional de prueba que habla italiano",
+              "type": "person",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "intent": "record",
+            "properties": [],
+            "tag_changes": [],
+            "facts": [],
+            "references": [],
+            "cardinality": "one",
+            "destination_type": null,
+            "reference_lookup_only": true
+          }
+        ],
+        "kind": "write"
+      }
+    ],
+    "limitations": [],
+    "presentation_intent": "answer"
+  },
+  "usage": {
+    "input_tokens": 9773,
+    "output_tokens": 669,
+    "cached_input_tokens": 9770,
+    "reasoning_tokens": 384
+  },
+  "validation_stage": null,
+  "validation_code": null,
+  "error": null
+}

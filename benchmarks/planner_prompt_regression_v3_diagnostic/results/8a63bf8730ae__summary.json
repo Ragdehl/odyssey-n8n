@@ -1,0 +1,15 @@
+{
+  "commit": "8a63bf8730ae6a7d2d3c3eda2d025c170ed05ec7",
+  "provider_attempts": 2,
+  "completed_provider_responses": 2,
+  "automatic_retries": 0,
+  "estimated_standard_cost_usd": "0.0051432",
+  "case_ids": [
+    "SWR10-relational-target-two-bounded-references",
+    "SWF-MIXED-ORDER-01"
+  ],
+  "failed_case_ids": [
+    "SWR10-relational-target-two-bounded-references"
+  ],
+  "provider_failures": []
+}
