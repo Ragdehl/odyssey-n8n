@@ -2205,10 +2205,10 @@ def test_two_semantic_fact_references_resolve_independently_with_canonical_names
     assert_capture_day_materialized(vault)
 
 
-def test_relational_target_with_two_relational_fact_references_stays_bounded(
+def test_legacy_journal_source_with_two_relational_fact_references_stays_bounded(
     tmp_path: Path, schema: dict
 ) -> None:
-    """Resolve target and two fact references inside their own canonical relationship universes."""
+    """Keep historical journal-backed source resolution readable; this is not a current write-model sentinel."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write_note(
@@ -2765,3 +2765,156 @@ def test_new_reference_is_rolled_back_when_consuming_fact_cannot_be_written(
     assert source_result.reason == "ambiguous_existing_target"
     assert project_result.status is application.UnitStatus.DEFERRED
     assert project_result.reason == "DEPENDENT_FACT_NOT_WRITTEN"
+
+
+def test_current_document_source_bounds_two_relational_fact_references(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Ground two qualified references inside an ordinary current-schema document source."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijas son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", fact("Es mi hija mayor."))
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", fact("Es mi hijo menor."))
+    write_note(
+        vault,
+        "documents/directorio-faro.md",
+        "directorio-faro",
+        "Directorio Faro",
+        fact(
+            "En Directorio Faro figuran [[people/clara|Clara Test]], "
+            "[[people/marta|Marta Test]] y [[people/ana|Ana Test]]."
+        ),
+        note_type="document",
+    )
+    write_note(vault, "people/clara.md", "clara", "Clara Test", fact("Habla italiano."))
+    write_note(vault, "people/marta.md", "marta", "Marta Test", fact("Trabaja en Airbus Test."))
+    write_note(vault, "people/ana.md", "ana", "Ana Test", fact("Practica natación."))
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+
+    source_query = "Directorio Faro"
+    source_members = "las personas del Directorio Faro"
+    marta_query = "la persona del Directorio Faro que trabaja en Airbus Test"
+    clara_query = "la persona del Directorio Faro que habla italiano"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "mi hija mayor",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": {
+                                "reference": "mi hija",
+                                "source_kind": "self",
+                                "source_query": None,
+                                "members": "one",
+                            },
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Va al parque el sábado con {{ref:0}} y con {{ref:1}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": marta_query,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": source_members,
+                                        "source_kind": "existing",
+                                        "source_query": source_query,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": marta_query,
+                            },
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": clara_query,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": source_members,
+                                        "source_kind": "existing",
+                                        "source_query": source_query,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": clara_query,
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert len(action.units) == 3
+    assert all(unit.reference_lookup_only for unit in action.units[1:])
+    index = MappedIndex(
+        {
+            source_query: (
+                SemanticEntityCandidate(
+                    "directorio-faro",
+                    "documents/directorio-faro.md",
+                    "document",
+                    "Directorio Faro",
+                    1.0,
+                ),
+            )
+        }
+    )
+    reasoner = MappedReasoner(
+        {
+            "mi hija mayor": "cloe",
+            source_query: "directorio-faro",
+            marta_query: "marta",
+            clara_query: "clara",
+        }
+    )
+
+    result = run(
+        vault,
+        schema,
+        plan,
+        reasoner=reasoner,
+        semantic_index=index,
+        selector=AllFactSelector(),
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("cloe",)
+    content = parse_note((vault / "people/cloe.md").read_text()).content
+    assert "Va al parque el sábado" in content
+    assert "[[people/marta|Marta Test]]" in content
+    assert "[[people/clara|Clara Test]]" in content
+    assert marta_query not in content and clara_query not in content
+    assert (vault / "documents/directorio-faro.md").read_bytes() == before[
+        vault / "documents/directorio-faro.md"
+    ]
+    assert (vault / "people/marta.md").read_bytes() == before[vault / "people/marta.md"]
+    assert (vault / "people/clara.md").read_bytes() == before[vault / "people/clara.md"]
+    assert len(domain_markdown_paths(vault)) == len(before)
+    assert_capture_day_materialized(vault)

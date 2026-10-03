@@ -1,27 +1,19 @@
-"""Calendar-owned mutation orchestration over Core canonical persistence primitives."""
+"""Compatibility adapter for Calendar's Core-owned fixed-destination capture boundary."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
-from odyssey_core.git_history import GitHistoryResult, HistoryRecorder, HistoryStatus
-from odyssey_core.materialization import capture_calendar_day_literal
-from odyssey_core.persistence import ActorInput, PersistenceOperation
+from odyssey_core.fixed_fact_capture import FixedFactCaptureResult, FixedFactCaptureService
+from odyssey_core.git_history import HistoryRecorder
+from odyssey_core.persistence import ActorInput
 from odyssey_core.storage import VaultRepository
 
-
-@dataclass(frozen=True, slots=True)
-class CalendarLiteralCaptureResult:
-    """Return bounded evidence for one exact Day-owned literal capture."""
-
-    note_id: str
-    changed: bool
-    history: GitHistoryResult
+CalendarLiteralCaptureResult = FixedFactCaptureResult
 
 
 class CalendarLiteralCaptureService:
-    """Coordinate Calendar literal capture while Core owns persistence and Git implementation."""
+    """Preserve the historical Calendar API while Core owns all capture semantics."""
 
     def __init__(
         self,
@@ -29,10 +21,7 @@ class CalendarLiteralCaptureService:
         schema: dict[str, Any],
         history: HistoryRecorder | None,
     ) -> None:
-        """Bind the authoritative Core repository, schema, and optional history recorder."""
-        self.repository = repository
-        self.schema = schema
-        self.history = history
+        self._core = FixedFactCaptureService(repository, schema, history)
 
     def capture(
         self,
@@ -43,48 +32,11 @@ class CalendarLiteralCaptureService:
         actor: ActorInput,
         now: str,
     ) -> CalendarLiteralCaptureResult:
-        """Capture untouched routed wording on one exact Day and record request-level history."""
-        snapshot = self._begin_history(request_id)
-        result = capture_calendar_day_literal(
-            repository=self.repository,
-            schema=self.schema,
+        """Delegate the legacy literal-only call to the Core-managed Day destination."""
+        return self._core.capture_calendar_day(
             date=date,
-            literal=literal,
+            capture_text=literal,
+            request_id=request_id,
             actor=actor,
             now=now,
-            request_id=request_id,
         )
-        history = self._record_history(request_id, snapshot, result.id)
-        return CalendarLiteralCaptureResult(
-            result.id,
-            result.operation is not PersistenceOperation.NO_CHANGE,
-            history,
-        )
-
-    def _begin_history(self, request_id: str) -> object | None:
-        """Begin existing Core history without making Git a mutation authority."""
-        if self.history is None:
-            return None
-        try:
-            return self.history.begin(request_id)
-        except Exception:
-            return None
-
-    def _record_history(
-        self, request_id: str, snapshot: object | None, note_id: str
-    ) -> GitHistoryResult:
-        """Record the same affected-note Git evidence used by established Core mutations."""
-        if self.history is None:
-            return GitHistoryResult.disabled()
-        if snapshot is None:
-            return GitHistoryResult(HistoryStatus.FAILED, reason="history snapshot failed")
-        try:
-            return self.history.record(
-                request_id=request_id,
-                snapshot=snapshot,
-                affected_stable_note_ids=(note_id,),
-                repository=self.repository,
-                schema=self.schema,
-            )
-        except Exception:
-            return GitHistoryResult(HistoryStatus.FAILED, reason="history record failed")

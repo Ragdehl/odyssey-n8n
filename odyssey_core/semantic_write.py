@@ -13,6 +13,8 @@ from odyssey_core.request_planning import (
     SELF_TARGET,
     PropertyChange,
     RequestPlanningError,
+    RetrieveAction,
+    SelectionCriteria,
     TagChange,
     WriteAction,
     planner_filter_array_json_schema,
@@ -477,6 +479,16 @@ def _decode_fact(raw: Any, *, allow_temporal_reference: bool) -> SemanticFact:
     return SemanticFact(tuple(parts))
 
 
+def decode_semantic_fact(raw: Any) -> SemanticFact:
+    """Decode one closed semantic fact without accepting temporal or mutation fields.
+
+    This narrow public boundary is used by fixed-destination capture. It deliberately reuses the
+    same ``SemanticFact``/part vocabulary as semantic WRITE while withholding target, operation,
+    destination, and persistence authority.
+    """
+    return _decode_fact(raw, allow_temporal_reference=False)
+
+
 def _decode_property(raw: Any) -> PropertyChange:
     """Decode a closed property change for authoritative Core revalidation."""
     if not isinstance(raw, dict) or set(raw) != {"field", "op", "value"}:
@@ -753,6 +765,44 @@ def _compile_identity(
             for key in ("entity", "query", "type", "filters", "relational_reference")
         }
     return result
+
+
+def compile_semantic_identity_selection(
+    identity: IdentityIntent,
+    schema: Mapping[str, Any],
+) -> SelectionCriteria:
+    """Validate one semantic identity through the ordinary Core selection contract.
+
+    The returned value carries only lookup evidence. It grants neither CREATE authority nor a
+    mutation target, which makes it suitable for optional references inside a trusted fixed fact.
+
+    Args:
+        identity: Model-described identity occurrence to validate.
+        schema: Active canonical schema used by the ordinary Core selection validator.
+
+    Returns:
+        A validated selection that may be resolved only against existing canonical notes.
+
+    Raises:
+        SemanticWriteCompileError: If the identity cannot form a safe Core selection.
+    """
+    try:
+        raw = _compile_identity(identity, allow_self=True, allow_complete_set=True)
+        plan = validate_request_plan(
+            {
+                "actions": [{"kind": "retrieve", "result_shape": "single", "plan": raw}],
+                "limitations": [],
+            },
+            schema,
+        )
+    except (RequestPlanningError, TypeError, ValueError) as error:
+        raise SemanticWriteCompileError(
+            "Semantic identity violates the Core selection contract"
+        ) from error
+    action = plan.actions[0]
+    if not isinstance(action, RetrieveAction):
+        raise SemanticWriteCompileError("Semantic identity did not produce a Core selection")
+    return action.plan
 
 
 def _compile_candidate_scope(

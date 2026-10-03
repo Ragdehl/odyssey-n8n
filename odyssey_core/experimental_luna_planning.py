@@ -16,6 +16,12 @@ from time import perf_counter
 from typing import Any, Protocol
 
 from odyssey_core.domain_interpretation import DomainInterpretation
+from odyssey_core.fixed_fact_capture import (
+    FIXED_FACT_ENRICHMENT_MAX_OUTPUT_TOKENS,
+    decode_fixed_fact_enrichment,
+    fixed_fact_enrichment_json_schema,
+    render_fixed_fact_enrichment_prompt,
+)
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalSpan,
@@ -376,6 +382,7 @@ class OpenAILunaExperimentalPlanner:
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
         self.max_output_tokens = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS
         self.max_retries = LUNA_EXPERIMENT_AUTOMATIC_RETRIES
+        self.last_call = False
         self.last_usage: dict[str, int] | None = None
         self.last_response_id: str | None = None
         self.last_provider_status: str | None = None
@@ -542,6 +549,56 @@ class OpenAILunaExperimentalPlanner:
             else "plan"
         )
         return result
+
+    def enrich_fixed_fact(self, capture_text: str):  # type: ignore[no-untyped-def]
+        """Make one Luna attempt under the separate fixed-fact parts-only contract.
+
+        The scoped response cannot contain a destination or mutation. Local decoding additionally
+        proves that ordered part text is an exact partition of ``capture_text``. Callers own literal
+        fallback; this method never invokes Sol or the ordinary request planner.
+        """
+        if not isinstance(capture_text, str) or not capture_text.strip():
+            raise RequestPlanningError("Fixed fact capture text must be non-empty")
+        self.last_call = True
+        self.last_usage = None
+        self.last_response_id = None
+        self.last_provider_status = None
+        self.last_error_category = None
+        output_schema = fixed_fact_enrichment_json_schema(self._schema)
+        try:
+            response = self._client.responses.create(
+                model=LUNA_EXPERIMENT_MODEL,
+                reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
+                store=False,
+                max_output_tokens=FIXED_FACT_ENRICHMENT_MAX_OUTPUT_TOKENS,
+                input=[
+                    {"role": "system", "content": render_fixed_fact_enrichment_prompt()},
+                    {"role": "user", "content": capture_text},
+                ],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "odyssey_fixed_fact_semantic_enrichment_v1",
+                        "strict": True,
+                        "schema": output_schema,
+                    }
+                },
+            )
+        except Exception as error:
+            self.last_error_category = type(error).__name__[:120]
+            raise RequestPlanningError("Fixed fact enrichment provider call failed") from error
+        self.last_usage = normalize_provider_usage(response)
+        self.last_response_id = _bounded_metadata(getattr(response, "id", None))
+        self.last_provider_status = _bounded_metadata(getattr(response, "status", None))
+        if self.last_provider_status != "completed":
+            self.last_error_category = "IncompleteProviderResponse"
+            raise RequestPlanningError("Fixed fact enrichment response was not completed")
+        try:
+            payload = json.loads(response.output_text)
+            return decode_fixed_fact_enrichment(payload, capture_text)
+        except Exception as error:
+            self.last_error_category = "LocalFixedFactValidationError"
+            raise RequestPlanningError("Fixed fact enrichment output was invalid") from error
 
 
 def _bounded_metadata(value: Any, *, maximum: int = 160) -> str | None:

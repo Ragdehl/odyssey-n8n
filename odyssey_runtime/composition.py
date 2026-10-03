@@ -26,7 +26,6 @@ from odyssey_apps.calendar import (
     CALENDAR_PLANNER_MODEL,
     CALENDAR_PLANNER_REASONING_EFFORT,
     CalendarApplication,
-    CalendarLiteralCaptureService,
     CalendarQueryService,
     CalendarRouteExecutor,
     OpenAICalendarPlanner,
@@ -60,7 +59,9 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationService,
 )
 from odyssey_core.domain_interpretation import DomainInterpretation
+from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
+from odyssey_core.fixed_fact_capture import FixedFactCaptureService
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
@@ -1406,7 +1407,6 @@ def build_runtime_from_environment() -> RuntimeComposition:
         ).catalog(enabled_ids=enabled_application_ids)
         application_router = OpenAIApplicationRouter.from_environment(application_catalog)
         if application_catalog.executable("calendar") is not None:
-            captures = CalendarLiteralCaptureService(repository, schema, history_recorder)
 
             def capture_calendar_literal(
                 date: str,
@@ -1419,12 +1419,28 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     authenticated_actor, AuthenticatedActorContext
                 ):
                     raise ValueError("authenticated actor context is invalid")
-                captured = captures.capture(
+                clock = _current_time()
+                fixed_fact_enricher = OpenAILunaExperimentalPlanner.from_environment(
+                    schema, {key: clock[key] for key in ("date", "time", "timezone")}
+                )
+                captures = FixedFactCaptureService(
+                    repository,
+                    schema,
+                    history_recorder,
+                    enricher=fixed_fact_enricher,
+                    semantic_index=semantic_index,
+                    embedder=embedder,
+                    contextual_reasoner=contextual_reasoner,
+                    semantic_set_selector=semantic_set_selector,
+                    self_binding_repository=self_binding_repository,
+                )
+                captured = captures.capture_calendar_day(
                     date=date,
-                    literal=literal,
+                    capture_text=literal,
                     request_id=request_id,
                     actor=_persistence_actor("calendar", authenticated_actor),
-                    now=_current_time()["timestamp"],
+                    now=clock["timestamp"],
+                    authenticated_actor=authenticated_actor,
                 )
                 unit = UnitResult(
                     0,
@@ -1446,6 +1462,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     ),
                     (captured.note_id,) if captured.changed else (),
                     history=captured.history,
+                    operational=captured.operational,
                 )
 
             def execute_calendar_core(

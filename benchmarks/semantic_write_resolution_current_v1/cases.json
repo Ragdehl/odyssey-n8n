@@ -1,0 +1,26 @@
+{
+  "version": "semantic-write-resolution-current-v1",
+  "schema_contract": "current-canonical-document-source",
+  "fixed_context": {
+    "date": "2026-10-03",
+    "time": "20:30",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "CSWR01-qualified-bounded-source-member",
+      "request": "De las personas del Directorio Faro, la que trabaja en Airbus Test se ha comprado un paraguas rojo.",
+      "expect": "qualified_bounded_source_target"
+    },
+    {
+      "id": "CSWR02-relational-target-one-bounded-reference",
+      "request": "Mi hija mayor va a cenar con la persona del Directorio Faro que trabaja en Airbus Test.",
+      "expect": "relational_target_and_one_bounded_reference"
+    },
+    {
+      "id": "CSWR03-relational-target-two-bounded-references",
+      "request": "Mi hija mayor va al parque el sábado con la persona del Directorio Faro que trabaja en Airbus Test y con la persona del Directorio Faro que habla italiano.",
+      "expect": "relational_target_and_two_bounded_references"
+    }
+  ]
+}

@@ -1560,6 +1560,15 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
             "input_tokens_details": {"cached_tokens": 20},
         },
     )
+    fixed_fact_responses = FakeResponses(
+        {"parts": [{"kind": "literal", "text": source}]},
+        response_id="resp-fixed-fact-e2e",
+        usage={
+            "input_tokens": 60,
+            "output_tokens": 12,
+            "input_tokens_details": {"cached_tokens": 0},
+        },
+    )
     calendar_contexts: list[dict[str, str]] = []
 
     def build_router(cls, catalog):
@@ -1569,11 +1578,19 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
         calendar_contexts.append(dict(current_context))
         return cls(SimpleNamespace(responses=calendar_responses), current_context)
 
+    def build_fixed_fact(cls, schema, current_context, **_kwargs):
+        return cls(SimpleNamespace(responses=fixed_fact_responses), schema, current_context)
+
     monkeypatch.setattr(
         composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
     )
     monkeypatch.setattr(
         composition.OpenAICalendarPlanner, "from_environment", classmethod(build_calendar)
+    )
+    monkeypatch.setattr(
+        composition.OpenAILunaExperimentalPlanner,
+        "from_environment",
+        classmethod(build_fixed_fact),
     )
     monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **_kwargs: object())
     monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
@@ -1615,6 +1632,7 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
     assert unit.operation == "calendar_capture"
     assert unit.stable_note_id == "date:2026-10-03"
     assert router_responses.calls == 1 and calendar_responses.calls == 1
+    assert fixed_fact_responses.calls == 1
     assert calendar_contexts == [
         {"date": "2026-10-02", "time": "18:30:00", "timezone": "Europe/Paris"}
     ]
@@ -1628,6 +1646,7 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
     assert [stage["name"] for stage in stages] == [
         "application.router",
         "calendar.planner",
+        "core.fixed_fact_enrichment",
         "index_refresh",
     ]
     assert stages[0]["model"] == "gpt-6-luna"
@@ -1636,6 +1655,9 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
     assert stages[1]["model"] == "gpt-6-luna"
     assert stages[1]["usage"]["input_tokens"] == 140
     assert stages[1]["provider_calls"][0]["response_id"] == "resp-calendar-e2e"
+    assert stages[2]["model"] == "gpt-5.6-luna"
+    assert stages[2]["usage"]["input_tokens"] == 60
+    assert stages[2]["provider_calls"][0]["response_id"] == "resp-fixed-fact-e2e"
 
 
 def test_production_composition_hands_calendar_domain_evidence_to_normal_core_planner_e2e(

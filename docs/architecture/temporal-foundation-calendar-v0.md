@@ -129,7 +129,9 @@ Examples:
 - `Añade a mis amigos como asistentes` requires the intended people to resolve; failure must clarify rather than silently save an unresolved literal substitute.
 - `Hoy vino el fontanero` does not by itself authorize creation of a `person` note named `El fontanero`.
 
-Core must never turn failed identity resolution into literal Calendar capture on its own. The validated plan/capability intent must authorize the literal capture path.
+Core must never turn failed identity resolution into literal Calendar capture on its own. The validated plan/capability intent must authorize the literal capture path. Once `DAY_LITERAL_CAPTURE` has authorized a fixed Day and exact capture text, however, Core may best-effort enrich identity occurrences before persistence. That enrichment is Core-owned and existing-only: Calendar supplies no aliases, person candidates, relationship members, candidate scopes, note targets, or mutation instructions. The scoped model result contains only ordered semantic fact parts, and their occurrence text must concatenate exactly to the authorized capture text.
+
+Safe enrichment never changes the destination and never creates a missing identity. A uniquely grounded existing identity may become a canonical wikilink; a bounded complete set such as `mis hijos` may expand only when the whole current set grounds safely. An unresolved, ambiguous, stale, or otherwise unavailable optional occurrence remains exactly literal. Provider or local enrichment failure falls back to the complete authorized literal capture. This fixed-destination contract is reusable by future managed destinations and is not a second Calendar planner.
 
 Writing directly inside an opened Day means literal Day content by default. It does not silently create a Task/Event merely because the text sounds actionable or scheduled; explicit intent or later specialized routing owns those application objects.
 
@@ -146,6 +148,8 @@ content. Core remains responsible for canonical Day persistence and shared safet
 not exposed in planner write capabilities, so new typed Journal creation/amendment is rejected. No
 existing Journal Markdown is migrated or deleted by this follow-up. Calendar may continue projecting
 legacy entries by `entry_date` until a later explicitly approved migration removes the legacy type.
+
+Historical semantic-WRITE regression assets that modeled an event-like source as `journal_entry` remain immutable evidence of the old contract; they are not current-schema product requirements. Current bounded-existing-source sentinels use an ordinary canonical `document` source instead, so identity-scope regression coverage does not pre-empt the future Events domain or revive Journal writes.
 
 ## Three temporal relationships must remain distinct
 
