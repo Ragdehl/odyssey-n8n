@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Protocol
 
-from odyssey_core.context import find_filtered_note_ids
+from odyssey_core.context import ContextRetrievalError, find_filtered_note_ids
+from odyssey_core.contextual import ContextualResolutionError
 from odyssey_core.git_history import GitHistoryResult, HistoryRecorder, HistoryStatus
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
@@ -23,9 +24,20 @@ from odyssey_core.observability import (
     normalize_provider_usage,
 )
 from odyssey_core.persistence import ActorInput, EntityPersistenceResult, PersistenceOperation
-from odyssey_core.relational_resolution import resolve_relational_reference
-from odyssey_core.relationship_evidence import CanonicalIdentity, RelationshipEvidenceProjector
-from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
+from odyssey_core.relational_resolution import (
+    RelationalResolutionError,
+    resolve_relational_reference,
+)
+from odyssey_core.relationship_evidence import (
+    CanonicalIdentity,
+    RelationshipEvidenceError,
+    RelationshipEvidenceProjector,
+)
+from odyssey_core.resolution import (
+    ExistingEntityOutcome,
+    ExistingEntityResolutionError,
+    resolve_existing_entity,
+)
 from odyssey_core.semantic_write import (
     IdentityPart,
     LiteralPart,
@@ -366,7 +378,16 @@ class FixedFactCaptureService:
                 rendered = FIXED_FACT_SET_SEPARATOR.join(
                     _canonical_wikilink(identity) for identity in identities
                 )
-            except Exception:
+            except (
+                FixedFactCaptureError,
+                SemanticWriteCompileError,
+                ContextRetrievalError,
+                ContextualResolutionError,
+                RelationalResolutionError,
+                RelationshipEvidenceError,
+                ExistingEntityResolutionError,
+                ValueError,
+            ):
                 pieces.append(part.text)
                 continue
             pieces.append(rendered)

@@ -1,0 +1,20 @@
+{
+  "version": "fixed-fact-enrichment-live-v1",
+  "cases": [
+    {
+      "id": "FFE01-nickname-occurrence",
+      "text": "He vaciado el garaje con Bea.",
+      "expect": "nickname_identity"
+    },
+    {
+      "id": "FFE02-complete-self-set",
+      "text": "He ordenado el garaje con mis hijos.",
+      "expect": "complete_self_set"
+    },
+    {
+      "id": "FFE03-mixed-canonical-day-content",
+      "text": "03-10-2026 hemos vaciado el garaje con Bea y mis hijos.",
+      "expect": "mixed_identity_and_set"
+    }
+  ]
+}
