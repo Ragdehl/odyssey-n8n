@@ -1,0 +1,76 @@
+{
+  "version": 13,
+  "commit": "688a0cb633d4450b4aa3440686527e6d4de40461",
+  "matrix_sha256": "12aaa2d80fc92d9994fc22aa4df173540baa7cc77e4b86058f9a170f79cae2d4",
+  "prompt_sha256": "8c7dcc7c41af3d4be2ba9b9de05668600ebdee1271fb4cb4971f1f6737860c48",
+  "provider_schema_sha256": "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
+  "provider_attempts": 2,
+  "completed_provider_responses": 2,
+  "automatic_retries": 0,
+  "estimated_standard_cost_usd": 0.0046836,
+  "estimated_regional_upper_usd": 0.00515196,
+  "passed": true,
+  "rows": [
+    {
+      "id": "journal-today-create-safe",
+      "passed": true,
+      "expect": {
+        "date": "2026-10-03",
+        "fact_contains": "tranquilo"
+      },
+      "actual": {
+        "kind": "write",
+        "target_type": "journal_entry",
+        "filters": [
+          {
+            "field": "entry_date",
+            "op": "eq",
+            "value": "2026-10-03"
+          }
+        ],
+        "properties": [
+          {
+            "field": "entry_date",
+            "op": "set",
+            "value": "2026-10-03"
+          }
+        ],
+        "facts": [
+          "Hoy he tenido un día muy tranquilo."
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "journal-yesterday-create-safe",
+      "passed": true,
+      "expect": {
+        "date": "2026-10-02",
+        "fact_contains": "parque"
+      },
+      "actual": {
+        "kind": "write",
+        "target_type": "journal_entry",
+        "filters": [
+          {
+            "field": "entry_date",
+            "op": "eq",
+            "value": "2026-10-02"
+          }
+        ],
+        "properties": [
+          {
+            "field": "entry_date",
+            "op": "set",
+            "value": "2026-10-02"
+          }
+        ],
+        "facts": [
+          "Ayer fui con los niños al parque."
+        ]
+      },
+      "error": null
+    }
+  ],
+  "provider_failures": []
+}
