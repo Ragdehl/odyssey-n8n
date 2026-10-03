@@ -2,7 +2,7 @@
   "version": "semantic-write-resolution-current-v1",
   "schema_contract": "current-canonical-document-source",
   "fixed_context": {
-    "date": "2026-10-03",
+    "date": "2026-09-28",
     "time": "20:30",
     "timezone": "Europe/Paris"
   },

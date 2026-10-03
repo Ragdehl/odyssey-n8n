@@ -44,7 +44,7 @@ def test_v4_keeps_exact_v3_model_facing_contract() -> None:
 def test_v4_budget_is_three_calls_and_bounded() -> None:
     budget = run_live.budget_snapshot()
     assert budget["calls"] == 3
-    assert budget["conservative_usd_upper"] == Decimal("TO_BE_FROZEN")
+    assert budget["conservative_usd_upper"] == Decimal("0.0388728")
     assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.040")
 
 
