@@ -124,9 +124,9 @@ def test_enablement_only_changes_catalog_not_core_planner_artifacts() -> None:
 
 
 def test_calendar_opt_in_compiler_does_not_change_accepted_core_planner_artifacts() -> None:
-    """Freeze the pre-Slice-5 Core prompt/schema/examples/model contract by content hash."""
+    """Freeze the v2-accepted Core Luna prompt/schema/examples/model contract by content hash."""
     assert core_planner_artifacts() == (
-        "717c9fea6a7d278be3284146b829a51fc8c7ed38549fe52ae17df2fd26585df9",
+        "20c4a16dc09f588845ff870e72253e7a6728278f11fe8158b9dae5bb84f4bbb5",
         "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
         "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
         ("gpt-5.6-luna", "low"),

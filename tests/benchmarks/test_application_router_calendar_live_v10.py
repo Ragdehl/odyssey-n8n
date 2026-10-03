@@ -57,19 +57,19 @@ def test_core_handoff_matrix_contains_only_bounded_domain_evidence() -> None:
         assert interpretation["evidence"][0]["kind"] == "temporal_reference"
 
 
-def test_v10_budget_is_ten_zero_retry_calls_below_hard_ceiling() -> None:
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 10
-    assert budget["regional_usd_upper"] < run_live.AUTHORIZED_CEILING_USD == 0.034
+def test_v10_retained_run_stayed_inside_its_authorized_budget() -> None:
+    """Judge the consumed historical gate from retained evidence, not today's larger Core prompt."""
+    artifact = json.loads((run_live.RESULTS_DIR / "ed5ddf437611.json").read_text(encoding="utf-8"))
+    assert artifact["provider_attempts"] == run_live.MAX_CALLS == 10
+    assert artifact["completed_provider_responses"] == 10
+    assert artifact["automatic_retries"] == 0
+    assert artifact["estimated_regional_upper_usd"] < run_live.AUTHORIZED_CEILING_USD == 0.034
 
 
-def test_v10_has_no_provider_authority_without_explicit_flag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
-        run_live._preflight()
+def test_v10_is_consumed_historical_evidence() -> None:
+    """Prevent a past one-shot gate from becoming authority for the current prompt contract."""
+    artifacts = sorted(run_live.RESULTS_DIR.glob("*.json"))
+    assert [item.name for item in artifacts] == ["ed5ddf437611.json"]
 
 
 def test_v10_recording_transport_counts_failures_without_exception_text() -> None:

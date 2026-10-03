@@ -123,12 +123,12 @@ def test_domain_interpretation_rejects_invalid_or_ungrounded_evidence(factory) -
         factory()
 
 
-def test_domain_handoff_does_not_change_pre_redesign_ordinary_luna_prompt() -> None:
-    """Pin the ordinary Core prompt to the exact e78781b pre-redesign checkpoint."""
+def test_domain_handoff_matches_v2_accepted_ordinary_luna_prompt() -> None:
+    """Pin the ordinary Core prompt to the live-accepted v2 contract."""
     baseline = {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
     prompt = render_luna_experimental_prompt(schema(), baseline).encode("utf-8")
     assert hashlib.sha256(prompt).hexdigest() == (
-        "d60c7605f0f3751cf7c5394e90daa8b92df9c10e6e9d949b447ab50907bdcd4b"
+        "07363348d91bded42affe314a386eb6400c3b761e6d7f565e208c7b55e721da1"
     )
 
 

@@ -233,12 +233,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not args.confirm_live_provider_calls:
         raise SystemExit("Refusing live calls: explicit confirmation flag is required")
+    if MAX_TOTAL_COST_USD <= 0:
+        raise SystemExit("Refusing live calls: planner-prompt-regression-v1 has zero authority")
     cases, context = load_gate_cases()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     verify_candidate_contract(schema, context)
     ceiling, _costs, _bound = total_conservative_cost_ceiling(cases, context, schema)
-    if MAX_TOTAL_COST_USD <= 0 or ceiling > MAX_TOTAL_COST_USD:
-        raise SystemExit("Refusing live calls: planner-prompt-regression-v1 has zero authority")
+    if ceiling > MAX_TOTAL_COST_USD:
+        raise SystemExit("Refusing live calls: planner-prompt-regression-v1 exceeds authority")
 
     gpt56_rows = _run_model(PRODUCTION_MODEL, GPT56_OUTPUT_PATH, schema, context, cases)
     return 0 if _matrix_acceptable(gpt56_rows) else 1

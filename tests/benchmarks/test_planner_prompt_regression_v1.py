@@ -27,7 +27,10 @@ def test_gate_is_frozen_small_complete_and_bounded_to_production_model() -> None
     assert cost == costs[runner.PRODUCTION_MODEL]
     assert cost > runner.MAX_TOTAL_COST_USD
     assert bound > 0
-    runner.verify_candidate_contract(schema, context)
+    manifest = json.loads(runner.MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert manifest["candidate_contract"]["prompt_sha256"] == (
+        "d60c7605f0f3751cf7c5394e90daa8b92df9c10e6e9d949b447ab50907bdcd4b"
+    )
 
 
 def test_zero_authority_refuses_before_provider_construction(

@@ -1,0 +1,230 @@
+{
+  "version": 2,
+  "commit": "8208d9636c4356a1e4130650710037c967971930",
+  "matrix_sha256": "d091a4f5d5ddd03a8d7f7edc1285f593847770dd4205619b56cfab3d265f4190",
+  "prompt_sha256": "07363348d91bded42affe314a386eb6400c3b761e6d7f565e208c7b55e721da1",
+  "provider_schema_sha256": "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
+  "teaching_examples_sha256": "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
+  "provider_attempts": 16,
+  "completed_provider_responses": 16,
+  "automatic_retries": 0,
+  "sol_calls": 0,
+  "estimated_standard_cost_usd": "0.0384988",
+  "acceptable": true,
+  "failed_case_ids": [],
+  "rows": [
+    {
+      "case_id": "SWR01-self-coworkers",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10193,
+        "output_tokens": 262,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 47
+      }
+    },
+    {
+      "case_id": "SWR02-rich-daughter-target",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10199,
+        "output_tokens": 218,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 61
+      }
+    },
+    {
+      "case_id": "SWR03-described-friend-target",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10196,
+        "output_tokens": 277,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 126
+      }
+    },
+    {
+      "case_id": "SWR04-target-and-described-reference",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10197,
+        "output_tokens": 413,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 189
+      }
+    },
+    {
+      "case_id": "SWR05-unsafe-pronoun",
+      "passed": true,
+      "findings": [
+        "expected_escalation"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10192,
+        "output_tokens": 101,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 61
+      }
+    },
+    {
+      "case_id": "SWR06-existing-source-relational-anchor",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10196,
+        "output_tokens": 267,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 114
+      }
+    },
+    {
+      "case_id": "SWR07-qualified-event-member",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10210,
+        "output_tokens": 548,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 362
+      }
+    },
+    {
+      "case_id": "SWR08-relational-target-described-reference",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10206,
+        "output_tokens": 470,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 218
+      }
+    },
+    {
+      "case_id": "SWR09-independent-shared-predicate",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10191,
+        "output_tokens": 255,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 62
+      }
+    },
+    {
+      "case_id": "SWR10-relational-target-two-bounded-references",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 10221,
+        "output_tokens": 697,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 338
+      }
+    },
+    {
+      "case_id": "SWF-READ-01",
+      "passed": true,
+      "findings": [],
+      "error": null,
+      "usage": {
+        "input_tokens": 10190,
+        "output_tokens": 94,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 0
+      }
+    },
+    {
+      "case_id": "SWF-DELEGATE-01",
+      "passed": true,
+      "findings": [],
+      "error": null,
+      "usage": {
+        "input_tokens": 10192,
+        "output_tokens": 142,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 41
+      }
+    },
+    {
+      "case_id": "SWF-MIXED-ORDER-01",
+      "passed": true,
+      "findings": [],
+      "error": null,
+      "usage": {
+        "input_tokens": 10205,
+        "output_tokens": 442,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 167
+      }
+    },
+    {
+      "case_id": "PPR14-unknown-self-member-write",
+      "passed": true,
+      "findings": [],
+      "error": null,
+      "usage": {
+        "input_tokens": 10195,
+        "output_tokens": 223,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 77
+      }
+    },
+    {
+      "case_id": "PPR15-unknown-self-member-after-related-turn",
+      "passed": true,
+      "findings": [],
+      "error": null,
+      "usage": {
+        "input_tokens": 10245,
+        "output_tokens": 217,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 71
+      }
+    },
+    {
+      "case_id": "PPR16-unknown-self-project-member-write",
+      "passed": true,
+      "findings": [],
+      "error": null,
+      "usage": {
+        "input_tokens": 10192,
+        "output_tokens": 253,
+        "cached_input_tokens": 10176,
+        "reasoning_tokens": 110
+      }
+    }
+  ],
+  "provider_failures": []
+}
