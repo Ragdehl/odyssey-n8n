@@ -3,7 +3,7 @@
   "cases": [
     {
       "id": "FFE01-nickname-occurrence",
-      "text": "He vaciado el garaje con Bea.",
+      "text": "He vaciado el garaje con bea.",
       "expect": "nickname_identity"
     },
     {
@@ -13,7 +13,7 @@
     },
     {
       "id": "FFE03-mixed-canonical-day-content",
-      "text": "03-10-2026 hemos vaciado el garaje con Bea y mis hijos.",
+      "text": "03-10-2026 hemos vaciado el garaje con bea y mis hijos.",
       "expect": "mixed_identity_and_set"
     }
   ]

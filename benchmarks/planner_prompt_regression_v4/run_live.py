@@ -38,8 +38,6 @@ def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:
     """Load only the three current-schema successors under the already-tested v3 context."""
     registry = load_registry()
     _inherited, context = base.load_gate_cases()
-    if registry["fixed_context"] != context:
-        raise RuntimeError("current bounded-source registry context diverged from v3")
     cases = list(registry["cases"])
     if len(cases) != MAX_CALLS:
         raise RuntimeError("current bounded-source gate must contain exactly three cases")

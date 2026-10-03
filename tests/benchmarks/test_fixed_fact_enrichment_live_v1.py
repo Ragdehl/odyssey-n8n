@@ -42,6 +42,7 @@ def test_fixed_fact_v1_pins_separate_model_contract() -> None:
 def test_fixed_fact_v1_budget_is_bounded() -> None:
     budget = run_live.budget_snapshot()
     assert budget["calls"] == 3
+    assert budget["conservative_usd_upper"] == Decimal("0.009069")
     assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.012")
 
 
@@ -67,7 +68,7 @@ def _described(text: str, scope: CandidateScope | None = None) -> IdentityPart:
 
 
 def test_fixed_fact_v1_oracles_require_identity_and_complete_self_set() -> None:
-    bea = _described("Bea")
+    bea = _described("bea")
     case = {"expect": "nickname_identity"}
     passed, findings = run_live.evaluate(
         SemanticFact((LiteralPart("He vaciado el garaje con "), bea, LiteralPart("."))), case
