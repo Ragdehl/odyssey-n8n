@@ -88,6 +88,7 @@ class CalendarPlan:
     temporal: TemporalResolution
     temporal_text: str | None = None
     failure_code: CalendarFailureCode | None = None
+    capture_text: str | None = None
 
 
 class ResponsesClient(Protocol):
@@ -135,6 +136,7 @@ def calendar_plan_json_schema(_legacy_schema: Mapping[str, Any] | None = None) -
             "range_start": {"type": ["string", "null"]},
             "range_end_exclusive": {"type": ["string", "null"]},
             "temporal_text": {"type": ["string", "null"]},
+            "capture_text": {"type": ["string", "null"]},
             "failure_code": {
                 "anyOf": [
                     {"type": "null"},
@@ -150,6 +152,7 @@ def calendar_plan_json_schema(_legacy_schema: Mapping[str, Any] | None = None) -
             "range_start",
             "range_end_exclusive",
             "temporal_text",
+            "capture_text",
             "failure_code",
         ],
         "additionalProperties": False,
@@ -166,6 +169,7 @@ def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
         "range_start",
         "range_end_exclusive",
         "temporal_text",
+        "capture_text",
         "failure_code",
     }
     if not isinstance(payload, Mapping) or set(payload) != required:
@@ -183,10 +187,21 @@ def parse_calendar_plan(payload: Mapping[str, Any]) -> CalendarPlan:
         not isinstance(temporal_text, str) or not temporal_text.strip()
     ):
         raise CalendarPlannerError("Calendar temporal text is invalid")
+    capture_text = payload["capture_text"]
+    if capture_text is not None and (not isinstance(capture_text, str) or not capture_text.strip()):
+        raise CalendarPlannerError("Calendar capture text is invalid")
     if outcome is CalendarPlanOutcome.FAIL_CLOSED and failure is not None:
         intent = None
         temporal_text = None
-    plan = CalendarPlan(outcome, intent, temporal, temporal_text, failure)
+        capture_text = None
+    plan = CalendarPlan(
+        outcome,
+        intent,
+        temporal,
+        temporal_text=temporal_text,
+        failure_code=failure,
+        capture_text=capture_text,
+    )
     _validate_plan(plan)
     return plan
 
@@ -221,7 +236,12 @@ def _parse_temporal(kind: TemporalResolutionKind, raw: Mapping[str, Any]) -> Tem
 def _validate_plan(plan: CalendarPlan) -> None:
     """Reject any Calendar output that exceeds temporal/domain classification authority."""
     if plan.outcome is CalendarPlanOutcome.FAIL_CLOSED:
-        if plan.intent is not None or plan.temporal_text is not None or plan.failure_code is None:
+        if (
+            plan.intent is not None
+            or plan.temporal_text is not None
+            or plan.capture_text is not None
+            or plan.failure_code is None
+        ):
             raise CalendarPlannerError("Fail-closed Calendar plan correlation is invalid")
         if (
             plan.failure_code is CalendarFailureCode.RANGE_REQUIRES_RANGE_AWARE_OPERATION
@@ -239,12 +259,12 @@ def _validate_plan(plan: CalendarPlan) -> None:
     if plan.temporal.kind is not TemporalResolutionKind.EXACT_DATE:
         raise CalendarPlannerError("Executable Calendar interpretation requires one exact date")
     if plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE:
-        if plan.temporal_text is None:
-            raise CalendarPlannerError("Day capture requires the exact temporal wording")
+        if plan.capture_text is None:
+            raise CalendarPlannerError("Day capture requires exact source capture text")
         return
     if plan.intent is CalendarIntentKind.DELEGATE_TO_CORE:
-        if plan.temporal_text is None:
-            raise CalendarPlannerError("Core delegation requires the exact temporal wording")
+        if plan.temporal_text is None or plan.capture_text is not None:
+            raise CalendarPlannerError("Core delegation requires only exact temporal wording")
         return
     raise CalendarPlannerError("Calendar intent is unsupported")
 
@@ -257,6 +277,8 @@ def validate_calendar_plan_for_source(plan: CalendarPlan, source_text: str) -> C
         raise CalendarPlannerError("Calendar source text must be non-empty")
     if plan.temporal_text is not None and plan.temporal_text not in source_text:
         raise CalendarPlannerError("Calendar temporal evidence is not grounded in source")
+    if plan.capture_text is not None and plan.capture_text not in source_text:
+        raise CalendarPlannerError("Calendar capture text is not grounded in source")
     if (
         plan.intent is CalendarIntentKind.DELEGATE_TO_CORE
         and plan.temporal_text is not None
@@ -295,21 +317,30 @@ def render_calendar_prompt(
         "to the ordinary Core planner. Never choose or describe Core targets, identities, candidate "
         "scopes, facts, references, note types, properties, tags, write intents, Markdown, or mutation "
         "structure. First decide whether the source is within Calendar's supported semantics: a temporal "
-        "occurrence, or a durable statement whose temporal wording changes or qualifies durable "
-        "knowledge. Instructions to create or write into another record/surface, obligations or intended "
-        "work, and other foreign semantics are OUT_OF_SCOPE; do not identify a sibling capability. Only "
+        "occurrence, everyday personal diary/journal capture, or a durable statement whose temporal "
+        "wording changes or qualifies durable knowledge. A request to write in the user's personal diary "
+        "means Day-owned Calendar content, not another record type. When that diary request names no date, "
+        "use current_date as EXACT_DATE and set temporal_text to null; an explicit day/date phrase still "
+        "uses the normal temporal resolution rules. Other instructions to create or write into another "
+        "record/surface, obligations or intended work, and foreign semantics are OUT_OF_SCOPE; do not "
+        "identify a sibling capability. Only "
         "for in-scope input, resolve the temporal shape from the supplied date/time/timezone: EXACT_DATE "
         "means one determinate date; DATE_RANGE means a bounded interval using a half-open "
         "range_end_exclusive; UNSPECIFIED means the wording is too vague to normalize safely. Never "
         "collapse a range or vague phrase into one Day. If a statement establishes, ends, or changes "
         "durable knowledge while also describing an occurrence on a date, durable knowledge takes "
         "precedence: emit DELEGATE_TO_CORE, preserve only the exact temporal wording in temporal_text, and "
-        "supply only its normalized exact date. For every executable exact-date result, temporal_text "
-        "must be the exact temporal phrase from the routed source, never the whole durable statement. "
-        "Core will independently decide semantic ownership, "
+        "supply only its normalized exact date; capture_text must be null. For executable exact-date "
+        "results with explicit temporal wording, temporal_text must be that exact phrase from the routed "
+        "source, never the whole durable statement. Core will independently decide semantic ownership, "
         "targets, identities, facts, references, and mutation semantics. Use DAY_LITERAL_CAPTURE only "
-        "when the semantic content itself belongs to the Day; preserve its exact temporal wording in "
-        "temporal_text so execution can replace only that occurrence with the canonical date label. "
+        "when the semantic content itself belongs to the Day. For every DAY_LITERAL_CAPTURE, capture_text "
+        "must be the exact non-empty source substring that the user wants remembered, with command wrappers "
+        "such as 'write in my diary that' excluded; never paraphrase, summarize, translate, or invent it. "
+        "For an ordinary explicit-date Day occurrence, capture_text may be the whole routed source. Preserve "
+        "explicit temporal wording in temporal_text so execution can canonicalize that occurrence when it "
+        "appears inside capture_text. For a diary request with no explicit date, temporal_text is null and "
+        "EXACT_DATE must be current_date. "
         "Remaining Day-owned EXACT_DATE uses "
         "DAY_LITERAL_CAPTURE, DATE_RANGE uses FAIL_CLOSED/RANGE_REQUIRES_RANGE_AWARE_OPERATION, and "
         "UNSPECIFIED uses FAIL_CLOSED/TEMPORAL_UNRESOLVED. Return only the strict JSON object.\n"
@@ -388,7 +419,14 @@ class OpenAICalendarPlanner:
             payload = json.loads(response.output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:
             raise CalendarPlannerError("Calendar planner returned malformed output") from error
-        return validate_calendar_plan_for_source(parse_calendar_plan(payload), source_text)
+        plan = validate_calendar_plan_for_source(parse_calendar_plan(payload), source_text)
+        if (
+            plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE
+            and plan.temporal_text is None
+            and plan.temporal.exact_date != self._current_context["date"]
+        ):
+            raise CalendarPlannerError("Implicit diary date must be the current date")
+        return plan
 
 
 class CalendarRouteExecutor:
@@ -439,10 +477,12 @@ class CalendarRouteExecutor:
         try:
             if plan.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE:
                 exact_date = plan.temporal.exact_date or ""
-                temporal_text = plan.temporal_text or ""
-                canonical_literal = source_text.replace(
-                    temporal_text, calendar_day_label(exact_date), 1
-                )
+                temporal_text = plan.temporal_text
+                canonical_literal = plan.capture_text or ""
+                if temporal_text and temporal_text in canonical_literal:
+                    canonical_literal = canonical_literal.replace(
+                        temporal_text, calendar_day_label(exact_date), 1
+                    )
                 result = self._capture_day_literal(
                     exact_date, canonical_literal, request_id, authenticated_actor
                 )

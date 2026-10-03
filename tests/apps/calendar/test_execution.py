@@ -45,6 +45,7 @@ def exact_day_plan(date: str = "2026-10-03") -> CalendarPlan:
         CalendarIntentKind.DAY_LITERAL_CAPTURE,
         TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date=date),
         temporal_text="Mañana",
+        capture_text="Mañana viene el fontanero",
     )
 
 

@@ -100,7 +100,7 @@ def test_catalog_keeps_disabled_evidence_but_never_makes_it_executable() -> None
     assert catalog.capabilities() == (
         RoutingCapability(
             "calendar",
-            "temporal interpretation of date-qualified statements, day/date-owned occurrences, and Calendar navigation",
+            "temporal interpretation of date-qualified statements, day/date-owned occurrences, personal diary/journal capture, and Calendar navigation",
             ("temporal",),
             False,
         ),

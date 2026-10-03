@@ -108,6 +108,8 @@ def build_write_capabilities(schema: Mapping[str, Any]) -> dict[str, Any]:
 
     projected: dict[str, Any] = {"types": {}}
     for note_type in types:
+        if note_type.get("planner_writable", True) is False:
+            continue
         try:
             type_id = note_type["id"]
             description = note_type["description"]

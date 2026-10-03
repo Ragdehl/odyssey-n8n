@@ -33,7 +33,7 @@ canonical Note types
   │     ├── person
   │     ├── project
   │     ├── document
-  │     └── journal_entry
+  │     └── journal_entry (legacy read compatibility; not a new write destination)
   └── application-managed types
         └── calendar_day
 ```
@@ -55,7 +55,7 @@ A day is virtual by default and materializes as canonical Markdown only when:
 1. the user/application writes content owned by that day; or
 2. canonical Markdown contains an explicit link whose target is that day.
 
-A structured temporal property alone does **not** materialize the day. Future examples include `task.due_date`, `event.start_date`, and the existing `journal_entry.entry_date`; Calendar can project those values onto a virtual day deterministically.
+A structured temporal property alone does **not** materialize the day. Future examples include task/event temporal properties; legacy `journal_entry.entry_date` remains projectable for historical entries without authorizing new Journal writes.
 
 A materialized day should use a deterministic Calendar-owned path such as:
 
@@ -97,7 +97,7 @@ Examples:
     -> ordinary WRITE owned by Marta, with an explicit temporal reference
 
 "Escribe en mi diario que hoy..."
-    -> Journal-owned knowledge with entry_date/day association
+    -> Calendar Day content for today; no separate Journal object
 
 "Tengo que llamar al banco el viernes"
     -> later Tasks-owned knowledge with due_date/day association
@@ -133,11 +133,25 @@ Core must never turn failed identity resolution into literal Calendar capture on
 
 Writing directly inside an opened Day means literal Day content by default. It does not silently create a Task/Event merely because the text sounds actionable or scheduled; explicit intent or later specialized routing owns those application objects.
 
+
+## Journal convergence follow-up
+
+Everyday diary capture now converges on the Calendar Day instead of creating a second date-bound
+knowledge object. User wording such as `mi diario` is Calendar-owned interaction semantics: an
+explicit date resolves to that Day, while no explicit date means the current Day. Calendar may select
+only the exact source substring the user asked to remember; it must not paraphrase the captured
+content. Core remains responsible for canonical Day persistence and shared safety.
+
+`journal_entry` remains in the canonical schema only for historical read/filter compatibility. It is
+not exposed in planner write capabilities, so new typed Journal creation/amendment is rejected. No
+existing Journal Markdown is migrated or deleted by this follow-up. Calendar may continue projecting
+legacy entries by `entry_date` until a later explicitly approved migration removes the legacy type.
+
 ## Three temporal relationships must remain distinct
 
 Calendar may present several kinds of relationship to the same day, but they are not one canonical mechanism:
 
-1. **Semantic/application time** — structured values such as `entry_date`, later `due_date`, or event start/end values. Calendar projects these deterministically without adding duplicate wikilinks.
+1. **Semantic/application time** — structured values such as later Task/Event dates/times and legacy `journal_entry.entry_date`. Calendar projects these deterministically without adding duplicate wikilinks.
 2. **Explicit temporal reference** — a canonical fact/body contains an intentional wikilink to the Day. This is a real Markdown backlink.
 3. **Odyssey activity/provenance** — notes/facts/tasks/events created, corrected, removed, or completed on that date. This is derived from existing request/Git/application history and must not be copied into every Note body merely to appear on Calendar.
 
@@ -170,7 +184,7 @@ The first version contains:
 - transparent handling of virtual versus materialized days;
 - Day-owned literal content;
 - explicit incoming temporal links/backlinks;
-- projected Journal/date associations and other supported temporal properties;
+- legacy Journal/date associations plus supported Task/Event temporal projections as they exist;
 - useful semantic activity for that date.
 
 Calendar-owned Day notes do not appear in the ordinary Notes feed by default, although the same underlying Markdown may reuse existing reading/editing infrastructure.
@@ -231,7 +245,7 @@ Applications may depend on lower-level capabilities when useful and must keep th
 5. A Day can store independent literal atomic facts with normal provenance and targeted correction/removal behavior.
 6. Identity-dependent operations never degrade silently into literal Day text when required identity/set resolution fails.
 7. Ordinary entity-owned knowledge remains stored once on its natural owner; an explicit temporal reference makes it discoverable from the corresponding Day without duplicating prose.
-8. Journal entries remain separate canonical objects and project to their `entry_date` Day.
+8. New everyday diary/journal capture is Day-owned `calendar_day` content; historical `journal_entry` notes remain valid/readable and project to their `entry_date` Day until an explicitly approved migration retires them.
 9. Same-day atomic captures in one ordinary Note group under one current-date `Added` heading, while historical duplicate headings remain valid input.
 10. Capture dates and explicit temporal references are navigable to the correct Day using ordinary validated link/backlink machinery.
 11. Calendar v0 month + Day views expose Day content, temporal projections, explicit references, and useful semantic activity while excluding application-managed Days from the ordinary Notes feed by default.
@@ -247,6 +261,7 @@ Applications may depend on lower-level capabilities when useful and must keep th
 - A new graph database, calendar database, event service, or second canonical knowledge store.
 - A comprehensive custom natural-language date parser when the existing planner + deterministic date validation suffices.
 - Automatic entity creation from unresolved literal Day text.
+- Destructive migration, deletion, or rewriting of historical `journal_entry` notes; legacy data remains readable until separately approved.
 - Technical/internal activity noise presented as personal calendar activity.
 - Production deployment as part of this phase's initial implementation work.
 

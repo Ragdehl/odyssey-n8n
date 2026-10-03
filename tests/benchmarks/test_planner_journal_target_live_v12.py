@@ -41,7 +41,7 @@ def test_v12_frozen_candidate_is_not_the_current_contract() -> None:
     schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
     prompt_hash, schema_hash = run_live._contract_hashes(schema, matrix["current_context"])
     assert prompt_hash != run_live.PROMPT_SHA256
-    assert schema_hash == run_live.PROVIDER_SCHEMA_SHA256
+    assert schema_hash != run_live.PROVIDER_SCHEMA_SHA256
 
 
 def test_v12_preflight_refuses_current_contract_before_provider_authority(

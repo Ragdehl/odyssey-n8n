@@ -645,31 +645,23 @@ def test_mixed_retrieval_and_write_actions_preserve_request_order(schema: dict) 
     assert isinstance(plan.actions[1], RetrieveAction)
 
 
-def test_journal_write_can_use_entry_date_for_target_identity_and_creation(schema: dict) -> None:
-    """Keep one schema-driven plan valid for same-date reuse or creation without Journal Core rules."""
-    plan = validate_request_plan(
-        output(
-            write(
-                unit(
-                    "entrada de diario del 3 de octubre",
-                    note_type="journal_entry",
-                    filters=[{"field": "entry_date", "op": "eq", "value": "2026-10-03"}],
-                    properties=[prop("entry_date", "2026-10-03")],
-                    facts=["He tenido un día muy tranquilo."],
+def test_legacy_journal_is_not_a_valid_typed_write_target(schema: dict) -> None:
+    """Reject new typed Journal writes after everyday diary capture converges on Calendar Day."""
+    with pytest.raises(RequestPlanningError, match="target type is not writable"):
+        validate_request_plan(
+            output(
+                write(
+                    unit(
+                        "entrada de diario del 3 de octubre",
+                        note_type="journal_entry",
+                        filters=[{"field": "entry_date", "op": "eq", "value": "2026-10-03"}],
+                        properties=[prop("entry_date", "2026-10-03")],
+                        facts=["He tenido un día muy tranquilo."],
+                    )
                 )
-            )
-        ),
-        schema,
-    )
-
-    item = plan.actions[0].units[0]  # type: ignore[union-attr]
-    assert item.target.type == "journal_entry"
-    assert [(flt.field, flt.op, flt.value) for flt in item.target.filters] == [
-        ("entry_date", "eq", "2026-10-03")
-    ]
-    assert [(change.field, change.value) for change in item.properties] == [
-        ("entry_date", "2026-10-03")
-    ]
+            ),
+            schema,
+        )
 
 
 def test_structured_property_only_record_amend_and_remove_are_valid(schema: dict) -> None:
@@ -978,27 +970,27 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     )[1]
     capabilities = json.loads(write_json)
     assert capabilities["types"]["person"]["properties"]["origin"]["value_type"] == "string"
-    assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
+    assert "journal_entry" not in capabilities["types"]
 
 
-def test_prompt_exposes_date_bound_journal_write_target_contract(schema: dict) -> None:
-    """Keep journal destination-by-date guidance visible at the production model boundary."""
+def test_prompt_keeps_legacy_journal_retrievable_but_not_writable(schema: dict) -> None:
+    """Expose historical Journal reads without offering Journal as a new mutation destination."""
     prompt = render_request_planner_prompt(schema, CONTEXT)
+    retrieval_json = prompt.split(
+        "Planner retrieval/selection capabilities (derived dynamically from the canonical schema):\n\n",
+        1,
+    )[1].split("\n\nPlanner writable", 1)[0]
     write_json = prompt.split(
         "Planner writable type/property capabilities (derived dynamically from the same canonical schema):\n\n",
         1,
     )[1]
-    capabilities = json.loads(write_json)
-    journal = capabilities["types"]["journal_entry"]
+    retrieval = json.loads(retrieval_json)
+    writes = json.loads(write_json)
 
-    assert "constrain target selection with entry_date equal to that date" in journal["description"]
-    assert "also set the same entry_date property" in journal["description"]
-    assert "Never repurpose an entry from another date" in journal["description"]
-    assert (
-        "even when the same date also appears in target filters"
-        in journal["properties"]["entry_date"]["description"]
-    )
-    assert "preserve its entry_date" in journal["properties"]["entry_date"]["description"]
+    assert "journal_entry" in retrieval["types"]
+    assert "entry_date" in retrieval["filters"]
+    assert "Legacy diary entry" in retrieval["types"]["journal_entry"]["description"]
+    assert "journal_entry" not in writes["types"]
 
 
 def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> None:

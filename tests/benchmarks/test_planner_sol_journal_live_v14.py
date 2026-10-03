@@ -2,20 +2,38 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from benchmarks.planner_sol_journal_live_v14 import run_live
 
 
-def test_v14_pins_current_sol_contract_and_budget() -> None:
+def test_v14_retained_evidence_is_historical_and_complete() -> None:
+    artifacts = list(run_live.RESULTS_DIR.glob("*.json"))
+    assert len(artifacts) == 1
+    artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["version"] == 14
+    assert artifact["model"] == "gpt-5.6-sol"
+    assert artifact["reasoning_effort"] == "low"
+    assert artifact["provider_attempts"] == artifact["completed_provider_responses"] == 1
+    assert artifact["automatic_retries"] == 0
+    assert artifact["passed"] is True
+    assert float(artifact["estimated_standard_cost_usd"]) < float(run_live.AUTHORIZED_CEILING_USD)
+
+
+def test_v14_historical_contract_is_not_current_and_cannot_rerun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     schema = run_live._schema()
-    assert run_live._contract_hashes(schema) == (
+    assert run_live._contract_hashes(schema) != (
         run_live.PROMPT_SHA256,
         run_live.PROVIDER_SCHEMA_SHA256,
     )
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 1
-    assert budget["standard_usd_upper"] < run_live.AUTHORIZED_CEILING_USD
+    monkeypatch.setenv(run_live.AUTH_ENV, "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
+    with pytest.raises(SystemExit, match="candidate contract changed"):
+        run_live._preflight()
 
 
 def test_v14_requires_filter_property_and_fact() -> None:
@@ -27,10 +45,3 @@ def test_v14_requires_filter_property_and_fact() -> None:
     }
     assert run_live._matches(good)
     assert not run_live._matches({**good, "properties": []})
-
-
-def test_v14_has_zero_provider_authority_without_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
-        run_live._preflight()

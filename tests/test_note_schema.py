@@ -75,6 +75,14 @@ class NoteSchemaValidationTests(unittest.TestCase):
             self.type_definition_from(schema, "calendar_day")["managed_by"] = value
             self.assert_invalid(schema, "managed_by must be a canonical identifier")
 
+    def test_planner_writable_flag_must_be_boolean(self) -> None:
+        """Keep planner write eligibility an explicit validated type-level contract."""
+        journal = self.type_definition("journal_entry")
+        self.assertIs(journal["planner_writable"], False)
+        schema = copy.deepcopy(self.schema)
+        self.type_definition_from(schema, "journal_entry")["planner_writable"] = "false"
+        self.assert_invalid(schema, "planner_writable must be boolean")
+
     def test_invalid_json_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "invalid.json"

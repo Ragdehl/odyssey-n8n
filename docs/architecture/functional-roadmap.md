@@ -123,9 +123,11 @@ approved fail-closed degradations. PROD has not been promoted to #148.
 
 [Temporal Foundation v1](temporal-foundation-v1.md) is provider-free complete. Calendar v0 and
 Application Boundary + Router v0 have completed their focused live gates and isolated-DEV adoption,
-and the shared Temporal contract now adds timezone-validated `EXACT_DATETIME` without changing
-Calendar's accepted prompt/provider schema or introducing app-to-app routing. The next functional
-phase is **Tasks**, the first lifecycle-heavy application.
+and the shared Temporal contract now adds timezone-validated `EXACT_DATETIME` without introducing
+app-to-app routing. A bounded Journal-convergence follow-up is now being validated before Tasks: new
+everyday diary capture targets Calendar Day, while historical `journal_entry` notes remain readable.
+Because this changes Router/Calendar and Core planner-facing contracts, fresh focused live evidence is
+required before the follow-up is accepted. **Tasks** remains the next functional phase afterward.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete

@@ -114,6 +114,8 @@ def _validate_types(types: Any) -> None:
                 raise SchemaValidationError(
                     f"type {type_id!r} managed_by must be a canonical identifier"
                 )
+        if "planner_writable" in note_type and not isinstance(note_type["planner_writable"], bool):
+            raise SchemaValidationError(f"type {type_id!r} planner_writable must be boolean")
         _validate_properties(note_type["properties"], type_id)
 
 

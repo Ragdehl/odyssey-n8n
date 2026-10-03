@@ -236,7 +236,7 @@ def test_prompt_allows_temporal_routing_without_date_normalization_or_context_au
     assert evidence["capabilities"][1]["dependencies"] == ["temporal"]
     assert evidence["capabilities"][1]["routing_description"] == (
         "temporal interpretation of date-qualified statements, day/date-owned occurrences, "
-        "and Calendar navigation"
+        "personal diary/journal capture, and Calendar navigation"
     )
 
 
@@ -325,6 +325,35 @@ def test_frozen_router_live_gate_matrix_is_closed_and_locally_valid() -> None:
             ApplicationDescriptor(
                 "calendar", "day/date-owned occurrences and navigation", ("temporal",)
             ),
+            ApplicationDescriptor(
+                "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
+            ),
+        )
+    ).catalog(enabled_ids=("calendar",))
+    for case in matrix["cases"]:
+        expected = case["expect"]
+        routes = tuple(
+            Route(capability_id, source_text) for capability_id, source_text in expected["routes"]
+        )
+        validate_route_plan(
+            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], gate_catalog
+        )
+
+
+def test_current_router_matrix_routes_daily_journal_to_calendar() -> None:
+    """Freeze the post-Journal-convergence router ownership without rewriting historical v1/v2 evidence."""
+    matrix = json.loads(
+        (
+            Path(__file__).resolve().parents[2] / "benchmarks/application_router/regression_v3.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert matrix["version"] == 3
+    by_id = {case["id"]: case for case in matrix["cases"]}
+    assert by_id["journal-to-calendar"]["expect"]["routes"][0][0] == "calendar"
+    assert by_id["journal-implicit-today-to-calendar"]["expect"]["routes"][0][0] == "calendar"
+    gate_catalog = ApplicationRegistry.from_descriptors(
+        (
+            CALENDAR_DESCRIPTOR,
             ApplicationDescriptor(
                 "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
             ),

@@ -194,8 +194,8 @@ def test_oracle_requires_semantic_content_for_reviewed_cases() -> None:
     assert evaluate("P05", missing_mutation, schema)[0] == "INVALID"
 
 
-def test_oracle_accepts_current_reflection_as_journal_entry() -> None:
-    """Treat a current personal reflection as a dated journal entry when represented fully."""
+def test_current_schema_rejects_new_journal_entry_write() -> None:
+    """Retain the historical payload while current diary capture is owned by Calendar Day."""
     schema = schema_for(next(case for case in load_cases() if case["id"] == "P09"))
     payload = _output(
         _write(
@@ -208,7 +208,9 @@ def test_oracle_accepts_current_reflection_as_journal_entry() -> None:
             )
         )
     )
-    assert evaluate("P09", payload, schema) == ("PASS", [])
+    status, reasons = evaluate("P09", payload, schema)
+    assert status == "INVALID"
+    assert any("not writable" in reason for reason in reasons)
 
 
 def test_regression_sentinels_require_user_content() -> None:

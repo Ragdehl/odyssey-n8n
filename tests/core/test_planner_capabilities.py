@@ -160,18 +160,18 @@ def test_concept_description_is_positive_not_fallback(schema: dict) -> None:
     assert "not a generic fallback" in concept["description"]
 
 
-def test_journal_write_target_semantics_are_schema_declared_and_projected(schema: dict) -> None:
-    """Expose date-bound journal destination semantics through generic write capabilities."""
+def test_legacy_journal_remains_retrievable_but_is_not_planner_writable(schema: dict) -> None:
+    """Retain historical diary reads while new diary capture belongs to Calendar Day."""
     journal = next(item for item in schema["types"] if item["id"] == "journal_entry")
     entry_date = next(item for item in journal["properties"] if item["id"] == "entry_date")
 
-    assert "constrain target selection with entry_date equal to that date" in journal["description"]
-    assert "also set the same entry_date property" in journal["description"]
-    assert "Never repurpose an entry from another date" in journal["description"]
-    assert "even when the same date also appears in target filters" in entry_date["description"]
-    assert "preserve its entry_date" in entry_date["description"]
-    assert "different date belongs to a different journal_entry" in entry_date["description"]
+    assert journal["planner_writable"] is False
+    assert "Legacy diary entry" in journal["description"]
+    assert "Calendar Day" in journal["description"]
+    assert "legacy journal entry" in entry_date["description"]
 
-    projected = build_write_capabilities(schema)["types"]["journal_entry"]
-    assert projected["description"] == journal["description"]
-    assert projected["properties"]["entry_date"]["description"] == entry_date["description"]
+    retrieval = build_planner_capabilities(schema)
+    writes = build_write_capabilities(schema)
+    assert "journal_entry" in retrieval["types"]
+    assert "entry_date" in retrieval["filters"]
+    assert "journal_entry" not in writes["types"]

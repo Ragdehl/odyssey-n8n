@@ -21,27 +21,28 @@ def test_v13_matrix_is_frozen_and_create_safe_specific() -> None:
     ]
 
 
-def test_v13_pins_exact_candidate_prompt_and_provider_schema() -> None:
-    matrix = json.loads(run_live.MATRIX.read_text(encoding="utf-8"))
-    schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
-    assert run_live._contract_hashes(schema, matrix["current_context"]) == (
-        run_live.PROMPT_SHA256,
-        run_live.PROVIDER_SCHEMA_SHA256,
-    )
+def test_v13_retained_evidence_is_historical_and_complete() -> None:
+    artifacts = list(run_live.RESULTS_DIR.glob("*.json"))
+    assert len(artifacts) == 1
+    artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["version"] == 13
+    assert artifact["provider_attempts"] == artifact["completed_provider_responses"] == 2
+    assert artifact["automatic_retries"] == 0
+    assert artifact["passed"] is True
+    assert artifact["estimated_regional_upper_usd"] < run_live.AUTHORIZED_CEILING_USD
 
 
-def test_v13_budget_is_two_zero_retry_calls_below_hard_ceiling() -> None:
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == run_live.MAX_CALLS == 2
-    assert budget["regional_usd_upper"] < run_live.AUTHORIZED_CEILING_USD == 0.030
-
-
-def test_v13_has_no_provider_authority_without_explicit_flag(
+def test_v13_historical_contract_is_not_current_and_cannot_rerun(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
+    matrix = json.loads(run_live.MATRIX.read_text(encoding="utf-8"))
+    schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
+    prompt_hash, schema_hash = run_live._contract_hashes(schema, matrix["current_context"])
+    assert prompt_hash != run_live.PROMPT_SHA256
+    assert schema_hash != run_live.PROVIDER_SCHEMA_SHA256
+    monkeypatch.setenv(run_live.AUTH_ENV, "1")
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="candidate model-facing contract changed"):
         run_live._preflight()
 
 

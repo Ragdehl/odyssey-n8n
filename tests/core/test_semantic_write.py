@@ -505,10 +505,14 @@ def test_reference_reuses_one_unique_material_target_and_ambiguous_match_fails(
 def test_properties_tags_intents_migration_bulk_and_complete_set_use_core_validation(
     schema: dict,
 ) -> None:
-    """Cover supported mutation forms while routing field and tag rules to the current validator."""
+    """Cover generic mutation forms using a synthetic writable property-bearing type."""
+    writable_schema = deepcopy(schema)
+    next(item for item in writable_schema["types"] if item["id"] == "journal_entry")[
+        "planner_writable"
+    ] = True
     metadata = PropertyChange("entry_date", "set", "2026-09-29")
     mutation = compile_one(
-        schema,
+        writable_schema,
         operation(
             IdentityIntent("diario", IdentityBinding.DESCRIBED, note_type="journal_entry"),
             fact(LiteralPart("Fue un buen día.")),
@@ -532,7 +536,7 @@ def test_properties_tags_intents_migration_bulk_and_complete_set_use_core_valida
     assert [unit.intent for unit in mutation.units] == ["record", "amend", "remove", "delete"]
 
     migration = compile_one(
-        schema,
+        writable_schema,
         operation(
             IdentityIntent("nota diaria", IdentityBinding.DESCRIBED, note_type="concept"),
             intent="amend",

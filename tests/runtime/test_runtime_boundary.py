@@ -1550,6 +1550,7 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
             "range_start": None,
             "range_end_exclusive": None,
             "temporal_text": "Mañana",
+            "capture_text": source,
             "failure_code": None,
         },
         response_id="resp-calendar-e2e",
@@ -1682,6 +1683,7 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
             "range_start": None,
             "range_end_exclusive": None,
             "temporal_text": "mañana",
+            "capture_text": None,
             "failure_code": None,
         }
     )

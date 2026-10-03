@@ -2352,11 +2352,15 @@ def _validate_knowledge_unit(
             code=PlannerValidationCode.INVALID_MUTATION,
         )
 
+    effective_type = destination_type or target.type
+    if effective_type is not None and effective_type not in write_capabilities["types"]:
+        raise RequestPlanningError("KnowledgeUnit target type is not writable")
+
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
         raise RequestPlanningError("KnowledgeUnit properties must be a list")
     properties = _validate_property_changes(
-        raw_properties, destination_type or target.type, intent, write_capabilities
+        raw_properties, effective_type, intent, write_capabilities
     )
     tag_changes = _validate_tag_changes(unit.get("tag_changes", []), intent)
 

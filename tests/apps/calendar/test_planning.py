@@ -38,9 +38,12 @@ def calendar_payload(
     range_start: str | None = None,
     range_end_exclusive: str | None = None,
     temporal_text: str | None = "mañana",
+    capture_text: str | None = None,
     failure_code: str | None = None,
 ) -> dict[str, Any]:
     """Build one complete domain-only Calendar Structured Output payload."""
+    if capture_text is None and outcome == "PLAN" and intent == "DAY_LITERAL_CAPTURE":
+        capture_text = temporal_text
     return {
         "outcome": outcome,
         "intent": intent,
@@ -49,6 +52,7 @@ def calendar_payload(
         "range_start": range_start,
         "range_end_exclusive": range_end_exclusive,
         "temporal_text": temporal_text,
+        "capture_text": capture_text,
         "failure_code": failure_code,
     }
 
@@ -135,6 +139,7 @@ def test_calendar_schema_contains_no_core_planning_or_mutation_vocabulary() -> N
         "range_start",
         "range_end_exclusive",
         "temporal_text",
+        "capture_text",
         "failure_code",
     }
     assert provider["properties"]["intent"]["anyOf"][1]["enum"] == [
@@ -249,6 +254,60 @@ class FakeResponses:
         if isinstance(self.response, Exception):
             raise self.response
         return self.response
+
+
+def test_diary_capture_without_explicit_date_uses_current_day_and_exact_content_span() -> None:
+    source = "Escribe en mi diario que he tenido un día muy tranquilo."
+    fake = FakeResponses(
+        SimpleNamespace(
+            status="completed",
+            output_text=json.dumps(
+                calendar_payload(
+                    exact_date="2026-10-02",
+                    temporal_text=None,
+                    capture_text="he tenido un día muy tranquilo.",
+                )
+            ),
+        )
+    )
+    planner = OpenAICalendarPlanner(
+        SimpleNamespace(responses=fake),
+        {"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"},
+    )
+
+    result = planner.plan(source)
+
+    assert result.intent is CalendarIntentKind.DAY_LITERAL_CAPTURE
+    assert result.temporal.exact_date == "2026-10-02"
+    assert result.temporal_text is None
+    assert result.capture_text == "he tenido un día muy tranquilo."
+
+
+def test_implicit_diary_date_cannot_escape_current_day_or_paraphrase_capture() -> None:
+    current = {"date": "2026-10-02", "time": "17:00", "timezone": "Europe/Paris"}
+    source = "Escribe en mi diario que he tenido un día muy tranquilo."
+    wrong_day = FakeResponses(
+        SimpleNamespace(
+            status="completed",
+            output_text=json.dumps(
+                calendar_payload(
+                    exact_date="2026-10-03",
+                    temporal_text=None,
+                    capture_text="he tenido un día muy tranquilo.",
+                )
+            ),
+        )
+    )
+    with pytest.raises(CalendarPlannerError, match="current date"):
+        OpenAICalendarPlanner(SimpleNamespace(responses=wrong_day), current).plan(source)
+
+    paraphrase = calendar_payload(
+        exact_date="2026-10-02",
+        temporal_text=None,
+        capture_text="Fue un día tranquilo.",
+    )
+    with pytest.raises(CalendarPlannerError, match="grounded"):
+        validate_calendar_plan_for_source(parse_calendar_plan(paraphrase), source)
 
 
 def test_provider_uses_luna_low_once_without_receiving_core_schema() -> None:

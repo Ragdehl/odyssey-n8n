@@ -75,6 +75,7 @@ def calendar_payload(
     temporal_kind: str,
     exact_date: str | None,
     temporal_text: str | None = None,
+    capture_text: str | None = None,
     outcome: str = "PLAN",
     range_start: str | None = None,
     range_end_exclusive: str | None = None,
@@ -88,6 +89,7 @@ def calendar_payload(
         "range_start": range_start,
         "range_end_exclusive": range_end_exclusive,
         "temporal_text": temporal_text,
+        "capture_text": capture_text,
         "failure_code": failure_code,
     }
 
@@ -275,6 +277,7 @@ def test_router_calendar_day_occurrence_persists_exact_source_e2e(tmp_path: Path
             temporal_kind="EXACT_DATE",
             exact_date="2026-10-03",
             temporal_text="Mañana",
+            capture_text=source,
         )
     )
     router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
@@ -319,6 +322,99 @@ def test_router_calendar_day_occurrence_persists_exact_source_e2e(tmp_path: Path
     note = parse_note((vault / "calendar/days/2026-10-03.md").read_text(encoding="utf-8"))
     assert "03-10-2026 viene el fontanero" in note.content
     assert "Mañana viene el fontanero" not in note.content
+
+
+@pytest.mark.parametrize(
+    ("source", "exact_date", "temporal_text", "capture_text", "expected"),
+    [
+        (
+            "Escribe en mi diario que he tenido un día muy tranquilo.",
+            "2026-10-02",
+            None,
+            "he tenido un día muy tranquilo.",
+            "he tenido un día muy tranquilo.",
+        ),
+        (
+            "Escribe en mi diario que ayer tuve un buen día.",
+            "2026-10-01",
+            "ayer",
+            "ayer tuve un buen día.",
+            "01-10-2026 tuve un buen día.",
+        ),
+    ],
+)
+def test_router_calendar_diary_capture_writes_day_not_journal_entry_e2e(
+    tmp_path: Path,
+    source: str,
+    exact_date: str,
+    temporal_text: str | None,
+    capture_text: str,
+    expected: str,
+) -> None:
+    schema = load_schema()
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    catalog = calendar_catalog()
+    router_transport = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_transport = FakeResponses(
+        calendar_payload(
+            intent="DAY_LITERAL_CAPTURE",
+            temporal_kind="EXACT_DATE",
+            exact_date=exact_date,
+            temporal_text=temporal_text,
+            capture_text=capture_text,
+        )
+    )
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=router_transport), catalog)
+    planner = OpenAICalendarPlanner(SimpleNamespace(responses=calendar_transport), CURRENT)
+    repository = VaultRepository(vault)
+    captures = CalendarLiteralCaptureService(repository, schema, None)
+
+    def capture(
+        date: str, literal: str, request_id: str, _actor: object | None
+    ) -> ApplicationResult:
+        result = captures.capture(
+            date=date,
+            literal=literal,
+            request_id=request_id,
+            actor={"human": "user-e2e", "app": "calendar"},
+            now="2026-10-02T17:00:00+02:00",
+        )
+        return ApplicationResult(
+            request_id,
+            ApplicationStatus.COMPLETED,
+            (ActionResult(0, "calendar", ActionStatus.COMPLETED),),
+            (result.note_id,),
+            history=result.history,
+        )
+
+    executor = CalendarRouteExecutor(
+        planner,
+        capture_day_literal=capture,
+        execute_core=lambda *_args: pytest.fail("Diary capture must remain Day-owned"),
+    )
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer-diary",
+        router=router,
+        catalog=catalog,
+        core_execute=lambda *_args, **_kwargs: pytest.fail("Router Core route must not run"),
+        application_executors={"calendar": executor},
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.affected_stable_note_ids == (f"date:{exact_date}",)
+    paths = repository.list_markdown_paths()
+    assert f"calendar/days/{exact_date}.md" in paths
+    assert all(path.startswith("calendar/days/") for path in paths)
+    for path in paths:
+        assert parse_note(repository.read_text(path)).metadata["type"] == "calendar_day"
+    note = parse_note((vault / f"calendar/days/{exact_date}.md").read_text(encoding="utf-8"))
+    assert note.metadata["type"] == "calendar_day"
+    assert expected in note.content
+    assert "Escribe en mi diario" not in note.content
 
 
 def test_router_calendar_durable_statement_returns_to_ordinary_core_planner_e2e() -> None:
