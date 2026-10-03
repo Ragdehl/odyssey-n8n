@@ -33,11 +33,11 @@ from odyssey_core.observability import (
     ProviderCallEvidence,
     normalize_provider_usage,
 )
-from odyssey_core.temporal import (
-    DateRange,
-    TemporalValueError,
-    calendar_day_label,
-    normalize_iso_date,
+from odyssey_core.temporal import TemporalValueError, calendar_day_label, normalize_iso_date
+from odyssey_core.temporal_resolution import (
+    TemporalResolution,
+    TemporalResolutionKind,
+    parse_temporal_resolution,
 )
 
 CALENDAR_PLANNER_MODEL = "gpt-6-luna"
@@ -46,18 +46,15 @@ CALENDAR_PLANNER_MAX_OUTPUT_TOKENS = 512
 CALENDAR_PLANNER_MAX_RECENT_TURNS = 8
 CALENDAR_PLANNER_MAX_CONTEXT_CHARS = 1_000
 CALENDAR_PLANNER_TIMEOUT_SECONDS = 30.0
+CALENDAR_TEMPORAL_RESOLUTION_KINDS = (
+    TemporalResolutionKind.EXACT_DATE,
+    TemporalResolutionKind.DATE_RANGE,
+    TemporalResolutionKind.UNSPECIFIED,
+)
 
 
 class CalendarPlannerError(ValueError):
     """Report an invalid or unavailable Calendar interpretation without executing it."""
-
-
-class TemporalResolutionKind(StrEnum):
-    """Name the only temporal-resolution shapes preserved by Calendar."""
-
-    EXACT_DATE = "EXACT_DATE"
-    DATE_RANGE = "DATE_RANGE"
-    UNSPECIFIED = "UNSPECIFIED"
 
 
 class CalendarPlanOutcome(StrEnum):
@@ -80,15 +77,6 @@ class CalendarFailureCode(StrEnum):
     RANGE_REQUIRES_RANGE_AWARE_OPERATION = "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
     TEMPORAL_UNRESOLVED = "TEMPORAL_UNRESOLVED"
     OUT_OF_SCOPE = "OUT_OF_SCOPE"
-
-
-@dataclass(frozen=True, slots=True)
-class TemporalResolution:
-    """Carry exact, range, or unresolved temporal evidence without guessing one Day."""
-
-    kind: TemporalResolutionKind
-    exact_date: str | None = None
-    date_range: DateRange | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +129,7 @@ def calendar_plan_json_schema(_legacy_schema: Mapping[str, Any] | None = None) -
             },
             "temporal_kind": {
                 "type": "string",
-                "enum": [item.value for item in TemporalResolutionKind],
+                "enum": [item.value for item in CALENDAR_TEMPORAL_RESOLUTION_KINDS],
             },
             "exact_date": {"type": ["string", "null"]},
             "range_start": {"type": ["string", "null"]},
@@ -214,25 +202,20 @@ def _enum_or_none(enum_type: type[StrEnum], value: object, name: str) -> Any:
 
 
 def _parse_temporal(kind: TemporalResolutionKind, raw: Mapping[str, Any]) -> TemporalResolution:
-    """Validate temporal-shape correlation without inventing an exact date from a range."""
-    exact, start, end = raw["exact_date"], raw["range_start"], raw["range_end_exclusive"]
-    if kind is TemporalResolutionKind.EXACT_DATE:
-        if not isinstance(exact, str) or start is not None or end is not None:
-            raise CalendarPlannerError("Exact Calendar date fields are invalid")
-        try:
-            return TemporalResolution(kind, exact_date=normalize_iso_date(exact))
-        except TemporalValueError as error:
-            raise CalendarPlannerError("Exact Calendar date is invalid") from error
-    if kind is TemporalResolutionKind.DATE_RANGE:
-        if exact is not None or not isinstance(start, str) or not isinstance(end, str):
-            raise CalendarPlannerError("Calendar date range fields are invalid")
-        try:
-            return TemporalResolution(kind, date_range=DateRange(start, end))
-        except TemporalValueError as error:
-            raise CalendarPlannerError("Calendar date range is invalid") from error
-    if exact is not None or start is not None or end is not None:
-        raise CalendarPlannerError("Unspecified Calendar time must not carry dates")
-    return TemporalResolution(kind)
+    """Validate Calendar's date-only subset through the shared Temporal v1 contract."""
+    try:
+        return parse_temporal_resolution(
+            {
+                "kind": kind.value,
+                "exact_date": raw["exact_date"],
+                "exact_datetime": None,
+                "range_start": raw["range_start"],
+                "range_end_exclusive": raw["range_end_exclusive"],
+            },
+            allowed_kinds=CALENDAR_TEMPORAL_RESOLUTION_KINDS,
+        )
+    except TemporalValueError as error:
+        raise CalendarPlannerError("Calendar temporal fields are invalid") from error
 
 
 def _validate_plan(plan: CalendarPlan) -> None:

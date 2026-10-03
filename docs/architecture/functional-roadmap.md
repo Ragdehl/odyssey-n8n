@@ -121,11 +121,11 @@ and natural-language continuation in isolated DEV, deterministic validation rema
 final reviewed Luna/low planner evidence fixed the blocking ownership regression while retaining the
 approved fail-closed degradations. PROD has not been promoted to #148.
 
-The current functional phase is [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md).
-Slices 1-4 are implemented and visually validated in isolated DEV. Before Calendar natural-language
-routing, the project is defining the cross-cutting [Application Boundary + Router v0](application-boundary-router-v0.md)
-so new applications do not modify the established Core planner contract. Tasks remains the next
-lifecycle-heavy application after Calendar routing proves that boundary.
+[Temporal Foundation v1](temporal-foundation-v1.md) is provider-free complete. Calendar v0 and
+Application Boundary + Router v0 have completed their focused live gates and isolated-DEV adoption,
+and the shared Temporal contract now adds timezone-validated `EXACT_DATETIME` without changing
+Calendar's accepted prompt/provider schema or introducing app-to-app routing. The next functional
+phase is **Tasks**, the first lifecycle-heavy application.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -168,9 +168,10 @@ Semantic set resolution and evidence                             ✅ merged in P
 Semantic self scope and clarification correction                   ✅ complete
 UI polish + Notes editing lite                                     ✅ merged in PR #144
 Explainable Clarification UX                                       ✅ merged in PR #148; DEV validated
-Temporal Foundation + Calendar v0                                  ✅ Attempt 8 Calendar low live gate 10/10; DEV adoption next
-Application Boundary + Router v0                                    ✅ Attempt 5 Router live gate 8/8
-Tasks — first lifecycle-heavy domain application                  ⬜ after Calendar routing
+Temporal Foundation + Calendar v0                                  ✅ Attempt 8 Calendar low live gate 10/10; DEV adopted
+Application Boundary + Router v0                                    ✅ Attempt 5 Router live gate 8/8; DEV adopted
+Temporal Foundation v1 — shared date/date-time contract              ✅ provider-free complete; Calendar artifacts unchanged
+Tasks — first lifecycle-heavy domain application                  ⬜ after Temporal v1
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
@@ -282,16 +283,13 @@ Semantic set resolution and evidence                  ✅ merged in PR #142
 Explainable Clarification UX                           ✅ merged in PR #148
         |
         v
-Temporal Foundation + Calendar v0                     ✅ Attempt 8 Calendar low live gate 10/10; DEV adoption next
+Temporal Foundation + Calendar v0                     ✅ Attempt 8 Calendar low live gate 10/10; DEV adopted
         |
         v
-Application Boundary + Router v0                     ✅ Attempt 5 Router 8/8 + Calendar Attempt 8 10/10 live gates complete
+Application Boundary + Router v0                     ✅ Attempt 5 Router 8/8 + Calendar Attempt 8 10/10; DEV adopted
         |
         v
-Router + Calendar focused live gates / Slice 6
-        |
-        v
-Calendar DEV adoption / Slice 7
+Temporal Foundation v1                               ✅ shared EXACT_DATETIME contract complete
         |
         v
 Tasks — first lifecycle-heavy domain application
@@ -360,14 +358,16 @@ Events ------+
 
 The approved user interaction model is **automatic routing by default, explicit routing when useful**. Ordinary users should speak naturally in the main conversation; the relevant capability is selected internally and only that selected capability should execute/respond. Optional syntax such as `@Tasks` may direct or disambiguate a request but must never be required. A capability-specific surface may exist only when a concrete need justifies it, while reusing the same knowledge, identity, and application state rather than becoming a silo. Applications may show a small capability identity in the UI, but should not become independent personalities that all listen to every message. Nested threads and branching chat management are not committed directions.
 
-The approved order now starts with **Temporal Foundation + Calendar v0**: shared date/Day identity,
-navigation, and Calendar-managed daily capture are lower-level behavior that Tasks and Events reuse.
-**Tasks** remains the first lifecycle-heavy domain application. **Events** follows Tasks and projects
-timed occurrences onto the same Calendar surface. **Reminders** should provide only the lower-level
-notification/delivery semantics Tasks and Events actually need; it must not collapse tasks and events
-into one model. **Projects** remains a committed consumer of Tasks but can follow the calendar path and
-the bounded maintainability checkpoint rather than blocking Events. See
-[Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) and
+The approved order now starts with **Temporal Foundation + Calendar v0**, followed by the small
+**Temporal Foundation v1** extension: date/Day identity and Calendar-managed daily capture remain
+lower-level behavior, while the shared normalized contract now also supports timezone-validated exact
+date-times for Tasks and later Events. **Tasks** remains the first lifecycle-heavy domain application.
+**Events** follows Tasks and projects timed occurrences onto the same Calendar surface. **Reminders**
+should provide only the lower-level notification/delivery semantics Tasks and Events actually need; it
+must not collapse tasks and events into one model. **Projects** remains a committed consumer of Tasks
+but can follow the calendar path and the bounded maintainability checkpoint rather than blocking
+Events. See [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md),
+[Temporal Foundation v1](temporal-foundation-v1.md), and
 [Future Events / Calendar capability](future-events-calendar.md).
 
 Do not build a generic plugin platform before Tasks proves what the common application contract actually needs.
@@ -379,8 +379,7 @@ Once application work becomes repetitive, evaluate a bounded **agent-assisted de
 ### Maintainability checkpoint after the calendar/application foundation
 
 Maintainability is a continuous acceptance concern during every phase, but Odyssey should not pause
-useful product work now for speculative restructuring. The near-term priority is the approved Temporal Foundation + Calendar v0, then Tasks and Events
-with the minimum Reminder semantics those capabilities need.
+useful product work now for speculative restructuring. The near-term priority is the approved Temporal Foundation + Calendar v0 plus the bounded Temporal v1 date-time extension, then Tasks and Events with the minimum Reminder semantics those capabilities need.
 
 After that path has exercised the application boundary in real code, schedule a **bounded
 maintainability checkpoint** before substantial secondary-app expansion. The checkpoint should use

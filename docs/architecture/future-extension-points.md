@@ -16,6 +16,7 @@ Use these documents as the detailed owners:
 - [Future product usage observability](future-product-usage-observability.md) — safe user/admin usage, timing, token, and cost projections from existing evidence.
 - [Future Odyssey product interface](future-product-interface.md) — mobile-first chat feedback, note browsing/editing, activity/change visualization, and role-aware advanced surfaces.
 - [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) — approved current contract for shared date/Day identity, Calendar-managed daily capture, temporal links, and month/Day navigation before Tasks.
+- [Temporal Foundation v1](temporal-foundation-v1.md) — shared date/date-time resolution shapes and timezone validation for Tasks/Events without app-to-app routing or an extra mandatory model pass.
 - [Future Events / Calendar capability](future-events-calendar.md) — later structured Event semantics, source-schedule preservation, timed Calendar projections, and eventual Reminder composition.
 - [Future capture-context provenance](future-capture-context-provenance.md) — optional request/fact capture location/context without confusing it with entity properties.
 - [Future pending-reference evolution](future-pending-reference-evolution.md) — safe relinking, recurrence signals, and advisory schema-evolution evidence.

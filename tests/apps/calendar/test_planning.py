@@ -141,6 +141,11 @@ def test_calendar_schema_contains_no_core_planning_or_mutation_vocabulary() -> N
         "DAY_LITERAL_CAPTURE",
         "DELEGATE_TO_CORE",
     ]
+    assert provider["properties"]["temporal_kind"]["enum"] == [
+        "EXACT_DATE",
+        "DATE_RANGE",
+        "UNSPECIFIED",
+    ]
     serialized = json.dumps(provider)
     for forbidden in (
         "semantic_write",
@@ -173,6 +178,7 @@ def test_calendar_schema_is_closed_and_requires_every_domain_field() -> None:
         calendar_payload(intent="DELEGATE_TO_CORE", temporal_text=None),
         calendar_payload(intent="DAY_LITERAL_CAPTURE", temporal_text=None),
         calendar_payload(temporal_kind="DATE_RANGE"),
+        calendar_payload(temporal_kind="EXACT_DATETIME", exact_date=None),
         calendar_payload(
             outcome="FAIL_CLOSED",
             intent=None,

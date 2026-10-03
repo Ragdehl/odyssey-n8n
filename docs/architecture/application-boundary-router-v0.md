@@ -45,6 +45,8 @@ The intended dependency graph is one-way:
 
 The current Temporal Foundation remains a valid Core dependency: normalized dates/date-times, timezone context, ranges, and deterministic Day-reference primitives are reusable below Calendar, Tasks, and Events. Calendar-specific routing/query/presentation logic is not a reason to move more domain behavior into Core.
 
+Descriptor `dependencies` name lower-level capability contracts; they are not an instruction for Runtime to build or execute an app-to-app DAG. In particular, a future `tasks -> temporal` dependency means the Tasks planner may reuse Core Temporal normalized shapes/validation inside its own application execution. It does not mean `Calendar -> Tasks`, and `temporal` is not a router destination.
+
 The implementation uses `odyssey_apps/` as the application package boundary. Runtime composition may discover/enable applications; `odyssey_core/` must not import application packages.
 
 ## Request flow

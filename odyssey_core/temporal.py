@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.persistence import ActorInput, EntityAlreadyExistsError, create_entity
@@ -60,6 +61,48 @@ def normalize_iso_date(value: str) -> str:
     if parsed.isoformat() != value:
         raise TemporalValueError("Calendar date must use canonical YYYY-MM-DD")
     return value
+
+
+def normalize_iso_datetime(value: str, *, timezone: str | None = None) -> str:
+    """Return one canonical offset-aware ISO date-time, optionally validated in an IANA zone.
+
+    The model-facing temporal contract may interpret natural wording, but Core remains the authority
+    for normalized value shape.  Exact instants use second precision and an explicit UTC offset.
+    When ``timezone`` is supplied, the offset must be valid for that local wall time in that zone;
+    impossible DST wall times and fabricated offsets therefore fail closed.
+    """
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?[+-]\d{2}:\d{2}", value) is None
+    ):
+        raise TemporalValueError(
+            "Temporal date-time must use YYYY-MM-DDTHH:MM[:SS] with an explicit UTC offset"
+        )
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise TemporalValueError("Temporal date-time is invalid") from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise TemporalValueError("Temporal date-time requires an explicit UTC offset")
+    if parsed.microsecond != 0:
+        raise TemporalValueError("Temporal date-time supports second precision only")
+    if timezone is not None:
+        if not isinstance(timezone, str) or not timezone.strip() or timezone != timezone.strip():
+            raise TemporalValueError("Temporal timezone must be a valid IANA timezone")
+        try:
+            zone = ZoneInfo(timezone)
+        except (ZoneInfoNotFoundError, ValueError) as error:
+            raise TemporalValueError("Temporal timezone must be a valid IANA timezone") from error
+        localized = parsed.astimezone(zone)
+        wall_time = parsed.replace(tzinfo=None)
+        if (
+            localized.replace(tzinfo=None) != wall_time
+            or localized.utcoffset() != parsed.utcoffset()
+        ):
+            raise TemporalValueError(
+                "Temporal date-time offset does not match the supplied timezone"
+            )
+    return parsed.isoformat(timespec="seconds")
 
 
 def calendar_day_id(value: str) -> str:
