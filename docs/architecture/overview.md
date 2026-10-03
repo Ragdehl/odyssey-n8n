@@ -14,24 +14,22 @@ This document describes the **current system shape and authority boundaries**. H
                    |
                    v
           thin host runtime
-                   |
-                   v
-+-----------------------------------------+
-|              odyssey_core/              |
-|                                         |
-| planning -> retrieval / write execution |
-| identity -> validation -> persistence   |
-+--------------------+--------------------+
-                     |
-        +------------+-------------+
-        |            |             |
-        v            v             v
- canonical       durable        rebuildable
- Markdown        app state      runtime state
- vault/          state/         runtime/
+            /             \
+           v               v
+  application boundary   Odyssey Core
+    odyssey_apps/        planning / identity
+           |             validation / mutation
+           +-----------> temporal / storage
+                              |
+                 +------------+-------------+
+                 |            |             |
+                 v            v             v
+            canonical       durable      rebuildable
+            Markdown        app state    runtime state
+            vault/          state/       runtime/
 ```
 
-Odyssey Core owns semantics. n8n owns external integration/orchestration. The runtime is a thin internal HTTP adapter that exposes Core to n8n; it is not a second domain service. Clients receive bounded product contracts and never gain direct filesystem, SQLite, Git, pending-state, or provider-credential authority.
+Odyssey Core remains the canonical knowledge and mutation authority. Application packages own capability-specific routing/planning/projection behavior and may depend on Core; Core does not import applications. n8n owns external integration/orchestration, while the runtime composes these boundaries and exposes them through thin internal HTTP/product adapters. Clients receive bounded product contracts and never gain direct filesystem, SQLite, Git, pending-state, or provider-credential authority.
 
 ## Request lifecycle
 
@@ -258,6 +256,10 @@ The top-level planner receives note-type/property capabilities projected dynamic
 
 Configuration-driven does not mean every future capability is executable without code. A new type/property that fits already-supported Core semantics should flow through configuration. A genuinely new executable capability may require an executor, permission boundary, and tests, but once the future capability/app registry exists it should not require rewriting the base planner prompt or adding a concrete app-name branch there.
 
-Current gap: Odyssey preserves generic `DelegateAction`, but executable application selection/manifest routing is still deferred. The intended future shape is a compact configuration-driven capability registry plus generic routing/execution boundaries, described in [Future Extension Points](future-extension-points.md).
+Odyssey now has a compact application registry/catalog, exact-source routing contract, and ordered runtime composition boundary. Router owns only application selection. Application planners are **minimal domain specialists**: they interpret only semantics unique to their domain and either perform a narrow app-owned operation or return the exact routed source plus bounded Core-owned `DomainInterpretation` evidence. They do not construct Core targets, identities, candidate scopes, semantic facts, references, `RequestPlan`, `SemanticWriteIntent`, Markdown, or mutation instructions. The ordinary Core planner remains the sole shared semantic planner and owns semantic ownership, identity/selection semantics, facts/references, validation, and mutation planning. Apps may depend on Core contracts; Core never imports Apps.
+
+Calendar demonstrates the boundary. A Day-owned occurrence may become `DAY_LITERAL_CAPTURE`; a durable date-qualified statement becomes `DELEGATE_TO_CORE` with only grounded temporal evidence such as `mañana → 2026-10-03`. Core then interprets the original statement normally and independently decides subjects such as Marta/Airbus, references, facts, and write ownership. Date ranges and unresolved temporal wording remain fail-closed rather than being collapsed to one Day. This same minimal-specialization rule is mandatory for Tasks and future applications.
+
+Historical Router/Calendar Attempts 1–8 remain retained evidence. Attempt 8 passed its then-current Calendar contract 10/10, but subsequent DEV execution exposed that the old oracle could accept non-executable self-referential identity scopes because Calendar itself was doing part of Core planning. The prepared v9 gate was therefore retired **without execution**. The successor architecture removes that duplicated semantic planner rather than hardening it.
 
 Model names, reasoning effort, output schemas, and generic safety instructions may still be explicit component configuration. That is distinct from hard-coding the user's ontology or application vocabulary into model logic.

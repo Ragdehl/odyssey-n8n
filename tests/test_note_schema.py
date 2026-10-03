@@ -27,6 +27,10 @@ class NoteSchemaValidationTests(unittest.TestCase):
     def type_definition(self, type_id: str) -> dict:
         return next(note_type for note_type in self.schema["types"] if note_type["id"] == type_id)
 
+    @staticmethod
+    def type_definition_from(schema: dict, type_id: str) -> dict:
+        return next(note_type for note_type in schema["types"] if note_type["id"] == type_id)
+
     def metadata_definition(self, field_id: str) -> dict:
         return next(field for field in self.schema["metadata_fields"] if field["id"] == field_id)
 
@@ -36,12 +40,40 @@ class NoteSchemaValidationTests(unittest.TestCase):
     def test_schema_version_is_phase17e_v3(self) -> None:
         self.assertEqual(self.schema["schema_version"], 3)
 
-    def test_active_type_registry_contains_only_current_base_creation_authority(self) -> None:
-        """Keep future app-owned domain types deferred until an owning app registers them."""
+    def test_active_type_registry_includes_calendar_managed_day(self) -> None:
+        """Register Calendar Day canonically without making it ordinary planner authority."""
         self.assertEqual(
             [note_type["id"] for note_type in self.schema["types"]],
-            ["concept", "project", "document", "person", "journal_entry"],
+            [
+                "concept",
+                "project",
+                "document",
+                "person",
+                "journal_entry",
+                "calendar_day",
+            ],
         )
+        calendar_day = self.type_definition("calendar_day")
+        self.assertEqual(calendar_day["managed_by"], "calendar")
+        self.assertEqual(
+            calendar_day["properties"],
+            [
+                {
+                    "id": "date",
+                    "value_type": "date",
+                    "required": True,
+                    "description": "Canonical ISO date represented by this Calendar Day.",
+                    "filterable": False,
+                }
+            ],
+        )
+
+    def test_managed_type_owner_must_be_canonical_identifier(self) -> None:
+        """Fail closed on malformed application ownership metadata."""
+        for value in (None, "", "Calendar App", 42):
+            schema = copy.deepcopy(self.schema)
+            self.type_definition_from(schema, "calendar_day")["managed_by"] = value
+            self.assert_invalid(schema, "managed_by must be a canonical identifier")
 
     def test_invalid_json_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

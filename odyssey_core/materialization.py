@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from odyssey_core.atomic_facts import (
+    AtomicFactError,
     append_atomic_facts,
     find_unique_atomic_fact,
     normalize_atomic_fact,
@@ -39,6 +40,13 @@ from odyssey_core.reference_binding import (
 from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
 from odyssey_core.storage import NoteUnavailableError, VaultAccessError, VaultRepository
+from odyssey_core.temporal import (
+    CalendarDayCollisionError,
+    CalendarDayRepository,
+    TemporalValueError,
+    _materialize_calendar_day_links,
+    materialize_calendar_day_links,
+)
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
 
 WRITER_MODEL = "gpt-5.6-luna"
@@ -72,6 +80,102 @@ class WriterOutputError(MaterializationError):
     """Indicate malformed, unsafe, or conflicting bounded writer operations."""
 
 
+def capture_calendar_day_literal(
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    date: str,
+    literal: str,
+    actor: ActorInput,
+    now: str,
+    request_id: str,
+    fact_ordinal: int = 0,
+) -> EntityPersistenceResult:
+    """Persist one exact routed literal on its deterministic Calendar Day through Core.
+
+    Calendar supplies only an already-authorized exact date and the untouched routed wording.
+    Core owns canonical Day identity, atomic-fact provenance, link materialization, schema
+    validation, replay detection, and revision-safe persistence.
+    """
+    if (
+        not isinstance(literal, str)
+        or not literal.strip()
+        or "\n" in literal
+        or "\r" in literal
+        or not isinstance(request_id, str)
+        or not request_id.strip()
+        or not isinstance(fact_ordinal, int)
+        or isinstance(fact_ordinal, bool)
+        or fact_ordinal < 0
+    ):
+        raise MaterializationError("Calendar Day literal capture input is invalid")
+    try:
+        days = CalendarDayRepository(repository, schema)
+        current_day = days.resolve(date)
+        if not current_day.materialized:
+            initial_content = append_atomic_facts("", (literal,), request_id, (fact_ordinal,), now)
+            _materialize_new_calendar_links(
+                initial_content,
+                repository=repository,
+                schema=schema,
+                actor=actor,
+                now=now,
+                skip_dates=(current_day.date,),
+            )
+            day = days.materialize(date, actor=actor, now=now, content=initial_content)
+            current = day.note
+            if current is None:
+                raise MaterializationError("Calendar Day did not materialize")
+            existing = parse_atomic_facts(current.content)
+            if current.content == initial_content:
+                return EntityPersistenceResult(
+                    PersistenceOperation.CREATED, day.id, day.path, current.metadata["revision"]
+                )
+        else:
+            day = current_day
+            current = current_day.note
+            if current is None:
+                raise MaterializationError("Calendar Day is unavailable")
+            existing = parse_atomic_facts(current.content)
+
+        if any(
+            fact.request_id == request_id and fact.ordinal == fact_ordinal for fact in existing
+        ) or any(
+            normalize_atomic_fact(fact.text) == normalize_atomic_fact(literal) for fact in existing
+        ):
+            return EntityPersistenceResult(
+                PersistenceOperation.NO_CHANGE, day.id, day.path, current.metadata["revision"]
+            )
+        content = append_atomic_facts(current.content, (literal,), request_id, (fact_ordinal,), now)
+        _materialize_new_calendar_links(
+            content,
+            previous_content=current.content,
+            repository=repository,
+            schema=schema,
+            actor=actor,
+            now=now,
+        )
+        return update_entity(
+            repository,
+            schema,
+            path=day.path,
+            expected_id=day.id,
+            expected_revision=current.metadata["revision"],
+            set_metadata={},
+            content=content,
+            actor=actor,
+            now=now,
+        )
+    except (
+        AtomicFactError,
+        CalendarDayCollisionError,
+        TemporalValueError,
+        ValueError,
+        OSError,
+    ) as error:
+        raise MaterializationError("Calendar Day literal capture failed") from error
+
+
 def rollback_created_reference(
     preflight: UnitTargetPreflight,
     *,
@@ -100,6 +204,41 @@ def rollback_created_reference(
     if note.metadata.get("id") != preflight.stable_id or note.metadata.get("revision") != 1:
         raise MaterializationError("Reference CREATE rollback identity or revision changed")
     repository.remove_text(preflight.path)
+
+
+def _materialize_new_calendar_links(
+    content: str,
+    *,
+    previous_content: str = "",
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: ActorInput,
+    now: str,
+    skip_dates: tuple[str, ...] = (),
+) -> None:
+    """Materialize newly introduced deterministic Day targets before committing their source link."""
+    try:
+        if skip_dates:
+            _materialize_calendar_day_links(
+                content,
+                previous_markdown=previous_content,
+                repository=repository,
+                schema=schema,
+                actor=actor,
+                now=now,
+                skip_dates=skip_dates,
+            )
+        else:
+            materialize_calendar_day_links(
+                content,
+                previous_markdown=previous_content,
+                repository=repository,
+                schema=schema,
+                actor=actor,
+                now=now,
+            )
+    except (CalendarDayCollisionError, TemporalValueError, ValueError, OSError) as error:
+        raise MaterializationError("Calendar Day link materialization failed") from error
 
 
 def materialize_create(
@@ -155,6 +294,9 @@ def materialize_create(
         else "\n".join(prepared_facts)
     )
     _validate_create_candidate(metadata, content, preflight.stable_id or "", actor, now, schema)
+    _materialize_new_calendar_links(
+        content, repository=repository, schema=schema, actor=actor, now=now
+    )
     return create_entity(
         repository,
         schema,
@@ -542,6 +684,15 @@ def materialize_update(
             decision.existing_note_id or "",
             path,
             existing.metadata["revision"],
+        )
+    if content != existing.content:
+        _materialize_new_calendar_links(
+            content,
+            previous_content=existing.content,
+            repository=repository,
+            schema=schema,
+            actor=actor,
+            now=now,
         )
     return update_entity(
         repository,

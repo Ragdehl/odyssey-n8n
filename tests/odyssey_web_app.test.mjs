@@ -102,6 +102,7 @@ class FakeDocument {
   constructor() {
     this.documentElement = new FakeElement("html");
     this._elements = new Map();
+    this._listeners = new Map();
     this.events = [];
   }
 
@@ -113,7 +114,16 @@ class FakeDocument {
     return this._elements.get(selector) ?? null;
   }
 
-  dispatchEvent(event) { this.events.push(event); }
+  addEventListener(type, listener) {
+    if (!this._listeners.has(type)) this._listeners.set(type, []);
+    this._listeners.get(type).push(listener);
+  }
+
+  dispatchEvent(event) {
+    this.events.push(event);
+    for (const listener of this._listeners.get(event.type) ?? []) listener(event);
+    return true;
+  }
 }
 
 function matches(element, selector) {
@@ -133,8 +143,13 @@ function createPage() {
     detailContent: new FakeElement("div"),
     chat: new FakeElement("section"),
     notes: new FakeElement("section"),
+    calendar: new FakeElement("section"),
     chatTab: new FakeElement("button"),
     notesTab: new FakeElement("button"),
+    calendarTab: new FakeElement("button"),
+    notesCalendarTab: new FakeElement("button"),
+    calendarChatTab: new FakeElement("button"),
+    calendarNotesTab: new FakeElement("button"),
     brand: new FakeElement("div"),
     clarificationStatus: new FakeElement("p"),
   };
@@ -148,8 +163,13 @@ function createPage() {
     ["#request-detail-content", elements.detailContent],
     ["#chat-surface", elements.chat],
     ["#notes-surface", elements.notes],
+    ["#calendar-surface", elements.calendar],
     ["#chat-tab", elements.chatTab],
     ["#notes-tab", elements.notesTab],
+    ["#calendar-tab", elements.calendarTab],
+    ["#notes-calendar-tab", elements.notesCalendarTab],
+    ["#calendar-chat-tab", elements.calendarChatTab],
+    ["#calendar-notes-tab", elements.calendarNotesTab],
     [".brand", elements.brand],
     ["#clarification-status", elements.clarificationStatus],
   ]) {
@@ -158,6 +178,7 @@ function createPage() {
   document._elements.set('meta[name="odyssey-api-endpoint"]', {content: "/api/request"});
   document._elements.set('meta[name="odyssey-conversation-endpoint"]', {content: "/api/conversation"});
   document._elements.set('meta[name="odyssey-notes-endpoint"]', {content: "/api/notes"});
+  document._elements.set('meta[name="odyssey-calendar-endpoint"]', {content: "/api/calendar"});
   return {document, elements};
 }
 
@@ -195,10 +216,12 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     },
   };
   globalThis.__odysseyTestNotes = {mountNotes() {}};
+  globalThis.__odysseyTestCalendar = {mountCalendar() {}};
   const source = await readFile(new URL("../odyssey_web/app.js", import.meta.url), "utf8");
   const testable = source
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
     .replace('import {mountNotes} from "./notes.js";', "const {mountNotes} = globalThis.__odysseyTestNotes;")
+    .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
@@ -345,4 +368,24 @@ test("older conversation pagination preserves an affected-note affordance", asyn
 
   const affordance = page.elements.conversation.children[0].querySelector(".note-set-button");
   assert.equal(affordance.textContent, "Ver nota");
+});
+
+test("Calendar and Notes events switch only the visible application surface", async () => {
+  const page = await mountApp({
+    turns: [],
+    requestProductResult: async () => { throw new Error("not exercised"); },
+  });
+  assert.equal(page.elements.chat.hidden, false);
+  assert.equal(page.elements.notes.hidden, true);
+  assert.equal(page.elements.calendar.hidden, true);
+
+  page.document.dispatchEvent(new CustomEvent("odyssey:open-calendar-day", {detail: {date: "2026-10-01"}}));
+  assert.equal(page.elements.chat.hidden, true);
+  assert.equal(page.elements.notes.hidden, true);
+  assert.equal(page.elements.calendar.hidden, false);
+
+  page.document.dispatchEvent(new CustomEvent("odyssey:open-note", {detail: {note_id: "marta"}}));
+  assert.equal(page.elements.chat.hidden, true);
+  assert.equal(page.elements.notes.hidden, false);
+  assert.equal(page.elements.calendar.hidden, true);
 });

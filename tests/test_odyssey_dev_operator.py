@@ -48,6 +48,18 @@ def test_render_binds_the_isolated_answerer_credential_id() -> None:
     assert 'name: "Odyssey DEV OpenAI Answerer"' in source
 
 
+def test_dev_workflow_pricing_uses_runtime_snapshot_with_gpt6_luna() -> None:
+    """Keep operational cost display separate from frozen benchmark pricing evidence."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    pricing = (Path(__file__).parents[1] / "config" / "runtime-pricing-snapshot.json").read_text(
+        encoding="utf-8"
+    )
+    assert "DEV_PRICING=$DEV_SOURCE/config/runtime-pricing-snapshot.json" in source
+    assert "phase20_answerer/pricing_snapshot.json" not in source
+    assert '"gpt-6-luna"' in pricing
+    assert '"as_of": "2026-10-02"' in pricing
+
+
 def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
     """Keep the isolated DEV planner able to use the existing protected provider key."""
     service = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-runtime.service").read_text(
@@ -56,6 +68,7 @@ def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
     assert "EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env" in service
     assert "Environment=ODYSSEY_CONTEXTUAL_MODEL=gpt-6-luna" in service
     assert "Environment=ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna" in service
+    assert "Environment=ODYSSEY_ENABLED_APPLICATIONS=calendar" in service
 
 
 def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> None:
@@ -269,7 +282,10 @@ def valid_publication_rows() -> list[dict[str, object]]:
             "active": 0,
             "activeVersionId": "online-version",
             "activeVersionNodes": active_version_nodes(
-                ("POST", "request"), ("POST", "conversation"), ("POST", "notes")
+                ("POST", "request"),
+                ("POST", "conversation"),
+                ("POST", "notes"),
+                ("POST", "calendar"),
             ),
         },
         {
@@ -285,6 +301,8 @@ def valid_publication_rows() -> list[dict[str, object]]:
                 ("GET", "client.js"),
                 ("GET", "notes.js"),
                 ("GET", "notes-client.js"),
+                ("GET", "calendar.js"),
+                ("GET", "calendar-client.js"),
             ),
         },
     ]
@@ -360,10 +378,13 @@ def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> 
         "/api/client.js",
         "/api/notes.js",
         "/api/notes-client.js",
+        "/api/calendar.js",
+        "/api/calendar-client.js",
         "/api/environment.js",
         "/api/request",
         "/api/conversation",
         "/api/notes",
+        "/api/calendar",
     )
     for route in expected:
         assert route in inventory
@@ -379,9 +400,10 @@ def test_publication_and_readiness_require_the_notes_and_complete_module_routes(
     inventory = (Path(__file__).parents[1] / "deploy" / "odyssey-dev-product-routes.tsv").read_text(
         encoding="utf-8"
     )
-    for route in ("notes.js", "notes-client.js"):
+    for route in ("notes.js", "notes-client.js", "calendar.js", "calendar-client.js"):
         assert route in inventory
     assert '"http://$N8N_HOST:$N8N_PORT/api/notes"' in source
+    assert '"http://$N8N_HOST:$N8N_PORT/api/calendar"' in source
     assert "dev_static_paths" in source
     assert 'for path in "${static_paths[@]}"' in source
 

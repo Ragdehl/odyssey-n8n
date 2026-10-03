@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, cast
 
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+from odyssey_core.schema_types import ordinary_type_ids
 from odyssey_core.storage import VaultRepository
 
 
@@ -96,22 +97,12 @@ def _normalize_reference(value: str) -> str:
 
 
 def _canonical_types(schema: dict[str, Any]) -> set[str]:
-    """Return the canonical type IDs available to the identity layer.
-
-    Args:
-        schema: Parsed canonical Odyssey note schema.
-
-    Returns:
-        Set of canonical note type identifiers.
-
-    Raises:
-        ValueError: If the supplied schema does not expose usable type definitions.
-    """
+    """Return ordinary semantic type IDs available to generic identity resolution."""
     try:
-        type_ids = {definition["id"] for definition in schema["types"]}
-    except (KeyError, TypeError):
+        type_ids = set(ordinary_type_ids(schema))
+    except ValueError:
         raise ValueError("Supplied schema is not a usable canonical schema") from None
-    if not type_ids or not all(isinstance(type_id, str) for type_id in type_ids):
+    if not type_ids:
         raise ValueError("Supplied schema is not a usable canonical schema")
     return type_ids
 
@@ -166,6 +157,8 @@ def find_exact_entity_candidates(
             raise ExactEntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
 
         note_type = cast(str, note.metadata["type"])
+        if note_type not in canonical_types:
+            continue
         if note.metadata.get("deleted") is True and not include_deleted:
             continue
         if type is not None and note_type != type:

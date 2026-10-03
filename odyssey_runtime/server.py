@@ -10,6 +10,7 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import urlsplit
 
+from odyssey_apps.calendar import CalendarQueryError
 from odyssey_core.conversations import ConversationError
 from odyssey_core.direct_note_mutations import DirectNoteMutationError
 from odyssey_core.identity_boundary import (
@@ -134,6 +135,22 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     self._write_json(
                         HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
                     )
+                return
+            if parsed.path == "/calendar":
+                try:
+                    payload = self._read_payload()
+                    operation = payload.pop("operation", None)
+                    if operation not in {"month", "day"}:
+                        raise ValueError("Calendar operation is invalid")
+                    actor_payload = {
+                        key: payload.pop(key)
+                        for key in ("authenticated_actor", "external_principal")
+                        if key in payload
+                    }
+                    actor = self._identity_from_payload(actor_payload)
+                    self._write_json(HTTPStatus.OK, runtime.calendar(operation, payload, *actor))
+                except (CalendarQueryError, IdentityBoundaryError, TypeError, ValueError):
+                    self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid calendar request"})
                 return
             if parsed.path == "/notes":
                 try:

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from odyssey_apps.calendar import CalendarApplication, CalendarDayView, CalendarJournal
 from odyssey_core.application import (
     ActionResult,
     ActionStatus,
@@ -22,6 +23,7 @@ from odyssey_core.application import (
 from odyssey_core.bulk_update import BulkUpdateFailure, BulkUpdateResult
 from odyssey_core.context import ContextItem, ContextPackage, RelatedContextItem
 from odyssey_core.direct_note_mutations import DirectNoteMutationError
+from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.git_history import GitHistoryResult
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
@@ -30,7 +32,8 @@ from odyssey_core.identity_boundary import (
     OdysseyUser,
 )
 from odyssey_core.local_conversations import ConversationRootResolver
-from odyssey_core.note_queries import StaleCursorError
+from odyssey_core.note_queries import NoteBodyBlock, NoteBodySegment, NoteSummary, StaleCursorError
+from odyssey_core.notes import parse_note
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -415,6 +418,153 @@ def test_http_boundary_rejects_invalid_input_without_calling_core() -> None:
         assert response.status == 400
         assert json.loads(response.read()) == {"error": "invalid request"}
         assert calls == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_calendar_boundary_projects_month_and_day_with_typed_actor() -> None:
+    """The private Calendar route forwards only one bounded operation and typed actor context."""
+    user = OdysseyUser.new()
+    calls: list[tuple[object, ...]] = []
+
+    class CalendarRuntime:
+        def calendar(self, operation, payload, actor, principal):
+            calls.append((operation, payload, actor.stable_user_id, principal))
+            return {"kind": f"calendar_{operation}", **payload}
+
+    server = _test_server(CalendarRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "month",
+                    "month": "2026-10",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "calendar_month", "month": "2026-10"}
+
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "day",
+                    "date": "2026-10-01",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {"kind": "calendar_day", "date": "2026-10-01"}
+        assert calls == [
+            ("month", {"month": "2026-10"}, user.stable_user_id, None),
+            ("day", {"date": "2026-10-01"}, user.stable_user_id, None),
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_calendar_boundary_serializes_journal_source_and_content() -> None:
+    """Regression: CalendarJournal crosses Core -> runtime -> HTTP without shape drift."""
+    user = OdysseyUser.new()
+    journal = CalendarJournal(
+        source=NoteSummary(
+            id="journal-2026-10-01",
+            name="Diario 1 octubre",
+            type="journal_entry",
+            tags=(),
+            created_at="2026-10-01T20:00:00+02:00",
+            updated_at="2026-10-01T20:00:00+02:00",
+            properties={"entry_date": "2026-10-01"},
+        ),
+        content=(NoteBodyBlock("paragraph", (NoteBodySegment("Buen día."),)),),
+    )
+    day = CalendarDayView(
+        date="2026-10-01",
+        materialized=False,
+        content=(),
+        journals=(journal,),
+        captures=(),
+        references=(),
+    )
+    runtime = RuntimeComposition(
+        core_execute=lambda *args, **kwargs: _result(),
+        refresh_indexes=lambda: None,
+        calendar_application=CalendarApplication(SimpleNamespace(day=lambda value: day)),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "day",
+                    "date": "2026-10-01",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        payload = json.loads(response.read())
+        assert payload["journals"] == [
+            {
+                "source": {
+                    "id": "journal-2026-10-01",
+                    "name": "Diario 1 octubre",
+                    "type": "journal_entry",
+                    "tags": [],
+                    "created_at": "2026-10-01T20:00:00+02:00",
+                    "updated_at": "2026-10-01T20:00:00+02:00",
+                    "properties": {"entry_date": "2026-10-01"},
+                },
+                "content": [{"kind": "paragraph", "segments": [{"text": "Buen día."}]}],
+            }
+        ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_calendar_boundary_rejects_unknown_or_invalid_operations() -> None:
+    """Calendar exposes only month/day and maps bounded runtime validation to one safe 400."""
+    calls: list[str] = []
+
+    class CalendarRuntime:
+        def calendar(self, operation, payload, actor, principal):
+            del actor, principal
+            calls.append(operation)
+            if operation == "day":
+                raise ValueError("invalid date")
+            return {}
+
+    server = _test_server(CalendarRuntime())
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/calendar", body=json.dumps({"operation": "unknown"}))
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid calendar request"}
+
+        connection.request(
+            "POST", "/calendar", body=json.dumps({"operation": "day", "date": "bad"})
+        )
+        response = connection.getresponse()
+        assert response.status == 400
+        assert json.loads(response.read()) == {"error": "invalid calendar request"}
+        assert calls == ["day"]
     finally:
         server.shutdown()
         server.server_close()
@@ -1327,3 +1477,276 @@ def _test_server(runtime: RuntimeComposition):
     server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(runtime))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
+
+
+def test_enabled_application_ids_are_explicit_and_reject_duplicates(monkeypatch) -> None:
+    """Keep application adoption opt-in so PROD does not inherit DEV routing implicitly."""
+    monkeypatch.delenv("ODYSSEY_ENABLED_APPLICATIONS", raising=False)
+    assert composition._enabled_application_ids() == ()
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    assert composition._enabled_application_ids() == ("calendar",)
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar,calendar")
+    with pytest.raises(ValueError, match="duplicates"):
+        composition._enabled_application_ids()
+
+
+def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Exercise the real composition root through Router, Calendar planner, and Day persistence."""
+    source = "Mañana viene el fontanero"
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    runtime_root = tmp_path / "runtime"
+    state_root = tmp_path / "state"
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
+    monkeypatch.setenv("ODYSSEY_SCHEMA_PATH", str(schema_path))
+    monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(state_root / "pending"))
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
+    monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault_root))
+    monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings"))
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    monkeypatch.setenv("ODYSSEY_ACTOR", "odyssey-dev-test")
+
+    class FakeIndex:
+        def __init__(self, path):
+            self.path = path
+
+        def rebuild(self, repository, schema, embedder):
+            return None
+
+    class FakeResponses:
+        def __init__(self, payload, *, response_id: str, usage: dict[str, object]):
+            self.payload = payload
+            self.response_id = response_id
+            self.usage = usage
+            self.calls = 0
+
+        def create(self, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(
+                id=self.response_id,
+                status="completed",
+                usage=self.usage,
+                output_text=json.dumps(self.payload),
+            )
+
+    router_responses = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]},
+        response_id="resp-router-e2e",
+        usage={
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "input_tokens_details": {"cached_tokens": 10},
+        },
+    )
+    calendar_responses = FakeResponses(
+        {
+            "outcome": "PLAN",
+            "intent": "DAY_LITERAL_CAPTURE",
+            "temporal_kind": "EXACT_DATE",
+            "exact_date": "2026-10-03",
+            "range_start": None,
+            "range_end_exclusive": None,
+            "temporal_text": "Mañana",
+            "failure_code": None,
+        },
+        response_id="resp-calendar-e2e",
+        usage={
+            "input_tokens": 140,
+            "output_tokens": 30,
+            "input_tokens_details": {"cached_tokens": 20},
+        },
+    )
+    calendar_contexts: list[dict[str, str]] = []
+
+    def build_router(cls, catalog):
+        return cls(SimpleNamespace(responses=router_responses), catalog)
+
+    def build_calendar(cls, current_context):
+        calendar_contexts.append(dict(current_context))
+        return cls(SimpleNamespace(responses=calendar_responses), current_context)
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
+    )
+    monkeypatch.setattr(
+        composition.OpenAICalendarPlanner, "from_environment", classmethod(build_calendar)
+    )
+    monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **_kwargs: object())
+    monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
+    monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
+    monkeypatch.setattr(composition, "_build_contextual_reasoner", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaWriter", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaSemanticSetSelector", lambda: object())
+    monkeypatch.setattr(composition, "GitHistoryRecorder", lambda _root: None)
+    monkeypatch.setattr(
+        composition,
+        "_current_time",
+        lambda: {
+            "date": "2026-10-02",
+            "time": "18:30:00",
+            "timezone": "Europe/Paris",
+            "timestamp": "2026-10-02T18:30:00+02:00",
+        },
+    )
+
+    runtime = composition.build_runtime_from_environment()
+    capabilities = {item.id: item for item in runtime.application_catalog.capabilities()}
+    assert capabilities["calendar"].enabled is True
+    assert capabilities["tasks"].enabled is False
+    assert runtime.application_router is not None
+    assert set(runtime.application_executors) == {"calendar"}
+
+    result = runtime.execute(
+        source,
+        "outer-production-wiring",
+        authenticated_actor=AuthenticatedActorContext("123e4567-e89b-42d3-a456-426614174000"),
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.affected_stable_note_ids == ("date:2026-10-03",)
+    assert len(result.action_results) == 1
+    unit = result.action_results[0].unit_results[0]
+    assert unit.status is UnitStatus.SUCCEEDED
+    assert unit.operation == "calendar_capture"
+    assert unit.stable_note_id == "date:2026-10-03"
+    assert router_responses.calls == 1 and calendar_responses.calls == 1
+    assert calendar_contexts == [
+        {"date": "2026-10-02", "time": "18:30:00", "timezone": "Europe/Paris"}
+    ]
+    note = parse_note((vault_root / "calendar/days/2026-10-03.md").read_text(encoding="utf-8"))
+    assert "03-10-2026 viene el fontanero" in note.content
+    assert source not in note.content
+    public = application_result_to_response(result)
+    assert public["product_outcome"] == "ANSWER"
+    assert public["actions"][0]["units"][0]["status"] == "succeeded"
+    stages = public["operational"]["stages"]
+    assert [stage["name"] for stage in stages] == [
+        "application.router",
+        "calendar.planner",
+        "index_refresh",
+    ]
+    assert stages[0]["model"] == "gpt-6-luna"
+    assert stages[0]["usage"]["input_tokens"] == 100
+    assert stages[0]["provider_calls"][0]["response_id"] == "resp-router-e2e"
+    assert stages[1]["model"] == "gpt-6-luna"
+    assert stages[1]["usage"]["input_tokens"] == 140
+    assert stages[1]["provider_calls"][0]["response_id"] == "resp-calendar-e2e"
+
+
+def test_production_composition_hands_calendar_domain_evidence_to_normal_core_planner_e2e(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Prove production wiring returns durable Calendar meaning to Core instead of preplanning it."""
+    source = "Marta Test empieza mañana a vivir con Daniel Test."
+    vault_root = tmp_path / "vault-domain"
+    vault_root.mkdir()
+    runtime_root = tmp_path / "runtime-domain"
+    state_root = tmp_path / "state-domain"
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
+    monkeypatch.setenv("ODYSSEY_SCHEMA_PATH", str(schema_path))
+    monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(state_root / "pending"))
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
+    monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault_root))
+    monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings-domain"))
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    monkeypatch.setenv("ODYSSEY_ACTOR", "odyssey-dev-test")
+
+    class FakeIndex:
+        def __init__(self, path):
+            self.path = path
+
+        def rebuild(self, repository, schema, embedder):
+            return None
+
+    class FakeResponses:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def create(self, **_kwargs):
+            return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
+
+    router_responses = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+    )
+    calendar_responses = FakeResponses(
+        {
+            "outcome": "PLAN",
+            "intent": "DELEGATE_TO_CORE",
+            "temporal_kind": "EXACT_DATE",
+            "exact_date": "2026-10-03",
+            "range_start": None,
+            "range_end_exclusive": None,
+            "temporal_text": "mañana",
+            "failure_code": None,
+        }
+    )
+    interpretations: list[DomainInterpretation | None] = []
+
+    def build_router(cls, catalog):
+        return cls(SimpleNamespace(responses=router_responses), catalog)
+
+    def build_calendar(cls, current_context):
+        return cls(SimpleNamespace(responses=calendar_responses), current_context)
+
+    class FakeCorePlanner:
+        last_provider_calls = ()
+
+        @classmethod
+        def from_environment(cls, schema, current_context, *, domain_interpretation=None):
+            del schema, current_context
+            interpretations.append(domain_interpretation)
+            return cls()
+
+    def fake_execute_request(request, **kwargs):
+        assert request == source
+        assert isinstance(kwargs["planner"], FakeCorePlanner)
+        request_id = kwargs["request_id_factory"]()
+        return ApplicationResult(request_id, ApplicationStatus.COMPLETED, (), ())
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
+    )
+    monkeypatch.setattr(
+        composition.OpenAICalendarPlanner, "from_environment", classmethod(build_calendar)
+    )
+    monkeypatch.setattr(composition, "OpenAIRequestPlanner", FakeCorePlanner)
+    monkeypatch.setattr(composition, "execute_request", fake_execute_request)
+    monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **_kwargs: object())
+    monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
+    monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
+    monkeypatch.setattr(composition, "_build_contextual_reasoner", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaWriter", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaSemanticSetSelector", lambda: object())
+    monkeypatch.setattr(composition, "GitHistoryRecorder", lambda _root: None)
+    monkeypatch.setattr(
+        composition,
+        "_current_time",
+        lambda: {
+            "date": "2026-10-02",
+            "time": "18:30:00",
+            "timezone": "Europe/Paris",
+            "timestamp": "2026-10-02T18:30:00+02:00",
+        },
+    )
+
+    runtime = composition.build_runtime_from_environment()
+    result = runtime.execute(
+        source,
+        "outer-domain-handoff",
+        authenticated_actor=AuthenticatedActorContext("123e4567-e89b-42d3-a456-426614174000"),
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert len(interpretations) == 1
+    interpretation = interpretations[0]
+    assert isinstance(interpretation, DomainInterpretation)
+    assert interpretation.source_text == source
+    assert interpretation.capability_id == "calendar"
+    assert interpretation.intent == "TEMPORAL_ANNOTATION"
+    assert interpretation.evidence[0].source_text == "mañana"
+    assert interpretation.evidence[0].value == "2026-10-03"

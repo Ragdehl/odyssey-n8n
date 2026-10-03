@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from time import perf_counter
 from typing import Any
 
+from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.experimental_luna_planning import (
     OpenAILunaExperimentalPlanner,
     PlannerEscalation,
@@ -59,12 +60,25 @@ class LunaFirstRequestPlanner:
 
     @classmethod
     def from_environment(
-        cls, schema: dict[str, Any], current_context: dict[str, str]
+        cls,
+        schema: dict[str, Any],
+        current_context: dict[str, str],
+        *,
+        domain_interpretation: DomainInterpretation | None = None,
     ) -> LunaFirstRequestPlanner:
-        """Build the validated Luna first pass and established Sol fallback from environment."""
+        """Build Luna/Sol with the same optional app-specialized evidence for one Core request."""
+        if domain_interpretation is None:
+            return cls(
+                OpenAILunaExperimentalPlanner.from_environment(schema, current_context),
+                OpenAIRequestPlanner.from_environment(schema, current_context),
+            )
         return cls(
-            OpenAILunaExperimentalPlanner.from_environment(schema, current_context),
-            OpenAIRequestPlanner.from_environment(schema, current_context),
+            OpenAILunaExperimentalPlanner.from_environment(
+                schema, current_context, domain_interpretation=domain_interpretation
+            ),
+            OpenAIRequestPlanner.from_environment(
+                schema, current_context, domain_interpretation=domain_interpretation
+            ),
         )
 
     def plan(

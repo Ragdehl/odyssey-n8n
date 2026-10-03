@@ -22,6 +22,7 @@ from odyssey_core import (
     WriteTargetDecision,
     WriteTargetOutcome,
     build_openai_writer_payload,
+    capture_calendar_day_literal,
     create_entity,
     materialize_update,
     update_entity,
@@ -186,6 +187,37 @@ def test_same_request_fact_ordinal_skips_planner_variation_on_replay(
     assert writer.requests == []
     assert calls == [1]
     assert repository.read_text("people/bea.md").count("Bea works at Thales.") == 1
+
+
+def test_calendar_day_literal_capture_uses_core_validation_atomic_provenance_and_replay(
+    repository: VaultRepository,
+) -> None:
+    """Materialize one Day only through Core persistence and retain the exact literal verbatim."""
+    first = capture_calendar_day_literal(
+        repository=repository,
+        schema=SCHEMA,
+        date="2026-08-27",
+        literal="Mañana viene el fontanero",
+        actor="calendar",
+        now=NOW,
+        request_id="route-1",
+    )
+    second = capture_calendar_day_literal(
+        repository=repository,
+        schema=SCHEMA,
+        date="2026-08-27",
+        literal="rewritten provider text must not replace the original",
+        actor="calendar",
+        now=NOW,
+        request_id="route-1",
+    )
+    body = parse_note(repository.read_text("calendar/days/2026-08-27.md")).content
+
+    assert first.operation is PersistenceOperation.CREATED
+    assert second.operation is PersistenceOperation.NO_CHANGE
+    assert "Mañana viene el fontanero" in body
+    assert "rewritten provider text" not in body
+    assert "<!-- odyssey:fact request=route-1 ordinal=0 -->" in body
 
 
 def test_production_writer_payload_is_luna_medium_full_note_and_no_storage() -> None:
@@ -629,3 +661,48 @@ def test_delete_intent_is_rejected_without_persistence(
 
     assert calls == [0]
     assert repository.read_text("people/bea.md") == before
+
+
+def test_atomic_update_materializes_navigable_capture_day(repository: VaultRepository) -> None:
+    """A persisted Added heading creates its deterministic Day target before the source link commits."""
+    result = materialize_update(
+        unit(facts=("Bea started a new project.",)),
+        decision(),
+        repository=repository,
+        schema=SCHEMA,
+        actor="phase16-test",
+        now="2026-08-25T11:00:00+02:00",
+        request_id="capture-day",
+        fact_ordinals=(0,),
+    )
+
+    assert result.operation is PersistenceOperation.UPDATED
+    source = parse_note(repository.read_text("people/bea.md"))
+    assert "# Added [[calendar/days/2026-08-25|25-08-2026]]" in source.content
+    day = parse_note(repository.read_text("calendar/days/2026-08-25.md"))
+    assert day.metadata["id"] == "date:2026-08-25"
+    assert day.metadata["type"] == "calendar_day"
+    assert day.metadata["date"] == "2026-08-25"
+    assert day.metadata["revision"] == 1
+
+
+def test_malformed_reserved_calendar_link_fails_before_source_persistence(
+    repository: VaultRepository,
+) -> None:
+    """Never commit a source fact or partial Day when its reserved Calendar target is invalid."""
+    before = repository.read_text("people/bea.md")
+
+    with pytest.raises(MaterializationError, match="Calendar Day link materialization failed"):
+        materialize_update(
+            unit(facts=("Meet on [[calendar/days/2026-02-30|bad date]].",)),
+            decision(),
+            repository=repository,
+            schema=SCHEMA,
+            actor="phase16-test",
+            now="2026-08-25T11:00:00+02:00",
+            request_id="bad-calendar-link",
+            fact_ordinals=(0,),
+        )
+
+    assert repository.read_text("people/bea.md") == before
+    assert not (repository.root / "calendar").exists()

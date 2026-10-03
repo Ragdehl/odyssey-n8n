@@ -1,0 +1,9 @@
+# Calendar-focused live gate v8
+
+Attempt 7 ran Calendar GPT-6 Luna `low` on 10 cases after the durable-transition precedence clarification. All 10 provider calls completed with zero retries. Eight cases passed. Both employment transition sentinels chose `CORE_SEMANTIC_WRITE`; the residence transition also chose `CORE_SEMANTIC_WRITE`, so the precedence rule itself held. Two orthogonal issues remained: a correct `FAIL_CLOSED/TEMPORAL_UNRESOLVED` response carried a stale non-executable intent allowed by the flat provider schema and rejected locally, while the added Lyon case coupled transition classification to the separate question of whether a place must be emitted as an Odyssey identity.
+
+v8 keeps Calendar on GPT-6 Luna `low` and does not change the precedence prompt or provider schema. The local decoder now normalizes an irrelevant intent to `None` only when `outcome=FAIL_CLOSED`, there is no semantic write, and a concrete failure code is present; all temporal/failure correlation checks remain mandatory and no execution authority is created. Calendar regression v4 preserves every consumed v3 case except the newly added residence sentinel, which now uses a second person (`Daniel`) as the clearly reusable identity participant instead of requiring a place (`Lyon`) to be classified as an identity.
+
+Router is not re-called: its retained Attempt-5 8/8 boundary is still required to be unchanged. The gate remains one-shot, Calendar-only, zero-retry, clean-commit-only, explicitly authorized, and capped at 10 provider attempts.
+
+Attempt 8 ran once at commit `32dce15a44362c4bac052c0870ccf2e2ebef5d2e`: all 10 provider attempts completed, zero retries, and all 10 cases passed. Usage-backed estimated cost was $0.00212180 Standard / $0.00233398 with regional uplift. The retained evidence is `results/32dce15a4436.json`; this v8 runner/result path is now consumed and must not be reused.

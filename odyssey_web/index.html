@@ -7,6 +7,7 @@
   <meta name="odyssey-api-endpoint" content="/api/request">
   <meta name="odyssey-conversation-endpoint" content="/api/conversation">
   <meta name="odyssey-notes-endpoint" content="/api/notes">
+  <meta name="odyssey-calendar-endpoint" content="/api/calendar">
   <title>Odyssey</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -19,7 +20,10 @@
         <h1 id="chat-title">Odyssey</h1>
         <p>Tu memoria, cuando la necesitas.</p>
       </div>
-      <button id="notes-tab" class="app-nav-button" type="button">Notas →</button>
+      <nav class="app-header-actions" aria-label="Aplicaciones">
+        <button id="notes-tab" class="app-nav-button" type="button">Notas</button>
+        <button id="calendar-tab" class="app-nav-button" type="button">Calendario</button>
+      </nav>
       </header>
       <h2 id="composer-title" class="sr-only">Conversación con Odyssey</h2>
       <section id="interaction" class="conversation" aria-live="polite" aria-atomic="false"></section>
@@ -45,6 +49,7 @@
       <header class="app-header notes-app-header">
         <button id="chat-tab" class="app-nav-button" type="button">← Chat</button>
         <h1 id="notes-title">Notas</h1>
+        <button id="notes-calendar-tab" class="app-nav-button" type="button">Calendario</button>
       </header>
       <section id="notes-list-view" class="notes-list-view" aria-label="Explorar notas">
         <div class="notes-controls">
@@ -68,6 +73,24 @@
         <input id="notes-search" type="search" placeholder="Buscar notas…" autocomplete="off">
         <button id="notes-intelligent" type="submit" aria-label="Búsqueda inteligente">✦</button>
       </form>
+    </section>
+    <section id="calendar-surface" class="app-view calendar-workspace" aria-labelledby="calendar-title" hidden>
+      <header class="app-header calendar-app-header">
+        <button id="calendar-chat-tab" class="app-nav-button" type="button">← Chat</button>
+        <h1 id="calendar-title">Calendario</h1>
+        <button id="calendar-notes-tab" class="app-nav-button" type="button">Notas</button>
+      </header>
+      <p id="calendar-status" class="calendar-status" aria-live="polite"></p>
+      <section id="calendar-month-view" class="calendar-month-view">
+        <div class="calendar-month-controls">
+          <button id="calendar-prev" type="button" aria-label="Mes anterior">‹</button>
+          <h2 id="calendar-month-title"></h2>
+          <button id="calendar-next" type="button" aria-label="Mes siguiente">›</button>
+          <button id="calendar-today" type="button">Hoy</button>
+        </div>
+        <div id="calendar-grid" class="calendar-grid" aria-label="Vista mensual"></div>
+      </section>
+      <article id="calendar-day-view" class="calendar-day-view" hidden></article>
     </section>
   </main>
 

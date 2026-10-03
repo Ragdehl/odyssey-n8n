@@ -123,7 +123,7 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert 'environment: "PROD"' in environment
 
 
-def test_chat_and_notes_are_exclusive_application_views_with_safe_no_js_fallback() -> None:
+def test_chat_notes_and_calendar_are_exclusive_application_views_with_safe_no_js_fallback() -> None:
     """Keep the inactive application fully absent even when module bootstrap fails."""
 
     parser = _IndexParser()
@@ -131,24 +131,30 @@ def test_chat_and_notes_are_exclusive_application_views_with_safe_no_js_fallback
     parser.feed(index)
 
     assert "hidden" in parser.elements["notes-surface"]
+    assert "hidden" in parser.elements["calendar-surface"]
     assert "chat-surface" in parser.ids
     assert "notes-surface" in parser.ids
+    assert "calendar-surface" in parser.ids
     assert "surface-nav" not in index
     assert index.index('id="chat-surface"') < index.index('id="notes-surface"')
     assert index.index('id="odyssey-form"') < index.index('id="notes-surface"')
     assert index.index('id="notes-search-form"') > index.index('id="notes-surface"')
+    assert index.index('id="calendar-surface"') > index.index('id="notes-surface"')
 
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     assert "function selectSurface(surface)" in app
-    assert "chatSurface.hidden = !chat" in app
-    assert "notesSurface.hidden = chat" in app
-    assert 'dataset.activeView = chat ? "chat" : "notes"' in app
+    assert 'chatSurface.hidden = active !== "chat"' in app
+    assert 'notesSurface.hidden = active !== "notes"' in app
+    assert 'calendarSurface.hidden = active !== "calendar"' in app
+    assert "dataset.activeView = active" in app
     assert 'selectSurface("chat")' in app
-    assert 'selectSurface("notes");\n    document.dispatchEvent' in app
+    assert 'selectSurface("notes")' in app
+    assert 'selectSurface("calendar")' in app
 
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
     assert "[hidden] { display: none !important; }" in styles
     assert ".chat-view, .notes-workspace { grid-template-rows:" in styles
+    assert ".calendar-workspace" in styles
     assert ".surface-nav" not in styles
 
 
@@ -217,8 +223,45 @@ def test_notes_detail_uses_safe_structured_presentation_and_complete_type_icons(
     assert "innerHTML" not in notes
     assert "body_blocks" in client
     assert "isString(value.body)" in client
-    for note_type in schema["types"]:
+    ordinary_types = [note_type for note_type in schema["types"] if "managed_by" not in note_type]
+    managed_types = [note_type for note_type in schema["types"] if "managed_by" in note_type]
+    for note_type in ordinary_types:
         assert f"{note_type['id']}: {{" in notes
+    for note_type in managed_types:
+        assert f"{note_type['id']}: {{" not in notes
+
+
+def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
+    """Expose Calendar as its own month/Day application without browser-side Markdown authority."""
+    parser = _IndexParser()
+    index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    parser.feed(index)
+    assert {
+        "calendar-surface",
+        "calendar-month-view",
+        "calendar-day-view",
+        "calendar-month-title",
+        "calendar-grid",
+        "calendar-prev",
+        "calendar-next",
+        "calendar-today",
+    } <= parser.ids
+    assert "/api/calendar" in index
+
+    calendar = (WEB_ROOT / "calendar.js").read_text(encoding="utf-8")
+    client = (WEB_ROOT / "calendar-client.js").read_text(encoding="utf-8")
+    notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
+    assert 'operation: "month"' in calendar
+    assert 'operation: "day"' in calendar
+    assert '"Contenido del día"' in calendar
+    assert '"Diario"' in calendar
+    assert '"Capturado este día"' in calendar
+    assert '"Referencias a este día"' in calendar
+    assert 'new CustomEvent("odyssey:open-note"' in calendar
+    assert 'new CustomEvent("odyssey:open-calendar-day"' in notes
+    assert 'credentials: "same-origin"' in client
+    assert "innerHTML" not in calendar
+    assert "innerHTML" not in client
 
 
 def test_older_chat_pages_restore_note_snapshot_affordances() -> None:
@@ -261,7 +304,14 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
     root = WEB_ROOT.resolve()
     modules = _reachable_local_modules(WEB_ROOT / "app.js")
     routes = {path.relative_to(root).as_posix() for path in modules}
-    assert routes == {"app.js", "client.js", "notes.js", "notes-client.js"}
+    assert routes == {
+        "app.js",
+        "client.js",
+        "notes.js",
+        "notes-client.js",
+        "calendar.js",
+        "calendar-client.js",
+    }
 
     workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")
     for route in routes:
@@ -284,7 +334,9 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     client = (WEB_ROOT / "client.js").read_text(encoding="utf-8")
     notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
     notes_client = (WEB_ROOT / "notes-client.js").read_text(encoding="utf-8")
-    combined = "\n".join((index, app, client, notes, notes_client))
+    calendar = (WEB_ROOT / "calendar.js").read_text(encoding="utf-8")
+    calendar_client = (WEB_ROOT / "calendar-client.js").read_text(encoding="utf-8")
+    combined = "\n".join((index, app, client, notes, notes_client, calendar, calendar_client))
 
     assert "https://" not in index
     assert "http://" not in index

@@ -34,6 +34,10 @@ The current standalone consumer source lives under `odyssey_web/` as part of Pha
 - `config/note-schema.json` is the machine-readable canonical schema.
 - n8n, browser code, and model providers must not become alternate semantic authorities.
 
+### Application specialization invariant
+
+Applications are narrow domain interpreters/executors, never miniature copies of Core. An application planner may emit only the minimum app-owned interpretation or operation needed for its specialty. When the remaining request uses shared Odyssey semantics, the app must return the exact routed source plus bounded Core-owned `DomainInterpretation` evidence and let the ordinary Core planner decide semantic ownership, targets, identities, references, facts, cardinality, mutation intent, and validation. Applications must not construct `RequestPlan`, `SemanticWriteIntent`, Core selections/candidate scopes, note types, generic properties/tags, Markdown, persistence instructions, or shared identity-resolution logic. App-owned direct operations such as a Calendar Day capture may execute through a narrow Core persistence boundary, but shared planning and mechanics stay in Core. Apps may depend on Core contracts; `odyssey_core/` must never import `odyssey_apps/`. Apply this invariant to every current and future application, including Calendar and Tasks.
+
 Do not introduce LangGraph, a vector service, graph database, queue, additional application server, or other infrastructure unless a concrete requirement cannot be handled cleanly by the current boundaries.
 
 ## Local-first ownership boundary
@@ -56,12 +60,15 @@ Current DEV/server actor isolation must remain enforced at the outer authenticat
 - Keep components replaceable behind explicit contracts.
 - Never silently change the ontology/schema. Material schema changes require an explicit proposal, compatibility/migration review, deterministic validation, and normally human approval.
 - Never expose, print, commit, or persist credentials/secrets in project files or documentation.
+- For an explicitly authorized one-shot live gate that needs `/home/ragdehl/.config/odyssey/secrets.env`, prefer a transient `systemd --user` unit with `EnvironmentFile=` and `--wait --collect --pipe`. Pass only the gate authorization flag explicitly; never source or print the secret in the remote shell, copy it into tmux, or persist it in the repo. If the user service manager or fixed environment file is unavailable, stop before provider access and ask the human operator rather than inventing another credential path.
 - Explain material architecture/security/data trade-offs before changing those boundaries.
 - Do not delete or overwrite real personal knowledge as part of development evidence.
 
 Production Python is for human readers. Functions and methods must have useful functional docstrings describing domain responsibility, parameters, returns when relevant, and meaningful errors. Add concise comments/examples only where behavior or safety reasoning is not obvious; do not narrate syntax.
 
 Ruff is the Python lint/format authority and pytest is the Python test runner. Preserve existing unittest tests unless functional work already makes migration useful.
+
+Every functional behavior change must ship with both **focused unit/contract tests** and **vertical end-to-end regression coverage** for the affected user path. The end-to-end layer must exercise the real production boundaries as far as safely possible (for example Router → application planner → runtime → Core/persistence) while replacing only external providers, credentials, or real personal data with deterministic fakes/isolated fixtures. Keep these tests as future regression sentinels. If a true vertical path cannot yet be exercised, document why and add the closest integration test before declaring the change ready; unit tests alone are never sufficient evidence for a functional change.
 
 ## Model-facing changes
 

@@ -1,0 +1,52 @@
+{
+  "version": 10,
+  "current_context": {
+    "date": "2026-10-02",
+    "time": "17:00",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "dev-explicit-start-direct-identities",
+      "request": "Marta Test empieza mañana a trabajar en Airbus Test.",
+      "domain_interpretation": {
+        "capability_id": "calendar",
+        "intent": "TEMPORAL_ANNOTATION",
+        "evidence": [
+          {
+            "kind": "temporal_reference",
+            "source_text": "mañana",
+            "value": "2026-10-03"
+          }
+        ]
+      },
+      "expect": {
+        "target_entity": "Marta Test",
+        "reference_entity": "Airbus Test",
+        "date": "2026-10-03",
+        "temporal_text": "mañana"
+      }
+    },
+    {
+      "id": "dev-explicit-end-direct-identities",
+      "request": "Bruno Test deja mañana de trabajar en Airbus Test.",
+      "domain_interpretation": {
+        "capability_id": "calendar",
+        "intent": "TEMPORAL_ANNOTATION",
+        "evidence": [
+          {
+            "kind": "temporal_reference",
+            "source_text": "mañana",
+            "value": "2026-10-03"
+          }
+        ]
+      },
+      "expect": {
+        "target_entity": "Bruno Test",
+        "reference_entity": "Airbus Test",
+        "date": "2026-10-03",
+        "temporal_text": "mañana"
+      }
+    }
+  ]
+}

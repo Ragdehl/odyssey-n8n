@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "commit": "f5949ecbce3058403847c5dc179003ea8079b0da",
+  "router_matrix_sha256": "8153847b0bd31ef45dd72ae31326f0d785b951a79811068296c29a5ea3db4bcf",
+  "calendar_matrix_sha256": "7a7b22790db10a05a3940f0f547d91a851eb56f60440753f1a5b75852c52f7a6",
+  "model": "gpt-6-luna",
+  "reasoning_effort": "low",
+  "provider_calls": 16,
+  "automatic_retries": 0,
+  "input_tokens": 18872,
+  "output_tokens": 2623,
+  "estimated_standard_cost_usd": 0.0031987,
+  "estimated_regional_upper_usd": 0.0035185700000000004,
+  "passed": false,
+  "router_passed": 7,
+  "calendar_passed": 4,
+  "rows": [
+    {
+      "gate": "router",
+      "id": "core-only",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "calendar-only",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "independent-split",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "dependent-calendar",
+      "passed": false,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "journal-stays-core",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "tasks-disabled",
+      "passed": true,
+      "expect": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "actual": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "ambiguous-owner",
+      "passed": true,
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "meaningless-input",
+      "passed": true,
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "exact-tomorrow-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "exact-three-days-literal",
+      "passed": false,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-05"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": "TASKS_CAPABILITY_REQUIRED",
+        "exact_date": "2026-10-05"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-week-range",
+      "passed": false,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "failure_code": "TASKS_CAPABILITY_REQUIRED",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-month-range",
+      "passed": false,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {},
+      "error": "CalendarPlannerError"
+    },
+    {
+      "gate": "calendar",
+      "id": "vague-end-of-month",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-exact-date",
+      "passed": false,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Marta",
+          "Airbus"
+        ]
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Marta"
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "task-lifecycle-not-calendar-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "TASKS_CAPABILITY_REQUIRED"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": "TASKS_CAPABILITY_REQUIRED",
+        "exact_date": "2026-10-02"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "journal-not-calendar",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "UNSAFE_INTENT"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": "UNSAFE_INTENT",
+        "exact_date": "2026-10-02"
+      },
+      "error": null
+    }
+  ]
+}

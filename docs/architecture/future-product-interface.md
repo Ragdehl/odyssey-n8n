@@ -182,7 +182,7 @@ Full message threads and branching chat management are not committed product dir
 capability-specific surface only when a concrete need cannot be met through the main conversation
 and canonical knowledge.
 
-The detailed executable routing/composition contract remains owned by [Future Extension Points](future-extension-points.md#application-routing-and-composition) and [Odyssey Platform Direction](odyssey-platform-direction.md#application-routingcomposition).
+The near-term executable routing/composition contract is now owned by [Application Boundary + Router v0](application-boundary-router-v0.md); longer-horizon marketplace/platform direction remains indexed by [Future Extension Points](future-extension-points.md#application-routing-and-composition) and [Odyssey Platform Direction](odyssey-platform-direction.md#application-routingcomposition).
 
 ### UI-3 — Activity / "what changed" view
 

@@ -67,6 +67,24 @@ def _write_note(
     repository.create_text(path, serialize_note(Note(metadata=metadata, content=content)))  # type: ignore[arg-type]
 
 
+def test_application_managed_notes_are_not_generic_identity_candidates(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
+    """Keep Calendar-managed Days outside ordinary exact identity resolution."""
+    (repository.root / "calendar" / "days").mkdir(parents=True)
+    _write_note(
+        repository,
+        "calendar/days/2026-10-01.md",
+        note_id="calendar-day-2026-10-01",
+        note_type="calendar_day",
+        extra_metadata={"date": "2026-10-01"},
+    )
+
+    assert find_exact_entity_candidates(repository, schema, "2026-10-01") == ()
+    with pytest.raises(ValueError, match="Unknown canonical note type"):
+        find_exact_entity_candidates(repository, schema, "2026-10-01", type="calendar_day")
+
+
 def test_find_exact_entity_candidates_finds_primary_name_with_unicode_casefold_and_whitespace(
     repository: VaultRepository, schema: dict[str, object]
 ) -> None:

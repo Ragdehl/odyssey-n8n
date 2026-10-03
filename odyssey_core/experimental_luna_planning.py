@@ -15,6 +15,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol
 
+from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalSpan,
@@ -32,6 +33,7 @@ from odyssey_core.request_planning import (
     planner_result_json_schema,
     render_semantic_write_planner_prompt,
     request_plan_json_schema,
+    validate_plan_against_domain_interpretation,
     validate_planner_result,
     validate_request_action,
 )
@@ -75,7 +77,9 @@ class PlannerEscalation:
 ExperimentalPlannerResult = RequestPlan | PlannerClarification | PlannerEscalation
 
 
-def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+def luna_experimental_result_json_schema(
+    schema: Mapping[str, Any], domain_interpretation: DomainInterpretation | None = None
+) -> dict[str, Any]:
     """Build the strict nested PLAN/CLARIFY/ESCALATE provider schema.
 
     The production planner result contract is inherited unchanged and the Luna-only ESCALATE branch
@@ -96,7 +100,12 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
         "additionalProperties": False,
     }
     definitions = deepcopy(production_schema["$defs"])
-    semantic_definitions = semantic_write_schema_definitions(schema)
+    semantic_definitions = semantic_write_schema_definitions(
+        schema,
+        include_temporal_reference=bool(
+            domain_interpretation and domain_interpretation.temporal_references()
+        ),
+    )
     existing_filter_array = definitions["filter_array"]
     if semantic_definitions["filter_array"] != existing_filter_array:
         raise RequestPlanningError("Semantic WRITE filter schema diverged from shared selection")
@@ -115,7 +124,9 @@ def luna_experimental_result_json_schema(schema: Mapping[str, Any]) -> dict[str,
 
 
 def validate_luna_experimental_result(
-    payload: Any, schema: Mapping[str, Any]
+    payload: Any,
+    schema: Mapping[str, Any],
+    domain_interpretation: DomainInterpretation | None = None,
 ) -> ExperimentalPlannerResult:
     """Validate a Luna result without weakening production planner validation.
 
@@ -130,9 +141,9 @@ def validate_luna_experimental_result(
             code=PlannerValidationCode.INVALID_FIELDS,
         )
     if payload.get("outcome") == "CLARIFY":
-        return validate_planner_result(payload, schema)
+        return validate_planner_result(payload, schema, domain_interpretation)
     if payload.get("outcome") == "PLAN":
-        return _validate_luna_plan(payload, schema)
+        return _validate_luna_plan(payload, schema, domain_interpretation)
     if payload.get("outcome") != "ESCALATE":
         return validate_planner_result(payload, schema)
     if set(payload) != {"outcome", "actions", "limitations", "clarification_code"}:
@@ -152,7 +163,11 @@ def validate_luna_experimental_result(
     return PlannerEscalation()
 
 
-def _validate_luna_plan(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> RequestPlan:
+def _validate_luna_plan(
+    payload: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    domain_interpretation: DomainInterpretation | None = None,
+) -> RequestPlan:
     """Compile semantic writes in provider order and reuse established action/final invariants."""
     required = {"outcome", "actions", "limitations", "clarification_code"}
     if (
@@ -171,7 +186,12 @@ def _validate_luna_plan(payload: Mapping[str, Any], schema: Mapping[str, Any]) -
     for raw_action in payload["actions"]:
         try:
             if isinstance(raw_action, dict) and raw_action.get("kind") == "write":
-                intent = decode_semantic_write_action(raw_action)
+                intent = decode_semantic_write_action(
+                    raw_action,
+                    allow_temporal_reference=bool(
+                        domain_interpretation and domain_interpretation.temporal_references()
+                    ),
+                )
                 actions.append(compile_semantic_write(intent, schema))
             else:
                 actions.append(validate_request_action(raw_action, schema))
@@ -181,11 +201,13 @@ def _validate_luna_plan(payload: Mapping[str, Any], schema: Mapping[str, Any]) -
                 stage=PlannerValidationStage.WRITE_ACTION,
                 code=PlannerValidationCode.INVALID_MUTATION,
             ) from error
-    return finalize_request_plan(
+    plan = finalize_request_plan(
         actions,
         payload["limitations"],
         payload.get("presentation_intent", "answer"),
     )
+    validate_plan_against_domain_interpretation(plan, domain_interpretation)
+    return plan
 
 
 def render_luna_experimental_prompt(
@@ -195,6 +217,7 @@ def render_luna_experimental_prompt(
     teaching_examples: Sequence[Mapping[str, Any]] | None = None,
     conversation_context: Sequence[Mapping[str, str]] = (),
     size_components: dict[str, int] | None = None,
+    domain_interpretation: DomainInterpretation | None = None,
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -229,7 +252,11 @@ def render_luna_experimental_prompt(
         for item in examples
     )
     semantic_prompt = render_semantic_write_planner_prompt(
-        schema, current_context, conversation_context, size_components=size_components
+        schema,
+        current_context,
+        conversation_context,
+        size_components=size_components,
+        domain_interpretation=domain_interpretation,
     )
     prompt = f"""{semantic_prompt}
 
@@ -335,6 +362,7 @@ class OpenAILunaExperimentalPlanner:
         monotonic: Any = perf_counter,
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
+        domain_interpretation: DomainInterpretation | None = None,
     ) -> None:
         self._client = client
         self._schema = schema
@@ -342,6 +370,7 @@ class OpenAILunaExperimentalPlanner:
         self._teaching_examples = (
             tuple(teaching_examples) if teaching_examples is not None else None
         )
+        self._domain_interpretation = domain_interpretation
         self._monotonic = monotonic
         self.model = LUNA_EXPERIMENT_MODEL
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
@@ -366,6 +395,7 @@ class OpenAILunaExperimentalPlanner:
         current_context: Mapping[str, str],
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
+        domain_interpretation: DomainInterpretation | None = None,
     ) -> OpenAILunaExperimentalPlanner:
         """Construct the experimental client with automatic SDK retries disabled."""
         if not os.environ.get("OPENAI_API_KEY"):
@@ -381,6 +411,7 @@ class OpenAILunaExperimentalPlanner:
             schema,
             current_context,
             teaching_examples=teaching_examples,
+            domain_interpretation=domain_interpretation,
         )
 
     def plan(
@@ -410,8 +441,11 @@ class OpenAILunaExperimentalPlanner:
                 teaching_examples=self._teaching_examples,
                 conversation_context=conversation_context,
                 size_components=sizes,
+                domain_interpretation=self._domain_interpretation,
             )
-            output_schema = luna_experimental_result_json_schema(self._schema)
+            output_schema = luna_experimental_result_json_schema(
+                self._schema, self._domain_interpretation
+            )
             sizes["user_request_bytes"] = len(request.encode("utf-8"))
             sizes["structured_output_schema_bytes"] = len(
                 json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -484,7 +518,9 @@ class OpenAILunaExperimentalPlanner:
             self.last_validation_code = "INVALID_FIELDS"
             raise RequestPlanningError("Luna experiment result wrapper is invalid")
         try:
-            result = validate_luna_experimental_result(payload["result"], self._schema)
+            result = validate_luna_experimental_result(
+                payload["result"], self._schema, self._domain_interpretation
+            )
         except RequestPlanningError as error:
             recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)
             self.last_spans = recorder.spans

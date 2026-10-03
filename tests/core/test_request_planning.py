@@ -645,6 +645,33 @@ def test_mixed_retrieval_and_write_actions_preserve_request_order(schema: dict) 
     assert isinstance(plan.actions[1], RetrieveAction)
 
 
+def test_journal_write_can_use_entry_date_for_target_identity_and_creation(schema: dict) -> None:
+    """Keep one schema-driven plan valid for same-date reuse or creation without Journal Core rules."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "entrada de diario del 3 de octubre",
+                    note_type="journal_entry",
+                    filters=[{"field": "entry_date", "op": "eq", "value": "2026-10-03"}],
+                    properties=[prop("entry_date", "2026-10-03")],
+                    facts=["He tenido un día muy tranquilo."],
+                )
+            )
+        ),
+        schema,
+    )
+
+    item = plan.actions[0].units[0]  # type: ignore[union-attr]
+    assert item.target.type == "journal_entry"
+    assert [(flt.field, flt.op, flt.value) for flt in item.target.filters] == [
+        ("entry_date", "eq", "2026-10-03")
+    ]
+    assert [(change.field, change.value) for change in item.properties] == [
+        ("entry_date", "2026-10-03")
+    ]
+
+
 def test_structured_property_only_record_amend_and_remove_are_valid(schema: dict) -> None:
     """Treat canonical properties as first-class semantic payload rather than requiring prose facts."""
     schema = deepcopy(schema)
@@ -873,6 +900,22 @@ def test_write_contract_rejects_physical_decisions_and_invalid_semantic_fields(
             validate_request_plan(payload, schema)
 
 
+def test_application_managed_type_does_not_change_generic_model_contract(schema: dict) -> None:
+    """Keep Calendar Day canonical while preserving the accepted generic planner surface."""
+    ordinary_only = deepcopy(schema)
+    ordinary_only["types"] = [item for item in ordinary_only["types"] if "managed_by" not in item]
+
+    assert render_request_planner_prompt(schema, CONTEXT) == render_request_planner_prompt(
+        ordinary_only, CONTEXT
+    )
+    assert planner_result_json_schema(schema) == planner_result_json_schema(ordinary_only)
+    assert luna_experimental_result_json_schema(schema) == luna_experimental_result_json_schema(
+        ordinary_only
+    )
+    with pytest.raises(RequestPlanningError):
+        validate_request_plan(output(retrieve("2026-10-01", note_type="calendar_day")), schema)
+
+
 def test_invalid_model_output_fails_closed(schema: dict) -> None:
     """Reject empty queries, unknown types, bad filters, old write shapes, and invalid actions."""
     invalid = [
@@ -936,6 +979,26 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     capabilities = json.loads(write_json)
     assert capabilities["types"]["person"]["properties"]["origin"]["value_type"] == "string"
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
+
+
+def test_prompt_exposes_date_bound_journal_write_target_contract(schema: dict) -> None:
+    """Keep journal destination-by-date guidance visible at the production model boundary."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    write_json = prompt.split(
+        "Planner writable type/property capabilities (derived dynamically from the same canonical schema):\n\n",
+        1,
+    )[1]
+    capabilities = json.loads(write_json)
+    journal = capabilities["types"]["journal_entry"]
+
+    assert "constrain target selection with entry_date equal to that date" in journal["description"]
+    assert "also set the same entry_date property" in journal["description"]
+    assert "Never repurpose an entry from another date" in journal["description"]
+    assert (
+        "even when the same date also appears in target filters"
+        in journal["properties"]["entry_date"]["description"]
+    )
+    assert "preserve its entry_date" in journal["properties"]["entry_date"]["description"]
 
 
 def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> None:
@@ -1058,6 +1121,31 @@ def test_semantic_reference_selection_lowers_to_internal_lookup_unit(schema: dic
     assert lookup.target.query == "la amiga que vive en Lyon"
     assert lookup.target.type == "person"
     assert lookup.facts == ()
+
+
+def test_calendar_day_link_alias_is_canonicalized_before_request_plan_execution(
+    schema: dict,
+) -> None:
+    """Keep provider temporal wording out of durable Markdown even on the fallback planner path."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "Marta Test",
+                    entity="Marta Test",
+                    facts=[
+                        "Empieza [[calendar/days/2026-10-03|"
+                        "Marta Test empieza mañana a vivir con Daniel Test.]]"
+                    ],
+                )
+            )
+        ),
+        schema,
+        allow_temporal_reference_links=True,
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert action.units[0].facts == ("Empieza [[calendar/days/2026-10-03|03-10-2026]]",)
 
 
 def test_relational_reference_selection_lowers_to_bounded_lookup_unit(schema: dict) -> None:

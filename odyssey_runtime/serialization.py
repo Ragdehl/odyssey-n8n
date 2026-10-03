@@ -184,6 +184,8 @@ def _product_outcome(result: ApplicationResult) -> tuple[str, str | None]:
         return "CANNOT_ANSWER", result.clarification_code
     if result.clarification_code is not None:
         return "CLARIFY", result.clarification_code
+    if result.planning_error is not None:
+        return "CANNOT_ANSWER", result.planning_error
     for action in result.action_results:
         collection = action.semantic_set
         if collection is not None:

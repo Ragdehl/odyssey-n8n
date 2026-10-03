@@ -1,0 +1,202 @@
+{
+  "version": 10,
+  "commit": "ed5ddf43761169dfdca8c37c1575e22a081a1aa5",
+  "router_retained_result": "v5 8/8",
+  "calendar_matrix_sha256": "056b33f6cffd3c179dc7ba3e2f9a82695933cfe90f34b9624a063ea9f9a1b9e2",
+  "core_matrix_sha256": "ac0d8d94ac721d4a956af825dc9729ac560afd07cbf0bc0c93b2eda12167e6e4",
+  "provider_attempts": 10,
+  "completed_provider_responses": 10,
+  "automatic_retries": 0,
+  "estimated_standard_cost_usd": 0.006012300000000001,
+  "estimated_regional_upper_usd": 0.006613530000000001,
+  "passed": false,
+  "rows": [
+    {
+      "gate": "calendar",
+      "id": "exact-tomorrow-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "exact-three-days-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-05"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-05"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-week-range",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "vague-end-of-month",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-exact-date",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DELEGATE_TO_CORE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DELEGATE_TO_CORE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-ending-exact-date",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DELEGATE_TO_CORE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DELEGATE_TO_CORE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "task-lifecycle-not-calendar-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "journal-not-calendar",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "error": null
+    },
+    {
+      "gate": "core_luna_handoff",
+      "id": "dev-explicit-start-direct-identities",
+      "passed": true,
+      "expect": {
+        "target_entity": "Marta Test",
+        "reference_entity": "Airbus Test",
+        "date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "actual": {
+        "kind": "write",
+        "target_entity": "Marta Test",
+        "reference_entity": "Airbus Test",
+        "temporal_fact": "Empieza [[calendar/days/2026-10-03|mañana]] a trabajar en {{ref:0}}."
+      },
+      "error": null
+    },
+    {
+      "gate": "core_luna_handoff",
+      "id": "dev-explicit-end-direct-identities",
+      "passed": false,
+      "expect": {
+        "target_entity": "Bruno Test",
+        "reference_entity": "Airbus Test",
+        "date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "actual": {
+        "kind": "write",
+        "target_entity": "Bruno Test",
+        "reference_entity": null,
+        "temporal_fact": "Deja de trabajar en Airbus Test [[calendar/days/2026-10-03|mañana]]."
+      },
+      "error": null
+    }
+  ],
+  "provider_failures": []
+}

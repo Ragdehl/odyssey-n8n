@@ -1,0 +1,485 @@
+{
+  "version": 8,
+  "commit": "32dce15a44362c4bac052c0870ccf2e2ebef5d2e",
+  "router_evidence_commit": "e186cf48561cfda9097f42268c8efaa82bab18bf",
+  "router_retained_result": "8/8",
+  "calendar_matrix_sha256": "a04ac4ee002fe133f840ae21d1573c1c749a95847fe7be111ce78eda041e8e19",
+  "calendar_model": "gpt-6-luna",
+  "calendar_reasoning_effort": "low",
+  "provider_attempts": 10,
+  "completed_provider_responses": 10,
+  "automatic_retries": 0,
+  "input_tokens": 10678,
+  "output_tokens": 2108,
+  "estimated_standard_cost_usd": 0.0021218,
+  "estimated_regional_upper_usd": 0.0023339800000000003,
+  "passed": true,
+  "rows": [
+    {
+      "gate": "calendar",
+      "id": "exact-tomorrow-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03"
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "exact-three-days-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-05"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-05"
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-05",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-week-range",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "exact_date": null,
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12",
+        "semantic_write": null,
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-month-range",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "exact_date": null,
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01",
+        "semantic_write": null,
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "vague-end-of-month",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "exact_date": null,
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-exact-date",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Marta",
+          "Airbus"
+        ]
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Marta",
+          "Airbus"
+        ]
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": {
+          "operations": [
+            {
+              "target": {
+                "description": "Marta",
+                "binding": "described",
+                "direct_name": null,
+                "candidate_scope": {
+                  "source": {
+                    "kind": "SOURCE_DESCRIPTION",
+                    "description": "Marta"
+                  },
+                  "member_query": "Marta",
+                  "extent": "one_member"
+                }
+              },
+              "facts": [
+                {
+                  "parts": [
+                    {
+                      "kind": "literal",
+                      "text": "empieza a trabajar en"
+                    },
+                    {
+                      "kind": "identity",
+                      "text": "Airbus",
+                      "identity": {
+                        "description": "Airbus",
+                        "binding": "described",
+                        "direct_name": null,
+                        "candidate_scope": {
+                          "source": {
+                            "kind": "SOURCE_DESCRIPTION",
+                            "description": "Airbus"
+                          },
+                          "member_query": "Airbus",
+                          "extent": "one_member"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "temporal_reference",
+                      "text": "mañana",
+                      "date": "2026-10-03"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-ending-exact-date",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Bruno",
+          "Renault"
+        ]
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Bruno",
+          "Renault"
+        ]
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": {
+          "operations": [
+            {
+              "target": {
+                "description": "Bruno",
+                "binding": "described",
+                "direct_name": "Bruno",
+                "candidate_scope": {
+                  "source": {
+                    "kind": "SOURCE_DESCRIPTION",
+                    "description": "Bruno"
+                  },
+                  "member_query": "Bruno",
+                  "extent": "one_member"
+                }
+              },
+              "facts": [
+                {
+                  "parts": [
+                    {
+                      "kind": "literal",
+                      "text": "deja de trabajar en "
+                    },
+                    {
+                      "kind": "identity",
+                      "text": "Renault",
+                      "identity": {
+                        "description": "Renault",
+                        "binding": "described",
+                        "direct_name": "Renault",
+                        "candidate_scope": {
+                          "source": {
+                            "kind": "SOURCE_DESCRIPTION",
+                            "description": "Renault"
+                          },
+                          "member_query": "Renault",
+                          "extent": "one_member"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "temporal_reference",
+                      "text": "mañana",
+                      "date": "2026-10-03"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-state-start-exact-date",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Lucía",
+          "Daniel"
+        ]
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Lucía",
+          "Daniel"
+        ]
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": {
+          "operations": [
+            {
+              "target": {
+                "description": "Lucía",
+                "binding": "described",
+                "direct_name": "Lucía",
+                "candidate_scope": null
+              },
+              "facts": [
+                {
+                  "parts": [
+                    {
+                      "kind": "literal",
+                      "text": "empieza "
+                    },
+                    {
+                      "kind": "temporal_reference",
+                      "text": "mañana",
+                      "date": "2026-10-03"
+                    },
+                    {
+                      "kind": "literal",
+                      "text": " a vivir con "
+                    },
+                    {
+                      "kind": "identity",
+                      "text": "Daniel",
+                      "identity": {
+                        "description": "Daniel",
+                        "binding": "described",
+                        "direct_name": "Daniel",
+                        "candidate_scope": null
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "task-lifecycle-not-calendar-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "exact_date": null,
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "journal-not-calendar",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "exact_date": null,
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "provider_failure": null,
+      "error": null
+    }
+  ]
+}

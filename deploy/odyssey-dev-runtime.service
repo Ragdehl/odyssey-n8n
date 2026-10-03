@@ -22,6 +22,7 @@ Environment=ODYSSEY_SCHEMA_PATH=/home/ragdehl/projects/odyssey-dev/config/note-s
 Environment=ODYSSEY_RUNTIME_HOST=127.0.0.1
 Environment=ODYSSEY_RUNTIME_PORT=28765
 Environment=ODYSSEY_ACTOR=odyssey-dev
+Environment=ODYSSEY_ENABLED_APPLICATIONS=calendar
 Environment=ODYSSEY_CONTEXTUAL_MODEL=gpt-6-luna
 Environment=ODYSSEY_SEMANTIC_SET_MODEL=gpt-6-luna
 Environment=TZ=Europe/Paris

@@ -1,0 +1,107 @@
+{
+  "version": 2,
+  "catalog": {
+    "enabled": [
+      "calendar"
+    ],
+    "disabled": [
+      "tasks"
+    ]
+  },
+  "cases": [
+    {
+      "id": "core-only",
+      "source": "A Cloe le gusta el chocolate.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "calendar-only",
+      "source": "Mañana viene el fontanero.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "independent-split",
+      "source": "A Cloe le gusta el chocolate. Mañana viene el fontanero.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "dependent-calendar",
+      "source": "Marta empieza mañana a trabajar en Airbus.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "journal-stays-core",
+      "source": "Escribe en mi diario que hoy fui al trabajo.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "tasks-disabled",
+      "source": "Tengo que llamar al banco el viernes.",
+      "expect": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      }
+    },
+    {
+      "id": "ambiguous-owner",
+      "source": "Guárdalo como nota o en el calendario.",
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      }
+    },
+    {
+      "id": "meaningless-input",
+      "source": "...",
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      }
+    }
+  ],
+  "route_source_comparison": "boundary_whitespace_insensitive_after_exact_span_validation"
+}

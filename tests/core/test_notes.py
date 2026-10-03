@@ -325,6 +325,13 @@ class NoteValidationTests(unittest.TestCase):
         journal["entry_date"] = "2026-08-15"
         validate_note(Note(metadata=journal, content=""), self.schema)  # type: ignore[arg-type]
 
+    def test_calendar_day_is_canonical_and_requires_date(self) -> None:
+        """Validate Calendar-managed Days through the ordinary canonical Note contract."""
+        day = self.valid_metadata("calendar_day")
+        self.assert_invalid(day, "Missing required type")
+        day["date"] = "2026-10-01"
+        validate_note(Note(metadata=day, content="- Vino el fontanero."), self.schema)  # type: ignore[arg-type]
+
     def test_note_schema_version_must_match_supplied_schema(self) -> None:
         """Reject otherwise valid notes written for another canonical schema version."""
         metadata = self.valid_metadata()

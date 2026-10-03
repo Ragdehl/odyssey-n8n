@@ -1,0 +1,50 @@
+{
+  "version": 11,
+  "commit": "641939fb3effc07c29694998263edf3900ad99ae",
+  "router_retained_result": "v5 8/8",
+  "calendar_retained_result": "v10 8/8",
+  "matrix_sha256": "d94e2fa7deb16e5a891f40ce28f19a362e8bcc2830cda27a572fee7a2d4207cb",
+  "provider_attempts": 2,
+  "completed_provider_responses": 2,
+  "automatic_retries": 0,
+  "estimated_standard_cost_usd": 0.0049084,
+  "estimated_regional_upper_usd": 0.0053992400000000005,
+  "passed": true,
+  "rows": [
+    {
+      "id": "dev-end-employment-participant",
+      "passed": true,
+      "expect": {
+        "target_entity": "Bruno Test",
+        "reference_entity": "Airbus Test",
+        "date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "actual": {
+        "kind": "write",
+        "target_entity": "Bruno Test",
+        "reference_entity": "Airbus Test",
+        "temporal_fact": "Deja [[calendar/days/2026-10-03|mañana]] de trabajar en {{ref:0}}."
+      },
+      "error": null
+    },
+    {
+      "id": "end-person-relation-participant",
+      "passed": true,
+      "expect": {
+        "target_entity": "Lucía Test",
+        "reference_entity": "Daniel Test",
+        "date": "2026-10-03",
+        "temporal_text": "mañana"
+      },
+      "actual": {
+        "kind": "write",
+        "target_entity": "Lucía Test",
+        "reference_entity": "Daniel Test",
+        "temporal_fact": "Deja de vivir con {{ref:0}} [[calendar/days/2026-10-03|mañana]]."
+      },
+      "error": null
+    }
+  ],
+  "provider_failures": []
+}

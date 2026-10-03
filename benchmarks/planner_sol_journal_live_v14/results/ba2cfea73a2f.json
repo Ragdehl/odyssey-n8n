@@ -1,0 +1,34 @@
+{
+  "version": 14,
+  "commit": "ba2cfea73a2fd33c60415d08175e75977d9e9453",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "provider_attempts": 1,
+  "completed_provider_responses": 1,
+  "automatic_retries": 0,
+  "estimated_standard_cost_usd": "0.002974",
+  "passed": true,
+  "actual": {
+    "kind": "write",
+    "target_type": "journal_entry",
+    "filters": [
+      [
+        "entry_date",
+        "eq",
+        "2026-10-03"
+      ]
+    ],
+    "properties": [
+      [
+        "entry_date",
+        "set",
+        "2026-10-03"
+      ]
+    ],
+    "facts": [
+      "Hoy he tenido un día muy tranquilo."
+    ]
+  },
+  "error": null,
+  "provider_failures": []
+}

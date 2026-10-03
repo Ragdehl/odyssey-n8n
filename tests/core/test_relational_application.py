@@ -13,12 +13,14 @@ import pytest
 import odyssey_core.application as application
 from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.clarification import ClarificationChoice
+from odyssey_core.context import ContextFilter
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.notes import Note, parse_note, serialize_note
 from odyssey_core.reference_preflight import current_identity_guard
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    PropertyChange,
     RelationalReference,
     RequestPlan,
     RequestPlanningError,
@@ -358,6 +360,20 @@ def fact(text: str, ordinal: int = 0) -> str:
     return render_atomic_facts((text,), "fixture", (ordinal,), "2026-09-23")
 
 
+def domain_markdown_paths(vault: Path) -> list[Path]:
+    """Return semantic/domain Markdown while excluding Calendar-managed capture Days."""
+    return [
+        path
+        for path in vault.rglob("*.md")
+        if not path.relative_to(vault).as_posix().startswith("calendar/days/")
+    ]
+
+
+def assert_capture_day_materialized(vault: Path, value: str = "2026-09-24") -> None:
+    """Assert the expected Calendar-managed capture Day exists beside domain writes."""
+    assert (vault / "calendar" / "days" / f"{value}.md").is_file()
+
+
 def relational_selection(
     reference: str, *, source_kind: str, source_query: str | None, members: str = "one"
 ) -> SelectionCriteria:
@@ -414,6 +430,72 @@ def _plan_relation_wording(plan: RequestPlan) -> str:
                 if unit.target.relational_reference is not None:
                     return unit.target.relational_reference.reference
     return ""
+
+
+def test_journal_entry_date_filter_prevents_reusing_an_entry_from_another_day(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep date-bound Journal targeting on generic filtered identity resolution."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    old_path = "journal/old.md"
+    write_note(
+        vault,
+        old_path,
+        "old-journal",
+        "entrada de diario de hoy sobre haber ido al trabajo",
+        fact("Hoy he ido al trabajo."),
+        note_type="journal_entry",
+    )
+    old_bytes = (vault / old_path).read_bytes()
+    query = "entrada de diario de hoy"
+    index = MappedIndex(
+        {
+            query: (
+                SemanticEntityCandidate(
+                    "old-journal",
+                    old_path,
+                    "journal_entry",
+                    "entrada de diario de hoy sobre haber ido al trabajo",
+                    1.0,
+                ),
+            )
+        }
+    )
+    selection = SelectionCriteria(
+        None,
+        query,
+        "journal_entry",
+        (ContextFilter("entry_date", "eq", "2026-10-03"),),
+        None,
+    )
+    unit = KnowledgeUnit(
+        selection,
+        "record",
+        (PropertyChange("entry_date", "set", "2026-10-03"),),
+        (),
+        ("Hoy he tenido un día muy tranquilo.",),
+        (),
+    )
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        semantic_index=index,
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert (vault / old_path).read_bytes() == old_bytes
+    journals = [
+        parse_note(path.read_text(encoding="utf-8"))
+        for path in domain_markdown_paths(vault)
+        if parse_note(path.read_text(encoding="utf-8")).metadata["type"] == "journal_entry"
+    ]
+    assert len(journals) == 2
+    created = next(note for note in journals if note.metadata["id"] != "old-journal")
+    assert created.metadata["entry_date"] == "2026-10-03"
+    assert "Hoy he tenido un día muy tranquilo." in created.content
 
 
 def test_model_contract_preserves_relational_intent_and_legacy_selection(schema: dict) -> None:
@@ -1089,7 +1171,8 @@ def test_w1_singular_relational_write_updates_child_and_never_creates(
     assert result.status is application.ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("chloe",)
     assert "Vive en Lyon." in parse_note((vault / "people/chloe.md").read_text()).content
-    assert len(list(vault.rglob("*.md"))) == 2
+    assert len(domain_markdown_paths(vault)) == 2
+    assert_capture_day_materialized(vault)
 
 
 def test_singular_relational_target_preserves_explicit_named_reference(
@@ -1718,7 +1801,8 @@ def test_w2_complete_set_writes_one_source_fact_and_no_member_notes(
     assert all(
         (vault / f"people/{name.lower()}.md").read_bytes() == before[name] for name in before
     )
-    assert len(list(vault.rglob("*.md"))) == 4
+    assert len(domain_markdown_paths(vault)) == 4
+    assert_capture_day_materialized(vault)
 
 
 def test_c1_ambiguity_defers_without_mutation(tmp_path: Path, schema: dict) -> None:
@@ -2025,7 +2109,8 @@ def test_semantic_fact_reference_resolves_existing_note_without_lookup_write(
     assert "[[people/marta|Marta]]" in bruno
     assert "la amiga con la que cenamos ayer" not in bruno
     assert (vault / "people/marta.md").read_bytes() == before_marta
-    assert len(list(vault.rglob("*.md"))) == 2
+    assert len(domain_markdown_paths(vault)) == 2
+    assert_capture_day_materialized(vault)
     unit_results = result.action_results[0].unit_results
     assert unit_results[1].operation == "REFERENCE_BOUND"
     assert unit_results[1].materially_affected is False
@@ -2116,7 +2201,8 @@ def test_two_semantic_fact_references_resolve_independently_with_canonical_names
     assert marta_query not in cloe and clara_query not in cloe
     assert (vault / "people/marta.md").read_bytes() == before_marta
     assert (vault / "people/clara.md").read_bytes() == before_clara
-    assert len(list(vault.rglob("*.md"))) == 3
+    assert len(domain_markdown_paths(vault)) == 3
+    assert_capture_day_materialized(vault)
 
 
 def test_relational_target_with_two_relational_fact_references_stays_bounded(
@@ -2266,7 +2352,8 @@ def test_relational_target_with_two_relational_fact_references_stays_bounded(
     assert marta_query not in content and clara_query not in content
     assert (vault / "people/marta.md").read_bytes() == before[vault / "people/marta.md"]
     assert (vault / "people/clara.md").read_bytes() == before[vault / "people/clara.md"]
-    assert len(list(vault.rglob("*.md"))) == len(before)
+    assert len(domain_markdown_paths(vault)) == len(before)
+    assert_capture_day_materialized(vault)
     assert all(
         request.reference in {"mi hija mayor", dinner_source, marta_query, clara_query}
         for request in reasoner.requests
@@ -2496,7 +2583,8 @@ def test_self_relationship_fact_uses_semantic_references_without_pairwise_writes
     assert "[[people/denis|Denis]]" in self_content
     assert (vault / "people/axel.md").read_bytes() == before_axel
     assert (vault / "people/denis.md").read_bytes() == before_denis
-    assert len(list(vault.rglob("*.md"))) == 3
+    assert len(domain_markdown_paths(vault)) == 3
+    assert_capture_day_materialized(vault)
 
 
 def test_schema_backed_missing_reference_is_created_and_linked(
@@ -2594,7 +2682,8 @@ def test_schema_backed_missing_reference_is_created_and_linked(
     assert "|el proyecto Faro]]" not in self_content
     assert (vault / "people/axel.md").read_bytes() == before_axel
     assert (vault / "people/denis.md").read_bytes() == before_denis
-    assert len(list(vault.rglob("*.md"))) == 4
+    assert len(domain_markdown_paths(vault)) == 4
+    assert_capture_day_materialized(vault)
 
 
 def test_new_reference_is_rolled_back_when_consuming_fact_cannot_be_written(

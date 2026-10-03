@@ -7,6 +7,7 @@ import {
   requestConversation,
 } from "./client.js";
 import {mountNotes} from "./notes.js";
+import {mountCalendar} from "./calendar.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -20,8 +21,13 @@ const conversationEndpoint = document.querySelector('meta[name="odyssey-conversa
 const MAIN_CONVERSATION_ID = "main";
 const chatSurface = document.querySelector("#chat-surface");
 const notesSurface = document.querySelector("#notes-surface");
+const calendarSurface = document.querySelector("#calendar-surface");
 const chatTab = document.querySelector("#chat-tab");
 const notesTab = document.querySelector("#notes-tab");
+const calendarTab = document.querySelector("#calendar-tab");
+const notesCalendarTab = document.querySelector("#notes-calendar-tab");
+const calendarChatTab = document.querySelector("#calendar-chat-tab");
+const calendarNotesTab = document.querySelector("#calendar-notes-tab");
 const clarificationStatus = document.querySelector("#clarification-status");
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
@@ -41,21 +47,31 @@ function showDeploymentMarker() {
 
 showDeploymentMarker();
 
-// Both application controllers remain mounted for the page lifetime. Navigation changes the one
-// visible application view, so Chat draft/scroll and Notes query/detail/navigation state persist.
+// Application controllers remain mounted for the page lifetime so each surface keeps its local state.
 if (notesSurface) {
   mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
 }
+if (calendarSurface) {
+  mountCalendar(calendarSurface, {endpoint: document.querySelector('meta[name="odyssey-calendar-endpoint"]')?.content ?? "/api/calendar"});
+}
 function selectSurface(surface) {
-  const chat = surface === "chat";
-  if (chatSurface) chatSurface.hidden = !chat;
-  if (notesSurface) notesSurface.hidden = chat;
-  document.documentElement.dataset.activeView = chat ? "chat" : "notes";
-  chatTab?.setAttribute("aria-current", chat ? "page" : "false");
-  notesTab?.setAttribute("aria-current", chat ? "false" : "page");
+  const active = ["chat", "notes", "calendar"].includes(surface) ? surface : "chat";
+  if (chatSurface) chatSurface.hidden = active !== "chat";
+  if (notesSurface) notesSurface.hidden = active !== "notes";
+  if (calendarSurface) calendarSurface.hidden = active !== "calendar";
+  document.documentElement.dataset.activeView = active;
+  chatTab?.setAttribute("aria-current", active === "chat" ? "page" : "false");
+  notesTab?.setAttribute("aria-current", active === "notes" ? "page" : "false");
+  calendarTab?.setAttribute("aria-current", active === "calendar" ? "page" : "false");
 }
 chatTab?.addEventListener("click", () => selectSurface("chat"));
+calendarChatTab?.addEventListener("click", () => selectSurface("chat"));
 notesTab?.addEventListener("click", () => selectSurface("notes"));
+calendarNotesTab?.addEventListener("click", () => selectSurface("notes"));
+calendarTab?.addEventListener("click", () => selectSurface("calendar"));
+notesCalendarTab?.addEventListener("click", () => selectSurface("calendar"));
+document.addEventListener("odyssey:open-note", () => selectSurface("notes"));
+document.addEventListener("odyssey:open-calendar-day", () => selectSurface("calendar"));
 selectSurface("chat");
 
 function conversationPayload() {

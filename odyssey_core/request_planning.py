@@ -14,6 +14,10 @@ from time import perf_counter
 from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
+from odyssey_core.domain_interpretation import (
+    TEMPORAL_REFERENCE_EVIDENCE,
+    DomainInterpretation,
+)
 from odyssey_core.notes.validation import NoteValidationError, validate_field_value
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -26,6 +30,7 @@ from odyssey_core.planner_capabilities import (
     build_planner_capabilities,
     build_write_capabilities,
 )
+from odyssey_core.temporal import TemporalValueError, calendar_day_wikilink, normalize_iso_date
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
@@ -42,6 +47,7 @@ _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
+_CALENDAR_DAY_LINK_PATTERN = re.compile(r"\[\[calendar/days/(\d{4}-\d{2}-\d{2})\|([^\]\r\n|]+)\]\]")
 _STABLE_ID_PATTERN = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I
 )
@@ -378,6 +384,7 @@ def render_request_planner_prompt(
     conversation_context: Sequence[Mapping[str, str]] = (),
     *,
     size_components: dict[str, int] | None = None,
+    domain_interpretation: DomainInterpretation | None = None,
 ) -> str:
     """Render the production planner prompt from active schema and runtime context.
 
@@ -399,6 +406,8 @@ def render_request_planner_prompt(
         current_context,
         conversation_context,
         size_components=size_components,
+        domain_interpretation=domain_interpretation,
+        semantic_write_mode=False,
     )
 
 
@@ -408,6 +417,7 @@ def render_semantic_write_planner_prompt(
     conversation_context: Sequence[Mapping[str, str]] = (),
     *,
     size_components: dict[str, int] | None = None,
+    domain_interpretation: DomainInterpretation | None = None,
 ) -> str:
     """Render the Luna semantic-WRITE variant while retaining common planner instructions.
 
@@ -446,6 +456,8 @@ def render_semantic_write_planner_prompt(
         current_context,
         conversation_context,
         size_components=size_components,
+        domain_interpretation=domain_interpretation,
+        semantic_write_mode=True,
     )
 
 
@@ -456,6 +468,8 @@ def _render_request_planner_prompt_template(
     conversation_context: Sequence[Mapping[str, str]],
     *,
     size_components: dict[str, int] | None,
+    domain_interpretation: DomainInterpretation | None,
+    semantic_write_mode: bool,
 ) -> str:
     """Fill one reviewed planner template from current schema capabilities and context."""
     _validate_current_context(current_context)
@@ -486,6 +500,11 @@ def _render_request_planner_prompt_template(
         )
         prompt += context_section
         context_bytes = len(context_section.encode("utf-8"))
+    if domain_interpretation is not None:
+        domain_section = _render_domain_interpretation_section(
+            domain_interpretation, semantic_write_mode=semantic_write_mode
+        )
+        prompt += domain_section
     if size_components is not None:
         retrieval_bytes = len(retrieval_json.encode("utf-8"))
         writable_bytes = len(writable_json.encode("utf-8"))
@@ -498,6 +517,38 @@ def _render_request_planner_prompt_template(
             recent_context_bytes=context_bytes,
         )
     return prompt
+
+
+def _render_domain_interpretation_section(
+    interpretation: DomainInterpretation, *, semantic_write_mode: bool
+) -> str:
+    """Render app-specialized evidence while keeping all Core semantic authority in Core."""
+    if not isinstance(interpretation, DomainInterpretation):
+        raise RequestPlanningError("Domain interpretation is invalid")
+    payload = json.dumps(
+        interpretation.to_prompt_payload(), ensure_ascii=False, separators=(",", ":")
+    )
+    if semantic_write_mode:
+        temporal_instruction = (
+            "For temporal_reference evidence that is material to a durable write, use exactly one "
+            "semantic temporal_reference fact part with the supplied source_text and value; never "
+            "invent or normalize another date yourself."
+        )
+    else:
+        temporal_instruction = (
+            "For temporal_reference evidence that is material to a durable write, preserve it as "
+            "one Calendar Day link using exactly the supplied VALUE. SOURCE_TEXT grounds which temporal "
+            "wording the evidence came from, but Core canonicalizes the durable link label; never "
+            "invent or normalize another date yourself."
+        )
+    return (
+        "\n\nSpecialized domain interpretation (trusted only as bounded domain evidence, never as "
+        "mutation authority):\n"
+        + payload
+        + "\nCore still owns action choice, semantic ownership, targets, identities, references, "
+        "cardinality, facts, validation, and mutation planning. Do not infer extra app semantics "
+        "or copy application-specific structure into Core fields. " + temporal_instruction
+    )
 
 
 def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -787,7 +838,11 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
 
 
 @_validation_boundary(PlannerValidationStage.PLANNER_RESULT_ENVELOPE)
-def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerResult:
+def validate_planner_result(
+    payload: Any,
+    schema: Mapping[str, Any],
+    domain_interpretation: DomainInterpretation | None = None,
+) -> PlannerResult:
     """Validate the production planner envelope without executing either outcome.
 
     Args:
@@ -816,14 +871,19 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
             or not isinstance(payload["limitations"], list)
         ):
             raise RequestPlanningError("PLAN must contain actions and limitations only")
-        return validate_request_plan(
+        plan = validate_request_plan(
             {
                 "actions": payload["actions"],
                 "limitations": payload["limitations"],
                 "presentation_intent": payload.get("presentation_intent", "answer"),
             },
             schema,
+            allow_temporal_reference_links=bool(
+                domain_interpretation and domain_interpretation.temporal_references()
+            ),
         )
+        validate_plan_against_domain_interpretation(plan, domain_interpretation)
+        return plan
     if outcome == "CLARIFY":
         code = payload["clarification_code"]
         if (
@@ -838,8 +898,47 @@ def validate_planner_result(payload: Any, schema: Mapping[str, Any]) -> PlannerR
     raise RequestPlanningError("PlannerResult outcome is unsupported")
 
 
+def validate_plan_against_domain_interpretation(
+    plan: RequestPlan, interpretation: DomainInterpretation | None
+) -> None:
+    """Correlate specialized evidence to Core output without delegating Core semantics to an app."""
+    if interpretation is None:
+        return
+    if not isinstance(interpretation, DomainInterpretation):
+        raise RequestPlanningError("Domain interpretation is invalid")
+    allowed = {
+        item.value for item in interpretation.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE
+    }
+    found: set[str] = set()
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            continue
+        for unit in action.units:
+            for fact in unit.facts:
+                for match in _CALENDAR_DAY_LINK_PATTERN.finditer(fact):
+                    found.add(match.group(1))
+    if found - allowed:
+        raise RequestPlanningError(
+            "Core plan contains temporal evidence not supplied by the specialized application",
+            stage=PlannerValidationStage.WRITE_ACTION,
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
+    if (
+        allowed
+        and any(isinstance(action, WriteAction) for action in plan.actions)
+        and not allowed <= found
+    ):
+        raise RequestPlanningError(
+            "Core write omitted required specialized temporal evidence",
+            stage=PlannerValidationStage.WRITE_ACTION,
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
+
+
 @_validation_boundary(PlannerValidationStage.REQUEST_PLAN)
-def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPlan:
+def validate_request_plan(
+    payload: Any, schema: Mapping[str, Any], *, allow_temporal_reference_links: bool = False
+) -> RequestPlan:
     """Validate untrusted model output and return an immutable non-executing plan.
 
     Args:
@@ -866,7 +965,13 @@ def validate_request_plan(payload: Any, schema: Mapping[str, Any]) -> RequestPla
     if not isinstance(raw_actions, list) or not raw_actions:
         raise RequestPlanningError("RequestPlan actions must be a non-empty list")
     actions = tuple(
-        _validate_action(action, schema, retrieval_capabilities, write_capabilities)
+        _validate_action(
+            action,
+            schema,
+            retrieval_capabilities,
+            write_capabilities,
+            allow_temporal_reference_links=allow_temporal_reference_links,
+        )
         for action in raw_actions
     )
     return finalize_request_plan(actions, limitations, presentation_intent)
@@ -926,6 +1031,8 @@ class OpenAIRequestPlanner:
         schema: Mapping[str, Any],
         current_context: Mapping[str, str],
         monotonic: Any = perf_counter,
+        *,
+        domain_interpretation: DomainInterpretation | None = None,
     ) -> None:
         """Initialize a planner with an injected client and runtime schema/context.
 
@@ -941,6 +1048,7 @@ class OpenAIRequestPlanner:
         self._client = client
         self._schema = schema
         self._current_context = dict(current_context)
+        self._domain_interpretation = domain_interpretation
         self._monotonic = monotonic
         self.model = PLANNER_MODEL
         self.reasoning_effort = PLANNER_REASONING_EFFORT
@@ -963,7 +1071,11 @@ class OpenAIRequestPlanner:
 
     @classmethod
     def from_environment(
-        cls, schema: Mapping[str, Any], current_context: Mapping[str, str]
+        cls,
+        schema: Mapping[str, Any],
+        current_context: Mapping[str, str],
+        *,
+        domain_interpretation: DomainInterpretation | None = None,
     ) -> OpenAIRequestPlanner:
         """Create a production planner using the environment-provided OpenAI API key.
 
@@ -983,7 +1095,12 @@ class OpenAIRequestPlanner:
             from openai import OpenAI
         except ImportError as error:
             raise RequestPlanningError("Install the OpenAI SDK for request planning") from error
-        return cls(OpenAI(max_retries=PLANNER_AUTOMATIC_RETRIES), schema, current_context)
+        return cls(
+            OpenAI(max_retries=PLANNER_AUTOMATIC_RETRIES),
+            schema,
+            current_context,
+            domain_interpretation=domain_interpretation,
+        )
 
     def plan(
         self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
@@ -1029,6 +1146,7 @@ class OpenAIRequestPlanner:
                 self._current_context,
                 conversation_context,
                 size_components=sizes,
+                domain_interpretation=self._domain_interpretation,
             )
             output_schema = planner_result_json_schema(self._schema)
             sizes["user_request_bytes"] = len(request.encode("utf-8"))
@@ -1120,7 +1238,9 @@ class OpenAIRequestPlanner:
                 code=PlannerValidationCode.INVALID_FIELDS,
             )
         try:
-            result = validate_planner_result(payload["result"], self._schema)
+            result = validate_planner_result(
+                payload["result"], self._schema, self._domain_interpretation
+            )
         except RequestPlanningError as error:
             recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)
             self.last_spans = recorder.spans
@@ -1506,12 +1626,20 @@ def _validate_action(
     schema: Mapping[str, Any],
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
+    *,
+    allow_temporal_reference_links: bool = False,
 ) -> RequestAction:
     """Validate one discriminated action without executing retrieval or persistence."""
     if not isinstance(action, dict):
         raise RequestPlanningError("RequestPlan action must be an object")
     if action.get("kind") == "write":
-        return _validate_write_action(action, schema, retrieval_capabilities, write_capabilities)
+        return _validate_write_action(
+            action,
+            schema,
+            retrieval_capabilities,
+            write_capabilities,
+            allow_temporal_reference_links=allow_temporal_reference_links,
+        )
     if action.get("kind") == "delegate":
         return _validate_delegate_action(action, schema, retrieval_capabilities)
     if action.get("kind") != "retrieve" or set(action) not in (
@@ -1993,6 +2121,8 @@ def _validate_write_action(
     schema: Mapping[str, Any],
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
+    *,
+    allow_temporal_reference_links: bool = False,
 ) -> WriteAction:
     """Validate one semantic write action without resolving identity or persisting data.
 
@@ -2013,7 +2143,13 @@ def _validate_write_action(
     if set(action) != {"kind", "units"} or not isinstance(raw_units, list) or not raw_units:
         raise RequestPlanningError("WriteAction must contain non-empty units")
     units = tuple(
-        _validate_knowledge_unit(raw, schema, retrieval_capabilities, write_capabilities)
+        _validate_knowledge_unit(
+            raw,
+            schema,
+            retrieval_capabilities,
+            write_capabilities,
+            allow_temporal_reference_links=allow_temporal_reference_links,
+        )
         for raw in raw_units
     )
     units = _lower_reference_selections(units)
@@ -2135,6 +2271,8 @@ def _validate_knowledge_unit(
     schema: Mapping[str, Any],
     retrieval_capabilities: Mapping[str, Any],
     write_capabilities: Mapping[str, Any],
+    *,
+    allow_temporal_reference_links: bool = False,
 ) -> KnowledgeUnit:
     """Validate one write target, mutation payload, and local reference set.
 
@@ -2308,7 +2446,9 @@ def _validate_knowledge_unit(
             "KnowledgeReference cannot select its own KnowledgeUnit target",
             code=PlannerValidationCode.INVALID_REFERENCE,
         )
-    marker_indexes = _validate_fact_reference_markers(raw_facts, len(references))
+    marker_indexes = _validate_fact_reference_markers(
+        raw_facts, len(references), allow_temporal_reference_links=allow_temporal_reference_links
+    )
     for reference_index in range(len(references)):
         if reference_index not in marker_indexes:
             raise RequestPlanningError(
@@ -2327,7 +2467,7 @@ def _validate_knowledge_unit(
         intent=intent,
         properties=properties,
         tag_changes=tag_changes,
-        facts=tuple(fact.strip() for fact in raw_facts),
+        facts=tuple(_canonicalize_calendar_day_links(fact.strip()) for fact in raw_facts),
         references=tuple(references),
         cardinality=cardinality,
         destination_type=destination_type,
@@ -2349,8 +2489,18 @@ def _query_repeats_new_fact(
     return False
 
 
+def _canonicalize_calendar_day_links(fact: str) -> str:
+    """Replace provider-supplied Calendar aliases with Core's canonical date label."""
+    return _CALENDAR_DAY_LINK_PATTERN.sub(
+        lambda match: calendar_day_wikilink(match.group(1)),
+        fact,
+    )
+
+
 @_validation_boundary(PlannerValidationStage.REFERENCE, PlannerValidationCode.INVALID_REFERENCE)
-def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int) -> set[int]:
+def _validate_fact_reference_markers(
+    facts: Sequence[Any], reference_count: int, *, allow_temporal_reference_links: bool = False
+) -> set[int]:
     """Validate internal reference markers and return their local reference indexes.
 
     Args:
@@ -2366,7 +2516,21 @@ def _validate_fact_reference_markers(facts: Sequence[Any], reference_count: int)
     indexes: set[int] = set()
     for fact in facts:
         if "[[" in fact or "]]" in fact:
-            raise RequestPlanningError("Planner facts must not contain Markdown wikilinks")
+            if not allow_temporal_reference_links:
+                raise RequestPlanningError("Planner facts must not contain Markdown wikilinks")
+            remainder = fact
+            for match in _CALENDAR_DAY_LINK_PATTERN.finditer(fact):
+                try:
+                    normalize_iso_date(match.group(1))
+                except TemporalValueError as error:
+                    raise RequestPlanningError(
+                        "Planner Calendar Day wikilink date is invalid"
+                    ) from error
+            remainder = _CALENDAR_DAY_LINK_PATTERN.sub("", remainder)
+            if "[[" in remainder or "]]" in remainder:
+                raise RequestPlanningError(
+                    "Only canonical Calendar Day wikilinks are allowed in this Core path"
+                )
         cursor = 0
         while True:
             start = fact.find("{{ref", cursor)

@@ -55,12 +55,29 @@ def test_request_cost_handles_cached_input_and_fails_closed() -> None:
 def test_request_cost_supports_luna_and_bounded_sol_calls() -> None:
     """Use the dated snapshot for every allowlisted provider model, including Sol fallback."""
     source = SOURCE.read_text(encoding="utf-8")
-    snapshot = (
-        Path(__file__).parents[1] / "benchmarks/phase20_answerer/pricing_snapshot.json"
-    ).read_text(encoding="utf-8")
+    snapshot = (Path(__file__).parents[1] / "config/runtime-pricing-snapshot.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"gpt-6-luna"' in snapshot
     assert '"gpt-5.6-luna"' in snapshot
     assert '"gpt-5.6-sol"' in snapshot
     assert "pricing.as_of" in source
+
+
+def test_routed_application_failures_keep_specific_user_facing_messages() -> None:
+    """Do not collapse known Router/Calendar outcomes back into generic evidence failures."""
+    source = SOURCE.read_text(encoding="utf-8")
+    for code in (
+        "ROUTER_NEEDS_CAPABILITY",
+        "ROUTER_INVALID",
+        "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "TEMPORAL_UNRESOLVED",
+        "CALENDAR_PLANNER_INVALID",
+        "CALENDAR_EXECUTION_FAILED",
+    ):
+        assert code in source
+    assert "No he guardado nada." in source
+    assert "No puedo convertir esa referencia temporal en una fecha exacta sin adivinar" in source
 
 
 def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> None:
@@ -130,6 +147,13 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
     assert "if (operation === 'detail') forwarded.note_id = note_id;" in source
     assert "delete_fact: new Set(['operation', 'note_id', 'fact_locator'" in source
     assert "delete_note: new Set(['operation', 'note_id', 'expected_revision'" in source
+
+
+def test_calendar_boundary_uses_render_stable_digit_patterns() -> None:
+    """Keep Calendar request validation intact after TypeScript template rendering."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "/^[0-9]{4}-[0-9]{2}$/" in source
+    assert "/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/" in source
 
 
 def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
@@ -323,3 +347,18 @@ def test_answerer_idempotency_key_excludes_request_and_identity_data() -> None:
     assert ".item.json.request +" not in expression
     for forbidden in ("issuer", "subject", "email", "stable_user_id", "person_note_id", "aud"):
         assert forbidden not in expression
+
+
+def test_calendar_route_is_deterministic_bounded_and_provider_free() -> None:
+    """Keep Calendar month/day projection outside the planner/answerer and behind the same identity boundary."""
+    source = SOURCE.read_text(encoding="utf-8")
+    calendar = source[source.index("// Calendar is a deterministic projection route") :]
+    assert "path: 'calendar'" in calendar
+    assert "operation === 'month'" in calendar
+    assert "operation === 'day'" in calendar
+    assert "new Set(['operation', 'month'])" in calendar
+    assert "new Set(['operation', 'date'])" in calendar
+    assert "runtimeBaseUrl}/calendar" in calendar
+    assert "conversationIdentity" in calendar
+    assert "Luna" not in calendar
+    assert "openai.com" not in calendar

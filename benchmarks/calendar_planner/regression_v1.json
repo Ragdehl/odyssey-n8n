@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "current_context": {
+    "date": "2026-10-02",
+    "time": "17:00",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "exact-tomorrow-literal",
+      "request": "Mañana viene el fontanero",
+      "expect": {"outcome": "PLAN", "intent": "DAY_LITERAL_CAPTURE", "temporal_kind": "EXACT_DATE", "exact_date": "2026-10-03"}
+    },
+    {
+      "id": "exact-three-days-literal",
+      "request": "Dentro de tres días viene el fontanero",
+      "expect": {"outcome": "PLAN", "intent": "DAY_LITERAL_CAPTURE", "temporal_kind": "EXACT_DATE", "exact_date": "2026-10-05"}
+    },
+    {
+      "id": "next-week-range",
+      "request": "La semana que viene viene el fontanero",
+      "expect": {"outcome": "FAIL_CLOSED", "temporal_kind": "DATE_RANGE", "range_start": "2026-10-05", "range_end_exclusive": "2026-10-12", "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"}
+    },
+    {
+      "id": "next-month-range",
+      "request": "El mes que viene viene el fontanero",
+      "expect": {"outcome": "FAIL_CLOSED", "temporal_kind": "DATE_RANGE", "range_start": "2026-11-01", "range_end_exclusive": "2026-12-01", "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"}
+    },
+    {
+      "id": "vague-end-of-month",
+      "request": "A finales de mes viene el fontanero",
+      "expect": {"outcome": "FAIL_CLOSED", "temporal_kind": "UNSPECIFIED", "failure_code": "TEMPORAL_UNRESOLVED"}
+    },
+    {
+      "id": "entity-owned-exact-date",
+      "request": "Marta empieza mañana a trabajar en Airbus.",
+      "expect": {"outcome": "PLAN", "intent": "CORE_SEMANTIC_WRITE", "temporal_kind": "EXACT_DATE", "exact_date": "2026-10-03", "temporal_text": "mañana", "identity_mentions": ["Marta", "Airbus"]}
+    },
+    {
+      "id": "task-lifecycle-not-calendar-literal",
+      "request": "Tengo que llamar al banco el viernes",
+      "expect": {"outcome": "FAIL_CLOSED", "failure_code": "TASKS_CAPABILITY_REQUIRED"}
+    },
+    {
+      "id": "journal-not-calendar",
+      "request": "Escribe en mi diario que hoy fui al trabajo",
+      "expect": {"outcome": "FAIL_CLOSED", "failure_code": "UNSAFE_INTENT"}
+    }
+  ]
+}

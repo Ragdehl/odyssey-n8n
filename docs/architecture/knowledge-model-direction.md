@@ -127,6 +127,12 @@ What useful capability does it add?  <- governing question
 
 The exact active registry and field definitions live only in `config/note-schema.json`. Domain/application types may remain registered centrally today as an implementation bridge; future applications should own their domain semantics through an explicit validated extension boundary rather than expanding Core business logic.
 
+### Application-managed canonical types
+
+A canonical Markdown type does not have to be an ordinary planner-selectable semantic target. A capability may own a deterministic lifecycle for one canonical type while reusing the same Note validation, storage, links/backlinks, history, and editing substrate. The first approved use is Calendar's `calendar_day`: its date identity is deterministic and Calendar-controlled, it is hidden from ordinary planner type selection and the default Notes feed, and its Markdown materializes only when Day-owned content or an explicit link requires it.
+
+This distinction must remain narrow and configuration/contract-driven. It is not authorization for applications to create shadow stores, bypass Core mutation/validation, or introduce a generic plugin framework. See [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md).
+
 ## Tags are explicit free-form facets
 
 `tags` are a generic Core storage/filter/mutation mechanism, not a Core-owned vocabulary. Values are explicitly chosen by the user or application. Core does not define semantic tag IDs, infer them from ordinary wording, or assign hidden lifecycle/security meaning to them.

@@ -1,0 +1,500 @@
+{
+  "version": 5,
+  "commit": "e186cf48561cfda9097f42268c8efaa82bab18bf",
+  "router_matrix_sha256": "357df380d43e1fe4f8f1e68d1f3094870bac184d86e9c78ae58f181c7d18f4e4",
+  "calendar_matrix_sha256": "34c552e2717e7748526941d6e98ed7bef5e5f5ede3e7cbd74736de0888a7a3f8",
+  "router_model": "gpt-6-luna",
+  "calendar_model": "gpt-6-luna",
+  "router_reasoning_effort": "medium",
+  "calendar_reasoning_effort": "low",
+  "provider_attempts": 16,
+  "completed_provider_responses": 16,
+  "automatic_retries": 0,
+  "input_tokens": 11160,
+  "output_tokens": 2233,
+  "estimated_standard_cost_usd": 0.0022325,
+  "estimated_regional_upper_usd": 0.0024557500000000005,
+  "passed": false,
+  "rows": [
+    {
+      "gate": "router",
+      "id": "core-only",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      },
+      "raw_output": {
+        "outcome": "ROUTE",
+        "routes": [
+          {
+            "capability_id": "core",
+            "source_text": "A Cloe le gusta el chocolate."
+          }
+        ]
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "calendar-only",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "raw_output": {
+        "outcome": "ROUTE",
+        "routes": [
+          {
+            "capability_id": "calendar",
+            "source_text": "Mañana viene el fontanero."
+          }
+        ]
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "independent-split",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "calendar",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "raw_output": {
+        "outcome": "ROUTE",
+        "routes": [
+          {
+            "capability_id": "core",
+            "source_text": "A Cloe le gusta el chocolate."
+          },
+          {
+            "capability_id": "calendar",
+            "source_text": "Mañana viene el fontanero."
+          }
+        ]
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "dependent-calendar",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "calendar",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      },
+      "raw_output": {
+        "outcome": "ROUTE",
+        "routes": [
+          {
+            "capability_id": "calendar",
+            "source_text": "Marta empieza mañana a trabajar en Airbus."
+          }
+        ]
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "journal-stays-core",
+      "passed": true,
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      },
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      },
+      "raw_output": {
+        "outcome": "ROUTE",
+        "routes": [
+          {
+            "capability_id": "core",
+            "source_text": "Escribe en mi diario que hoy fui al trabajo."
+          }
+        ]
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "tasks-disabled",
+      "passed": true,
+      "expect": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "actual": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "raw_output": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "ambiguous-owner",
+      "passed": true,
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "raw_output": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "meaningless-input",
+      "passed": true,
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "raw_output": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "exact-tomorrow-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03"
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "exact-three-days-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-05"
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-05"
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-05",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-week-range",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "exact_date": null,
+        "range_start": "2026-10-05",
+        "range_end_exclusive": "2026-10-12",
+        "semantic_write": null,
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "next-month-range",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "DATE_RANGE",
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION",
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "DATE_RANGE",
+        "exact_date": null,
+        "range_start": "2026-11-01",
+        "range_end_exclusive": "2026-12-01",
+        "semantic_write": null,
+        "failure_code": "RANGE_REQUIRES_RANGE_AWARE_OPERATION"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "vague-end-of-month",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "exact_date": null,
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": "TEMPORAL_UNRESOLVED"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "entity-owned-exact-date",
+      "passed": false,
+      "expect": {
+        "outcome": "PLAN",
+        "intent": "CORE_SEMANTIC_WRITE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "temporal_text": "mañana",
+        "identity_mentions": [
+          "Marta",
+          "Airbus"
+        ]
+      },
+      "actual": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "failure_code": null,
+        "exact_date": "2026-10-03"
+      },
+      "raw_output": {
+        "outcome": "PLAN",
+        "intent": "DAY_LITERAL_CAPTURE",
+        "temporal_kind": "EXACT_DATE",
+        "exact_date": "2026-10-03",
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": null
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "task-lifecycle-not-calendar-literal",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "exact_date": null,
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "provider_failure": null,
+      "error": null
+    },
+    {
+      "gate": "calendar",
+      "id": "journal-not-calendar",
+      "passed": true,
+      "expect": {
+        "outcome": "FAIL_CLOSED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "actual": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "raw_output": {
+        "outcome": "FAIL_CLOSED",
+        "intent": null,
+        "temporal_kind": "UNSPECIFIED",
+        "exact_date": null,
+        "range_start": null,
+        "range_end_exclusive": null,
+        "semantic_write": null,
+        "failure_code": "OUT_OF_SCOPE"
+      },
+      "provider_failure": null,
+      "error": null
+    }
+  ]
+}

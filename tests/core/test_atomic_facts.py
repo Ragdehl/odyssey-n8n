@@ -25,13 +25,15 @@ def test_atomic_facts_render_parse_and_note_scoped_identity() -> None:
     facts = parse_atomic_facts(body)
     assert [fact.text for fact in facts] == ["Works at Thales.", "Has two children."]
     assert facts[0].global_identity("marta") == ("marta", "R1", 4)
-    assert "# Added 29-08-2026" in body and "Legacy prose." in body
+    assert "# Added [[calendar/days/2026-08-29|29-08-2026]]" in body and "Legacy prose." in body
 
 
 def test_capture_heading_uses_calendar_day_not_timestamp_details() -> None:
     """Expose the request capture day once without per-fact timestamps."""
     rendered = render_atomic_facts(("Works at Thales.",), "R1", (0,), "2026-08-30T23:45:00+02:00")
-    assert rendered.startswith("# Added 30-08-2026\n- Works at Thales.")
+    assert rendered.startswith(
+        "# Added [[calendar/days/2026-08-30|30-08-2026]]\n- Works at Thales."
+    )
     assert "23:45" not in rendered
 
 
@@ -65,7 +67,7 @@ def test_exact_marked_fact_removal_leaves_neighbors_untouched() -> None:
         and "Has two children." in result
         and "Legacy prose." in result
     )
-    assert "# Added 29-08-2026" in result
+    assert "# Added [[calendar/days/2026-08-29|29-08-2026]]" in result
 
 
 def test_last_fact_removal_also_removes_empty_capture_heading() -> None:
@@ -89,7 +91,7 @@ def test_empty_capture_cleanup_preserves_following_sections() -> None:
     result = remove_atomic_fact(body, target)
 
     assert "Added 29-08-2026" not in result
-    assert result.startswith("# Added 30-08-2026\n- Has two children.")
+    assert result.startswith("# Added [[calendar/days/2026-08-30|30-08-2026]]\n- Has two children.")
     assert "R2" in result
 
 
@@ -101,3 +103,37 @@ def test_locator_is_note_scoped_for_global_identity() -> None:
     assert fact.locator == "R1:0"
     assert fact.global_identity("marta") != fact.global_identity("ada")
     assert FactCandidate(fact.locator, fact.text).text == "Works at Airbus."
+
+
+def test_same_day_append_reuses_one_capture_heading() -> None:
+    """Group later same-day captures under the existing Day heading without duplicate sections."""
+    body = append_atomic_facts("", ("First fact.",), "R1", (0,), "2026-10-01T09:00:00+02:00")
+    body = append_atomic_facts(body, ("Second fact.",), "R2", (0,), "2026-10-01T18:00:00+02:00")
+
+    assert body.count("# Added [[calendar/days/2026-10-01|01-10-2026]]") == 1
+    assert [fact.text for fact in parse_atomic_facts(body)] == ["First fact.", "Second fact."]
+    assert "request=R1 ordinal=0" in body
+    assert "request=R2 ordinal=0" in body
+
+
+def test_same_day_append_upgrades_selected_legacy_heading_without_rewriting_duplicates() -> None:
+    """Tolerate historical duplicate headings and append to the last one without adding a third."""
+    body = (
+        "# Added 01-10-2026\n"
+        "- Older fact.\n"
+        "  <!-- odyssey:fact request=OLD1 ordinal=0 -->\n\n"
+        "# Added 01-10-2026\n"
+        "- Later fact.\n"
+        "  <!-- odyssey:fact request=OLD2 ordinal=0 -->"
+    )
+
+    updated = append_atomic_facts(body, ("New fact.",), "NEW", (0,), "2026-10-01T20:00:00+02:00")
+
+    assert updated.count("# Added ") == 2
+    assert updated.count("# Added 01-10-2026") == 1
+    assert updated.count("# Added [[calendar/days/2026-10-01|01-10-2026]]") == 1
+    assert [fact.text for fact in parse_atomic_facts(updated)] == [
+        "Older fact.",
+        "Later fact.",
+        "New fact.",
+    ]
