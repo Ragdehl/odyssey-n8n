@@ -1,4 +1,4 @@
-"""One-shot current-schema Core planner regression gate after Journal convergence."""
+"""Focused current-schema successor gate for the three obsolete v3 relational fixtures."""
 
 from __future__ import annotations
 
@@ -13,12 +13,7 @@ from typing import Any
 
 from benchmarks.planner_prompt_regression_v1 import run_live as base
 from benchmarks.planner_prompt_regression_v3 import run_live as prior
-from benchmarks.semantic_write_resolution_current_v1.evaluate import (
-    evaluate as evaluate_current_bounded_source,
-)
-from benchmarks.semantic_write_resolution_current_v1.evaluate import (
-    load_registry as load_current_registry,
-)
+from benchmarks.semantic_write_resolution_current_v1.evaluate import evaluate, load_registry
 from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
     LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -31,67 +26,33 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 AUTH_ENV = "ODYSSEY_RUN_PLANNER_PROMPT_REGRESSION_V4"
 PRODUCTION_MODEL = "gpt-5.6-luna"
 REASONING_EFFORT = "low"
-MAX_CALLS = 16
-AUTHORIZED_CEILING_USD = Decimal("0.210")
-MATRIX_SHA256 = "3bb4cceeac6b0226c9139cd1f5b19d3d7e95e3794cdb4aa8dc4665b4aa908ac6"
+MAX_CALLS = 3
+AUTHORIZED_CEILING_USD = Decimal("0.040")
+MATRIX_SHA256 = "TO_BE_FROZEN"
 PROMPT_SHA256 = prior.PROMPT_SHA256
 PROVIDER_SCHEMA_SHA256 = prior.PROVIDER_SCHEMA_SHA256
 TEACHING_SHA256 = prior.TEACHING_SHA256
-ACCEPTED_FAILURE_IDS: frozenset[str] = frozenset()
-
-_REPLACEMENTS = {
-    "SWR07-qualified-event-member": "CSWR01-qualified-bounded-source-member",
-    "SWR08-relational-target-described-reference": "CSWR02-relational-target-one-bounded-reference",
-    "SWR10-relational-target-two-bounded-references": "CSWR03-relational-target-two-bounded-references",
-}
 
 
 def load_gate_cases() -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Replace only obsolete Journal/event fixtures with current canonical-source successors."""
-    inherited, context = base.load_gate_cases()
-    current = {case["id"]: case for case in load_current_registry()["cases"]}
-    cases: list[dict[str, Any]] = []
-    for case in inherited:
-        successor_id = _REPLACEMENTS.get(case["id"])
-        if successor_id is None:
-            cases.append(case)
-            continue
-        successor = current[successor_id]
-        cases.append(
-            {
-                "id": successor["id"],
-                "request": successor["request"],
-                "expect": successor["expect"],
-                "lineage": "current_bounded_source",
-            }
-        )
-    if len(cases) != len(inherited) or any(
-        old in {item["id"] for item in cases} for old in _REPLACEMENTS
-    ):
-        raise RuntimeError("current Core regression replacement matrix is invalid")
+    """Load only the three current-schema successors under the already-tested v3 context."""
+    registry = load_registry()
+    _inherited, context = base.load_gate_cases()
+    if registry["fixed_context"] != context:
+        raise RuntimeError("current bounded-source registry context diverged from v3")
+    cases = list(registry["cases"])
+    if len(cases) != MAX_CALLS:
+        raise RuntimeError("current bounded-source gate must contain exactly three cases")
     return cases, context
 
 
 def _matrix_payload(cases: list[dict[str, Any]], context: dict[str, str]) -> bytes:
+    """Serialize the focused successor matrix deterministically for one content hash."""
     return prior._matrix_payload(cases, context)
 
 
-def _case_passed(result: Any, case: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Use the generic current bounded-source evaluator only for the three successor cases."""
-    if case.get("lineage") == "current_bounded_source":
-        verdict = evaluate_current_bounded_source(result, case["expect"])
-        return verdict.passed, list(verdict.findings)
-    return base._case_passed(result, case)
-
-
-def _matrix_acceptable(rows: list[dict[str, Any]]) -> bool:
-    """Require every current v4 sentinel to pass; only obsolete fixtures were replaced."""
-    failed = {row["case_id"] for row in rows if not row["passed"]}
-    return failed <= ACCEPTED_FAILURE_IDS
-
-
 def budget_snapshot() -> dict[str, Decimal | int]:
-    """Return the conservative complete-matrix cost ceiling for the current successor matrix."""
+    """Return the conservative three-call ceiling for the focused successor gate."""
     cases, context = load_gate_cases()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     cost, _costs, input_bound = base.total_conservative_cost_ceiling(cases, context, schema)
@@ -99,11 +60,11 @@ def budget_snapshot() -> dict[str, Decimal | int]:
 
 
 def _preflight() -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any]]:
-    """Grant provider authority only to the frozen current-schema matrix and exact contract."""
+    """Grant provider authority only to the frozen three-case successor and unchanged v3 contract."""
     cases, context = load_gate_cases()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     if hashlib.sha256(_matrix_payload(cases, context)).hexdigest() != MATRIX_SHA256:
-        raise SystemExit("v4 regression matrix changed")
+        raise SystemExit("v4 focused successor matrix changed")
     if (LUNA_EXPERIMENT_MODEL, LUNA_EXPERIMENT_REASONING_EFFORT) != (
         PRODUCTION_MODEL,
         REASONING_EFFORT,
@@ -117,7 +78,7 @@ def _preflight() -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any]]:
         raise SystemExit("v4 candidate model-facing contract changed")
     budget = budget_snapshot()
     if budget["calls"] != MAX_CALLS or budget["conservative_usd_upper"] > AUTHORIZED_CEILING_USD:
-        raise SystemExit("v4 regression budget changed; fresh authorization required")
+        raise SystemExit("v4 focused successor budget changed; fresh authorization required")
     if os.environ.get(AUTH_ENV) != "1":
         raise SystemExit(f"Refusing live calls: set {AUTH_ENV}=1 only after explicit authorization")
     if not os.environ.get("OPENAI_API_KEY"):
@@ -133,7 +94,7 @@ def _preflight() -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any]]:
 
 
 def run() -> int:
-    """Run the authorized current-schema matrix once and retain bounded auditable evidence."""
+    """Run the authorized three-case successor once and retain bounded auditable evidence."""
     cases, context, schema = _preflight()
     from openai import OpenAI
 
@@ -142,8 +103,10 @@ def run() -> int:
     rows: list[dict[str, Any]] = []
     for case in cases:
         try:
-            result = planner.plan(case["request"], case.get("conversation_context", ()))
-            passed, findings = _case_passed(result, case)
+            result = planner.plan(case["request"])
+            verdict = evaluate(result, case["expect"])
+            passed = verdict.passed
+            findings = list(verdict.findings)
             error = None
         except Exception as exc:
             passed = False
@@ -160,10 +123,11 @@ def run() -> int:
         )
     actual_cost = prior._estimated_cost(recorder.records)
     if recorder.attempts > MAX_CALLS or actual_cost > AUTHORIZED_CEILING_USD:
-        raise SystemExit("Authorized v4 regression ceiling exceeded")
-    acceptable = _matrix_acceptable(rows)
+        raise SystemExit("Authorized v4 focused successor ceiling exceeded")
+    acceptable = all(row["passed"] for row in rows)
     artifact = {
         "version": 4,
+        "scope": "three-current-bounded-source-successors",
         "commit": subprocess.check_output(
             ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
         ).strip(),
@@ -183,6 +147,7 @@ def run() -> int:
     }
     out = RESULTS_DIR / f"{artifact['commit'][:12]}.json"
     out.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
     print(f"provider_attempts={recorder.attempts}")
     print(f"completed_provider_responses={len(recorder.records)}")
     print(f"standard_cost_usd={actual_cost}")

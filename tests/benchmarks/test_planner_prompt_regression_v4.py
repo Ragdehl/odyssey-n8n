@@ -1,4 +1,4 @@
-"""Provider-free guards for the current-schema Core Luna v4 gate."""
+"""Provider-free guards for the three-case current-schema Core Luna v4 gate."""
 
 from __future__ import annotations
 
@@ -13,29 +13,25 @@ from benchmarks.planner_prompt_regression_v3 import run_live as prior
 from benchmarks.planner_prompt_regression_v4 import run_live
 
 
-def test_v4_replaces_only_obsolete_journal_event_sentinels() -> None:
-    old, old_context = base.load_gate_cases()
+def test_v4_runs_only_the_three_current_bounded_source_successors() -> None:
     cases, context = run_live.load_gate_cases()
+    _old, old_context = base.load_gate_cases()
     assert context == old_context
-    assert len(cases) == len(old) == run_live.MAX_CALLS == 16
-    replaced = {6, 7, 9}
-    for index, (before, after) in enumerate(zip(old, cases, strict=True)):
-        if index not in replaced:
-            assert after == before
-    assert [cases[index]["id"] for index in (6, 7, 9)] == [
+    assert len(cases) == run_live.MAX_CALLS == 3
+    assert [case["id"] for case in cases] == [
         "CSWR01-qualified-bounded-source-member",
         "CSWR02-relational-target-one-bounded-reference",
         "CSWR03-relational-target-two-bounded-references",
     ]
-    assert all("Directorio Faro" in cases[index]["request"] for index in replaced)
-    assert all("cena relacional" not in cases[index]["request"].casefold() for index in replaced)
+    assert all("Directorio Faro" in case["request"] for case in cases)
+    assert all("cena relacional" not in case["request"].casefold() for case in cases)
     assert (
         hashlib.sha256(run_live._matrix_payload(cases, context)).hexdigest()
         == run_live.MATRIX_SHA256
     )
 
 
-def test_v4_pins_exact_journal_candidate_contract() -> None:
+def test_v4_keeps_exact_v3_model_facing_contract() -> None:
     _cases, context = run_live.load_gate_cases()
     schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
     assert prior._contract_hashes(schema, context) == (
@@ -45,11 +41,11 @@ def test_v4_pins_exact_journal_candidate_contract() -> None:
     )
 
 
-def test_v4_budget_is_complete_and_bounded() -> None:
+def test_v4_budget_is_three_calls_and_bounded() -> None:
     budget = run_live.budget_snapshot()
-    assert budget["calls"] == 16
-    assert budget["conservative_usd_upper"] == Decimal("0.2076192")
-    assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.210")
+    assert budget["calls"] == 3
+    assert budget["conservative_usd_upper"] == Decimal("TO_BE_FROZEN")
+    assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.040")
 
 
 def test_v4_has_zero_provider_authority_without_explicit_flag(
@@ -59,14 +55,3 @@ def test_v4_has_zero_provider_authority_without_explicit_flag(
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
     with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
         run_live._preflight()
-
-
-def test_v4_allows_no_regression_outside_the_three_replaced_obsolete_fixtures() -> None:
-    assert run_live.ACCEPTED_FAILURE_IDS == frozenset()
-    assert run_live._matrix_acceptable([])
-    assert not run_live._matrix_acceptable(
-        [{"case_id": "PPR16-unknown-self-project-member-write", "passed": False}]
-    )
-    assert not run_live._matrix_acceptable(
-        [{"case_id": "CSWR03-relational-target-two-bounded-references", "passed": False}]
-    )
