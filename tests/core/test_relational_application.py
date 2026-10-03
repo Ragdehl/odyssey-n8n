@@ -13,12 +13,14 @@ import pytest
 import odyssey_core.application as application
 from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.clarification import ClarificationChoice
+from odyssey_core.context import ContextFilter
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.notes import Note, parse_note, serialize_note
 from odyssey_core.reference_preflight import current_identity_guard
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    PropertyChange,
     RelationalReference,
     RequestPlan,
     RequestPlanningError,
@@ -428,6 +430,72 @@ def _plan_relation_wording(plan: RequestPlan) -> str:
                 if unit.target.relational_reference is not None:
                     return unit.target.relational_reference.reference
     return ""
+
+
+def test_journal_entry_date_filter_prevents_reusing_an_entry_from_another_day(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep date-bound Journal targeting on generic filtered identity resolution."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    old_path = "journal/old.md"
+    write_note(
+        vault,
+        old_path,
+        "old-journal",
+        "entrada de diario de hoy sobre haber ido al trabajo",
+        fact("Hoy he ido al trabajo."),
+        note_type="journal_entry",
+    )
+    old_bytes = (vault / old_path).read_bytes()
+    query = "entrada de diario de hoy"
+    index = MappedIndex(
+        {
+            query: (
+                SemanticEntityCandidate(
+                    "old-journal",
+                    old_path,
+                    "journal_entry",
+                    "entrada de diario de hoy sobre haber ido al trabajo",
+                    1.0,
+                ),
+            )
+        }
+    )
+    selection = SelectionCriteria(
+        None,
+        query,
+        "journal_entry",
+        (ContextFilter("entry_date", "eq", "2026-10-03"),),
+        None,
+    )
+    unit = KnowledgeUnit(
+        selection,
+        "record",
+        (PropertyChange("entry_date", "set", "2026-10-03"),),
+        (),
+        ("Hoy he tenido un día muy tranquilo.",),
+        (),
+    )
+
+    result = run(
+        vault,
+        schema,
+        RequestPlan((WriteAction((unit,)),), ()),
+        semantic_index=index,
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert (vault / old_path).read_bytes() == old_bytes
+    journals = [
+        parse_note(path.read_text(encoding="utf-8"))
+        for path in domain_markdown_paths(vault)
+        if parse_note(path.read_text(encoding="utf-8")).metadata["type"] == "journal_entry"
+    ]
+    assert len(journals) == 2
+    created = next(note for note in journals if note.metadata["id"] != "old-journal")
+    assert created.metadata["entry_date"] == "2026-10-03"
+    assert "Hoy he tenido un día muy tranquilo." in created.content
 
 
 def test_model_contract_preserves_relational_intent_and_legacy_selection(schema: dict) -> None:

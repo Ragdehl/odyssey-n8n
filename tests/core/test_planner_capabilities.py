@@ -158,3 +158,18 @@ def test_concept_description_is_positive_not_fallback(schema: dict) -> None:
     concept = next(item for item in schema["types"] if item["id"] == "concept")
     assert "semantic identity of its own" in concept["description"]
     assert "not a generic fallback" in concept["description"]
+
+
+def test_journal_write_target_semantics_are_schema_declared_and_projected(schema: dict) -> None:
+    """Expose date-bound journal destination semantics through generic write capabilities."""
+    journal = next(item for item in schema["types"] if item["id"] == "journal_entry")
+    entry_date = next(item for item in journal["properties"] if item["id"] == "entry_date")
+
+    assert "constrain target selection by entry_date equal to that date" in journal["description"]
+    assert "Never repurpose an entry from another date" in journal["description"]
+    assert "preserve its entry_date" in entry_date["description"]
+    assert "different date belongs to a different journal_entry" in entry_date["description"]
+
+    projected = build_write_capabilities(schema)["types"]["journal_entry"]
+    assert projected["description"] == journal["description"]
+    assert projected["properties"]["entry_date"]["description"] == entry_date["description"]

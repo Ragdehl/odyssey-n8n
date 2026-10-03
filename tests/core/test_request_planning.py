@@ -645,6 +645,33 @@ def test_mixed_retrieval_and_write_actions_preserve_request_order(schema: dict) 
     assert isinstance(plan.actions[1], RetrieveAction)
 
 
+def test_journal_write_can_use_entry_date_for_target_identity_and_creation(schema: dict) -> None:
+    """Keep one schema-driven plan valid for same-date reuse or creation without Journal Core rules."""
+    plan = validate_request_plan(
+        output(
+            write(
+                unit(
+                    "entrada de diario del 3 de octubre",
+                    note_type="journal_entry",
+                    filters=[{"field": "entry_date", "op": "eq", "value": "2026-10-03"}],
+                    properties=[prop("entry_date", "2026-10-03")],
+                    facts=["He tenido un día muy tranquilo."],
+                )
+            )
+        ),
+        schema,
+    )
+
+    item = plan.actions[0].units[0]  # type: ignore[union-attr]
+    assert item.target.type == "journal_entry"
+    assert [(flt.field, flt.op, flt.value) for flt in item.target.filters] == [
+        ("entry_date", "eq", "2026-10-03")
+    ]
+    assert [(change.field, change.value) for change in item.properties] == [
+        ("entry_date", "2026-10-03")
+    ]
+
+
 def test_structured_property_only_record_amend_and_remove_are_valid(schema: dict) -> None:
     """Treat canonical properties as first-class semantic payload rather than requiring prose facts."""
     schema = deepcopy(schema)
@@ -952,6 +979,21 @@ def test_prompt_includes_dynamic_write_capabilities(schema: dict) -> None:
     capabilities = json.loads(write_json)
     assert capabilities["types"]["person"]["properties"]["origin"]["value_type"] == "string"
     assert capabilities["types"]["journal_entry"]["properties"]["entry_date"]["required"] is True
+
+
+def test_prompt_exposes_date_bound_journal_write_target_contract(schema: dict) -> None:
+    """Keep journal destination-by-date guidance visible at the production model boundary."""
+    prompt = render_request_planner_prompt(schema, CONTEXT)
+    write_json = prompt.split(
+        "Planner writable type/property capabilities (derived dynamically from the same canonical schema):\n\n",
+        1,
+    )[1]
+    capabilities = json.loads(write_json)
+    journal = capabilities["types"]["journal_entry"]
+
+    assert "constrain target selection by entry_date equal to that date" in journal["description"]
+    assert "Never repurpose an entry from another date" in journal["description"]
+    assert "preserve its entry_date" in journal["properties"]["entry_date"]["description"]
 
 
 def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> None:

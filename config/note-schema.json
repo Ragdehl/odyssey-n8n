@@ -181,7 +181,7 @@
         {
             "id": "journal_entry",
             "name": "Journal Entry",
-            "description": "Diary or journal entry describing a day, experience, reflection, or personal occurrence.",
+            "description": "Diary or journal entry bound to one specific semantic date. For journal writes, the date the user refers to is identifying evidence for the destination entry: constrain target selection by entry_date equal to that date. Reuse an existing journal_entry only when its entry_date matches; otherwise target a journal_entry for that date without reusing a different day’s entry. Never repurpose an entry from another date by changing entry_date.",
             "examples": [
                 "13 August 2026",
                 "First day in Madrid"
@@ -191,7 +191,7 @@
                     "id": "entry_date",
                     "value_type": "date",
                     "required": true,
-                    "description": "Date the journal entry refers to.",
+                    "description": "Semantic date this journal entry belongs to. Derive it from the day the user refers to. When adding content to an existing journal_entry, preserve its entry_date; content referring to a different date belongs to a different journal_entry.",
                     "retrieval_guidance": "Domain date only for journal_entry: the date the diary entry refers to, not when Odyssey stored it. Serialize as YYYY-MM-DD. Use half-open ranges for years or months. ‘entradas de diario de agosto’ uses entry_date; ‘entradas de diario que escribí ayer’ uses created_at.",
                     "retrieval_examples": [
                         "entradas de diario de agosto -> entry_date August range",
