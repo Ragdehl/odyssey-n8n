@@ -29,6 +29,15 @@ The near-term executable application boundary has been promoted from future dire
 
 This future index retains only the longer-horizon direction: a later marketplace/user-created-app product may add package discovery, installation, permissions, signing/sandboxing, versioning, and schema-extension lifecycle. None of those are implied by Router v0. Application dependencies must remain explicit/non-circular and must never bypass Core mutation or authorization rules. See also [Temporal Foundation + Calendar v0](temporal-foundation-calendar-v0.md) and [Future Events / Calendar capability](future-events-calendar.md).
 
+## Future input normalization and semantic verification
+
+Two later safeguards are worth evaluating after Router v0 is stable:
+
+- **Router-owned input normalization:** let the Router preserve the immutable original user message for audit/traceability while also emitting a minimally normalized source for downstream planning. Normalization may correct obvious spelling, punctuation, or transcription errors, but must not silently alter names, numbers, dates, negation, intent, or substantive wording. Prefer extending the existing Router pass over adding a separate model call unless measured evidence shows separation is safer.
+- **Selective post-execution semantic verification:** for higher-risk composed requests, a bounded verifier may compare the original request with the validated plan and resulting mutations before final acceptance. It should be risk-triggered rather than always-on, must not become a second semantic authority, and should fail closed. If automatic retry is later justified, allow at most one controlled re-plan/re-execution attempt before surfacing the problem to the user; never create an unbounded self-repair loop.
+
+Both ideas require their own measured false-positive/false-negative and cost evidence before adoption. They are safeguards around the existing Router/Core/application boundaries, not justification for a new orchestration framework.
+
 ## Shopping/consumption inference and assisted shopping lists
 
 A future purchases/food/shopping capability may use incomplete evidence to **suggest** what is probably needed next without pretending Odyssey has a complete household inventory.
