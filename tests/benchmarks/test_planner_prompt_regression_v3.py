@@ -82,3 +82,21 @@ def test_v3_recording_transport_does_not_retain_exception_text() -> None:
     assert recorder.attempts == 1
     assert recorder.failures == [{"attempt": 1, "error_type": "RuntimeError", "status_code": 400}]
     assert "sensitive" not in repr(recorder.failures)
+
+
+def test_v3_retained_summary_records_blocking_live_result_without_inventing_rows() -> None:
+    artifacts = list(run_live.RESULTS_DIR.glob("*.reconstructed.json"))
+    assert len(artifacts) == 1
+    artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["version"] == 3
+    assert artifact["reconstructed_from_runner_stdout"] is True
+    assert artifact["full_row_artifact_available"] is False
+    assert artifact["provider_attempts"] == artifact["completed_provider_responses"] == 16
+    assert artifact["automatic_retries"] == artifact["sol_calls"] == 0
+    assert artifact["acceptable"] is False
+    assert artifact["failed_case_ids"] == [
+        "SWR07-qualified-event-member",
+        "SWR08-relational-target-described-reference",
+        "SWR10-relational-target-two-bounded-references",
+        "SWF-MIXED-ORDER-01",
+    ]

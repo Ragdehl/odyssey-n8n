@@ -1,0 +1,17 @@
+{
+  "version": 15,
+  "commit": "208c47de13075bf4aa1484aca74d165207e97f67",
+  "case_id": "SWR01-self-coworkers",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "low",
+  "provider_attempts": 1,
+  "completed_provider_responses": 1,
+  "automatic_retries": 0,
+  "estimated_standard_cost_usd": "0.0028968",
+  "passed": true,
+  "findings": [
+    "all_checks_passed"
+  ],
+  "error": null,
+  "provider_failures": []
+}

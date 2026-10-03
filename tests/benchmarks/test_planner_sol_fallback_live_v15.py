@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 import pytest
@@ -55,3 +56,14 @@ def test_v15_recording_transport_does_not_retain_exception_text() -> None:
     assert recorder.records == []
     assert recorder.failures == [{"attempt": 1, "error_type": "RuntimeError", "status_code": 400}]
     assert "sensitive" not in repr(recorder.failures)
+
+
+def test_v15_retains_complete_passing_evidence() -> None:
+    artifacts = list(run_live.RESULTS_DIR.glob("*.json"))
+    assert len(artifacts) == 1
+    artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["version"] == 15
+    assert artifact["provider_attempts"] == artifact["completed_provider_responses"] == 1
+    assert artifact["automatic_retries"] == 0
+    assert artifact["passed"] is True
+    assert artifact["case_id"] == "SWR01-self-coworkers"

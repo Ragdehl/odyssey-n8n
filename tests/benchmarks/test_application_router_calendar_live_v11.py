@@ -81,3 +81,15 @@ def test_v11_calendar_oracle_requires_exact_capture_text() -> None:
     assert run_live._expected_subset(actual, expected)
     actual["capture_text"] = "Fue un día tranquilo."
     assert not run_live._expected_subset(actual, expected)
+
+
+def test_v11_retained_summary_records_consumed_pass_without_inventing_rows() -> None:
+    artifacts = list(run_live.RESULTS_DIR.glob("*.reconstructed.json"))
+    assert len(artifacts) == 1
+    artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["version"] == 11
+    assert artifact["reconstructed_from_runner_stdout"] is True
+    assert artifact["full_row_artifact_available"] is False
+    assert artifact["provider_attempts"] == artifact["completed_provider_responses"] == 18
+    assert artifact["automatic_retries"] == 0
+    assert artifact["passed"] is True

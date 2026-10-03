@@ -1,0 +1,19 @@
+{
+  "version": 3,
+  "commit": "208c47de13075bf4aa1484aca74d165207e97f67",
+  "reconstructed_from_runner_stdout": true,
+  "full_row_artifact_available": false,
+  "provider_attempts": 16,
+  "completed_provider_responses": 16,
+  "automatic_retries": 0,
+  "sol_calls": 0,
+  "estimated_standard_cost_usd": "0.0367568",
+  "acceptable": false,
+  "failed_case_ids": [
+    "SWR07-qualified-event-member",
+    "SWR08-relational-target-described-reference",
+    "SWR10-relational-target-two-bounded-references",
+    "SWF-MIXED-ORDER-01"
+  ],
+  "lost_detail_reason": "Post-run local evidence staging used the same commit-derived filename for multiple gate artifacts; the later move overwrote this detailed JSON before it was committed."
+}
