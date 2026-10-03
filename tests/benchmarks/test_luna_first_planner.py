@@ -234,17 +234,17 @@ def test_production_sol_configuration_remains_unchanged() -> None:
     assert LUNA_EXPERIMENT_AUTOMATIC_RETRIES == 0
 
 
-def test_sol_prompt_and_provider_schema_equal_c6e4364_baseline(
+def test_sol_prompt_and_provider_schema_match_v14_accepted_contract(
     schema: dict[str, Any],
 ) -> None:
-    """Freeze the established Sol bytes and provider language during Luna-only adoption."""
+    """Freeze the Sol fallback contract accepted after the focused Journal v14 live gate."""
     prompt = render_request_planner_prompt(schema, BASELINE_CONTEXT).encode("utf-8")
     provider_schema = json.dumps(
         planner_result_json_schema(schema), ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")
-    assert len(prompt) == 25_474
+    assert len(prompt) == 27_286
     assert hashlib.sha256(prompt).hexdigest() == (
-        "64efb6ecf5c380f5808811fbd9c473934eb3b47a6c0790a8e940320f51367036"
+        "9085e74275c86dbeb5c42438f3a6d1afd9dad2236354a0892f5e1a21a9625125"
     )
     assert len(provider_schema) == 47_418
     assert hashlib.sha256(provider_schema).hexdigest() == (
