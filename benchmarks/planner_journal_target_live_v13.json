@@ -1,0 +1,26 @@
+{
+  "version": 13,
+  "current_context": {
+    "date": "2026-10-03",
+    "time": "16:00",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "journal-today-create-safe",
+      "request": "Escribe en mi diario que hoy he tenido un día muy tranquilo.",
+      "expect": {
+        "date": "2026-10-03",
+        "fact_contains": "tranquilo"
+      }
+    },
+    {
+      "id": "journal-yesterday-create-safe",
+      "request": "Escribe en mi diario que ayer fui con los niños al parque.",
+      "expect": {
+        "date": "2026-10-02",
+        "fact_contains": "parque"
+      }
+    }
+  ]
+}

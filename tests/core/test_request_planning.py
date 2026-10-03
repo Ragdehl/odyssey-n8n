@@ -991,8 +991,13 @@ def test_prompt_exposes_date_bound_journal_write_target_contract(schema: dict) -
     capabilities = json.loads(write_json)
     journal = capabilities["types"]["journal_entry"]
 
-    assert "constrain target selection by entry_date equal to that date" in journal["description"]
+    assert "constrain target selection with entry_date equal to that date" in journal["description"]
+    assert "also set the same entry_date property" in journal["description"]
     assert "Never repurpose an entry from another date" in journal["description"]
+    assert (
+        "even when the same date also appears in target filters"
+        in journal["properties"]["entry_date"]["description"]
+    )
     assert "preserve its entry_date" in journal["properties"]["entry_date"]["description"]
 
 

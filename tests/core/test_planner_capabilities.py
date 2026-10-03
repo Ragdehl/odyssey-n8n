@@ -165,8 +165,10 @@ def test_journal_write_target_semantics_are_schema_declared_and_projected(schema
     journal = next(item for item in schema["types"] if item["id"] == "journal_entry")
     entry_date = next(item for item in journal["properties"] if item["id"] == "entry_date")
 
-    assert "constrain target selection by entry_date equal to that date" in journal["description"]
+    assert "constrain target selection with entry_date equal to that date" in journal["description"]
+    assert "also set the same entry_date property" in journal["description"]
     assert "Never repurpose an entry from another date" in journal["description"]
+    assert "even when the same date also appears in target filters" in entry_date["description"]
     assert "preserve its entry_date" in entry_date["description"]
     assert "different date belongs to a different journal_entry" in entry_date["description"]
 

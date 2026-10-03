@@ -1,9 +1,9 @@
-# Journal target live gate v12
+# Planner Journal target live gate v12
 
-This focused gate validates the model-facing `note-schema` correction for `journal_entry` targeting.
+> **Retained partial-failure evidence.** v12 ran once on `894c38ae65c9d93a7adf7f143548fb475b554814`. It must not be rerun or used as acceptance evidence for the revised contract.
 
-The production Core planner must treat the semantic journal date as target identity evidence: `today` and `yesterday` must produce `journal_entry` writes whose target is filtered by the resolved `entry_date`, while also recording that required property for creation when no same-date entry exists.
+v12 tested whether the schema-driven Core planner binds a `journal_entry` write to the semantic date named by the user, with no Journal-specific Core rule. Both GPT-5.6 Luna low calls emitted the correct exact `entry_date` target filter, so an older journal entry from another date could no longer be selected.
 
-The gate makes exactly two GPT-5.6 Luna low calls, with zero automatic retries and no Sol fallback. It is mutation-free and does not touch the real vault. Provider access requires explicit `ODYSSEY_RUN_PLANNER_JOURNAL_TARGET_V12=1`, a clean worktree, the exact pinned candidate prompt/schema hashes, and a fresh human authorization.
+The `ayer` case also emitted `entry_date` as a write property and passed. The `hoy` case omitted that required property, so it would not be create-safe when no same-day journal entry exists. The gate therefore correctly failed overall.
 
-The conservative regional byte-as-token ceiling is below $0.030. Real persistence behavior is covered separately by a provider-free vertical regression proving that a wrong-date journal candidate is excluded and left byte-for-byte unchanged.
+Retained evidence: 2 provider attempts, 2 completed responses, zero retries, no Sol fallback, estimated cost $0.00480240 Standard / $0.00528264 regional. v13 strengthens only the canonical `note-schema` guidance so a journal record write carries the same semantic date both as target identity evidence and as the required creation property.
