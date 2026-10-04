@@ -239,10 +239,10 @@ config/note-schema.json
 schema-derived retrieval/write capabilities
         |
         v
-Luna-first planner
+Luna-first semantic planner
         |
-        +--> same generic RequestPlan contract
-        `--> bounded Sol fallback on structured fail-closed only
+        +--> Luna: shared semantic prompt/schema/compiler
+        `--> Sol fallback: the exact same semantic frontend, different model only
 
 retrieval / write execution
         |
@@ -252,7 +252,7 @@ retrieval / write execution
         `--> grounded answerer: supplied evidence in, grounded answer out
 ```
 
-The top-level planner receives note-type/property capabilities projected dynamically from `config/note-schema.json`; Luna-first reuses the same semantic planner contract and the Sol fallback receives the same active schema. The contextual resolver, bounded writer, fact selector, and grounded answerer use fixed generic safety instructions but do not implement per-note-type production branches.
+The top-level planner receives note-type/property capabilities projected dynamically from `config/note-schema.json`; Luna and the bounded Sol fallback now use the same semantic prompt, structured-output schema, `SemanticWriteIntent` compiler, and local validator. At that boundary the provider model is the only intentional difference. The contextual resolver, bounded writer, fact selector, and grounded answerer use fixed generic safety instructions but do not implement per-note-type production branches.
 
 Configuration-driven does not mean every future capability is executable without code. A new type/property that fits already-supported Core semantics should flow through configuration. A genuinely new executable capability may require an executor, permission boundary, and tests, but once the future capability/app registry exists it should not require rewriting the base planner prompt or adding a concrete app-name branch there.
 

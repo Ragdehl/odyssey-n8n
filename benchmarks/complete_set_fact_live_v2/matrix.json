@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "current_context": {
+    "date": "2026-10-04",
+    "time": "20:15:00",
+    "timezone": "Europe/Paris"
+  },
+  "case": {
+    "id": "S1-shared-semantic-frontend-complete-set",
+    "source": "Hoy hemos vaciado el garaje con Bea y mis hijos.",
+    "evidence": [["Hoy", "2026-10-04"]],
+    "phrase": "mis hijos",
+    "expect_extent": "complete_set",
+    "must_contain": ["Bea", "mis hijos", "garaje"],
+    "expect_anchors": ["2026-10-04"]
+  }
+}

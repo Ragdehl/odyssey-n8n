@@ -1,5 +1,5 @@
 {
-  "contract_revision": 1,
+  "contract_revision": 2,
   "baseline_context": {
     "date": "2026-09-28",
     "time": "20:30",
@@ -8,8 +8,8 @@
   "production_model": "gpt-5.6-luna",
   "production_reasoning_effort": "low",
   "preferred_first_candidate_model": "gpt-6-luna",
-  "prompt_sha256": "f87003ab7ff02100e3ab9bf3a05b10d8805332615970a36aa382825319db1f61",
-  "provider_schema_sha256": "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce",
+  "prompt_sha256": "edb14e38833feddb9129192b8a131469c278d678dd2757f7c34b4d8891451cac",
+  "provider_schema_sha256": "72698d25b7d8c491c41b2821473f955dd29a085ca9f41155a9af3f5688b032f7",
   "teaching_examples_sha256": "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
   "accepted_production_evidence": {
     "gate": "semantic-write-frontend-v8",
@@ -31,5 +31,16 @@
     "explicit_bounded_cost_authorization_required": true,
     "collect_complete_matrix": true,
     "deterministic_vertical_e2e_required": true
+  },
+  "fallback_model": "gpt-5.6-sol",
+  "fallback_reasoning_effort": "low",
+  "shared_semantic_frontend": true,
+  "accepted_complete_set_evidence": {
+    "luna_gate": "complete-set-fact-live-v1",
+    "luna_result": "3_of_3_semantic_cases_passed",
+    "luna_artifact_sha256": "b7bb43eb02642458e4ef06dc8b00d3fc416bc365a24f9f4a83efa7c7f8b86a9b",
+    "sol_gate": "complete-set-fact-live-v2",
+    "sol_result": "1_of_1_shared_semantic_frontend_passed",
+    "sol_artifact_sha256": "7acac0e752c13a37b2a7d5463c8a26387693113df716a03775f72ae8bdb0b683"
   }
 }

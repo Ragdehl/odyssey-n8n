@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
 
@@ -59,6 +59,17 @@ class ResolvedRelationshipMember:
 
     unit_index: int
     stable_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteSetReferenceBinding:
+    """Bind one set-valued fact reference to an exact, re-groundable member set."""
+
+    source_unit_index: int
+    evidence_source_id: str
+    evidence_source_hash: str
+    fact_locator: str
+    members: tuple[ResolvedRelationshipMember, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -419,6 +430,199 @@ def prepare_relationship_shared_fact_action(
         ),
     )
     return WriteAction((source, *members)), binding
+
+
+def prepare_complete_set_reference_action(
+    action: WriteAction,
+    resolved_references: Mapping[tuple[int, int], ResolvedRelationalReference],
+) -> tuple[WriteAction, tuple[CompleteSetReferenceBinding, ...]]:
+    """Expand set-valued fact references into exact no-write member units.
+
+    The durable fact keeps the user's set wording and its one internal marker becomes the complete
+    ordered member-link list. Core derives every member from grounded relationship evidence; the
+    model never supplies the concrete member identities.
+    """
+    if not isinstance(action, WriteAction):
+        raise ValueError("Complete-set reference preparation requires a WriteAction")
+    original_count = len(action.units)
+    synthetic_units: list[KnowledgeUnit] = []
+    transformed_units: list[KnowledgeUnit] = []
+    bindings: list[CompleteSetReferenceBinding] = []
+    consumed: set[tuple[int, int]] = set()
+    marker_pattern = re.compile(r"\{\{ref:(\d+)\}\}")
+
+    for source_index, unit in enumerate(action.units):
+        new_references: list[KnowledgeReference] = []
+        marker_map: dict[int, str] = {}
+        for reference_index, reference in enumerate(unit.references):
+            relation = (
+                reference.selection.relational_reference
+                if reference.selection is not None
+                else None
+            )
+            if relation is None or relation.members != "complete_set":
+                new_index = len(new_references)
+                new_references.append(reference)
+                marker_map[reference_index] = f"{{{{ref:{new_index}}}}}"
+                continue
+
+            key = (source_index, reference_index)
+            resolved = resolved_references.get(key)
+            if (
+                resolved is None
+                or reference.target_index is not None
+                or resolved.direction is not EvidenceDirection.OUTGOING
+                or not resolved.targets
+            ):
+                raise RelationshipWritePreflightError(
+                    "Complete-set fact reference is unresolved or unsupported"
+                )
+            consumed.add(key)
+            member_bindings: list[ResolvedRelationshipMember] = []
+            local_markers: list[str] = []
+            for target in resolved.targets:
+                target_index = original_count + len(synthetic_units)
+                synthetic_units.append(
+                    KnowledgeUnit(
+                        SelectionCriteria(target.name, target.name, target.type, (), None),
+                        "record",
+                        (),
+                        (),
+                        (),
+                        (),
+                        reference_lookup_only=True,
+                    )
+                )
+                local_index = len(new_references)
+                new_references.append(KnowledgeReference(target_index, reference.role, target.name))
+                local_markers.append(f"{{{{ref:{local_index}}}}}")
+                member_bindings.append(ResolvedRelationshipMember(target_index, target.id))
+            marker_map[reference_index] = ", ".join(local_markers)
+            bindings.append(
+                CompleteSetReferenceBinding(
+                    source_index,
+                    resolved.evidence_source.id,
+                    resolved.evidence_source.source_hash,
+                    resolved.fact_locator,
+                    tuple(member_bindings),
+                )
+            )
+
+        def replace_marker(match: re.Match[str], replacements: dict[int, str] = marker_map) -> str:
+            index = int(match.group(1))
+            replacement = replacements.get(index)
+            if replacement is None:
+                raise RelationshipWritePreflightError(
+                    "Complete-set reference marker has no semantic reference"
+                )
+            return replacement
+
+        facts = tuple(marker_pattern.sub(replace_marker, fact) for fact in unit.facts)
+        transformed_units.append(replace(unit, facts=facts, references=tuple(new_references)))
+
+    if consumed != set(resolved_references):
+        raise RelationshipWritePreflightError(
+            "Complete-set relationship resolutions do not match fact references"
+        )
+    return replace(action, units=tuple((*transformed_units, *synthetic_units))), tuple(bindings)
+
+
+def preflight_complete_set_reference_action(
+    action: WriteAction,
+    bindings: tuple[CompleteSetReferenceBinding, ...],
+    *,
+    relationship_projector: RelationshipEvidenceProjector,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    semantic_index: Any,
+    embedder: Any,
+    contextual_reasoner: Any,
+    semantic_limit: int,
+    id_allocator: Callable[[], str] = allocate_stable_id,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
+    span_recorder: SpanRecorder | None = None,
+    semantic_set_selector: Any | None = None,
+) -> tuple[UnitTargetPreflight, ...]:
+    """Re-ground every set reference and preflight its exact existing members atomically."""
+    if not bindings:
+        raise RelationshipWritePreflightError("Complete-set reference bindings are empty")
+    validated_targets: dict[int, str] = {}
+    for binding in bindings:
+        if (
+            not 0 <= binding.source_unit_index < len(action.units)
+            or not binding.evidence_source_id
+            or not binding.evidence_source_hash
+            or not binding.fact_locator
+            or not binding.members
+        ):
+            raise RelationshipWritePreflightError("Complete-set reference binding is invalid")
+        projection = relationship_projector.project_targets(
+            binding.evidence_source_id, binding.fact_locator
+        )
+        if (
+            projection.status is not TargetProjectionStatus.COMPLETE
+            or projection.source is None
+            or projection.source.source_hash != binding.evidence_source_hash
+        ):
+            raise RelationshipWritePreflightError(
+                "Complete-set relationship evidence is stale, unavailable, or incomplete"
+            )
+        member_indices = tuple(member.unit_index for member in binding.members)
+        member_ids = tuple(member.stable_id for member in binding.members)
+        projected_ids = tuple(target.id for target in projection.targets)
+        if (
+            len(set(member_indices)) != len(member_indices)
+            or len(set(member_ids)) != len(member_ids)
+            or frozenset(projected_ids) != frozenset(member_ids)
+            or len(projected_ids) != len(member_ids)
+        ):
+            raise RelationshipWritePreflightError(
+                "Complete-set member set does not match current relationship evidence"
+            )
+        source_targets = {
+            reference.target_index
+            for reference in action.units[binding.source_unit_index].references
+            if reference.target_index is not None
+        }
+        if not set(member_indices).issubset(source_targets):
+            raise RelationshipWritePreflightError(
+                "Complete-set member units are not referenced by the source fact"
+            )
+        for member in binding.members:
+            previous = validated_targets.get(member.unit_index)
+            if previous is not None and previous != member.stable_id:
+                raise RelationshipWritePreflightError(
+                    "Complete-set member unit has conflicting stable identities"
+                )
+            validated_targets[member.unit_index] = member.stable_id
+
+    preflight = _preflight_write_action(
+        action,
+        repository=repository,
+        schema=schema,
+        semantic_index=semantic_index,
+        embedder=embedder,
+        contextual_reasoner=contextual_reasoner,
+        semantic_limit=semantic_limit,
+        id_allocator=id_allocator,
+        authenticated_actor=authenticated_actor,
+        self_binding_repository=self_binding_repository,
+        span_recorder=span_recorder,
+        semantic_set_selector=semantic_set_selector,
+        _validated_reference_targets=validated_targets,
+    )
+    for unit_index, stable_id in validated_targets.items():
+        result = preflight[unit_index]
+        if (
+            result.outcome is not WriteTargetOutcome.UPDATE
+            or result.stable_id != stable_id
+            or not result.reference_only
+        ):
+            raise RelationshipWritePreflightError(
+                "Complete-set member is not an exact existing reference target"
+            )
+    return preflight
 
 
 def preflight_relationship_write_action(

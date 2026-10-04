@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "current_context": {
+    "date": "2026-10-04",
+    "time": "19:30:00",
+    "timezone": "Europe/Paris"
+  },
+  "luna_cases": [
+    {
+      "id": "L1-bea-children-date",
+      "source": "Hoy hemos vaciado el garaje con Bea y mis hijos.",
+      "evidence": [["Hoy", "2026-10-04"]],
+      "phrase": "mis hijos",
+      "expect_extent": "complete_set",
+      "must_contain": ["Bea", "mis hijos", "garaje"],
+      "expect_anchors": ["2026-10-04"]
+    },
+    {
+      "id": "L2-bea-children-datetime",
+      "source": "Mañana a las 15:35 voy al parque con Bea y mis hijos.",
+      "evidence": [["Mañana a las 15:35", "2026-10-05T15:35:00+02:00"]],
+      "phrase": "mis hijos",
+      "expect_extent": "complete_set",
+      "must_contain": ["Bea", "mis hijos", "parque", "15:35"],
+      "expect_anchors": ["2026-10-05T15:35:00+02:00"]
+    },
+    {
+      "id": "L3-qualified-child-singular",
+      "source": "Hoy cené con Bea y mi hijo al que le gusta el fútbol.",
+      "evidence": [["Hoy", "2026-10-04"]],
+      "phrase": "mi hijo al que le gusta el fútbol",
+      "expect_extent": "one_member",
+      "must_contain": ["Bea", "mi hijo", "fútbol"],
+      "expect_anchors": ["2026-10-04"]
+    }
+  ],
+  "sol_cases": [
+    {
+      "id": "S1-bea-children-date-fallback",
+      "source": "Hoy hemos vaciado el garaje con Bea y mis hijos.",
+      "evidence": [["Hoy", "2026-10-04"]],
+      "phrase": "mis hijos",
+      "expect_extent": "complete_set",
+      "must_contain": ["Bea", "mis hijos", "garaje"],
+      "expect_anchors": ["2026-10-04"]
+    }
+  ]
+}

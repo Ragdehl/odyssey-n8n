@@ -8,7 +8,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from odyssey_apps.calendar import CalendarQueryService
-from odyssey_core import create_entity
+from odyssey_core import (
+    AuthenticatedActorContext,
+    SelfBindingRepository,
+    create_entity,
+)
 from odyssey_core.application import ApplicationStatus, execute_request
 from odyssey_core.atomic_facts import parse_atomic_facts
 from odyssey_core.context import ContextIndex
@@ -25,6 +29,15 @@ from odyssey_core.storage import VaultRepository
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+USER_ID = "11111111-1111-4111-8111-111111111111"
+
+
+class FirstFactReasoner:
+    """Choose only the first canonical fact supplied by Core for an isolated fixture."""
+
+    def resolve(self, request):  # type: ignore[no-untyped-def]
+        candidate = request.candidates[0]
+        return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
 
 
 class ConstantEmbedder:
@@ -45,22 +58,37 @@ def _environment(tmp_path: Path):  # type: ignore[no-untyped-def]
     vault.mkdir()
     (vault / "people").mkdir()
     repository = VaultRepository(vault)
+    for note_id, name in (("bea", "Bea"), ("cloe", "Cloe"), ("bruno", "Bruno")):
+        create_entity(
+            repository,
+            SCHEMA,
+            path=f"people/{note_id}.md",
+            entity_id=note_id,
+            metadata={"name": name, "type": "person"},
+            content="",
+            actor="fixture",
+            now="2026-10-04T12:00:00+02:00",
+        )
     create_entity(
         repository,
         SCHEMA,
-        path="people/bea.md",
-        entity_id="bea",
-        metadata={"name": "Bea", "type": "person"},
-        content="",
+        path="people/self.md",
+        entity_id="self-person",
+        metadata={"name": "Edgar", "type": "person"},
+        content="- Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].",
         actor="fixture",
         now="2026-10-04T12:00:00+02:00",
     )
+    state = tmp_path / "state"
+    state.mkdir()
+    bindings = SelfBindingRepository(state, repository, SCHEMA)
+    bindings.bind(USER_ID, "self-person")
     embedder = ConstantEmbedder()
     context = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
     semantic = SemanticEntityIndex(tmp_path / "runtime" / "semantic.sqlite3")
-    assert context.rebuild(repository, SCHEMA, embedder) == 1
-    assert semantic.rebuild(repository, SCHEMA, embedder) == 1
-    return repository, embedder, context, semantic
+    assert context.rebuild(repository, SCHEMA, embedder) == 4
+    assert semantic.rebuild(repository, SCHEMA, embedder) == 4
+    return repository, bindings, embedder, context, semantic
 
 
 def _plan(source: str, temporal_text: str, value: str, raw_result: dict):  # type: ignore[no-untyped-def]
@@ -79,7 +107,7 @@ def _plan(source: str, temporal_text: str, value: str, raw_result: dict):  # typ
 
 
 def _execute(tmp_path: Path, source: str, plan, *, request_id: str, now: str):  # type: ignore[no-untyped-def]
-    repository, embedder, context, semantic = _environment(tmp_path)
+    repository, bindings, embedder, context, semantic = _environment(tmp_path)
     result = execute_request(
         source,
         planner=SimpleNamespace(plan=lambda _request: plan, is_local_replay=True),
@@ -88,8 +116,10 @@ def _execute(tmp_path: Path, source: str, plan, *, request_id: str, now: str):  
         context_index=context,
         semantic_index=semantic,
         embedder=embedder,
-        contextual_reasoner=object(),
+        contextual_reasoner=FirstFactReasoner(),
         actor="e2e",
+        authenticated_actor=AuthenticatedActorContext(USER_ID),
+        self_binding_repository=bindings,
         now=now,
         context_limit=10,
         request_id_factory=lambda: request_id,
@@ -100,8 +130,8 @@ def _execute(tmp_path: Path, source: str, plan, *, request_id: str, now: str):  
     return repository, CalendarQueryService(repository, SCHEMA, notes)
 
 
-def test_day_fact_keeps_bea_link_and_children_literal_end_to_end(tmp_path: Path) -> None:
-    """A set-valued participant stays literal while a singular participant resolves normally."""
+def test_day_fact_resolves_complete_children_set_end_to_end(tmp_path: Path) -> None:
+    """Resolve every known child while preserving the user's natural set wording."""
     source = "Hoy hemos vaciado el garaje con Bea y mis hijos."
     raw = {
         "outcome": "PLAN",
@@ -136,7 +166,24 @@ def test_day_fact_keeps_bea_link_and_children_literal_end_to_end(tmp_path: Path)
                                             "candidate_scope": None,
                                         },
                                     },
-                                    {"kind": "literal", "text": " y mis hijos."},
+                                    {"kind": "literal", "text": " y "},
+                                    {
+                                        "kind": "identity",
+                                        "text": "mis hijos",
+                                        "identity": {
+                                            "description": "mis hijos",
+                                            "binding": "described",
+                                            "direct_name": None,
+                                            "note_type": "person",
+                                            "filters": [],
+                                            "candidate_scope": {
+                                                "source": {"kind": "SELF"},
+                                                "member_query": "mis hijos",
+                                                "extent": "complete_set",
+                                            },
+                                        },
+                                    },
+                                    {"kind": "literal", "text": "."},
                                 ]
                             }
                         ],
@@ -157,13 +204,22 @@ def test_day_fact_keeps_bea_link_and_children_literal_end_to_end(tmp_path: Path)
     )
 
     markdown = repository.read_text("calendar/days/2026-10-04.md")
-    assert "Hemos vaciado el garaje con [[people/bea|Bea]] y mis hijos." in markdown
-    assert repository.list_markdown_paths() == ["calendar/days/2026-10-04.md", "people/bea.md"]
+    assert (
+        "Hemos vaciado el garaje con [[people/bea|Bea]] y mis hijos "
+        "([[people/cloe|Cloe]], [[people/bruno|Bruno]])." in markdown
+    )
+    assert repository.list_markdown_paths() == [
+        "calendar/days/2026-10-04.md",
+        "people/bea.md",
+        "people/bruno.md",
+        "people/cloe.md",
+        "people/self.md",
+    ]
     visible = [
         "".join(segment.text for segment in block.segments)
         for block in calendar.day("2026-10-04").content
     ]
-    assert "Hemos vaciado el garaje con Bea y mis hijos." in visible
+    assert "Hemos vaciado el garaje con Bea y mis hijos (Cloe, Bruno)." in visible
 
 
 def test_day_exact_time_has_canonical_clock_prefix_and_separate_capture_time_end_to_end(
@@ -209,7 +265,24 @@ def test_day_exact_time_has_canonical_clock_prefix_and_separate_capture_time_end
                                             "candidate_scope": None,
                                         },
                                     },
-                                    {"kind": "literal", "text": " y mis hijos."},
+                                    {"kind": "literal", "text": " y "},
+                                    {
+                                        "kind": "identity",
+                                        "text": "mis hijos",
+                                        "identity": {
+                                            "description": "mis hijos",
+                                            "binding": "described",
+                                            "direct_name": None,
+                                            "note_type": "person",
+                                            "filters": [],
+                                            "candidate_scope": {
+                                                "source": {"kind": "SELF"},
+                                                "member_query": "mis hijos",
+                                                "extent": "complete_set",
+                                            },
+                                        },
+                                    },
+                                    {"kind": "literal", "text": "."},
                                 ]
                             }
                         ],
@@ -235,11 +308,14 @@ def test_day_exact_time_has_canonical_clock_prefix_and_separate_capture_time_end
 
     note = parse_note(repository.read_text("calendar/days/2026-10-05.md"))
     fact = parse_atomic_facts(note.content)[0]
-    assert fact.text == "15:35 — voy al parque con [[people/bea|Bea]] y mis hijos."
+    assert fact.text == (
+        "15:35 — voy al parque con [[people/bea|Bea]] y mis hijos "
+        "([[people/cloe|Cloe]], [[people/bruno|Bruno]])."
+    )
     assert fact.recorded_at == "2026-10-04T16:05:00+02:00"
     assert [anchor.value for anchor in fact.temporal_anchors] == ["2026-10-05T15:35:00+02:00"]
     visible = [
         "".join(segment.text for segment in block.segments)
         for block in calendar.day("2026-10-05").content
     ]
-    assert "15:35 — voy al parque con Bea y mis hijos." in visible
+    assert "15:35 — voy al parque con Bea y mis hijos (Cloe, Bruno)." in visible

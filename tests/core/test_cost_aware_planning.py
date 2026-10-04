@@ -161,25 +161,36 @@ def test_empty_request_makes_no_provider_call() -> None:
     assert sol.calls == 0
 
 
-def test_from_environment_builds_both_provider_boundaries(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Production construction wires one Luna first pass and one Sol fallback."""
+def test_from_environment_builds_luna_and_sol_from_the_same_semantic_frontend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production differs by provider model, never by WRITE prompt/schema/compiler contract."""
     luna = object()
     sol = object()
+    calls: list[dict[str, object]] = []
+
+    def build(cls, schema, context, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(dict(kwargs))
+        return sol if kwargs.get("model") == "gpt-5.6-sol" else luna
+
     monkeypatch.setattr(
         cost_aware_planning.OpenAILunaExperimentalPlanner,
         "from_environment",
-        classmethod(lambda cls, schema, context: luna),
-    )
-    monkeypatch.setattr(
-        cost_aware_planning.OpenAIRequestPlanner,
-        "from_environment",
-        classmethod(lambda cls, schema, context: sol),
+        classmethod(build),
     )
 
     planner = LunaFirstRequestPlanner.from_environment({}, {"timezone": "Europe/Paris"})
 
     assert planner._luna is luna
     assert planner._sol is sol
+    assert calls == [
+        {},
+        {
+            "model": "gpt-5.6-sol",
+            "reasoning_effort": "low",
+            "max_output_tokens": 2048,
+        },
+    ]
 
 
 def test_unsupported_luna_result_fails_closed_without_sol() -> None:
@@ -204,6 +215,19 @@ def test_unsupported_sol_fallback_result_fails_closed() -> None:
     with pytest.raises(TypeError, match="unsupported planner result"):
         planner.plan("What do I know about Odyssey?")
 
+    assert luna.calls == 1
+    assert sol.calls == 1
+
+
+def test_sol_semantic_escalation_matches_luna_non_executing_behavior() -> None:
+    """The same semantic frontend gives ESCALATE the same fail-closed meaning on either model."""
+    luna = _FakePlanner(error=RequestPlanningError("invalid Luna result"), model="gpt-5.6-luna")
+    sol = _FakePlanner(PlannerEscalation(), model="gpt-5.6-sol")
+    planner = _planner(luna, sol)
+
+    result = planner.plan("Do something that remains unrepresentable.")
+
+    assert result == PlannerClarification("UNREPRESENTABLE_REQUEST")
     assert luna.calls == 1
     assert sol.calls == 1
 

@@ -154,7 +154,7 @@ DEV user-visible validation of this post-gate Router revision.
 20.2C planner incident hardening + focused live gate          ✅ complete
 20.2D Luna-first planner experiment preparation               ✅ complete
 20.2E Luna prompt-parity + atomicity validation               ✅ complete
-20.2F Luna-first production planning + bounded Sol fallback   ✅ complete
+20.2F Luna-first semantic planning + same-contract Sol fallback   ✅ complete
 20.2G contextual reasoner Luna replacement                    ✅ complete
 20.3  protected Raspberry/Cloudflare deployment + E2E        ✅ complete
 21A   isolation architecture challenge                       ✅ complete
@@ -227,7 +227,7 @@ Complete. The production planner has explicit clarification, a bounded output en
 
 ### 20.2D–20.2F — Luna-first planner adoption
 
-Complete. Luna/low inherited the strongest established RequestPlan semantics, passed the focused prompt-parity/atomicity gates, and is now the production first pass. Safe PLAN/CLARIFY returns directly; structured fail-closed may invoke one bounded Sol/low fallback. Separate provider-call evidence preserves the real Luna/Sol usage split. See [Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
+Complete. Luna/low is the production first pass. Safe PLAN/CLARIFY returns directly; structured fail-closed may invoke one bounded Sol/low fallback through the **same semantic prompt/schema/compiler**, so the fallback differs only by model rather than by planner language. Separate provider-call evidence preserves the real Luna/Sol usage split. See [Phase 20.2F — Luna-first production planning](phase-20-2f-luna-first-production.md).
 
 ### 20.2G — contextual reasoner Luna replacement
 

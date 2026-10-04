@@ -4,8 +4,7 @@ Status: **implementation complete; planner-only live gate passed; deployment rem
 
 ## Objective
 
-Adopt the validated Phase 20.2E Luna/low planner as the normal production first pass while preserving
-the established Sol/low planner as a bounded fallback only when Luna fails closed structurally. Safe
+Adopt the validated Phase 20.2E semantic planner as the normal Luna/low first pass and use Sol/low only as a bounded second model over that **same semantic frontend** when Luna fails closed structurally. Safe
 Luna abstention must never grant Sol authority to guess missing user truth.
 
 ```text
@@ -17,17 +16,17 @@ Luna / low
   +-- PLAN ------------------------> execute validated RequestPlan
   +-- CLARIFY ---------------------> ask user
   +-- ESCALATE --------------------> ask user
-  +-- validated fail-closed error -> Sol / low once
+  +-- validated fail-closed error -> same semantic frontend / Sol low once
                                       |
                                       +-- PLAN -> execute
-                                      `-- CLARIFY -> ask user
+                                      +-- CLARIFY -> ask user
+                                      `-- ESCALATE -> ask user
 ```
 
 ## Acceptance criteria
 
 1. Production runtime constructs the Luna-first planner by default.
-2. The Luna provider prompt/schema is exactly the Phase 20.2E validated inherited-prompt boundary; no
-   fresh simplified prompt is introduced.
+2. Luna and Sol use the exact same semantic provider prompt/schema/compiler boundary; no legacy Sol WRITE language or second planner contract is allowed.
 3. A safe Luna PLAN or CLARIFY makes zero Sol calls.
 4. A Luna ESCALATE makes zero Sol calls and becomes a non-executing user clarification.
 5. A bounded Luna `RequestPlanningError` may trigger exactly one Sol/low fallback attempt.
@@ -45,14 +44,11 @@ Luna / low
 
 Result: **PROCEED**.
 
-The experiment already proved the model/prompt boundary. Production adoption therefore needs only a
-thin routing wrapper around the existing two validated planners. No router service, queue, LangGraph,
-second application server, or duplicated semantic prompt is justified.
+The experiment already proved the model/prompt boundary. Production therefore uses one semantic planner implementation configured first with Luna and, only after bounded local failure, with Sol. No router service, queue, LangGraph, second application server, duplicated semantic prompt, or legacy Sol WRITE schema is justified.
 
 The safest initial interpretation of Luna `ESCALATE` is user clarification rather than Sol fallback.
 Phase 20.2E's explicit escalation case lacked truth/authority that no stronger model could legitimately
-invent. Sol fallback is reserved for fail-closed structured-result failure, where the historical Sol
-planner can still provide a valid plan without changing user authority.
+invent. Sol fallback is reserved for fail-closed structured-result failure, but it receives exactly the same semantic contract and validation rules as Luna; the stronger model never gains a lower-level or broader WRITE language.
 
 ## Out of scope
 

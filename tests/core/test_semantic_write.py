@@ -502,40 +502,48 @@ def test_reference_reuses_one_unique_material_target_and_ambiguous_match_fails(
         )
 
 
-def test_provider_schema_keeps_complete_set_out_of_fact_identity_parts(schema: dict) -> None:
-    """Align model-facing fact identities with Core's singular-reference invariant."""
+def test_provider_schema_allows_complete_set_fact_part_without_claiming_one_identity(
+    schema: dict,
+) -> None:
+    """Let the model describe a grounded participant set without supplying its concrete members."""
     definitions = semantic_write_schema_definitions(schema)
     fact_identity = definitions["semantic_identity_part"]["properties"]["identity"]
-    fact_scope = fact_identity["properties"]["candidate_scope"]["anyOf"][1]
-    assert fact_scope["properties"]["extent"]["enum"] == ["one_member"]
-    target_scope_ref = definitions["semantic_identity"]["properties"]["candidate_scope"]["anyOf"][1]
-    assert target_scope_ref == {"$ref": "#/$defs/semantic_candidate_scope"}
+    fact_scope_ref = fact_identity["properties"]["candidate_scope"]["anyOf"][1]
+    assert fact_scope_ref == {"$ref": "#/$defs/semantic_candidate_scope"}
     assert definitions["semantic_candidate_scope"]["properties"]["extent"]["enum"] == [
         "one_member",
         "complete_set",
     ]
 
 
-def test_fact_reference_cannot_select_complete_relational_set(schema: dict) -> None:
-    """Keep fact references singular; complete sets belong to source-write target semantics."""
+def test_complete_relational_set_fact_reference_stays_unresolved_until_core_preflight(
+    schema: dict,
+) -> None:
+    """Preserve set wording plus one internal marker; never ask the model for member identities."""
     complete_children = person(
         "mis hijos",
         scope=scoped_self("mis hijos", CandidateScopeExtent.COMPLETE_SET),
     )
-    with pytest.raises(SemanticWriteCompileError, match="violates the Core contract") as raised:
-        compile_one(
-            schema,
-            operation(
-                person("Cloe", name="Cloe"),
-                fact(
-                    LiteralPart("Fue con "),
-                    IdentityPart("mis hijos", complete_children),
-                    LiteralPart("."),
-                ),
+    action = compile_one(
+        schema,
+        operation(
+            person("Cloe", name="Cloe"),
+            fact(
+                LiteralPart("Fue con "),
+                IdentityPart("mis hijos", complete_children),
+                LiteralPart("."),
             ),
-        )
-    assert isinstance(raised.value.__cause__, SemanticWriteCompileError)
-    assert str(raised.value.__cause__) == "Fact references cannot select a complete set"
+        ),
+    )
+    unit = action.units[0]
+    assert unit.facts == ("Fue con mis hijos ({{ref:0}}).",)
+    assert len(unit.references) == 1
+    reference = unit.references[0]
+    assert reference.target_index is None
+    assert reference.mention == "mis hijos"
+    assert reference.selection is not None
+    assert reference.selection.relational_reference is not None
+    assert reference.selection.relational_reference.members == "complete_set"
 
 
 def test_properties_tags_intents_migration_bulk_and_complete_set_use_core_validation(

@@ -450,3 +450,97 @@ def test_exact_identity_uses_current_name_not_stale_creation_label(
     assert len(candidates) == 1
     assert candidates[0].primary_name == "Marta García López"
     assert find_exact_entity_candidates(repository, schema, "Marta García", type="person") == ()
+
+
+def test_complete_set_fact_reference_rejects_relationship_change_before_write(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Never persist a partial participant set when canonical relationship evidence changes."""
+    from odyssey_core import create_entity
+    from odyssey_core.reference_preflight import (
+        RelationshipWritePreflightError,
+        preflight_complete_set_reference_action,
+        prepare_complete_set_reference_action,
+    )
+    from odyssey_core.relational_resolution import ResolvedRelationalReference
+    from odyssey_core.relationship_evidence import EvidenceDirection, RelationshipEvidenceProjector
+    from odyssey_core.request_planning import RelationalReference
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "people").mkdir()
+    repository = VaultRepository(vault)
+    for note_id, name, content in (
+        ("self-person", "Edgar", "- Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+        ("cloe", "Cloe", ""),
+        ("bruno", "Bruno", ""),
+        ("bea", "Bea", ""),
+    ):
+        create_entity(
+            repository,
+            schema,
+            path=f"people/{note_id}.md",
+            entity_id=note_id,
+            metadata={"name": name, "type": "person"},
+            content=content,
+            actor="test",
+            now="2026-10-04T12:00:00+02:00",
+        )
+
+    projector = RelationshipEvidenceProjector(repository, schema)
+    fact = projector.facts_for_source("self-person")[0]
+    projection = projector.project_targets("self-person", fact.locator)
+    assert projection.source is not None
+    assert {target.id for target in projection.targets} == {"cloe", "bruno"}
+    resolved = ResolvedRelationalReference(
+        projection.source,
+        projection.source,
+        fact.locator,
+        EvidenceDirection.OUTGOING,
+        projection.targets,
+        "test-guard",
+    )
+    relation = RelationalReference("mis hijos", "self", None, "complete_set")
+    set_selection = SelectionCriteria(
+        None,
+        "mis hijos",
+        "person",
+        (),
+        None,
+        None,
+        relation,
+    )
+    source = KnowledgeUnit(
+        SelectionCriteria("Bea", "Bea", "person", (), None),
+        "record",
+        (),
+        (),
+        ("Estuvo con mis hijos ({{ref:0}}).",),
+        (KnowledgeReference(None, "identity", "mis hijos", set_selection),),
+    )
+    executable, bindings = prepare_complete_set_reference_action(
+        WriteAction((source,)), {(0, 0): resolved}
+    )
+
+    # Change the authoritative relationship after semantic resolution but before write preflight.
+    self_note = repository.read_text("people/self-person.md")
+    (vault / "people/self-person.md").write_text(
+        self_note.replace(
+            "Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].",
+            "Mi hija es [[people/cloe|Cloe]].",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RelationshipWritePreflightError, match="stale|member set"):
+        preflight_complete_set_reference_action(
+            executable,
+            bindings,
+            relationship_projector=RelationshipEvidenceProjector(repository, schema),
+            repository=repository,
+            schema=schema,
+            semantic_index=EmptyIndex(),
+            embedder=EmptyEmbedder(),
+            contextual_reasoner=NoReasoner(),
+            semantic_limit=5,
+        )

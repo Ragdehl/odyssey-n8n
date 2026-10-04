@@ -123,8 +123,8 @@ def test_domain_interpretation_rejects_invalid_or_ungrounded_evidence(factory) -
         factory()
 
 
-def test_domain_handoff_retires_old_journal_prompt_but_keeps_ordinary_luna_schema() -> None:
-    """Temporal routing may change instructions without widening ordinary Luna output authority."""
+def test_domain_handoff_retires_old_journal_prompt_and_pins_current_luna_candidate() -> None:
+    """Keep the current provider-free Luna candidate explicit without changing accepted live evidence."""
     baseline = {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
     prompt = render_luna_experimental_prompt(schema(), baseline).encode("utf-8")
     payload = luna_experimental_result_json_schema(schema())
@@ -133,7 +133,7 @@ def test_domain_handoff_retires_old_journal_prompt_but_keeps_ordinary_luna_schem
         "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143"
     )
     assert hashlib.sha256(encoded).hexdigest() == (
-        "240ace2627aecaaf8f91522eba7066af2edb09bcfa7463b7632fcb38ef37d2a8"
+        "72698d25b7d8c491c41b2821473f955dd29a085ca9f41155a9af3f5688b032f7"
     )
 
 

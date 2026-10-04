@@ -47,9 +47,11 @@ from .reference_preflight import (
     RelationshipWritePreflightError,
     UnitTargetPreflight,
     current_identity_guard,
+    preflight_complete_set_reference_action,
     preflight_relational_target_write_action,
     preflight_relationship_write_action,
     preflight_write_action,
+    prepare_complete_set_reference_action,
     prepare_relationship_shared_fact_action,
 )
 from .relational_resolution import RelationalResolutionError, resolve_relational_reference
@@ -861,10 +863,26 @@ def _execute_write(
     clarification_choice: ClarificationChoice | None = None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
-    if any(
+    complete_set_references = tuple(
+        (unit_index, reference_index, reference)
+        for unit_index, unit in enumerate(action.units)
+        for reference_index, reference in enumerate(unit.references)
+        if reference.selection is not None
+        and reference.selection.relational_reference is not None
+        and reference.selection.relational_reference.members == "complete_set"
+    )
+    has_relational_target = any(
         unit.target.relational_reference is not None and not unit.reference_lookup_only
         for unit in action.units
-    ):
+    )
+    if complete_set_references and has_relational_target:
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason="UNSUPPORTED_MIXED_RELATIONAL_WRITE_SHAPE",
+        )
+    if has_relational_target:
         return _execute_relational_write(
             action_index,
             action,
@@ -917,24 +935,86 @@ def _execute_write(
             kwargs["id_allocator"] = id_allocator
         if clarification_choice is not None:
             kwargs["clarification_choice"] = clarification_choice
-        preflight = spans.invoke(
-            "preflight",
-            preflight_write_action,
-            action,
-            repository=repository,
-            schema=schema,
-            semantic_index=semantic_index,
-            embedder=embedder,
-            contextual_reasoner=contextual_reasoner,
-            semantic_limit=semantic_limit,
-            authenticated_actor=authenticated_actor,
-            self_binding_repository=self_binding_repository,
-            span_recorder=spans,
-            semantic_set_selector=semantic_set_selector,
-            **kwargs,
-        )
-        executable = bind_canonical_reference_mentions(action, preflight)
+        executable = action
+        executable_ordinals = unit_ordinals
+        if complete_set_references:
+            resolved_references = {}
+            for unit_index, reference_index, reference in complete_set_references:
+                if reference.selection is None:
+                    raise RelationshipWritePreflightError(
+                        "Complete-set fact reference has no semantic selection"
+                    )
+                resolved_references[(unit_index, reference_index)] = spans.invoke(
+                    "relational_resolution",
+                    resolve_relational_reference,
+                    reference.selection,
+                    repository=repository,
+                    schema=schema,
+                    semantic_index=semantic_index,
+                    embedder=embedder,
+                    contextual_reasoner=contextual_reasoner,
+                    semantic_limit=semantic_limit,
+                    authenticated_actor=authenticated_actor,
+                    self_binding_repository=self_binding_repository,
+                    semantic_set_selector=semantic_set_selector,
+                )
+            original_count = len(action.units)
+            executable, set_bindings = prepare_complete_set_reference_action(
+                action, resolved_references
+            )
+            executable_ordinals = (
+                *unit_ordinals,
+                *(((),) * (len(executable.units) - original_count)),
+            )
+            preflight = spans.invoke(
+                "preflight",
+                preflight_complete_set_reference_action,
+                executable,
+                set_bindings,
+                relationship_projector=RelationshipEvidenceProjector(repository, schema),
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                span_recorder=spans,
+                semantic_set_selector=semantic_set_selector,
+                **kwargs,
+            )
+        else:
+            preflight = spans.invoke(
+                "preflight",
+                preflight_write_action,
+                executable,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                span_recorder=spans,
+                semantic_set_selector=semantic_set_selector,
+                **kwargs,
+            )
+        executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
+    except RelationalResolutionError as error:
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason=str(error),
+            candidate_note_ids=error.candidate_ids,
+            relational_evidence_guard=error.evidence_guard,
+            clarification=error.clarification,
+        )
+    except RelationshipWritePreflightError as error:
+        return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
     except Exception as error:
         return ActionResult(
             action_index, action.kind, ActionStatus.FAILED, reason=_safe_reason(error)
@@ -950,7 +1030,7 @@ def _execute_write(
         now,
         writer,
         request_id,
-        unit_ordinals,
+        executable_ordinals,
         fact_selector,
         spans,
     )

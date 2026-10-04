@@ -56,7 +56,7 @@ Luna semantic PLAN actions (provider order)
         v
 existing RequestPlan -> unchanged downstream behavior
 
-Sol fallback -> frozen legacy prompt/schema -> existing RequestPlan
+Sol fallback -> same semantic prompt/schema -> SemanticWriteIntent -> existing RequestPlan
 ```
 
 The semantic values preserve ownership, the full target description, explicit direct-name/type/filter evidence, `SELF`, genuine bulk intent, candidate-scope meaning, ordered facts, explicit property/tag/type mutations, and which fact spans denote other Odyssey identities. A candidate scope is deliberately generic and non-recursive: its source is either authenticated self or one existing source described in free text, plus a free-text member query and `one member | complete set` extent. This is not a relationship ontology.
@@ -76,8 +76,7 @@ One provider write action owns its ordered `operations[]` and compiles independe
 existing `WriteAction`. Separate writes remain separate even when adjacent or separated by retrieve
 or delegate actions. The compiler fails closed on mixed `one` / `all_matching`, multiple bulk
 operations, multiple material relational targets, and `complete_set` combined with another material
-operation. A semantic parse/compiler failure becomes bounded `RequestPlanningError`, allowing the
-existing single normal Sol fallback. `ESCALATE` remains a clarification and never invokes Sol.
+operation. A semantic parse/compiler failure becomes bounded `RequestPlanningError`, allowing one Sol fallback through the **same semantic frontend**. Sol does not emit `KnowledgeUnit`, `{{ref:N}}`, target indexes, or any alternate WRITE language; it differs from Luna only by provider model. `ESCALATE` remains a clarification on either model.
 
 The frozen SWR registry, cases, oracles, and v8 evidence are unchanged. Provider-free tests cover all
 nine compilable current SWR cases; SWR05 remains planner-owned escalation and never reaches the

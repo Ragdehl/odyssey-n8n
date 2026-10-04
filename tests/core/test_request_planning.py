@@ -1086,7 +1086,8 @@ def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> No
         "existing",
     }
     assert all(
-        branch["properties"]["members"]["enum"] == ["one"] for branch in relational_branches[1:]
+        branch["properties"]["members"]["enum"] == ["one", "complete_set"]
+        for branch in relational_branches[1:]
     )
     self_branch = next(
         branch
@@ -1101,7 +1102,7 @@ def test_prompt_and_schema_use_semantic_reference_selections(schema: dict) -> No
     assert self_branch["properties"]["source_query"] == {"type": "null"}
     assert existing_branch["properties"]["source_query"] == {"type": "string"}
     assert "members=one" in prompt
-    assert "must denote a different logical note from its own KnowledgeUnit target" in prompt
+    assert "must not select its own KnowledgeUnit target" in prompt
 
 
 def test_fact_reference_cannot_select_its_own_unit_target(schema: dict) -> None:
@@ -1243,8 +1244,10 @@ def test_relational_reference_selection_lowers_to_bounded_lookup_unit(schema: di
     assert lookup.target.relational_reference.members == "one"
 
 
-def test_fact_reference_rejects_complete_relational_member_set(schema: dict) -> None:
-    """Require every fact marker to bind one canonical note rather than an implicit member set."""
+def test_fact_reference_preserves_complete_relational_member_set_for_core_expansion(
+    schema: dict,
+) -> None:
+    """Keep complete-set fact authority unresolved until Core re-grounds and expands its members."""
     raw = output(
         write(
             unit(
@@ -1270,8 +1273,14 @@ def test_fact_reference_rejects_complete_relational_member_set(schema: dict) -> 
         )
     )
 
-    with pytest.raises(RequestPlanningError, match="must select one identity"):
-        validate_request_plan(raw, schema)
+    plan = validate_request_plan(raw, schema)
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    reference = action.units[0].references[0]
+    assert reference.target_index is None
+    assert reference.selection is not None
+    assert reference.selection.relational_reference is not None
+    assert reference.selection.relational_reference.members == "complete_set"
 
     provider_payload = provider_output(
         planner_output(
@@ -1285,8 +1294,8 @@ def test_fact_reference_rejects_complete_relational_member_set(schema: dict) -> 
             )
         )
     )
-    assert not schema_accepts(provider_payload, planner_result_json_schema(schema))
-    assert not schema_accepts(provider_payload, compact_planner_result_json_schema(schema))
+    assert schema_accepts(provider_payload, planner_result_json_schema(schema))
+    assert schema_accepts(provider_payload, compact_planner_result_json_schema(schema))
 
 
 def test_semantic_reference_reuses_matching_same_request_target(schema: dict) -> None:
@@ -2210,7 +2219,7 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     assert "NEVER split the relationship into participant-targeted units" in prompt
     assert "A proper noun or ordinary fact argument is not enough by itself" in prompt
     assert (
-        "Type-null references are for wording that explicitly denotes an existing Odyssey identity"
+        "Type-null singular references are for wording that explicitly denotes an existing Odyssey identity"
         in prompt
     )
     assert "Minimize note mutations without changing semantic ownership" in prompt

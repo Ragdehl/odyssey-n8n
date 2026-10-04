@@ -18,7 +18,7 @@ from odyssey_core.observability import (
     OperationalStage,
     reconcile_duration,
 )
-from odyssey_core.request_planning import OpenAIRequestPlanner, PlannerClarification, RequestPlan
+from odyssey_core.request_planning import PlannerClarification, RequestPlan
 from odyssey_runtime.serialization import operational_to_response
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -115,7 +115,13 @@ def _planner_pair(
     )
     planner = LunaFirstRequestPlanner(
         OpenAILunaExperimentalPlanner(SimpleNamespace(responses=luna_api), schema, CONTEXT, clock),
-        OpenAIRequestPlanner(SimpleNamespace(responses=sol_api), schema, CONTEXT, clock),
+        OpenAILunaExperimentalPlanner(
+            SimpleNamespace(responses=sol_api),
+            schema,
+            CONTEXT,
+            clock,
+            model="gpt-5.6-sol",
+        ),
         clock,
     )
     return planner, luna_api, sol_api
@@ -175,7 +181,13 @@ def test_first_attempt_clarification_skips_sol_with_provider_complete_payload() 
     )
     planner = LunaFirstRequestPlanner(
         OpenAILunaExperimentalPlanner(SimpleNamespace(responses=luna_api), schema, CONTEXT, clock),
-        OpenAIRequestPlanner(SimpleNamespace(responses=sol_api), schema, CONTEXT, clock),
+        OpenAILunaExperimentalPlanner(
+            SimpleNamespace(responses=sol_api),
+            schema,
+            CONTEXT,
+            clock,
+            model="gpt-5.6-sol",
+        ),
         clock,
     )
 

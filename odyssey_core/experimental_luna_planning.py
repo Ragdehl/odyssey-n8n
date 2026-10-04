@@ -442,6 +442,9 @@ class OpenAILunaExperimentalPlanner:
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        model: str = LUNA_EXPERIMENT_MODEL,
+        reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
+        max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
     ) -> None:
         self._client = client
         self._schema = schema
@@ -451,9 +454,19 @@ class OpenAILunaExperimentalPlanner:
         )
         self._domain_interpretation = domain_interpretation
         self._monotonic = monotonic
-        self.model = LUNA_EXPERIMENT_MODEL
-        self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
-        self.max_output_tokens = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS
+        if not isinstance(model, str) or not model.strip():
+            raise RequestPlanningError("Semantic planner model must be non-empty")
+        if not isinstance(reasoning_effort, str) or not reasoning_effort.strip():
+            raise RequestPlanningError("Semantic planner reasoning effort must be non-empty")
+        if (
+            not isinstance(max_output_tokens, int)
+            or isinstance(max_output_tokens, bool)
+            or max_output_tokens <= 0
+        ):
+            raise RequestPlanningError("Semantic planner max output tokens must be positive")
+        self.model = model.strip()
+        self.reasoning_effort = reasoning_effort.strip()
+        self.max_output_tokens = max_output_tokens
         self.max_retries = LUNA_EXPERIMENT_AUTOMATIC_RETRIES
         self.last_usage: dict[str, int] | None = None
         self.last_response_id: str | None = None
@@ -475,6 +488,9 @@ class OpenAILunaExperimentalPlanner:
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        model: str = LUNA_EXPERIMENT_MODEL,
+        reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
+        max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
     ) -> OpenAILunaExperimentalPlanner:
         """Construct the experimental client with automatic SDK retries disabled."""
         if not os.environ.get("OPENAI_API_KEY"):
@@ -491,6 +507,9 @@ class OpenAILunaExperimentalPlanner:
             current_context,
             teaching_examples=teaching_examples,
             domain_interpretation=domain_interpretation,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            max_output_tokens=max_output_tokens,
         )
 
     def plan(
@@ -543,10 +562,10 @@ class OpenAILunaExperimentalPlanner:
         provider_started = self._monotonic()
         try:
             response = self._client.responses.create(
-                model=LUNA_EXPERIMENT_MODEL,
-                reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
+                model=self.model,
+                reasoning={"effort": self.reasoning_effort},
                 store=False,
-                max_output_tokens=LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
+                max_output_tokens=self.max_output_tokens,
                 input=[
                     {
                         "role": "system",

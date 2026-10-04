@@ -1,8 +1,8 @@
 """Cost-aware production request planning with a validated Luna first pass.
 
-The first pass deliberately reuses the exact Luna prompt/schema boundary validated in Phase 20.2E.
-A locally invalid/incomplete Luna result may fall back once to the established Sol planner. A safe
-Luna ESCALATE does not authorize stronger-model guessing: it becomes a normal user clarification.
+Luna and the one bounded Sol fallback deliberately share one semantic prompt/schema/compiler
+boundary. A locally invalid/incomplete Luna result may fall back once to the same semantic frontend
+running on Sol. A safe ESCALATE never authorizes stronger-model guessing: it becomes clarification.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any
 
 from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.experimental_luna_planning import (
+    LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
     OpenAILunaExperimentalPlanner,
     PlannerEscalation,
 )
@@ -24,7 +25,8 @@ from odyssey_core.observability import (
     normalize_provider_usage,
 )
 from odyssey_core.request_planning import (
-    OpenAIRequestPlanner,
+    PLANNER_MODEL,
+    PLANNER_REASONING_EFFORT,
     PlannerClarification,
     PlannerResult,
     RequestPlan,
@@ -36,9 +38,9 @@ LUNA_PROVIDER_STAGE = "planner.luna"
 
 
 class LunaFirstRequestPlanner:
-    """Plan with Luna first and use Sol only after a fail-closed Luna result.
+    """Plan with one semantic frontend on Luna, then the same frontend on Sol if needed.
 
-    Safe PLAN and CLARIFY results from Luna are returned directly. Luna ESCALATE is converted to the
+    Safe PLAN and CLARIFY results from Luna are returned directly. ESCALATE is converted to the
     existing non-executing clarification result so missing user authority is never guessed by Sol.
     Only a bounded ``RequestPlanningError`` from the validated Luna provider boundary triggers one Sol
     attempt. Generic provider/network exceptions propagate without a second call.
@@ -67,19 +69,23 @@ class LunaFirstRequestPlanner:
         domain_interpretation: DomainInterpretation | None = None,
     ) -> LunaFirstRequestPlanner:
         """Build Luna/Sol with the same optional app-specialized evidence for one Core request."""
-        if domain_interpretation is None:
-            return cls(
-                OpenAILunaExperimentalPlanner.from_environment(schema, current_context),
-                OpenAIRequestPlanner.from_environment(schema, current_context),
-            )
-        return cls(
-            OpenAILunaExperimentalPlanner.from_environment(
-                schema, current_context, domain_interpretation=domain_interpretation
-            ),
-            OpenAIRequestPlanner.from_environment(
-                schema, current_context, domain_interpretation=domain_interpretation
-            ),
+        shared: dict[str, Any] = {}
+        if domain_interpretation is not None:
+            shared["domain_interpretation"] = domain_interpretation
+        luna = OpenAILunaExperimentalPlanner.from_environment(
+            schema,
+            current_context,
+            **shared,
         )
+        sol = OpenAILunaExperimentalPlanner.from_environment(
+            schema,
+            current_context,
+            model=PLANNER_MODEL,
+            reasoning_effort=PLANNER_REASONING_EFFORT,
+            max_output_tokens=LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
+            **shared,
+        )
+        return cls(luna, sol)
 
     def plan(
         self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()
@@ -159,6 +165,8 @@ class LunaFirstRequestPlanner:
             sol_started,
         )
         self._sync_final_metadata(self._sol)
+        if isinstance(result, PlannerEscalation):
+            return PlannerClarification("UNREPRESENTABLE_REQUEST")
         if not isinstance(result, (RequestPlan, PlannerClarification)):
             raise TypeError("Sol fallback returned an unsupported planner result")
         return result

@@ -306,7 +306,7 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     schema_bytes = len(
         json.dumps(result_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     )
-    assert write_branch_bytes == 4_030
+    assert write_branch_bytes == 3_525
     assert write_branch_bytes <= int(7_343 * 0.75)
     assert prompt_bytes < 40_000
     assert schema_bytes < 25_000
@@ -701,6 +701,41 @@ def test_luna_call_has_one_attempt_zero_retries_and_explicit_cap(
     assert calls[0]["max_output_tokens"] == 2048
     assert planner.max_retries == 0
     assert planner.last_error_chain is None
+
+
+def test_luna_and_sol_semantic_frontends_send_identical_contract_except_model(
+    schema: dict[str, Any],
+) -> None:
+    """Prevent the production Sol fallback from drifting into a second planner language."""
+    result_payload = {
+        "result": {
+            "outcome": "ESCALATE",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+        }
+    }
+    response = SimpleNamespace(
+        status="completed",
+        id="resp_test",
+        output_text=json.dumps(result_payload),
+        usage=None,
+    )
+    calls: list[dict[str, Any]] = []
+    client = SimpleNamespace(
+        responses=SimpleNamespace(create=lambda **kwargs: calls.append(kwargs) or response)
+    )
+    luna = OpenAILunaExperimentalPlanner(client, schema, CONTEXT)
+    sol = OpenAILunaExperimentalPlanner(client, schema, CONTEXT, model="gpt-5.6-sol")
+
+    assert isinstance(luna.plan("Handle this safely"), PlannerEscalation)
+    assert isinstance(sol.plan("Handle this safely"), PlannerEscalation)
+    assert len(calls) == 2
+    assert calls[0]["model"] == "gpt-5.6-luna"
+    assert calls[1]["model"] == "gpt-5.6-sol"
+    luna_contract = {key: value for key, value in calls[0].items() if key != "model"}
+    sol_contract = {key: value for key, value in calls[1].items() if key != "model"}
+    assert sol_contract == luna_contract
 
 
 def test_environment_client_disables_sdk_retries(

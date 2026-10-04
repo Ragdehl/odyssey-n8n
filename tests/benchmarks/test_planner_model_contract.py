@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import odyssey_core.experimental_luna_planning as luna
+from odyssey_core.request_planning import PLANNER_MODEL, PLANNER_REASONING_EFFORT
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / "benchmarks/planner_model_contract/accepted_contract.json"
@@ -52,6 +53,13 @@ def test_current_planner_contract_matches_last_live_accepted_evidence() -> None:
     assert luna.LUNA_EXPERIMENT_REASONING_EFFORT == contract["production_reasoning_effort"], (
         "planner reasoning effort changed: fresh live gate required"
     )
+    assert PLANNER_MODEL == contract["fallback_model"], (
+        "fallback model changed: fresh live gate required"
+    )
+    assert PLANNER_REASONING_EFFORT == contract["fallback_reasoning_effort"], (
+        "fallback reasoning effort changed: fresh live gate required"
+    )
+    assert contract["shared_semantic_frontend"] is True
 
 
 def test_accepted_contract_points_to_immutable_recorded_evidence() -> None:
@@ -71,6 +79,13 @@ def test_accepted_contract_points_to_immutable_recorded_evidence() -> None:
     assert production["artifact_sha256"] == prod_evidence["artifact_sha256"]
     assert candidate["result"] == candidate_evidence["result"]
     assert candidate["artifact_sha256"] == candidate_evidence["artifact_sha256"]
+    complete_set = contract["accepted_complete_set_evidence"]
+    luna_set = ROOT / "benchmarks/complete_set_fact_live_v1/results/1502919df0f3.json"
+    sol_set = ROOT / "benchmarks/complete_set_fact_live_v2/results/09d4217d0818.json"
+    assert _sha(luna_set.read_bytes()) == complete_set["luna_artifact_sha256"]
+    assert _sha(sol_set.read_bytes()) == complete_set["sol_artifact_sha256"]
+    assert complete_set["luna_result"] == "3_of_3_semantic_cases_passed"
+    assert complete_set["sol_result"] == "1_of_1_shared_semantic_frontend_passed"
     assert contract["change_policy"] == {
         "fresh_versioned_live_gate_required": True,
         "live_gate_stage": "final_pre_merge",

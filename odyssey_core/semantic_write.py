@@ -258,17 +258,10 @@ def semantic_write_schema_definitions(
         "required": ["kind", "text"],
         "additionalProperties": False,
     }
-    # Fact references always bind one logical identity. Operation targets may select a complete
-    # relationship-bounded set, but exposing that same provider shape inside facts lets the model
-    # produce a value Core must reject. Keep the provider contract aligned with the compiler by
-    # narrowing only fact-part candidate scopes to one_member; set-valued participant wording can
-    # remain literal unless it is itself the operation target.
+    # Fact references may denote either one identity or one relationship-bounded complete set.
+    # Singular references still bind one canonical note; complete sets remain set-valued until Core
+    # resolves and expands every grounded member immediately before persistence.
     fact_identity = deepcopy(identity)
-    fact_candidate_scope = deepcopy(candidate_scope)
-    fact_candidate_scope["properties"]["extent"]["enum"] = ["one_member"]
-    fact_identity["properties"]["candidate_scope"] = {
-        "anyOf": [{"type": "null"}, fact_candidate_scope]
-    }
     identity_part = {
         "type": "object",
         "properties": {
@@ -776,7 +769,7 @@ def _compile_facts(
             if not isinstance(part, IdentityPart):
                 raise SemanticWriteCompileError("Semantic fact part is invalid")
             _safe_text(part.text)
-            selection = _compile_identity(part.identity, allow_self=False, allow_complete_set=False)
+            selection = _compile_identity(part.identity, allow_self=False, allow_complete_set=True)
             if part.identity == target:
                 raise SemanticWriteCompileError("Fact reference cannot select its own target")
             reference_key = (part.identity, part.text)
@@ -794,7 +787,12 @@ def _compile_facts(
                 references.append(
                     {"selection": selection, "role": "identity", "mention": part.text}
                 )
-            pieces.append(f"{{{{ref:{reference_index}}}}}")
+            scope = part.identity.candidate_scope
+            if scope is not None and scope.extent is CandidateScopeExtent.COMPLETE_SET:
+                pieces.append(part.text)
+                pieces.append(f" ({{{{ref:{reference_index}}}}})")
+            else:
+                pieces.append(f"{{{{ref:{reference_index}}}}}")
         rendered_fact = "".join(pieces)
         if normalize_single_day_clock:
             clock = same_day_clock_parts[0].anchor.display_time

@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "head": "28b65f2751a722940a93e2f88d39d76b98cfbbb1",
+  "dirty_worktree": true,
+  "matrix_sha256": "9d35be2fb16e060d99b38a61f717ac0c52b3f06269a4cb8cf4f263939f64b915",
+  "source_digest": "09d4217d08188b73b5184f56f523036a17c2600b85113207f5654b18b0f6440d",
+  "provider_attempts": 1,
+  "automatic_retries": 0,
+  "mutation_authority": false,
+  "shared_semantic_frontend": true,
+  "budget_upper_usd": 0.22105600000000003,
+  "estimated_regional_cost_usd": 0.0531916,
+  "passed": true,
+  "row": {
+    "id": "S1-shared-semantic-frontend-complete-set",
+    "passed": true,
+    "actual": {
+      "kind": "plan",
+      "units": [
+        {
+          "target": {
+            "query": "2026-10-04",
+            "type": "calendar_day"
+          },
+          "facts": [
+            "Hemos vaciado el garaje con {{ref:0}} y mis hijos ({{ref:1}})."
+          ],
+          "references": [
+            "Bea",
+            "mis hijos"
+          ],
+          "anchors": [
+            "2026-10-04"
+          ]
+        },
+        {
+          "target": {
+            "query": "Bea",
+            "type": "person"
+          },
+          "facts": [],
+          "references": [],
+          "anchors": []
+        }
+      ],
+      "footprint": "[{\"target\":{\"query\":\"2026-10-04\",\"type\":\"calendar_day\"},\"facts\":[\"hemos vaciado el garaje con {{ref:0}} y mis hijos ({{ref:1}}).\"],\"references\":[\"bea\",\"mis hijos\"],\"anchors\":[\"2026-10-04\"]},{\"target\":{\"query\":\"bea\",\"type\":\"person\"},\"facts\":[],\"references\":[],\"anchors\":[]}]",
+      "anchors": [
+        "2026-10-04"
+      ]
+    },
+    "raw_extent": "complete_set",
+    "expected_extent": "complete_set",
+    "error": null
+  },
+  "provider_records": [
+    {
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "low",
+      "max_output_tokens": 2048,
+      "input_tokens": 10554,
+      "output_tokens": 307,
+      "response_id": "resp_0063e77cc870ea56016ac29776856887d1b9b4397199f37501",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Hemos vaciado el garaje con \"},{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y \"},{\"kind\":\"identity\",\"text\":\"mis hijos\",\"identity\":{\"description\":\"mis hijos\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":{\"source\":{\"kind\":\"SELF\"},\"member_query\":\"mis hijos\",\"extent\":\"complete_set\"}}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "format_name": "odyssey_luna_first_planner_result"
+    }
+  ]
+}
