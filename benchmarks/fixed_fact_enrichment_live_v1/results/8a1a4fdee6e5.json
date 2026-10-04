@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "commit": "8a1a4fdee6e5940c21e0c02d06b9ca874be197f9",
+  "cases_sha256": "a8a1b4e5c44c9bdf0d764c6255dd90469cf7e942b1e0c51a5b5192813d3b4f76",
+  "prompt_sha256": "ac71eca521f29079d2f757095576dd7f76335758dee9172c185248cdda321322",
+  "provider_schema_sha256": "f8c259623f1f30e2a9bf8598d64c304dc2428f213d6a773997912c248ad1d687",
+  "provider_attempts": 3,
+  "completed_provider_responses": 3,
+  "automatic_retries": 0,
+  "sol_calls": 0,
+  "estimated_standard_cost_usd": "0.0017418",
+  "acceptable": false,
+  "failed_case_ids": [
+    "FFE02-complete-self-set"
+  ],
+  "rows": [
+    {
+      "case_id": "FFE01-nickname-occurrence",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 1432,
+        "output_tokens": 295,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 169
+      }
+    },
+    {
+      "case_id": "FFE02-complete-self-set",
+      "passed": false,
+      "findings": [
+        "missing_children_identity"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 1432,
+        "output_tokens": 147,
+        "cached_input_tokens": 1415,
+        "reasoning_tokens": 107
+      }
+    },
+    {
+      "case_id": "FFE03-mixed-canonical-day-content",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 1441,
+        "output_tokens": 292,
+        "cached_input_tokens": 1415,
+        "reasoning_tokens": 130
+      }
+    }
+  ],
+  "provider_failures": []
+}

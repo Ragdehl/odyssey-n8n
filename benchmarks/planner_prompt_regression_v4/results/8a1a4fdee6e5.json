@@ -1,0 +1,61 @@
+{
+  "version": 4,
+  "scope": "three-current-bounded-source-successors",
+  "commit": "8a1a4fdee6e5940c21e0c02d06b9ca874be197f9",
+  "matrix_sha256": "383dfa94fc4e11e34cab5fb96b128ad8c6945dee5bfe98ecc061c850f22407fa",
+  "prompt_sha256": "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143",
+  "provider_schema_sha256": "d336432ba67b471030ac67eed11bb389065d5832d4032906774bbef52e84cb23",
+  "teaching_examples_sha256": "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
+  "provider_attempts": 3,
+  "completed_provider_responses": 3,
+  "automatic_retries": 0,
+  "sol_calls": 0,
+  "estimated_standard_cost_usd": "0.007291",
+  "acceptable": true,
+  "failed_case_ids": [],
+  "rows": [
+    {
+      "case_id": "CSWR01-qualified-bounded-source-member",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 9757,
+        "output_tokens": 288,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 120
+      }
+    },
+    {
+      "case_id": "CSWR02-relational-target-one-bounded-reference",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 9755,
+        "output_tokens": 460,
+        "cached_input_tokens": 9728,
+        "reasoning_tokens": 219
+      }
+    },
+    {
+      "case_id": "CSWR03-relational-target-two-bounded-references",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "error": null,
+      "usage": {
+        "input_tokens": 9767,
+        "output_tokens": 448,
+        "cached_input_tokens": 9728,
+        "reasoning_tokens": 111
+      }
+    }
+  ],
+  "provider_failures": []
+}

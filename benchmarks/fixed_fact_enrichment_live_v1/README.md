@@ -15,3 +15,7 @@ The gate is one-shot, GPT-5.6 Luna low, zero-retry, and has no vault mutation au
 
 - Maximum provider calls: `3`.
 - Conservative ceiling: `$0.009069`; hard authorization cap: `$0.012`.
+
+## Retained live evidence
+
+Executed once on `8a1a4fdee6e5940c21e0c02d06b9ca874be197f9` after explicit authorization. `FFE01-nickname-occurrence` and `FFE03-mixed-canonical-day-content` passed; `FFE02-complete-self-set` failed with `missing_children_identity`. The run completed 3 GPT-5.6 Luna low responses, zero retries/Sol, at estimated standard cost `$0.0017418`. This v1 contract is consumed historical evidence and must not be rerun or accepted as production-ready.

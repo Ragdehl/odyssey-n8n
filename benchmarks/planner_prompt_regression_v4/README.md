@@ -16,3 +16,7 @@ effort are exactly the v3 candidate contract. All three successor cases must pas
 accepted failures in this focused gate. Provider authority is zero unless the exact matrix,
 contract hashes, clean worktree, bounded cost, and explicit authorization flag all match. The gate
 is one-shot, zero-retry, and has no vault mutation authority.
+
+## Retained live evidence
+
+Executed once on `8a1a4fdee6e5940c21e0c02d06b9ca874be197f9` after explicit authorization. All 3 current-schema successor cases passed, with 3 completed GPT-5.6 Luna low responses, zero retries/Sol, and estimated standard cost `$0.007291`. This closes the obsolete Journal/event sentinel issue without changing the ordinary Core planner prompt.
