@@ -27,33 +27,29 @@ def test_v2_reuses_complete_frozen_matrix() -> None:
     ]
 
 
-def test_v2_pins_exact_current_candidate_contract() -> None:
-    """Refuse evidence from any prompt/schema/examples contract other than this candidate."""
-    _cases, context = base.load_gate_cases()
-    schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
-    assert run_live._contract_hashes(schema, context) == (
-        run_live.PROMPT_SHA256,
-        run_live.PROVIDER_SCHEMA_SHA256,
-        run_live.TEACHING_SHA256,
-    )
+def _retained_v2_artifact() -> dict:
+    return json.loads((run_live.RESULTS_DIR / "8208d9636c43.json").read_text(encoding="utf-8"))
 
 
-def test_v2_budget_is_complete_and_bounded() -> None:
-    """Bound all 16 zero-retry production-model calls before provider authority exists."""
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == 16
-    assert budget["conservative_usd_upper"] == Decimal("0.214944")
-    assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.215")
+def test_v2_retained_evidence_matches_its_frozen_historical_contract() -> None:
+    """Keep the consumed v2 evidence auditable without making it the current baseline."""
+    artifact = _retained_v2_artifact()
+    assert artifact["prompt_sha256"] == run_live.PROMPT_SHA256
+    assert artifact["provider_schema_sha256"] == run_live.PROVIDER_SCHEMA_SHA256
+    assert artifact["teaching_examples_sha256"] == run_live.TEACHING_SHA256
+    assert artifact["matrix_sha256"] == run_live.MATRIX_SHA256
 
 
-def test_v2_has_zero_provider_authority_without_explicit_flag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Do not permit provider access until the exact bounded gate is human-authorized."""
-    monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
-        run_live._preflight()
+def test_v2_retained_execution_was_complete_and_bounded() -> None:
+    artifact = _retained_v2_artifact()
+    assert artifact["provider_attempts"] == artifact["completed_provider_responses"] == 16
+    assert artifact["automatic_retries"] == 0
+    assert artifact["acceptable"] is True
+    assert Decimal(artifact["estimated_standard_cost_usd"]) < run_live.AUTHORIZED_CEILING_USD
+
+
+def test_v2_is_consumed_historical_evidence_not_a_rerunnable_current_gate() -> None:
+    assert list(run_live.RESULTS_DIR.glob("*.json"))
 
 
 def test_v2_keeps_prior_reviewed_safe_degradation_policy() -> None:

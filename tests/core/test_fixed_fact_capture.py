@@ -523,5 +523,5 @@ def test_real_luna_adapter_uses_one_parts_only_call(schema: dict) -> None:
     call = responses.calls[0]
     assert call["model"] == "gpt-5.6-luna"
     assert call["reasoning"] == {"effort": "low"}
-    assert call["text"]["format"]["name"] == "odyssey_fixed_fact_semantic_enrichment_v1"
+    assert call["text"]["format"]["name"] == "odyssey_fixed_fact_semantic_enrichment_v2"
     assert set(call["text"]["format"]["schema"]["properties"]) == {"parts"}

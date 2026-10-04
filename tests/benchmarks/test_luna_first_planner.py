@@ -234,21 +234,21 @@ def test_production_sol_configuration_remains_unchanged() -> None:
     assert LUNA_EXPERIMENT_AUTOMATIC_RETRIES == 0
 
 
-def test_sol_prompt_and_provider_schema_match_v14_accepted_contract(
+def test_sol_prompt_and_provider_schema_match_v15_accepted_contract(
     schema: dict[str, Any],
 ) -> None:
-    """Freeze the Sol fallback contract accepted after the focused Journal v14 live gate."""
+    """Freeze the Sol fallback contract accepted after the Journal-converged v15 live gate."""
     prompt = render_request_planner_prompt(schema, BASELINE_CONTEXT).encode("utf-8")
     provider_schema = json.dumps(
         planner_result_json_schema(schema), ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")
-    assert len(prompt) == 27_286
+    assert len(prompt) == 25_366
     assert hashlib.sha256(prompt).hexdigest() == (
-        "9085e74275c86dbeb5c42438f3a6d1afd9dad2236354a0892f5e1a21a9625125"
+        "a696410a65ec841c153498bee9788f116fb8b1620bde83882c4d3d6495ee0633"
     )
-    assert len(provider_schema) == 47_418
+    assert len(provider_schema) == 47_049
     assert hashlib.sha256(provider_schema).hexdigest() == (
-        "dd7fba6948ce1503518f17df233b1842bda7316d45bf693f95c8c0cf538a518f"
+        "433c43a72f335f22bcfd22fe3311a728acf8a1c4edf5e3d58d0ac3d9654d75db"
     )
 
 
@@ -304,10 +304,10 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     schema_bytes = len(
         json.dumps(result_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     )
-    assert write_branch_bytes == 3_378
+    assert write_branch_bytes == 3_009
     assert write_branch_bytes <= int(7_343 * 0.75)
-    assert prompt_bytes == 35_070
-    assert schema_bytes == 18_539
+    assert prompt_bytes == 33_150
+    assert schema_bytes == 18_170
 
 
 def test_luna_prompt_contains_one_semantic_write_language(schema: dict[str, Any]) -> None:

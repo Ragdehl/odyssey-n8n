@@ -49,7 +49,8 @@ from odyssey_core.semantic_write import (
 )
 from odyssey_core.storage import VaultRepository
 
-FIXED_FACT_ENRICHMENT_CONTRACT_VERSION = "fixed-fact-semantic-enrichment-v1"
+FIXED_FACT_ENRICHMENT_CONTRACT_VERSION = "fixed-fact-semantic-enrichment-v2"
+FIXED_FACT_ENRICHMENT_FORMAT_NAME = "odyssey_fixed_fact_semantic_enrichment_v2"
 FIXED_FACT_ENRICHMENT_MAX_OUTPUT_TOKENS = 1024
 FIXED_FACT_SET_SEPARATOR = " · "
 
@@ -57,7 +58,7 @@ _FIXED_FACT_PROMPT = """You enrich one exact user-authored fact for a destinatio
 
 Return only ordered semantic fact parts. The concatenation of every part.text MUST equal the supplied fact byte-for-byte. Never paraphrase, translate, normalize, omit, reorder, or add text.
 
-Use literal parts for ordinary wording. Use an identity part only for an exact occurrence that may denote an existing reusable Odyssey identity. The identity object is lookup evidence only: it never selects a destination, authorizes a mutation, or creates a note. Use binding=self only when the occurrence denotes the authenticated human. A described identity may carry a candidate_scope when SELF or one bounded existing source defines its current member universe. Use extent=complete_set only for wording that denotes the entire finite current set, and one_member otherwise. SOURCE_DESCRIPTION describes the user's bounded source wording; it does not assert that the source exists. Never supply stable IDs, paths, Markdown, targets, destinations, note creation, mutation intent, or persistence details. If wording such as a generic role may not denote an existing identity, leaving it literal is safe.
+Use literal parts for ordinary wording. Use an identity part for an exact occurrence that may denote an existing reusable Odyssey identity. The identity object is lookup evidence only: it never selects a destination, authorizes a mutation, or creates a note. Use binding=self only when the occurrence denotes the authenticated human. When the wording itself defines a bounded identity universe through SELF or one bounded source, emit a described identity with candidate_scope; do not leave that occurrence literal merely because the source or members may not exist. Core, not you, decides whether the bounded source and members resolve. Use extent=complete_set only when the wording denotes the entire finite current set, and one_member otherwise. SOURCE_DESCRIPTION describes the user's bounded source wording; it does not assert that the source exists. Literal is safe for unbounded generic wording that does not define such an identity universe. Never supply stable IDs, paths, Markdown, targets, destinations, note creation, mutation intent, or persistence details.
 
 Return only the strict JSON object."""
 

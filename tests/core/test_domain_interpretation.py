@@ -123,12 +123,12 @@ def test_domain_interpretation_rejects_invalid_or_ungrounded_evidence(factory) -
         factory()
 
 
-def test_domain_handoff_matches_v2_accepted_ordinary_luna_prompt() -> None:
-    """Pin the ordinary Core prompt to the live-accepted v2 contract."""
+def test_domain_handoff_matches_accepted_journal_converged_luna_prompt() -> None:
+    """Pin ordinary Core to the live-accepted Journal-converged Luna contract."""
     baseline = {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
     prompt = render_luna_experimental_prompt(schema(), baseline).encode("utf-8")
     assert hashlib.sha256(prompt).hexdigest() == (
-        "07363348d91bded42affe314a386eb6400c3b761e6d7f565e208c7b55e721da1"
+        "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143"
     )
 
 
@@ -137,7 +137,7 @@ def test_domain_handoff_does_not_change_ordinary_luna_provider_schema() -> None:
     payload = luna_experimental_result_json_schema(schema())
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     assert hashlib.sha256(encoded).hexdigest() == (
-        "65877ae84df406d36648c37a7ad4826033990a1d1b2cc8a1d1a193a5e7ecedce"
+        "d336432ba67b471030ac67eed11bb389065d5832d4032906774bbef52e84cb23"
     )
 
 

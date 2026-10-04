@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.fixed_fact_capture import (
+    FIXED_FACT_ENRICHMENT_FORMAT_NAME,
     FIXED_FACT_ENRICHMENT_MAX_OUTPUT_TOKENS,
     decode_fixed_fact_enrichment,
     fixed_fact_enrichment_json_schema,
@@ -578,7 +579,7 @@ class OpenAILunaExperimentalPlanner:
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "odyssey_fixed_fact_semantic_enrichment_v1",
+                        "name": FIXED_FACT_ENRICHMENT_FORMAT_NAME,
                         "strict": True,
                         "schema": output_schema,
                     }
