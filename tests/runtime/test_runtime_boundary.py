@@ -1377,7 +1377,12 @@ def test_http_boundary_rejects_unsafe_delivery_identity_without_calling_core() -
 def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path) -> None:
     """The composition root wires environment paths into the existing production boundaries."""
     schema_path = tmp_path / "schema.json"
-    schema_path.write_text('{"fields": {}}', encoding="utf-8")
+    schema_path.write_text(
+        (Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
     pending = tmp_path / "pending"
     runtime_root = tmp_path / "runtime"
     vault_root = tmp_path / "vault"
@@ -1388,6 +1393,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings"))
     monkeypatch.setenv("ODYSSEY_CONTEXT_LIMIT", "4")
     monkeypatch.setenv("ODYSSEY_ACTOR", "test-runtime")
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks")
 
     class FakeIndex:
         def __init__(self, path):
@@ -1452,6 +1458,11 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     runtime = composition.build_runtime_from_environment()
     assert pending.is_dir()
     assert isinstance(runtime.identity_mapping_repository, IdentityMappingRepository)
+    tasks_capability = next(
+        item for item in runtime.application_catalog.capabilities() if item.id == "tasks"
+    )
+    assert tasks_capability.enabled is True
+    assert "tasks" in runtime.application_executors
     routed = runtime.execute("hello")
     assert routed.status is ApplicationStatus.COMPLETED
     assert routed.request_id != "request-test"  # Router owns the outer delivery correlation.

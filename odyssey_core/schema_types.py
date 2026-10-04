@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 
@@ -36,3 +37,26 @@ def is_application_managed_type(schema: Mapping[str, Any], type_id: str) -> bool
         item.get("id") == type_id and "managed_by" in item
         for item in canonical_type_definitions(schema)
     )
+
+
+def planning_schema_for_capability(
+    schema: Mapping[str, Any], capability_id: str | None
+) -> dict[str, Any]:
+    """Project app-owned canonical types into planner authority for one trusted app route only.
+
+    Registered ``managed_by`` types remain excluded from ordinary Core planning.  A trusted
+    application route may temporarily expose only the types it owns; persisted validation still uses
+    the unchanged managed schema.
+    """
+    projected = deepcopy(dict(schema))
+    if capability_id is None:
+        return projected
+    if not isinstance(capability_id, str) or not capability_id:
+        raise ValueError("Planning capability id is invalid")
+    raw_types = projected.get("types")
+    if not isinstance(raw_types, list):
+        raise ValueError("Canonical schema has unusable type data")
+    for definition in raw_types:
+        if isinstance(definition, dict) and definition.get("managed_by") == capability_id:
+            definition.pop("managed_by")
+    return projected

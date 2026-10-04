@@ -134,6 +134,29 @@ class PendingWorkRecorder(Protocol):
         """Persist one incomplete validated request and return its durable record ID."""
 
 
+class WritePreflightGuardError(ValueError):
+    """Reject a resolved write when domain-owned current-state invariants do not authorize it."""
+
+    def __init__(self, code: str) -> None:
+        if not isinstance(code, str) or not code:
+            raise ValueError("Write preflight guard code must be non-empty")
+        super().__init__(code)
+        self.code = code
+
+
+class WritePreflightGuard(Protocol):
+    """Validate domain state only after Core has resolved immutable write targets."""
+
+    def __call__(
+        self,
+        action: WriteAction,
+        preflight: tuple[UnitTargetPreflight, ...],
+        repository: VaultRepository,
+        schema: dict[str, Any],
+    ) -> None:
+        """Raise WritePreflightGuardError to fail closed before any mutation."""
+
+
 @dataclass(frozen=True, slots=True)
 class DependencyEvidence:
     """Explain why one source unit could not safely execute.
@@ -234,6 +257,7 @@ def execute_request(
     monotonic: Callable[[], float] = perf_counter,
     conversation_context: Sequence[Mapping[str, str]] = (),
     clarification_choice: ClarificationChoice | None = None,
+    write_preflight_guard: WritePreflightGuard | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -449,6 +473,7 @@ def execute_request(
                 self_binding_repository,
                 action_spans,
                 clarification_choice,
+                write_preflight_guard,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -861,6 +886,7 @@ def _execute_write(
     self_binding_repository: SelfBindingRepository | None,
     spans: SpanRecorder,
     clarification_choice: ClarificationChoice | None = None,
+    write_preflight_guard: WritePreflightGuard | None = None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     complete_set_references = tuple(
@@ -1001,8 +1027,19 @@ def _execute_write(
                 semantic_set_selector=semantic_set_selector,
                 **kwargs,
             )
+        if write_preflight_guard is not None:
+            spans.invoke(
+                "domain_preflight_guard",
+                write_preflight_guard,
+                executable,
+                preflight,
+                repository,
+                schema,
+            )
         executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
+    except WritePreflightGuardError as error:
+        return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=error.code)
     except RelationalResolutionError as error:
         return ActionResult(
             action_index,

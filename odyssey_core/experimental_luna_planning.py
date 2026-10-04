@@ -40,6 +40,7 @@ from odyssey_core.request_planning import (
     validate_planner_result,
     validate_request_action,
 )
+from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic_write import (
     SemanticWriteCompileError,
     SemanticWriteIntent,
@@ -453,6 +454,10 @@ class OpenAILunaExperimentalPlanner:
             tuple(teaching_examples) if teaching_examples is not None else None
         )
         self._domain_interpretation = domain_interpretation
+        self._planning_schema = planning_schema_for_capability(
+            schema,
+            domain_interpretation.capability_id if domain_interpretation is not None else None,
+        )
         self._monotonic = monotonic
         if not isinstance(model, str) or not model.strip():
             raise RequestPlanningError("Semantic planner model must be non-empty")
@@ -534,7 +539,7 @@ class OpenAILunaExperimentalPlanner:
         sizes: dict[str, int] = {}
         try:
             prompt = render_luna_experimental_prompt(
-                self._schema,
+                self._planning_schema,
                 self._current_context,
                 teaching_examples=self._teaching_examples,
                 conversation_context=conversation_context,
@@ -545,7 +550,7 @@ class OpenAILunaExperimentalPlanner:
                 self._current_context, self._domain_interpretation
             )
             output_schema = luna_experimental_result_json_schema(
-                self._schema,
+                self._planning_schema,
                 self._domain_interpretation,
                 authorized_calendar_dates=authorized_calendar_dates,
             )
@@ -623,7 +628,7 @@ class OpenAILunaExperimentalPlanner:
         try:
             result = validate_luna_experimental_result(
                 payload["result"],
-                self._schema,
+                self._planning_schema,
                 self._domain_interpretation,
                 authorized_calendar_dates=planner_authorized_calendar_dates(
                     self._current_context, self._domain_interpretation

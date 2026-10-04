@@ -60,8 +60,24 @@ def validate_field_value(field_id: str, value: Any, definition: dict[str, Any]) 
             raise NoteValidationError(
                 "Tags must be non-empty single-line strings without surrounding whitespace"
             )
-    if constraints.get("format") == "date-time" and not _is_date_time(value):
+    allowed = constraints.get("enum")
+    if allowed is not None:
+        if (
+            not isinstance(allowed, list)
+            or not allowed
+            or len(set(allowed)) != len(allowed)
+            or value not in allowed
+        ):
+            raise NoteValidationError(
+                f"Metadata field {field_id!r} has an invalid controlled value"
+            )
+    value_format = constraints.get("format")
+    if value_format == "date-time" and not _is_date_time(value):
         raise NoteValidationError(f"Metadata field {field_id!r} must be a date-time")
+    if value_format == "temporal-anchor" and not _is_temporal_anchor(value):
+        raise NoteValidationError(
+            f"Metadata field {field_id!r} must be a canonical temporal anchor"
+        )
 
 
 def _is_date(value: str) -> bool:
@@ -72,6 +88,21 @@ def _is_date(value: str) -> bool:
         return date.fromisoformat(value).isoformat() == value
     except ValueError:
         return False
+
+
+def _is_temporal_anchor(value: Any) -> bool:
+    """Accept only the canonical date or second-precision offset date-time Temporal emits."""
+    if not isinstance(value, str):
+        return False
+    if _is_date(value):
+        return True
+    if len(value) != 25 or value[10:11] != "T" or value[-6:-5] not in {"+", "-"}:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.isoformat(timespec="seconds") == value
 
 
 def _is_date_time(value: Any) -> bool:

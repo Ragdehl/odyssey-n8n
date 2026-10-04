@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "head": "516d12325e6cf4bc0eb14c416ac830744054ed3e",
+  "dirty_worktree": true,
+  "matrix_sha256": "99d3301ce1860e2a81e69eba8a2b77028825d05f432c9a1fc9aab628133effb3",
+  "source_digest": "8e017021d6ec9081762b00b22aa53327ee8446910afefe9e9ba5c860fcc60ca3",
+  "provider_attempts": 14,
+  "automatic_retries": 0,
+  "mutation_authority": false,
+  "sol_calls": 0,
+  "budget_upper_usd": 0.03958592000000001,
+  "estimated_regional_cost_usd": 0.00799348,
+  "passed": false,
+  "rows": [
+    {
+      "gate": "router",
+      "id": "R1-create",
+      "passed": true,
+      "actual": [
+        "tasks"
+      ],
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R2-complete",
+      "passed": true,
+      "actual": [
+        "tasks"
+      ],
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R3-deadline",
+      "passed": true,
+      "actual": [
+        "tasks"
+      ],
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R4-overdue",
+      "passed": true,
+      "actual": [
+        "tasks"
+      ],
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R5-future-not-task",
+      "passed": true,
+      "actual": [
+        "temporal"
+      ],
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R6-task-word-not-lifecycle",
+      "passed": true,
+      "actual": [
+        "core"
+      ],
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T1-create",
+      "passed": true,
+      "actual": {
+        "operation": "CREATE",
+        "temporal_roles": [
+          "TARGET_DATE"
+        ],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T2-complete",
+      "passed": true,
+      "actual": {
+        "operation": "COMPLETE",
+        "temporal_roles": [],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T3-deadline",
+      "passed": true,
+      "actual": {
+        "operation": "UPDATE",
+        "temporal_roles": [
+          "DEADLINE_AT"
+        ],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T4-overdue",
+      "passed": true,
+      "actual": {
+        "operation": "QUERY",
+        "temporal_roles": [],
+        "query_scope": "OVERDUE"
+      },
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "X1-create",
+      "passed": true,
+      "actual": [
+        [
+          "el viernes",
+          "EXACT_DATE",
+          "2026-10-09"
+        ]
+      ],
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "X2-deadline",
+      "passed": true,
+      "actual": [
+        [
+          "al 12 de octubre",
+          "EXACT_DATE",
+          "2026-10-12"
+        ]
+      ],
+      "error": null
+    },
+    {
+      "gate": "planner",
+      "id": "T1-create",
+      "passed": false,
+      "actual": null,
+      "error": "AttributeError"
+    },
+    {
+      "gate": "planner",
+      "id": "T2-complete",
+      "passed": false,
+      "actual": null,
+      "error": "AttributeError"
+    }
+  ],
+  "provider_records": [
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 698,
+      "output_tokens": 117,
+      "response_id": "resp_0dded487a6533dde016ac2bd870c6c87d1b896d2362f16df30",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 697,
+      "output_tokens": 79,
+      "response_id": "resp_0910e7042dcaaa5d016ac2bd896c5887d1a298ef13c6360f4b",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 705,
+      "output_tokens": 111,
+      "response_id": "resp_0c46747f62b15a38016ac2bd8cbd4c87d1a2aaea00a5d1b33f",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 696,
+      "output_tokens": 75,
+      "response_id": "resp_0c2956d17b05953a016ac2bd8f15b887d19fb59da05d7931ba",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 703,
+      "output_tokens": 239,
+      "response_id": "resp_0d80eee5536fd98e016ac2bd912cac87d1a40434bf522ea8d0",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 701,
+      "output_tokens": 100,
+      "response_id": "resp_0aac089ad9b22966016ac2bd956d5c87d190fb71cc7e585c97",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 441,
+      "output_tokens": 80,
+      "response_id": "resp_035cd55691518e3f016ac2bd98238887d19d596d43542fdf01",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 440,
+      "output_tokens": 60,
+      "response_id": "resp_045c7009be3f373e016ac2bd99e6dc87d1acb606ddf41fd5b7",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 448,
+      "output_tokens": 83,
+      "response_id": "resp_0bc7b73cf9da0630016ac2bd9b599487d1a4a8053675427034",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 439,
+      "output_tokens": 54,
+      "response_id": "resp_05430b4bb5708fbe016ac2bd9d344887d19404474c74e09de4",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 355,
+      "output_tokens": 102,
+      "response_id": "resp_060498e8fc1a4306016ac2bd9e7e0c87d1a9ea65d71146d3e3",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 362,
+      "output_tokens": 93,
+      "response_id": "resp_013816780a6bb0c1016ac2bda03e6887d19509755a7d483860",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 13678,
+      "output_tokens": 224,
+      "response_id": "resp_0fe116ce8bfa9c94016ac2bda2704887d1a53a0e7e81bbc94a",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 13691,
+      "output_tokens": 216,
+      "response_id": "resp_0266af3ad7992d47016ac2bda5d86487d1add26af427637595",
+      "status": "completed"
+    }
+  ]
+}

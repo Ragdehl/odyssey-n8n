@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "current_context": {"date":"2026-10-04","time":"22:51:00","timezone":"Europe/Paris"},
+  "now": "2026-10-04T22:51:00+02:00",
+  "router_cases": [
+    {"id":"R1-create","source":"Tengo que llamar al banco el viernes.","expect":"tasks"},
+    {"id":"R2-complete","source":"Marca llamar al banco como hecho.","expect":"tasks"},
+    {"id":"R3-deadline","source":"Cambia la fecha límite de llamar al banco al 12 de octubre.","expect":"tasks"},
+    {"id":"R4-overdue","source":"¿Qué tareas tengo vencidas?","expect":"tasks"},
+    {"id":"R5-future-not-task","source":"El fontanero viene mañana a las 15:35.","expect":"temporal"},
+    {"id":"R6-task-word-not-lifecycle","source":"La tarea de matemáticas de Bruno era muy difícil.","expect":"core"}
+  ],
+  "task_cases": [
+    {"id":"T1-create","source":"Tengo que llamar al banco el viernes.","operation":"CREATE","temporal":[["el viernes","TARGET_DATE"]],"query_scope":null},
+    {"id":"T2-complete","source":"Marca llamar al banco como hecho.","operation":"COMPLETE","temporal":[],"query_scope":null},
+    {"id":"T3-deadline","source":"Cambia la fecha límite de llamar al banco al 12 de octubre.","operation":"UPDATE","temporal":[["12 de octubre","DEADLINE_AT"]],"query_scope":null},
+    {"id":"T4-overdue","source":"¿Qué tareas tengo vencidas?","operation":"QUERY","temporal":[],"query_scope":"OVERDUE"}
+  ],
+  "temporal_cases": [
+    {"id":"X1-create","source":"Tengo que llamar al banco el viernes.","text":"el viernes","kind":"EXACT_DATE","value":"2026-10-09"},
+    {"id":"X2-deadline","source":"Cambia la fecha límite de llamar al banco al 12 de octubre.","text":"12 de octubre","kind":"EXACT_DATE","value":"2026-10-12"}
+  ],
+  "planner_cases": ["T1-create","T2-complete"]
+}

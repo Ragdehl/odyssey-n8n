@@ -16,6 +16,8 @@ from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
 from odyssey_core.domain_interpretation import (
+    DOMAIN_PROPERTY_REMOVE_PREFIX,
+    DOMAIN_PROPERTY_SET_PREFIX,
     DomainInterpretation,
 )
 from odyssey_core.notes.validation import NoteValidationError, validate_field_value
@@ -554,6 +556,15 @@ def _render_domain_interpretation_section(
     payload = json.dumps(
         interpretation.to_prompt_payload(), ensure_ascii=False, separators=(",", ":")
     )
+    property_instruction = (
+        " Application evidence kinds property.FIELD and property_remove.FIELD are closed structured "
+        "property authority for this routed request. For property.FIELD, reproduce VALUE exactly once "
+        "as one set mutation of FIELD; for property_remove.FIELD, remove FIELD with null exactly once. "
+        "When any such property evidence is supplied, do not add, remove, normalize, or infer any other "
+        "canonical property mutation anywhere in the plan. Facts and identity/reference resolution remain "
+        "Core-owned. If the required property evidence cannot be represented safely, ESCALATE rather than "
+        "approximating it."
+    )
     if semantic_write_mode:
         temporal_instruction = (
             "Every supplied temporal_reference evidence item is mandatory in a PLAN. Account for each "
@@ -582,7 +593,10 @@ def _render_domain_interpretation_section(
         + payload
         + "\nCore still owns action choice, semantic ownership, targets, identities, references, "
         "cardinality, facts, validation, and mutation planning. Do not infer extra app semantics "
-        "or copy application-specific structure into Core fields. " + temporal_instruction
+        "or copy application-specific structure into Core fields. "
+        + property_instruction
+        + " "
+        + temporal_instruction
     )
 
 
@@ -981,6 +995,43 @@ def _match_allowed_anchor_value(
     return None
 
 
+def _validate_domain_property_evidence(
+    plan: RequestPlan, interpretation: DomainInterpretation
+) -> None:
+    """Require app-normalized property mutations exactly and reject ungrounded property invention."""
+    property_evidence = interpretation.property_evidence()
+    if not property_evidence:
+        return
+    expected: Counter[tuple[str, str, object]] = Counter()
+    for item in property_evidence:
+        if item.kind.startswith(DOMAIN_PROPERTY_SET_PREFIX):
+            field = item.kind[len(DOMAIN_PROPERTY_SET_PREFIX) :]
+            if not field:
+                raise RequestPlanningError("Domain property evidence field is invalid")
+            expected[(field, "set", item.value)] += 1
+        elif item.kind.startswith(DOMAIN_PROPERTY_REMOVE_PREFIX):
+            field = item.kind[len(DOMAIN_PROPERTY_REMOVE_PREFIX) :]
+            if not field or item.value != "null":
+                raise RequestPlanningError("Domain property removal evidence is invalid")
+            expected[(field, "remove", None)] += 1
+
+    found: Counter[tuple[str, str, object]] = Counter()
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            continue
+        for unit in action.units:
+            if unit.reference_lookup_only:
+                continue
+            for change in unit.properties:
+                found[(change.field, change.op, change.value)] += 1
+    if found != expected:
+        raise RequestPlanningError(
+            "Core plan property mutations do not exactly match specialized domain evidence",
+            stage=PlannerValidationStage.PROPERTY_CHANGE,
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
+
+
 def validate_plan_against_domain_interpretation(
     plan: RequestPlan, interpretation: DomainInterpretation | None
 ) -> None:
@@ -989,6 +1040,7 @@ def validate_plan_against_domain_interpretation(
         return
     if not isinstance(interpretation, DomainInterpretation):
         raise RequestPlanningError("Domain interpretation is invalid")
+    _validate_domain_property_evidence(plan, interpretation)
     evidence = interpretation.temporal_references()
     allowed = Counter(item.value for item in evidence)
     anchors = tuple(item.temporal_anchor() for item in evidence)
@@ -1834,12 +1886,17 @@ def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]
         RequestPlanningError: If the property value type has no Structured Outputs mapping.
     """
     value_type = definition["value_type"]
+    constraints = definition.get("constraints", {})
     if value_type == "integer":
         return {"type": "integer"}
     if value_type == "array[string]":
         return {"type": "array", "items": {"type": "string"}}
     if value_type in {"string", "date"}:
-        return {"type": "string"}
+        result: dict[str, Any] = {"type": "string"}
+        controlled = constraints.get("enum") if isinstance(constraints, Mapping) else None
+        if controlled is not None:
+            result["enum"] = list(controlled)
+        return result
     raise RequestPlanningError(f"Unsupported writable property value type: {value_type!r}")
 
 

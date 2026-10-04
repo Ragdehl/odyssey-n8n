@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from .temporal import TemporalAnchor, TemporalValueError
 
 TEMPORAL_REFERENCE_EVIDENCE = "temporal_reference"
+DOMAIN_PROPERTY_SET_PREFIX = "property."
+DOMAIN_PROPERTY_REMOVE_PREFIX = "property_remove."
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,63}\Z")
 _INTENT = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
 
@@ -97,3 +99,12 @@ class DomainInterpretation:
     def temporal_references(self) -> tuple[DomainEvidence, ...]:
         """Return exact date/date-time evidence that may anchor Core writes."""
         return tuple(item for item in self.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE)
+
+    def property_evidence(self) -> tuple[DomainEvidence, ...]:
+        """Return app-normalized property evidence without interpreting its business meaning."""
+        return tuple(
+            item
+            for item in self.evidence
+            if item.kind.startswith(DOMAIN_PROPERTY_SET_PREFIX)
+            or item.kind.startswith(DOMAIN_PROPERTY_REMOVE_PREFIX)
+        )

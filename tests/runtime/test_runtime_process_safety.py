@@ -169,8 +169,7 @@ def test_persistent_runtime_refreshes_planner_clock_for_each_request(
     monkeypatch, tmp_path: Path
 ) -> None:
     """Relative-date planning must not keep the process-start timestamp forever."""
-    schema_path = tmp_path / "schema.json"
-    schema_path.write_text('{"fields": {}}', encoding="utf-8")
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
     monkeypatch.setenv("ODYSSEY_SCHEMA_PATH", str(schema_path))
     monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(tmp_path / "pending"))
     monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(tmp_path / "runtime"))

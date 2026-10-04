@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Lock, RLock
 from time import perf_counter
-from typing import cast
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from odyssey_apps import (
@@ -22,9 +22,24 @@ from odyssey_apps import (
     OpenAIApplicationRouter,
 )
 from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
+from odyssey_apps.schema_extensions import compose_application_schema
+from odyssey_apps.tasks import (
+    TASK_SCHEMA_EXTENSION,
+    OpenAITaskInterpreter,
+    TaskCorePlanner,
+    TaskInterpretationError,
+    TaskLifecycleGuard,
+    TaskOperation,
+    TaskQueryError,
+    TaskQueryService,
+    compose_task_domain_interpretation,
+)
 from odyssey_core.application import (
+    ActionResult,
+    ActionStatus,
     ApplicationResult,
     ApplicationStatus,
+    WritePreflightGuard,
     allocate_request_id,
     execute_request,
 )
@@ -84,6 +99,7 @@ from odyssey_core.request_planning import (
     WriteAction,
     validate_request_plan,
 )
+from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.storage import VaultRepository
@@ -1148,12 +1164,20 @@ def build_runtime_from_environment() -> RuntimeComposition:
         "/data/odyssey/runtime/phase11a-benchmark/embedding-cache",
     )
     with schema_path.open("r", encoding="utf-8") as schema_file:
-        schema = json.load(schema_file)
+        base_schema = json.load(schema_file)
+    application_schema_extensions = (TASK_SCHEMA_EXTENSION,)
+    schema = compose_application_schema(base_schema, application_schema_extensions)
 
     repository = VaultRepository(vault_root)
     embedder = FastEmbedTextEmbedder(cache_dir=embedding_cache, local_files_only=True)
     context_index = ContextIndex(runtime_root / "context.sqlite3")
     semantic_index = SemanticEntityIndex(runtime_root / "semantic.sqlite3")
+    application_semantic_indexes = {
+        extension.capability_id: SemanticEntityIndex(
+            runtime_root / f"semantic-{extension.capability_id}.sqlite3"
+        )
+        for extension in application_schema_extensions
+    }
     contextual_reasoner = _build_contextual_reasoner()
     writer = OpenAILunaWriter()
     fact_selector = OpenAILunaFactSelector()
@@ -1180,10 +1204,17 @@ def build_runtime_from_environment() -> RuntimeComposition:
         *,
         conversation_context_override: Sequence[Mapping[str, str]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        planner_decorator: Callable[[Any], Any] | None = None,
+        write_preflight_guard: WritePreflightGuard | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
         clock = _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
+        capability_id = (
+            domain_interpretation.capability_id if domain_interpretation is not None else None
+        )
+        execution_schema = planning_schema_for_capability(schema, capability_id)
+        execution_semantic_index = application_semantic_indexes.get(capability_id, semantic_index)
         if resume_plan is not None:
             planner = _FixedRequestPlanner(resume_plan)
         elif domain_interpretation is None:
@@ -1192,6 +1223,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
             planner = OpenAIRequestPlanner.from_environment(
                 schema, planner_context, domain_interpretation=domain_interpretation
             )
+        if planner_decorator is not None:
+            if resume_plan is not None:
+                raise ValueError("resume plan cannot use a planner decorator")
+            planner = planner_decorator(planner)
         if resume_plan is not None and domain_interpretation is not None:
             raise ValueError("resume plan cannot carry fresh domain interpretation")
         if domain_interpretation is not None and domain_interpretation.source_text != user_request:
@@ -1206,9 +1241,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
             user_request,
             planner=planner,
             repository=repository,
-            schema=schema,
+            schema=execution_schema,
             context_index=context_index,
-            semantic_index=semantic_index,
+            semantic_index=execution_semantic_index,
             embedder=embedder,
             contextual_reasoner=contextual_reasoner,
             actor=persistence_actor,
@@ -1236,6 +1271,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 else ()
             ),
             clarification_choice=clarification_choice,
+            write_preflight_guard=write_preflight_guard,
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)
@@ -1245,6 +1281,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
         runtime_root.mkdir(parents=True, exist_ok=True)
         context_index.rebuild(repository, schema, embedder)
         semantic_index.rebuild(repository, schema, embedder)
+        for capability_id, index in application_semantic_indexes.items():
+            index.rebuild(
+                repository, planning_schema_for_capability(schema, capability_id), embedder
+            )
 
     def intelligent_notes(
         query: str, explicit_filters: Sequence[object]
@@ -1464,6 +1504,164 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 (stage, *core_result.operational.stages),
             ),
         )
+
+    def execute_tasks(
+        source_text: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+    ) -> ApplicationResult:
+        """Interpret Tasks lifecycle, consume Temporal when needed, then delegate mutation to Core."""
+        clock = _current_time()
+        task_interpreter = OpenAITaskInterpreter.from_environment()
+        task_started = perf_counter()
+        try:
+            task = task_interpreter.interpret(source_text, conversation_context)
+        except TaskInterpretationError as error:
+            duration = max(0.0, (perf_counter() - task_started) * 1000)
+            stage = OperationalStage(
+                "tasks.interpretation",
+                OperationalOutcome.FAILED,
+                duration,
+                model=task_interpreter.model,
+                reasoning_effort=task_interpreter.reasoning_effort,
+                usage=normalize_provider_usage(task_interpreter.last_usage),
+                error_category=type(error).__name__,
+            )
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.FAILED,
+                (),
+                (),
+                planning_error="TASK_INTERPRETATION_FAILED",
+                operational=OperationalEvidence(duration, (stage,)),
+            )
+        task_duration = max(0.0, (perf_counter() - task_started) * 1000)
+        task_stage = OperationalStage(
+            "tasks.interpretation",
+            OperationalOutcome.COMPLETED,
+            task_duration,
+            model=task_interpreter.model,
+            reasoning_effort=task_interpreter.reasoning_effort,
+            usage=normalize_provider_usage(task_interpreter.last_usage),
+        )
+        stages: list[OperationalStage] = [task_stage]
+        total_duration = task_duration
+        if task.operation is TaskOperation.QUERY:
+            assert task.query_scope is not None
+            query_started = perf_counter()
+            try:
+                retrieval = TaskQueryService(repository, schema).query(
+                    source_text, task.query_scope, now=clock["timestamp"]
+                )
+            except TaskQueryError as error:
+                duration = max(0.0, (perf_counter() - query_started) * 1000)
+                stages.append(
+                    OperationalStage(
+                        "tasks.query",
+                        OperationalOutcome.FAILED,
+                        duration,
+                        error_category=type(error).__name__,
+                    )
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.FAILED,
+                    (),
+                    (),
+                    planning_error="TASK_QUERY_FAILED",
+                    operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                )
+            duration = max(0.0, (perf_counter() - query_started) * 1000)
+            stages.append(OperationalStage("tasks.query", OperationalOutcome.COMPLETED, duration))
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.COMPLETED,
+                (ActionResult(0, "retrieve", ActionStatus.COMPLETED, retrieval=retrieval),),
+                (),
+                operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+            )
+
+        temporal = None
+        if task.requires_temporal():
+            temporal_interpreter = OpenAITemporalInterpreter.from_environment(
+                {key: clock[key] for key in ("date", "time", "timezone")}
+            )
+            temporal_started = perf_counter()
+            try:
+                temporal = temporal_interpreter.interpret(source_text, conversation_context)
+                if any(
+                    kind
+                    not in {
+                        TemporalResolutionKind.EXACT_DATE,
+                        TemporalResolutionKind.EXACT_DATETIME,
+                    }
+                    for kind in temporal.kinds()
+                ):
+                    raise TemporalInterpreterError("Tasks requires exact temporal values")
+            except TemporalInterpreterError as error:
+                duration = max(0.0, (perf_counter() - temporal_started) * 1000)
+                stages.append(
+                    OperationalStage(
+                        "temporal.interpretation",
+                        OperationalOutcome.FAILED,
+                        duration,
+                        model=temporal_interpreter.model,
+                        reasoning_effort=temporal_interpreter.reasoning_effort,
+                        usage=normalize_provider_usage(temporal_interpreter.last_usage),
+                        error_category=type(error).__name__,
+                    )
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="TASK_TEMPORAL_UNRESOLVED",
+                    operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                )
+            duration = max(0.0, (perf_counter() - temporal_started) * 1000)
+            total_duration += duration
+            stages.append(
+                OperationalStage(
+                    "temporal.interpretation",
+                    OperationalOutcome.COMPLETED,
+                    duration,
+                    model=temporal_interpreter.model,
+                    reasoning_effort=temporal_interpreter.reasoning_effort,
+                    usage=normalize_provider_usage(temporal_interpreter.last_usage),
+                )
+            )
+        try:
+            domain = compose_task_domain_interpretation(task, temporal, now=clock["timestamp"])
+        except TaskInterpretationError:
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="TASK_DOMAIN_INVALID",
+                operational=OperationalEvidence(total_duration, tuple(stages)),
+            )
+        core_result = core_execute(
+            source_text,
+            request_id,
+            authenticated_actor,
+            conversation_context_override=conversation_context,
+            domain_interpretation=domain,
+            planner_decorator=lambda planner: TaskCorePlanner(planner, task),
+            write_preflight_guard=TaskLifecycleGuard(task.operation),
+        )
+        return replace(
+            core_result,
+            operational=OperationalEvidence(
+                total_duration + (core_result.operational.total_duration_ms or 0.0),
+                (*stages, *core_result.operational.stages),
+            ),
+        )
+
+    if "tasks" in enabled_application_ids:
+        application_executors["tasks"] = execute_tasks
 
     return RuntimeComposition(
         core_execute=core_execute,

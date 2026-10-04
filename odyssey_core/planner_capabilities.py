@@ -15,8 +15,8 @@ LIMITATIONS = {
 }
 _EXCLUDED_FIELDS: set[str] = set()
 _SUPPORTED_WRITE_VALUE_TYPES = {"string", "integer", "array[string]", "date"}
-_SUPPORTED_WRITE_CONSTRAINTS = {"non_empty", "minimum", "unique_items", "format"}
-_SUPPORTED_WRITE_FORMATS = {"date-time"}
+_SUPPORTED_WRITE_CONSTRAINTS = {"non_empty", "minimum", "unique_items", "format", "enum"}
+_SUPPORTED_WRITE_FORMATS = {"date-time", "temporal-anchor"}
 
 
 def build_planner_capabilities(
@@ -157,7 +157,7 @@ def _filter_capability(field: Mapping[str, Any], applies_to: list[str]) -> dict[
     return {
         "value_type": value_type,
         "operators": list(supported_filter_operators(field)),
-        "controlled_values": [],
+        "controlled_values": list(field.get("constraints", {}).get("enum", ())),
         "applies_to": applies_to,
         "description": field["description"],
         "retrieval_guidance": field.get("retrieval_guidance", ""),
@@ -207,5 +207,15 @@ def _validate_write_constraint_compatibility(
         raise ValueError(f"Writable property {field_id!r} uses minimum on non-integer data")
     if constraints.get("unique_items") is True and value_type != "array[string]":
         raise ValueError(f"Writable property {field_id!r} uses unique_items on non-array data")
+    if "enum" in constraints:
+        values = constraints["enum"]
+        if (
+            value_type != "string"
+            or not isinstance(values, list)
+            or not values
+            or any(not isinstance(value, str) or not value for value in values)
+            or len(values) != len(set(values))
+        ):
+            raise ValueError(f"Writable property {field_id!r} declares an invalid enum")
     if constraints.get("non_empty") is True and value_type != "string":
         raise ValueError(f"Writable property {field_id!r} uses non_empty on non-string data")
