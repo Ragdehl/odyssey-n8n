@@ -59,7 +59,7 @@ def identity(name: str) -> dict[str, Any]:
 def semantic_result(*, date: str = "2026-10-03", include_temporal: bool = True) -> dict[str, Any]:
     parts: list[dict[str, Any]] = [{"kind": "literal", "text": "Empieza "}]
     if include_temporal:
-        parts.append({"kind": "temporal_reference", "text": "mañana", "date": date})
+        parts.append({"kind": "temporal_reference", "text": "mañana", "value": date})
     parts.extend(
         [
             {"kind": "literal", "text": " a vivir con "},
@@ -123,21 +123,17 @@ def test_domain_interpretation_rejects_invalid_or_ungrounded_evidence(factory) -
         factory()
 
 
-def test_domain_handoff_matches_accepted_journal_converged_luna_prompt() -> None:
-    """Pin ordinary Core to the live-accepted Journal-converged Luna contract."""
+def test_domain_handoff_retires_old_journal_prompt_but_keeps_ordinary_luna_schema() -> None:
+    """Temporal routing may change instructions without widening ordinary Luna output authority."""
     baseline = {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
     prompt = render_luna_experimental_prompt(schema(), baseline).encode("utf-8")
-    assert hashlib.sha256(prompt).hexdigest() == (
-        "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143"
-    )
-
-
-def test_domain_handoff_does_not_change_ordinary_luna_provider_schema() -> None:
-    """Pin the ordinary Core provider schema while specialized evidence remains opt-in."""
     payload = luna_experimental_result_json_schema(schema())
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    assert hashlib.sha256(prompt).hexdigest() != (
+        "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143"
+    )
     assert hashlib.sha256(encoded).hexdigest() == (
-        "d336432ba67b471030ac67eed11bb389065d5832d4032906774bbef52e84cb23"
+        "240ace2627aecaaf8f91522eba7066af2edb09bcfa7463b7632fcb38ef37d2a8"
     )
 
 
@@ -167,6 +163,8 @@ def test_specialized_evidence_is_additive_and_never_grants_core_semantics() -> N
     assert '"value":"2026-10-03"' in prompt
     assert "Core still owns action choice, semantic ownership, targets, identities" in prompt
     assert "never as mutation authority" in prompt
+    assert "Every supplied temporal_reference evidence item is mandatory" in prompt
+    assert "ESCALATE instead of returning a partial PLAN" in prompt
 
 
 def test_luna_core_schema_gains_only_shared_temporal_part_when_evidence_requires_it() -> None:
@@ -207,3 +205,235 @@ def test_core_rejects_invented_or_dropped_specialized_temporal_evidence(
 ) -> None:
     with pytest.raises(RequestPlanningError):
         validate_luna_experimental_result(payload, schema(), domain_interpretation=interpretation())
+
+
+def test_core_requires_every_exact_date_from_multi_temporal_handoff() -> None:
+    source = "Marta Test trabajó ayer y hoy."
+    temporal = DomainInterpretation(
+        "temporal",
+        source,
+        "TEMPORAL_RESOLUTION",
+        (
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, "ayer", "2026-10-01"),
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, "hoy", "2026-10-02"),
+        ),
+    )
+
+    def result(*, include_today: bool) -> dict[str, Any]:
+        facts = [
+            {
+                "parts": [
+                    {"kind": "literal", "text": "Trabajó "},
+                    {"kind": "temporal_reference", "text": "ayer", "value": "2026-10-01"},
+                    {"kind": "literal", "text": "."},
+                ]
+            }
+        ]
+        if include_today:
+            facts.append(
+                {
+                    "parts": [
+                        {"kind": "literal", "text": "Trabajó "},
+                        {"kind": "temporal_reference", "text": "hoy", "value": "2026-10-02"},
+                        {"kind": "literal", "text": "."},
+                    ]
+                }
+            )
+        return {
+            "outcome": "PLAN",
+            "actions": [
+                {
+                    "kind": "write",
+                    "operations": [
+                        {
+                            "target": identity("Marta Test"),
+                            "apply_to": "one",
+                            "intent": "record",
+                            "facts": facts,
+                            "properties": [],
+                            "tag_changes": [],
+                            "destination_type": None,
+                        }
+                    ],
+                }
+            ],
+            "limitations": [],
+            "clarification_code": None,
+            "presentation_intent": "answer",
+        }
+
+    accepted = validate_luna_experimental_result(
+        result(include_today=True), schema(), domain_interpretation=temporal
+    )
+    assert isinstance(accepted, RequestPlan)
+    with pytest.raises(RequestPlanningError, match="omitted required"):
+        validate_luna_experimental_result(
+            result(include_today=False), schema(), domain_interpretation=temporal
+        )
+
+
+def test_core_rejects_right_date_bound_to_wrong_temporal_wording() -> None:
+    payload = semantic_result()
+    temporal_part = payload["actions"][0]["operations"][0]["facts"][0]["parts"][1]
+    temporal_part["text"] = "hoy"
+
+    with pytest.raises(RequestPlanningError, match="wording/temporal evidence"):
+        validate_luna_experimental_result(payload, schema(), domain_interpretation=interpretation())
+
+
+def test_core_preserves_repeated_same_day_evidence_count_for_entity_write() -> None:
+    temporal = DomainInterpretation(
+        "temporal",
+        "Marta Test trabajó hoy y descansó hoy.",
+        "TEMPORAL_RESOLUTION",
+        (
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, "hoy", "2026-10-02"),
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, "hoy", "2026-10-02"),
+        ),
+    )
+
+    def result(repetitions: int) -> dict[str, Any]:
+        facts = []
+        labels = ("Trabajó ", "Descansó ", "Volvió ")
+        for index in range(repetitions):
+            facts.append(
+                {
+                    "parts": [
+                        {"kind": "literal", "text": labels[index]},
+                        {"kind": "temporal_reference", "text": "hoy", "value": "2026-10-02"},
+                        {"kind": "literal", "text": "."},
+                    ]
+                }
+            )
+        return {
+            "outcome": "PLAN",
+            "actions": [
+                {
+                    "kind": "write",
+                    "operations": [
+                        {
+                            "target": identity("Marta Test"),
+                            "apply_to": "one",
+                            "intent": "record",
+                            "facts": facts,
+                            "properties": [],
+                            "tag_changes": [],
+                            "destination_type": None,
+                        }
+                    ],
+                }
+            ],
+            "limitations": [],
+            "clarification_code": None,
+            "presentation_intent": "answer",
+        }
+
+    assert isinstance(
+        validate_luna_experimental_result(result(2), schema(), domain_interpretation=temporal),
+        RequestPlan,
+    )
+    with pytest.raises(RequestPlanningError, match="omitted required"):
+        validate_luna_experimental_result(result(1), schema(), domain_interpretation=temporal)
+    with pytest.raises(RequestPlanningError, match="not supplied"):
+        validate_luna_experimental_result(result(3), schema(), domain_interpretation=temporal)
+
+
+def test_exact_datetime_becomes_day_link_plus_clock_and_internal_anchor() -> None:
+    """Core renders the clock and retains the validated exact date-time as fact metadata."""
+    temporal = DomainInterpretation(
+        "temporal",
+        "Marta Test ve mañana a las 15:35 a Daniel Test.",
+        "TEMPORAL_RESOLUTION",
+        (
+            DomainEvidence(
+                TEMPORAL_REFERENCE_EVIDENCE,
+                "mañana a las 15:35",
+                "2026-10-03T15:35:00+02:00",
+            ),
+        ),
+    )
+    payload = semantic_result()
+    temporal_part = payload["actions"][0]["operations"][0]["facts"][0]["parts"][1]
+    temporal_part["text"] = "mañana a las 15:35"
+    temporal_part["value"] = "2026-10-03T15:35:00+02:00"
+
+    plan = validate_luna_experimental_result(payload, schema(), domain_interpretation=temporal)
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    target = action.units[0]
+    assert "[[calendar/days/2026-10-03|03-10-2026]] 15:35" in target.facts[0]
+    assert [[anchor.value for anchor in row] for row in target.fact_temporal_anchors] == [
+        ["2026-10-03T15:35:00+02:00"]
+    ]
+
+
+def test_calendar_day_target_consumes_date_but_keeps_exact_clock_anchor() -> None:
+    """A Day-owned fact avoids a self-link while preserving its exact clock coordinate."""
+    temporal = DomainInterpretation(
+        "temporal",
+        "Mañana a las 15:35 voy al dentista.",
+        "TEMPORAL_RESOLUTION",
+        (
+            DomainEvidence(
+                TEMPORAL_REFERENCE_EVIDENCE,
+                "Mañana a las 15:35",
+                "2026-10-03T15:35:00+02:00",
+            ),
+        ),
+    )
+    day = {
+        "description": "2026-10-03",
+        "binding": "described",
+        "direct_name": None,
+        "note_type": "calendar_day",
+        "filters": [],
+        "candidate_scope": None,
+    }
+    payload = {
+        "outcome": "PLAN",
+        "actions": [
+            {
+                "kind": "write",
+                "operations": [
+                    {
+                        "target": day,
+                        "apply_to": "one",
+                        "intent": "record",
+                        "facts": [
+                            {
+                                "parts": [
+                                    {
+                                        "kind": "temporal_reference",
+                                        "text": "Mañana a las 15:35",
+                                        "value": "2026-10-03T15:35:00+02:00",
+                                    },
+                                    {"kind": "literal", "text": " — Voy al dentista."},
+                                ]
+                            }
+                        ],
+                        "properties": [],
+                        "tag_changes": [],
+                        "destination_type": None,
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+        "clarification_code": None,
+        "presentation_intent": "answer",
+    }
+
+    plan = validate_luna_experimental_result(
+        payload,
+        schema(),
+        domain_interpretation=temporal,
+        authorized_calendar_dates=("2026-10-03",),
+    )
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    unit = action.units[0]
+    assert unit.target.type == "calendar_day"
+    assert unit.facts == ("15:35 — Voy al dentista.",)
+    assert [[anchor.value for anchor in row] for row in unit.fact_temporal_anchors] == [
+        ["2026-10-03T15:35:00+02:00"]
+    ]

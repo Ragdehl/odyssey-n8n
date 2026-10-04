@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from decimal import Decimal
 
 import pytest
 
@@ -31,27 +30,28 @@ def test_v4_runs_only_the_three_current_bounded_source_successors() -> None:
     )
 
 
-def test_v4_keeps_exact_v3_model_facing_contract() -> None:
+def test_v4_is_retained_passing_historical_evidence() -> None:
     _cases, context = run_live.load_gate_cases()
     schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
-    assert prior._contract_hashes(schema, context) == (
+    historical = (
         run_live.PROMPT_SHA256,
         run_live.PROVIDER_SCHEMA_SHA256,
         run_live.TEACHING_SHA256,
     )
+    assert prior._contract_hashes(schema, context) != historical
+    artifacts = list(run_live.RESULTS_DIR.glob("*.json"))
+    assert len(artifacts) == 1
+    artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["version"] == 4
+    assert artifact["acceptable"] is True
+    assert artifact["provider_attempts"] == 3
+    assert artifact["automatic_retries"] == 0
 
 
-def test_v4_budget_is_three_calls_and_bounded() -> None:
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == 3
-    assert budget["conservative_usd_upper"] == Decimal("0.0388728")
-    assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.040")
-
-
-def test_v4_has_zero_provider_authority_without_explicit_flag(
+def test_v4_preflight_refuses_reuse_after_contract_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="contract changed"):
         run_live._preflight()

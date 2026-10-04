@@ -22,6 +22,7 @@ from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, 
 from .identity_boundary import AuthenticatedActorContext, SelfBindingError, SelfBindingRepository
 from .materialization import (
     BoundedNoteWriter,
+    materialize_calendar_day_record,
     materialize_create,
     materialize_delete,
     materialize_type_migration,
@@ -70,6 +71,7 @@ from .semantic_sets import (
     resolve_semantic_set,
 )
 from .storage import VaultRepository
+from .temporal import CALENDAR_DAY_TYPE
 from .write_target import WriteTargetDecision, WriteTargetOutcome
 
 
@@ -1278,7 +1280,21 @@ def _execute_single_units(
             continue
         decision = WriteTargetDecision(target.outcome, existing_note_id=target.stable_id)
         try:
-            if target.outcome is WriteTargetOutcome.CREATE:
+            if unit.target.type == CALENDAR_DAY_TYPE:
+                persisted = spans.invoke(
+                    f"unit[{index}].materialize",
+                    materialize_calendar_day_record,
+                    unit,
+                    target,
+                    repository=repository,
+                    schema=schema,
+                    actor=actor,
+                    now=now,
+                    rendered_facts=rendered_facts[index],
+                    request_id=request_id,
+                    fact_ordinals=unit_ordinals[index],
+                )
+            elif target.outcome is WriteTargetOutcome.CREATE:
                 persisted = spans.invoke(
                     f"unit[{index}].materialize",
                     materialize_create,

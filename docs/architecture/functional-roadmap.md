@@ -122,12 +122,28 @@ final reviewed Luna/low planner evidence fixed the blocking ownership regression
 approved fail-closed degradations. PROD has not been promoted to #148.
 
 [Temporal Foundation v1](temporal-foundation-v1.md) is provider-free complete. Calendar v0 and
-Application Boundary + Router v0 have completed their focused live gates and isolated-DEV adoption,
-and the shared Temporal contract now adds timezone-validated `EXACT_DATETIME` without introducing
-app-to-app routing. A bounded Journal-convergence follow-up is now being validated before Tasks: new
-everyday diary capture targets Calendar Day, while historical `journal_entry` notes remain readable.
-Because this changes Router/Calendar and Core planner-facing contracts, fresh focused live evidence is
-required before the follow-up is accepted. **Tasks** remains the next functional phase afterward.
+Application Boundary + Router v0 have completed their earlier focused live gates and isolated-DEV
+adoption, and the shared Temporal contract now adds timezone-validated `EXACT_DATETIME` without
+introducing app-to-app routing. The bounded Journal/Temporal convergence follow-up remains the active
+closeout before Tasks. Router v6 first passed its 17/17 successor matrix, Temporal passed 5/6 with the
+sole missing-offset result subsequently canonicalized deterministically, and the `complete_set`
+fact-reference correction then passed its consumed Core successor gate 4/4 at `$0.01135904` regional
+estimated cost. A later disposable full-runtime user-path check intentionally went beyond those isolated
+model gates and found two additional integration/model-boundary issues: the exact Ana/Luis request
+completed correctly but Router did not split it on that call, while `Mañana a las 15:35 viene el
+fontanero.` failed closed with zero mutation after Luna semantic-write validation and bounded Sol
+fallback. Review found provider schemas still admitted managed Calendar Day shapes that deterministic
+Core rejects. The candidate now aligns Luna's Day operation branch with Core's `one + record +
+facts-only` rule and constrains Sol Day selection to trusted exact dates. The explicitly authorized
+eight-call Router/Core successor was then consumed with zero retries/mutations at `$0.00932448`:
+Core passed 3/3, including the exact-time fontanero case, while Router passed 3/5. The three repeated
+Ana/Luis splits all passed; the two failures were the dependent no-split sentinels (shared temporal
+scope and ellipsis/specialization). No live retry was performed. Router's current candidate therefore
+strengthens exact-span semantic completeness and selects specialized capabilities from requested
+lifecycle semantics rather than surface resemblance, without phrase-specific rules. Disposable
+provider-free user paths now preserve Ana/Luis as two Day writes and render exact Day time canonically
+as `15:35 — ...`; the full deterministic suite is green. **Tasks** remains next after a small isolated-
+DEV user-visible validation of this post-gate Router revision.
 
 ```text
 20.0  consumer contract + architecture challenge             ✅ complete
@@ -173,7 +189,8 @@ Explainable Clarification UX                                       ✅ merged in
 Temporal Foundation + Calendar v0                                  ✅ Attempt 8 Calendar low live gate 10/10; DEV adopted
 Application Boundary + Router v0                                    ✅ Attempt 5 Router live gate 8/8; DEV adopted
 Temporal Foundation v1 — shared date/date-time contract              ✅ provider-free complete; Calendar artifacts unchanged
-Tasks — first lifecycle-heavy domain application                  ⬜ after Temporal v1
+Journal/Temporal convergence follow-up                              ➡️ isolated DEV user-visible validation pending
+Tasks — first lifecycle-heavy domain application                  ⬜ after DEV user-path recheck
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned

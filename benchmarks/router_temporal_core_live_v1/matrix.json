@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "current_context": {
+    "date": "2026-10-04",
+    "time": "13:00:00",
+    "timezone": "Europe/Paris"
+  },
+  "router_cases": [
+    {"id":"R1-multiple-dates","source":"Ayer vi a Ana y hoy vi a Luis.","expect_capability":"temporal"},
+    {"id":"R2-exact-datetime-relational-friend","source":"Mañana a las 15:35 voy a ver a mi amigo del barrio que tiene un barco.","expect_capability":"temporal"},
+    {"id":"R3-date-range","source":"Marta vivió en Lyon de enero a marzo de 2025.","expect_capability":"temporal"}
+  ],
+  "temporal_cases": [
+    {"id":"T1-today-bea-children","source":"Hoy hemos vaciado el garaje con Bea y mis hijos.","expect":[["Hoy","2026-10-04"]]},
+    {"id":"T2-multiple-dates","source":"Ayer vi a Ana y hoy vi a Luis.","expect":[["Ayer","2026-10-03"],["hoy","2026-10-04"]]},
+    {"id":"T3-exact-datetime","source":"Mañana a las 15:35 voy a ver a mi amigo del barrio que tiene un barco.","expect":[["Mañana a las 15:35","2026-10-05T15:35:00+02:00"]]},
+    {"id":"T4-date-range","source":"Marta vivió en Lyon de enero a marzo de 2025.","expect_range":["de enero a marzo de 2025","2025-01-01","2025-04-01"]}
+  ],
+  "core_cases": [
+    {"id":"C1-exact-dates-compound","source":"Marta empieza mañana a vivir con Daniel. Ayer vi a Ana y hoy vi a Luis.","evidence":[["mañana","2026-10-05"],["Ayer","2026-10-03"],["hoy","2026-10-04"]],"must_contain":["Marta","Daniel","Ana","Luis"],"expect_anchors":["2026-10-05","2026-10-03","2026-10-04"]},
+    {"id":"C2-entity-exact-datetime","source":"Marta empieza mañana a las 15:35 a trabajar en Airbus.","evidence":[["mañana a las 15:35","2026-10-05T15:35:00+02:00"]],"must_contain":["Marta","Airbus","15:35"],"expect_anchors":["2026-10-05T15:35:00+02:00"]},
+    {"id":"C3-day-exact-datetime","source":"Mañana a las 15:35 viene el fontanero.","evidence":[["Mañana a las 15:35","2026-10-05T15:35:00+02:00"]],"must_contain":["fontanero","15:35"],"expect_anchors":["2026-10-05T15:35:00+02:00"]},
+    {"id":"C4-relational-friend-exact-datetime","source":"Mañana a las 15:35 voy a ver a mi amigo del barrio que tiene un barco.","evidence":[["Mañana a las 15:35","2026-10-05T15:35:00+02:00"]],"must_contain":["amigo","barrio","barco","15:35"],"expect_anchors":["2026-10-05T15:35:00+02:00"]},
+    {"id":"C5-bea-children-date","source":"Hoy hemos vaciado el garaje con Bea y mis hijos.","evidence":[["Hoy","2026-10-04"]],"must_contain":["Bea","mis hijos","garaje"],"expect_anchors":["2026-10-04"]},
+    {"id":"C6-bea-children-datetime","source":"Mañana a las 15:35 voy al parque con Bea y mis hijos.","evidence":[["Mañana a las 15:35","2026-10-05T15:35:00+02:00"]],"must_contain":["Bea","mis hijos","parque","15:35"],"expect_anchors":["2026-10-05T15:35:00+02:00"]},
+    {"id":"C7-qualified-child-date","source":"Hoy cené con Bea y mi hijo al que le gusta el fútbol.","evidence":[["Hoy","2026-10-04"]],"must_contain":["Bea","mi hijo","fútbol"],"expect_anchors":["2026-10-04"]}
+  ]
+}

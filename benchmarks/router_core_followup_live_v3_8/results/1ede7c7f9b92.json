@@ -1,0 +1,327 @@
+{
+  "version": 3,
+  "head": "74340a16ec9d278b812abdb55ac12f2008fec239",
+  "dirty_worktree": true,
+  "matrix_sha256": "f0f20545880544aa35701c1faa5cf1c644d6b530834d2e61966a1c0f2936e87e",
+  "source_digest": "1ede7c7f9b923244e90cc0a263efb0340c7f89f7aa9e1650943503b33f0af3e4",
+  "provider_attempts": 8,
+  "automatic_retries": 0,
+  "mutation_authority": false,
+  "budget_upper_usd": 0.04141808000000001,
+  "estimated_regional_cost_usd": 0.009324480000000003,
+  "passed": false,
+  "rows": [
+    {
+      "gate": "router",
+      "id": "R1a-independent-temporal-repeat-1",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R1b-independent-temporal-repeat-2",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R1c-independent-temporal-repeat-3",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            " y hoy vi a Luis."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R2-shared-temporal-scope-no-split",
+      "passed": false,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy vi a Ana"
+          ],
+          [
+            "core",
+            " y compré pan."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy vi a Ana y compré pan."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "R3-ellipsis-no-split",
+      "passed": false,
+      "actual": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy a las 15:00 veo a Bea y a las 17:00 a Luis."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "core",
+      "id": "C1-day-exact-datetime",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "query": "2026-10-05",
+              "type": "calendar_day"
+            },
+            "facts": [
+              "15:35 — Viene el fontanero."
+            ],
+            "references": [],
+            "anchors": [
+              "2026-10-05T15:35:00+02:00"
+            ]
+          }
+        ],
+        "footprint": "[{\"target\":{\"query\":\"2026-10-05\",\"type\":\"calendar_day\"},\"facts\":[\"15:35 — viene el fontanero.\"],\"references\":[],\"anchors\":[\"2026-10-05t15:35:00+02:00\"]}]",
+        "anchors": [
+          "2026-10-05T15:35:00+02:00"
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "core",
+      "id": "C2-bea-children-date",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "query": "2026-10-04",
+              "type": "calendar_day"
+            },
+            "facts": [
+              "Hemos vaciado el garaje con {{ref:0}} y mis hijos."
+            ],
+            "references": [
+              "Bea"
+            ],
+            "anchors": [
+              "2026-10-04"
+            ]
+          },
+          {
+            "target": {
+              "query": "Bea",
+              "type": "person"
+            },
+            "facts": [],
+            "references": [],
+            "anchors": []
+          }
+        ],
+        "footprint": "[{\"target\":{\"query\":\"2026-10-04\",\"type\":\"calendar_day\"},\"facts\":[\"hemos vaciado el garaje con {{ref:0}} y mis hijos.\"],\"references\":[\"bea\"],\"anchors\":[\"2026-10-04\"]},{\"target\":{\"query\":\"bea\",\"type\":\"person\"},\"facts\":[],\"references\":[],\"anchors\":[]}]",
+        "anchors": [
+          "2026-10-04"
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "core",
+      "id": "C3-entity-exact-datetime",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "query": "Marta",
+              "type": "person"
+            },
+            "facts": [
+              "Empieza a trabajar en Airbus [[calendar/days/2026-10-05|05-10-2026]] 15:35."
+            ],
+            "references": [],
+            "anchors": [
+              "2026-10-05T15:35:00+02:00"
+            ]
+          }
+        ],
+        "footprint": "[{\"target\":{\"query\":\"marta\",\"type\":\"person\"},\"facts\":[\"empieza a trabajar en airbus [[calendar/days/2026-10-05|05-10-2026]] 15:35.\"],\"references\":[],\"anchors\":[\"2026-10-05t15:35:00+02:00\"]}]",
+        "anchors": [
+          "2026-10-05T15:35:00+02:00"
+        ]
+      },
+      "error": null
+    }
+  ],
+  "provider_records": [
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 547,
+      "output_tokens": 291,
+      "response_id": "resp_01eb32d8ece3719b016ac26cb97e9487d1a74970d9889eacc5",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Ayer vi a Ana\"},{\"capability_id\":\"temporal\",\"source_text\":\"y hoy vi a Luis.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 547,
+      "output_tokens": 289,
+      "response_id": "resp_0b6728b3be3fd1d0016ac26cbd692487d18c91d42de3a6021d",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Ayer vi a Ana\"},{\"capability_id\":\"temporal\",\"source_text\":\"y hoy vi a Luis.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 547,
+      "output_tokens": 261,
+      "response_id": "resp_051dbd49a4d22268016ac26cc0a6b887d18ab8791caffb4809",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Ayer vi a Ana\"},{\"capability_id\":\"temporal\",\"source_text\":\" y hoy vi a Luis.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 545,
+      "output_tokens": 278,
+      "response_id": "resp_044b83cd0c07d94f016ac26cc3cb8c87d1be1e504f839ee515",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Hoy vi a Ana\"},{\"capability_id\":\"core\",\"source_text\":\" y compré pan.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 556,
+      "output_tokens": 387,
+      "response_id": "resp_07d8d9dd256626c8016ac26cc77cc487d1a4297917edcabbd2",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"NEEDS_CAPABILITY\",\"routes\":[]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10581,
+      "output_tokens": 255,
+      "response_id": "resp_051263bed1811632016ac26ccc238c87d19e2d465b22ca3a26",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Viene el fontanero.\"},{\"kind\":\"temporal_reference\",\"text\":\"Mañana a las 15:35\",\"value\":\"2026-10-05T15:35:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10561,
+      "output_tokens": 402,
+      "response_id": "resp_0541e9b5a0bf71a2016ac26ccfe75487d195d25d19f80d8fbc",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Hemos vaciado el garaje con \"},{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y mis hijos.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10580,
+      "output_tokens": 264,
+      "response_id": "resp_0f00dc0f5bf4ac9e016ac26cd4f46487d184e4162b0fda0c6d",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Empieza a trabajar en Airbus \"},{\"kind\":\"temporal_reference\",\"text\":\"mañana a las 15:35\",\"value\":\"2026-10-05T15:35:00+02:00\"},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    }
+  ]
+}

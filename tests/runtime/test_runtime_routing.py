@@ -584,3 +584,86 @@ def test_multiple_routed_pending_results_never_create_misleading_clarification(
     }
     assert state.read() is None
     assert len(refreshes) == 1
+
+
+def test_temporal_is_a_builtin_pre_core_route_not_an_application() -> None:
+    """Route exact-date normalization through the built-in Temporal executor before Core ownership."""
+    source = "Hoy hemos vaciado el garaje con Bea y mis hijos."
+    router = FixedRouter(RoutePlan(RouteOutcome.ROUTE, (Route("temporal", source),)))
+    calls: list[tuple[str, str]] = []
+
+    def temporal(text, locator, actor, conversation_context):
+        calls.append(("temporal", text))
+        return _result(locator, actions=1)
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer",
+        router=router,
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: pytest.fail("Router must not bypass Temporal"),
+        application_executors={},
+        temporal_execute=temporal,
+    )
+
+    assert calls == [("temporal", source)]
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.request_id == "outer"
+
+
+def test_two_independent_temporal_routes_execute_separately_in_source_order() -> None:
+    """Keep Router atomization intact when adjacent independent spans share Temporal."""
+    source = "Ayer vi a Ana y hoy vi a Luis."
+    router = FixedRouter(
+        RoutePlan(
+            RouteOutcome.ROUTE,
+            (
+                Route("temporal", "Ayer vi a Ana"),
+                Route("temporal", "y hoy vi a Luis."),
+            ),
+        )
+    )
+    calls: list[tuple[str, str]] = []
+
+    def temporal(text, locator, actor, conversation_context):
+        calls.append((text, locator))
+        return _result(locator, actions=1)
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer",
+        router=router,
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: pytest.fail("Router must not bypass Temporal"),
+        application_executors={},
+        temporal_execute=temporal,
+    )
+
+    assert calls == [
+        ("Ayer vi a Ana", route_execution_id("outer", 0)),
+        ("y hoy vi a Luis.", route_execution_id("outer", 1)),
+    ]
+    assert calls[0][1] != calls[1][1]
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.request_id == "outer"
+    assert [action.action_index for action in result.action_results] == [0, 1]
+
+
+def test_temporal_route_fails_closed_when_runtime_executor_is_unavailable() -> None:
+    """Never silently send a Temporal-owned span straight to Core if normalization is unavailable."""
+    source = "Marta empieza mañana a trabajar en Airbus."
+    router = FixedRouter(RoutePlan(RouteOutcome.ROUTE, (Route("temporal", source),)))
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="outer",
+        router=router,
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: pytest.fail(
+            "Core must not receive unresolved temporal text"
+        ),
+        application_executors={},
+    )
+
+    assert result.status is ApplicationStatus.FAILED
+    assert result.action_results[0].reason == "TEMPORAL_EXECUTOR_UNAVAILABLE"

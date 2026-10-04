@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -13,15 +14,18 @@ from odyssey_core.request_planning import (
     SELF_TARGET,
     PropertyChange,
     RequestPlanningError,
-    RetrieveAction,
-    SelectionCriteria,
     TagChange,
     WriteAction,
     planner_filter_array_json_schema,
     planner_property_changes_json_schema,
     validate_request_plan,
 )
-from odyssey_core.temporal import calendar_day_wikilink, normalize_iso_date
+from odyssey_core.temporal import (
+    CALENDAR_DAY_TYPE,
+    TemporalAnchor,
+    calendar_day_wikilink,
+    normalize_iso_date,
+)
 
 
 class SemanticWriteCompileError(ValueError):
@@ -94,15 +98,19 @@ class IdentityPart:
 
 @dataclass(frozen=True, slots=True)
 class TemporalReferencePart:
-    """Represent one exact temporal mention whose canonical Day link is rendered only by Core.
+    """Represent one exact temporal mention rendered canonically only by Core.
 
-    The visible ``text`` preserves the user's temporal wording while ``date`` carries the
-    application-normalized exact date. The ordinary Core planner schema does not expose this
-    opt-in vocabulary.
+    ``value`` is either an exact ISO date or an offset-aware exact date-time supplied by Temporal.
+    The ordinary Core planner schema never exposes this opt-in vocabulary.
     """
 
     text: str
-    date: str
+    value: str
+
+    @property
+    def anchor(self) -> TemporalAnchor:
+        """Return the locally validated temporal coordinate."""
+        return TemporalAnchor.from_value(self.value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +141,10 @@ class SemanticWriteIntent:
 
 
 def semantic_write_schema_definitions(
-    schema: Mapping[str, Any], *, include_temporal_reference: bool = False
+    schema: Mapping[str, Any],
+    *,
+    include_temporal_reference: bool = False,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Build the closed dynamic Structured Outputs definitions for Luna semantic WRITE.
 
@@ -208,6 +219,36 @@ def semantic_write_schema_definitions(
         ],
         "additionalProperties": False,
     }
+    calendar_dates = tuple(
+        dict.fromkeys(normalize_iso_date(value) for value in authorized_calendar_dates)
+    )
+    calendar_day_target: dict[str, Any] | None = None
+    if calendar_dates:
+        calendar_day_target = {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "enum": list(calendar_dates)},
+                "binding": {"type": "string", "enum": ["described"]},
+                "direct_name": {"type": "null"},
+                "note_type": {"type": "string", "enum": [CALENDAR_DAY_TYPE]},
+                "filters": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/filter_array"},
+                    "maxItems": 0,
+                },
+                "candidate_scope": {"type": "null"},
+            },
+            "required": [
+                "description",
+                "binding",
+                "direct_name",
+                "note_type",
+                "filters",
+                "candidate_scope",
+            ],
+            "additionalProperties": False,
+        }
+
     literal_part = {
         "type": "object",
         "properties": {
@@ -217,12 +258,23 @@ def semantic_write_schema_definitions(
         "required": ["kind", "text"],
         "additionalProperties": False,
     }
+    # Fact references always bind one logical identity. Operation targets may select a complete
+    # relationship-bounded set, but exposing that same provider shape inside facts lets the model
+    # produce a value Core must reject. Keep the provider contract aligned with the compiler by
+    # narrowing only fact-part candidate scopes to one_member; set-valued participant wording can
+    # remain literal unless it is itself the operation target.
+    fact_identity = deepcopy(identity)
+    fact_candidate_scope = deepcopy(candidate_scope)
+    fact_candidate_scope["properties"]["extent"]["enum"] = ["one_member"]
+    fact_identity["properties"]["candidate_scope"] = {
+        "anyOf": [{"type": "null"}, fact_candidate_scope]
+    }
     identity_part = {
         "type": "object",
         "properties": {
             "kind": {"type": "string", "enum": ["identity"]},
             "text": {"type": "string", "maxLength": 256},
-            "identity": {"$ref": "#/$defs/semantic_identity"},
+            "identity": fact_identity,
         },
         "required": ["kind", "text", "identity"],
         "additionalProperties": False,
@@ -238,9 +290,12 @@ def semantic_write_schema_definitions(
             "properties": {
                 "kind": {"type": "string", "enum": ["temporal_reference"]},
                 "text": {"type": "string", "maxLength": 256},
-                "date": {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"},
+                "value": {
+                    "type": "string",
+                    "pattern": r"^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})?$",
+                },
             },
-            "required": ["kind", "text", "date"],
+            "required": ["kind", "text", "value"],
             "additionalProperties": False,
         }
         fact_parts.append({"$ref": "#/$defs/semantic_temporal_reference_part"})
@@ -256,47 +311,69 @@ def semantic_write_schema_definitions(
         "required": ["parts"],
         "additionalProperties": False,
     }
-    operation = {
-        "type": "object",
-        "properties": {
-            "target": {"$ref": "#/$defs/semantic_identity"},
-            "apply_to": {"type": "string", "enum": ["one", "all_matching"]},
-            "intent": {"type": "string", "enum": ["record", "amend", "remove", "delete"]},
-            "facts": {
-                "type": "array",
-                "items": {"$ref": "#/$defs/semantic_fact"},
-            },
-            "properties": {"$ref": "#/$defs/semantic_property_changes"},
-            "tag_changes": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "op": {"type": "string", "enum": ["add", "remove"]},
-                        "value": {"type": "string"},
-                    },
-                    "required": ["op", "value"],
-                    "additionalProperties": False,
+    operation_properties: dict[str, Any] = {
+        "target": {"$ref": "#/$defs/semantic_identity"},
+        "apply_to": {"type": "string", "enum": ["one", "all_matching"]},
+        "intent": {"type": "string", "enum": ["record", "amend", "remove", "delete"]},
+        "facts": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/semantic_fact"},
+        },
+        "properties": {"$ref": "#/$defs/semantic_property_changes"},
+        "tag_changes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "op": {"type": "string", "enum": ["add", "remove"]},
+                    "value": {"type": "string"},
                 },
-            },
-            "destination_type": {
-                "anyOf": [
-                    {"type": "null"},
-                    {"type": "string", "enum": sorted(writable["types"])},
-                ]
+                "required": ["op", "value"],
+                "additionalProperties": False,
             },
         },
-        "required": [
-            "target",
-            "apply_to",
-            "intent",
-            "facts",
-            "properties",
-            "tag_changes",
-            "destination_type",
-        ],
+        "destination_type": {
+            "anyOf": [
+                {"type": "null"},
+                {"type": "string", "enum": sorted(writable["types"])},
+            ]
+        },
+    }
+    operation_required = [
+        "target",
+        "apply_to",
+        "intent",
+        "facts",
+        "properties",
+        "tag_changes",
+        "destination_type",
+    ]
+    ordinary_operation = {
+        "type": "object",
+        "properties": operation_properties,
+        "required": operation_required,
         "additionalProperties": False,
     }
+    operation: dict[str, Any] = ordinary_operation
+    if calendar_day_target is not None:
+        calendar_operation_properties = deepcopy(operation_properties)
+        calendar_operation_properties.update(
+            {
+                "target": {"$ref": "#/$defs/semantic_calendar_day_target"},
+                "apply_to": {"type": "string", "enum": ["one"]},
+                "intent": {"type": "string", "enum": ["record"]},
+                "properties": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
+                "tag_changes": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
+                "destination_type": {"type": "null"},
+            }
+        )
+        calendar_operation = {
+            "type": "object",
+            "properties": calendar_operation_properties,
+            "required": operation_required,
+            "additionalProperties": False,
+        }
+        operation = {"anyOf": [ordinary_operation, calendar_operation]}
     definitions: dict[str, Any] = {
         "filter_array": planner_filter_array_json_schema(retrieval),
         "semantic_candidate_scope": candidate_scope,
@@ -309,6 +386,8 @@ def semantic_write_schema_definitions(
     }
     if temporal_reference_part is not None:
         definitions["semantic_temporal_reference_part"] = temporal_reference_part
+    if calendar_day_target is not None:
+        definitions["semantic_calendar_day_target"] = calendar_day_target
     return definitions
 
 
@@ -464,29 +543,19 @@ def _decode_fact(raw: Any, *, allow_temporal_reference: bool) -> SemanticFact:
             parts.append(IdentityPart(part["text"], _decode_identity(part["identity"])))
         elif (
             allow_temporal_reference
-            and set(part) == {"kind", "text", "date"}
+            and set(part) == {"kind", "text", "value"}
             and part["kind"] == "temporal_reference"
         ):
             try:
                 _safe_text(part["text"])
-                normalized = normalize_iso_date(part["date"])
-                calendar_day_wikilink(normalized)
-                parts.append(TemporalReferencePart(part["text"], normalized))
+                anchor = TemporalAnchor.from_value(part["value"])
+                calendar_day_wikilink(anchor.date)
+                parts.append(TemporalReferencePart(part["text"], anchor.value))
             except (TypeError, ValueError) as error:
                 raise SemanticWriteCompileError("Temporal reference is invalid") from error
         else:
             raise SemanticWriteCompileError("Semantic fact part fields are invalid")
     return SemanticFact(tuple(parts))
-
-
-def decode_semantic_fact(raw: Any) -> SemanticFact:
-    """Decode one closed semantic fact without accepting temporal or mutation fields.
-
-    This narrow public boundary is used by fixed-destination capture. It deliberately reuses the
-    same ``SemanticFact``/part vocabulary as semantic WRITE while withholding target, operation,
-    destination, and persistence authority.
-    """
-    return _decode_fact(raw, allow_temporal_reference=False)
 
 
 def _decode_property(raw: Any) -> PropertyChange:
@@ -503,7 +572,12 @@ def _decode_tag(raw: Any) -> TagChange:
     return TagChange(raw["op"], raw["value"])
 
 
-def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any]) -> WriteAction:
+def compile_semantic_write(
+    intent: SemanticWriteIntent,
+    schema: Mapping[str, Any],
+    *,
+    authorized_calendar_dates: Sequence[str] = (),
+) -> WriteAction:
     """Compile immutable semantic WRITE intent through the established request-plan validator.
 
     Args:
@@ -535,6 +609,7 @@ def compile_semantic_write(intent: SemanticWriteIntent, schema: Mapping[str, Any
                 for fact in operation.facts
                 for part in fact.parts
             ),
+            authorized_calendar_dates=authorized_calendar_dates,
         )
     except (RequestPlanningError, TypeError, ValueError) as error:
         raise SemanticWriteCompileError(
@@ -670,6 +745,15 @@ def _compile_facts(
         ):
             raise SemanticWriteCompileError("Semantic fact is invalid")
         pieces: list[str] = []
+        same_day_clock_parts = [
+            part
+            for part in fact.parts
+            if isinstance(part, TemporalReferencePart)
+            and target.note_type == CALENDAR_DAY_TYPE
+            and target.description == part.anchor.date
+            and part.anchor.display_time is not None
+        ]
+        normalize_single_day_clock = len(same_day_clock_parts) == 1
         for part in fact.parts:
             if isinstance(part, LiteralPart):
                 _safe_literal_text(part.text)
@@ -678,7 +762,14 @@ def _compile_facts(
             if isinstance(part, TemporalReferencePart):
                 try:
                     _safe_text(part.text)
-                    pieces.append(calendar_day_wikilink(part.date))
+                    anchor = part.anchor
+                    if target.note_type == CALENDAR_DAY_TYPE and target.description == anchor.date:
+                        if anchor.display_time is not None and not normalize_single_day_clock:
+                            pieces.append(anchor.display_time)
+                    else:
+                        pieces.append(calendar_day_wikilink(anchor.date))
+                        if anchor.display_time is not None:
+                            pieces.append(f" {anchor.display_time}")
                 except (TypeError, ValueError) as error:
                     raise SemanticWriteCompileError("Temporal reference is invalid") from error
                 continue
@@ -704,7 +795,19 @@ def _compile_facts(
                     {"selection": selection, "role": "identity", "mention": part.text}
                 )
             pieces.append(f"{{{{ref:{reference_index}}}}}")
-        rendered.append("".join(pieces))
+        rendered_fact = "".join(pieces)
+        if normalize_single_day_clock:
+            clock = same_day_clock_parts[0].anchor.display_time
+            if clock is None:  # pragma: no cover - guarded by construction above
+                raise SemanticWriteCompileError("Temporal reference clock is unavailable")
+            if rendered_fact:
+                body = rendered_fact.lstrip()
+                if body.startswith(("—", "–", "-")):
+                    body = body[1:].lstrip()
+                rendered_fact = f"{clock} — {body}" if body else clock
+            else:
+                rendered_fact = clock
+        rendered.append(rendered_fact)
     return rendered, references
 
 
@@ -765,44 +868,6 @@ def _compile_identity(
             for key in ("entity", "query", "type", "filters", "relational_reference")
         }
     return result
-
-
-def compile_semantic_identity_selection(
-    identity: IdentityIntent,
-    schema: Mapping[str, Any],
-) -> SelectionCriteria:
-    """Validate one semantic identity through the ordinary Core selection contract.
-
-    The returned value carries only lookup evidence. It grants neither CREATE authority nor a
-    mutation target, which makes it suitable for optional references inside a trusted fixed fact.
-
-    Args:
-        identity: Model-described identity occurrence to validate.
-        schema: Active canonical schema used by the ordinary Core selection validator.
-
-    Returns:
-        A validated selection that may be resolved only against existing canonical notes.
-
-    Raises:
-        SemanticWriteCompileError: If the identity cannot form a safe Core selection.
-    """
-    try:
-        raw = _compile_identity(identity, allow_self=True, allow_complete_set=True)
-        plan = validate_request_plan(
-            {
-                "actions": [{"kind": "retrieve", "result_shape": "single", "plan": raw}],
-                "limitations": [],
-            },
-            schema,
-        )
-    except (RequestPlanningError, TypeError, ValueError) as error:
-        raise SemanticWriteCompileError(
-            "Semantic identity violates the Core selection contract"
-        ) from error
-    action = plan.actions[0]
-    if not isinstance(action, RetrieveAction):
-        raise SemanticWriteCompileError("Semantic identity did not produce a Core selection")
-    return action.plan
 
 
 def _compile_candidate_scope(

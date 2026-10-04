@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
@@ -15,7 +16,6 @@ from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
 from odyssey_core.domain_interpretation import (
-    TEMPORAL_REFERENCE_EVIDENCE,
     DomainInterpretation,
 )
 from odyssey_core.notes.validation import NoteValidationError, validate_field_value
@@ -30,7 +30,13 @@ from odyssey_core.planner_capabilities import (
     build_planner_capabilities,
     build_write_capabilities,
 )
-from odyssey_core.temporal import TemporalValueError, calendar_day_wikilink, normalize_iso_date
+from odyssey_core.temporal import (
+    CALENDAR_DAY_TYPE,
+    TemporalAnchor,
+    TemporalValueError,
+    calendar_day_wikilink,
+    normalize_iso_date,
+)
 
 PLANNER_MODEL = "gpt-5.6-sol"
 PLANNER_REASONING_EFFORT = "low"
@@ -48,6 +54,7 @@ _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
 _CALENDAR_DAY_LINK_PATTERN = re.compile(r"\[\[calendar/days/(\d{4}-\d{2}-\d{2})\|([^\]\r\n|]+)\]\]")
+_CLOCK_AFTER_LINK_PATTERN = re.compile(r"^[ \t]+(\d{2}:\d{2}(?::\d{2})?)")
 _STABLE_ID_PATTERN = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I
 )
@@ -112,7 +119,7 @@ For every semantic write, determine ownership before mutation payload. target.de
 
 After ownership is fixed, decompose only the new durable knowledge. Group compatible changes for the same logical target inside one operation; different intents remain distinct operations. Atomicity is semantic, not punctuation-based: use separate facts for independently meaningful knowledge, but keep clauses with dependent reasons, explanation, reflection, or decision wording together. Preserve operation, fact, and part order. Use only record, amend, remove, and delete. Explicit correction uses remove for false prior knowledge and amend for corrected knowledge. Amend/remove require a material payload; delete carries none. destination_type is null except for explicit metadata-only reclassification with intent=amend and apply_to=one.
 
-Facts contain ordered parts. A literal part preserves non-identity wording exactly. An identity part contains the exact occurrence text plus an independently selectable semantic identity. Use identity parts for distinct participants that safely denote Odyssey note identities, including descriptive participants; do not promote ordinary places, dates, URLs, paths, external identifiers, or context into identities merely because they are nouns or proper names. An identity part must not select its own operation target. Reuse the same semantic identity wording within the same write action when occurrences refer to the same identity; Core derives all reference markers, indexes, lookup units, roles, and binding mechanics. Never emit those mechanical fields, stable IDs, Markdown wikilinks, or inferred inverse writes.
+Facts contain ordered parts. A literal part preserves non-identity wording exactly. An identity part contains the exact occurrence text plus an independently selectable semantic identity. Use identity parts for distinct participants that safely denote one Odyssey note identity, including descriptive participants; do not promote ordinary places, dates, URLs, paths, external identifiers, or context into identities merely because they are nouns or proper names. A fact identity part is always singular: its candidate_scope may select only one_member. If participant wording denotes a complete relationship-bounded set of several identities, preserve that exact set wording as literal fact text unless the set itself is the operation target; never emit complete_set inside an identity part. An identity part must not select its own operation target. Reuse the same semantic identity wording within the same write action when occurrences refer to the same identity; Core derives all reference markers, indexes, lookup units, roles, and binding mechanics. Never emit those mechanical fields, stable IDs, Markdown wikilinks, or inferred inverse writes.
 
 Properties, filters, note types, destination types, and property value types come only from the supplied dynamic capabilities. Tags are explicit free-form metadata; never infer tags from semantic words. Candidate complete_set and all_matching are distinct: complete_set is one relationship-bounded source operation, while all_matching is a bulk selection. If safe ownership, action boundaries, candidate scope, correction shape, or identity promotion remains uncertain, ESCALATE instead of approximating.""",
     "For a write, determine semantic ownership": "",
@@ -318,6 +325,7 @@ class KnowledgeUnit:
     cardinality: str = "one"
     destination_type: str | None = None
     reference_lookup_only: bool = False
+    fact_temporal_anchors: tuple[tuple[TemporalAnchor, ...], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,6 +487,24 @@ def _render_request_planner_prompt_template(
         raise RuntimeError("Request planner write capability placeholder is invalid")
     retrieval = build_planner_capabilities(schema, current_context=current_context)
     writable = build_write_capabilities(schema)
+    authorized_calendar_dates = planner_authorized_calendar_dates(
+        current_context, domain_interpretation
+    )
+    if authorized_calendar_dates:
+        writable = dict(writable)
+        writable["managed_destinations"] = {
+            CALENDAR_DAY_TYPE: {
+                "authorized_dates": list(authorized_calendar_dates),
+                "description": (
+                    "Core-owned deterministic Day destination. Use it only when the new knowledge "
+                    "itself belongs to that day, such as a daily occurrence, reflection, or "
+                    "daily-record content. The target query/description must be exactly one "
+                    "authorized ISO date. Do not use other selectors, properties, tags, migration, "
+                    "or bulk semantics. If durable knowledge belongs to another entity, keep that "
+                    "entity as target and use temporal evidence only as a temporal reference."
+                ),
+            }
+        }
     retrieval_json = json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))
     writable_json = json.dumps(writable, ensure_ascii=False, separators=(",", ":"))
     rendered = template.replace(
@@ -530,16 +556,25 @@ def _render_domain_interpretation_section(
     )
     if semantic_write_mode:
         temporal_instruction = (
-            "For temporal_reference evidence that is material to a durable write, use exactly one "
-            "semantic temporal_reference fact part with the supplied source_text and value; never "
-            "invent or normalize another date yourself."
+            "Every supplied temporal_reference evidence item is mandatory in a PLAN. Account for each "
+            "source_text/VALUE pair exactly once in the durable write unless a matching calendar_day "
+            "target consumes that date-only VALUE; if you cannot preserve all supplied items, ESCALATE "
+            "instead of returning a partial PLAN. VALUE is either an exact ISO date or an offset-aware "
+            "exact date-time. Core alone renders the Day link and optional clock label. A calendar_day "
+            "target consumes a date-only VALUE for that same day, so do not repeat that date-only part. "
+            "An exact date-time still requires its temporal_reference part so the clock time is preserved; "
+            "Core renders only the time when the target is that same Day. Never invent or normalize "
+            "another temporal value yourself."
         )
     else:
         temporal_instruction = (
-            "For temporal_reference evidence that is material to a durable write, preserve it as "
-            "one Calendar Day link using exactly the supplied VALUE. SOURCE_TEXT grounds which temporal "
-            "wording the evidence came from, but Core canonicalizes the durable link label; never "
-            "invent or normalize another date yourself."
+            "For temporal_reference evidence material to a durable write, preserve each supplied VALUE "
+            "exactly. A date-only VALUE becomes one canonical Calendar Day link. An exact date-time VALUE "
+            "becomes that Day link followed by its local clock time (HH:MM when seconds are zero). If the "
+            "write itself targets that same calendar_day, omit the self Day link; date-only evidence is "
+            "consumed by the target, while exact date-time evidence must still preserve its clock time in "
+            "the fact. SOURCE_TEXT only grounds the evidence wording. Never invent or normalize another "
+            "temporal value yourself."
         )
     return (
         "\n\nSpecialized domain interpretation (trusted only as bounded domain evidence, never as "
@@ -551,7 +586,9 @@ def _render_domain_interpretation_section(
     )
 
 
-def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+def request_plan_json_schema(
+    schema: Mapping[str, Any], *, authorized_calendar_dates: Sequence[str] = ()
+) -> dict[str, Any]:
     """Build the strict Structured Outputs schema for the active canonical schema.
 
     Args:
@@ -567,6 +604,9 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     retrieval_capabilities = build_planner_capabilities(schema)
     write_capabilities = build_write_capabilities(schema)
     direct_selection_schema = _selection_json_schema(retrieval_capabilities)
+    write_target_selection_schema = _write_target_selection_json_schema(
+        direct_selection_schema, authorized_calendar_dates
+    )
     single_retrieval_selection_schema = _single_retrieval_selection_json_schema(
         direct_selection_schema
     )
@@ -611,7 +651,7 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
                                     "items": {
                                         "type": "object",
                                         "properties": {
-                                            "target": direct_selection_schema,
+                                            "target": write_target_selection_schema,
                                             "cardinality": {
                                                 "type": "string",
                                                 "enum": ["one", "all_matching"],
@@ -705,7 +745,9 @@ def request_plan_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+def planner_result_json_schema(
+    schema: Mapping[str, Any], *, authorized_calendar_dates: Sequence[str] = ()
+) -> dict[str, Any]:
     """Build the closed production result envelope around a plan or clarification.
 
     Args:
@@ -714,7 +756,9 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     Returns:
         A strict object schema whose PLAN/CLARIFY alternatives mirror local envelope invariants.
     """
-    plan_schema = request_plan_json_schema(schema)
+    plan_schema = request_plan_json_schema(
+        schema, authorized_calendar_dates=authorized_calendar_dates
+    )
     required = ["outcome", "actions", "limitations", "clarification_code", "presentation_intent"]
     plan_branch = {
         "type": "object",
@@ -753,7 +797,9 @@ def planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+def compact_planner_result_json_schema(
+    schema: Mapping[str, Any], *, authorized_calendar_dates: Sequence[str] = ()
+) -> dict[str, Any]:
     """Build the exact PlannerResult language with shared Structured Outputs definitions.
 
     The established inline schema remains the production Sol contract. This representation is for
@@ -767,13 +813,14 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
         A closed PlannerResult envelope whose local ``$defs`` share the otherwise identical PLAN
         and CLARIFY substructures.
     """
-    inline = planner_result_json_schema(schema)
+    inline = planner_result_json_schema(schema, authorized_calendar_dates=authorized_calendar_dates)
     plan_branch, clarify_branch = deepcopy(inline["properties"]["result"]["anyOf"])
     actions = plan_branch["properties"]["actions"]
     retrieve_action, collection_action, write_action, delegate_action = actions["items"]["anyOf"]
     collection_selection = collection_action["properties"]["plan"]
     single_retrieval_selection = retrieve_action["properties"]["plan"]
-    selection = write_action["properties"]["units"]["items"]["properties"]["target"]
+    write_target = write_action["properties"]["units"]["items"]["properties"]["target"]
+    selection = write_target["anyOf"][0] if "anyOf" in write_target else write_target
     filter_array = selection["properties"]["filters"]
     link_scope = selection["properties"]["link_scope"]["anyOf"][1]
     note_selector = link_scope["properties"]["anchor"]
@@ -788,9 +835,12 @@ def compact_planner_result_json_schema(schema: Mapping[str, Any]) -> dict[str, A
     single_retrieval_selection["properties"]["link_scope"] = {
         "anyOf": [{"type": "null"}, {"$ref": "#/$defs/link_scope"}]
     }
-    write_action["properties"]["units"]["items"]["properties"]["target"] = {
-        "$ref": "#/$defs/selection"
-    }
+    if "anyOf" in write_target:
+        write_target["anyOf"][0] = {"$ref": "#/$defs/selection"}
+    else:
+        write_action["properties"]["units"]["items"]["properties"]["target"] = {
+            "$ref": "#/$defs/selection"
+        }
     delegate_action["properties"]["selection"] = {
         "anyOf": [{"type": "null"}, {"$ref": "#/$defs/selection"}]
     }
@@ -842,6 +892,8 @@ def validate_planner_result(
     payload: Any,
     schema: Mapping[str, Any],
     domain_interpretation: DomainInterpretation | None = None,
+    *,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> PlannerResult:
     """Validate the production planner envelope without executing either outcome.
 
@@ -881,9 +933,10 @@ def validate_planner_result(
             allow_temporal_reference_links=bool(
                 domain_interpretation and domain_interpretation.temporal_references()
             ),
+            authorized_calendar_dates=authorized_calendar_dates,
         )
         validate_plan_against_domain_interpretation(plan, domain_interpretation)
-        return plan
+        return bind_plan_temporal_anchors(plan, domain_interpretation)
     if outcome == "CLARIFY":
         code = payload["clarification_code"]
         if (
@@ -898,26 +951,93 @@ def validate_planner_result(
     raise RequestPlanningError("PlannerResult outcome is unsupported")
 
 
+def _clock_occurrences(text: str, clock: str) -> int:
+    """Count one canonical clock label without matching digits inside larger tokens."""
+    return len(re.findall(rf"(?<!\d){re.escape(clock)}(?!\d)", text))
+
+
+def _allowed_temporal_anchors(
+    interpretation: DomainInterpretation | None,
+) -> tuple[TemporalAnchor, ...]:
+    if interpretation is None:
+        return ()
+    return tuple(item.temporal_anchor() for item in interpretation.temporal_references())
+
+
+def _match_allowed_anchor_value(
+    date_value: str, clock: str | None, allowed: tuple[TemporalAnchor, ...]
+) -> str | None:
+    candidates = {
+        anchor.value
+        for anchor in allowed
+        if anchor.date == date_value
+        and (
+            (clock is None and anchor.time is None)
+            or (clock is not None and anchor.display_time == clock)
+        )
+    }
+    if len(candidates) == 1:
+        return next(iter(candidates))
+    return None
+
+
 def validate_plan_against_domain_interpretation(
     plan: RequestPlan, interpretation: DomainInterpretation | None
 ) -> None:
-    """Correlate specialized evidence to Core output without delegating Core semantics to an app."""
+    """Correlate specialized temporal evidence to Core output without granting mutation authority."""
     if interpretation is None:
         return
     if not isinstance(interpretation, DomainInterpretation):
         raise RequestPlanningError("Domain interpretation is invalid")
-    allowed = {
-        item.value for item in interpretation.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE
-    }
-    found: set[str] = set()
+    evidence = interpretation.temporal_references()
+    allowed = Counter(item.value for item in evidence)
+    anchors = tuple(item.temporal_anchor() for item in evidence)
+    found: Counter[str] = Counter()
+    consumed: Counter[str] = Counter()
+
     for action in plan.actions:
         if not isinstance(action, WriteAction):
             continue
         for unit in action.units:
+            target_day = unit.target.query if unit.target.type == CALENDAR_DAY_TYPE else None
+            if target_day is not None:
+                for value, count in allowed.items():
+                    anchor = TemporalAnchor.from_value(value)
+                    if anchor.date == target_day and anchor.time is None:
+                        consumed[value] = count
+                for value, _count in allowed.items():
+                    anchor = TemporalAnchor.from_value(value)
+                    if anchor.date != target_day or anchor.display_time is None:
+                        continue
+                    occurrences = sum(
+                        _clock_occurrences(fact, anchor.display_time) for fact in unit.facts
+                    )
+                    if occurrences:
+                        found[value] += occurrences
+
             for fact in unit.facts:
                 for match in _CALENDAR_DAY_LINK_PATTERN.finditer(fact):
-                    found.add(match.group(1))
-    if found - allowed:
+                    linked_day = match.group(1)
+                    if target_day is not None and linked_day == target_day:
+                        raise RequestPlanningError(
+                            "Calendar Day write must not repeat its own temporal target as a fact link",
+                            stage=PlannerValidationStage.WRITE_ACTION,
+                            code=PlannerValidationCode.INVALID_MUTATION,
+                        )
+                    tail = fact[match.end() :]
+                    clock_match = _CLOCK_AFTER_LINK_PATTERN.match(tail)
+                    clock = clock_match.group(1) if clock_match is not None else None
+                    matched_value = _match_allowed_anchor_value(linked_day, clock, anchors)
+                    if matched_value is None:
+                        raise RequestPlanningError(
+                            "Core plan contains temporal evidence not supplied by the specialized application",
+                            stage=PlannerValidationStage.WRITE_ACTION,
+                            code=PlannerValidationCode.INVALID_MUTATION,
+                        )
+                    found[matched_value] += 1
+
+    required = allowed - consumed
+    if found - required:
         raise RequestPlanningError(
             "Core plan contains temporal evidence not supplied by the specialized application",
             stage=PlannerValidationStage.WRITE_ACTION,
@@ -926,7 +1046,7 @@ def validate_plan_against_domain_interpretation(
     if (
         allowed
         and any(isinstance(action, WriteAction) for action in plan.actions)
-        and not allowed <= found
+        and required - found
     ):
         raise RequestPlanningError(
             "Core write omitted required specialized temporal evidence",
@@ -935,9 +1055,60 @@ def validate_plan_against_domain_interpretation(
         )
 
 
+def bind_plan_temporal_anchors(
+    plan: RequestPlan, interpretation: DomainInterpretation | None
+) -> RequestPlan:
+    """Attach validated semantic temporal coordinates to facts as internal Core metadata."""
+    allowed = _allowed_temporal_anchors(interpretation)
+    if not allowed:
+        return plan
+    rebound_actions: list[RequestAction] = []
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            rebound_actions.append(action)
+            continue
+        rebound_units: list[KnowledgeUnit] = []
+        for unit in action.units:
+            if not unit.facts or unit.reference_lookup_only:
+                rebound_units.append(unit)
+                continue
+            target_day = unit.target.query if unit.target.type == CALENDAR_DAY_TYPE else None
+            per_fact: list[tuple[TemporalAnchor, ...]] = []
+            for fact in unit.facts:
+                values: list[TemporalAnchor] = []
+                if target_day is not None:
+                    for anchor in allowed:
+                        if anchor.date != target_day:
+                            continue
+                        if anchor.time is None or (
+                            anchor.display_time is not None
+                            and _clock_occurrences(fact, anchor.display_time)
+                        ):
+                            if anchor not in values:
+                                values.append(anchor)
+                for match in _CALENDAR_DAY_LINK_PATTERN.finditer(fact):
+                    tail = fact[match.end() :]
+                    clock_match = _CLOCK_AFTER_LINK_PATTERN.match(tail)
+                    clock = clock_match.group(1) if clock_match is not None else None
+                    matched_value = _match_allowed_anchor_value(match.group(1), clock, allowed)
+                    if matched_value is None:
+                        continue
+                    anchor = TemporalAnchor.from_value(matched_value)
+                    if anchor not in values:
+                        values.append(anchor)
+                per_fact.append(tuple(values))
+            rebound_units.append(replace(unit, fact_temporal_anchors=tuple(per_fact)))
+        rebound_actions.append(replace(action, units=tuple(rebound_units)))
+    return replace(plan, actions=tuple(rebound_actions))
+
+
 @_validation_boundary(PlannerValidationStage.REQUEST_PLAN)
 def validate_request_plan(
-    payload: Any, schema: Mapping[str, Any], *, allow_temporal_reference_links: bool = False
+    payload: Any,
+    schema: Mapping[str, Any],
+    *,
+    allow_temporal_reference_links: bool = False,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> RequestPlan:
     """Validate untrusted model output and return an immutable non-executing plan.
 
@@ -971,19 +1142,23 @@ def validate_request_plan(
             retrieval_capabilities,
             write_capabilities,
             allow_temporal_reference_links=allow_temporal_reference_links,
+            authorized_calendar_dates=authorized_calendar_dates,
         )
         for action in raw_actions
     )
     return finalize_request_plan(actions, limitations, presentation_intent)
 
 
-def validate_request_action(action: Any, schema: Mapping[str, Any]) -> RequestAction:
+def validate_request_action(
+    action: Any, schema: Mapping[str, Any], *, authorized_calendar_dates: Sequence[str] = ()
+) -> RequestAction:
     """Validate one raw action for adapters that preserve a heterogeneous provider sequence."""
     return _validate_action(
         action,
         schema,
         build_planner_capabilities(schema),
         build_write_capabilities(schema),
+        authorized_calendar_dates=authorized_calendar_dates,
     )
 
 
@@ -1148,7 +1323,12 @@ class OpenAIRequestPlanner:
                 size_components=sizes,
                 domain_interpretation=self._domain_interpretation,
             )
-            output_schema = planner_result_json_schema(self._schema)
+            authorized_calendar_dates = planner_authorized_calendar_dates(
+                self._current_context, self._domain_interpretation
+            )
+            output_schema = planner_result_json_schema(
+                self._schema, authorized_calendar_dates=authorized_calendar_dates
+            )
             sizes["user_request_bytes"] = len(request.encode("utf-8"))
             sizes["structured_output_schema_bytes"] = len(
                 json.dumps(output_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -1239,7 +1419,12 @@ class OpenAIRequestPlanner:
             )
         try:
             result = validate_planner_result(
-                payload["result"], self._schema, self._domain_interpretation
+                payload["result"],
+                self._schema,
+                self._domain_interpretation,
+                authorized_calendar_dates=planner_authorized_calendar_dates(
+                    self._current_context, self._domain_interpretation
+                ),
             )
         except RequestPlanningError as error:
             recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)
@@ -1378,6 +1563,53 @@ def _selection_json_schema(capabilities: Mapping[str, Any]) -> dict[str, Any]:
         ],
         "additionalProperties": False,
     }
+
+
+def _normalized_authorized_calendar_dates(values: Sequence[str]) -> tuple[str, ...]:
+    """Return unique canonical Day dates supplied by trusted runtime context."""
+    if isinstance(values, (str, bytes, bytearray)) or not isinstance(values, Sequence):
+        raise RequestPlanningError("Authorized Calendar Day dates are invalid")
+    normalized: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            raise RequestPlanningError("Authorized Calendar Day dates are invalid")
+        try:
+            date = normalize_iso_date(value)
+        except TemporalValueError as error:
+            raise RequestPlanningError("Authorized Calendar Day dates are invalid") from error
+        if date not in normalized:
+            normalized.append(date)
+    return tuple(normalized)
+
+
+def _write_target_selection_json_schema(
+    direct_selection_schema: Mapping[str, Any], authorized_calendar_dates: Sequence[str]
+) -> dict[str, Any]:
+    """Expose Calendar Day as a closed target branch over trusted exact dates only.
+
+    Ordinary semantic selections keep their established schema.  A managed Calendar Day target is a
+    separate branch because Core already requires its query to be one authorized canonical date and
+    every other selection mechanism to be empty.  Encoding that invariant in Structured Outputs
+    prevents providers from emitting values that deterministic validation must reject.
+    """
+    dates = _normalized_authorized_calendar_dates(authorized_calendar_dates)
+    selection = deepcopy(direct_selection_schema)
+    if not dates:
+        return selection
+
+    calendar_selection = deepcopy(direct_selection_schema)
+    properties = calendar_selection["properties"]
+    properties["entity"] = {"type": "null"}
+    properties["query"] = {"type": "string", "enum": list(dates)}
+    properties["type"] = {"type": "string", "enum": [CALENDAR_DAY_TYPE]}
+    filters = deepcopy(properties["filters"])
+    filters["maxItems"] = 0
+    properties["filters"] = filters
+    properties["link_scope"] = {"type": "null"}
+    properties["self_target"] = {"type": "null"}
+    properties["relational_reference"] = {"type": "null"}
+    properties["collection_subject"] = {"type": "null"}
+    return {"anyOf": [selection, calendar_selection]}
 
 
 def _relational_reference_json_schema() -> dict[str, Any]:
@@ -1611,6 +1843,25 @@ def _property_value_json_schema(definition: Mapping[str, Any]) -> dict[str, Any]
     raise RequestPlanningError(f"Unsupported writable property value type: {value_type!r}")
 
 
+def planner_authorized_calendar_dates(
+    current_context: Mapping[str, str],
+    domain_interpretation: DomainInterpretation | None = None,
+) -> tuple[str, ...]:
+    """Return the only Calendar Day destinations Core may choose for this request.
+
+    Explicit trusted temporal evidence takes precedence. Without specialized temporal evidence,
+    Core may choose only the current local Day supplied by runtime context.
+    """
+    _validate_current_context(current_context)
+    if domain_interpretation is None:
+        return (normalize_iso_date(current_context["date"]),)
+    if not isinstance(domain_interpretation, DomainInterpretation):
+        raise RequestPlanningError("Domain interpretation is invalid")
+    return _normalized_authorized_calendar_dates(
+        tuple(item.temporal_anchor().date for item in domain_interpretation.temporal_references())
+    )
+
+
 def _validate_current_context(current_context: Mapping[str, str]) -> None:
     """Reject incomplete dynamic date/time context before it reaches a planner prompt."""
     if set(current_context) != _CURRENT_CONTEXT_KEYS or not all(
@@ -1628,6 +1879,7 @@ def _validate_action(
     write_capabilities: Mapping[str, Any],
     *,
     allow_temporal_reference_links: bool = False,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> RequestAction:
     """Validate one discriminated action without executing retrieval or persistence."""
     if not isinstance(action, dict):
@@ -1639,6 +1891,7 @@ def _validate_action(
             retrieval_capabilities,
             write_capabilities,
             allow_temporal_reference_links=allow_temporal_reference_links,
+            authorized_calendar_dates=authorized_calendar_dates,
         )
     if action.get("kind") == "delegate":
         return _validate_delegate_action(action, schema, retrieval_capabilities)
@@ -1738,6 +1991,7 @@ def _validate_selection(
     capabilities: Mapping[str, Any],
     *,
     label: str,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> SelectionCriteria:
     """Validate the shared query/type/filters selection contract.
 
@@ -1803,6 +2057,35 @@ def _validate_selection(
             f"{label} query must be non-empty",
             stage=PlannerValidationStage.SELECTION,
             code=PlannerValidationCode.EMPTY_QUERY,
+        )
+    if note_type == CALENDAR_DAY_TYPE:
+        allowed_dates = _normalized_authorized_calendar_dates(authorized_calendar_dates)
+        if (
+            label != "KnowledgeUnit target"
+            or query.strip() not in allowed_dates
+            or entity is not None
+            or raw_filters != []
+            or raw.get("link_scope") is not None
+            or raw.get("self_target") is not None
+            or raw.get("relational_reference") is not None
+            or raw.get("semantic_set") is not None
+            or raw.get("collection_subject") is not None
+        ):
+            raise RequestPlanningError(
+                f"{label} Calendar Day target is not authorized",
+                stage=PlannerValidationStage.SELECTION,
+                code=PlannerValidationCode.INVALID_TYPE,
+            )
+        return SelectionCriteria(
+            entity=None,
+            query=query.strip(),
+            type=CALENDAR_DAY_TYPE,
+            filters=(),
+            link_scope=None,
+            self_target=None,
+            relational_reference=None,
+            semantic_set=None,
+            collection_subject=None,
         )
     if note_type is not None and note_type not in capabilities["types"]:
         raise RequestPlanningError(
@@ -2123,6 +2406,7 @@ def _validate_write_action(
     write_capabilities: Mapping[str, Any],
     *,
     allow_temporal_reference_links: bool = False,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> WriteAction:
     """Validate one semantic write action without resolving identity or persisting data.
 
@@ -2149,17 +2433,26 @@ def _validate_write_action(
             retrieval_capabilities,
             write_capabilities,
             allow_temporal_reference_links=allow_temporal_reference_links,
+            authorized_calendar_dates=authorized_calendar_dates,
         )
         for raw in raw_units
     )
     units = _lower_reference_selections(units)
     for index, unit in enumerate(units):
         for reference in unit.references:
-            if (
-                reference.target_index is None
-                or reference.target_index >= len(units)
-                or reference.target_index == index
-            ):
+            if reference.target_index is None:
+                relation = (
+                    reference.selection.relational_reference
+                    if reference.selection is not None
+                    else None
+                )
+                if relation is None or relation.members != "complete_set":
+                    raise RequestPlanningError(
+                        "KnowledgeUnit reference target is invalid",
+                        code=PlannerValidationCode.INVALID_REFERENCE,
+                    )
+                continue
+            if reference.target_index >= len(units) or reference.target_index == index:
                 raise RequestPlanningError(
                     "KnowledgeUnit reference target is invalid",
                     code=PlannerValidationCode.INVALID_REFERENCE,
@@ -2215,6 +2508,10 @@ def _lower_reference_selections(units: tuple[KnowledgeUnit, ...]) -> tuple[Knowl
         lowered_references: list[KnowledgeReference] = []
         for reference in unit.references:
             if reference.selection is None:
+                lowered_references.append(reference)
+                continue
+            relation = reference.selection.relational_reference
+            if relation is not None and relation.members == "complete_set":
                 lowered_references.append(reference)
                 continue
             matching_indexes = [
@@ -2273,6 +2570,7 @@ def _validate_knowledge_unit(
     write_capabilities: Mapping[str, Any],
     *,
     allow_temporal_reference_links: bool = False,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> KnowledgeUnit:
     """Validate one write target, mutation payload, and local reference set.
 
@@ -2303,7 +2601,11 @@ def _validate_knowledge_unit(
     if not isinstance(unit, dict) or not minimum.issubset(unit) or set(unit) - required:
         raise RequestPlanningError("KnowledgeUnit fields are invalid")
     target = _validate_selection(
-        unit["target"], schema, retrieval_capabilities, label="KnowledgeUnit target"
+        unit["target"],
+        schema,
+        retrieval_capabilities,
+        label="KnowledgeUnit target",
+        authorized_calendar_dates=authorized_calendar_dates,
     )
     if target.semantic_set is not None:
         raise RequestPlanningError("semantic set requires RetrieveAction")
@@ -2352,17 +2654,39 @@ def _validate_knowledge_unit(
             code=PlannerValidationCode.INVALID_MUTATION,
         )
 
+    temporal_day_target = target.type == CALENDAR_DAY_TYPE
     effective_type = destination_type or target.type
-    if effective_type is not None and effective_type not in write_capabilities["types"]:
+    if (
+        effective_type is not None
+        and effective_type not in write_capabilities["types"]
+        and not temporal_day_target
+    ):
         raise RequestPlanningError("KnowledgeUnit target type is not writable")
 
     raw_properties = unit["properties"]
     if not isinstance(raw_properties, list):
         raise RequestPlanningError("KnowledgeUnit properties must be a list")
-    properties = _validate_property_changes(
-        raw_properties, effective_type, intent, write_capabilities
-    )
-    tag_changes = _validate_tag_changes(unit.get("tag_changes", []), intent)
+    raw_tag_changes = unit.get("tag_changes", [])
+    if temporal_day_target:
+        if (
+            cardinality != "one"
+            or intent != "record"
+            or destination_type is not None
+            or raw_properties
+            or raw_tag_changes
+        ):
+            raise RequestPlanningError(
+                "Calendar Day target must be one record with facts only",
+                stage=PlannerValidationStage.KNOWLEDGE_UNIT,
+                code=PlannerValidationCode.INVALID_MUTATION,
+            )
+        properties: tuple[PropertyChange, ...] = ()
+        tag_changes: tuple[TagChange, ...] = ()
+    else:
+        properties = _validate_property_changes(
+            raw_properties, effective_type, intent, write_capabilities
+        )
+        tag_changes = _validate_tag_changes(raw_tag_changes, intent)
 
     raw_facts = unit["facts"]
     if (

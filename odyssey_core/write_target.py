@@ -20,6 +20,7 @@ from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_enti
 from odyssey_core.schema_types import ordinary_type_ids
 from odyssey_core.semantic import SemanticEntityIndex, TextEmbedder
 from odyssey_core.storage import VaultRepository
+from odyssey_core.temporal import CALENDAR_DAY_TYPE, CalendarDayRepository
 
 
 class WriteTargetOutcome(Enum):
@@ -92,6 +93,20 @@ def decide_write_target(
     if not isinstance(unit, KnowledgeUnit):
         raise ValueError("Write target requires a validated KnowledgeUnit")
     target = unit.target
+    if target.type == CALENDAR_DAY_TYPE:
+        if (
+            unit.intent != "record"
+            or target.entity is not None
+            or target.filters
+            or target.link_scope is not None
+            or target.self_target is not None
+            or target.relational_reference is not None
+        ):
+            return _clarification("invalid_calendar_day_target")
+        day = CalendarDayRepository(repository, schema).resolve(target.query)
+        if day.materialized:
+            return WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=day.id)
+        return WriteTargetDecision(WriteTargetOutcome.CREATE, target_type=CALENDAR_DAY_TYPE)
     if target.relational_reference is not None:
         return _clarification("relational_resolution_required")
     if target.link_scope is not None:

@@ -908,6 +908,66 @@ def test_application_managed_type_does_not_change_generic_model_contract(schema:
         validate_request_plan(output(retrieve("2026-10-01", note_type="calendar_day")), schema)
 
 
+def test_calendar_day_write_target_requires_one_authorized_exact_date(schema: dict) -> None:
+    """Expose Day as a Core target only under trusted temporal/current-day authority."""
+    payload = output(
+        write(
+            unit(
+                "2026-08-22",
+                note_type="calendar_day",
+                facts=["He vaciado el garaje con Bea y mis hijos."],
+            )
+        )
+    )
+
+    plan = validate_request_plan(payload, schema, authorized_calendar_dates=("2026-08-22",))
+    action = plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert action.units[0].target.type == "calendar_day"
+    assert action.units[0].target.query == "2026-08-22"
+
+    with pytest.raises(RequestPlanningError, match="not authorized"):
+        validate_request_plan(payload, schema, authorized_calendar_dates=("2026-08-23",))
+    with pytest.raises(RequestPlanningError):
+        validate_request_plan(payload, schema)
+
+
+def test_calendar_day_target_rejects_non_fact_mutation_shapes(schema: dict) -> None:
+    """Never let the managed Day escape into bulk, metadata, migration, or remove semantics."""
+    invalid = (
+        unit("2026-08-22", note_type="calendar_day", cardinality="all_matching"),
+        unit("2026-08-22", note_type="calendar_day", intent="amend"),
+        unit(
+            "2026-08-22",
+            note_type="calendar_day",
+            properties=[prop("birth_date", "2026-08-22")],
+        ),
+        unit(
+            "2026-08-22",
+            note_type="calendar_day",
+            tag_changes=[{"op": "add", "value": "x"}],
+        ),
+    )
+    for raw in invalid:
+        with pytest.raises(RequestPlanningError):
+            validate_request_plan(
+                output(write(raw)),
+                schema,
+                authorized_calendar_dates=("2026-08-22",),
+            )
+
+
+def test_calendar_day_is_never_exposed_as_an_ordinary_retrieval_type(schema: dict) -> None:
+    """Keep deterministic Day authority confined to the write target branch."""
+    contract = request_plan_json_schema(schema, authorized_calendar_dates=("2026-08-22",))
+    write_target = contract["properties"]["actions"]["items"]["anyOf"][2]["properties"]["units"][
+        "items"
+    ]["properties"]["target"]
+    assert "calendar_day" in json.dumps(write_target)
+    retrieve_schema = contract["properties"]["actions"]["items"]["anyOf"][0]
+    assert "calendar_day" not in json.dumps(retrieve_schema)
+
+
 def test_invalid_model_output_fails_closed(schema: dict) -> None:
     """Reject empty queries, unknown types, bad filters, old write shapes, and invalid actions."""
     invalid = [
@@ -2407,3 +2467,36 @@ def test_semantic_set_is_rejected_from_delegate_selection(schema: dict) -> None:
             ),
             schema,
         )
+
+
+def test_calendar_day_write_target_provider_branch_is_closed_to_authorized_dates(
+    schema: dict,
+) -> None:
+    """Keep the Sol provider target language aligned with Calendar Day selection validation."""
+    provider = request_plan_json_schema(schema, authorized_calendar_dates=("2026-10-05",))
+    write_action = provider["properties"]["actions"]["items"]["anyOf"][2]
+    target = write_action["properties"]["units"]["items"]["properties"]["target"]
+
+    ordinary, calendar = target["anyOf"]
+    assert "calendar_day" not in ordinary["properties"]["type"]["anyOf"][1]["enum"]
+    properties = calendar["properties"]
+    assert properties["entity"] == {"type": "null"}
+    assert properties["query"]["enum"] == ["2026-10-05"]
+    assert properties["type"]["enum"] == ["calendar_day"]
+    assert properties["filters"]["maxItems"] == 0
+    assert properties["link_scope"] == {"type": "null"}
+    assert properties["self_target"] == {"type": "null"}
+    assert properties["relational_reference"] == {"type": "null"}
+    assert properties["collection_subject"] == {"type": "null"}
+
+
+def test_compact_calendar_day_write_target_keeps_strict_branch(schema: dict) -> None:
+    """Compaction may share ordinary selectors but must retain the managed Day target branch."""
+    provider = compact_planner_result_json_schema(schema, authorized_calendar_dates=("2026-10-05",))
+    write_action = provider["$defs"]["write_action"]
+    target = write_action["properties"]["units"]["items"]["properties"]["target"]
+
+    assert target["anyOf"][0] == {"$ref": "#/$defs/selection"}
+    calendar = target["anyOf"][1]
+    assert calendar["properties"]["query"]["enum"] == ["2026-10-05"]
+    assert calendar["properties"]["type"]["enum"] == ["calendar_day"]

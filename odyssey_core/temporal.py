@@ -1,4 +1,4 @@
-"""Deterministic temporal primitives and Calendar-managed Day materialization."""
+"""Deterministic temporal primitives and Core-owned Day materialization."""
 
 from __future__ import annotations
 
@@ -37,6 +37,62 @@ class DateRange:
         end = date.fromisoformat(normalize_iso_date(self.end_exclusive))
         if start >= end:
             raise TemporalValueError("Calendar range must have a positive half-open span")
+
+
+@dataclass(frozen=True, slots=True)
+class TemporalAnchor:
+    """Represent one semantic temporal coordinate independent of capture time.
+
+    ``date`` is always present. ``time`` and ``offset`` are either both absent or both present.
+    Exact times preserve second precision internally; ``display_time`` keeps the ordinary HH:MM
+    presentation when seconds are zero.
+    """
+
+    date: str
+    time: str | None = None
+    offset: str | None = None
+
+    def __post_init__(self) -> None:
+        normalized_date = normalize_iso_date(self.date)
+        object.__setattr__(self, "date", normalized_date)
+        if self.time is None and self.offset is None:
+            return
+        if self.time is None or self.offset is None:
+            raise TemporalValueError("Temporal anchor time and offset must be supplied together")
+        value = f"{normalized_date}T{self.time}{self.offset}"
+        normalized = normalize_iso_datetime(value)
+        parsed = datetime.fromisoformat(normalized)
+        object.__setattr__(self, "time", parsed.time().isoformat(timespec="seconds"))
+        object.__setattr__(self, "offset", normalized[-6:])
+
+    @classmethod
+    def from_value(cls, value: str) -> TemporalAnchor:
+        """Decode one canonical date or offset-aware exact date-time evidence value."""
+        try:
+            return cls(normalize_iso_date(value))
+        except TemporalValueError:
+            normalized = normalize_iso_datetime(value)
+            parsed = datetime.fromisoformat(normalized)
+            return cls(
+                parsed.date().isoformat(),
+                parsed.time().isoformat(timespec="seconds"),
+                normalized[-6:],
+            )
+
+    @property
+    def value(self) -> str:
+        """Return the canonical durable evidence representation."""
+        if self.time is None:
+            return self.date
+        assert self.offset is not None
+        return f"{self.date}T{self.time}{self.offset}"
+
+    @property
+    def display_time(self) -> str | None:
+        """Return a compact human clock label without discarding non-zero seconds."""
+        if self.time is None:
+            return None
+        return self.time[:5] if self.time.endswith(":00") else self.time
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +167,7 @@ def calendar_day_id(value: str) -> str:
 
 
 def calendar_day_path(value: str) -> str:
-    """Return the Calendar-owned deterministic Markdown path for one date."""
+    """Return the deterministic Calendar Day Markdown path for one date."""
     return f"calendar/days/{normalize_iso_date(value)}.md"
 
 
@@ -222,7 +278,7 @@ def year_range(value: str) -> DateRange:
 def _load_day_note(
     repository: VaultRepository, schema: dict[str, Any], path: str, expected_date: str
 ) -> Note:
-    """Load one deterministic Day path and verify its Calendar-owned identity metadata."""
+    """Load one deterministic Day path and verify its Core-owned deterministic identity metadata."""
     try:
         note = parse_note(repository.read_text(path))
         validate_note(note, schema)
@@ -280,7 +336,7 @@ def _assert_unique_day_identity(
 
 
 def _ensure_calendar_day_directory(repository: VaultRepository) -> None:
-    """Create only the fixed Calendar-owned directory tree after containment checks."""
+    """Create only the fixed Calendar Day directory tree after containment checks."""
     root = repository.root
     current = root
     for part in _CALENDAR_ROOT:
@@ -305,16 +361,16 @@ def _ensure_calendar_day_directory(repository: VaultRepository) -> None:
 
 
 class CalendarDayRepository:
-    """Resolve and materialize Calendar-owned Days without semantic entity search."""
+    """Resolve and materialize Core-owned Days without semantic entity search."""
 
     def __init__(self, repository: VaultRepository, schema: dict[str, Any]) -> None:
-        """Bind one authoritative vault and schema that explicitly delegates Days to Calendar."""
+        """Bind one authoritative vault and schema that keeps deterministic Days in Core."""
         try:
             definition = next(item for item in schema["types"] if item["id"] == CALENDAR_DAY_TYPE)
         except (KeyError, StopIteration, TypeError) as error:
             raise ValueError("Canonical schema does not define Calendar Day") from error
-        if definition.get("managed_by") != "calendar":
-            raise ValueError("Calendar Day is not delegated to Calendar")
+        if definition.get("managed_by") != "core":
+            raise ValueError("Calendar Day is not managed by Core")
         self.repository = repository
         self.schema = schema
 

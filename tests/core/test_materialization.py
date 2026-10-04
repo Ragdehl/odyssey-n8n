@@ -27,8 +27,10 @@ from odyssey_core import (
     materialize_update,
     update_entity,
 )
-from odyssey_core.atomic_facts import append_atomic_facts
+from odyssey_core.atomic_facts import append_atomic_facts, parse_atomic_facts
+from odyssey_core.materialization import materialize_calendar_day_record
 from odyssey_core.notes import parse_note, serialize_note
+from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -217,7 +219,51 @@ def test_calendar_day_literal_capture_uses_core_validation_atomic_provenance_and
     assert second.operation is PersistenceOperation.NO_CHANGE
     assert "Mañana viene el fontanero" in body
     assert "rewritten provider text" not in body
-    assert "<!-- odyssey:fact request=route-1 ordinal=0 -->" in body
+    fact = parse_atomic_facts(body)[0]
+    assert fact.request_id == "route-1"
+    assert fact.ordinal == 0
+    assert fact.recorded_at == NOW
+
+
+def test_calendar_day_record_uses_deterministic_core_identity_after_reference_rendering(
+    repository: VaultRepository,
+) -> None:
+    """Persist Core-rendered facts to the authorized Day without a Calendar mutation path."""
+    knowledge = KnowledgeUnit(
+        SelectionCriteria(None, "2026-08-27", "calendar_day", (), None),
+        "record",
+        (),
+        (),
+        ("He vaciado el garaje con Bea.",),
+        (),
+    )
+    preflight = UnitTargetPreflight(
+        0,
+        WriteTargetOutcome.CREATE,
+        "date:2026-08-27",
+        "2026-08-27",
+        "calendar/days/2026-08-27.md",
+    )
+
+    result = materialize_calendar_day_record(
+        knowledge,
+        preflight,
+        repository=repository,
+        schema=SCHEMA,
+        actor="core",
+        now=NOW,
+        rendered_facts=("He vaciado el garaje con [[people/bea|Bea]].",),
+        request_id="day-core-record",
+        fact_ordinals=(0,),
+    )
+
+    note = parse_note(repository.read_text("calendar/days/2026-08-27.md"))
+    assert result.operation is PersistenceOperation.CREATED
+    assert result.id == "date:2026-08-27"
+    assert note.metadata["id"] == "date:2026-08-27"
+    assert note.metadata["type"] == "calendar_day"
+    assert note.metadata["date"] == "2026-08-27"
+    assert "[[people/bea|Bea]]" in note.content
 
 
 def test_production_writer_payload_is_luna_medium_full_note_and_no_storage() -> None:
@@ -706,3 +752,46 @@ def test_malformed_reserved_calendar_link_fails_before_source_persistence(
 
     assert repository.read_text("people/bea.md") == before
     assert not (repository.root / "calendar").exists()
+
+
+def test_calendar_day_materialization_persists_hidden_semantic_clock_anchor(
+    repository: VaultRepository,
+) -> None:
+    """Persist Day-visible clock text with separate hidden semantic and capture timestamps."""
+    from odyssey_core.temporal import TemporalAnchor
+
+    anchor = TemporalAnchor.from_value("2026-08-27T15:35:00+02:00")
+    knowledge = KnowledgeUnit(
+        SelectionCriteria(None, "2026-08-27", "calendar_day", (), None),
+        "record",
+        (),
+        (),
+        ("15:35 — Voy al dentista.",),
+        (),
+        fact_temporal_anchors=((anchor,),),
+    )
+    preflight = UnitTargetPreflight(
+        0,
+        WriteTargetOutcome.CREATE,
+        "date:2026-08-27",
+        "2026-08-27",
+        "calendar/days/2026-08-27.md",
+    )
+
+    materialize_calendar_day_record(
+        knowledge,
+        preflight,
+        repository=repository,
+        schema=SCHEMA,
+        actor="core",
+        now=NOW,
+        rendered_facts=knowledge.facts,
+        request_id="day-clock-record",
+        fact_ordinals=(0,),
+    )
+
+    note = parse_note(repository.read_text("calendar/days/2026-08-27.md"))
+    fact = parse_atomic_facts(note.content)[0]
+    assert fact.text == "15:35 — Voy al dentista."
+    assert fact.recorded_at == NOW
+    assert [item.value for item in fact.temporal_anchors] == ["2026-08-27T15:35:00+02:00"]

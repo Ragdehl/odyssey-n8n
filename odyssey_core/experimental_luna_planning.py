@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -16,13 +17,6 @@ from time import perf_counter
 from typing import Any, Protocol
 
 from odyssey_core.domain_interpretation import DomainInterpretation
-from odyssey_core.fixed_fact_capture import (
-    FIXED_FACT_ENRICHMENT_FORMAT_NAME,
-    FIXED_FACT_ENRICHMENT_MAX_OUTPUT_TOKENS,
-    decode_fixed_fact_enrichment,
-    fixed_fact_enrichment_json_schema,
-    render_fixed_fact_enrichment_prompt,
-)
 from odyssey_core.observability import (
     OperationalOutcome,
     OperationalSpan,
@@ -35,8 +29,10 @@ from odyssey_core.request_planning import (
     PlannerValidationStage,
     RequestPlan,
     RequestPlanningError,
+    bind_plan_temporal_anchors,
     compact_planner_result_json_schema,
     finalize_request_plan,
+    planner_authorized_calendar_dates,
     planner_result_json_schema,
     render_semantic_write_planner_prompt,
     request_plan_json_schema,
@@ -46,6 +42,8 @@ from odyssey_core.request_planning import (
 )
 from odyssey_core.semantic_write import (
     SemanticWriteCompileError,
+    SemanticWriteIntent,
+    TemporalReferencePart,
     compile_semantic_write,
     decode_semantic_write_action,
     semantic_write_action_json_schema,
@@ -85,7 +83,10 @@ ExperimentalPlannerResult = RequestPlan | PlannerClarification | PlannerEscalati
 
 
 def luna_experimental_result_json_schema(
-    schema: Mapping[str, Any], domain_interpretation: DomainInterpretation | None = None
+    schema: Mapping[str, Any],
+    domain_interpretation: DomainInterpretation | None = None,
+    *,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Build the strict nested PLAN/CLARIFY/ESCALATE provider schema.
 
@@ -93,7 +94,9 @@ def luna_experimental_result_json_schema(
     is appended. The root remains a closed object and the union stays beneath ``result`` for the
     supported Structured Outputs subset.
     """
-    production_schema = compact_planner_result_json_schema(schema)
+    production_schema = compact_planner_result_json_schema(
+        schema, authorized_calendar_dates=authorized_calendar_dates
+    )
     existing_branches = production_schema["properties"]["result"]["anyOf"]
     escalate_branch = {
         "type": "object",
@@ -112,6 +115,7 @@ def luna_experimental_result_json_schema(
         include_temporal_reference=bool(
             domain_interpretation and domain_interpretation.temporal_references()
         ),
+        authorized_calendar_dates=authorized_calendar_dates,
     )
     existing_filter_array = definitions["filter_array"]
     if semantic_definitions["filter_array"] != existing_filter_array:
@@ -134,6 +138,8 @@ def validate_luna_experimental_result(
     payload: Any,
     schema: Mapping[str, Any],
     domain_interpretation: DomainInterpretation | None = None,
+    *,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> ExperimentalPlannerResult:
     """Validate a Luna result without weakening production planner validation.
 
@@ -148,9 +154,19 @@ def validate_luna_experimental_result(
             code=PlannerValidationCode.INVALID_FIELDS,
         )
     if payload.get("outcome") == "CLARIFY":
-        return validate_planner_result(payload, schema, domain_interpretation)
+        return validate_planner_result(
+            payload,
+            schema,
+            domain_interpretation,
+            authorized_calendar_dates=authorized_calendar_dates,
+        )
     if payload.get("outcome") == "PLAN":
-        return _validate_luna_plan(payload, schema, domain_interpretation)
+        return _validate_luna_plan(
+            payload,
+            schema,
+            domain_interpretation,
+            authorized_calendar_dates=authorized_calendar_dates,
+        )
     if payload.get("outcome") != "ESCALATE":
         return validate_planner_result(payload, schema)
     if set(payload) != {"outcome", "actions", "limitations", "clarification_code"}:
@@ -174,6 +190,8 @@ def _validate_luna_plan(
     payload: Mapping[str, Any],
     schema: Mapping[str, Any],
     domain_interpretation: DomainInterpretation | None = None,
+    *,
+    authorized_calendar_dates: Sequence[str] = (),
 ) -> RequestPlan:
     """Compile semantic writes in provider order and reuse established action/final invariants."""
     required = {"outcome", "actions", "limitations", "clarification_code"}
@@ -190,6 +208,7 @@ def _validate_luna_plan(
             code=PlannerValidationCode.INVALID_FIELDS,
         )
     actions = []
+    semantic_write_intents: list[SemanticWriteIntent] = []
     for raw_action in payload["actions"]:
         try:
             if isinstance(raw_action, dict) and raw_action.get("kind") == "write":
@@ -199,22 +218,75 @@ def _validate_luna_plan(
                         domain_interpretation and domain_interpretation.temporal_references()
                     ),
                 )
-                actions.append(compile_semantic_write(intent, schema))
+                semantic_write_intents.append(intent)
+                actions.append(
+                    compile_semantic_write(
+                        intent, schema, authorized_calendar_dates=authorized_calendar_dates
+                    )
+                )
             else:
-                actions.append(validate_request_action(raw_action, schema))
+                actions.append(
+                    validate_request_action(
+                        raw_action, schema, authorized_calendar_dates=authorized_calendar_dates
+                    )
+                )
         except SemanticWriteCompileError as error:
             raise RequestPlanningError(
                 "Luna semantic WRITE failed local compilation",
                 stage=PlannerValidationStage.WRITE_ACTION,
                 code=PlannerValidationCode.INVALID_MUTATION,
             ) from error
+    _validate_semantic_temporal_evidence(semantic_write_intents, domain_interpretation)
     plan = finalize_request_plan(
         actions,
         payload["limitations"],
         payload.get("presentation_intent", "answer"),
     )
     validate_plan_against_domain_interpretation(plan, domain_interpretation)
-    return plan
+    return bind_plan_temporal_anchors(plan, domain_interpretation)
+
+
+def _validate_semantic_temporal_evidence(
+    intents: Sequence[SemanticWriteIntent],
+    interpretation: DomainInterpretation | None,
+) -> None:
+    """Bind semantic temporal parts to exact trusted source-text/date evidence pairs."""
+    if interpretation is None:
+        return
+    allowed = Counter(
+        (item.source_text, item.value) for item in interpretation.temporal_references()
+    )
+    found: Counter[tuple[str, str]] = Counter()
+    consumed_values: set[str] = set()
+    for intent in intents:
+        for operation in intent.operations:
+            if operation.target.note_type == "calendar_day":
+                target_date = operation.target.description
+                consumed_values.update(
+                    item.value
+                    for item in interpretation.temporal_references()
+                    if item.temporal_anchor().date == target_date
+                    and item.temporal_anchor().time is None
+                )
+            for fact in operation.facts:
+                for part in fact.parts:
+                    if isinstance(part, TemporalReferencePart):
+                        found[(part.text, part.value)] += 1
+    required = Counter(
+        {pair: count for pair, count in allowed.items() if pair[1] not in consumed_values}
+    )
+    if found - required:
+        raise RequestPlanningError(
+            "Luna semantic WRITE contains temporal wording/temporal evidence not supplied by Temporal",
+            stage=PlannerValidationStage.WRITE_ACTION,
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
+    if intents and required - found:
+        raise RequestPlanningError(
+            "Luna semantic WRITE omitted required temporal wording/temporal evidence",
+            stage=PlannerValidationStage.WRITE_ACTION,
+            code=PlannerValidationCode.INVALID_MUTATION,
+        )
 
 
 def render_luna_experimental_prompt(
@@ -383,7 +455,6 @@ class OpenAILunaExperimentalPlanner:
         self.reasoning_effort = LUNA_EXPERIMENT_REASONING_EFFORT
         self.max_output_tokens = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS
         self.max_retries = LUNA_EXPERIMENT_AUTOMATIC_RETRIES
-        self.last_call = False
         self.last_usage: dict[str, int] | None = None
         self.last_response_id: str | None = None
         self.last_provider_status: str | None = None
@@ -451,8 +522,13 @@ class OpenAILunaExperimentalPlanner:
                 size_components=sizes,
                 domain_interpretation=self._domain_interpretation,
             )
+            authorized_calendar_dates = planner_authorized_calendar_dates(
+                self._current_context, self._domain_interpretation
+            )
             output_schema = luna_experimental_result_json_schema(
-                self._schema, self._domain_interpretation
+                self._schema,
+                self._domain_interpretation,
+                authorized_calendar_dates=authorized_calendar_dates,
             )
             sizes["user_request_bytes"] = len(request.encode("utf-8"))
             sizes["structured_output_schema_bytes"] = len(
@@ -527,7 +603,12 @@ class OpenAILunaExperimentalPlanner:
             raise RequestPlanningError("Luna experiment result wrapper is invalid")
         try:
             result = validate_luna_experimental_result(
-                payload["result"], self._schema, self._domain_interpretation
+                payload["result"],
+                self._schema,
+                self._domain_interpretation,
+                authorized_calendar_dates=planner_authorized_calendar_dates(
+                    self._current_context, self._domain_interpretation
+                ),
             )
         except RequestPlanningError as error:
             recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)
@@ -550,56 +631,6 @@ class OpenAILunaExperimentalPlanner:
             else "plan"
         )
         return result
-
-    def enrich_fixed_fact(self, capture_text: str):  # type: ignore[no-untyped-def]
-        """Make one Luna attempt under the separate fixed-fact parts-only contract.
-
-        The scoped response cannot contain a destination or mutation. Local decoding additionally
-        proves that ordered part text is an exact partition of ``capture_text``. Callers own literal
-        fallback; this method never invokes Sol or the ordinary request planner.
-        """
-        if not isinstance(capture_text, str) or not capture_text.strip():
-            raise RequestPlanningError("Fixed fact capture text must be non-empty")
-        self.last_call = True
-        self.last_usage = None
-        self.last_response_id = None
-        self.last_provider_status = None
-        self.last_error_category = None
-        output_schema = fixed_fact_enrichment_json_schema(self._schema)
-        try:
-            response = self._client.responses.create(
-                model=LUNA_EXPERIMENT_MODEL,
-                reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
-                store=False,
-                max_output_tokens=FIXED_FACT_ENRICHMENT_MAX_OUTPUT_TOKENS,
-                input=[
-                    {"role": "system", "content": render_fixed_fact_enrichment_prompt()},
-                    {"role": "user", "content": capture_text},
-                ],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": FIXED_FACT_ENRICHMENT_FORMAT_NAME,
-                        "strict": True,
-                        "schema": output_schema,
-                    }
-                },
-            )
-        except Exception as error:
-            self.last_error_category = type(error).__name__[:120]
-            raise RequestPlanningError("Fixed fact enrichment provider call failed") from error
-        self.last_usage = normalize_provider_usage(response)
-        self.last_response_id = _bounded_metadata(getattr(response, "id", None))
-        self.last_provider_status = _bounded_metadata(getattr(response, "status", None))
-        if self.last_provider_status != "completed":
-            self.last_error_category = "IncompleteProviderResponse"
-            raise RequestPlanningError("Fixed fact enrichment response was not completed")
-        try:
-            payload = json.loads(response.output_text)
-            return decode_fixed_fact_enrichment(payload, capture_text)
-        except Exception as error:
-            self.last_error_category = "LocalFixedFactValidationError"
-            raise RequestPlanningError("Fixed fact enrichment output was invalid") from error
 
 
 def _bounded_metadata(value: Any, *, maximum: int = 160) -> str | None:

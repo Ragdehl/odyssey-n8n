@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "current_context": {
+    "date": "2026-10-04",
+    "time": "10:00:00",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "today-day-owned",
+      "source": "Hoy hemos vaciado el garaje con Bea y mis hijos.",
+      "expect": {
+        "mentions": [
+          {
+            "temporal_text": "Hoy",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-04",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "core_outcome": "SUPPORTED"
+    },
+    {
+      "id": "tomorrow-entity-owned",
+      "source": "Marta empieza mañana a vivir con Daniel.",
+      "expect": {
+        "mentions": [
+          {
+            "temporal_text": "mañana",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-05",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "core_outcome": "SUPPORTED"
+    },
+    {
+      "id": "multiple-exact-dates",
+      "source": "Ayer vi a Ana y hoy vi a Luis.",
+      "expect": {
+        "mentions": [
+          {
+            "temporal_text": "Ayer",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-03",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          },
+          {
+            "temporal_text": "hoy",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-04",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "core_outcome": "SUPPORTED"
+    },
+    {
+      "id": "exact-datetime",
+      "source": "Marta empieza mañana a las 15:00 en Airbus.",
+      "expect": {
+        "mentions": [
+          {
+            "temporal_text": "mañana a las 15:00",
+            "temporal": {
+              "kind": "EXACT_DATETIME",
+              "exact_date": null,
+              "exact_datetime": "2026-10-05T15:00:00+02:00",
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "core_outcome": "SUPPORTED"
+    },
+    {
+      "id": "date-range",
+      "source": "Marta vivió en Lyon de enero a marzo de 2025.",
+      "expect": {
+        "mentions": [
+          {
+            "temporal_text": "de enero a marzo de 2025",
+            "temporal": {
+              "kind": "DATE_RANGE",
+              "exact_date": null,
+              "exact_datetime": null,
+              "range_start": "2025-01-01",
+              "range_end_exclusive": "2025-04-01"
+            }
+          }
+        ]
+      },
+      "core_outcome": "TEMPORAL_VALUE_REQUIRES_DOMAIN_OWNER"
+    },
+    {
+      "id": "unresolved",
+      "source": "Algún día quiero volver a Lyon.",
+      "expect": {
+        "mentions": [
+          {
+            "temporal_text": "Algún día",
+            "temporal": {
+              "kind": "UNSPECIFIED",
+              "exact_date": null,
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "core_outcome": "TEMPORAL_UNRESOLVED"
+    }
+  ]
+}

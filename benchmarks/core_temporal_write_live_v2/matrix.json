@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "current_context": {
+    "date": "2026-10-04",
+    "time": "13:00:00",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {"id":"C5-bea-children-date","source":"Hoy hemos vaciado el garaje con Bea y mis hijos.","evidence":[["Hoy","2026-10-04"]],"must_contain":["Bea","mis hijos","garaje"],"expect_anchors":["2026-10-04"]},
+    {"id":"C6-bea-children-datetime","source":"Mañana a las 15:35 voy al parque con Bea y mis hijos.","evidence":[["Mañana a las 15:35","2026-10-05T15:35:00+02:00"]],"must_contain":["Bea","mis hijos","parque","15:35"],"expect_anchors":["2026-10-05T15:35:00+02:00"]},
+    {"id":"C7-qualified-child-date","source":"Hoy cené con Bea y mi hijo al que le gusta el fútbol.","evidence":[["Hoy","2026-10-04"]],"must_contain":["Bea","mi hijo","fútbol"],"expect_anchors":["2026-10-04"]},
+    {"id":"C4-relational-friend-exact-datetime","source":"Mañana a las 15:35 voy a ver a mi amigo del barrio que tiene un barco.","evidence":[["Mañana a las 15:35","2026-10-05T15:35:00+02:00"]],"must_contain":["amigo","barrio","barco","15:35"],"expect_anchors":["2026-10-05T15:35:00+02:00"]}
+  ]
+}

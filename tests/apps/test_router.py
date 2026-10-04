@@ -22,14 +22,17 @@ from odyssey_apps import (
     route_plan_json_schema,
     validate_route_plan,
 )
-from odyssey_apps.calendar import CALENDAR_DESCRIPTOR
 from odyssey_apps.router import ROUTER_PROVIDER_TIMEOUT_SECONDS, render_router_prompt
+
+TEST_APP_DESCRIPTOR = ApplicationDescriptor(
+    "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
+)
 
 
 def catalog(*, enabled: bool = True):  # type: ignore[no-untyped-def]
-    """Return the small Calendar catalog used by closed router tests."""
-    registry = ApplicationRegistry.from_descriptors((CALENDAR_DESCRIPTOR,))
-    return registry.catalog(enabled_ids=("calendar",) if enabled else ())
+    """Return the small installed-app catalog used by closed router tests."""
+    registry = ApplicationRegistry.from_descriptors((TEST_APP_DESCRIPTOR,))
+    return registry.catalog(enabled_ids=("tasks",) if enabled else ())
 
 
 def plan(outcome: str, routes: list[dict[str, str]]) -> dict[str, object]:
@@ -44,7 +47,7 @@ def test_contract_accepts_core_app_split_and_repeated_destinations() -> None:
         RoutePlan(RouteOutcome.ROUTE, (Route("core", "Remember this."),)), "Remember this.", enabled
     )
     assert validate_route_plan(
-        RoutePlan(RouteOutcome.ROUTE, (Route("calendar", "Tomorrow dentist."),)),
+        RoutePlan(RouteOutcome.ROUTE, (Route("tasks", "Tomorrow dentist."),)),
         "Tomorrow dentist.",
         enabled,
     )
@@ -53,7 +56,7 @@ def test_contract_accepts_core_app_split_and_repeated_destinations() -> None:
         RouteOutcome.ROUTE,
         (
             Route("core", "Remember tea"),
-            Route("calendar", "and tomorrow dentist."),
+            Route("tasks", "and tomorrow dentist."),
             Route("core", "Then remember milk."),
         ),
     )
@@ -83,7 +86,7 @@ def test_unknown_and_disabled_executable_destinations_fail_closed(
     routes: tuple[Route, ...], message: str
 ) -> None:
     """Allow only Core plus currently enabled registered application destinations."""
-    selected_catalog = catalog(enabled=routes[0].capability_id != "calendar")
+    selected_catalog = catalog(enabled=routes[0].capability_id != "tasks")
     with pytest.raises(RouterError, match=message):
         validate_route_plan(
             RoutePlan(RouteOutcome.ROUTE, routes), "Tomorrow dentist.", selected_catalog
@@ -182,10 +185,11 @@ def test_fake_provider_uses_exact_luna_medium_strict_schema_and_bounded_context(
     assert call["text"]["format"]["strict"] is True
     schema = call["text"]["format"]["schema"]
     assert schema["properties"]["routes"]["items"]["properties"]["capability_id"]["enum"] == [
-        "core"
+        "core",
+        "temporal",
     ]
     prompt = call["input"][0]["content"]
-    assert '"id":"calendar"' in prompt and '"enabled":false' in prompt
+    assert '"id":"tasks"' in prompt and '"enabled":false' in prompt
     assert '"dependencies":["temporal"]' in prompt
     assert '"recent_routing_context"' in prompt and prompt.count('"content":"previous"') == 8
     assert call["input"][1] == {"role": "user", "content": "Remember tea."}
@@ -226,18 +230,22 @@ def test_prompt_allows_temporal_routing_without_date_normalization_or_context_au
     prompt = render_router_prompt(catalog(), ({"role": "user", "content": "earlier"},))
     evidence = json.loads(prompt.partition("\n")[2])
 
-    assert "Temporal wording may be considered only to choose capability ownership" in prompt
+    assert "Route an otherwise ordinary Core-owned dependent statement to temporal" in prompt
     assert "routing owner by the domain interpretation required" in prompt
-    assert "do not CLARIFY merely because the application may later delegate" in prompt
-    assert "never normalize or resolve dates or times into structured values" in prompt
+    assert "Do not route specialized Tasks/Events/etc. to temporal" in prompt
+    assert "Never normalize or resolve dates or times yourself" in prompt
     assert "routing continuity evidence only, never canonical truth or mutation authority" in prompt
     assert '"dependencies":["temporal"]' in prompt
     assert set(evidence["capabilities"][0]) == {"id", "routing_description", "enabled"}
-    assert evidence["capabilities"][1]["dependencies"] == ["temporal"]
-    assert evidence["capabilities"][1]["routing_description"] == (
-        "temporal interpretation of date-qualified statements, day/date-owned occurrences, "
-        "personal diary/journal capture, and Calendar navigation"
-    )
+    assert evidence["capabilities"][1] == {
+        "id": "temporal",
+        "routing_description": (
+            "ordinary Core-owned intent whose temporal wording must first be normalized; "
+            "Temporal resolves only date/time meaning and then returns the unchanged source to Core"
+        ),
+        "enabled": True,
+    }
+    assert evidence["capabilities"][2]["dependencies"] == ["temporal"]
 
 
 def test_from_environment_disables_retries_and_sets_finite_timeout(
@@ -291,7 +299,7 @@ def test_schema_allows_only_enabled_destination_ids() -> None:
     """Expose Core and enabled apps, never disabled routing evidence, in route enums."""
     schema = route_plan_json_schema(catalog())
     enum = schema["properties"]["routes"]["items"]["properties"]["capability_id"]["enum"]
-    assert enum == ["core", "calendar"]
+    assert enum == ["core", "temporal", "tasks"]
 
 
 def test_router_accepts_runtime_role_text_prior_context_shape() -> None:
@@ -301,69 +309,77 @@ def test_router_accepts_runtime_role_text_prior_context_shape() -> None:
     assert evidence["recent_routing_context"] == [{"role": "user", "content": "earlier"}]
 
 
-def test_frozen_router_live_gate_matrix_is_closed_and_locally_valid() -> None:
-    """Freeze the eight-case Router oracle before any paid provider evidence is collected."""
+def test_historical_router_v1_matrix_remains_locally_replayable() -> None:
+    """Retain the original Calendar-routing matrix as historical evidence only."""
     matrix = json.loads(
         (
             Path(__file__).resolve().parents[2] / "benchmarks/application_router/regression_v1.json"
         ).read_text(encoding="utf-8")
     )
-    assert matrix["version"] == 1
-    assert matrix["catalog"] == {"enabled": ["calendar"], "disabled": ["tasks"]}
-    assert [case["id"] for case in matrix["cases"]] == [
-        "core-only",
-        "calendar-only",
-        "independent-split",
-        "dependent-calendar",
-        "journal-stays-core",
-        "tasks-disabled",
-        "ambiguous-owner",
-        "meaningless-input",
-    ]
-    gate_catalog = ApplicationRegistry.from_descriptors(
+    historical_catalog = ApplicationRegistry.from_descriptors(
         (
-            ApplicationDescriptor(
-                "calendar", "day/date-owned occurrences and navigation", ("temporal",)
-            ),
-            ApplicationDescriptor(
-                "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
-            ),
+            ApplicationDescriptor("calendar", "historical Calendar chat capability", ("temporal",)),
+            TEST_APP_DESCRIPTOR,
         )
     ).catalog(enabled_ids=("calendar",))
     for case in matrix["cases"]:
         expected = case["expect"]
-        routes = tuple(
-            Route(capability_id, source_text) for capability_id, source_text in expected["routes"]
-        )
+        routes = tuple(Route(capability_id, text) for capability_id, text in expected["routes"])
         validate_route_plan(
-            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], gate_catalog
+            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], historical_catalog
         )
 
 
-def test_current_router_matrix_routes_daily_journal_to_calendar() -> None:
-    """Freeze the post-Journal-convergence router ownership without rewriting historical v1/v2 evidence."""
+def test_historical_router_v3_matrix_remains_locally_replayable() -> None:
+    """Retain the Journal-convergence Calendar matrix without treating it as current routing."""
     matrix = json.loads(
         (
             Path(__file__).resolve().parents[2] / "benchmarks/application_router/regression_v3.json"
         ).read_text(encoding="utf-8")
     )
-    assert matrix["version"] == 3
-    by_id = {case["id"]: case for case in matrix["cases"]}
-    assert by_id["journal-to-calendar"]["expect"]["routes"][0][0] == "calendar"
-    assert by_id["journal-implicit-today-to-calendar"]["expect"]["routes"][0][0] == "calendar"
-    gate_catalog = ApplicationRegistry.from_descriptors(
+    historical_catalog = ApplicationRegistry.from_descriptors(
         (
-            CALENDAR_DESCRIPTOR,
-            ApplicationDescriptor(
-                "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
-            ),
+            ApplicationDescriptor("calendar", "historical Calendar chat capability", ("temporal",)),
+            TEST_APP_DESCRIPTOR,
         )
     ).catalog(enabled_ids=("calendar",))
     for case in matrix["cases"]:
         expected = case["expect"]
-        routes = tuple(
-            Route(capability_id, source_text) for capability_id, source_text in expected["routes"]
-        )
+        routes = tuple(Route(capability_id, text) for capability_id, text in expected["routes"])
         validate_route_plan(
-            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], gate_catalog
+            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], historical_catalog
+        )
+
+
+def test_current_router_v6_matrix_uses_builtin_temporal_and_semantic_intent_splitting() -> None:
+    """Freeze current routing: split independent intents, not merely different destinations."""
+    matrix = json.loads(
+        (
+            Path(__file__).resolve().parents[2] / "benchmarks/application_router/regression_v6.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert matrix["version"] == 6
+    assert matrix["catalog"] == {"enabled": [], "disabled": ["tasks"]}
+    by_id = {case["id"]: case for case in matrix["cases"]}
+    assert by_id["temporal-day-owned"]["expect"]["routes"][0][0] == "temporal"
+    assert by_id["dependent-temporal-core"]["expect"]["routes"][0][0] == "temporal"
+    assert by_id["journal-explicit-date-is-temporal"]["expect"]["routes"][0][0] == "temporal"
+    assert by_id["journal-implicit-today-is-core"]["expect"]["routes"][0][0] == "core"
+    assert by_id["independent-temporal-temporal-split"]["expect"]["routes"] == [
+        ["temporal", "Ayer vi a Ana"],
+        ["temporal", "y hoy vi a Luis."],
+    ]
+    assert by_id["independent-core-core-split"]["expect"]["routes"][0][0] == "core"
+    assert len(by_id["shared-temporal-scope-no-split"]["expect"]["routes"]) == 1
+    assert len(by_id["shared-predicate-no-split"]["expect"]["routes"]) == 1
+    assert len(by_id["elliptical-predicate-no-split"]["expect"]["routes"]) == 1
+    assert len(by_id["shared-event-participants-no-split"]["expect"]["routes"]) == 1
+    assert by_id["exact-datetime-still-temporal"]["expect"]["routes"][0][0] == "temporal"
+    assert by_id["date-range-still-temporal"]["expect"]["routes"][0][0] == "temporal"
+    current_catalog = ApplicationRegistry.from_descriptors((TEST_APP_DESCRIPTOR,)).catalog()
+    for case in matrix["cases"]:
+        expected = case["expect"]
+        routes = tuple(Route(capability_id, text) for capability_id, text in expected["routes"])
+        validate_route_plan(
+            RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], current_catalog
         )

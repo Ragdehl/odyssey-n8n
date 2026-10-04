@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 
 import pytest
 
@@ -17,28 +16,19 @@ def test_v15_reuses_one_frozen_non_journal_core_sentinel() -> None:
     assert context == {"date": "2026-09-28", "time": "20:30", "timezone": "Europe/Paris"}
 
 
-def test_v15_pins_exact_current_sol_contract_and_budget() -> None:
-    case, context = run_live._case_and_context()
-    del case
+def test_v15_is_retained_historical_sol_evidence() -> None:
+    _case, context = run_live._case_and_context()
     schema = run_live._schema()
-    assert run_live._contract_hashes(schema, context) == (
-        run_live.PROMPT_SHA256,
-        run_live.PROVIDER_SCHEMA_SHA256,
-    )
-    assert run_live.budget_snapshot() == {
-        "calls": 1,
-        "input_bytes_upper": 72459,
-        "standard_usd_upper": Decimal("0.019407"),
-    }
-    assert run_live.AUTHORIZED_CEILING_USD == Decimal("0.020")
+    historical = (run_live.PROMPT_SHA256, run_live.PROVIDER_SCHEMA_SHA256)
+    assert run_live._contract_hashes(schema, context) != historical
 
 
-def test_v15_has_zero_provider_authority_without_explicit_flag(
+def test_v15_preflight_refuses_reuse_after_contract_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="contract changed"):
         run_live._preflight()
 
 

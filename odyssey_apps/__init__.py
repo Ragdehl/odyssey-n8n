@@ -5,6 +5,7 @@ Applications may depend on Odyssey Core.  Core deliberately does not import this
 
 from .catalog import (
     CORE_CAPABILITY_ID,
+    TEMPORAL_CAPABILITY_ID,
     ApplicationCatalog,
     ApplicationDescriptor,
     ApplicationRegistry,
@@ -26,6 +27,7 @@ __all__ = [
     "ApplicationDescriptor",
     "ApplicationRegistry",
     "CORE_CAPABILITY_ID",
+    "TEMPORAL_CAPABILITY_ID",
     "OpenAIApplicationRouter",
     "Route",
     "RouteOutcome",

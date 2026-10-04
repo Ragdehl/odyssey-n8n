@@ -15,6 +15,7 @@ from typing import Protocol
 
 from odyssey_apps import (
     CORE_CAPABILITY_ID,
+    TEMPORAL_CAPABILITY_ID,
     ApplicationCatalog,
     Route,
     RouteOutcome,
@@ -105,6 +106,7 @@ def execute_routed_request(
     catalog: ApplicationCatalog,
     core_execute: Callable[..., ApplicationResult],
     application_executors: Mapping[str, ApplicationExecutor],
+    temporal_execute: ApplicationExecutor | None = None,
     authenticated_actor: AuthenticatedActorContext | None = None,
     conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> ApplicationResult:
@@ -145,6 +147,7 @@ def execute_routed_request(
                 locator,
                 core_execute,
                 application_executors,
+                temporal_execute,
                 authenticated_actor,
                 conversation_context,
             )
@@ -209,6 +212,7 @@ def _execute_route(
     locator: str,
     core_execute: Callable[..., ApplicationResult],
     application_executors: Mapping[str, ApplicationExecutor],
+    temporal_execute: ApplicationExecutor | None,
     authenticated_actor: AuthenticatedActorContext | None,
     conversation_context: Sequence[Mapping[str, str]],
 ) -> ApplicationResult:
@@ -221,6 +225,12 @@ def _execute_route(
                 locator,
                 authenticated_actor,
                 conversation_context,
+            )
+        elif route.capability_id == TEMPORAL_CAPABILITY_ID:
+            if temporal_execute is None:
+                return _route_failure(locator, "TEMPORAL_EXECUTOR_UNAVAILABLE")
+            result = temporal_execute(
+                route.source_text, locator, authenticated_actor, conversation_context
             )
         else:
             executor = application_executors.get(route.capability_id)

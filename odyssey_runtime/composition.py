@@ -21,22 +21,10 @@ from odyssey_apps import (
     ApplicationRegistry,
     OpenAIApplicationRouter,
 )
-from odyssey_apps.calendar import (
-    CALENDAR_DESCRIPTOR,
-    CALENDAR_PLANNER_MODEL,
-    CALENDAR_PLANNER_REASONING_EFFORT,
-    CalendarApplication,
-    CalendarQueryService,
-    CalendarRouteExecutor,
-    OpenAICalendarPlanner,
-)
+from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
 from odyssey_core.application import (
-    ActionResult,
-    ActionStatus,
     ApplicationResult,
     ApplicationStatus,
-    UnitResult,
-    UnitStatus,
     allocate_request_id,
     execute_request,
 )
@@ -59,9 +47,7 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationService,
 )
 from odyssey_core.domain_interpretation import DomainInterpretation
-from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
-from odyssey_core.fixed_fact_capture import FixedFactCaptureService
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
     AuthenticatedActorContext,
@@ -85,6 +71,7 @@ from odyssey_core.observability import (
     OperationalOutcome,
     OperationalStage,
     ProviderCallEvidence,
+    normalize_provider_usage,
 )
 from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
 from odyssey_core.persistence import ActorInput
@@ -100,6 +87,11 @@ from odyssey_core.request_planning import (
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.storage import VaultRepository
+from odyssey_core.temporal_interpretation import (
+    OpenAITemporalInterpreter,
+    TemporalInterpreterError,
+)
+from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .delivery_results import LocalDeliveryResultStore
 from .routing import (
@@ -117,39 +109,6 @@ _TASKS_DESCRIPTOR = ApplicationDescriptor(
     routing_description="task lifecycle, due dates, completion and obligations",
     dependencies=("temporal",),
 )
-
-
-class _FreshCalendarPlanner:
-    """Create one domain-only Calendar planner with request-time temporal context per routed span."""
-
-    def __init__(self) -> None:
-        self.model = CALENDAR_PLANNER_MODEL
-        self.reasoning_effort = CALENDAR_PLANNER_REASONING_EFFORT
-        self.last_call = False
-        self.last_usage = None
-        self.last_response_id = None
-        self.last_provider_status = None
-        self.last_error_category = None
-
-    def plan(self, source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()):  # type: ignore[no-untyped-def]
-        """Plan one routed Calendar source using the current date/time rather than process startup."""
-        self.last_call = False
-        self.last_usage = None
-        self.last_response_id = None
-        self.last_provider_status = None
-        self.last_error_category = None
-        clock = _current_time()
-        planner = OpenAICalendarPlanner.from_environment(
-            {key: clock[key] for key in ("date", "time", "timezone")}
-        )
-        try:
-            return planner.plan(source_text, conversation_context)
-        finally:
-            self.last_call = planner.last_call
-            self.last_usage = planner.last_usage
-            self.last_response_id = planner.last_response_id
-            self.last_provider_status = planner.last_provider_status
-            self.last_error_category = planner.last_error_category
 
 
 def _enabled_application_ids() -> tuple[str, ...]:
@@ -202,6 +161,7 @@ class RuntimeComposition:
     application_catalog: ApplicationCatalog = field(default_factory=ApplicationCatalog.empty)
     application_router: ApplicationRouter | None = None
     application_executors: Mapping[str, ApplicationExecutor] = field(default_factory=dict)
+    temporal_executor: ApplicationExecutor | None = None
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
@@ -883,6 +843,7 @@ class RuntimeComposition:
                 catalog=self.application_catalog,
                 core_execute=self.core_execute,
                 application_executors=self.application_executors,
+                temporal_execute=self.temporal_executor,
                 authenticated_actor=authenticated_actor,
                 conversation_context=self._routing_conversation_context(
                     authenticated_actor, conversation_id, request_id
@@ -1397,99 +1358,112 @@ def build_runtime_from_environment() -> RuntimeComposition:
         CalendarQueryService(repository, schema, notes_service)
     )
 
-    application_catalog = ApplicationCatalog.empty()
-    application_router = None
-    application_executors: dict[str, ApplicationExecutor] = {}
     enabled_application_ids = _enabled_application_ids()
-    if enabled_application_ids:
-        application_catalog = ApplicationRegistry.from_descriptors(
-            (CALENDAR_DESCRIPTOR, _TASKS_DESCRIPTOR)
-        ).catalog(enabled_ids=enabled_application_ids)
-        application_router = OpenAIApplicationRouter.from_environment(application_catalog)
-        if application_catalog.executable("calendar") is not None:
+    application_catalog = ApplicationRegistry.from_descriptors((_TASKS_DESCRIPTOR,)).catalog(
+        enabled_ids=enabled_application_ids
+    )
+    application_router = OpenAIApplicationRouter.from_environment(application_catalog)
+    application_executors: dict[str, ApplicationExecutor] = {}
 
-            def capture_calendar_literal(
-                date: str,
-                literal: str,
-                request_id: str,
-                authenticated_actor: object | None,
-            ) -> ApplicationResult:
-                """Persist one routed Day literal through the canonical Calendar/Core boundary."""
-                if authenticated_actor is not None and not isinstance(
-                    authenticated_actor, AuthenticatedActorContext
-                ):
-                    raise ValueError("authenticated actor context is invalid")
-                clock = _current_time()
-                fixed_fact_enricher = OpenAILunaExperimentalPlanner.from_environment(
-                    schema, {key: clock[key] for key in ("date", "time", "timezone")}
-                )
-                captures = FixedFactCaptureService(
-                    repository,
-                    schema,
-                    history_recorder,
-                    enricher=fixed_fact_enricher,
-                    semantic_index=semantic_index,
-                    embedder=embedder,
-                    contextual_reasoner=contextual_reasoner,
-                    semantic_set_selector=semantic_set_selector,
-                    self_binding_repository=self_binding_repository,
-                )
-                captured = captures.capture_calendar_day(
-                    date=date,
-                    capture_text=literal,
-                    request_id=request_id,
-                    actor=_persistence_actor("calendar", authenticated_actor),
-                    now=clock["timestamp"],
-                    authenticated_actor=authenticated_actor,
-                )
-                unit = UnitResult(
-                    0,
-                    UnitStatus.SUCCEEDED,
-                    operation="calendar_capture",
-                    stable_note_id=captured.note_id,
-                    materially_affected=captured.changed,
-                )
-                return ApplicationResult(
-                    request_id,
-                    ApplicationStatus.COMPLETED,
-                    (
-                        ActionResult(
-                            0,
-                            "calendar",
-                            ActionStatus.COMPLETED,
-                            unit_results=(unit,),
-                        ),
-                    ),
-                    (captured.note_id,) if captured.changed else (),
-                    history=captured.history,
-                    operational=captured.operational,
-                )
-
-            def execute_calendar_core(
-                source_text: str,
-                request_id: str,
-                authenticated_actor: object | None,
-                conversation_context: Sequence[Mapping[str, str]],
-                domain_interpretation: DomainInterpretation,
-            ) -> ApplicationResult:
-                """Return Calendar evidence to the ordinary Core planner without preplanning writes."""
-                if authenticated_actor is not None and not isinstance(
-                    authenticated_actor, AuthenticatedActorContext
-                ):
-                    raise ValueError("authenticated actor context is invalid")
-                return core_execute(
-                    source_text,
-                    request_id,
-                    authenticated_actor,
-                    conversation_context_override=conversation_context,
-                    domain_interpretation=domain_interpretation,
-                )
-
-            application_executors["calendar"] = CalendarRouteExecutor(
-                _FreshCalendarPlanner(),
-                capture_day_literal=capture_calendar_literal,
-                execute_core=execute_calendar_core,
+    def execute_temporal_core(
+        source_text: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+    ) -> ApplicationResult:
+        """Resolve only time semantics, then return the unchanged source to ordinary Core."""
+        if authenticated_actor is not None and not isinstance(
+            authenticated_actor, AuthenticatedActorContext
+        ):
+            raise ValueError("authenticated actor context is invalid")
+        clock = _current_time()
+        interpreter = OpenAITemporalInterpreter.from_environment(
+            {key: clock[key] for key in ("date", "time", "timezone")}
+        )
+        started = perf_counter()
+        try:
+            temporal = interpreter.interpret(source_text, conversation_context)
+        except TemporalInterpreterError as error:
+            duration_ms = max(0.0, (perf_counter() - started) * 1000)
+            stage = OperationalStage(
+                "temporal.interpretation",
+                OperationalOutcome.FAILED,
+                duration_ms,
+                model=interpreter.model,
+                reasoning_effort=interpreter.reasoning_effort,
+                usage=normalize_provider_usage(interpreter.last_usage),
+                error_category=type(error).__name__,
             )
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.FAILED,
+                (),
+                (),
+                planning_error="TEMPORAL_INTERPRETATION_FAILED",
+                operational=OperationalEvidence(duration_ms, (stage,)),
+            )
+        duration_ms = max(0.0, (perf_counter() - started) * 1000)
+        provider_calls: tuple[ProviderCallEvidence, ...] = ()
+        if interpreter.last_call:
+            provider_calls = (
+                ProviderCallEvidence(
+                    name="temporal.interpretation",
+                    outcome=OperationalOutcome.COMPLETED,
+                    duration_ms=duration_ms,
+                    model=interpreter.model,
+                    reasoning_effort=interpreter.reasoning_effort,
+                    usage=normalize_provider_usage(interpreter.last_usage),
+                    response_id=interpreter.last_response_id,
+                    provider_status=interpreter.last_provider_status,
+                    attempt_count=1,
+                    ordinal=1,
+                ),
+            )
+        stage = OperationalStage(
+            "temporal.interpretation",
+            OperationalOutcome.COMPLETED,
+            duration_ms,
+            model=interpreter.model,
+            reasoning_effort=interpreter.reasoning_effort,
+            usage=normalize_provider_usage(interpreter.last_usage),
+            provider_calls=provider_calls,
+        )
+        temporal_kinds = temporal.kinds()
+        if any(kind is TemporalResolutionKind.UNSPECIFIED for kind in temporal_kinds):
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="TEMPORAL_UNRESOLVED",
+                operational=OperationalEvidence(duration_ms, (stage,)),
+            )
+        if any(
+            kind not in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
+            for kind in temporal_kinds
+        ):
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="TEMPORAL_VALUE_REQUIRES_DOMAIN_OWNER",
+                operational=OperationalEvidence(duration_ms, (stage,)),
+            )
+        core_result = core_execute(
+            source_text,
+            request_id,
+            authenticated_actor,
+            conversation_context_override=conversation_context,
+            domain_interpretation=temporal.core_domain_interpretation(),
+        )
+        return replace(
+            core_result,
+            operational=OperationalEvidence(
+                (core_result.operational.total_duration_ms or 0.0) + duration_ms,
+                (stage, *core_result.operational.stages),
+            ),
+        )
 
     return RuntimeComposition(
         core_execute=core_execute,
@@ -1497,6 +1471,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         application_catalog=application_catalog,
         application_router=application_router,
         application_executors=application_executors,
+        temporal_executor=execute_temporal_core,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
         notes_service=notes_service,

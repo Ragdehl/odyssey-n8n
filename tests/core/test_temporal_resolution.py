@@ -53,11 +53,32 @@ def test_exact_datetime_is_canonical_and_timezone_validated() -> None:
 
 
 def test_exact_datetime_rejects_naive_or_wrong_zone_offset() -> None:
-    """Fail closed on missing offsets and offsets impossible for the supplied IANA zone."""
+    """Keep the canonical Core primitive strict even when provider decoding is tolerant."""
     with pytest.raises(TemporalValueError, match="explicit UTC offset"):
         normalize_iso_datetime("2026-10-05T15:00:00", timezone="Europe/Paris")
     with pytest.raises(TemporalValueError, match="does not match"):
         normalize_iso_datetime("2026-12-05T15:00:00+02:00", timezone="Europe/Paris")
+
+
+def test_provider_exact_datetime_localizes_unambiguous_wall_time() -> None:
+    """Resolve provider-local wall time with runtime timezone before constructing Core value."""
+    resolution = parse_temporal_resolution(
+        payload(kind="EXACT_DATETIME", exact_datetime="2026-10-05T15:00:00"),
+        allowed_kinds=TASK_SHAPES,
+        timezone="Europe/Paris",
+    )
+    assert resolution.exact_datetime == "2026-10-05T15:00:00+02:00"
+
+
+def test_provider_exact_datetime_rejects_ambiguous_or_nonexistent_local_wall_time() -> None:
+    """Never guess a DST fold or normalize a local clock time that does not exist."""
+    for value in ("2026-10-25T02:30:00", "2026-03-29T02:30:00"):
+        with pytest.raises(TemporalValueError, match="ambiguous or nonexistent"):
+            parse_temporal_resolution(
+                payload(kind="EXACT_DATETIME", exact_datetime=value),
+                allowed_kinds=TASK_SHAPES,
+                timezone="Europe/Paris",
+            )
 
 
 def test_exact_datetime_rejects_nonexistent_dst_wall_time() -> None:

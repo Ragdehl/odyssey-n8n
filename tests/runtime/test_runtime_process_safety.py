@@ -234,13 +234,35 @@ def test_persistent_runtime_refreshes_planner_clock_for_each_request(
 
     monkeypatch.setattr(composition, "execute_request", fake_execute_request)
 
+    class FakeRouter:
+        last_call = False
+        last_usage = None
+        last_response_id = None
+        last_provider_status = None
+        last_error_category = None
+
+        def route(self, request, conversation_context=()):
+            del conversation_context
+            from odyssey_apps import Route, RouteOutcome, RoutePlan
+
+            return RoutePlan(RouteOutcome.ROUTE, (Route("core", request),))
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter,
+        "from_environment",
+        classmethod(lambda cls, catalog: FakeRouter()),
+    )
+
     runtime = composition.build_runtime_from_environment()
     runtime.execute("¿Qué pasa hoy?", "delivery-1")
     runtime.execute("¿Qué pasa hoy?", "delivery-2")
 
     assert [context["date"] for context in planner_contexts] == ["2026-09-02", "2026-09-03"]
     assert persistence_times == ["2026-09-02T23:59:59+02:00", "2026-09-03T00:00:01+02:00"]
-    assert request_ids == ["delivery-1", "delivery-2"]
+    from odyssey_runtime.routing import is_route_execution_id
+
+    assert is_route_execution_id("delivery-1", request_ids[0])
+    assert is_route_execution_id("delivery-2", request_ids[1])
 
 
 def test_runtime_server_uses_concurrent_http_execution(monkeypatch) -> None:
@@ -819,6 +841,25 @@ def test_intelligent_notes_uses_the_injected_planner_and_surfaces_deduplicated_f
     monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
     monkeypatch.setattr(composition, "PendingWorkRepository", lambda root: object())
     monkeypatch.setattr(composition, "GitHistoryRecorder", lambda root: object())
+
+    class FakeRouter:
+        last_call = False
+        last_usage = None
+        last_response_id = None
+        last_provider_status = None
+        last_error_category = None
+
+        def route(self, request, conversation_context=()):
+            del conversation_context
+            from odyssey_apps import Route, RouteOutcome, RoutePlan
+
+            return RoutePlan(RouteOutcome.ROUTE, (Route("core", request),))
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter,
+        "from_environment",
+        classmethod(lambda cls, catalog: FakeRouter()),
+    )
 
     runtime = composition.build_runtime_from_environment()
     result = runtime.notes(

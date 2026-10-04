@@ -1,0 +1,297 @@
+{
+  "version": 2,
+  "head": "74340a16ec9d278b812abdb55ac12f2008fec239",
+  "dirty_worktree": true,
+  "matrix_sha256": "3600ad45d021b29e1819274118c9cbfa29d54ee1b82ad85900deaca1a5643e92",
+  "source_digest": "f6d14c572ab5eb0abc7dd051fa5ca6cfbaa7b4361c75bb982956f207a061f83a",
+  "provider_attempts": 4,
+  "automatic_retries": 0,
+  "mutation_authority": false,
+  "budget_upper_usd": 0.04601344000000001,
+  "estimated_standard_cost_usd": 0.010326400000000001,
+  "estimated_regional_cost_usd": 0.011359040000000003,
+  "passed": true,
+  "rows": [
+    {
+      "id": "C5-bea-children-date",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "entity": null,
+              "query": "2026-10-04",
+              "type": "calendar_day",
+              "self_target": null
+            },
+            "facts": [
+              "Hemos vaciado el garaje con {{ref:0}} y mis hijos."
+            ],
+            "references": [
+              {
+                "mention": "Bea",
+                "role": "identity",
+                "query": null
+              }
+            ],
+            "reference_lookup_only": false,
+            "anchors": [
+              "2026-10-04"
+            ]
+          },
+          {
+            "target": {
+              "entity": "Bea",
+              "query": "Bea",
+              "type": "person",
+              "self_target": null
+            },
+            "facts": [],
+            "references": [],
+            "reference_lookup_only": true,
+            "anchors": []
+          }
+        ],
+        "footprint": "[{\"target\":{\"entity\":null,\"query\":\"2026-10-04\",\"type\":\"calendar_day\",\"self_target\":null},\"facts\":[\"hemos vaciado el garaje con {{ref:0}} y mis hijos.\"],\"references\":[{\"mention\":\"bea\",\"role\":\"identity\",\"query\":null}],\"reference_lookup_only\":false,\"anchors\":[\"2026-10-04\"]},{\"target\":{\"entity\":\"bea\",\"query\":\"bea\",\"type\":\"person\",\"self_target\":null},\"facts\":[],\"references\":[],\"reference_lookup_only\":true,\"anchors\":[]}]",
+        "anchors": [
+          "2026-10-04"
+        ]
+      },
+      "expect_anchors": [
+        "2026-10-04"
+      ],
+      "must_contain": [
+        "Bea",
+        "mis hijos",
+        "garaje"
+      ],
+      "error": null
+    },
+    {
+      "id": "C6-bea-children-datetime",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "entity": null,
+              "query": "2026-10-05",
+              "type": "calendar_day",
+              "self_target": null
+            },
+            "facts": [
+              "15:35 voy al parque con {{ref:0}} y mis hijos."
+            ],
+            "references": [
+              {
+                "mention": "Bea",
+                "role": "identity",
+                "query": null
+              }
+            ],
+            "reference_lookup_only": false,
+            "anchors": [
+              "2026-10-05T15:35:00+02:00"
+            ]
+          },
+          {
+            "target": {
+              "entity": "Bea",
+              "query": "Bea",
+              "type": "person",
+              "self_target": null
+            },
+            "facts": [],
+            "references": [],
+            "reference_lookup_only": true,
+            "anchors": []
+          }
+        ],
+        "footprint": "[{\"target\":{\"entity\":null,\"query\":\"2026-10-05\",\"type\":\"calendar_day\",\"self_target\":null},\"facts\":[\"15:35 voy al parque con {{ref:0}} y mis hijos.\"],\"references\":[{\"mention\":\"bea\",\"role\":\"identity\",\"query\":null}],\"reference_lookup_only\":false,\"anchors\":[\"2026-10-05t15:35:00+02:00\"]},{\"target\":{\"entity\":\"bea\",\"query\":\"bea\",\"type\":\"person\",\"self_target\":null},\"facts\":[],\"references\":[],\"reference_lookup_only\":true,\"anchors\":[]}]",
+        "anchors": [
+          "2026-10-05T15:35:00+02:00"
+        ]
+      },
+      "expect_anchors": [
+        "2026-10-05T15:35:00+02:00"
+      ],
+      "must_contain": [
+        "Bea",
+        "mis hijos",
+        "parque",
+        "15:35"
+      ],
+      "error": null
+    },
+    {
+      "id": "C7-qualified-child-date",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "entity": null,
+              "query": "2026-10-04",
+              "type": "calendar_day",
+              "self_target": null
+            },
+            "facts": [
+              "Cené con {{ref:0}} y {{ref:1}}."
+            ],
+            "references": [
+              {
+                "mention": "Bea",
+                "role": "identity",
+                "query": null
+              },
+              {
+                "mention": "mi hijo al que le gusta el fútbol",
+                "role": "identity",
+                "query": null
+              }
+            ],
+            "reference_lookup_only": false,
+            "anchors": [
+              "2026-10-04"
+            ]
+          },
+          {
+            "target": {
+              "entity": "Bea",
+              "query": "Bea",
+              "type": "person",
+              "self_target": null
+            },
+            "facts": [],
+            "references": [],
+            "reference_lookup_only": true,
+            "anchors": []
+          },
+          {
+            "target": {
+              "entity": null,
+              "query": "mi hijo al que le gusta el fútbol",
+              "type": "person",
+              "self_target": null
+            },
+            "facts": [],
+            "references": [],
+            "reference_lookup_only": true,
+            "anchors": []
+          }
+        ],
+        "footprint": "[{\"target\":{\"entity\":null,\"query\":\"2026-10-04\",\"type\":\"calendar_day\",\"self_target\":null},\"facts\":[\"cené con {{ref:0}} y {{ref:1}}.\"],\"references\":[{\"mention\":\"bea\",\"role\":\"identity\",\"query\":null},{\"mention\":\"mi hijo al que le gusta el fútbol\",\"role\":\"identity\",\"query\":null}],\"reference_lookup_only\":false,\"anchors\":[\"2026-10-04\"]},{\"target\":{\"entity\":\"bea\",\"query\":\"bea\",\"type\":\"person\",\"self_target\":null},\"facts\":[],\"references\":[],\"reference_lookup_only\":true,\"anchors\":[]},{\"target\":{\"entity\":null,\"query\":\"mi hijo al que le gusta el fútbol\",\"type\":\"person\",\"self_target\":null},\"facts\":[],\"references\":[],\"reference_lookup_only\":true,\"anchors\":[]}]",
+        "anchors": [
+          "2026-10-04"
+        ]
+      },
+      "expect_anchors": [
+        "2026-10-04"
+      ],
+      "must_contain": [
+        "Bea",
+        "mi hijo",
+        "fútbol"
+      ],
+      "error": null
+    },
+    {
+      "id": "C4-relational-friend-exact-datetime",
+      "passed": true,
+      "actual": {
+        "kind": "plan",
+        "units": [
+          {
+            "target": {
+              "entity": null,
+              "query": "2026-10-05",
+              "type": "calendar_day",
+              "self_target": null
+            },
+            "facts": [
+              "Voy a ver a {{ref:0}}.15:35"
+            ],
+            "references": [
+              {
+                "mention": "mi amigo del barrio que tiene un barco",
+                "role": "identity",
+                "query": null
+              }
+            ],
+            "reference_lookup_only": false,
+            "anchors": [
+              "2026-10-05T15:35:00+02:00"
+            ]
+          },
+          {
+            "target": {
+              "entity": null,
+              "query": "mi amigo del barrio que tiene un barco",
+              "type": "person",
+              "self_target": null
+            },
+            "facts": [],
+            "references": [],
+            "reference_lookup_only": true,
+            "anchors": []
+          }
+        ],
+        "footprint": "[{\"target\":{\"entity\":null,\"query\":\"2026-10-05\",\"type\":\"calendar_day\",\"self_target\":null},\"facts\":[\"voy a ver a {{ref:0}}.15:35\"],\"references\":[{\"mention\":\"mi amigo del barrio que tiene un barco\",\"role\":\"identity\",\"query\":null}],\"reference_lookup_only\":false,\"anchors\":[\"2026-10-05t15:35:00+02:00\"]},{\"target\":{\"entity\":null,\"query\":\"mi amigo del barrio que tiene un barco\",\"type\":\"person\",\"self_target\":null},\"facts\":[],\"references\":[],\"reference_lookup_only\":true,\"anchors\":[]}]",
+        "anchors": [
+          "2026-10-05T15:35:00+02:00"
+        ]
+      },
+      "expect_anchors": [
+        "2026-10-05T15:35:00+02:00"
+      ],
+      "must_contain": [
+        "amigo",
+        "barrio",
+        "barco",
+        "15:35"
+      ],
+      "error": null
+    }
+  ],
+  "provider_records": [
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10477,
+      "output_tokens": 386,
+      "response_id": "resp_031905c4c4a6218e016ac26607698c87d198fdc01374cc4909",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Hemos vaciado el garaje con \"},{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y mis hijos.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10500,
+      "output_tokens": 420,
+      "response_id": "resp_0299657cd9c93a44016ac2660cfcfc87d1bc79d0afa07ac861",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"Mañana a las 15:35\",\"value\":\"2026-10-05T15:35:00+02:00\"},{\"kind\":\"literal\",\"text\":\" voy al parque con \"},{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y mis hijos.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10479,
+      "output_tokens": 378,
+      "response_id": "resp_052c05e3928660a4016ac26612470087d1bf0058c29e50b5c6",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Cené con \"},{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y \"},{\"kind\":\"identity\",\"text\":\"mi hijo al que le gusta el fútbol\",\"identity\":{\"description\":\"mi hijo al que le gusta el fútbol\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":{\"source\":{\"kind\":\"SELF\"},\"member_query\":\"mi hijo\",\"extent\":\"one_member\"}}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 10504,
+      "output_tokens": 428,
+      "response_id": "resp_03cd0fbf1c6630fe016ac26617375887d1b46df85da247183d",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Voy a ver a \"},{\"kind\":\"identity\",\"text\":\"mi amigo del barrio que tiene un barco\",\"identity\":{\"description\":\"mi amigo del barrio que tiene un barco\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":{\"source\":{\"kind\":\"SELF\"},\"member_query\":\"mi amigo del barrio que tiene un barco\",\"extent\":\"one_member\"}}},{\"kind\":\"literal\",\"text\":\".\"},{\"kind\":\"temporal_reference\",\"text\":\"Mañana a las 15:35\",\"value\":\"2026-10-05T15:35:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    }
+  ]
+}

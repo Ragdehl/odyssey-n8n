@@ -26,6 +26,7 @@ from .relationship_evidence import (
 )
 from .request_planning import KnowledgeReference, KnowledgeUnit, SelectionCriteria, WriteAction
 from .storage import VaultRepository
+from .temporal import CALENDAR_DAY_TYPE, CalendarDayRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
 
@@ -395,6 +396,7 @@ def prepare_relationship_shared_fact_action(
         (),
         (f"{unit.facts[0]} ({markers})",),
         references,
+        fact_temporal_anchors=unit.fact_temporal_anchors,
     )
     members = tuple(
         KnowledgeUnit(
@@ -652,6 +654,18 @@ def _materialize_decision(
             name,
             path,
             reference_only=unit.reference_lookup_only,
+        )
+    if unit.target.type == CALENDAR_DAY_TYPE:
+        day = CalendarDayRepository(repository, schema).resolve(unit.target.query)
+        if day.materialized:
+            return UnitTargetPreflight(
+                unit_index, WriteTargetOutcome.UPDATE, day.id, day.date, day.path
+            )
+        if day.path in allocated_paths:
+            raise ReferencePreflightError(f"CREATE path already exists: {day.path}")
+        allocated_paths.add(day.path)
+        return UnitTargetPreflight(
+            unit_index, WriteTargetOutcome.CREATE, day.id, day.date, day.path
         )
     name = unit.target.entity or unit.target.query
     if not isinstance(name, str) or not name.strip():

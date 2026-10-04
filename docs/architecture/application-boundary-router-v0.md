@@ -1,6 +1,14 @@
 # Application Boundary + Router v0
 
-Status: **approved architecture contract; Slices 1-5 implemented and deterministically validated; Router retains its Attempt-5 8/8 pass and Calendar Attempt 8 now passes its full 10/10 Luna-low gate; focused Router + Calendar live validation is complete before DEV adoption**.
+Status: **approved architecture contract; current conversational flow is Router -> built-in Temporal when needed -> Core, with Calendar retained as presentation/query UI rather than a chat routing owner. Historical Calendar-planner sections below document superseded validation work.**
+
+## Current simplification (supersedes Calendar chat routing)
+
+- `temporal` is a built-in lower-level routing destination, not an application. It resolves every material grounded date/time mention in source order into the shared `TemporalResolution` contract.
+- Ordinary dated/timed knowledge routes `Router -> Temporal -> Core`. Core still owns semantic ownership, entities, relationship sets, references, clarification, and mutation planning. The current generic Core handoff consumes one or more `EXACT_DATE` or `EXACT_DATETIME` results as validated `TemporalAnchor` evidence. `DATE_RANGE` and `UNSPECIFIED` remain preserved by Temporal but fail closed before Core until a safe generic representation is approved.
+- Calendar is not registered as a conversational capability. Its runtime role is day/month presentation and query over canonical temporal knowledge.
+- `calendar_day` is a Core-owned deterministic destination. Core may target only a trusted exact date supplied by Temporal, or the current local date for ordinary day/diary capture; it is never an unrestricted semantic note type.
+- Specialized applications such as Tasks remain routing owners for their own domain semantics and may consume Temporal as a dependency before returning canonical writes to Core.
 
 ## Objective
 
@@ -16,7 +24,7 @@ or make ordinary Core READ/WRITE unusable
 
 Applications may depend on stable Core services. Core must not depend on application modules for startup or ordinary knowledge behavior.
 
-This phase is a prerequisite for Calendar v0 routing and for Tasks, the first lifecycle-heavy application.
+This boundary now supports built-in Temporal routing plus Tasks and later lifecycle-heavy applications; Calendar itself is a read/presentation surface, not a conversational route owner.
 
 ## Non-goals
 
@@ -43,15 +51,15 @@ The intended dependency graph is one-way:
 
 `odyssey_core/` owns reusable knowledge/platform primitives. Application-specific routing, planners, lifecycle rules, projections, and optional UI belong outside Core.
 
-The current Temporal Foundation remains a valid Core dependency: normalized dates/date-times, timezone context, ranges, and deterministic Day-reference primitives are reusable below Calendar, Tasks, and Events. Calendar-specific routing/query/presentation logic is not a reason to move more domain behavior into Core.
+The current Temporal Foundation remains a valid Core dependency: normalized dates/date-times, timezone context, ranges, and deterministic Day-reference primitives are reusable below Core, Tasks, Events, and Calendar presentation. Calendar-specific query/presentation logic is not a reason to move application semantics into Core.
 
-Descriptor `dependencies` name lower-level capability contracts; they are not an instruction for Runtime to build or execute an app-to-app DAG. In particular, a future `tasks -> temporal` dependency means the Tasks planner may reuse Core Temporal normalized shapes/validation inside its own application execution. It does not mean `Calendar -> Tasks`, and `temporal` is not a router destination.
+Descriptor `dependencies` name lower-level capability contracts; they are not an instruction for Runtime to build or execute an app-to-app DAG. `temporal` is now also a built-in router destination for otherwise Core-owned dated intents. A future `tasks -> temporal` dependency still means Tasks consumes the same lower-level Temporal contract inside its own execution; it does not create app-to-app delegation.
 
 The implementation uses `odyssey_apps/` as the application package boundary. Runtime composition may discover/enable applications; `odyssey_core/` must not import application packages.
 
 ## Request flow
 
-When at least one application capability is enabled, ordinary natural-language requests pass through a small router before detailed planning:
+Ordinary natural-language requests pass through the small router before detailed planning because `temporal` is always available as a built-in destination:
 
 ```text
 user request
@@ -59,21 +67,21 @@ user request
     v
 Router (GPT-6 Luna)
     |
-    +--> Core route ------> established Core planner
+    +--> Core route -----------------> established Core planner
     |
-    +--> Calendar route --> Calendar planner
+    +--> Temporal route -> normalize date/time -> same source -> Core planner
     |
-    +--> Tasks route -----> Tasks planner
-    `--> no safe route ---> fail closed / clarify
+    +--> Tasks route ----------------> Tasks planner (may consume Temporal)
+    `--> no safe route --------------> fail closed / clarify
 ```
 
-Explicit application entry points or future `@App` syntax may bypass model routing deterministically when the destination is unambiguous and enabled. Runtime may bypass the router only when no specialized application is registered at all. A registered but disabled capability remains visible to routing as unavailable evidence so specialized intent cannot silently fall through to Core.
+Calendar is absent from this conversational graph. Its month/day APIs project canonical state after writes have already been owned and executed by Core. Disabled registered applications remain visible to routing only as unavailable evidence so specialized intent cannot silently fall through to Core.
 
 ## Router model boundary
 
 The v0 router uses **GPT-6 Luna**. The initial `low` reasoning candidate did not prove stable enough: the same dependent temporal-owner case passed in Attempt 2 and regressed to Core again in Attempt 3 under an unchanged routing contract. The current provider-free successor therefore raises Router reasoning to `medium` rather than growing the prompt with case-specific rules. There is no automatic Sol fallback in Router v0 unless later evidence separately justifies one.
 
-New application planners also start with GPT-6 Luna. Their reasoning effort is validated per application; Calendar should begin with the smallest sufficient configuration. This phase does **not** switch or edit the already accepted Core planner model/prompt/Structured Output contract.
+Specialized application planners may use their own separately validated model contracts. Temporal is deliberately smaller: it resolves only bounded date/time meaning and returns evidence to Core. Exact dates and exact date-times may become shared Core temporal anchors; Temporal still does not choose targets, entities, facts, or mutations. This boundary does **not** give applications Core mutation authority.
 
 The router is intentionally much smaller than a planner. It may decide only:
 
@@ -89,8 +97,8 @@ It must not resolve identities, inspect the vault, invent facts, choose canonica
 Router input is generated from registered application manifests plus runtime availability. A v0 manifest needs only compact routing metadata, for example conceptually:
 
 ```text
-id: calendar
-routing_description: temporal interpretation of date-qualified statements, day/date-owned occurrences, and Calendar navigation
+id: tasks
+routing_description: task lifecycle, obligations, due dates, completion and task-specific state
 dependencies: [temporal]
 enabled: true | false   # runtime state, not app prompt detail
 ```
@@ -119,9 +127,9 @@ The router never emits stable IDs, note types, properties, dates, facts, app-int
 
 ## Splitting rule
 
-The router splits only **independent material intentions that require different capability owners**. It does not split merely because a sentence has several clauses, and it does not create extra model calls for multiple ordinary Core facts that the Core planner can already handle together.
+The router splits the current message into the smallest **material intentions that are independently interpretable from their own exact source span**. Independence, not destination diversity, is the boundary: adjacent intentions may therefore produce two `core` routes or two `temporal` routes when each span preserves its own subject/action/qualifiers and can be understood without borrowing omitted meaning from its sibling. This keeps downstream planners focused on one self-contained intention without turning Router into a semantic planner.
 
-Example:
+Examples:
 
 ```text
 "A Cloe le gusta el chocolate y mañana viene el fontanero."
@@ -129,27 +137,41 @@ Example:
 route 1 -> CORE
   "A Cloe le gusta el chocolate"
 
-route 2 -> CALENDAR
+route 2 -> TEMPORAL
   "y mañana viene el fontanero."
+
+"Ayer vi a Ana y hoy vi a Luis."
+
+route 1 -> TEMPORAL
+  "Ayer vi a Ana"
+
+route 2 -> TEMPORAL
+  "y hoy vi a Luis."
+
+"Marta vive en Lyon. Luis vive en París."
+
+route 1 -> CORE
+  "Marta vive en Lyon."
+
+route 2 -> CORE
+  "Luis vive en París."
 ```
 
-The route spans form an exact ordered partition of the original wording apart from whitespace. A conjunction or punctuation mark therefore belongs verbatim to one neighboring route; the router may not drop it or replace either clause with an interpreted summary.
+The route spans form an exact ordered partition of the original wording apart from whitespace. A conjunction or punctuation mark therefore belongs verbatim to one neighboring route; the router may not drop it or replace either clause with an interpreted summary. Router must never copy, synthesize, or rewrite a missing verb, temporal expression, negation, participant, or qualifier merely to manufacture an independent span.
 
 ## Dependent clauses stay together
 
-A request is not split when one clause changes the meaning or execution of another. The route goes to the primary capability whose domain semantics are needed; that capability may reuse Core or declared lower-level capabilities.
+A request is not split when one span would need semantic material that exists only in another span. Shared predicates/participant sets, ellipsis with an omitted verb or argument, and temporal/negation/qualifier scope that governs multiple clauses therefore remain together whenever exact-source partitioning would lose that meaning. For example, `Marta y Luis viven en Lyon.`, `Hoy vi a Ana y compré pan.`, `Hoy a las 15:00 veo a Bea y a las 17:00 a Luis.`, and `Hoy hemos vaciado el garaje con Bea y mis hijos.` each remain one route. The route goes to the primary capability whose domain semantics are needed; that capability may reuse Core or declared lower-level capabilities.
 
 Example:
 
 ```text
 "Marta empieza mañana a trabajar en Airbus."
         |
-        `--> one CALENDAR route
+        `--> one TEMPORAL route
 ```
 
-Calendar understands the temporal meaning, but the canonical knowledge owner can still be Marta. Routing ownership and knowledge ownership are deliberately distinct.
-
-The Calendar planner may therefore produce a shared Core write intent plus a validated temporal reference. Core still resolves Marta/Airbus, validates the mutation, renders canonical links, writes Markdown, records Git/history, and refreshes derived indexes.
+Temporal resolves only the date meaning and returns bounded evidence plus the unchanged source. The canonical knowledge owner can still be Marta because Core alone decides ownership, resolves Marta/Airbus, validates the mutation, renders canonical links, writes Markdown, records Git/history, and refreshes derived indexes.
 
 Likewise, a future request such as:
 
@@ -161,16 +183,13 @@ should remain one route when the reminder depends on the event. The selected app
 
 ## Application planners and shared Core contracts
 
-Each application owns its detailed planner contract. Application planners may emit:
+Each specialized application owns only the smallest domain contract required for its specialty. It may classify or normalize app-specific meaning, then hand bounded evidence or an app-specific action back to the shared runtime/Core boundary. It does **not** recreate a mini Core planner.
 
-- application-specific typed intents handled by that application; and
-- shared Core intents compiled through reusable Core contracts.
+Applications do not reimplement note creation, semantic ownership, identity/reference resolution, Markdown persistence, Git history, indexes, or authorization. Canonical knowledge writes return to the existing semantic-write/Core mutation contract.
 
-Applications do not reimplement note creation, identity resolution, Markdown persistence, Git history, indexes, or authorization. Shared write semantics should reuse the existing semantic-write/Core mutation contract rather than copy a second Note-creation protocol into every application prompt.
+A shared Core extension is justified only when it is genuinely cross-application. For example, typed temporal evidence belongs below Calendar/Tasks/Events because all can depend on the same Temporal contract while Core alone decides how that evidence participates in canonical knowledge.
 
-A small shared Core extension is justified only when it is genuinely cross-application. For example, a typed temporal-reference fact part can belong to Core because Calendar, Tasks, Events, Journal, and later capabilities may all need to preserve a normalized date reference while Core alone renders its canonical Markdown representation.
-
-App-specific lifecycle fields or actions do not move into Core merely because an application needs them.
+App-specific lifecycle state remains app-owned; ordinary knowledge semantics remain Core-owned.
 
 ## Execution and isolation
 
@@ -213,9 +232,11 @@ Core production model configuration     unchanged
 
 Application work therefore carries router/app regression responsibility without automatically reopening the full Core planner live gate.
 
-## First Calendar consumer
+## Historical Calendar routing experiment (superseded)
 
-Calendar is the first consumer of this boundary. Slice 4 moved Calendar-specific deterministic query, presentation, and compact descriptor ownership into `odyssey_apps/calendar/`, while the shared Day/date identity, links, ranges, and materialization primitives remain in `odyssey_core/temporal.py`. Runtime composes the read-only Calendar surface instead of owning Calendar projection semantics. Slice 5 now adds the provider-free natural-language Calendar planner/executor contract, but production routing remains deliberately disabled until the focused live gates and later DEV adoption.
+The following Slice 4-6 record is retained only as historical validation evidence. It does not describe the active runtime, where Calendar is not routable and built-in Temporal supplies date/time evidence to Core.
+
+Calendar was the first experimental consumer of this boundary. Slice 4 moved Calendar-specific deterministic query, presentation, and compact descriptor ownership into `odyssey_apps/calendar/`, while the shared Day/date identity, links, ranges, and materialization primitives remain in `odyssey_core/temporal.py`. Runtime composes the read-only Calendar surface instead of owning Calendar projection semantics. Slice 5 now adds the provider-free natural-language Calendar planner/executor contract, but production routing remains deliberately disabled until the focused live gates and later DEV adoption.
 
 Slice 5 is implemented provider-free. Calendar has its own closed GPT-6 Luna planner; after Slice 6 contract review its current candidate reasoning effort remains `low`
 contract, exact-date/DATE_RANGE/UNSPECIFIED temporal result shapes, strict local response parsing,
@@ -248,16 +269,18 @@ Every application follows the same dependency rule: specialize only what Core ca
 
 ## Deterministic acceptance criteria
 
-1. Registering/enabling Calendar changes no accepted Core planner prompt/schema/model artifact.
-2. Disabling Calendar leaves Core startup and ordinary READ/WRITE deterministic tests green.
-3. Router output is closed, validated, ordered, and carries only enabled capability IDs plus exact source text.
+1. Calendar remains usable as a deterministic month/day query surface without being a conversational capability.
+2. Ordinary undated Core READ/WRITE remains usable independently of optional applications.
+3. Router output is closed, validated, ordered, and carries only `core`, built-in `temporal`, or enabled application IDs plus exact source text.
 4. Rewritten/fabricated/overlapping/out-of-order/incompletely covered routed text fails closed locally.
-5. Independent Core + Calendar intents can be split without duplicate execution.
-6. A single dependent temporal/Core statement remains one route and preserves one canonical knowledge owner.
-7. Application code cannot bypass the validated Core mutation boundary to mutate canonical knowledge.
+5. Independent intents can be split even when adjacent routes share the same capability (Core/Core or Temporal/Temporal); dependent shared predicates, ellipsis, and cross-clause temporal/qualifier scope remain unsplit, and Temporal never rewrites source wording.
+6. A dependent dated Core statement remains one Temporal route, after which Core alone chooses canonical ownership and write shape.
+7. Temporal and application code cannot bypass the validated Core mutation boundary to mutate canonical knowledge.
 8. App failure/unavailability is reported as bounded route failure and does not poison unrelated Core routes.
-9. Router/app model failures make no canonical mutation unless a complete validated downstream intent already exists.
-10. No new application requires editing the Core planner instructions merely to become routable.
+9. Router/Temporal/app model failures make no canonical mutation unless a complete validated downstream Core intent exists.
+10. No new application requires recreating Core identity, reference, semantic-write, persistence, or history logic.
+11. `EXACT_DATETIME` evidence reaches Core without becoming an Event: Core renders the canonical Day plus clock for entity-owned facts, or only the clock for same-Day facts, and persists the exact semantic anchor separately from automatic fact `recorded_at`.
+12. `DATE_RANGE` and unresolved temporal wording remain non-executable at the generic Core boundary rather than being collapsed to one arbitrary Day.
 
 ## Model-facing validation
 
@@ -277,8 +300,6 @@ Router v0 should freeze a compact GPT-6 Luna regression matrix covering at least
 Calendar planner gets its own separate GPT-6 Luna gate for its detailed semantics. A router pass is not evidence that the Calendar planner is safe, and vice versa.
 
 Application planners are domain-local: they do not classify or name sibling applications. The Router alone knows the application catalog; a planner that receives foreign-domain semantics fails closed with a generic app-local `OUT_OF_SCOPE` result. Domain-local does not mean locally reimplementing Core: the earlier Calendar `CORE_SEMANTIC_WRITE` design is historical and retired. Current app-to-Core handoff uses only minimal `DomainInterpretation` evidence.
-
-A managed application capture follows the same ownership rule. For `DAY_LITERAL_CAPTURE`, Calendar may resolve the temporal destination and exact user-authored capture span, but it does not resolve people, aliases, relationship sets, references, Note types, or persistence. The destination remains fixed by the validated Calendar intent. Core may run one separately scoped, parts-only semantic enrichment over that exact text and then resolve only existing canonical identities; unresolved optional occurrences stay literal and never authorize CREATE. The enrichment contract contains no target, destination, mutation, stable ID, path, or Markdown authority and is not an app-to-app delegation.
 
 Slice 6 Attempt 1 ran at commit `f5949ec` after explicit bounded-cost authorization: 16/16 permitted Luna/low calls, zero retries, Router 7/8 and Calendar 4/8, for 11/16 overall. Review found all five failures to be candidate-contract/model failures rather than oracle drift. The retained evidence is owned by `benchmarks/application_router_calendar_live_v1/`. Review then removed sibling-application vocabulary from Calendar entirely. The Router v1 matrix remains unchanged; the consumed Calendar v1 matrix remains immutable historical evidence, while Calendar v2 changes only foreign-domain failures to generic `OUT_OF_SCOPE`. Attempt 2 then ran once at `459956a57770fd4e55c3dab75fa9cd7c58320e2b`: Router passed 8/8, Calendar passed 6/8, and the overall gate failed. The two remaining Calendar failures showed that foreign-domain semantics could still consume temporal handling or reach an over-broad shared Core-write schema. Attempt 3 therefore keeps Router v1 and Calendar v2 oracles unchanged while restricting Calendar Core writes to generic fact-only record operations over untyped identities, with duplicate local validation. Attempt 3 then ran once at `3319f6d4d1ec389140b7c722e70ab9670ce948dd`. Router completed 8/8 calls but only 6 matched the exact oracle: one mismatch was separator-whitespace allocation within a valid exact span, while the dependent temporal statement materially regressed to Core. Calendar produced no completed provider response because the narrowed schema failed at the provider boundary in every case. This is not Calendar semantic evidence. No retry or continuation was made. Attempt 4 then ran once at `7e9857d260dcafce4d986d33b8dc71d9b4789263`: 16/16 provider attempts completed, zero retries, Router 7/8 and Calendar 8/8. Calendar therefore passed its full frozen semantic gate with the app-native schema. Router still sent the dependent temporal statement `Marta empieza mañana a trabajar en Airbus.` to Core even at `medium`. Inspection showed the catalog description remained `day/date-owned occurrences and Calendar navigation`, which is narrower than the actual boundary because Calendar also owns temporal interpretation for date-qualified durable statements before delegating canonical writes to Core. Attempt 5 corrected exactly that capability description and made the gate import the production `CALENDAR_DESCRIPTOR` directly. It then ran once at `e186cf48561cfda9097f42268c8efaa82bab18bf`: 16/16 provider attempts completed, zero retries, Router passed 8/8, and Calendar passed 7/8. The sole remaining failure was `entity-owned-exact-date`, where Calendar returned `DAY_LITERAL_CAPTURE` instead of `CORE_SEMANTIC_WRITE`. Review then found that the prompt did not define precedence when the same statement is both a Day occurrence and the start/end/change of durable entity-owned knowledge. Attempt 6 (`medium`) was therefore retired unexecuted. The current successor keeps Calendar at `low`, adds one generic priority rule favoring durable entity-owned knowledge in that overlap, retains every Calendar v2 oracle, adds two distinct transition sentinels, and reuses the unchanged Router 8/8 evidence instead of spending new Router calls. Attempt 7 then ran once at `727da022370363ac6bb6fc53c4af79f7811a004e`: all 10 Calendar calls completed with zero retries, 8/10 passed, and both employment transition sentinels plus the residence transition chose `CORE_SEMANTIC_WRITE`. One failure was a correct `FAIL_CLOSED/TEMPORAL_UNRESOLVED` raw result carrying an irrelevant intent allowed by the flat provider schema but rejected locally; the other was the newly added Lyon sentinel requiring a place to be emitted as an identity, which mixed transition classification with a separate identity-decomposition question. v8 keeps Luna low and the precedence prompt unchanged, normalizes only non-executable fail-closed intent noise when no semantic write exists and a failure code is present, and replaces only that newly introduced place-identity sentinel with a clearly reusable person-to-person durable relation. The successor must pass deterministic unit/contract and vertical E2E coverage before any separately authorized live call.
 

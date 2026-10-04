@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "current_context": {
+    "date": "2026-10-04",
+    "time": "17:00:00",
+    "timezone": "Europe/Paris"
+  },
+  "router_cases": [
+    {
+      "id": "R1a-independent-temporal-repeat-1",
+      "source": "Ayer vi a Ana y hoy vi a Luis.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "R1b-independent-temporal-repeat-2",
+      "source": "Ayer vi a Ana y hoy vi a Luis.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "R1c-independent-temporal-repeat-3",
+      "source": "Ayer vi a Ana y hoy vi a Luis.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "R2-shared-temporal-scope-no-split",
+      "source": "Hoy vi a Ana y compré pan.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy vi a Ana y compré pan."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "R3-ellipsis-no-split",
+      "source": "Hoy a las 15:00 veo a Bea y a las 17:00 a Luis.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy a las 15:00 veo a Bea y a las 17:00 a Luis."
+          ]
+        ]
+      }
+    }
+  ],
+  "core_cases": [
+    {
+      "id": "C1-day-exact-datetime",
+      "source": "Mañana a las 15:35 viene el fontanero.",
+      "evidence": [
+        [
+          "Mañana a las 15:35",
+          "2026-10-05T15:35:00+02:00"
+        ]
+      ],
+      "must_contain": [
+        "fontanero",
+        "15:35"
+      ],
+      "expect_anchors": [
+        "2026-10-05T15:35:00+02:00"
+      ]
+    },
+    {
+      "id": "C2-bea-children-date",
+      "source": "Hoy hemos vaciado el garaje con Bea y mis hijos.",
+      "evidence": [
+        [
+          "Hoy",
+          "2026-10-04"
+        ]
+      ],
+      "must_contain": [
+        "Bea",
+        "mis hijos",
+        "garaje"
+      ],
+      "expect_anchors": [
+        "2026-10-04"
+      ]
+    },
+    {
+      "id": "C3-entity-exact-datetime",
+      "source": "Marta empieza mañana a las 15:35 a trabajar en Airbus.",
+      "evidence": [
+        [
+          "mañana a las 15:35",
+          "2026-10-05T15:35:00+02:00"
+        ]
+      ],
+      "must_contain": [
+        "Marta",
+        "Airbus",
+        "15:35"
+      ],
+      "expect_anchors": [
+        "2026-10-05T15:35:00+02:00"
+      ]
+    }
+  ]
+}

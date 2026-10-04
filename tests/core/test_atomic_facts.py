@@ -28,13 +28,38 @@ def test_atomic_facts_render_parse_and_note_scoped_identity() -> None:
     assert "# Added [[calendar/days/2026-08-29|29-08-2026]]" in body and "Legacy prose." in body
 
 
-def test_capture_heading_uses_calendar_day_not_timestamp_details() -> None:
-    """Expose the request capture day once without per-fact timestamps."""
+def test_capture_heading_shows_only_day_while_fact_marker_keeps_exact_recorded_at() -> None:
+    """Keep capture time machine-readable without exposing it in the visible fact text."""
     rendered = render_atomic_facts(("Works at Thales.",), "R1", (0,), "2026-08-30T23:45:00+02:00")
     assert rendered.startswith(
         "# Added [[calendar/days/2026-08-30|30-08-2026]]\n- Works at Thales."
     )
-    assert "23:45" not in rendered
+    fact = parse_atomic_facts(rendered)[0]
+    assert fact.text == "Works at Thales."
+    assert fact.recorded_at == "2026-08-30T23:45:00+02:00"
+    assert "- Works at Thales. 23:45" not in rendered
+
+
+def test_legacy_fact_marker_without_recorded_at_remains_readable() -> None:
+    """Do not invent capture times for historical facts created before timestamp metadata."""
+    body = (
+        "# Added [[calendar/days/2026-08-30|30-08-2026]]\n"
+        "- Works at Thales.\n"
+        "  <!-- odyssey:fact request=R1 ordinal=0 -->"
+    )
+    fact = parse_atomic_facts(body)[0]
+    assert fact.recorded_at is None
+    assert fact.locator == "R1:0"
+
+
+def test_malformed_recorded_at_in_hidden_marker_fails_closed() -> None:
+    """Never trust an unzoned or malformed capture timestamp embedded in Odyssey markup."""
+    body = (
+        "- Works at Thales.\n"
+        "  <!-- odyssey:fact request=R1 ordinal=0 recorded_at=2026-08-30T23:45:00 -->"
+    )
+    with pytest.raises(AtomicFactError, match="recorded_at"):
+        parse_atomic_facts(body)
 
 
 def test_malformed_odyssey_marker_fails_closed() -> None:
@@ -111,7 +136,12 @@ def test_same_day_append_reuses_one_capture_heading() -> None:
     body = append_atomic_facts(body, ("Second fact.",), "R2", (0,), "2026-10-01T18:00:00+02:00")
 
     assert body.count("# Added [[calendar/days/2026-10-01|01-10-2026]]") == 1
-    assert [fact.text for fact in parse_atomic_facts(body)] == ["First fact.", "Second fact."]
+    parsed = parse_atomic_facts(body)
+    assert [fact.text for fact in parsed] == ["First fact.", "Second fact."]
+    assert [fact.recorded_at for fact in parsed] == [
+        "2026-10-01T09:00:00+02:00",
+        "2026-10-01T18:00:00+02:00",
+    ]
     assert "request=R1 ordinal=0" in body
     assert "request=R2 ordinal=0" in body
 
@@ -137,3 +167,21 @@ def test_same_day_append_upgrades_selected_legacy_heading_without_rewriting_dupl
         "Later fact.",
         "New fact.",
     ]
+
+
+def test_atomic_fact_hidden_temporal_anchor_is_distinct_from_recorded_at() -> None:
+    """Persist semantic time separately from the automatic capture timestamp."""
+    from odyssey_core.temporal import TemporalAnchor
+
+    rendered = render_atomic_facts(
+        ("[[calendar/days/2026-10-05|05-10-2026]] 15:35 — Voy a ver a Luis.",),
+        "R-time",
+        (0,),
+        "2026-10-04T11:56:00+02:00",
+        temporal_anchors=((TemporalAnchor.from_value("2026-10-05T15:35:00+02:00"),),),
+    )
+    fact = parse_atomic_facts(rendered)[0]
+
+    assert fact.recorded_at == "2026-10-04T11:56:00+02:00"
+    assert [anchor.value for anchor in fact.temporal_anchors] == ["2026-10-05T15:35:00+02:00"]
+    assert "05-10-2026]] 15:35" in fact.text

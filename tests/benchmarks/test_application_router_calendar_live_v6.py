@@ -7,7 +7,7 @@ import hashlib
 import pytest
 
 from benchmarks.application_router_calendar_live_v6 import run_live
-from odyssey_apps.calendar import CALENDAR_DESCRIPTOR
+from benchmarks.calendar_legacy_descriptor import CALENDAR_DESCRIPTOR
 
 
 def test_v6_gate_uses_versioned_router_v2_and_calendar_v2_matrices() -> None:

@@ -1,0 +1,157 @@
+{
+  "version": 5,
+  "catalog": {
+    "enabled": [],
+    "disabled": [
+      "tasks"
+    ]
+  },
+  "cases": [
+    {
+      "id": "core-only",
+      "source": "A Cloe le gusta el chocolate.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "temporal-day-owned",
+      "source": "Mañana viene el fontanero.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "independent-core-temporal-split",
+      "source": "A Cloe le gusta el chocolate. Mañana viene el fontanero.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "temporal",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "dependent-temporal-core",
+      "source": "Marta empieza mañana a trabajar en Airbus.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "journal-explicit-date-is-temporal",
+      "source": "Escribe en mi diario que hoy fui al trabajo.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "journal-implicit-today-is-core",
+      "source": "Escribe en mi diario que he tenido un día tranquilo.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que he tenido un día tranquilo."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "tasks-disabled",
+      "source": "Tengo que llamar al banco el viernes.",
+      "expect": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      }
+    },
+    {
+      "id": "ambiguous-storage-wording",
+      "source": "Guárdalo como nota o en el calendario.",
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      }
+    },
+    {
+      "id": "meaningless-input",
+      "source": "...",
+      "expect": {
+        "outcome": "CLARIFY",
+        "routes": []
+      }
+    },
+    {
+      "id": "multiple-exact-dates-one-core-source",
+      "source": "Ayer vi a Ana y hoy vi a Luis.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana y hoy vi a Luis."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "exact-datetime-still-temporal",
+      "source": "Marta empieza mañana a las 15:00 en Airbus.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta empieza mañana a las 15:00 en Airbus."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "date-range-still-temporal",
+      "source": "Marta vivió en Lyon de enero a marzo de 2025.",
+      "expect": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta vivió en Lyon de enero a marzo de 2025."
+          ]
+        ]
+      }
+    }
+  ],
+  "route_source_comparison": "boundary_whitespace_insensitive_after_exact_span_validation"
+}

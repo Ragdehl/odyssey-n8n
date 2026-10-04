@@ -33,30 +33,30 @@ def test_v11_frozen_matrices_cover_journal_convergence_and_prior_routes() -> Non
     }
 
 
-def test_v11_pins_exact_candidate_contract_and_budget() -> None:
-    assert run_live._contract_hashes() == (
+def test_v11_is_retained_historical_evidence_not_the_current_contract() -> None:
+    """Keep the consumed v11 hashes immutable while proving Calendar chat routing is retired."""
+    historical = (
         run_live.ROUTER_PROMPT_SHA256,
         run_live.ROUTER_SCHEMA_SHA256,
         run_live.CALENDAR_PROMPT_SHA256,
         run_live.CALENDAR_SCHEMA_SHA256,
     )
-    budget = run_live.budget_snapshot()
-    assert budget == {
-        "calls": 18,
-        "input_bytes_upper": 55623,
-        "max_output_tokens": 9216,
-        "standard_usd_upper": 0.0101703,
-        "regional_usd_upper": 0.01118733,
-    }
-    assert budget["regional_usd_upper"] < run_live.AUTHORIZED_CEILING_USD == 0.013
+    assert historical == (
+        "1140626c2c05ec02d33aebc96456e4dc7387a8cab6340b18427c8fb8843d06d6",
+        "86ddd47fd22d1e6f3496d784679f6e71ac0b44a89b16d6d487a3298ea162908e",
+        "ecdfd472ef2a51ab32dd9512132bc77d77462e8fef81444971da844d2d6ab711",
+        "2230bfa0bf885b0c97e5bd458cebda6d38ebca8ec555fdbb72736fbc911f7e3c",
+    )
+    assert run_live._contract_hashes() != historical
 
 
-def test_v11_has_zero_provider_authority_without_explicit_flag(
+def test_v11_preflight_refuses_reuse_after_contract_retirement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A historical authorization can never be reused against the new Router/Temporal contract."""
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="contract changed"):
         run_live._preflight()
 
 

@@ -255,13 +255,13 @@ def test_direct_date_range_construction_preserves_half_open_invariant() -> None:
         DateRange("2026-1-01", "2026-10-01")
 
 
-def test_day_repository_requires_calendar_managed_schema(vault: Path, schema: dict) -> None:
-    """Fail before virtual resolution when the schema does not delegate the type to Calendar."""
+def test_day_repository_requires_core_managed_schema(vault: Path, schema: dict) -> None:
+    """Fail before virtual resolution when deterministic Day ownership leaves Core."""
     changed = json.loads(json.dumps(schema))
     day = next(item for item in changed["types"] if item["id"] == "calendar_day")
     del day["managed_by"]
 
-    with pytest.raises(ValueError, match="not delegated"):
+    with pytest.raises(ValueError, match="not managed by Core"):
         CalendarDayRepository(VaultRepository(vault), changed)
 
 

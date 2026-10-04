@@ -40,8 +40,8 @@ class NoteSchemaValidationTests(unittest.TestCase):
     def test_schema_version_is_phase17e_v3(self) -> None:
         self.assertEqual(self.schema["schema_version"], 3)
 
-    def test_active_type_registry_includes_calendar_managed_day(self) -> None:
-        """Register Calendar Day canonically without making it ordinary planner authority."""
+    def test_active_type_registry_includes_core_managed_day(self) -> None:
+        """Register Calendar Day as a Core-managed deterministic surface, not an ordinary target."""
         self.assertEqual(
             [note_type["id"] for note_type in self.schema["types"]],
             [
@@ -54,7 +54,7 @@ class NoteSchemaValidationTests(unittest.TestCase):
             ],
         )
         calendar_day = self.type_definition("calendar_day")
-        self.assertEqual(calendar_day["managed_by"], "calendar")
+        self.assertEqual(calendar_day["managed_by"], "core")
         self.assertEqual(
             calendar_day["properties"],
             [

@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 CORE_CAPABILITY_ID = "core"
+TEMPORAL_CAPABILITY_ID = "temporal"
 
 
 def _validate_identifier(value: str, *, field: str) -> str:
@@ -43,8 +44,8 @@ class ApplicationDescriptor:
     def __post_init__(self) -> None:
         """Validate descriptor metadata before it enters the closed registry."""
         _validate_identifier(self.id, field="id")
-        if self.id == CORE_CAPABILITY_ID:
-            raise ValueError("Application id 'core' is reserved for the built-in destination")
+        if self.id in {CORE_CAPABILITY_ID, TEMPORAL_CAPABILITY_ID}:
+            raise ValueError(f"Application id {self.id!r} is reserved for a built-in destination")
         if (
             not isinstance(self.routing_description, str)
             or not self.routing_description.strip()

@@ -33,7 +33,6 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_core.note_queries import NoteBodyBlock, NoteBodySegment, NoteSummary, StaleCursorError
-from odyssey_core.notes import parse_note
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -1423,12 +1422,39 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
             "timestamp": "2026-09-02T12:00:00+02:00",
         },
     )
-    monkeypatch.setattr(composition, "execute_request", lambda request, **kwargs: _result())
+    monkeypatch.setattr(
+        composition,
+        "execute_request",
+        lambda request, **kwargs: ApplicationResult(
+            kwargs["request_id_factory"](), ApplicationStatus.COMPLETED, (), ()
+        ),
+    )
+
+    class FakeRouter:
+        last_call = False
+        last_usage = None
+        last_response_id = None
+        last_provider_status = None
+        last_error_category = None
+
+        def route(self, request, conversation_context=()):
+            del conversation_context
+            from odyssey_apps import Route, RouteOutcome, RoutePlan
+
+            return RoutePlan(RouteOutcome.ROUTE, (Route("core", request),))
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter,
+        "from_environment",
+        classmethod(lambda cls, catalog: FakeRouter()),
+    )
 
     runtime = composition.build_runtime_from_environment()
     assert pending.is_dir()
     assert isinstance(runtime.identity_mapping_repository, IdentityMappingRepository)
-    assert runtime.execute("hello").request_id == "request-test"
+    routed = runtime.execute("hello")
+    assert routed.status is ApplicationStatus.COMPLETED
+    assert routed.request_id != "request-test"  # Router owns the outer delivery correlation.
 
 
 def test_composition_replaces_only_planner_provider_evidence() -> None:
@@ -1483,17 +1509,17 @@ def test_enabled_application_ids_are_explicit_and_reject_duplicates(monkeypatch)
     """Keep application adoption opt-in so PROD does not inherit DEV routing implicitly."""
     monkeypatch.delenv("ODYSSEY_ENABLED_APPLICATIONS", raising=False)
     assert composition._enabled_application_ids() == ()
-    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
-    assert composition._enabled_application_ids() == ("calendar",)
-    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar,calendar")
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks")
+    assert composition._enabled_application_ids() == ("tasks",)
+    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks,tasks")
     with pytest.raises(ValueError, match="duplicates"):
         composition._enabled_application_ids()
 
 
-def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
+def test_production_composition_routes_temporal_to_core_day_e2e(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Exercise the real composition root through Router, Calendar planner, and Day persistence."""
+    """Route an ordinary dated statement through Temporal, then the ordinary Core planner."""
     source = "Mañana viene el fontanero"
     vault_root = tmp_path / "vault"
     vault_root.mkdir()
@@ -1506,7 +1532,7 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
     monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
     monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault_root))
     monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings"))
-    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    monkeypatch.delenv("ODYSSEY_ENABLED_APPLICATIONS", raising=False)
     monkeypatch.setenv("ODYSSEY_ACTOR", "odyssey-dev-test")
 
     class FakeIndex:
@@ -1517,81 +1543,63 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
             return None
 
     class FakeResponses:
-        def __init__(self, payload, *, response_id: str, usage: dict[str, object]):
+        def __init__(self, payload):
             self.payload = payload
-            self.response_id = response_id
-            self.usage = usage
             self.calls = 0
 
         def create(self, **_kwargs):
             self.calls += 1
-            return SimpleNamespace(
-                id=self.response_id,
-                status="completed",
-                usage=self.usage,
-                output_text=json.dumps(self.payload),
-            )
+            return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
 
     router_responses = FakeResponses(
-        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]},
-        response_id="resp-router-e2e",
-        usage={
-            "input_tokens": 100,
-            "output_tokens": 20,
-            "input_tokens_details": {"cached_tokens": 10},
-        },
+        {"outcome": "ROUTE", "routes": [{"capability_id": "temporal", "source_text": source}]}
     )
-    calendar_responses = FakeResponses(
+    temporal_responses = FakeResponses(
         {
-            "outcome": "PLAN",
-            "intent": "DAY_LITERAL_CAPTURE",
-            "temporal_kind": "EXACT_DATE",
-            "exact_date": "2026-10-03",
-            "range_start": None,
-            "range_end_exclusive": None,
-            "temporal_text": "Mañana",
-            "capture_text": source,
-            "failure_code": None,
-        },
-        response_id="resp-calendar-e2e",
-        usage={
-            "input_tokens": 140,
-            "output_tokens": 30,
-            "input_tokens_details": {"cached_tokens": 20},
-        },
+            "mentions": [
+                {
+                    "temporal_text": "Mañana",
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": "2026-10-03",
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                }
+            ]
+        }
     )
-    fixed_fact_responses = FakeResponses(
-        {"parts": [{"kind": "literal", "text": source}]},
-        response_id="resp-fixed-fact-e2e",
-        usage={
-            "input_tokens": 60,
-            "output_tokens": 12,
-            "input_tokens_details": {"cached_tokens": 0},
-        },
-    )
-    calendar_contexts: list[dict[str, str]] = []
+    interpretations: list[DomainInterpretation | None] = []
 
     def build_router(cls, catalog):
         return cls(SimpleNamespace(responses=router_responses), catalog)
 
-    def build_calendar(cls, current_context):
-        calendar_contexts.append(dict(current_context))
-        return cls(SimpleNamespace(responses=calendar_responses), current_context)
+    def build_temporal(cls, current_context):
+        return cls(SimpleNamespace(responses=temporal_responses), current_context)
 
-    def build_fixed_fact(cls, schema, current_context, **_kwargs):
-        return cls(SimpleNamespace(responses=fixed_fact_responses), schema, current_context)
+    class FakeCorePlanner:
+        last_provider_calls = ()
+
+        @classmethod
+        def from_environment(cls, schema, current_context, *, domain_interpretation=None):
+            del schema, current_context
+            interpretations.append(domain_interpretation)
+            return cls()
+
+    def fake_execute_request(request, **kwargs):
+        assert request == source
+        request_id = kwargs["request_id_factory"]()
+        return ApplicationResult(request_id, ApplicationStatus.COMPLETED, (), ())
 
     monkeypatch.setattr(
         composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
     )
     monkeypatch.setattr(
-        composition.OpenAICalendarPlanner, "from_environment", classmethod(build_calendar)
+        composition.OpenAITemporalInterpreter, "from_environment", classmethod(build_temporal)
     )
-    monkeypatch.setattr(
-        composition.OpenAILunaExperimentalPlanner,
-        "from_environment",
-        classmethod(build_fixed_fact),
-    )
+    monkeypatch.setattr(composition, "OpenAIRequestPlanner", FakeCorePlanner)
+    monkeypatch.setattr(composition, "execute_request", fake_execute_request)
     monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **_kwargs: object())
     monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
     monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
@@ -1612,58 +1620,34 @@ def test_production_composition_routes_calendar_literal_to_isolated_vault_e2e(
     )
 
     runtime = composition.build_runtime_from_environment()
-    capabilities = {item.id: item for item in runtime.application_catalog.capabilities()}
-    assert capabilities["calendar"].enabled is True
-    assert capabilities["tasks"].enabled is False
+    assert runtime.application_catalog.capabilities()[0].id == "tasks"
+    assert runtime.application_catalog.capabilities()[0].enabled is False
     assert runtime.application_router is not None
-    assert set(runtime.application_executors) == {"calendar"}
+    assert runtime.application_executors == {}
+    assert runtime.temporal_executor is not None
 
     result = runtime.execute(
         source,
-        "outer-production-wiring",
+        "outer-temporal-wiring",
         authenticated_actor=AuthenticatedActorContext("123e4567-e89b-42d3-a456-426614174000"),
     )
 
     assert result.status is ApplicationStatus.COMPLETED
-    assert result.affected_stable_note_ids == ("date:2026-10-03",)
-    assert len(result.action_results) == 1
-    unit = result.action_results[0].unit_results[0]
-    assert unit.status is UnitStatus.SUCCEEDED
-    assert unit.operation == "calendar_capture"
-    assert unit.stable_note_id == "date:2026-10-03"
-    assert router_responses.calls == 1 and calendar_responses.calls == 1
-    assert fixed_fact_responses.calls == 1
-    assert calendar_contexts == [
-        {"date": "2026-10-02", "time": "18:30:00", "timezone": "Europe/Paris"}
-    ]
-    note = parse_note((vault_root / "calendar/days/2026-10-03.md").read_text(encoding="utf-8"))
-    assert "03-10-2026 viene el fontanero" in note.content
-    assert source not in note.content
-    public = application_result_to_response(result)
-    assert public["product_outcome"] == "ANSWER"
-    assert public["actions"][0]["units"][0]["status"] == "succeeded"
-    stages = public["operational"]["stages"]
-    assert [stage["name"] for stage in stages] == [
-        "application.router",
-        "calendar.planner",
-        "core.fixed_fact_enrichment",
-        "index_refresh",
-    ]
-    assert stages[0]["model"] == "gpt-6-luna"
-    assert stages[0]["usage"]["input_tokens"] == 100
-    assert stages[0]["provider_calls"][0]["response_id"] == "resp-router-e2e"
-    assert stages[1]["model"] == "gpt-6-luna"
-    assert stages[1]["usage"]["input_tokens"] == 140
-    assert stages[1]["provider_calls"][0]["response_id"] == "resp-calendar-e2e"
-    assert stages[2]["model"] == "gpt-5.6-luna"
-    assert stages[2]["usage"]["input_tokens"] == 60
-    assert stages[2]["provider_calls"][0]["response_id"] == "resp-fixed-fact-e2e"
+    assert router_responses.calls == 1 and temporal_responses.calls == 1
+    assert len(interpretations) == 1
+    interpretation = interpretations[0]
+    assert isinstance(interpretation, DomainInterpretation)
+    assert interpretation.capability_id == "temporal"
+    assert interpretation.source_text == source
+    assert interpretation.intent == "TEMPORAL_RESOLUTION"
+    assert interpretation.evidence[0].source_text == "Mañana"
+    assert interpretation.evidence[0].value == "2026-10-03"
 
 
-def test_production_composition_hands_calendar_domain_evidence_to_normal_core_planner_e2e(
+def test_production_composition_temporal_evidence_keeps_core_semantic_ownership(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Prove production wiring returns durable Calendar meaning to Core instead of preplanning it."""
+    """Temporal contributes only normalized date evidence; Core still owns targets and facts."""
     source = "Marta Test empieza mañana a vivir con Daniel Test."
     vault_root = tmp_path / "vault-domain"
     vault_root.mkdir()
@@ -1676,7 +1660,7 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
     monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
     monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault_root))
     monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings-domain"))
-    monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "calendar")
+    monkeypatch.delenv("ODYSSEY_ENABLED_APPLICATIONS", raising=False)
     monkeypatch.setenv("ODYSSEY_ACTOR", "odyssey-dev-test")
 
     class FakeIndex:
@@ -1694,19 +1678,22 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
             return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
 
     router_responses = FakeResponses(
-        {"outcome": "ROUTE", "routes": [{"capability_id": "calendar", "source_text": source}]}
+        {"outcome": "ROUTE", "routes": [{"capability_id": "temporal", "source_text": source}]}
     )
-    calendar_responses = FakeResponses(
+    temporal_responses = FakeResponses(
         {
-            "outcome": "PLAN",
-            "intent": "DELEGATE_TO_CORE",
-            "temporal_kind": "EXACT_DATE",
-            "exact_date": "2026-10-03",
-            "range_start": None,
-            "range_end_exclusive": None,
-            "temporal_text": "mañana",
-            "capture_text": None,
-            "failure_code": None,
+            "mentions": [
+                {
+                    "temporal_text": "mañana",
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": "2026-10-03",
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                }
+            ]
         }
     )
     interpretations: list[DomainInterpretation | None] = []
@@ -1714,8 +1701,8 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
     def build_router(cls, catalog):
         return cls(SimpleNamespace(responses=router_responses), catalog)
 
-    def build_calendar(cls, current_context):
-        return cls(SimpleNamespace(responses=calendar_responses), current_context)
+    def build_temporal(cls, current_context):
+        return cls(SimpleNamespace(responses=temporal_responses), current_context)
 
     class FakeCorePlanner:
         last_provider_calls = ()
@@ -1736,7 +1723,7 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
         composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
     )
     monkeypatch.setattr(
-        composition.OpenAICalendarPlanner, "from_environment", classmethod(build_calendar)
+        composition.OpenAITemporalInterpreter, "from_environment", classmethod(build_temporal)
     )
     monkeypatch.setattr(composition, "OpenAIRequestPlanner", FakeCorePlanner)
     monkeypatch.setattr(composition, "execute_request", fake_execute_request)
@@ -1770,7 +1757,261 @@ def test_production_composition_hands_calendar_domain_evidence_to_normal_core_pl
     interpretation = interpretations[0]
     assert isinstance(interpretation, DomainInterpretation)
     assert interpretation.source_text == source
-    assert interpretation.capability_id == "calendar"
-    assert interpretation.intent == "TEMPORAL_ANNOTATION"
+    assert interpretation.capability_id == "temporal"
+    assert interpretation.intent == "TEMPORAL_RESOLUTION"
     assert interpretation.evidence[0].source_text == "mañana"
     assert interpretation.evidence[0].value == "2026-10-03"
+
+
+def _build_current_temporal_test_runtime(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    source: str,
+    temporal_payload: dict[str, object],
+):
+    """Build isolated production composition with fake Router/Temporal transports."""
+    vault_root = tmp_path / "vault-current-temporal"
+    vault_root.mkdir()
+    runtime_root = tmp_path / "runtime-current-temporal"
+    state_root = tmp_path / "state-current-temporal"
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
+    monkeypatch.setenv("ODYSSEY_SCHEMA_PATH", str(schema_path))
+    monkeypatch.setenv("ODYSSEY_PENDING_ROOT", str(state_root / "pending"))
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(state_root))
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
+    monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault_root))
+    monkeypatch.setenv("ODYSSEY_EMBEDDING_CACHE", str(tmp_path / "embeddings-current-temporal"))
+    monkeypatch.delenv("ODYSSEY_ENABLED_APPLICATIONS", raising=False)
+    monkeypatch.setenv("ODYSSEY_ACTOR", "odyssey-dev-test")
+
+    class FakeIndex:
+        def __init__(self, path):
+            self.path = path
+
+        def rebuild(self, repository, schema, embedder):
+            return None
+
+    class FakeResponses:
+        def __init__(self, payload):
+            self.payload = payload
+            self.calls = 0
+
+        def create(self, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(status="completed", output_text=json.dumps(self.payload))
+
+    router_responses = FakeResponses(
+        {"outcome": "ROUTE", "routes": [{"capability_id": "temporal", "source_text": source}]}
+    )
+    temporal_responses = FakeResponses(temporal_payload)
+    planner_interpretations: list[DomainInterpretation | None] = []
+
+    def build_router(cls, catalog):
+        return cls(SimpleNamespace(responses=router_responses), catalog)
+
+    def build_temporal(cls, current_context):
+        return cls(SimpleNamespace(responses=temporal_responses), current_context)
+
+    class FakeCorePlanner:
+        last_provider_calls = ()
+
+        @classmethod
+        def from_environment(cls, schema, current_context, *, domain_interpretation=None):
+            del schema, current_context
+            planner_interpretations.append(domain_interpretation)
+            return cls()
+
+    monkeypatch.setattr(
+        composition.OpenAIApplicationRouter, "from_environment", classmethod(build_router)
+    )
+    monkeypatch.setattr(
+        composition.OpenAITemporalInterpreter, "from_environment", classmethod(build_temporal)
+    )
+    monkeypatch.setattr(composition, "OpenAIRequestPlanner", FakeCorePlanner)
+    monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **_kwargs: object())
+    monkeypatch.setattr(composition, "ContextIndex", FakeIndex)
+    monkeypatch.setattr(composition, "SemanticEntityIndex", FakeIndex)
+    monkeypatch.setattr(composition, "_build_contextual_reasoner", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaWriter", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaFactSelector", lambda: object())
+    monkeypatch.setattr(composition, "OpenAILunaSemanticSetSelector", lambda: object())
+    monkeypatch.setattr(composition, "GitHistoryRecorder", lambda _root: None)
+    monkeypatch.setattr(
+        composition,
+        "_current_time",
+        lambda: {
+            "date": "2026-10-04",
+            "time": "10:00:00",
+            "timezone": "Europe/Paris",
+            "timestamp": "2026-10-04T10:00:00+02:00",
+        },
+    )
+    return (
+        composition.build_runtime_from_environment(),
+        planner_interpretations,
+        router_responses,
+        temporal_responses,
+    )
+
+
+def test_production_composition_hands_all_exact_dates_from_temporal_to_core(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Preserve two exact temporal mentions through one Router -> Temporal -> Core route."""
+    source = "Ayer vi a Ana y hoy vi a Luis."
+    runtime, interpretations, router_responses, temporal_responses = (
+        _build_current_temporal_test_runtime(
+            monkeypatch,
+            tmp_path,
+            source=source,
+            temporal_payload={
+                "mentions": [
+                    {
+                        "temporal_text": "Ayer",
+                        "temporal": {
+                            "kind": "EXACT_DATE",
+                            "exact_date": "2026-10-03",
+                            "exact_datetime": None,
+                            "range_start": None,
+                            "range_end_exclusive": None,
+                        },
+                    },
+                    {
+                        "temporal_text": "hoy",
+                        "temporal": {
+                            "kind": "EXACT_DATE",
+                            "exact_date": "2026-10-04",
+                            "exact_datetime": None,
+                            "range_start": None,
+                            "range_end_exclusive": None,
+                        },
+                    },
+                ]
+            },
+        )
+    )
+
+    def fake_execute_request(request, **kwargs):
+        assert request == source
+        return ApplicationResult(
+            kwargs["request_id_factory"](), ApplicationStatus.COMPLETED, (), ()
+        )
+
+    monkeypatch.setattr(composition, "execute_request", fake_execute_request)
+    result = runtime.execute(source, "outer-multi-temporal")
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert router_responses.calls == temporal_responses.calls == 1
+    assert len(interpretations) == 1
+    interpretation = interpretations[0]
+    assert isinstance(interpretation, DomainInterpretation)
+    assert [(item.source_text, item.value) for item in interpretation.evidence] == [
+        ("Ayer", "2026-10-03"),
+        ("hoy", "2026-10-04"),
+    ]
+
+
+def test_production_composition_hands_exact_datetime_to_core_as_temporal_anchor(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Preserve exact local date-time evidence through Temporal without creating an Event."""
+    source = "Mañana a las 15:00 voy a ver a Luis."
+    runtime, interpretations, router_responses, temporal_responses = (
+        _build_current_temporal_test_runtime(
+            monkeypatch,
+            tmp_path,
+            source=source,
+            temporal_payload={
+                "mentions": [
+                    {
+                        "temporal_text": "Mañana a las 15:00",
+                        "temporal": {
+                            "kind": "EXACT_DATETIME",
+                            "exact_date": None,
+                            "exact_datetime": "2026-10-05T15:00:00+02:00",
+                            "range_start": None,
+                            "range_end_exclusive": None,
+                        },
+                    }
+                ]
+            },
+        )
+    )
+
+    def fake_execute_request(request, **kwargs):
+        assert request == source
+        return ApplicationResult(
+            kwargs["request_id_factory"](), ApplicationStatus.COMPLETED, (), ()
+        )
+
+    monkeypatch.setattr(composition, "execute_request", fake_execute_request)
+    result = runtime.execute(source, "outer-exact-datetime")
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert router_responses.calls == temporal_responses.calls == 1
+    assert len(interpretations) == 1
+    evidence = interpretations[0].evidence[0]
+    assert evidence.source_text == "Mañana a las 15:00"
+    assert evidence.value == "2026-10-05T15:00:00+02:00"
+
+
+@pytest.mark.parametrize(
+    ("temporal_payload", "expected_error"),
+    [
+        (
+            {
+                "mentions": [
+                    {
+                        "temporal_text": "de enero a marzo de 2025",
+                        "temporal": {
+                            "kind": "DATE_RANGE",
+                            "exact_date": None,
+                            "exact_datetime": None,
+                            "range_start": "2025-01-01",
+                            "range_end_exclusive": "2025-04-01",
+                        },
+                    }
+                ]
+            },
+            "TEMPORAL_VALUE_REQUIRES_DOMAIN_OWNER",
+        ),
+        (
+            {
+                "mentions": [
+                    {
+                        "temporal_text": "Algún día",
+                        "temporal": {
+                            "kind": "UNSPECIFIED",
+                            "exact_date": None,
+                            "exact_datetime": None,
+                            "range_start": None,
+                            "range_end_exclusive": None,
+                        },
+                    }
+                ]
+            },
+            "TEMPORAL_UNRESOLVED",
+        ),
+    ],
+)
+def test_production_composition_stops_unsupported_temporal_shapes_before_core(
+    monkeypatch, tmp_path: Path, temporal_payload: dict[str, object], expected_error: str
+) -> None:
+    """Keep unsupported range/unknown semantics fail-closed before Core planning."""
+    mention_text = temporal_payload["mentions"][0]["temporal_text"]  # type: ignore[index]
+    source = f"Registro temporal: {mention_text}."
+    runtime, interpretations, _router, _temporal = _build_current_temporal_test_runtime(
+        monkeypatch, tmp_path, source=source, temporal_payload=temporal_payload
+    )
+    monkeypatch.setattr(
+        composition,
+        "execute_request",
+        lambda *_args, **_kwargs: pytest.fail("Core execution must not start"),
+    )
+
+    result = runtime.execute(source, "outer-unsupported-temporal")
+
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.planning_error == expected_error
+    assert interpretations == []

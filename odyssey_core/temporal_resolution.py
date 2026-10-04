@@ -7,10 +7,13 @@ and later capabilities; it is not a natural-language parser and performs no rout
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .temporal import DateRange, TemporalValueError, normalize_iso_date, normalize_iso_datetime
 
@@ -113,6 +116,44 @@ def temporal_resolution_json_schema(
     }
 
 
+def _normalize_provider_datetime(value: str, *, timezone: str) -> str:
+    """Canonicalize one provider date-time while keeping Core offset-aware.
+
+    Providers may emit either Odyssey's canonical offset-aware value or a local wall clock value.
+    A local value is resolved deterministically with the supplied IANA timezone only when that wall
+    time maps to exactly one real instant. Ambiguous and nonexistent DST wall times fail closed.
+    """
+    try:
+        return normalize_iso_datetime(value, timezone=timezone)
+    except TemporalValueError as canonical_error:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?", value) is None:
+            raise canonical_error
+
+    try:
+        zone = ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError) as error:
+        raise TemporalValueError("Temporal timezone must be a valid IANA timezone") from error
+    try:
+        naive = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise TemporalValueError("Temporal date-time is invalid") from error
+    if naive.microsecond != 0:
+        raise TemporalValueError("Temporal date-time supports second precision only")
+
+    candidates: list[str] = []
+    for fold in (0, 1):
+        aware = naive.replace(tzinfo=zone, fold=fold)
+        roundtrip = aware.astimezone(UTC).astimezone(zone)
+        if roundtrip.replace(tzinfo=None) != naive:
+            continue
+        normalized = aware.isoformat(timespec="seconds")
+        if normalized not in candidates:
+            candidates.append(normalized)
+    if len(candidates) != 1:
+        raise TemporalValueError("Temporal local date-time is ambiguous or nonexistent in timezone")
+    return normalize_iso_datetime(candidates[0], timezone=timezone)
+
+
 def parse_temporal_resolution(
     payload: Mapping[str, Any],
     *,
@@ -147,7 +188,11 @@ def parse_temporal_resolution(
             raise TemporalValueError("Exact-date-time temporal payload fields are invalid")
         if timezone is None:
             raise TemporalValueError("Exact date-time resolution requires timezone context")
-        return TemporalResolution(kind, exact_datetime=exact_datetime, timezone=timezone)
+        return TemporalResolution(
+            kind,
+            exact_datetime=_normalize_provider_datetime(exact_datetime, timezone=timezone),
+            timezone=timezone,
+        )
     if kind is TemporalResolutionKind.DATE_RANGE:
         if (
             exact_date is not None

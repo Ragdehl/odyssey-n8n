@@ -205,11 +205,11 @@
         {
             "id": "calendar_day",
             "name": "Calendar Day",
-            "description": "Calendar-managed canonical day surface for literal day-owned knowledge and temporal navigation; not an ordinary semantic planner target.",
+            "description": "Core-managed deterministic day surface used by Calendar presentation and temporal navigation; exposed as a write destination only for an authorized calendar date.",
             "examples": [
                 "1 October 2026"
             ],
-            "managed_by": "calendar",
+            "managed_by": "core",
             "properties": [
                 {
                     "id": "date",

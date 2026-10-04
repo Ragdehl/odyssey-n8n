@@ -1,0 +1,838 @@
+{
+  "version": 2,
+  "head": "74340a16ec9d278b812abdb55ac12f2008fec239",
+  "dirty_worktree": true,
+  "matrix_sha256": "e6ea6722307f11af1d034b6156545771d7ff54abea9f272e7e6f87cb8110ac69",
+  "source_digest": "e1beaa4e406bb7601d7b4e41e1d5ae95c606171a6e53b82fd31a03d6525937b2",
+  "provider_attempts": 23,
+  "automatic_retries": 0,
+  "mutation_authority": false,
+  "budget_upper_usd": 0.0317768,
+  "estimated_standard_cost_usd": 0.002893000000000001,
+  "estimated_regional_cost_usd": 0.003182300000000001,
+  "passed": false,
+  "rows": [
+    {
+      "gate": "router",
+      "id": "core-only",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "temporal-day-owned",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "independent-core-temporal-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "temporal",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "A Cloe le gusta el chocolate."
+          ],
+          [
+            "temporal",
+            "Mañana viene el fontanero."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "dependent-temporal-core",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta empieza mañana a trabajar en Airbus."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "journal-explicit-date-is-temporal",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Escribe en mi diario que hoy fui al trabajo."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "journal-implicit-today-is-core",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que he tenido un día tranquilo."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Escribe en mi diario que he tenido un día tranquilo."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "tasks-disabled",
+      "passed": true,
+      "actual": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "expected": {
+        "outcome": "NEEDS_CAPABILITY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "ambiguous-storage-wording",
+      "passed": true,
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "expected": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "meaningless-input",
+      "passed": true,
+      "actual": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "expected": {
+        "outcome": "CLARIFY",
+        "routes": []
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "independent-temporal-temporal-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Ayer vi a Ana"
+          ],
+          [
+            "temporal",
+            "y hoy vi a Luis."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "exact-datetime-still-temporal",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta empieza mañana a las 15:00 en Airbus."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta empieza mañana a las 15:00 en Airbus."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "date-range-still-temporal",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta vivió en Lyon de enero a marzo de 2025."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Marta vivió en Lyon de enero a marzo de 2025."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "independent-core-core-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Marta vive en Lyon."
+          ],
+          [
+            "core",
+            "Luis vive en París."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Marta vive en Lyon."
+          ],
+          [
+            "core",
+            "Luis vive en París."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "shared-temporal-scope-no-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy vi a Ana y compré pan."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy vi a Ana y compré pan."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "shared-predicate-no-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Marta y Luis viven en Lyon."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "core",
+            "Marta y Luis viven en Lyon."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "elliptical-predicate-no-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy a las 15:00 veo a Bea y a las 17:00 a Luis."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy a las 15:00 veo a Bea y a las 17:00 a Luis."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "router",
+      "id": "shared-event-participants-no-split",
+      "passed": true,
+      "actual": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy hemos vaciado el garaje con Bea y mis hijos."
+          ]
+        ]
+      },
+      "expected": {
+        "outcome": "ROUTE",
+        "routes": [
+          [
+            "temporal",
+            "Hoy hemos vaciado el garaje con Bea y mis hijos."
+          ]
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "today-day-owned",
+      "passed": true,
+      "actual": {
+        "mentions": [
+          {
+            "temporal_text": "Hoy",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-04",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "mentions": [
+          {
+            "temporal_text": "Hoy",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-04",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "tomorrow-entity-owned",
+      "passed": true,
+      "actual": {
+        "mentions": [
+          {
+            "temporal_text": "mañana",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-05",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "mentions": [
+          {
+            "temporal_text": "mañana",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-05",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "multiple-exact-dates",
+      "passed": true,
+      "actual": {
+        "mentions": [
+          {
+            "temporal_text": "Ayer",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-03",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          },
+          {
+            "temporal_text": "hoy",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-04",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "mentions": [
+          {
+            "temporal_text": "Ayer",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-03",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          },
+          {
+            "temporal_text": "hoy",
+            "temporal": {
+              "kind": "EXACT_DATE",
+              "exact_date": "2026-10-04",
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "exact-datetime",
+      "passed": false,
+      "actual": {},
+      "expected": {
+        "mentions": [
+          {
+            "temporal_text": "mañana a las 15:00",
+            "temporal": {
+              "kind": "EXACT_DATETIME",
+              "exact_date": null,
+              "exact_datetime": "2026-10-05T15:00:00+02:00",
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "error": "TemporalInterpreterError"
+    },
+    {
+      "gate": "temporal",
+      "id": "date-range",
+      "passed": true,
+      "actual": {
+        "mentions": [
+          {
+            "temporal_text": "de enero a marzo de 2025",
+            "temporal": {
+              "kind": "DATE_RANGE",
+              "exact_date": null,
+              "exact_datetime": null,
+              "range_start": "2025-01-01",
+              "range_end_exclusive": "2025-04-01"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "mentions": [
+          {
+            "temporal_text": "de enero a marzo de 2025",
+            "temporal": {
+              "kind": "DATE_RANGE",
+              "exact_date": null,
+              "exact_datetime": null,
+              "range_start": "2025-01-01",
+              "range_end_exclusive": "2025-04-01"
+            }
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "temporal",
+      "id": "unresolved",
+      "passed": true,
+      "actual": {
+        "mentions": [
+          {
+            "temporal_text": "Algún día",
+            "temporal": {
+              "kind": "UNSPECIFIED",
+              "exact_date": null,
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "mentions": [
+          {
+            "temporal_text": "Algún día",
+            "temporal": {
+              "kind": "UNSPECIFIED",
+              "exact_date": null,
+              "exact_datetime": null,
+              "range_start": null,
+              "range_end_exclusive": null
+            }
+          }
+        ]
+      },
+      "error": null
+    }
+  ],
+  "provider_records": [
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 507,
+      "output_tokens": 73,
+      "response_id": "resp_040373634c3f0d79016ac2479d5f1887d1af4437dd6d07ff93",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"core\",\"source_text\":\"A Cloe le gusta el chocolate.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 508,
+      "output_tokens": 210,
+      "response_id": "resp_07ade9a5a85267a4016ac2479f4c5c87d1ab2e4ec966c27a7e",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Mañana viene el fontanero.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 516,
+      "output_tokens": 180,
+      "response_id": "resp_044d372ae042e339016ac247a2ac1087d1b9cb079a5bef0203",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"core\",\"source_text\":\"A Cloe le gusta el chocolate.\"},{\"capability_id\":\"temporal\",\"source_text\":\"Mañana viene el fontanero.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 508,
+      "output_tokens": 86,
+      "response_id": "resp_0254afdcbded968c016ac247a59f4c87d1a53ac6eb889b5426",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Marta empieza mañana a trabajar en Airbus.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 510,
+      "output_tokens": 137,
+      "response_id": "resp_09bbe9f75581aa98016ac247a7f24c87d1aa17157380526b95",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Escribe en mi diario que hoy fui al trabajo.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 511,
+      "output_tokens": 106,
+      "response_id": "resp_0470aead6a31a186016ac247aa9bc087d1b5fb83e50133e021",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"core\",\"source_text\":\"Escribe en mi diario que he tenido un día tranquilo.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 507,
+      "output_tokens": 173,
+      "response_id": "resp_087e6038960bddd2016ac247ad135087d1b526f2aaaac5e844",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"NEEDS_CAPABILITY\",\"routes\":[]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 510,
+      "output_tokens": 101,
+      "response_id": "resp_07afc5fd708915af016ac247b055b887d1a25fd54eacd42804",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"CLARIFY\",\"routes\":[]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 500,
+      "output_tokens": 59,
+      "response_id": "resp_04b5fe3868304c4c016ac247b2d5a087d1bce6bd2674b42282",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"CLARIFY\",\"routes\":[]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 510,
+      "output_tokens": 274,
+      "response_id": "resp_09f72afdda610fb3016ac247b42c1487d1b6831d7afddff09d",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Ayer vi a Ana\"},{\"capability_id\":\"temporal\",\"source_text\":\"y hoy vi a Luis.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 512,
+      "output_tokens": 213,
+      "response_id": "resp_08c0acdbcc2b6222016ac247b8827c87d1af87d7c19070bbc4",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Marta empieza mañana a las 15:00 en Airbus.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 514,
+      "output_tokens": 104,
+      "response_id": "resp_0a6e7e5cf404f930016ac247bc138c87d1996731faa57e3623",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Marta vivió en Lyon de enero a marzo de 2025.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 510,
+      "output_tokens": 152,
+      "response_id": "resp_0f846a59a9813a56016ac247be723c87d1b28d00f1f16d1aff",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"core\",\"source_text\":\"Marta vive en Lyon.\"},{\"capability_id\":\"core\",\"source_text\":\"Luis vive en París.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 508,
+      "output_tokens": 310,
+      "response_id": "resp_02b5e8b1c7bc3ef6016ac247c16ee487d1b67efe7299034b72",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Hoy vi a Ana y compré pan.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 507,
+      "output_tokens": 80,
+      "response_id": "resp_0dee02b79aab9781016ac247c666d487d18529d3ef6492b454",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"core\",\"source_text\":\"Marta y Luis viven en Lyon.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 519,
+      "output_tokens": 478,
+      "response_id": "resp_0073f5e21b412236016ac247c8205487d1aaf0e156b450d8e8",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Hoy a las 15:00 veo a Bea y a las 17:00 a Luis.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "medium",
+      "input_tokens": 512,
+      "output_tokens": 172,
+      "response_id": "resp_03aa8cdff51711f2016ac247cf436487d19ad8ffd7e50eee5c",
+      "status": "completed",
+      "output_text": "{\"outcome\":\"ROUTE\",\"routes\":[{\"capability_id\":\"temporal\",\"source_text\":\"Hoy hemos vaciado el garaje con Bea y mis hijos.\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 360,
+      "output_tokens": 113,
+      "response_id": "resp_08c45243bf45dff8016ac247d1ff6487d18935237bdebd3ef3",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 356,
+      "output_tokens": 93,
+      "response_id": "resp_0acbaad6821ca389016ac247d40c9887d1b09c118f8768e5ad",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 358,
+      "output_tokens": 140,
+      "response_id": "resp_04ac7e3b58a787a5016ac247d6d5a887d19ea2581f94d4a9b6",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 360,
+      "output_tokens": 138,
+      "response_id": "resp_04017325ae393a65016ac247d9735c87d18b9a6fb9b751f588",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"mañana a las 15:00\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T15:00:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 362,
+      "output_tokens": 136,
+      "response_id": "resp_080b0bd8b86cb327016ac247dbb70087d1a0f28e016d7c1ab0",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"de enero a marzo de 2025\",\"temporal\":{\"kind\":\"DATE_RANGE\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":\"2025-01-01\",\"range_end_exclusive\":\"2025-04-01\"}}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 355,
+      "output_tokens": 94,
+      "response_id": "resp_06d721b6bddba400016ac247de843c87d18e25b39ce23d30ed",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Algún día\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    }
+  ]
+}

@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from odyssey_apps import ApplicationDescriptor, ApplicationRegistry, RoutingCapability
-from odyssey_apps.calendar import CALENDAR_DESCRIPTOR
 from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
     LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -24,9 +23,9 @@ from odyssey_runtime.composition import RuntimeComposition
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def calendar_descriptor() -> ApplicationDescriptor:
-    """Return Calendar's app-owned compact routing descriptor."""
-    return CALENDAR_DESCRIPTOR
+def routable_descriptor() -> ApplicationDescriptor:
+    """Return one compact installed-app routing descriptor."""
+    return ApplicationDescriptor("tasks", "task lifecycle", ("temporal",))
 
 
 def core_planner_artifacts() -> tuple[str, str, str, tuple[str, str]]:
@@ -85,55 +84,40 @@ def test_registry_rejects_malformed_and_duplicate_descriptors() -> None:
     with pytest.raises(ValueError, match="routing_description"):
         ApplicationDescriptor(id="calendar", routing_description=" ")
     with pytest.raises(ValueError, match="Duplicate application id"):
-        ApplicationRegistry.from_descriptors((calendar_descriptor(), calendar_descriptor()))
+        ApplicationRegistry.from_descriptors((routable_descriptor(), routable_descriptor()))
     with pytest.raises(ValueError, match="reserved"):
         ApplicationDescriptor(id="core", routing_description="shadow Core")
 
 
 def test_catalog_keeps_disabled_evidence_but_never_makes_it_executable() -> None:
     """Expose enabled and disabled capability state in deterministic identifier order."""
-    tasks = ApplicationDescriptor("tasks", "task lifecycle", ("temporal",))
-    catalog = ApplicationRegistry.from_descriptors((tasks, calendar_descriptor())).catalog(
-        enabled_ids=("tasks",)
-    )
+    tasks = routable_descriptor()
+    events = ApplicationDescriptor("events", "event lifecycle", ("temporal",))
+    catalog = ApplicationRegistry.from_descriptors((tasks, events)).catalog(enabled_ids=("tasks",))
 
     assert catalog.capabilities() == (
-        RoutingCapability(
-            "calendar",
-            "temporal interpretation of date-qualified statements, day/date-owned occurrences, personal diary/journal capture, and Calendar navigation",
-            ("temporal",),
-            False,
-        ),
+        RoutingCapability("events", "event lifecycle", ("temporal",), False),
         RoutingCapability("tasks", "task lifecycle", ("temporal",), True),
     )
-    assert catalog.executable("calendar") is None
+    assert catalog.executable("events") is None
     assert catalog.executable("tasks") == tasks
 
 
 def test_enablement_only_changes_catalog_not_core_planner_artifacts() -> None:
     """Keep Core's accepted planner contract independent from application availability."""
     before = core_planner_artifacts()
-    registry = ApplicationRegistry.from_descriptors((calendar_descriptor(),))
+    descriptor = routable_descriptor()
+    registry = ApplicationRegistry.from_descriptors((descriptor,))
     disabled = registry.catalog()
-    enabled = registry.catalog(enabled_ids=("calendar",))
+    enabled = registry.catalog(enabled_ids=("tasks",))
 
     assert disabled.capabilities() != enabled.capabilities()
-    assert disabled.executable("calendar") is None
-    assert enabled.executable("calendar") == calendar_descriptor()
+    assert disabled.executable("tasks") is None
+    assert enabled.executable("tasks") == descriptor
     assert core_planner_artifacts() == before
 
 
-def test_calendar_opt_in_compiler_does_not_change_accepted_core_planner_artifacts() -> None:
-    """Freeze the live-accepted Journal-converged Core Luna contract by content hash."""
-    assert core_planner_artifacts() == (
-        "36b889ba5ac214262c4a2ca68bf04aa5c22c26645f81043cac3c2108e34d440a",
-        "d336432ba67b471030ac67eed11bb389065d5832d4032906774bbef52e84cb23",
-        "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
-        ("gpt-5.6-luna", "low"),
-    )
-
-
-def test_core_only_runtime_remains_usable_with_empty_or_disabled_calendar_catalog() -> None:
+def test_core_only_runtime_remains_usable_with_empty_or_disabled_app_catalog() -> None:
     """Keep Slice 1 catalog state inert for the established Core request execution seam."""
 
     def execute(*_args: object, **_kwargs: object) -> None:
@@ -147,12 +131,12 @@ def test_core_only_runtime_remains_usable_with_empty_or_disabled_calendar_catalo
         core_execute=execute,
         refresh_indexes=refresh_indexes,
         application_catalog=ApplicationRegistry.from_descriptors(
-            (calendar_descriptor(),)
+            (routable_descriptor(),)
         ).catalog(),
     )
 
     assert empty.application_catalog.capabilities() == ()
-    assert disabled.application_catalog.executable("calendar") is None
+    assert disabled.application_catalog.executable("tasks") is None
     with pytest.raises(ValueError, match="Calendar application is unavailable"):
         disabled.calendar("month", {"month": "2026-10"})
     assert empty.core_execute("ordinary Core request") is None

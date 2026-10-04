@@ -10,8 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from benchmarks.calendar_legacy_descriptor import CALENDAR_DESCRIPTOR
 from odyssey_apps import ApplicationDescriptor, ApplicationRegistry
-from odyssey_apps.calendar import CALENDAR_DESCRIPTOR
 from odyssey_apps.calendar.planning import (
     CALENDAR_PLANNER_MAX_OUTPUT_TOKENS,
     CALENDAR_PLANNER_MODEL,

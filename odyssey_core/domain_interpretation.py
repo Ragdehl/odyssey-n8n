@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .temporal import TemporalValueError, normalize_iso_date
+from .temporal import TemporalAnchor, TemporalValueError
 
 TEMPORAL_REFERENCE_EVIDENCE = "temporal_reference"
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,63}\Z")
@@ -33,15 +33,24 @@ class DomainEvidence:
             raise ValueError("domain evidence value is invalid")
         if self.kind == TEMPORAL_REFERENCE_EVIDENCE:
             try:
-                normalized = normalize_iso_date(self.value)
+                anchor = TemporalAnchor.from_value(self.value)
             except TemporalValueError as error:
                 raise ValueError("temporal domain evidence is invalid") from error
-            if normalized != self.value:
+            if anchor.value != self.value:
                 raise ValueError("temporal domain evidence must be canonical")
 
     def to_payload(self) -> dict[str, str]:
         """Return the bounded prompt-safe representation of this evidence item."""
         return {"kind": self.kind, "source_text": self.source_text, "value": self.value}
+
+    def temporal_anchor(self) -> TemporalAnchor:
+        """Return this temporal evidence as a validated semantic coordinate."""
+        if self.kind != TEMPORAL_REFERENCE_EVIDENCE:
+            raise ValueError("domain evidence is not temporal")
+        try:
+            return TemporalAnchor.from_value(self.value)
+        except TemporalValueError as error:
+            raise ValueError("temporal domain evidence is invalid") from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,8 +76,13 @@ class DomainInterpretation:
             isinstance(item, DomainEvidence) for item in self.evidence
         ):
             raise ValueError("domain interpretation evidence is invalid")
-        if len(self.evidence) > 16 or len(self.evidence) != len(set(self.evidence)):
-            raise ValueError("domain interpretation evidence is duplicate or too large")
+        if len(self.evidence) > 16:
+            raise ValueError("domain interpretation evidence is too large")
+        non_temporal = tuple(
+            item for item in self.evidence if item.kind != TEMPORAL_REFERENCE_EVIDENCE
+        )
+        if len(non_temporal) != len(set(non_temporal)):
+            raise ValueError("domain interpretation evidence is duplicate")
         if any(item.source_text not in self.source_text for item in self.evidence):
             raise ValueError("domain evidence is not grounded in routed source")
 
@@ -81,5 +95,5 @@ class DomainInterpretation:
         }
 
     def temporal_references(self) -> tuple[DomainEvidence, ...]:
-        """Return exact-date evidence that may authorize canonical Day references in Core writes."""
+        """Return exact date/date-time evidence that may anchor Core writes."""
         return tuple(item for item in self.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE)

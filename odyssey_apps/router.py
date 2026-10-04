@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
-from .catalog import CORE_CAPABILITY_ID, ApplicationCatalog
+from .catalog import CORE_CAPABILITY_ID, TEMPORAL_CAPABILITY_ID, ApplicationCatalog
 
 ROUTER_MODEL = "gpt-6-luna"
 ROUTER_REASONING_EFFORT = "medium"
@@ -79,7 +79,7 @@ class ResponsesClient(Protocol):
 
 def route_plan_json_schema(catalog: ApplicationCatalog) -> dict[str, Any]:
     """Build the strict provider schema using only built-in and enabled destinations."""
-    executable_ids = [CORE_CAPABILITY_ID] + [
+    executable_ids = [CORE_CAPABILITY_ID, TEMPORAL_CAPABILITY_ID] + [
         capability.id for capability in catalog.capabilities() if capability.enabled
     ]
     return {
@@ -142,7 +142,7 @@ def validate_route_plan(
     cursor = 0
     for route in plan.routes:
         if (
-            route.capability_id != CORE_CAPABILITY_ID
+            route.capability_id not in {CORE_CAPABILITY_ID, TEMPORAL_CAPABILITY_ID}
             and catalog.executable(route.capability_id) is None
         ):
             raise RouterError("Route destination is unknown or disabled")
@@ -180,7 +180,15 @@ def render_router_prompt(
     capabilities = [
         {
             "id": CORE_CAPABILITY_ID,
-            "routing_description": "ordinary Odyssey retrieval and mutation; generic knowledge work",
+            "routing_description": "ordinary Odyssey retrieval and mutation; generic knowledge work without temporal normalization",
+            "enabled": True,
+        },
+        {
+            "id": TEMPORAL_CAPABILITY_ID,
+            "routing_description": (
+                "ordinary Core-owned intent whose temporal wording must first be normalized; "
+                "Temporal resolves only date/time meaning and then returns the unchanged source to Core"
+            ),
             "enabled": True,
         },
         *[
@@ -201,15 +209,15 @@ def render_router_prompt(
         "Route only the original current user request. Return ROUTE only when its ordered "
         "source_text values are exact contiguous spans that cover every non-whitespace character "
         "exactly once. Do not paraphrase, drop punctuation, conjunctions, negation, or qualifiers. "
-        "Split only independent material intentions owned by different capabilities. Choose the "
+        "Split the request into the smallest material intentions that are independently interpretable without borrowing omitted meaning from another span, even when adjacent intentions route to the same capability. Same destination is never by itself a reason to keep independent intentions joined. A proposed span is independent only when its exact text standing alone preserves the same user meaning, including every operator, predicate, argument, and scoped modifier it needs. Before splitting, check dependencies in both directions: if isolating a span would lose or change its temporal scope, negation, modality, quantification, predicate or argument structure, anaphora, ellipsis, or coordination meaning, keep the dependent material in one route. A span that would acquire a different default time, polarity, action, subject, object, or relation when isolated is not independent. Before returning ROUTE, inspect each proposed route again: if one route still contains two independently interpretable material intentions, split it further until every route is irreducible under this rule. Never rewrite, copy, or synthesize missing words merely to make a span independent. Choose the "
         "routing owner by the domain interpretation required for the whole dependent intent, not by "
-        "the canonical knowledge owner that may ultimately be written. When one dependent statement "
-        "requires an enabled application to interpret its domain semantics, keep that whole statement "
-        "in the application route; do not CLARIFY merely because the application may later delegate a "
-        "canonical Core write. Disabled apps are evidence only: use NEEDS_CAPABILITY when their "
-        "specialized work is needed. CLARIFY when safe routing is materially ambiguous. Temporal "
-        "wording may be considered only to choose capability ownership; never normalize or resolve "
-        "dates or times into structured values, or emit interpreted date values. "
+        "the canonical knowledge owner that may ultimately be written. Route an otherwise ordinary "
+        "Core-owned dependent statement to temporal when resolving its date/time wording is material. "
+        "Choose specialized capabilities from the requested domain semantics, not from surface resemblance: an ordinary assertion or record of something that happened, happens, or will happen at a date/time remains Core-owned knowledge and routes to temporal when normalization is material. Future tense, an exact clock time, appointment-like wording, or a domain noun alone never implies specialized lifecycle work. Route to a specialized capability only when the request actually requires that capability's lifecycle or operation semantics. "
+        "Do not route specialized Tasks/Events/etc. to temporal merely because they contain a date; "
+        "their owning capability consumes Temporal itself. Disabled apps are evidence only: use "
+        "NEEDS_CAPABILITY when their specialized work is needed. CLARIFY when safe routing is materially "
+        "ambiguous. Never normalize or resolve dates or times yourself, or emit interpreted date values. "
         "Never plan, resolve identities, inspect files or notes, or emit mutations, commands, or "
         "execution arguments. Recent context is routing continuity evidence only, never canonical "
         "truth or mutation authority.\n"

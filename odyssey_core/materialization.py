@@ -41,8 +41,10 @@ from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, TagChange
 from odyssey_core.storage import NoteUnavailableError, VaultAccessError, VaultRepository
 from odyssey_core.temporal import (
+    CALENDAR_DAY_TYPE,
     CalendarDayCollisionError,
     CalendarDayRepository,
+    TemporalAnchor,
     TemporalValueError,
     _materialize_calendar_day_links,
     materialize_calendar_day_links,
@@ -80,40 +82,56 @@ class WriterOutputError(MaterializationError):
     """Indicate malformed, unsafe, or conflicting bounded writer operations."""
 
 
-def capture_calendar_day_literal(
+def _unit_fact_temporal_anchors(
+    unit: KnowledgeUnit, fact_count: int
+) -> tuple[tuple[object, ...], ...]:
+    """Return one validated internal temporal-anchor row per fact."""
+    anchors = unit.fact_temporal_anchors
+    if not anchors:
+        return tuple(() for _ in range(fact_count))
+    if len(anchors) != fact_count:
+        raise MaterializationError("Fact temporal anchors do not align with facts")
+    return anchors
+
+
+def _persist_calendar_day_facts(
     *,
     repository: VaultRepository,
     schema: dict[str, Any],
     date: str,
-    literal: str,
+    facts: tuple[str, ...],
     actor: ActorInput,
     now: str,
     request_id: str,
-    fact_ordinal: int = 0,
+    fact_ordinals: tuple[int, ...],
+    fact_temporal_anchors: tuple[tuple[object, ...], ...] | None = None,
 ) -> EntityPersistenceResult:
-    """Persist one exact routed literal on its deterministic Calendar Day through Core.
-
-    Calendar supplies only an already-authorized exact date and the untouched routed wording.
-    Core owns canonical Day identity, atomic-fact provenance, link materialization, schema
-    validation, replay detection, and revision-safe persistence.
-    """
+    """Persist one Core-authorized Day unit as one revision-safe mutation."""
     if (
-        not isinstance(literal, str)
-        or not literal.strip()
-        or "\n" in literal
-        or "\r" in literal
+        not facts
+        or len(facts) != len(fact_ordinals)
+        or len(fact_ordinals) != len(set(fact_ordinals))
         or not isinstance(request_id, str)
         or not request_id.strip()
-        or not isinstance(fact_ordinal, int)
-        or isinstance(fact_ordinal, bool)
-        or fact_ordinal < 0
+        or not all(
+            isinstance(fact, str) and fact.strip() and "\n" not in fact and "\r" not in fact
+            for fact in facts
+        )
+        or not all(
+            isinstance(ordinal, int) and not isinstance(ordinal, bool) and ordinal >= 0
+            for ordinal in fact_ordinals
+        )
+        or (fact_temporal_anchors is not None and len(fact_temporal_anchors) != len(facts))
     ):
-        raise MaterializationError("Calendar Day literal capture input is invalid")
+        raise MaterializationError("Calendar Day record input is invalid")
+    anchor_rows = fact_temporal_anchors or tuple(() for _ in facts)
     try:
         days = CalendarDayRepository(repository, schema)
         current_day = days.resolve(date)
+        initial_content = append_atomic_facts(
+            "", facts, request_id, fact_ordinals, now, temporal_anchors=anchor_rows
+        )
         if not current_day.materialized:
-            initial_content = append_atomic_facts("", (literal,), request_id, (fact_ordinal,), now)
             _materialize_new_calendar_links(
                 initial_content,
                 repository=repository,
@@ -126,7 +144,6 @@ def capture_calendar_day_literal(
             current = day.note
             if current is None:
                 raise MaterializationError("Calendar Day did not materialize")
-            existing = parse_atomic_facts(current.content)
             if current.content == initial_content:
                 return EntityPersistenceResult(
                     PersistenceOperation.CREATED, day.id, day.path, current.metadata["revision"]
@@ -136,17 +153,31 @@ def capture_calendar_day_literal(
             current = current_day.note
             if current is None:
                 raise MaterializationError("Calendar Day is unavailable")
-            existing = parse_atomic_facts(current.content)
 
-        if any(
-            fact.request_id == request_id and fact.ordinal == fact_ordinal for fact in existing
-        ) or any(
-            normalize_atomic_fact(fact.text) == normalize_atomic_fact(literal) for fact in existing
-        ):
+        existing = parse_atomic_facts(current.content)
+        existing_keys = {(fact.request_id, fact.ordinal) for fact in existing}
+        existing_text = {normalize_atomic_fact(fact.text) for fact in existing}
+        missing = tuple(
+            (fact, ordinal, anchors)
+            for fact, ordinal, anchors in zip(facts, fact_ordinals, anchor_rows, strict=True)
+            if (request_id, ordinal) not in existing_keys
+            and normalize_atomic_fact(fact) not in existing_text
+        )
+        if not missing:
             return EntityPersistenceResult(
                 PersistenceOperation.NO_CHANGE, day.id, day.path, current.metadata["revision"]
             )
-        content = append_atomic_facts(current.content, (literal,), request_id, (fact_ordinal,), now)
+        missing_facts = tuple(item[0] for item in missing)
+        missing_ordinals = tuple(item[1] for item in missing)
+        missing_anchors = tuple(item[2] for item in missing)
+        content = append_atomic_facts(
+            current.content,
+            missing_facts,
+            request_id,
+            missing_ordinals,
+            now,
+            temporal_anchors=missing_anchors,
+        )
         _materialize_new_calendar_links(
             content,
             previous_content=current.content,
@@ -154,6 +185,7 @@ def capture_calendar_day_literal(
             schema=schema,
             actor=actor,
             now=now,
+            skip_dates=(day.date,),
         )
         return update_entity(
             repository,
@@ -173,7 +205,32 @@ def capture_calendar_day_literal(
         ValueError,
         OSError,
     ) as error:
-        raise MaterializationError("Calendar Day literal capture failed") from error
+        raise MaterializationError("Calendar Day record failed") from error
+
+
+def capture_calendar_day_literal(
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    date: str,
+    literal: str,
+    actor: ActorInput,
+    now: str,
+    request_id: str,
+    fact_ordinal: int = 0,
+) -> EntityPersistenceResult:
+    """Compatibility wrapper for one deterministic Core-owned Day fact."""
+    return _persist_calendar_day_facts(
+        repository=repository,
+        schema=schema,
+        date=date,
+        facts=(literal,),
+        actor=actor,
+        now=now,
+        request_id=request_id,
+        fact_ordinals=(fact_ordinal,),
+        fact_temporal_anchors=((TemporalAnchor(date),),),
+    )
 
 
 def rollback_created_reference(
@@ -241,6 +298,51 @@ def _materialize_new_calendar_links(
         raise MaterializationError("Calendar Day link materialization failed") from error
 
 
+def materialize_calendar_day_record(
+    unit: KnowledgeUnit,
+    preflight: UnitTargetPreflight,
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    actor: ActorInput,
+    now: str,
+    rendered_facts: tuple[str, ...],
+    request_id: str,
+    fact_ordinals: tuple[int, ...],
+) -> EntityPersistenceResult:
+    """Persist one validated Core-owned Day record through deterministic Day identity."""
+    if (
+        unit.target.type != CALENDAR_DAY_TYPE
+        or unit.intent != "record"
+        or unit.cardinality != "one"
+        or unit.properties
+        or unit.tag_changes
+        or unit.destination_type is not None
+        or len(rendered_facts) != len(unit.facts)
+        or len(fact_ordinals) != len(unit.facts)
+        or not unit.facts
+    ):
+        raise MaterializationError("Calendar Day record shape is invalid")
+    day = CalendarDayRepository(repository, schema).resolve(unit.target.query)
+    if (
+        preflight.stable_id != day.id
+        or preflight.path != day.path
+        or preflight.canonical_name != day.date
+    ):
+        raise MaterializationError("Calendar Day preflight identity is invalid")
+    return _persist_calendar_day_facts(
+        repository=repository,
+        schema=schema,
+        date=day.date,
+        facts=rendered_facts,
+        actor=actor,
+        now=now,
+        request_id=request_id,
+        fact_ordinals=fact_ordinals,
+        fact_temporal_anchors=_unit_fact_temporal_anchors(unit, len(rendered_facts)),
+    )
+
+
 def materialize_create(
     unit: KnowledgeUnit,
     preflight: UnitTargetPreflight,
@@ -289,7 +391,13 @@ def materialize_create(
         raise MaterializationError("Raw reference markers cannot reach CREATE persistence")
     metadata = _stage_create_metadata(unit, preflight)
     content = (
-        render_atomic_facts(prepared_facts, request_id, fact_ordinals or (), now)
+        render_atomic_facts(
+            prepared_facts,
+            request_id,
+            fact_ordinals or (),
+            now,
+            temporal_anchors=_unit_fact_temporal_anchors(unit, len(prepared_facts)),
+        )
         if request_id is not None and prepared_facts
         else "\n".join(prepared_facts)
     )
@@ -642,19 +750,25 @@ def materialize_update(
             }
         except ValueError as error:
             raise MaterializationError("Existing atomic facts are malformed") from error
-        additions = tuple(
-            fact
-            for fact, ordinal in zip(prepared_facts, fact_ordinals, strict=True)
+        anchor_rows = _unit_fact_temporal_anchors(unit, len(prepared_facts))
+        additions_with_metadata = tuple(
+            (fact, ordinal, anchors)
+            for fact, ordinal, anchors in zip(
+                prepared_facts, fact_ordinals, anchor_rows, strict=True
+            )
             if ordinal not in replayed_ordinals and normalize_atomic_fact(fact) not in known
         )
-        addition_ordinals = tuple(
-            ordinal
-            for fact, ordinal in zip(prepared_facts, fact_ordinals, strict=True)
-            if ordinal not in replayed_ordinals and normalize_atomic_fact(fact) not in known
-        )
+        additions = tuple(item[0] for item in additions_with_metadata)
+        addition_ordinals = tuple(item[1] for item in additions_with_metadata)
+        addition_anchors = tuple(item[2] for item in additions_with_metadata)
         if additions:
             content = append_atomic_facts(
-                existing.content, additions, request_id, addition_ordinals, now
+                existing.content,
+                additions,
+                request_id,
+                addition_ordinals,
+                now,
+                temporal_anchors=addition_anchors,
             )
         remaining_facts = ()
     if remaining_facts:

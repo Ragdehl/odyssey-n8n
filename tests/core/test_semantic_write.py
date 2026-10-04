@@ -502,6 +502,42 @@ def test_reference_reuses_one_unique_material_target_and_ambiguous_match_fails(
         )
 
 
+def test_provider_schema_keeps_complete_set_out_of_fact_identity_parts(schema: dict) -> None:
+    """Align model-facing fact identities with Core's singular-reference invariant."""
+    definitions = semantic_write_schema_definitions(schema)
+    fact_identity = definitions["semantic_identity_part"]["properties"]["identity"]
+    fact_scope = fact_identity["properties"]["candidate_scope"]["anyOf"][1]
+    assert fact_scope["properties"]["extent"]["enum"] == ["one_member"]
+    target_scope_ref = definitions["semantic_identity"]["properties"]["candidate_scope"]["anyOf"][1]
+    assert target_scope_ref == {"$ref": "#/$defs/semantic_candidate_scope"}
+    assert definitions["semantic_candidate_scope"]["properties"]["extent"]["enum"] == [
+        "one_member",
+        "complete_set",
+    ]
+
+
+def test_fact_reference_cannot_select_complete_relational_set(schema: dict) -> None:
+    """Keep fact references singular; complete sets belong to source-write target semantics."""
+    complete_children = person(
+        "mis hijos",
+        scope=scoped_self("mis hijos", CandidateScopeExtent.COMPLETE_SET),
+    )
+    with pytest.raises(SemanticWriteCompileError, match="violates the Core contract") as raised:
+        compile_one(
+            schema,
+            operation(
+                person("Cloe", name="Cloe"),
+                fact(
+                    LiteralPart("Fue con "),
+                    IdentityPart("mis hijos", complete_children),
+                    LiteralPart("."),
+                ),
+            ),
+        )
+    assert isinstance(raised.value.__cause__, SemanticWriteCompileError)
+    assert str(raised.value.__cause__) == "Fact references cannot select a complete set"
+
+
 def test_properties_tags_intents_migration_bulk_and_complete_set_use_core_validation(
     schema: dict,
 ) -> None:
@@ -944,7 +980,7 @@ def test_temporal_reference_is_opt_in_and_default_core_schema_stays_closed(schem
                 {
                     "parts": [
                         {"kind": "literal", "text": "Empieza "},
-                        {"kind": "temporal_reference", "text": "mañana", "date": "2026-10-03"},
+                        {"kind": "temporal_reference", "text": "mañana", "value": "2026-10-03"},
                     ]
                 }
             ]
@@ -968,7 +1004,7 @@ def test_calendar_temporal_source_text_never_controls_durable_link_label(schema:
                             {
                                 "kind": "temporal_reference",
                                 "text": "mañana o cualquier alias",
-                                "date": "2026-10-03",
+                                "value": "2026-10-03",
                             }
                         ]
                     }
@@ -979,3 +1015,70 @@ def test_calendar_temporal_source_text_never_controls_durable_link_label(schema:
     )
     action = compile_semantic_write(intent, schema)
     assert action.units[0].facts == ("[[calendar/days/2026-10-03|03-10-2026]]",)
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        [
+            {
+                "kind": "temporal_reference",
+                "text": "Mañana a las 15:35",
+                "value": "2026-10-05T15:35:00+02:00",
+            },
+            {"kind": "literal", "text": " voy al parque."},
+        ],
+        [
+            {"kind": "literal", "text": "Voy a ver a Marta."},
+            {
+                "kind": "temporal_reference",
+                "text": "Mañana a las 15:35",
+                "value": "2026-10-05T15:35:00+02:00",
+            },
+        ],
+    ],
+)
+def test_calendar_day_single_clock_is_a_deterministic_fact_prefix(
+    schema: dict, parts: list[dict]
+) -> None:
+    """Render one Day-owned exact clock consistently regardless of model part ordering."""
+    intent = decode_semantic_write_action(
+        raw_action(
+            raw_operation(
+                target=raw_identity("2026-10-05", direct_name=None, note_type="calendar_day"),
+                facts=[{"parts": parts}],
+            )
+        ),
+        allow_temporal_reference=True,
+    )
+
+    action = compile_semantic_write(intent, schema, authorized_calendar_dates=("2026-10-05",))
+
+    assert action.units[0].facts in (
+        ("15:35 — voy al parque.",),
+        ("15:35 — Voy a ver a Marta.",),
+    )
+
+
+def test_calendar_day_semantic_provider_branch_matches_executable_core_shape(schema: dict) -> None:
+    """Do not let Luna emit Calendar Day operation shapes Core must reject later."""
+    definitions = semantic_write_schema_definitions(
+        schema,
+        include_temporal_reference=True,
+        authorized_calendar_dates=("2026-10-05",),
+    )
+
+    operation_schema = definitions["semantic_operation"]
+    ordinary, calendar = operation_schema["anyOf"]
+    assert ordinary["properties"]["target"] == {"$ref": "#/$defs/semantic_identity"}
+    properties = calendar["properties"]
+    assert properties["target"] == {"$ref": "#/$defs/semantic_calendar_day_target"}
+    assert properties["apply_to"]["enum"] == ["one"]
+    assert properties["intent"]["enum"] == ["record"]
+    assert properties["properties"]["maxItems"] == 0
+    assert properties["tag_changes"]["maxItems"] == 0
+    assert properties["destination_type"] == {"type": "null"}
+
+    day = definitions["semantic_calendar_day_target"]
+    assert day["properties"]["description"]["enum"] == ["2026-10-05"]
+    assert day["properties"]["note_type"]["enum"] == ["calendar_day"]

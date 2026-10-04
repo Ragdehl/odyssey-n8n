@@ -1,6 +1,11 @@
 # Temporal Foundation + Calendar v0
 
-Status: **approved phase contract; Slices 1-5 implemented deterministically; Slices 1-4 were visually validated in isolated DEV; Router retains Attempt-5 8/8 evidence and Calendar Attempt 8 passes 10/10 on GPT-6 Luna low; focused live validation is complete before DEV adoption**.
+## Current conversational ownership
+
+The original Calendar-planner routing work below is retained as historical evidence, but the active chat architecture is simpler: Router sends ordinary dated knowledge to built-in Temporal, Temporal resolves every material date/time mention in source order, and Core performs semantic ownership, identity/reference resolution, clarification, and mutation planning. Calendar remains the presentation/query application over canonical day data. `calendar_day` is Core-owned and can be selected only for an authorized exact date (or the current local day for ordinary daily capture), preserving deterministic `date:YYYY-MM-DD` identity and `calendar/days/YYYY-MM-DD.md` paths. Multiple exact dates/date-times may be handed to Core together and every supplied temporal wording/value pair must be preserved by a durable write. Exact date-times are represented by one shared `TemporalAnchor` (date plus optional exact local time/offset), so Core can preserve `HH:MM` presentation without turning hours into Notes or Calendar entities. At the model-facing Temporal boundary, an unambiguous local wall time may be deterministically localized with the supplied IANA timezone; canonical Core anchors remain offset-aware, while ambiguous or nonexistent DST wall times fail closed. Date ranges remain normalized Temporal results but intentionally stop before generic Core planning until a safe canonical write representation is approved.
+
+
+Status: **active deterministic architecture uses Router -> built-in Temporal -> Core for dated chat knowledge. Calendar is read/presentation only. Earlier Calendar-planner live gates remain historical evidence and do not authorize the current boundary.**
 
 ## Objective
 
@@ -12,7 +17,7 @@ This phase deliberately precedes Tasks because Tasks will later project `due_dat
 
 ## Approved architecture
 
-A calendar day is a **Calendar-managed canonical Note type**, not an ordinary planner-selectable semantic type.
+A calendar day is a **Core-owned deterministic canonical destination**, not an ordinary unrestricted semantic Note type.
 
 It reuses the canonical Note substrate:
 
@@ -23,7 +28,7 @@ It reuses the canonical Note substrate:
 - the existing renderer/editor infrastructure where useful;
 - the same local-first vault authority.
 
-Calendar owns its deterministic lifecycle and routing. The generic planner must not treat `calendar_day` like `person`, `project`, `document`, or a later `task` when choosing an ordinary WRITE target.
+Core owns deterministic Day identity/materialization. The generic planner may use `calendar_day` only when runtime has authorized the exact date (or today for ordinary day capture); it cannot search or create arbitrary Day targets like `person`, `project`, `document`, or a later `task`. Calendar owns only deterministic projection/presentation.
 
 Conceptually the type boundary is:
 
@@ -34,11 +39,11 @@ canonical Note types
   │     ├── project
   │     ├── document
   │     └── journal_entry (legacy read compatibility; not a new write destination)
-  └── application-managed types
+  └── Core-managed deterministic destinations
         └── calendar_day
 ```
 
-The exact schema metadata used to express `application-managed`, `Calendar-owned`, planner visibility, or default Notes-feed visibility is an implementation detail to keep minimal and validated. Do not introduce a generic plugin/package framework merely to express this one boundary.
+The exact schema metadata used to express deterministic/managed planner visibility or default Notes-feed visibility is an implementation detail to keep minimal and validated. Do not introduce a generic plugin/package framework merely to express this one boundary.
 
 ## Temporal identity and materialization
 
@@ -57,7 +62,7 @@ A day is virtual by default and materializes as canonical Markdown only when:
 
 A structured temporal property alone does **not** materialize the day. Future examples include task/event temporal properties; legacy `journal_entry.entry_date` remains projectable for historical entries without authorizing new Journal writes.
 
-A materialized day should use a deterministic Calendar-owned path such as:
+A materialized day uses a deterministic Core-owned temporal path such as:
 
 ```text
 calendar/days/2026-10-01.md
@@ -79,35 +84,34 @@ Core owns only reusable temporal primitives needed by multiple capabilities:
 - timezone-aware current context;
 - deterministic day/week/month/year ranges;
 - validation/comparison of normalized temporal values;
+- a shared `TemporalAnchor` coordinate (`date` plus optional exact `time`/UTC offset) for durable fact semantics;
 - deterministic Calendar-day identity/reference handling.
 
-Core does **not** become a calendar application, event model, reminder scheduler, or comprehensive natural-language date parser. A selected application planner may interpret natural temporal wording using its current date/time/timezone context; Core validates normalized results and must fail closed when chronology cannot be established safely.
+Core does **not** become a calendar application, event model, or reminder scheduler. The built-in Temporal interpreter performs only bounded natural-language date/time normalization using current date/time/timezone context; Core consumes that trusted evidence and must fail closed when chronology cannot be established safely. `EXACT_DATE` and `EXACT_DATETIME` may reach ordinary Core knowledge planning. `DATE_RANGE` and unresolved temporal wording remain fail-closed until an explicitly approved generic representation exists.
 
 ## Routing and knowledge ownership
 
-Natural-language application selection is owned by the cross-cutting [Application Boundary + Router v0](application-boundary-router-v0.md), not by adding Calendar rules to the established Core planner. The router selects Calendar when temporal/domain interpretation is required, while the selected Calendar planner still determines whether canonical knowledge ultimately belongs to a Day or to an ordinary Core-owned entity.
+Natural-language routing is owned by the cross-cutting [Application Boundary + Router v0](application-boundary-router-v0.md). Calendar is not a chat destination. Router first partitions the current message only where exact source spans are independently interpretable; independent dated intentions may therefore become separate Temporal routes, while clauses with shared temporal scope, predicates, or ellipsis remain together. For otherwise ordinary Core-owned knowledge whose date/time wording matters, Router selects built-in Temporal; Temporal returns only normalized temporal evidence plus the unchanged routed source text; Core then decides semantic ownership and the write shape.
 
 Examples:
 
 ```text
 "El fontanero viene mañana"
-    -> Calendar day capture for tomorrow
+    -> Router -> Temporal resolves tomorrow -> Core decides the authorized Day-owned write
 
 "Marta empezó hoy en Airbus"
-    -> ordinary WRITE owned by Marta, with an explicit temporal reference
+    -> Router -> Temporal resolves today -> Core writes Marta-owned durable knowledge with temporal evidence
 
 "Escribe en mi diario que hoy..."
-    -> Calendar Day content for today; no separate Journal object
+    -> Router -> Temporal/Core -> today's calendar_day content; no separate Journal object
 
 "Tengo que llamar al banco el viernes"
-    -> later Tasks-owned knowledge with due_date/day association
+    -> Tasks owns the task semantics and may consume Temporal for the due date
 ```
 
-Calendar routing does not require `calendar_day` to appear among ordinary Core-planner-selectable note types. The Router sees only a compact Calendar routing descriptor; once selected, Calendar's own planner preserves the specialized temporal intent and Calendar/Core resolve the normalized date and canonical owner deterministically.
+`calendar_day` does not need to appear among ordinary unrestricted Core-planner-selectable note types. Runtime exposes only the exact trusted dates Core may choose for the current request. Calendar later projects the resulting canonical day data; it does not interpret the chat request or plan the mutation.
 
-The established Core planner remains application-agnostic. Detailed Calendar instructions load only after routing, and future applications follow the same boundary. Router and Calendar planner start with GPT-6 Luna under their own separately validated model-facing contracts; neither change reopens the Core planner contract merely to add an application.
-
-Application planners are domain-local: they do not classify or name sibling applications. The Router alone knows the application catalog; a planner that receives foreign-domain semantics fails closed with a generic app-local `OUT_OF_SCOPE` result.
+Specialized application planners remain domain-local and may depend on Temporal, but Core remains the canonical mutation authority.
 
 ## Literal day capture versus identity resolution
 
@@ -129,27 +133,23 @@ Examples:
 - `Añade a mis amigos como asistentes` requires the intended people to resolve; failure must clarify rather than silently save an unresolved literal substitute.
 - `Hoy vino el fontanero` does not by itself authorize creation of a `person` note named `El fontanero`.
 
-Core must never turn failed identity resolution into literal Calendar capture on its own. The validated plan/capability intent must authorize the literal capture path. Once `DAY_LITERAL_CAPTURE` has authorized a fixed Day and exact capture text, however, Core may best-effort enrich identity occurrences before persistence. That enrichment is Core-owned and existing-only: Calendar supplies no aliases, person candidates, relationship members, candidate scopes, note targets, or mutation instructions. The scoped model result contains only ordered semantic fact parts, and their occurrence text must concatenate exactly to the authorized capture text.
-
-Safe enrichment never changes the destination and never creates a missing identity. A uniquely grounded existing identity may become a canonical wikilink; a bounded complete set such as `mis hijos` may expand only when the whole current set grounds safely. An unresolved, ambiguous, stale, or otherwise unavailable optional occurrence remains exactly literal. Provider or local enrichment failure falls back to the complete authorized literal capture. This fixed-destination contract is reusable by future managed destinations and is not a second Calendar planner.
+Core must never turn failed identity resolution into literal Calendar capture on its own. The validated plan/capability intent must authorize the literal capture path.
 
 Writing directly inside an opened Day means literal Day content by default. It does not silently create a Task/Event merely because the text sounds actionable or scheduled; explicit intent or later specialized routing owns those application objects.
 
 
 ## Journal convergence follow-up
 
-Everyday diary capture now converges on the Calendar Day instead of creating a second date-bound
-knowledge object. User wording such as `mi diario` is Calendar-owned interaction semantics: an
-explicit date resolves to that Day, while no explicit date means the current Day. Calendar may select
-only the exact source substring the user asked to remember; it must not paraphrase the captured
-content. Core remains responsible for canonical Day persistence and shared safety.
+Everyday diary capture now converges on the canonical Day instead of creating a second date-bound
+knowledge object. Wording such as `mi diario` does not create a separate Journal or require Calendar
+to participate in chat. Temporal resolves any material date wording (with the current local Day as the
+ordinary default) and Core decides whether the knowledge is Day-owned, then performs canonical Day
+persistence and shared safety.
 
 `journal_entry` remains in the canonical schema only for historical read/filter compatibility. It is
 not exposed in planner write capabilities, so new typed Journal creation/amendment is rejected. No
 existing Journal Markdown is migrated or deleted by this follow-up. Calendar may continue projecting
 legacy entries by `entry_date` until a later explicitly approved migration removes the legacy type.
-
-Historical semantic-WRITE regression assets that modeled an event-like source as `journal_entry` remain immutable evidence of the old contract; they are not current-schema product requirements. Current bounded-existing-source sentinels use an ordinary canonical `document` source instead, so identity-scope regression coverage does not pre-empt the future Events domain or revive Journal writes.
 
 ## Three temporal relationships must remain distinct
 
@@ -157,7 +157,7 @@ Calendar may present several kinds of relationship to the same day, but they are
 
 1. **Semantic/application time** — structured values such as later Task/Event dates/times and legacy `journal_entry.entry_date`. Calendar projects these deterministically without adding duplicate wikilinks.
 2. **Explicit temporal reference** — a canonical fact/body contains an intentional wikilink to the Day. This is a real Markdown backlink.
-3. **Odyssey activity/provenance** — notes/facts/tasks/events created, corrected, removed, or completed on that date. This is derived from existing request/Git/application history and must not be copied into every Note body merely to appear on Calendar.
+3. **Odyssey activity/provenance** — notes/facts/tasks/events created, corrected, removed, or completed on that date. Atomic facts retain their exact capture timestamp as Odyssey-owned hidden marker metadata (`recorded_at`), while the human-visible Markdown remains uncluttered. Request/Git/application history remains the broader provenance authority and should not be duplicated as visible prose merely to appear on Calendar.
 
 Technical/internal changes that do not represent useful user-visible semantic activity should not clutter the Day activity surface.
 
@@ -175,7 +175,7 @@ The already-approved formatting follow-up for atomic facts remains required: whe
 
 The rendered capture date should become navigable to the corresponding Calendar Day without weakening existing fact markers, request provenance, correction/removal authority, or tolerance for historical duplicate same-date headings.
 
-Implementation note after Slice 3: current Odyssey-created capture headings render the date as an ordinary wikilink to `calendar/days/YYYY-MM-DD`, materialize that Day before committing the source link, and append later same-day facts beneath the last matching capture section instead of creating another heading. Legacy plain-date headings and historical duplicate same-date sections remain readable/removable; a same-day append may upgrade only the selected current section to the navigable form. Explicit Day links introduced in other fact text use the same deterministic materialization/backlink path. A provider-free Core end-to-end test covers write -> Markdown -> Day materialization -> context-index rebuild -> detail link resolution -> incoming backlink projection.
+Implementation note after the temporal-anchor follow-up: current Odyssey-created capture headings render only the capture **day** as an ordinary wikilink to `calendar/days/YYYY-MM-DD`, while every new atomic fact stores its exact offset-aware `recorded_at` in the hidden Odyssey marker. The same marker may also carry one or more canonical semantic `temporal` anchors. These values are deliberately separate: `recorded_at` means when Odyssey persisted the fact; `temporal` means when the fact says something happened/will happen. Legacy markers without either field remain readable and no historical time is invented. Exact semantic date-time facts owned by another entity render a canonical Day link followed by the local clock (`[[...|DD-MM-YYYY]] 15:35` when seconds are zero); a fact owned by that same Day renders only `15:35` and retains the exact date-time in hidden metadata, avoiding a self-link. Later same-day captures still append beneath the last matching capture section instead of creating another heading. A provider-free Core end-to-end test covers write -> Markdown -> Day materialization -> context-index rebuild -> detail link resolution -> incoming backlink projection, and focused tests cover hidden capture/semantic-time separation.
 
 ## Calendar v0 product surface
 
@@ -191,11 +191,11 @@ The first version contains:
 - legacy Journal/date associations plus supported Task/Event temporal projections as they exist;
 - useful semantic activity for that date.
 
-Calendar-owned Day notes do not appear in the ordinary Notes feed by default, although the same underlying Markdown may reuse existing reading/editing infrastructure.
+Core-managed Day notes do not appear in the ordinary Notes feed by default, although the same underlying Markdown may reuse existing reading/editing infrastructure.
 
 Week uses Monday through Sunday in v0. Locale/user-configurable week starts are deferred. Week/month/year are calculated views over date ranges, not separately persisted Notes in this phase.
 
-Hourly week/day/three-day grids are deferred until Events provides timed objects that justify them. Calendar v0 must not create an empty Google-Calendar-style scheduling UI before the event contract exists.
+A full scheduling-style hourly week/day/three-day grid remains deferred until Events provides lifecycle-owned timed objects that justify it. The data foundation is nevertheless ready earlier: atomic facts can already carry semantic `TemporalAnchor` times and independent `recorded_at` capture times, so a later Day Agenda/Activity presentation can order existing knowledge by semantic time or capture time without inventing hours retroactively. Calendar v0 must not create an empty Google-Calendar-style scheduling UI before the event contract exists.
 
 Implementation note after Slice 4: Calendar now owns its deterministic `month` + `day` projection and presentation boundary under `odyssey_apps/calendar/`, while reusable temporal/Day primitives remain in Core. It also has a dedicated framework-free browser surface. Month projection scans current validated canonical Markdown and exposes bounded indicators for Day-owned content, Journal `entry_date`, same-day captured facts, and explicit temporal references; Day projection keeps those categories separate and opens virtual dates without materialization. Browser responses contain only Core-resolved presentation blocks and stable Note summaries, never raw vault paths or browser-side Markdown parsing authority. Notes date links hand navigation to Calendar, while Calendar related-note controls hand navigation back to Notes. Provider-free backend and browser end-to-end tests cover real canonical write -> Day chronology/materialization -> index rebuild -> month/Day projection and month -> Day -> related Note navigation. The checked-in DEV route inventory includes the Calendar modules/API, but no live DEV or public-route deployment is implied by the implementation commit.
 
@@ -275,7 +275,7 @@ Applications may depend on lower-level capabilities when useful and must keep th
 2. **Temporal/Day Core primitives.** Deterministic date identity, virtual/materialized Day repository behavior, collision/idempotence checks, and strict date/range helpers.
 3. **Temporal links and chronology.** Explicit Day links/backlinks plus the approved same-day `Added` heading grouping/navigation, keeping capture time separate from described/event time.
 4. **Calendar v0 read/UI surface.** Month + Day projections over virtual/materialized Days, Journal temporal properties, explicit links, and useful semantic activity.
-5. **Application-routed natural language.** After [Application Boundary + Router v0](application-boundary-router-v0.md) is approved and implemented, route Calendar intents without changing the established Core planner; Calendar owns its GPT-6 Luna planner contract and compiles validated Calendar/shared-Core intents through existing Core safety boundaries.
+5. **Temporal-routed natural language.** Route ordinary dated/timed Core knowledge through built-in Temporal without giving Calendar a chat planner; `EXACT_DATE` and `EXACT_DATETIME` become shared Core temporal anchors, while range semantics remain fail-closed. Specialized applications such as Tasks may depend on the same Temporal contract.
 
 Implementation note after Slice 5 deterministic work: Calendar's separate GPT-6 Luna planner (current Slice 6 candidate effort: `low`)
 contract retains `EXACT_DATE`, `DATE_RANGE`, and `UNSPECIFIED` temporal evidence. Exact Day literal
@@ -301,6 +301,6 @@ Result: **PROCEED after approved reconsideration**.
 
 The first hybrid proposal treated Calendar Days as Markdown resources outside the canonical Note type system. Review found that this would duplicate or special-case validation, links/backlinks, editing, history, and future direct-Markdown ingestion.
 
-The approved simpler boundary keeps one canonical Markdown/Note substrate and introduces only the distinction between ordinary planner-selectable semantic types and an application-managed canonical type. `calendar_day` remains Calendar-owned and deterministically addressed, so the generic planner cannot create/search it as an ordinary entity while Calendar still reuses the existing authority and safety machinery.
+The approved simpler boundary keeps one canonical Markdown/Note substrate and distinguishes ordinary semantic types from the Core-managed deterministic `calendar_day` destination. The planner cannot search/create arbitrary Day entities; it may target only runtime-authorized dates, while Calendar reuses the resulting canonical state for presentation and navigation.
 
 The human explicitly approved this reconsidered boundary and the application principle that a selected app/capability may resolve its own bounded functionality deterministically or with a separately justified AI boundary. No additional product decision is required before implementation.

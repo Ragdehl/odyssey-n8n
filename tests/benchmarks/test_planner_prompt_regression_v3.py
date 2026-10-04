@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from decimal import Decimal
 
 import pytest
 
@@ -27,32 +26,25 @@ def test_v3_reuses_complete_frozen_matrix() -> None:
     ]
 
 
-def test_v3_pins_exact_current_candidate_contract() -> None:
-    """Refuse evidence from any prompt/schema/examples contract other than this candidate."""
+def test_v3_is_retained_historical_core_evidence() -> None:
+    """Keep the consumed v3 hashes immutable while the current Core contract moves on."""
     _cases, context = base.load_gate_cases()
     schema = json.loads(run_live.SCHEMA_PATH.read_text(encoding="utf-8"))
-    assert run_live._contract_hashes(schema, context) == (
-        run_live.PROMPT_SHA256,
-        run_live.PROVIDER_SCHEMA_SHA256,
-        run_live.TEACHING_SHA256,
+    historical = (run_live.PROMPT_SHA256, run_live.PROVIDER_SCHEMA_SHA256, run_live.TEACHING_SHA256)
+    assert historical == (
+        "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143",
+        "d336432ba67b471030ac67eed11bb389065d5832d4032906774bbef52e84cb23",
+        "e3ad1321ab56fb0ce0a3b587a73c07f282c748ec6ae0f203bb50ca13d1d3f5c0",
     )
+    assert run_live._contract_hashes(schema, context) != historical
 
 
-def test_v3_budget_is_complete_and_bounded() -> None:
-    """Bound all 16 zero-retry production-model calls before provider authority exists."""
-    budget = run_live.budget_snapshot()
-    assert budget["calls"] == 16
-    assert budget["conservative_usd_upper"] == Decimal("0.2076192")
-    assert budget["conservative_usd_upper"] <= run_live.AUTHORIZED_CEILING_USD == Decimal("0.210")
-
-
-def test_v3_has_zero_provider_authority_without_explicit_flag(
+def test_v3_preflight_refuses_reuse_after_current_contract_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Do not permit provider access until the exact bounded gate is human-authorized."""
     monkeypatch.delenv(run_live.AUTH_ENV, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "presence-only")
-    with pytest.raises(SystemExit, match=run_live.AUTH_ENV):
+    with pytest.raises(SystemExit, match="contract changed"):
         run_live._preflight()
 
 
