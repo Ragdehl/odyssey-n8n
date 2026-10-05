@@ -12,20 +12,25 @@ const TYPE_PRESENTATION = Object.freeze({
   document: {label: "Documento", paths: ["M7 3h7l4 4v14H7z", "M14 3v5h4", "M10 12h5M10 16h5"]},
   person: {label: "Persona", paths: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M5 21a7 7 0 0 1 14 0"]},
   journal_entry: {label: "Entrada de diario", paths: ["M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 1V4Z", "M8 8h7M8 12h7M8 16h5"]},
+  calendar_day: {label: "Día de calendario", paths: ["M5 4h14v16H5z", "M8 2v4m8-4v4M5 9h14", "M9 13h2v2H9z"]},
 });
 const GENERAL_FIELDS = new Set(["type", "tags", "created_at", "updated_at"]);
+const GROUP_PAGE_SIZE = 3;
+const COLLAPSED_TYPES_KEY = "odyssey.notes.collapsed-types.v1";
 
 /** Mount the read-only Notes application while retaining its state while the view is inactive. */
 export function mountNotes(root, {
   endpoint = "/api/notes",
   confirmImpl = (message) => globalThis.confirm?.(message) ?? false,
+  sessionStorageImpl = safeSessionStorage(),
 } = {}) {
   const state = {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
     editingWorkSessionId: null, editingWorkSessionActivityId: null,
-    workSessionDisclosure: new Map(), feedDirty: false,
+    workSessionDisclosure: new Map(), feedDirty: false, groups: new Map(),
+    collapsedTypes: readCollapsedTypes(sessionStorageImpl),
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -46,6 +51,14 @@ export function mountNotes(root, {
   }
 
   async function load({reset = false, mode = state.mode, snapshotIds = state.snapshot?.note_ids ?? [], throwOnError = false} = {}) {
+    if (!state.historical && ["feed", "local"].includes(mode)) {
+      await loadGroups({reset, mode, throwOnError});
+      return;
+    }
+    await loadGlobal({reset, mode, snapshotIds, throwOnError});
+  }
+
+  async function loadGlobal({reset, mode, snapshotIds, throwOnError}) {
     if (state.loading || (!reset && !state.cursor)) return;
     state.loading = true;
     status.textContent = "Cargando…";
@@ -86,6 +99,89 @@ export function mountNotes(root, {
     } finally {
       state.loading = false;
     }
+  }
+
+  async function loadGroups({reset, mode, throwOnError}) {
+    if (state.loading) return;
+    state.loading = true;
+    state.historical = false;
+    state.mode = mode;
+    state.cursor = null;
+    state.items = [];
+    if (reset) state.groups = new Map();
+    const types = eligibleTypes();
+    status.textContent = "Cargando…";
+    try {
+      const results = await Promise.allSettled(
+        types.map((type) => loadGroup(type.id, {reset, mode, render: false})),
+      );
+      state.total = types.reduce((total, type) => total + (state.groups.get(type.id)?.total ?? 0), 0);
+      renderList();
+      renderStatus(state.total);
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed && throwOnError) throw failed.reason;
+      if (failed) status.textContent = "Algunos grupos no se han podido cargar.";
+    } catch (error) {
+      status.textContent = "No se han podido cargar las notas.";
+      if (throwOnError) throw error;
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  async function loadGroup(typeId, {reset = false, mode = state.mode, render = true} = {}) {
+    const previous = state.groups.get(typeId) ?? {items: [], cursor: null, total: 0, loading: false};
+    if (previous.loading || (!reset && !previous.cursor)) return;
+    const group = reset ? {items: [], cursor: null, total: 0, loading: true} : {...previous, loading: true};
+    state.groups.set(typeId, group);
+    try {
+      const page = await requestNotes({endpoint, operation: "query", payload: {
+        mode, query: state.query, filters: filtersForType(typeId), sort: state.sort,
+        page_size: GROUP_PAGE_SIZE, cursor: reset ? null : previous.cursor, snapshot_ids: [],
+      }});
+      state.groups.set(typeId, {
+        items: reset ? [...page.items] : [...previous.items, ...page.items],
+        cursor: page.next_cursor, total: page.total, loading: false,
+      });
+    } catch (error) {
+      if (error instanceof NotesRequestError && error.code === "STALE_CURSOR" && !reset) {
+        state.groups.set(typeId, {...previous, cursor: null, loading: false});
+        await loadGroup(typeId, {reset: true, mode, render});
+        return;
+      }
+      state.groups.set(typeId, {...previous, loading: false, error: true});
+      if (render) status.textContent = "No se ha podido actualizar este grupo.";
+      throw error;
+    }
+    if (render) {
+      state.total = eligibleTypes().reduce(
+        (total, type) => total + (state.groups.get(type.id)?.total ?? 0), 0,
+      );
+      renderList();
+      renderStatus(state.total);
+    }
+  }
+
+  function eligibleTypes() {
+    const selected = state.filters.find((filter) => filter.field === "type" && filter.op === "eq")?.value;
+    const propertyFilters = state.filters.filter((filter) => !GENERAL_FIELDS.has(filter.field));
+    return state.capabilities.types.filter((type) => (
+      (!selected || type.id === selected) && propertyFilters.every((filter) => {
+        const field = state.capabilities.fields.find((candidate) => candidate.id === filter.field);
+        return field?.applies_to.includes(type.id);
+      })
+    ));
+  }
+
+  function filtersForType(typeId) {
+    return [
+      ...state.filters.filter((filter) => filter.field !== "type" && (
+        GENERAL_FIELDS.has(filter.field) || state.capabilities.fields.find(
+          (field) => field.id === filter.field,
+        )?.applies_to.includes(typeId)
+      )),
+      {field: "type", op: "eq", value: typeId},
+    ];
   }
 
   async function loadCapabilities() {
@@ -144,16 +240,161 @@ export function mountNotes(root, {
   }
 
   function renderList() {
-    list.replaceChildren(...state.items.map((note) => (
-      note.unavailable ? unavailableRow(note.id) : noteRow(note, () => void open(note.id))
-    )));
+    if (!state.historical && ["feed", "local"].includes(state.mode)) {
+      renderNormalGroups();
+    } else {
+      renderGlobalGroups();
+    }
+    renderFilterChips();
+    updateControlAvailability();
+  }
+
+  function renderNormalGroups() {
+    const intro = document.createElement("p");
+    intro.className = "notes-groups-intro";
+    intro.textContent = "Estos son los tipos de nota que Odyssey usa para organizar tu información. Algunos pueden crearse automáticamente.";
+    const groups = eligibleTypes().map((type) => typeGroup(type, state.groups.get(type.id)));
+    list.replaceChildren(intro, ...groups, createTypeCard());
+  }
+
+  function renderGlobalGroups() {
+    const nodes = state.historical ? historicalGroupNodes() : groupedResultNodes();
+    list.replaceChildren(...nodes);
     if (state.cursor) {
       const more = button("Cargar más", () => void load());
       more.className = "notes-more";
       list.append(more);
     }
-    renderFilterChips();
-    updateControlAvailability();
+  }
+
+  function groupedResultNodes() {
+    const byType = new Map(state.capabilities.types.map((type) => [type.id, []]));
+    const ungrouped = [];
+    for (const item of state.items) {
+      const target = byType.get(item.type);
+      if (target) target.push(item); else ungrouped.push(item);
+    }
+    return [
+      ...state.capabilities.types
+        .filter((type) => byType.get(type.id).length)
+        .map((type) => typeGroup(type, {items: byType.get(type.id), total: byType.get(type.id).length})),
+      ...ungrouped.map((note) => noteRow(note, () => void open(note.id))),
+    ];
+  }
+
+  function historicalGroupNodes() {
+    const types = new Map(state.capabilities.types.map((type) => [type.id, type]));
+    const nodes = [];
+    let run = [];
+    let runType = null;
+    const flush = () => {
+      if (!run.length) return;
+      nodes.push(typeGroup(types.get(runType), {items: run, total: run.length}));
+      run = [];
+    };
+    for (const item of state.items) {
+      const type = item.unavailable ? null : types.get(item.type);
+      if (!type) {
+        flush();
+        runType = null;
+        nodes.push(item.unavailable ? unavailableRow(item.id) : noteRow(item, () => void open(item.id)));
+      } else if (runType === item.type) {
+        run.push(item);
+      } else {
+        flush();
+        runType = item.type;
+        run = [item];
+      }
+    }
+    flush();
+    return nodes;
+  }
+
+  function typeGroup(type, group = {items: [], cursor: null, total: 0}) {
+    const section = document.createElement("section");
+    section.className = "notes-type-group";
+    section.dataset.type = type.id;
+    const header = document.createElement("header");
+    header.className = "notes-type-group-header";
+    const collapsed = state.collapsedTypes.has(type.id);
+    const toggle = button("", () => toggleGroup(type.id));
+    toggle.className = "notes-type-toggle";
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.append(typeBadge(type.id), document.createTextNode(typeLabel(type.id)));
+    const count = document.createElement("span");
+    count.className = "notes-type-count";
+    count.textContent = String(group.total ?? 0);
+    const info = button("i", () => {
+      details.hidden = !details.hidden;
+      info.setAttribute("aria-expanded", details.hidden ? "false" : "true");
+    });
+    info.className = "notes-type-info-button";
+    info.setAttribute("aria-label", `Información sobre ${typeLabel(type.id)}`);
+    info.setAttribute("aria-expanded", "false");
+    header.append(toggle, count, info);
+    const details = typeInformation(type);
+    details.hidden = true;
+    const body = document.createElement("div");
+    body.className = "notes-type-group-body";
+    body.hidden = collapsed;
+    for (const note of group.items ?? []) body.append(noteRow(note, () => void open(note.id)));
+    if (group.error) {
+      const error = document.createElement("p");
+      error.className = "notes-group-error";
+      error.textContent = "No se ha podido cargar este grupo.";
+      body.append(error);
+    }
+    if (group.cursor) {
+      const more = button("Ver más", () => void loadGroup(type.id));
+      more.className = "notes-group-more";
+      body.append(more);
+    }
+    section.append(header, details, body);
+    return section;
+  }
+
+  function typeInformation(type) {
+    const details = document.createElement("div");
+    details.className = "notes-type-information";
+    const description = document.createElement("p");
+    description.textContent = type.description;
+    details.append(description);
+    if (type.properties.length) {
+      const properties = document.createElement("ul");
+      for (const property of type.properties) {
+        const item = document.createElement("li");
+        const requirement = property.required ? "obligatoria" : "opcional";
+        const filtering = property.filterable ? "filtrable" : "no filtrable";
+        item.textContent = `${filterLabel(property.id)}: ${property.description} (${requirement} · ${property.value_type} · ${filtering})`;
+        properties.append(item);
+      }
+      details.append(properties);
+    }
+    return details;
+  }
+
+  function toggleGroup(typeId) {
+    if (state.collapsedTypes.has(typeId)) state.collapsedTypes.delete(typeId);
+    else state.collapsedTypes.add(typeId);
+    writeCollapsedTypes(sessionStorageImpl, state.collapsedTypes);
+    renderList();
+  }
+
+  function createTypeCard() {
+    const card = document.createElement("section");
+    card.className = "notes-create-type-card";
+    const control = button("＋ Crear nuevo tipo", () => {
+      message.hidden = false;
+      control.setAttribute("aria-expanded", "true");
+    });
+    control.className = "notes-create-type-button";
+    control.setAttribute("aria-expanded", "false");
+    const message = document.createElement("p");
+    message.className = "notes-create-type-message";
+    message.textContent = "Próximamente · Esta función está en desarrollo.";
+    message.hidden = true;
+    card.append(control, message);
+    return card;
   }
 
   function updateControlAvailability() {
@@ -219,6 +460,8 @@ export function mountNotes(root, {
     } catch (error) {
       state.items = [];
       state.cursor = null;
+      state.groups = new Map();
+      state.mode = "intelligent";
       state.current = null;
       showList();
       renderList();
@@ -233,17 +476,25 @@ export function mountNotes(root, {
 
   function filtersAreRepresentable(filters) {
     const selectedType = filters.find((filter) => filter.field === "type" && filter.op === "eq")?.value;
-    return filters.every((filter) => {
+    const valid = filters.every((filter) => {
       if (filter.field === "type") return filter.op === "eq" && state.capabilities.types.some((type) => type.id === filter.value);
       if (filter.field === "tags") return filter.op === "contains" && typeof filter.value === "string";
       if (["created_at", "updated_at"].includes(filter.field)) return ["gte", "lt", "lte"].includes(filter.op) && typeof filter.value === "string";
       const field = state.capabilities.fields.find((candidate) => candidate.id === filter.field);
-      if (!field || !field.operators.includes(filter.op) || !field.applies_to.includes(selectedType)) return false;
+      if (!field || !field.operators.includes(filter.op) || !field.applies_to.length ||
+          (selectedType && !field.applies_to.includes(selectedType))) return false;
       if (field.value_type === "date") return ["gte", "lt", "lte"].includes(filter.op) && typeof filter.value === "string";
       if (field.value_type === "integer") return ["gte", "lte"].includes(filter.op) && Number.isInteger(filter.value);
       if (field.value_type === "array[string]") return filter.op === "contains" && typeof filter.value === "string";
       return field.value_type === "string" && filter.op === "eq" && typeof filter.value === "string";
     });
+    if (!valid) return false;
+    const propertyFilters = filters.filter((filter) => !GENERAL_FIELDS.has(filter.field));
+    return state.capabilities.types.some((type) => (
+      (!selectedType || type.id === selectedType) && propertyFilters.every((filter) => (
+        state.capabilities.fields.find((field) => field.id === filter.field)?.applies_to.includes(type.id)
+      ))
+    ));
   }
 
   async function rerunHistorical() {
@@ -979,13 +1230,11 @@ export function mountNotes(root, {
 
   function syncFilterForm() {
     filterForm.reset();
-    const type = state.filters.find((filter) => filter.field === "type" && filter.op === "eq");
     const tags = state.filters.filter((filter) => filter.field === "tags" && filter.op === "contains");
-    setFormValue("filter-type", type?.value ?? "");
     setFormValue("filter-tags", tags.map((filter) => filter.value).join(", "));
     syncRange("created_at", "filter-created");
     syncRange("updated_at", "filter-updated");
-    syncTypeSpecificFields(typeof type?.value === "string" ? type.value : "");
+    syncTypeSpecificFields();
   }
 
   function syncRange(field, prefix) {
@@ -998,15 +1247,12 @@ export function mountNotes(root, {
 
   function renderFilterFields() {
     filterFields.replaceChildren(
-      selectField("filter-type", "Tipo de nota", state.capabilities.types),
       textField("filter-tags", "Etiquetas", "Una o varias etiquetas separadas por comas"),
       rangeField("filter-created", lifecycleLabel("created_at"), "created_at", fieldFormat("created_at") === "date-time" ? "datetime-local" : "date"),
       rangeField("filter-updated", lifecycleLabel("updated_at"), "updated_at", fieldFormat("updated_at") === "date-time" ? "datetime-local" : "date"),
       extraFieldsContainer(),
     );
-    filterFields.querySelector("#filter-type")?.addEventListener("change", (event) => {
-      renderTypeSpecificFields(event.currentTarget.value);
-    });
+    renderTypeSpecificFields();
   }
 
   function extraFieldsContainer() {
@@ -1016,46 +1262,45 @@ export function mountNotes(root, {
     return container;
   }
 
-  function renderTypeSpecificFields(noteType) {
+  function renderTypeSpecificFields() {
     const container = filterFields?.querySelector("#notes-type-specific-filters");
     if (!container) return;
     container.replaceChildren();
     const fields = state.capabilities.fields.filter((field) => (
-      !GENERAL_FIELDS.has(field.id) && field.applies_to.includes(noteType)
+      !GENERAL_FIELDS.has(field.id)
     ));
-    if (!fields.length) {
-      if (noteType) {
-        const message = document.createElement("p");
-        message.className = "notes-type-specific-empty";
-        message.textContent = "Este tipo no tiene propiedades específicas.";
-        container.append(message);
-      }
-      return;
-    }
+    if (!fields.length) return;
     const heading = document.createElement("h3");
-    heading.textContent = "Propiedades de este tipo";
+    heading.textContent = "Propiedades específicas";
     container.append(heading);
     for (const field of fields) {
+      let control = null;
       if (field.value_type === "date") {
-        container.append(rangeField(`filter-${field.id}`, filterLabel(field.id), field.id));
+        control = rangeField(`filter-${field.id}`, filterFieldLabel(field), field.id);
       } else if (field.value_type === "integer") {
-        container.append(numberRangeField(`filter-${field.id}`, filterLabel(field.id), field.id));
+        control = numberRangeField(`filter-${field.id}`, filterFieldLabel(field), field.id);
       } else if (field.value_type === "array[string]" && field.operators.includes("contains")) {
-        container.append(textField(`filter-${field.id}`, filterLabel(field.id), "Valores separados por comas", field.id));
+        control = textField(`filter-${field.id}`, filterFieldLabel(field), "Valores separados por comas", field.id);
       } else if (field.value_type === "string" && field.operators.includes("eq")) {
         if (field.controlled_values?.length) {
-          container.append(selectField(`filter-${field.id}`, filterLabel(field.id), field.controlled_values.map((value) => ({id: value, name: controlledValueLabel(field.id, value)}))));
+          control = selectField(`filter-${field.id}`, filterFieldLabel(field), field.controlled_values.map((value) => ({id: value, name: controlledValueLabel(field.id, value)})));
         } else {
-          container.append(textField(`filter-${field.id}`, filterLabel(field.id), "Coincidencia exacta", field.id));
+          control = textField(`filter-${field.id}`, filterFieldLabel(field), "Coincidencia exacta", field.id);
         }
       }
+      if (control) container.append(control);
     }
   }
 
-  function syncTypeSpecificFields(noteType) {
-    renderTypeSpecificFields(noteType);
+  function filterFieldLabel(field) {
+    const types = field.applies_to.map(typeLabel).join(", ");
+    return types ? `${filterLabel(field.id)} · ${types}` : filterLabel(field.id);
+  }
+
+  function syncTypeSpecificFields() {
+    renderTypeSpecificFields();
     for (const field of state.capabilities.fields) {
-      if (GENERAL_FIELDS.has(field.id) || !field.applies_to.includes(noteType)) continue;
+      if (GENERAL_FIELDS.has(field.id)) continue;
       const prefix = `filter-${field.id}`;
       if (field.value_type === "date") {
         syncRange(field.id, prefix);
@@ -1073,14 +1318,12 @@ export function mountNotes(root, {
   }
 
   function applyFilters() {
-    const next = [];
-    const type = formValue("filter-type");
-    if (type) next.push({field: "type", op: "eq", value: type});
+    const next = state.filters.filter((filter) => filter.field === "type");
     for (const tag of splitValues(formValue("filter-tags"))) next.push({field: "tags", op: "contains", value: tag});
     appendDateRange(next, "created_at", "filter-created");
     appendDateRange(next, "updated_at", "filter-updated");
     for (const field of state.capabilities.fields) {
-      if (GENERAL_FIELDS.has(field.id) || !field.applies_to.includes(type)) continue;
+      if (GENERAL_FIELDS.has(field.id)) continue;
       const prefix = `filter-${field.id}`;
       if (field.value_type === "date") {
         appendDateRange(next, field.id, prefix);
@@ -1167,7 +1410,8 @@ export function mountNotes(root, {
     }
   });
   list.addEventListener("scroll", () => {
-    if (list.scrollTop + list.clientHeight >= list.scrollHeight - 80) void load();
+    if ((state.historical || state.mode === "intelligent") &&
+        list.scrollTop + list.clientHeight >= list.scrollHeight - 80) void load();
   });
   void (async () => {
     await loadCapabilities();
@@ -1180,6 +1424,7 @@ export function mountNotes(root, {
 function noteRow(note, action) {
   const row = button("", action);
   row.className = "note-row";
+  row.dataset.noteId = note.id;
   const title = document.createElement("strong");
   title.append(typeBadge(note.type), document.createTextNode(note.name));
   const meta = document.createElement("span");
@@ -1253,10 +1498,10 @@ function appendBodySegments(parent, segments, open) {
       continue;
     }
     const link = document.createElement("a");
-    link.className = `note-inline-link type-${segment.target_type}`;
+    link.className = "note-inline-link";
     link.href = `#note-${encodeURIComponent(segment.target_id)}`;
     link.setAttribute("aria-label", `${typeLabel(segment.target_type)}: ${segment.text}`);
-    link.append(typeIcon(segment.target_type), document.createTextNode(segment.text));
+    link.append(typeBadge(segment.target_type), document.createTextNode(segment.text));
     link.addEventListener("click", (event) => {
       event.preventDefault();
       if (segment.target_type === "calendar_day" && segment.target_id.startsWith("date:")) {
@@ -1296,6 +1541,20 @@ export function typeIcon(type) {
   return icon;
 }
 export function typeLabel(type) { return TYPE_PRESENTATION[type]?.label ?? type.replaceAll("_", " "); }
+function safeSessionStorage() {
+  try { return globalThis.sessionStorage ?? null; } catch { return null; }
+}
+function readCollapsedTypes(storage) {
+  try {
+    const value = JSON.parse(storage?.getItem(COLLAPSED_TYPES_KEY) ?? "[]");
+    return new Set(Array.isArray(value) ? value.filter((item) => typeof item === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+function writeCollapsedTypes(storage, values) {
+  try { storage?.setItem(COLLAPSED_TYPES_KEY, JSON.stringify([...values].sort())); } catch { /* Session state is optional. */ }
+}
 function property(parent, key, value) {
   const term = document.createElement("dt");
   term.textContent = key.replaceAll("_", " ");
@@ -1383,6 +1642,12 @@ function numberRangeField(prefix, label, field) {
 }
 function filterLabel(field) {
   return ({type: "Tipo", tags: "Etiqueta", created_at: "Creada", updated_at: "Actualizada", entry_date: "Fecha de la entrada"})[field] ?? field.replaceAll("_", " ");
+}
+function controlledValueLabel(field, value) {
+  if (field === "status") {
+    return ({pending: "Pendiente", in_progress: "En curso", completed: "Completada", cancelled: "Cancelada"})[value] ?? value;
+  }
+  return value.replaceAll("_", " ");
 }
 function filterValueLabel(filter) {
   if (filter.field === "type" && typeof filter.value === "string") return typeLabel(filter.value);

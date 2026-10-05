@@ -112,6 +112,11 @@ def test_capabilities_and_local_search_are_schema_grounded_and_zero_provider(
     notes = service(tmp_path, schema)
     capabilities = notes.capabilities()
     assert {item["id"] for item in capabilities.types} >= {"concept", "person"}
+    concept = next(item for item in capabilities.types if item["id"] == "concept")
+    assert concept["description"] == next(
+        item["description"] for item in schema["types"] if item["id"] == "concept"
+    )
+    assert concept["properties"] == ()
     assert next(item for item in capabilities.fields if item["id"] == "tags")["operators"] == (
         "contains",
     )
@@ -147,6 +152,10 @@ def test_calendar_managed_type_is_hidden_from_default_notes_feed(
     assert "calendar_day" not in {item["id"] for item in capabilities.types}
     assert "date" not in {item["id"] for item in capabilities.fields}
     assert "calendar-day-2026-10-01" not in {item.id for item in notes.query(mode="feed").items}
+    assert "calendar-day-2026-10-01" not in {
+        item.id
+        for item in notes.query(mode="intelligent", query="2026-10-01", embedder=Embedder()).items
+    }
     assert [item.id for item in notes.query(mode="local", query="2026-10-01").items] == [
         "calendar-day-2026-10-01"
     ]

@@ -104,7 +104,26 @@ function validatePage(value) {
     unavailable_ids: unavailable, snapshot_offset: snapshotOffset, ...(operational ? {operational} : {})};
 }
 function validateSummary(value) { if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.name) || !isText(value.type) || !Array.isArray(value.tags) || !isText(value.created_at) || !isText(value.updated_at) || !value.properties || typeof value.properties !== "object" || Array.isArray(value.properties)) throw new NotesRequestError("Nota inválida."); return {id: value.id, name: value.name, type: value.type, tags: value.tags.filter(isText), created_at: value.created_at, updated_at: value.updated_at, properties: value.properties}; }
-function validateType(value) { if (!value || !isText(value.id) || !isText(value.name)) throw new NotesRequestError("Tipo inválido."); return {id: value.id, name: value.name}; }
+function validateType(value) {
+  const allowed = new Set(["id", "name", "description", "properties"]);
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).some((key) => !allowed.has(key)) || !isText(value.id) ||
+      !isText(value.name) || !isText(value.description) || !Array.isArray(value.properties)) {
+    throw new NotesRequestError("Tipo inválido.");
+  }
+  return {id: value.id, name: value.name, description: value.description,
+    properties: value.properties.map(validateTypeProperty)};
+}
+function validateTypeProperty(value) {
+  const keys = ["description", "filterable", "id", "required", "value_type"];
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).sort().join(",") !== keys.join(",") || !isText(value.id) ||
+      !isText(value.description) || !isText(value.value_type) ||
+      typeof value.required !== "boolean" || typeof value.filterable !== "boolean") {
+    throw new NotesRequestError("Propiedad de tipo inválida.");
+  }
+  return {...value};
+}
 function validateField(value) { if (!value || !isText(value.id) || !isText(value.value_type) || !Array.isArray(value.operators) || !Array.isArray(value.applies_to) || (value.format !== undefined && !isText(value.format) && value.format !== null) || (value.controlled_values !== undefined && (!Array.isArray(value.controlled_values) || value.controlled_values.some((item) => !isText(item))))) throw new NotesRequestError("Campo inválido."); return {id: value.id, value_type: value.value_type, operators: value.operators.filter(isText), applies_to: value.applies_to.filter(isText), format: value.format ?? null, controlled_values: value.controlled_values?.filter(isText) ?? []}; }
 function validateFilter(value) { if (!value || !isText(value.field) || !isText(value.op)) throw new NotesRequestError("Filtro inválido."); return {field: value.field, op: value.op, value: value.value}; }
 function validateLink(value) { if (!value || !isText(value.target_id) || !isText(value.target_name) || !isText(value.target_type) || !isText(value.label)) throw new NotesRequestError("Enlace inválido."); return {...value, occurrences: count(value.occurrences)}; }

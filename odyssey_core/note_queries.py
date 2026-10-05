@@ -423,7 +423,7 @@ class NotesQueryService:
         self.context_index = context_index
 
     def capabilities(self) -> NoteCapabilities:
-        """Project ordinary semantic types and their Core-supported browser filters."""
+        """Project Notes-visible schema metadata and Core-supported browser filters."""
         visible_types = notes_visible_type_definitions(self.schema)
         universal_fields = {
             item["id"] for item in self.schema["metadata_fields"] if item.get("filterable") is True
@@ -448,7 +448,24 @@ class NotesQueryService:
                 }
             )
         return NoteCapabilities(
-            types=tuple({"id": item["id"], "name": item["name"]} for item in visible_types),
+            types=tuple(
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "description": item["description"],
+                    "properties": tuple(
+                        {
+                            "id": property_["id"],
+                            "description": property_["description"],
+                            "value_type": property_["value_type"],
+                            "required": property_["required"],
+                            "filterable": property_["filterable"],
+                        }
+                        for property_ in item["properties"]
+                    ),
+                }
+                for item in visible_types
+            ),
             fields=tuple(fields),
         )
 
@@ -508,7 +525,7 @@ class NotesQueryService:
                 fingerprint=fingerprint,
             )
         generation, notes = self._grounded_index_notes()
-        if mode == "feed":
+        if mode in {"feed", "intelligent"}:
             visible_type_ids = notes_visible_type_ids(self.schema)
             notes = [note for note in notes if note.summary.type in visible_type_ids]
         offset = 0

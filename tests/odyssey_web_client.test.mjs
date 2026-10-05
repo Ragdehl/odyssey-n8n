@@ -484,7 +484,13 @@ test("Notes transport sends only the allowed same-origin operation envelope", as
       captured = {endpoint, options};
       return response({payload: {
         kind: "capabilities",
-        types: [{id: "person", name: "Persona"}],
+        types: [{
+          id: "person", name: "Person", description: "A person with stable identity.",
+          properties: [{
+            id: "company", description: "Employer name.", value_type: "string",
+            required: false, filterable: true,
+          }],
+        }],
         fields: [
           {id: "tags", value_type: "array[string]", operators: ["contains"], applies_to: []},
           {id: "updated_at", value_type: "string", operators: ["gte", "lte"], applies_to: [], format: "date-time"},
@@ -499,9 +505,30 @@ test("Notes transport sends only the allowed same-origin operation envelope", as
   assert.equal(captured.options.cache, "no-store");
   assert.deepEqual(JSON.parse(captured.options.body), {operation: "capabilities"});
   assert.equal(result.types[0].id, "person");
+  assert.equal(result.types[0].description, "A person with stable identity.");
+  assert.equal(result.types[0].properties[0].filterable, true);
   assert.equal(result.fields[1].format, "date-time");
   assert.deepEqual(result.fields[2].controlled_values, ["pending", "completed"]);
   await assert.rejects(requestNotes({operation: "unsupported"}), NotesRequestError);
+});
+
+test("Notes browser rejects malformed schema-derived type metadata", () => {
+  const base = {
+    kind: "capabilities",
+    fields: [],
+    types: [{id: "person", name: "Person", description: "A person.", properties: []}],
+  };
+  assert.throws(() => validateNotesResponse({
+    ...base,
+    types: [{...base.types[0], description: ""}],
+  }), NotesRequestError);
+  assert.throws(() => validateNotesResponse({
+    ...base,
+    types: [{...base.types[0], properties: [{
+      id: "company", description: "Employer.", value_type: "string",
+      required: "no", filterable: true,
+    }]}],
+  }), NotesRequestError);
 });
 
 test("explicit intelligent Notes transport preserves visible user filters", async () => {

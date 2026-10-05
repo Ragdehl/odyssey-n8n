@@ -133,10 +133,12 @@ Switching surfaces must preserve each surface's local interaction state:
   and currently open note;
 - returning to either surface resumes where the user left it rather than resetting to a default view.
 
-## Notes home: relevant knowledge feed
+## Notes home: grouped relevant knowledge
 
-The Notes landing surface is not grouped by note type and is not alphabetically ordered. It is a
-scrollable/paginated feed of notes ordered by a cheap deterministic notion of **current relevance**.
+The grouped-browsing follow-on organizes the Notes landing surface by every runtime Notes-visible
+canonical type. Inside each group, notes retain the cheap deterministic notion of **current
+relevance** defined below rather than alphabetical ordering. The runtime capability projection, not
+browser JavaScript, supplies type descriptions and canonical property metadata.
 
 Each row/card should expose enough structure to be useful without becoming visually dense. The
 initial product direction is:
@@ -162,9 +164,10 @@ Pure backlink/link count must not dominate ranking: a historically central note 
 the top forever merely because it has many old connections. The exact deterministic rule is recorded
 under [Ranking and pagination](#ranking-and-pagination); it is not a hidden model judgment.
 
-The feed must load incrementally rather than deserialize/render the whole vault. Scrolling downward
-loads subsequent pages while preserving a smooth visual position, analogous to the bounded loading
-already proven for durable chat history.
+The landing page must load incrementally rather than deserialize/render the whole vault. Ordinary
+feed/local browsing requests three notes per eligible type, uses one page scroll without nested group
+scrolling, and exposes `Ver más` only for the group whose independent cursor can continue. Intelligent
+and snapshot result sets retain one global deterministic cursor.
 
 ## Type icons and colors
 
@@ -191,9 +194,8 @@ presentation metadata should not be silently added to `config/note-schema.json`.
 architecture keeps icon/color presentation in a small UI map and leaves the canonical schema
 unchanged.
 
-For inline links, prefer the type icon/color as the visual type cue while keeping link text visually
-consistent. Color the entire linked text only if DEV visual validation shows that it remains calm and
-readable rather than producing a rainbow effect.
+For inline links, the target type icon keeps its semantic color while the hyperlink text uses the
+standard link color. This presentation rule does not change link or type semantics.
 
 ## Search: one field, two execution modes
 
@@ -242,10 +244,12 @@ in a compact mobile bottom sheet or similarly lightweight progressive-disclosure
 
 At minimum, support/filter architecture for common note metadata such as:
 
-- note type;
 - tags;
 - creation date/range;
 - update date/range.
+
+Ordinary browsing does not expose a type selector because types are already visible as groups. A safe
+type filter received from intelligent or historical state remains supported and visible as a chip.
 
 Creation/update dates should be available for filtering and sorting without forcing both dates onto
 every feed card. The default card may show update recency because it is usually more useful for
@@ -253,8 +257,9 @@ current relevance; both dates can be visible in the note detail view.
 
 ### Type-specific filters
 
-Once the user selects a note type, expose the properties declared for that type by the canonical note
-schema. UI controls should follow the property kind when practical, for example:
+Expose the supported properties declared by visible types without requiring a manual type selection.
+When a property filter has a value, only compatible type groups remain eligible. UI controls should
+follow the property kind when practical, for example:
 
 - date/date-time -> exact value or range;
 - integer -> exact value or bounded range;
@@ -450,11 +455,13 @@ least:
 
 1. persistent top-level Chat/Notes selector with state preservation across switching and the bottom
    edge left available for surface-specific interaction;
-2. paginated/incremental Notes feed without whole-vault rendering;
+2. grouped, bounded Notes feed with three initial notes and an independent safe cursor per eligible
+   canonical type, without whole-vault rendering or nested group scrolling;
 3. deterministic default relevance ordering plus chronological sort alternatives;
 4. immediate zero-provider text search while typing;
 5. explicit intelligent search producing ranked notes, not a prose answer;
-6. schema-driven general/type-specific filters with visible independent filter chips;
+6. schema-driven general/type-specific filters without an ordinary type selector, with compatible
+   group eligibility and visible independent filter chips;
 7. human-readable note detail with bounded properties, tags, dates, body, and clickable internal links;
 8. backward/forward note navigation;
 9. explicit backlinks with context and a reliable recency ordering;
@@ -519,8 +526,9 @@ ephemeral interaction state. Canonical Markdown remains the only knowledge autho
 Add one reusable Core Notes query boundary with four typed outputs rather than UI-specific filesystem
 access:
 
-- `NoteCapabilities` projects canonical type IDs/names and filterable fields/operators from
-  `config/note-schema.json` plus Core's existing `supported_filter_operators()` contract;
+- `NoteCapabilities` projects canonical type IDs/names/descriptions, bounded property metadata, and
+  filterable fields/operators from the runtime-composed canonical schema plus Core's existing
+  `supported_filter_operators()` contract;
 - `NotePage` returns bounded note summaries, canonical applied filters, ranking/sort version, and an
   optional next cursor for feed, local search, intelligent search, or an ordered historical snapshot;
 - `NoteDetail` returns one currently validated note by stable ID, its human-facing metadata/body, and
@@ -697,8 +705,11 @@ Controls map the existing Core-supported kinds as follows:
 | date-time formatted `string` | timezone-aware date/time range |
 | `integer` | exact value or bounded numeric range |
 
-Type-specific controls appear only after the selected type makes their `applies_to` set valid. Tags
-and aliases use their actual array-membership contract; the UI does not invent fuzzy filter semantics.
+The grouped-browsing follow-on exposes type-specific controls without requiring an explicit type
+selector. A populated property control makes only types in that field's runtime `applies_to` set
+eligible, and the browser never forwards the property filter to an incompatible group. A validated
+type filter arriving from an intelligent or historical state remains representable. Tags and aliases
+use their actual array-membership contract; the UI does not invent fuzzy filter semantics.
 Boolean, free-form float/number, enum, or reference controls are not exposed because the current Core
 filter contract does not support those property kinds. If a future canonical schema introduces one,
 Core's shared filter validator/operator projection must support it before the UI can render it.
@@ -713,13 +724,14 @@ change to `config/note-schema.json`.
 
 ### Notes state and frontend structure
 
-Notes state is one in-memory controller for the current page lifetime: query text, explicit/inferred
-filter chips, sort, loaded pages/cursors, feed scroll, current note, backward/forward note stack, and
+Notes state is one controller for the current page lifetime: query text, explicit/inferred filter
+chips, sort, loaded pages/cursors, feed scroll, current note, backward/forward note stack, and
 historical-snapshot marker. Switching with the top-level selector hides rather than destroys each
 surface, preserving both Chat's scroll/draft and this Notes state. A reload restores the already-durable
-UI-0 transcript but starts Notes at its default feed. UI-2 adds no local/session storage and no durable
-Notes-view state. Historical result links remain reload-safe because their snapshot belongs to the
-durable chat turn, not the transient Notes controller.
+UI-0 transcript but starts Notes at its default feed. The grouped-browsing follow-on stores only group
+collapse preferences in optional `sessionStorage`, with a safe in-memory fallback; it adds no durable
+Notes-view or canonical knowledge state. Historical result links remain reload-safe because their
+snapshot belongs to the durable chat turn, not the transient Notes controller.
 
 Keep the dependency-free frontend and split only at the new responsibility boundary:
 

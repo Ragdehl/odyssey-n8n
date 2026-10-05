@@ -466,7 +466,17 @@ def test_runtime_notes_operations_project_only_typed_core_evidence() -> None:
 
     class Notes:
         def capabilities(self):
-            return NoteCapabilities(({"id": "person", "name": "Person"},), ())
+            return NoteCapabilities(
+                (
+                    {
+                        "id": "person",
+                        "name": "Person",
+                        "description": "A person.",
+                        "properties": (),
+                    },
+                ),
+                (),
+            )
 
         def query(self, **kwargs):
             assert kwargs["mode"] == "feed"

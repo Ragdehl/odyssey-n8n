@@ -227,8 +227,10 @@ def test_notes_detail_uses_safe_structured_presentation_and_complete_type_icons(
     managed_types = [note_type for note_type in schema["types"] if "managed_by" in note_type]
     for note_type in ordinary_types:
         assert f"{note_type['id']}: {{" in notes
+    assert "calendar_day: {" in notes
     for note_type in managed_types:
-        assert f"{note_type['id']}: {{" not in notes
+        if note_type["id"] != "calendar_day":
+            assert f"{note_type['id']}: {{" not in notes
 
 
 def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
@@ -326,8 +328,8 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
     assert "assert_dev_product_route_inventory" in operator
 
 
-def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> None:
-    """The offline checkpoint stays self-contained and creates no durable browser history."""
+def test_frontend_has_no_external_asset_or_durable_browser_persistence_dependency() -> None:
+    """Stay self-contained while permitting only optional session-scoped Notes UI state."""
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -341,7 +343,11 @@ def test_frontend_has_no_external_asset_or_browser_persistence_dependency() -> N
     assert "https://" not in index
     assert "http://" not in index
     assert "localStorage" not in combined
-    assert "sessionStorage" not in combined
+    assert "sessionStorage" not in "\n".join(
+        (index, app, client, notes_client, calendar, calendar_client)
+    )
+    assert "odyssey.notes.collapsed-types.v1" in notes
+    assert "safeSessionStorage" in notes
     assert "innerHTML" not in combined
     assert "request_id" in client
     assert 'credentials: "same-origin"' in client

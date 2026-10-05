@@ -66,6 +66,21 @@ def test_task_is_visible_searchable_and_filterable_in_general_notes(tmp_path: Pa
 
     capabilities = notes.capabilities()
     assert "task" in {item["id"] for item in capabilities.types}
+    assert "work_session" not in {item["id"] for item in capabilities.types}
+    assert "calendar_day" not in {item["id"] for item in capabilities.types}
+    task = next(item for item in capabilities.types if item["id"] == "task")
+    canonical_task = next(item for item in SCHEMA["types"] if item["id"] == "task")
+    assert task["description"] == canonical_task["description"]
+    assert task["properties"] == tuple(
+        {
+            "id": item["id"],
+            "description": item["description"],
+            "value_type": item["value_type"],
+            "required": item["required"],
+            "filterable": item["filterable"],
+        }
+        for item in canonical_task["properties"]
+    )
     status = next(item for item in capabilities.fields if item["id"] == "status")
     assert status["applies_to"] == ("task",)
     assert status["controlled_values"] == (

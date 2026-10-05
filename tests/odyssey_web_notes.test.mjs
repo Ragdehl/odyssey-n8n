@@ -52,6 +52,14 @@ class FakeElement {
     }
     return null;
   }
+  querySelectorAll(selector) {
+    const values = [];
+    for (const child of this.children) {
+      if (matches(child, selector)) values.push(child);
+      values.push(...(child.querySelectorAll?.(selector) ?? []));
+    }
+    return values;
+  }
   addEventListener(type, listener) { this._listeners.set(type, listener); }
   emit(type, event = {}) { this._listeners.get(type)?.({preventDefault() {}, currentTarget: this, ...event}); }
   click() { this.emit("click"); }
@@ -67,7 +75,15 @@ class FakeDocument {
   createElement(tagName) { return new FakeElement(tagName); }
   createElementNS(_namespace, tagName) { return new FakeElement(tagName); }
   createTextNode(value) { return new FakeText(value); }
-  querySelector(selector) { return this._elements.get(selector) ?? null; }
+  querySelector(selector) {
+    const direct = this._elements.get(selector);
+    if (direct) return direct;
+    for (const element of this._elements.values()) {
+      const nested = element.querySelector?.(selector);
+      if (nested) return nested;
+    }
+    return null;
+  }
   addEventListener(type, listener) { this._listeners.set(type, listener); }
   emit(type, event = {}) { this._listeners.get(type)?.(event); }
   dispatchEvent(event) { this.events.push(event); this._listeners.get(event.type)?.(event); return true; }
@@ -79,8 +95,8 @@ function matches(element, selector) {
   return element.tagName === selector;
 }
 
-function pageItem(id, name = id) {
-  return {id, name, type: "person", updated_at: "2026-09-22T10:00:00Z", tags: [], properties: {}};
+function pageItem(id, name = id, type = "person") {
+  return {id, name, type, updated_at: "2026-09-22T10:00:00Z", tags: [], properties: {}};
 }
 
 function page({mode = "feed", items = [pageItem("a", "Resultado A")], total = items.length, applied_filters = [], next_cursor = null} = {}) {
@@ -123,7 +139,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-async function mountNotes({requestNotes, confirmImpl = () => true}) {
+async function mountNotes({requestNotes, confirmImpl = () => true, sessionStorageImpl = null}) {
   const document = new FakeDocument();
   const root = new FakeElement("section");
   const elements = {
@@ -160,7 +176,7 @@ async function mountNotes({requestNotes, confirmImpl = () => true}) {
   const {mountNotes: mount} = await import(
     `data:text/javascript;base64,${Buffer.from(`${testable}\n// fixture ${fixtureNumber += 1}`).toString("base64")}`,
   );
-  const controller = mount(root, {confirmImpl});
+  const controller = mount(root, {confirmImpl, sessionStorageImpl});
   await flush();
   return {controller, document, elements};
 }
@@ -192,7 +208,7 @@ async function mountMutationNote({confirmImpl}) {
       return page({items: [pageItem("ada", "Ada")]});
     },
   });
-  mounted.elements.list.children[0].click();
+  mounted.elements.list.querySelector(".note-row").click();
   await flush();
   return {mounted, calls};
 }
@@ -215,13 +231,13 @@ test("load more recovers a stale cursor by restarting the current feed", async (
     },
   });
 
-  mounted.elements.list.querySelector(".notes-more").click();
+  mounted.elements.list.querySelector(".notes-group-more").click();
   await flush();
   await flush();
 
   assert.equal(queries, 3);
   assert.equal(mounted.elements.list.textContent.includes("Nueva"), true);
-  assert.equal(mounted.elements.list.querySelector(".notes-more"), null);
+  assert.equal(mounted.elements.list.querySelector(".notes-group-more"), null);
   assert.equal(mounted.elements.status.textContent, "2 notas");
 });
 
@@ -247,8 +263,220 @@ test("generic open-note event opens the stable note ID through the existing deta
 });
 
 function capabilities() {
-  return {types: [{id: "person", name: "Persona"}], fields: []};
+  return {types: [{id: "person", name: "Person", description: "A person with stable identity.", properties: []}], fields: []};
 }
+
+function groupedCapabilities() {
+  return {
+    types: [
+      {id: "person", name: "Person", description: "A person with stable identity.", properties: []},
+      {id: "task", name: "Task", description: "An actionable item.", properties: [{
+        id: "status", description: "Current lifecycle state.", value_type: "string",
+        required: true, filterable: true,
+      }]},
+    ],
+    fields: [{
+      id: "status", value_type: "string", operators: ["eq"], applies_to: ["task"],
+      controlled_values: ["pending", "completed"], format: null,
+    }],
+  };
+}
+
+function groupElement(mounted, type) {
+  return mounted.elements.list.querySelectorAll(".notes-type-group").find(
+    (group) => group.dataset.type === type,
+  );
+}
+
+test("normal Notes browsing loads bounded independent type groups and advances only one group", async () => {
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return groupedCapabilities();
+      const type = payload.filters.find((filter) => filter.field === "type").value;
+      if (type === "person" && payload.cursor === null) return page({
+        items: [pageItem("p1"), pageItem("p2"), pageItem("p3")], total: 4, next_cursor: "person-next",
+      });
+      if (type === "person") return page({items: [pageItem("p4")], total: 4});
+      return page({items: [pageItem("t1", "Tarea", "task")], total: 1});
+    },
+  });
+
+  const initial = calls.filter(({operation}) => operation === "query");
+  assert.equal(initial.length, 2);
+  assert.equal(initial.every(({payload}) => payload.page_size === 3), true);
+  assert.deepEqual(initial.map(({payload}) => payload.filters.at(-1).value).sort(), ["person", "task"]);
+  assert.equal(groupElement(mounted, "person").querySelector(".notes-type-count").textContent, "4");
+  assert.equal(groupElement(mounted, "task").querySelector(".notes-type-count").textContent, "1");
+  assert.equal(mounted.elements.list.textContent.includes("tipos de nota que Odyssey usa"), true);
+
+  mounted.elements.list.emit("scroll");
+  await flush();
+  assert.equal(calls.filter(({operation}) => operation === "query").length, 2);
+  groupElement(mounted, "person").querySelector(".notes-group-more").click();
+  await flush();
+
+  const continued = calls.filter(({operation}) => operation === "query").at(-1);
+  assert.equal(continued.payload.cursor, "person-next");
+  assert.equal(continued.payload.filters.at(-1).value, "person");
+  assert.equal(groupElement(mounted, "person").querySelectorAll(".note-row").length, 4);
+  assert.equal(groupElement(mounted, "task").querySelectorAll(".note-row").length, 1);
+});
+
+test("general controls refresh every group while Task status skips incompatible groups", async () => {
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return groupedCapabilities();
+      const type = payload.filters.find((filter) => filter.field === "type").value;
+      return page({items: [pageItem(`${type}-1`, type, type)], total: 1});
+    },
+  });
+  assert.equal(mounted.elements.filterFields.querySelector("#filter-type"), null);
+  assert.notEqual(mounted.elements.filterFields.querySelector("#filter-status"), null);
+
+  calls.length = 0;
+  mounted.controller.state.filters = [{field: "tags", op: "contains", value: "casa"}];
+  await mounted.controller.refresh();
+  let queries = calls.filter(({operation}) => operation === "query");
+  assert.equal(queries.length, 2);
+  assert.equal(queries.every(({payload}) => payload.filters.some((filter) => filter.field === "tags")), true);
+
+  calls.length = 0;
+  mounted.controller.state.filters = [{field: "status", op: "eq", value: "pending"}];
+  await mounted.controller.refresh();
+  queries = calls.filter(({operation}) => operation === "query");
+  assert.equal(queries.length, 1);
+  assert.deepEqual(queries[0].payload.filters, [
+    {field: "status", op: "eq", value: "pending"},
+    {field: "type", op: "eq", value: "task"},
+  ]);
+  assert.equal(groupElement(mounted, "person"), undefined);
+  assert.notEqual(groupElement(mounted, "task"), undefined);
+
+  calls.length = 0;
+  mounted.controller.state.filters = [];
+  mounted.elements.sort.value = "updated_desc";
+  mounted.elements.sort.emit("change");
+  await flush();
+  queries = calls.filter(({operation}) => operation === "query");
+  assert.equal(queries.length, 2);
+  assert.equal(queries.every(({payload}) => payload.sort === "updated_desc"), true);
+
+  calls.length = 0;
+  mounted.elements.search.value = "ana";
+  mounted.elements.search.emit("input");
+  await flush();
+  queries = calls.filter(({operation}) => operation === "query");
+  assert.equal(queries.length, 2);
+  assert.equal(queries.every(({payload}) => payload.mode === "local" && payload.query === "ana"), true);
+
+  calls.length = 0;
+  mounted.controller.state.filters = [{field: "type", op: "eq", value: "person"}];
+  await mounted.controller.refresh();
+  queries = calls.filter(({operation}) => operation === "query");
+  assert.equal(queries.length, 1);
+  assert.equal(queries[0].payload.filters.at(-1).value, "person");
+  assert.equal(mounted.elements.chips.textContent.includes("Tipo"), true);
+});
+
+test("collapse state is session-only and storage failures degrade safely", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const requestNotes = async ({operation, payload}) => {
+    if (operation === "capabilities") return capabilities();
+    return page({items: [pageItem(`note-${payload.filters.at(-1).value}`)]});
+  };
+  const first = await mountNotes({requestNotes, sessionStorageImpl: storage});
+  groupElement(first, "person").querySelector(".notes-type-toggle").click();
+  assert.equal(groupElement(first, "person").querySelector(".notes-type-group-body").hidden, true);
+  assert.equal(values.get("odyssey.notes.collapsed-types.v1"), '["person"]');
+
+  const second = await mountNotes({requestNotes, sessionStorageImpl: storage});
+  assert.equal(groupElement(second, "person").querySelector(".notes-type-group-body").hidden, true);
+
+  const unavailable = {getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); }};
+  const fallback = await mountNotes({requestNotes, sessionStorageImpl: unavailable});
+  groupElement(fallback, "person").querySelector(".notes-type-toggle").click();
+  assert.equal(fallback.controller.state.collapsedTypes.has("person"), true);
+});
+
+test("intelligent Notes plans once, groups loaded results, and continues deterministically", async () => {
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return groupedCapabilities();
+      if (operation === "intelligent") return page({
+        mode: "intelligent",
+        items: [pageItem("p1"), pageItem("t1", "Tarea", "task")], total: 3,
+        next_cursor: "intelligent-next",
+      });
+      if (payload.mode === "intelligent") return page({
+        mode: "intelligent", items: [pageItem("p2")], total: 3,
+      });
+      return page({items: [], total: 0});
+    },
+  });
+  mounted.elements.search.value = "cosas pendientes";
+  mounted.elements.searchForm.emit("submit");
+  await flush();
+
+  assert.equal(calls.filter(({operation}) => operation === "intelligent").length, 1);
+  assert.notEqual(groupElement(mounted, "person"), undefined);
+  assert.notEqual(groupElement(mounted, "task"), undefined);
+  mounted.elements.list.querySelector(".notes-more").click();
+  await flush();
+
+  assert.equal(calls.filter(({operation}) => operation === "intelligent").length, 1);
+  const continuation = calls.filter(({operation, payload}) => operation === "query" && payload.mode === "intelligent");
+  assert.equal(continuation.length, 1);
+  assert.equal(continuation[0].payload.cursor, "intelligent-next");
+  assert.equal(groupElement(mounted, "person").querySelectorAll(".note-row").length, 2);
+});
+
+test("historical grouping preserves stable-ID order and unavailable positions", async () => {
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return groupedCapabilities();
+      if (payload.mode === "snapshot") return page({mode: "snapshot", items: [
+        pageItem("p1"), pageItem("t1", "Tarea", "task"), pageItem("p2"),
+      ], total: 4});
+      return page({items: [], total: 0});
+    },
+  });
+  mounted.document.emit("odyssey:open-note-snapshot", {detail: {
+    version: 2, kind: "affected_notes", note_ids: ["p1", "t1", "p2", "gone"],
+    total: 4, truncated: false,
+  }});
+  await flush();
+
+  assert.deepEqual(
+    mounted.elements.list.querySelectorAll(".note-row").map((row) => row.dataset.noteId),
+    ["p1", "t1", "p2", "gone"],
+  );
+  assert.equal(mounted.elements.list.querySelector(".notes-group-more"), null);
+  assert.equal(mounted.elements.status.querySelector(".notes-show-all").textContent, "Ver todas");
+});
+
+test("create-new-type card is presentation-only work in progress", async () => {
+  const calls = [];
+  const mounted = await mountNotes({requestNotes: async ({operation}) => {
+    calls.push(operation);
+    if (operation === "capabilities") return capabilities();
+    return page();
+  }});
+  const before = calls.length;
+  mounted.elements.list.querySelector(".notes-create-type-button").click();
+  assert.equal(mounted.elements.list.querySelector(".notes-create-type-message").hidden, false);
+  assert.equal(mounted.elements.list.textContent.includes("Próximamente"), true);
+  assert.equal(calls.length, before);
+});
 
 function enterEditMode(mounted) {
   mounted.elements.detail.querySelector(".note-edit-toggle").click();
@@ -436,14 +664,15 @@ test("returning from an affected snapshot detail restores status, exit, and exac
   });
   mounted.document.emit("odyssey:open-note-snapshot", {detail: snapshot});
   await flush();
-  mounted.elements.list.children[0].click();
+  mounted.elements.list.querySelector(".note-row").click();
   await flush();
   mounted.elements.detail.querySelector("button").click();
   await flush();
 
   assert.equal(mounted.elements.status.textContent.includes("2 notas afectadas"), true);
   assert.equal(mounted.elements.status.querySelector(".notes-show-all").textContent, "Ver todas");
-  assert.equal(mounted.elements.list.textContent, "MartaPersona · actualizada 9/22/2026ElenaPersona · actualizada 9/22/2026");
+  assert.equal(mounted.elements.list.textContent.includes("MartaPersona · actualizada 9/22/2026"), true);
+  assert.equal(mounted.elements.list.textContent.includes("ElenaPersona · actualizada 9/22/2026"), true);
   assert.equal(mounted.elements.filters.disabled, true);
   assert.equal(mounted.elements.sort.disabled, true);
 });
@@ -464,7 +693,7 @@ test("returning from a historical snapshot detail restores rerun and exit contro
   });
   mounted.document.emit("odyssey:open-note-snapshot", {detail: snapshot});
   await flush();
-  mounted.elements.list.children[0].click();
+  mounted.elements.list.querySelector(".note-row").click();
   await flush();
   mounted.elements.detail.querySelector("button").click();
   await flush();
@@ -493,7 +722,7 @@ test("returning from a normal note detail restores list status without reloading
   const initialQueries = feedQueries;
   mounted.controller.state.query = "A";
   mounted.controller.state.filters = [{field: "type", op: "eq", value: "person"}];
-  mounted.elements.list.children[0].click();
+  mounted.elements.list.querySelector(".note-row").click();
   await flush();
   mounted.elements.detail.querySelector("button").click();
   await flush();
@@ -552,13 +781,35 @@ test("Calendar Day inline links hand navigation to Calendar instead of opening m
       return page({items: [pageItem("marta", "Marta")]});
     },
   });
-  mounted.elements.list.children[0].click();
+  mounted.elements.list.querySelector(".note-row").click();
   await flush();
   const dateLink = mounted.elements.detail.querySelector("a");
   assert.equal(dateLink.textContent.includes("01-10-2026"), true);
+  assert.equal(dateLink.className, "note-inline-link");
+  assert.equal(dateLink.querySelector(".note-type").className.includes("type-calendar_day"), true);
   dateLink.click();
   assert.equal(mounted.document.events.at(-1).type, "odyssey:open-calendar-day");
   assert.deepEqual(mounted.document.events.at(-1).detail, {date: "2026-10-01"});
+});
+
+test("inline links keep standard link text color while the target icon keeps semantic color", async () => {
+  const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") return detail(payload.note_id, "Ada", null, [{
+      kind: "paragraph", segments: [{text: "Marta", target_id: "marta", target_type: "person"}],
+    }]);
+    if (operation === "backlinks") return {items: []};
+    return page({items: [pageItem("ada", "Ada")]});
+  }});
+  mounted.elements.list.querySelector(".note-row").click();
+  await flush();
+  const link = mounted.elements.detail.querySelector("a");
+  assert.equal(link.className, "note-inline-link");
+  assert.equal(link.querySelector(".note-type").className.includes("type-person"), true);
+
+  const css = await readFile(new URL("../odyssey_web/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.note-inline-link \{ color: #394d88;/);
+  assert.match(css, /\.type-person, \.type-concept \{ color:/);
 });
 
 test("Notes list metadata does not override semantic type icon colors", async () => {
@@ -566,6 +817,8 @@ test("Notes list metadata does not override semantic type icon colors", async ()
   assert.match(css, /\.type-person, \.type-concept \{ color:/);
   assert.match(css, /\.type-project, \.type-store \{ color:/);
   assert.match(css, /\.type-task, \.type-purchase \{ color:/);
+  assert.match(css, /\.type-calendar_day \{ color:/);
+  assert.match(css, /\.note-inline-link \.note-type \{/);
   assert.match(css, /\.note-row > span \{/);
   assert.doesNotMatch(css, /\.note-row span \{/);
 });
