@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "work_session_start", "work_session_stop", "work_session_edit"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -52,8 +52,9 @@ export function validateNotesResponse(value) {
   }
   if (value.kind === "page") return validatePage(value);
   if (value.kind === "detail") {
-    if (!isString(value.body) || !Array.isArray(value.body_blocks) || !Array.isArray(value.links)) throw new NotesRequestError("Detalle inválido.");
-    return {kind: "detail", note: validateSummary(value.note), body: value.body, body_blocks: value.body_blocks.map(validateBodyBlock), links: value.links.map(validateLink), mutation: value.mutation === undefined ? null : validateMutationMetadata(value.mutation)};
+    if (!isString(value.body) || !Array.isArray(value.body_blocks) || !Array.isArray(value.links) ||
+        (value.work_sessions !== undefined && !Array.isArray(value.work_sessions))) throw new NotesRequestError("Detalle inválido.");
+    return {kind: "detail", note: validateSummary(value.note), body: value.body, body_blocks: value.body_blocks.map(validateBodyBlock), links: value.links.map(validateLink), mutation: value.mutation === undefined ? null : validateMutationMetadata(value.mutation), work_sessions: (value.work_sessions ?? []).map(validateWorkSession)};
   }
   if (value.kind === "backlinks") {
     if (!isText(value.target_id) || !Array.isArray(value.items) || !Number.isInteger(value.total) || !cursor(value.next_cursor)) throw new NotesRequestError("Enlaces entrantes inválidos.");
@@ -61,10 +62,15 @@ export function validateNotesResponse(value) {
       items: value.items.map(validateBacklink)};
   }
   if (value.kind === "mutation") {
-    if (!["fact_deleted", "note_deleted", "task_completed", "task_reopened"].includes(value.operation) || !isText(value.note_id) || !value.history || !isText(value.history.status)) throw new NotesRequestError("Mutación de nota inválida.");
+    const operations = ["fact_deleted", "note_deleted", "task_completed", "task_reopened", "work_session_started", "work_session_stopped", "work_session_edited"];
+    if (!operations.includes(value.operation) || !isText(value.note_id) || !value.history || !isText(value.history.status)) throw new NotesRequestError("Mutación de nota inválida.");
     if (["task_completed", "task_reopened"].includes(value.operation)) {
       if (!isText(value.status) || (value.completed_at !== null && value.completed_at !== undefined && !isText(value.completed_at))) throw new NotesRequestError("Mutación de tarea inválida.");
       return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}, mutation: validateMutationMetadata(value.mutation), status: value.status, completed_at: value.completed_at ?? null};
+    }
+    if (["work_session_started", "work_session_stopped", "work_session_edited"].includes(value.operation)) {
+      if (!Array.isArray(value.work_sessions)) throw new NotesRequestError("Mutación de Work Session inválida.");
+      return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}, work_sessions: value.work_sessions.map(validateWorkSession)};
     }
     return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}};
   }
@@ -93,6 +99,13 @@ function validateField(value) { if (!value || !isText(value.id) || !isText(value
 function validateFilter(value) { if (!value || !isText(value.field) || !isText(value.op)) throw new NotesRequestError("Filtro inválido."); return {field: value.field, op: value.op, value: value.value}; }
 function validateLink(value) { if (!value || !isText(value.target_id) || !isText(value.target_name) || !isText(value.target_type) || !isText(value.label)) throw new NotesRequestError("Enlace inválido."); return {...value, occurrences: count(value.occurrences)}; }
 function validateMutationMetadata(value) { if (!value || !Number.isInteger(value.revision) || value.revision < 1 || !/^[a-f0-9]{64}$/.test(value.source_hash) || Object.keys(value).some((key) => !["revision", "source_hash"].includes(key))) throw new NotesRequestError("Metadatos de edición inválidos."); return {revision: value.revision, source_hash: value.source_hash}; }
+function validateWorkSession(value) {
+  const allowed = new Set(["id", "task_id", "started_at", "ended_at", "mutation"]);
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !allowed.has(key)) ||
+      !isText(value.id) || !isText(value.task_id) || !isText(value.started_at) ||
+      (value.ended_at !== null && value.ended_at !== undefined && !isText(value.ended_at))) throw new NotesRequestError("Work Session inválida.");
+  return {id: value.id, task_id: value.task_id, started_at: value.started_at, ended_at: value.ended_at ?? null, mutation: validateMutationMetadata(value.mutation)};
+}
 function validateBodyBlock(value) {
   if (!value || !["heading", "paragraph", "list_item"].includes(value.kind) || !Array.isArray(value.segments)) throw new NotesRequestError("Cuerpo de nota inválido.");
   const deletable = value.deletable === true;

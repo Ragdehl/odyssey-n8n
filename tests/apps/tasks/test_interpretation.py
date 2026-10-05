@@ -18,6 +18,7 @@ from odyssey_apps.tasks import (
     TaskTemporalMention,
     TaskTemporalRole,
     compose_task_domain_interpretation,
+    compose_work_session_times,
 )
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 
@@ -176,6 +177,209 @@ def test_relationship_mentions_are_for_create_or_update_only() -> None:
         )
 
 
+def test_work_session_start_uses_current_instant_without_inventing_temporal_text() -> None:
+    source = "Empiezo una work session para Trabajar en Odyssey"
+    task = TaskInterpretation(
+        source,
+        TaskOperation.START_WORK_SESSION,
+        task_reference="Trabajar en Odyssey",
+    )
+    assert compose_work_session_times(task, None, now="2026-10-05T18:30:00+02:00") == (
+        "2026-10-05T18:30:00+02:00",
+        None,
+    )
+    with pytest.raises(TaskInterpretationError, match="do not mutate Task state"):
+        compose_task_domain_interpretation(task, None, now="2026-10-05T18:30:00+02:00")
+
+
+def test_work_session_edit_maps_exact_actual_work_time_without_task_schedule_authority() -> None:
+    source = "La work session de Odyssey empezó hoy a las 17:30"
+    phrase = "hoy a las 17:30"
+    task = TaskInterpretation(
+        source,
+        TaskOperation.EDIT_WORK_SESSION,
+        (TaskTemporalMention(phrase, TaskTemporalRole.WORK_SESSION_START_AT),),
+        task_reference="Odyssey",
+    )
+    resolved = temporal(
+        source,
+        phrase,
+        "EXACT_DATETIME",
+        dt="2026-10-05T17:30:00+02:00",
+    )
+    assert compose_work_session_times(task, resolved, now="2026-10-05T18:30:00+02:00") == (
+        "2026-10-05T17:30:00+02:00",
+        None,
+    )
+
+
+def test_work_session_merges_split_date_and_clock_for_one_actual_work_instant() -> None:
+    source = "Corrige la sesión de Odyssey de hoy: terminé a las 18:15."
+    task = TaskInterpretation(
+        source,
+        TaskOperation.EDIT_WORK_SESSION,
+        (
+            TaskTemporalMention("hoy", TaskTemporalRole.WORK_SESSION_END_AT),
+            TaskTemporalMention("a las 18:15", TaskTemporalRole.WORK_SESSION_END_AT),
+        ),
+        task_reference="Odyssey",
+    )
+    resolved = parse_temporal_interpretation(
+        {
+            "mentions": [
+                {
+                    "temporal_text": "hoy",
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": "2026-10-05",
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+                {
+                    "temporal_text": "18:15",
+                    "temporal": {
+                        "kind": "EXACT_DATETIME",
+                        "exact_date": None,
+                        "exact_datetime": "2026-10-05T18:15:00+02:00",
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+            ]
+        },
+        source,
+        timezone="Europe/Paris",
+    )
+    assert compose_work_session_times(task, resolved, now="2026-10-05T19:00:00+02:00") == (
+        None,
+        "2026-10-05T18:15:00+02:00",
+    )
+
+
+def test_work_session_split_date_and_clock_fail_closed_when_they_conflict() -> None:
+    source = "Corrige la sesión de Odyssey de hoy: terminé a las 18:15."
+    task = TaskInterpretation(
+        source,
+        TaskOperation.EDIT_WORK_SESSION,
+        (
+            TaskTemporalMention("hoy", TaskTemporalRole.WORK_SESSION_END_AT),
+            TaskTemporalMention("a las 18:15", TaskTemporalRole.WORK_SESSION_END_AT),
+        ),
+        task_reference="Odyssey",
+    )
+    resolved = parse_temporal_interpretation(
+        {
+            "mentions": [
+                {
+                    "temporal_text": "hoy",
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": "2026-10-04",
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+                {
+                    "temporal_text": "18:15",
+                    "temporal": {
+                        "kind": "EXACT_DATETIME",
+                        "exact_date": None,
+                        "exact_datetime": "2026-10-05T18:15:00+02:00",
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+            ]
+        },
+        source,
+        timezone="Europe/Paris",
+    )
+    with pytest.raises(TaskInterpretationError, match="conflict"):
+        compose_work_session_times(task, resolved, now="2026-10-05T19:00:00+02:00")
+
+
+def test_work_session_shared_date_can_ground_both_corrected_instants() -> None:
+    source = (
+        "Corrige la work session de Trabajar en Odyssey de hoy: "
+        "empezó a las 18:00 y terminó a las 18:30."
+    )
+    task = TaskInterpretation(
+        source,
+        TaskOperation.EDIT_WORK_SESSION,
+        (
+            TaskTemporalMention("de hoy", TaskTemporalRole.WORK_SESSION_START_AT),
+            TaskTemporalMention("a las 18:00", TaskTemporalRole.WORK_SESSION_START_AT),
+            TaskTemporalMention("de hoy", TaskTemporalRole.WORK_SESSION_END_AT),
+            TaskTemporalMention("a las 18:30", TaskTemporalRole.WORK_SESSION_END_AT),
+        ),
+        task_reference="Trabajar en Odyssey",
+    )
+    resolved = parse_temporal_interpretation(
+        {
+            "mentions": [
+                {
+                    "temporal_text": "de hoy",
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": "2026-10-05",
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+                {
+                    "temporal_text": "a las 18:00",
+                    "temporal": {
+                        "kind": "EXACT_DATETIME",
+                        "exact_date": None,
+                        "exact_datetime": "2026-10-05T18:00:00+02:00",
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+                {
+                    "temporal_text": "a las 18:30",
+                    "temporal": {
+                        "kind": "EXACT_DATETIME",
+                        "exact_date": None,
+                        "exact_datetime": "2026-10-05T18:30:00+02:00",
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                },
+            ]
+        },
+        source,
+        timezone="Europe/Paris",
+    )
+    assert compose_work_session_times(task, resolved, now="2026-10-05T19:00:00+02:00") == (
+        "2026-10-05T18:00:00+02:00",
+        "2026-10-05T18:30:00+02:00",
+    )
+
+
+def test_work_session_requires_grounded_task_reference_and_rejects_schedule_roles() -> None:
+    source = "Empiezo una work session para Odyssey"
+    with pytest.raises(TaskInterpretationError, match="Task reference"):
+        TaskInterpretation(source, TaskOperation.START_WORK_SESSION)
+    with pytest.raises(TaskInterpretationError, match="Task reference"):
+        TaskInterpretation(
+            source, TaskOperation.START_WORK_SESSION, task_reference="Una tarea inventada"
+        )
+    with pytest.raises(TaskInterpretationError, match="scheduling temporal roles"):
+        TaskInterpretation(
+            source,
+            TaskOperation.START_WORK_SESSION,
+            (TaskTemporalMention("Odyssey", TaskTemporalRole.TARGET_DATE),),
+            task_reference="Odyssey",
+        )
+    with pytest.raises(TaskInterpretationError, match="Only Work Session"):
+        TaskInterpretation(source, TaskOperation.START, task_reference="Odyssey")
+
+
 def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() -> None:
     source = "Tengo que llamar al banco el viernes"
 
@@ -194,6 +398,7 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
                         "relationship_mentions": [],
                         "clear_fields": [],
                         "query_scope": None,
+                        "task_reference": "",
                     }
                 ),
                 usage=None,
@@ -204,6 +409,10 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
     interpreter = OpenAITaskInterpreter(SimpleNamespace(responses=responses))
     result = interpreter.interpret(source)
     assert result.operation is TaskOperation.CREATE
+    assert result.task_reference is None
+    assert responses.kwargs["text"]["format"]["schema"]["properties"]["task_reference"] == {
+        "type": "string"
+    }
     assert responses.kwargs["model"] == "gpt-6-luna"
     assert responses.kwargs["reasoning"] == {"effort": "low"}
     assert responses.kwargs["store"] is False

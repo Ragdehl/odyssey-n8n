@@ -24,6 +24,7 @@ export function mountNotes(root, {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
+    editingWorkSessionId: null,
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -281,6 +282,7 @@ export function mountNotes(root, {
       }
       state.current = value;
       state.editing = false;
+      state.editingWorkSessionId = null;
       state.feedScroll = list.scrollTop;
       renderDetail();
     } catch {
@@ -290,6 +292,7 @@ export function mountNotes(root, {
 
   function showList() {
     state.editing = false;
+    state.editingWorkSessionId = null;
     detail.hidden = true;
     listView.hidden = false;
     searchDock.hidden = false;
@@ -377,6 +380,7 @@ export function mountNotes(root, {
       : null, value.note.type === "task" ? value.note.name : null);
     const related = [];
     if (value.note.type === "task") {
+      related.push(renderWorkSessions(value));
       const subtasks = document.createElement("section");
       subtasks.className = "note-subtasks";
       const subtasksHeading = document.createElement("h3");
@@ -421,6 +425,151 @@ export function mountNotes(root, {
     }
   }
 
+  function renderWorkSessions(value) {
+    const section = document.createElement("section");
+    section.className = "note-work-sessions";
+    const headingRow = document.createElement("div");
+    headingRow.className = "work-session-heading";
+    const heading = document.createElement("h3");
+    heading.textContent = "Sesiones de trabajo";
+    const sessions = Array.isArray(value.work_sessions) ? value.work_sessions : [];
+    const active = sessions.find((session) => !session.ended_at) ?? null;
+    const control = button(active ? "Terminar sesión" : "Empezar sesión", () => {
+      if (active) void stopWorkSession(value, active, control);
+      else void startWorkSession(value, control);
+    });
+    control.className = active ? "work-session-stop" : "work-session-start";
+    const taskCanStart = ["pending", "in_progress"].includes(value.note.properties?.status);
+    if (!value.mutation || (!active && !taskCanStart)) control.disabled = true;
+    headingRow.append(heading, control);
+    section.append(headingRow);
+
+    if (sessions.length) {
+      const total = sessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
+      const summary = document.createElement("p");
+      summary.className = "work-session-total";
+      summary.textContent = `Tiempo registrado: ${formatDuration(total)}`;
+      section.append(summary);
+    }
+    if (!sessions.length) {
+      const empty = document.createElement("p");
+      empty.className = "work-session-empty";
+      empty.textContent = "Aún no hay sesiones de trabajo.";
+      section.append(empty);
+      return section;
+    }
+    const list = document.createElement("div");
+    list.className = "work-session-list";
+    for (const session of sessions) {
+      const row = document.createElement("div");
+      const editingSession = state.editingWorkSessionId === session.id;
+      row.className = `work-session-row${session.ended_at ? "" : " active"}${editingSession ? " editing" : ""}`;
+      if (editingSession) {
+        const startLabel = document.createElement("label");
+        startLabel.textContent = "Inicio";
+        const start = document.createElement("input");
+        start.type = "datetime-local";
+        start.className = "work-session-edit-start";
+        start.value = localDateTimePart(session.started_at);
+        startLabel.append(start);
+        const endLabel = document.createElement("label");
+        endLabel.textContent = "Fin";
+        const end = document.createElement("input");
+        end.type = "datetime-local";
+        end.className = "work-session-edit-end";
+        end.value = session.ended_at ? localDateTimePart(session.ended_at) : "";
+        endLabel.append(end);
+        const actions = document.createElement("div");
+        actions.className = "work-session-edit-actions";
+        const save = button("Guardar", () => void saveWorkSessionEdit(value, session, start, end, save));
+        save.className = "work-session-save";
+        const cancel = button("Cancelar", () => {
+          state.editingWorkSessionId = null;
+          renderDetail();
+        });
+        cancel.className = "work-session-cancel";
+        actions.append(save, cancel);
+        row.append(startLabel, endLabel, actions);
+      } else {
+        const label = document.createElement("span");
+        label.className = "work-session-label";
+        label.textContent = workSessionLabel(session);
+        const edit = button("Editar", () => {
+          state.editingWorkSessionId = session.id;
+          renderDetail();
+        });
+        edit.className = "work-session-edit";
+        row.append(label, edit);
+      }
+      list.append(row);
+    }
+    section.append(list);
+    return section;
+  }
+
+  async function startWorkSession(value, control) {
+    control.disabled = true;
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_start", payload: {
+        note_id: value.note.id,
+        expected_revision: value.mutation.revision,
+        expected_source_hash: value.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.editingWorkSessionId = null;
+      renderDetail();
+      status.textContent = "Sesión de trabajo iniciada.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  async function stopWorkSession(value, session, control) {
+    control.disabled = true;
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_stop", payload: {
+        session_id: session.id,
+        expected_revision: session.mutation.revision,
+        expected_source_hash: session.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.editingWorkSessionId = null;
+      renderDetail();
+      status.textContent = "Sesión de trabajo terminada.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  async function saveWorkSessionEdit(value, session, startInput, endInput, control) {
+    const startedAt = timezoneAwareDateTime(startInput.value);
+    const endedAt = endInput.value ? timezoneAwareDateTime(endInput.value) : null;
+    if (!startedAt || (endInput.value && !endedAt)) {
+      status.textContent = "Revisa las fechas y horas de la sesión.";
+      return;
+    }
+    control.disabled = true;
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_edit", payload: {
+        session_id: session.id, started_at: startedAt, ended_at: endedAt,
+        expected_revision: session.mutation.revision,
+        expected_source_hash: session.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.editingWorkSessionId = null;
+      renderDetail();
+      status.textContent = "Sesión de trabajo corregida.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
   async function deleteFact(value, factLocator, control) {
     if (!confirmImpl(`¿Eliminar esta información de ${value.note.name}?`)) return;
     control.disabled = true;
@@ -457,6 +606,11 @@ export function mountNotes(root, {
 
   function mutationErrorMessage(error) {
     if (error instanceof NotesRequestError && error.code === "INCOMING_REFERENCES") return "No se puede eliminar esta nota porque otras notas la enlazan.";
+    if (error instanceof NotesRequestError && error.code === "WORK_SESSION_ALREADY_ACTIVE") return "Ya hay una sesión de trabajo activa. Termínala antes de empezar otra.";
+    if (error instanceof NotesRequestError && error.code === "WORK_SESSION_TASK_CLOSED") return "No se puede iniciar una sesión en una tarea completada o cancelada.";
+    if (error instanceof NotesRequestError && error.code === "WORK_SESSION_HISTORY_PRESENT") return "No se puede eliminar una tarea que tiene sesiones de trabajo registradas.";
+    if (error instanceof NotesRequestError && error.code === "WORK_SESSION_END_BEFORE_START") return "La hora de fin no puede ser anterior a la hora de inicio.";
+    if (error instanceof NotesRequestError && ["WORK_SESSION_NOT_ACTIVE", "WORK_SESSION_UNAVAILABLE", "WORK_SESSION_STATE_INVALID"].includes(error.code)) return "La sesión de trabajo ha cambiado. Abre de nuevo la tarea antes de modificarla.";
     if (error instanceof NotesRequestError && ["STALE_NOTE", "FACT_UNAVAILABLE", "NOTE_UNAVAILABLE", "TASK_UNAVAILABLE", "TASK_INVALID_TRANSITION"].includes(error.code)) return "La nota ha cambiado. Ábrela de nuevo antes de modificarla.";
     return "No se ha podido actualizar la nota.";
   }
@@ -969,4 +1123,7 @@ function previousDatePart(value) { if (typeof value !== "string" || value.length
 function displayRangeValue(value, dateTime) { return dateTime ? localDateTimePart(value) : datePart(value); }
 function localDateTimePart(value) { if (typeof value !== "string") return ""; const date = new Date(value); if (Number.isNaN(date.valueOf())) return ""; const part = (number) => String(number).padStart(2, "0"); return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}T${part(date.getHours())}:${part(date.getMinutes())}`; }
 function timezoneAwareDateTime(value) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? "" : date.toISOString(); }
+function sessionDurationMs(session) { const start = new Date(session.started_at).valueOf(); const end = session.ended_at ? new Date(session.ended_at).valueOf() : Date.now(); return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : 0; }
+function formatDuration(milliseconds) { const minutes = Math.max(0, Math.round(milliseconds / 60000)); const hours = Math.floor(minutes / 60); const rest = minutes % 60; return hours ? `${hours} h${rest ? ` ${rest} min` : ""}` : `${rest} min`; }
+function workSessionLabel(session) { const start = new Date(session.started_at); if (Number.isNaN(start.valueOf())) return "Sesión de trabajo"; const day = start.toLocaleDateString(undefined, {day: "numeric", month: "short"}); const time = (date) => date.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"}); if (!session.ended_at) return `${day} · ${time(start)} — en curso · ${formatDuration(sessionDurationMs(session))}`; const end = new Date(session.ended_at); return Number.isNaN(end.valueOf()) ? `${day} · ${time(start)}` : `${day} · ${time(start)} — ${time(end)} · ${formatDuration(sessionDurationMs(session))}`; }
 function readableDate(value) { const parsed = new Date(value); return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleDateString(); }

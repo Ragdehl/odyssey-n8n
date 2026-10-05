@@ -11,6 +11,7 @@ from .interpretation import (
     TaskTemporalMention,
     TaskTemporalRole,
     compose_task_domain_interpretation,
+    compose_work_session_times,
     parse_task_interpretation,
     render_task_prompt,
     task_interpretation_json_schema,
@@ -23,12 +24,19 @@ from .mutations import (
 )
 from .planning import TaskCorePlanner
 from .query import TaskQueryError, TaskQueryService
-from .schema import TASK_SCHEMA_EXTENSION, TASK_STATUS_VALUES, TASK_TYPE
+from .schema import TASK_SCHEMA_EXTENSION, TASK_STATUS_VALUES, TASK_TYPE, WORK_SESSION_TYPE
+from .work_sessions import (
+    TaskWorkSessionService,
+    WorkSessionError,
+    WorkSessionMutationResult,
+    WorkSessionSnapshot,
+)
 
 __all__ = [
     "TASK_SCHEMA_EXTENSION",
     "TASK_STATUS_VALUES",
     "TASK_TYPE",
+    "WORK_SESSION_TYPE",
     "TaskDirectMutationError",
     "TaskDirectMutationResult",
     "TaskDirectMutationService",
@@ -36,6 +44,10 @@ __all__ = [
     "TaskLifecycleGuard",
     "TaskQueryError",
     "TaskQueryService",
+    "TaskWorkSessionService",
+    "WorkSessionError",
+    "WorkSessionMutationResult",
+    "WorkSessionSnapshot",
     "OpenAITaskInterpreter",
     "TaskInterpretation",
     "TaskInterpretationError",
@@ -46,6 +58,7 @@ __all__ = [
     "TaskTemporalMention",
     "TaskTemporalRole",
     "compose_task_domain_interpretation",
+    "compose_work_session_times",
     "parse_task_interpretation",
     "render_task_prompt",
     "task_interpretation_json_schema",

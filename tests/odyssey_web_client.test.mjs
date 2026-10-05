@@ -674,6 +674,38 @@ test("Notes transport fails closed for a stale cursor, malformed JSON, and netwo
 });
 
 
+test("Work Session responses stay bounded to task-owned temporal projections", async () => {
+  let captured;
+  const session = {
+    id: "session-one", task_id: "task-bank", started_at: "2026-10-05T18:00:00+02:00",
+    ended_at: null, mutation: {revision: 1, source_hash: "c".repeat(64)},
+  };
+  const result = await requestNotes({
+    operation: "work_session_start",
+    payload: {
+      note_id: "task-bank", expected_revision: 2,
+      expected_source_hash: "a".repeat(64), request_id: "notes-session-start",
+    },
+    fetchImpl: async (_endpoint, options) => {
+      captured = JSON.parse(options.body);
+      return response({payload: {
+        kind: "mutation", operation: "work_session_started", note_id: "task-bank",
+        history: {status: "COMMITTED"}, work_sessions: [session],
+      }});
+    },
+  });
+  assert.deepEqual(Object.keys(captured).sort(), [
+    "expected_revision", "expected_source_hash", "note_id", "operation", "request_id",
+  ]);
+  assert.equal(result.work_sessions[0].id, "session-one");
+  assert.equal(result.work_sessions[0].mutation.revision, 1);
+  assert.throws(() => validateNotesResponse({
+    kind: "mutation", operation: "work_session_started", note_id: "task-bank",
+    history: {status: "COMMITTED"}, work_sessions: [{...session, path: "secret.md"}],
+  }), NotesRequestError);
+});
+
+
 test("Task status mutation transport is explicit and bounded", async () => {
   let captured;
   const result = await requestNotes({

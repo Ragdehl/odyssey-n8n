@@ -96,6 +96,26 @@ function detail(id, name = id, mutation = null, body_blocks = []) {
   };
 }
 
+function taskDetail({sessions = [], status = "pending"} = {}) {
+  return {
+    kind: "detail",
+    note: {
+      id: "task-odyssey", name: "Trabajar en Odyssey", type: "task", properties: {status},
+      created_at: "2026-10-05T10:00:00+02:00", updated_at: "2026-10-05T10:00:00+02:00", tags: [],
+    },
+    body_blocks: [],
+    mutation: {revision: 4, source_hash: "a".repeat(64)},
+    work_sessions: sessions,
+  };
+}
+
+function workSession({ended_at = null, revision = 1, source = "b"} = {}) {
+  return {
+    id: "session-one", task_id: "task-odyssey", started_at: "2026-10-05T18:00:00+02:00",
+    ended_at, mutation: {revision, source_hash: source.repeat(64)},
+  };
+}
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -521,6 +541,114 @@ test("Notes list metadata does not override semantic type icon colors", async ()
   assert.match(css, /\.note-row > span \{/);
   assert.doesNotMatch(css, /\.note-row span \{/);
 });
+
+test("Task Work Session start and stop use bounded stale-state tokens and update in place", async () => {
+  const calls = [];
+  let sessions = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail({sessions});
+      if (operation === "backlinks") return {items: []};
+      if (operation === "work_session_start") {
+        sessions = [workSession()];
+        return {kind: "mutation", operation: "work_session_started", note_id: "task-odyssey", history: {status: "COMMITTED"}, work_sessions: sessions};
+      }
+      if (operation === "work_session_stop") {
+        sessions = [workSession({ended_at: "2026-10-05T18:45:00+02:00", revision: 2, source: "c"})];
+        return {kind: "mutation", operation: "work_session_stopped", note_id: "task-odyssey", history: {status: "COMMITTED"}, work_sessions: sessions};
+      }
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+
+  const start = mounted.elements.detail.querySelector(".work-session-start");
+  assert.equal(start.textContent, "Empezar sesión");
+  start.click();
+  await flush();
+  const startCall = calls.find(({operation}) => operation === "work_session_start");
+  assert.deepEqual(Object.keys(startCall.payload).sort(), [
+    "expected_revision", "expected_source_hash", "note_id", "request_id",
+  ]);
+  assert.equal(startCall.payload.note_id, "task-odyssey");
+  assert.equal(startCall.payload.expected_revision, 4);
+  assert.equal(startCall.payload.expected_source_hash, "a".repeat(64));
+  assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
+
+  const stop = mounted.elements.detail.querySelector(".work-session-stop");
+  assert.equal(stop.textContent, "Terminar sesión");
+  stop.click();
+  await flush();
+  const stopCall = calls.find(({operation}) => operation === "work_session_stop");
+  assert.deepEqual(Object.keys(stopCall.payload).sort(), [
+    "expected_revision", "expected_source_hash", "request_id", "session_id",
+  ]);
+  assert.equal(stopCall.payload.session_id, "session-one");
+  assert.equal(stopCall.payload.expected_revision, 1);
+  assert.equal(stopCall.payload.expected_source_hash, "b".repeat(64));
+  assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
+  assert.equal(mounted.elements.detail.textContent.includes("45 min"), true);
+});
+
+
+test("Task Work Session edit submits corrected local date/time without refetching the Task", async () => {
+  const calls = [];
+  let sessions = [workSession({ended_at: "2026-10-05T19:00:00+02:00"})];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail({sessions});
+      if (operation === "backlinks") return {items: []};
+      if (operation === "work_session_edit") {
+        sessions = [{...sessions[0], started_at: payload.started_at, ended_at: payload.ended_at,
+          mutation: {revision: 2, source_hash: "d".repeat(64)}}];
+        return {kind: "mutation", operation: "work_session_edited", note_id: "task-odyssey", history: {status: "COMMITTED"}, work_sessions: sessions};
+      }
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  mounted.elements.detail.querySelector(".work-session-edit").click();
+  const start = mounted.elements.detail.querySelector(".work-session-edit-start");
+  const end = mounted.elements.detail.querySelector(".work-session-edit-end");
+  start.value = "2026-10-05T17:30";
+  end.value = "2026-10-05T18:15";
+  mounted.elements.detail.querySelector(".work-session-save").click();
+  await flush();
+
+  const edit = calls.find(({operation}) => operation === "work_session_edit");
+  assert.equal(edit.payload.session_id, "session-one");
+  assert.equal(edit.payload.expected_revision, 1);
+  assert.equal(edit.payload.expected_source_hash, "b".repeat(64));
+  assert.equal(new Date(edit.payload.started_at).getTime(), new Date("2026-10-05T17:30").getTime());
+  assert.equal(new Date(edit.payload.ended_at).getTime(), new Date("2026-10-05T18:15").getTime());
+  assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
+  assert.equal(mounted.elements.detail.textContent.includes("45 min"), true);
+});
+
+
+test("completed Task disables starting a new Work Session but keeps session history visible", async () => {
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail({
+        status: "completed", sessions: [workSession({ended_at: "2026-10-05T19:00:00+02:00"})],
+      });
+      if (operation === "backlinks") return {items: []};
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  assert.equal(mounted.elements.detail.querySelector(".work-session-start").disabled, true);
+  assert.equal(mounted.elements.detail.textContent.includes("1 h"), true);
+});
+
 
 test("legacy Task checklist marker is hidden when it duplicates the Task action", async () => {
   const mounted = await mountNotes({

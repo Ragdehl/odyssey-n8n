@@ -6,6 +6,7 @@ import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -24,6 +25,14 @@ _TASK_TEMPORAL_FIELDS = {
     "DEADLINE_AT": "deadline_at",
 }
 _TASK_CLEARABLE_FIELDS = frozenset(_TASK_TEMPORAL_FIELDS.values())
+_WORK_SESSION_OPERATIONS = frozenset(
+    {
+        "START_WORK_SESSION",
+        "STOP_WORK_SESSION",
+        "EDIT_WORK_SESSION",
+    }
+)
+_WORK_SESSION_TEMPORAL_ROLES = frozenset({"WORK_SESSION_START_AT", "WORK_SESSION_END_AT"})
 
 
 class TaskInterpretationError(ValueError):
@@ -38,6 +47,9 @@ class TaskOperation(StrEnum):
     CANCEL = "CANCEL"
     UPDATE = "UPDATE"
     QUERY = "QUERY"
+    START_WORK_SESSION = "START_WORK_SESSION"
+    STOP_WORK_SESSION = "STOP_WORK_SESSION"
+    EDIT_WORK_SESSION = "EDIT_WORK_SESSION"
 
 
 class TaskQueryScope(StrEnum):
@@ -55,6 +67,8 @@ class TaskTemporalRole(StrEnum):
     PLANNED_START_AT = "PLANNED_START_AT"
     PLANNED_END_AT = "PLANNED_END_AT"
     DEADLINE_AT = "DEADLINE_AT"
+    WORK_SESSION_START_AT = "WORK_SESSION_START_AT"
+    WORK_SESSION_END_AT = "WORK_SESSION_END_AT"
 
 
 class TaskRelationshipRole(StrEnum):
@@ -104,6 +118,7 @@ class TaskInterpretation:
     clear_fields: tuple[str, ...] = ()
     query_scope: TaskQueryScope | None = None
     relationship_mentions: tuple[TaskRelationshipMention, ...] = ()
+    task_reference: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_text, str) or not self.source_text.strip():
@@ -131,18 +146,31 @@ class TaskInterpretation:
             if mention.role in relationship_roles:
                 raise TaskInterpretationError("Task relationship roles must be unique")
             relationship_roles.add(mention.role)
-        cursor = 0
+        work_session_operation = self.operation.value in _WORK_SESSION_OPERATIONS
         roles: set[TaskTemporalRole] = set()
-        for mention in self.temporal_mentions:
-            position = self.source_text.find(mention.text, cursor)
-            if position < 0:
-                raise TaskInterpretationError(
-                    "Task temporal wording is not grounded in source order"
-                )
-            cursor = position + len(mention.text)
-            if mention.role in roles:
-                raise TaskInterpretationError("Task temporal roles must be unique")
-            roles.add(mention.role)
+        if work_session_operation:
+            role_cursors: dict[TaskTemporalRole, int] = {}
+            for mention in self.temporal_mentions:
+                cursor = role_cursors.get(mention.role, 0)
+                position = self.source_text.find(mention.text, cursor)
+                if position < 0:
+                    raise TaskInterpretationError(
+                        "Work Session temporal wording is not grounded in source order for its role"
+                    )
+                role_cursors[mention.role] = position + len(mention.text)
+                roles.add(mention.role)
+        else:
+            cursor = 0
+            for mention in self.temporal_mentions:
+                position = self.source_text.find(mention.text, cursor)
+                if position < 0:
+                    raise TaskInterpretationError(
+                        "Task temporal wording is not grounded in source order"
+                    )
+                cursor = position + len(mention.text)
+                if mention.role in roles:
+                    raise TaskInterpretationError("Task temporal roles must be unique")
+                roles.add(mention.role)
         if (
             not isinstance(self.clear_fields, tuple)
             or len(set(self.clear_fields)) != len(self.clear_fields)
@@ -155,38 +183,78 @@ class TaskInterpretation:
             if field in self.clear_fields
         }:
             raise TaskInterpretationError("Task cannot set and clear the same temporal property")
-        if self.operation is TaskOperation.QUERY:
+
+        session_roles = {role for role in roles if role.value in _WORK_SESSION_TEMPORAL_ROLES}
+        if work_session_operation:
             if (
-                self.query_scope is None
-                or self.clear_fields
-                or self.temporal_mentions
-                or self.relationship_mentions
+                not isinstance(self.task_reference, str)
+                or not self.task_reference.strip()
+                or self.source_text.count(self.task_reference) != 1
             ):
                 raise TaskInterpretationError(
-                    "Tasks v0 query requires one lifecycle scope without temporal range semantics"
+                    "Work Session operation requires one grounded Task reference"
                 )
-        elif self.query_scope is not None:
-            raise TaskInterpretationError("Task write cannot carry query scope")
-        if self.operation not in {
-            TaskOperation.CREATE,
-            TaskOperation.UPDATE,
-            TaskOperation.QUERY,
-        } and (self.temporal_mentions or self.clear_fields or self.relationship_mentions):
-            raise TaskInterpretationError(
-                "Lifecycle transition cannot also change task scheduling or relationships"
-            )
-        if self.operation is TaskOperation.CREATE and self.clear_fields:
-            raise TaskInterpretationError("Task create cannot clear scheduling properties")
-        if self.operation is TaskOperation.UPDATE and not (
-            self.temporal_mentions or self.clear_fields or self.relationship_mentions
-        ):
-            raise TaskInterpretationError("Task update has no scheduling or relationship change")
-        if self.temporal_mentions and self.clear_fields:
-            # Core cannot yet atomically mix property set/remove in one generic unit. Keep the app
-            # fail-closed instead of allowing a partial schedule transition.
-            raise TaskInterpretationError(
-                "Mixed task schedule set/remove is not supported atomically"
-            )
+            if self.query_scope is not None or self.clear_fields or self.relationship_mentions:
+                raise TaskInterpretationError(
+                    "Work Session operation cannot carry Task query, clear, or relationship semantics"
+                )
+            if len(session_roles) != len(roles):
+                raise TaskInterpretationError(
+                    "Work Session operation cannot carry Task scheduling temporal roles"
+                )
+            if self.operation is TaskOperation.START_WORK_SESSION and any(
+                role is not TaskTemporalRole.WORK_SESSION_START_AT for role in roles
+            ):
+                raise TaskInterpretationError("Work Session start accepts only a start instant")
+            if self.operation is TaskOperation.STOP_WORK_SESSION and any(
+                role is not TaskTemporalRole.WORK_SESSION_END_AT for role in roles
+            ):
+                raise TaskInterpretationError("Work Session stop accepts only an end instant")
+            if self.operation is TaskOperation.EDIT_WORK_SESSION and not self.temporal_mentions:
+                raise TaskInterpretationError("Work Session edit requires a corrected time")
+        else:
+            if self.task_reference is not None:
+                raise TaskInterpretationError(
+                    "Only Work Session operations may carry a direct Task reference"
+                )
+            if session_roles:
+                raise TaskInterpretationError(
+                    "Task lifecycle/scheduling cannot carry Work Session temporal roles"
+                )
+            if self.operation is TaskOperation.QUERY:
+                if (
+                    self.query_scope is None
+                    or self.clear_fields
+                    or self.temporal_mentions
+                    or self.relationship_mentions
+                ):
+                    raise TaskInterpretationError(
+                        "Tasks v0 query requires one lifecycle scope without temporal range semantics"
+                    )
+            elif self.query_scope is not None:
+                raise TaskInterpretationError("Task write cannot carry query scope")
+            if self.operation not in {
+                TaskOperation.CREATE,
+                TaskOperation.UPDATE,
+                TaskOperation.QUERY,
+            } and (self.temporal_mentions or self.clear_fields or self.relationship_mentions):
+                raise TaskInterpretationError(
+                    "Lifecycle transition cannot also change task scheduling or relationships"
+                )
+            if self.operation is TaskOperation.CREATE and self.clear_fields:
+                raise TaskInterpretationError("Task create cannot clear scheduling properties")
+            if self.operation is TaskOperation.UPDATE and not (
+                self.temporal_mentions or self.clear_fields or self.relationship_mentions
+            ):
+                raise TaskInterpretationError(
+                    "Task update has no scheduling or relationship change"
+                )
+            if self.temporal_mentions and self.clear_fields:
+                # Core cannot yet atomically mix property set/remove in one generic unit. Keep the app
+                # fail-closed instead of allowing a partial schedule transition.
+                raise TaskInterpretationError(
+                    "Mixed task schedule set/remove is not supported atomically"
+                )
 
     def requires_temporal(self) -> bool:
         return bool(self.temporal_mentions)
@@ -209,6 +277,93 @@ def _remove_evidence(field: str, source_text: str) -> DomainEvidence:
     return DomainEvidence(f"property_remove.{field}", source_text, "null")
 
 
+def compose_work_session_times(
+    task: TaskInterpretation,
+    temporal: TemporalInterpretation | None,
+    *,
+    now: str,
+) -> tuple[str | None, str | None]:
+    """Normalize Tasks-owned Work Session start/end instants from Temporal evidence."""
+    if (
+        not isinstance(task, TaskInterpretation)
+        or task.operation.value not in _WORK_SESSION_OPERATIONS
+    ):
+        raise TaskInterpretationError("Work Session interpretation is invalid")
+    if task.requires_temporal() != (temporal is not None):
+        raise TaskInterpretationError("Work Session temporal dependency is inconsistent")
+    if temporal is not None and temporal.source_text != task.source_text:
+        raise TaskInterpretationError("Tasks and Temporal sources differ")
+    try:
+        current = datetime.fromisoformat(now.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as error:
+        raise TaskInterpretationError("Work Session current time is invalid") from error
+    if current.tzinfo is None:
+        raise TaskInterpretationError("Work Session current time must be offset-aware")
+
+    start_at: str | None = None
+    end_at: str | None = None
+    if temporal is not None:
+        temporal_positions = _temporal_positions(temporal)
+        grouped: dict[TaskTemporalRole, list[object]] = {}
+        for task_mention in task.temporal_mentions:
+            task_position = _unique_source_position(task.source_text, task_mention.text)
+            matches = [
+                item
+                for item in temporal_positions
+                if _spans_overlap(
+                    task_position,
+                    task_position + len(task_mention.text),
+                    item[0],
+                    item[1],
+                )
+            ]
+            if not matches:
+                raise TaskInterpretationError(
+                    "Work Session temporal role does not map to Temporal evidence"
+                )
+            grouped.setdefault(task_mention.role, []).extend(item[2].resolution for item in matches)
+        for role, resolutions in grouped.items():
+            value = _merge_work_session_datetime(resolutions)
+            if role is TaskTemporalRole.WORK_SESSION_START_AT:
+                start_at = value
+            elif role is TaskTemporalRole.WORK_SESSION_END_AT:
+                end_at = value
+            else:
+                raise TaskInterpretationError("Work Session temporal role is invalid")
+
+    if task.operation is TaskOperation.START_WORK_SESSION and start_at is None:
+        start_at = now
+    if task.operation is TaskOperation.STOP_WORK_SESSION and end_at is None:
+        end_at = now
+    return start_at, end_at
+
+
+def _merge_work_session_datetime(resolutions: list[object]) -> str:
+    """Collapse split date/time evidence only when it proves one exact Work Session instant."""
+    datetimes: set[str] = set()
+    dates: set[str] = set()
+    for resolution in resolutions:
+        kind = getattr(resolution, "kind", None)
+        if kind is TemporalResolutionKind.EXACT_DATETIME:
+            value = getattr(resolution, "exact_datetime", None)
+            if not isinstance(value, str):
+                raise TaskInterpretationError("Work Session temporal value is unavailable")
+            datetimes.add(value)
+        elif kind is TemporalResolutionKind.EXACT_DATE:
+            value = getattr(resolution, "exact_date", None)
+            if not isinstance(value, str):
+                raise TaskInterpretationError("Work Session temporal value is unavailable")
+            dates.add(value)
+        else:
+            raise TaskInterpretationError("Work Session times require exact temporal evidence")
+    if len(datetimes) != 1 or len(dates) > 1:
+        raise TaskInterpretationError("Work Session temporal evidence is not one exact date-time")
+    value = next(iter(datetimes))
+    if dates and value[:10] != next(iter(dates)):
+        raise TaskInterpretationError("Work Session date and time evidence conflict")
+    return value
+
+
 def compose_task_domain_interpretation(
     task: TaskInterpretation,
     temporal: TemporalInterpretation | None,
@@ -218,6 +373,10 @@ def compose_task_domain_interpretation(
     """Combine Tasks role semantics with Temporal normalization into Core-safe property evidence."""
     if not isinstance(task, TaskInterpretation):
         raise TaskInterpretationError("Task interpretation is invalid")
+    if task.operation.value in _WORK_SESSION_OPERATIONS:
+        raise TaskInterpretationError(
+            "Work Session operations do not mutate Task state through Core"
+        )
     if task.requires_temporal() != (temporal is not None):
         raise TaskInterpretationError("Task temporal dependency is inconsistent")
     if temporal is not None and temporal.source_text != task.source_text:
@@ -358,6 +517,7 @@ def task_interpretation_json_schema() -> dict[str, Any]:
                     {"type": "string", "enum": [item.value for item in TaskQueryScope]},
                 ]
             },
+            "task_reference": {"type": "string"},
         },
         "required": [
             "operation",
@@ -365,6 +525,7 @@ def task_interpretation_json_schema() -> dict[str, Any]:
             "relationship_mentions",
             "clear_fields",
             "query_scope",
+            "task_reference",
         ],
         "additionalProperties": False,
     }
@@ -377,6 +538,7 @@ def parse_task_interpretation(payload: Mapping[str, Any], source_text: str) -> T
         "relationship_mentions",
         "clear_fields",
         "query_scope",
+        "task_reference",
     }:
         raise TaskInterpretationError("Task interpretation fields are invalid")
     try:
@@ -422,30 +584,35 @@ def parse_task_interpretation(payload: Mapping[str, Any], source_text: str) -> T
         clear_fields=tuple(clear_fields),
         query_scope=query_scope,
         relationship_mentions=tuple(relationships),
+        task_reference=payload["task_reference"] or None,
     )
 
 
 def render_task_prompt() -> str:
-    """Render only Tasks lifecycle classification and temporal-role assignment instructions."""
+    """Render Tasks lifecycle, Work Session, and temporal-role interpretation instructions."""
     return (
-        "You are Odyssey Tasks. Interpret only task lifecycle semantics in the exact routed user "
-        "source. Never choose a Core note target, invent a task identity, normalize a date/time, emit "
-        "facts, references, filters, Markdown, stable IDs, or mutation instructions. CREATE means the user is "
-        "creating an actionable commitment, not merely describing a future or past occurrence. START "
-        "means move an existing task into active work. COMPLETE, REOPEN, and CANCEL are explicit "
-        "lifecycle transitions. UPDATE changes task scheduling without changing lifecycle state. QUERY "
-        "asks to inspect tasks. Assign every scheduling/deadline temporal phrase material to Tasks to "
-        "exact source text and exactly one role: TARGET_DATE is the day the user intends to address the "
-        "task and is not a hard deadline; PLANNED_START_AT and PLANNED_END_AT are exact planned clock "
-        "instants; DEADLINE_AT is the hard latest date/time. Do not use DEADLINE_AT merely because a "
-        "task is associated with a date. relationship_mentions may assign exact source wording to "
-        "ASSIGNEE when the user explicitly makes one person responsible, or PARENT_TASK when the "
-        "user explicitly identifies one parent task. Do not resolve either relationship yourself and "
-        "do not infer an assignee merely from who mentioned or benefits from the task. Do not infer "
-        "task lifecycle from words like task, future tense, "
-        "or a clock time alone. clear_fields is only for an explicit request to remove an existing "
-        "scheduling value. Do not combine lifecycle transitions with schedule changes in v0. QUERY must "
-        "choose the narrow query_scope that matches the request. Return only the strict JSON object."
+        "You are Odyssey Tasks. Interpret only Tasks-owned semantics in the exact routed user source. "
+        "Never resolve a Core note identity, invent a task identity, normalize a date/time, emit facts, "
+        "filters, Markdown, stable IDs, or mutation instructions. CREATE creates an actionable commitment. "
+        "START is only an explicit task lifecycle/status transition into in_progress; it is not actual work. "
+        "COMPLETE, REOPEN, and CANCEL are explicit lifecycle transitions. UPDATE changes task scheduling "
+        "without changing lifecycle state. QUERY inspects tasks. START_WORK_SESSION begins actual work on one "
+        "existing task, STOP_WORK_SESSION ends actual work, and EDIT_WORK_SESSION corrects the recorded start "
+        "or end instant of a previous work session. For START_WORK_SESSION, STOP_WORK_SESSION, and "
+        "EDIT_WORK_SESSION, task_reference must copy the smallest exact non-empty source substring that "
+        "identifies the task. Never invent, paraphrase, or omit that reference. For every other operation, "
+        "task_reference must be the exact empty string. Task scheduling/deadline phrases use TARGET_DATE, "
+        "PLANNED_START_AT, PLANNED_END_AT, or DEADLINE_AT only for non-Work-Session operations. A Work Session "
+        "must never emit those Task scheduling roles. Every temporal_mentions.text value must be one exact "
+        "contiguous source substring: never delete or bridge over intervening words or punctuation. If date and "
+        "clock wording are separated, emit separate temporal mentions with the same Work Session role; Odyssey "
+        "will combine them only when Temporal proves one coherent instant. Date words that qualify an actual-work "
+        "timestamp belong inside the relevant WORK_SESSION_START_AT or WORK_SESSION_END_AT source span when needed. A Work Session "
+        "start/stop with no explicit clock phrase uses the current instant later and therefore emits no invented "
+        "temporal mention. EDIT_WORK_SESSION requires at least one corrected actual-work temporal mention. "
+        "relationship_mentions may assign exact source wording to ASSIGNEE or PARENT_TASK, but never resolve it. "
+        "clear_fields is only for explicitly removing task scheduling values. Do not combine ordinary lifecycle "
+        "transitions with schedule changes. QUERY must choose the narrow query_scope. Return only the strict JSON object."
     )
 
 

@@ -25,6 +25,7 @@ from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
+    TASK_TYPE,
     OpenAITaskInterpreter,
     TaskCorePlanner,
     TaskDirectMutationError,
@@ -34,13 +35,19 @@ from odyssey_apps.tasks import (
     TaskOperation,
     TaskQueryError,
     TaskQueryService,
+    TaskWorkSessionService,
+    WorkSessionError,
+    WorkSessionSnapshot,
     compose_task_domain_interpretation,
+    compose_work_session_times,
 )
 from odyssey_core.application import (
     ActionResult,
     ActionStatus,
     ApplicationResult,
     ApplicationStatus,
+    UnitResult,
+    UnitStatus,
     WritePreflightGuard,
     allocate_request_id,
     execute_request,
@@ -101,6 +108,7 @@ from odyssey_core.request_planning import (
     WriteAction,
     validate_request_plan,
 )
+from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
 from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex, SemanticIndexError
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
@@ -124,7 +132,10 @@ _VAULT_REPOSITORY_TYPE = VaultRepository
 
 _TASKS_DESCRIPTOR = ApplicationDescriptor(
     id="tasks",
-    routing_description="task lifecycle, due dates, completion and obligations",
+    routing_description=(
+        "task lifecycle, scheduling, completion, obligations, explicit work sessions, and actual "
+        "time tracking for an existing task"
+    ),
     dependencies=("temporal",),
 )
 
@@ -195,6 +206,7 @@ class RuntimeComposition:
     ) = None
     direct_notes_mutations: DirectNoteMutationService | None = None
     direct_task_mutations: TaskDirectMutationService | None = None
+    work_session_service: TaskWorkSessionService | None = None
     notes_mutation_actor: (
         Callable[[AuthenticatedActorContext | None, ExternalPrincipal | None], object] | None
     ) = None
@@ -699,7 +711,14 @@ class RuntimeComposition:
         if operation == "detail":
             if set(payload) != {"note_id"} or not isinstance(payload["note_id"], str):
                 raise ValueError("Notes detail payload is invalid")
-            return _notes_to_response(self.notes_service.detail(payload["note_id"]))
+            detail = self.notes_service.detail(payload["note_id"])
+            response = _notes_to_response(detail)
+            if detail.note.type == TASK_TYPE and self.work_session_service is not None:
+                response["work_sessions"] = [
+                    _work_session_to_response(item)
+                    for item in self.work_session_service.list_for_task(detail.note.id)
+                ]
+            return response
         if operation == "backlinks":
             allowed = {"note_id", "page_size", "cursor"}
             if set(payload) - allowed or not isinstance(payload.get("note_id"), str):
@@ -711,6 +730,89 @@ class RuntimeComposition:
                     cursor=payload.get("cursor"),
                 )
             )
+        if operation in {"work_session_start", "work_session_stop", "work_session_edit"}:
+            if self.work_session_service is None or self.notes_mutation_actor is None:
+                raise ValueError("Work Session service is unavailable")
+            request_id = payload.get("request_id")
+            if not isinstance(request_id, str) or not request_id:
+                raise ValueError("Work Session request ID is invalid")
+            actor = self.notes_mutation_actor(authenticated_actor, external_principal)
+            now = _current_time()["timestamp"]
+            with self._execute_lock:
+                if operation == "work_session_start":
+                    if set(payload) != {
+                        "note_id",
+                        "expected_revision",
+                        "expected_source_hash",
+                        "request_id",
+                    } or not isinstance(payload.get("note_id"), str):
+                        raise ValueError("Work Session start payload is invalid")
+                    result = self.work_session_service.start(
+                        task_id=payload["note_id"],
+                        started_at=now,
+                        expected_task_revision=cast(int, payload.get("expected_revision")),
+                        expected_task_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
+                elif operation == "work_session_stop":
+                    if set(payload) != {
+                        "session_id",
+                        "expected_revision",
+                        "expected_source_hash",
+                        "request_id",
+                    } or not isinstance(payload.get("session_id"), str):
+                        raise ValueError("Work Session stop payload is invalid")
+                    result = self.work_session_service.stop(
+                        session_id=payload["session_id"],
+                        ended_at=now,
+                        expected_revision=cast(int, payload.get("expected_revision")),
+                        expected_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
+                else:
+                    if (
+                        set(payload)
+                        != {
+                            "session_id",
+                            "started_at",
+                            "ended_at",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        }
+                        or not isinstance(payload.get("session_id"), str)
+                        or not isinstance(payload.get("started_at"), str)
+                        or (
+                            payload.get("ended_at") is not None
+                            and not isinstance(payload.get("ended_at"), str)
+                        )
+                    ):
+                        raise ValueError("Work Session edit payload is invalid")
+                    result = self.work_session_service.edit(
+                        session_id=payload["session_id"],
+                        started_at=payload["started_at"],
+                        ended_at=cast(str | None, payload.get("ended_at")),
+                        expected_revision=cast(int, payload.get("expected_revision")),
+                        expected_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
+                self.refresh_indexes()
+            return {
+                "kind": "mutation",
+                "operation": result.operation,
+                "note_id": result.task_id,
+                "history": {"status": result.history.status.value},
+                "work_sessions": [
+                    _work_session_to_response(item)
+                    for item in self.work_session_service.list_for_task(result.task_id)
+                ],
+            }
         if operation in {"delete_fact", "delete_note", "task_status"}:
             if self.direct_notes_mutations is None or self.notes_mutation_actor is None:
                 raise ValueError("Notes mutation service is unavailable")
@@ -747,6 +849,13 @@ class RuntimeComposition:
                             "request_id",
                         }:
                             raise ValueError("Notes deletion payload is invalid")
+                        if self.work_session_service is not None:
+                            detail = self.notes_service.detail(cast(str, payload.get("note_id")))
+                            if (
+                                detail.note.type == TASK_TYPE
+                                and self.work_session_service.list_for_task(detail.note.id)
+                            ):
+                                raise WorkSessionError("WORK_SESSION_HISTORY_PRESENT")
                         result = self.direct_notes_mutations.delete_note(**common)
                     else:
                         if self.direct_task_mutations is None:
@@ -762,7 +871,7 @@ class RuntimeComposition:
                         result = self.direct_task_mutations.set_completed(
                             **common, completed=payload["completed"]
                         )
-                except (DirectNoteMutationError, TaskDirectMutationError):
+                except (DirectNoteMutationError, TaskDirectMutationError, WorkSessionError):
                     raise
                 if operation == "task_status" and self.refresh_task_lifecycle_indexes is not None:
                     try:
@@ -1472,6 +1581,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         if "tasks" in enabled_application_ids
         else None
     )
+    work_session_service = (
+        TaskWorkSessionService(repository, schema, history_recorder)
+        if "tasks" in enabled_application_ids
+        else None
+    )
 
     def execute_temporal_core(
         source_text: str,
@@ -1700,6 +1814,165 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     usage=normalize_provider_usage(temporal_interpreter.last_usage),
                 )
             )
+        if task.operation in {
+            TaskOperation.START_WORK_SESSION,
+            TaskOperation.STOP_WORK_SESSION,
+            TaskOperation.EDIT_WORK_SESSION,
+        }:
+            if work_session_service is None or task.task_reference is None:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.FAILED,
+                    (),
+                    (),
+                    planning_error="WORK_SESSION_UNAVAILABLE",
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                )
+            resolution_started = perf_counter()
+            try:
+                task_schema = planning_schema_for_capability(schema, "tasks")
+                resolution = resolve_existing_entity(
+                    task.task_reference,
+                    source_text,
+                    type=TASK_TYPE,
+                    repository=repository,
+                    schema=task_schema,
+                    semantic_index=application_semantic_indexes.get("tasks", semantic_index),
+                    embedder=embedder,
+                    contextual_reasoner=contextual_reasoner,
+                    semantic_limit=context_limit,
+                    expand_relationship_context=True,
+                )
+            except Exception as error:
+                duration = max(0.0, (perf_counter() - resolution_started) * 1000)
+                stages.append(
+                    OperationalStage(
+                        "tasks.work_session_resolution",
+                        OperationalOutcome.FAILED,
+                        duration,
+                        error_category=type(error).__name__,
+                    )
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.FAILED,
+                    (),
+                    (),
+                    planning_error="WORK_SESSION_RESOLUTION_FAILED",
+                    operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                )
+            duration = max(0.0, (perf_counter() - resolution_started) * 1000)
+            total_duration += duration
+            stages.append(
+                OperationalStage(
+                    "tasks.work_session_resolution", OperationalOutcome.COMPLETED, duration
+                )
+            )
+            if resolution.outcome is not ExistingEntityOutcome.RESOLVED or resolution.id is None:
+                code = (
+                    "WORK_SESSION_TASK_AMBIGUOUS"
+                    if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS
+                    or resolution.offers_clarification
+                    else "WORK_SESSION_TASK_UNRESOLVED"
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error=code,
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                )
+            try:
+                started_at, ended_at = compose_work_session_times(
+                    task, temporal, now=clock["timestamp"]
+                )
+            except TaskInterpretationError:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="WORK_SESSION_TEMPORAL_INVALID",
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                )
+            mutation_started = perf_counter()
+            try:
+                persistence_actor = _persistence_actor(actor, authenticated_actor)
+                if task.operation is TaskOperation.START_WORK_SESSION:
+                    assert started_at is not None
+                    mutation = work_session_service.start(
+                        task_id=resolution.id,
+                        started_at=started_at,
+                        request_id=request_id,
+                        actor=persistence_actor,
+                        now=clock["timestamp"],
+                    )
+                elif task.operation is TaskOperation.STOP_WORK_SESSION:
+                    assert ended_at is not None
+                    mutation = work_session_service.stop_for_task(
+                        task_id=resolution.id,
+                        ended_at=ended_at,
+                        request_id=request_id,
+                        actor=persistence_actor,
+                        now=clock["timestamp"],
+                    )
+                else:
+                    mutation = work_session_service.edit_for_task(
+                        task_id=resolution.id,
+                        started_at=started_at,
+                        ended_at=ended_at,
+                        request_id=request_id,
+                        actor=persistence_actor,
+                        now=clock["timestamp"],
+                    )
+            except WorkSessionError as error:
+                duration = max(0.0, (perf_counter() - mutation_started) * 1000)
+                stages.append(
+                    OperationalStage(
+                        "tasks.work_session_mutation",
+                        OperationalOutcome.FAILED,
+                        duration,
+                        error_category=error.code,
+                    )
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error=error.code,
+                    operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                )
+            duration = max(0.0, (perf_counter() - mutation_started) * 1000)
+            total_duration += duration
+            stages.append(
+                OperationalStage(
+                    "tasks.work_session_mutation", OperationalOutcome.COMPLETED, duration
+                )
+            )
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.COMPLETED,
+                (
+                    ActionResult(
+                        0,
+                        "write",
+                        ActionStatus.COMPLETED,
+                        unit_results=(
+                            UnitResult(
+                                0,
+                                UnitStatus.SUCCEEDED,
+                                operation=mutation.operation,
+                                stable_note_id=mutation.session.id,
+                            ),
+                        ),
+                    ),
+                ),
+                (resolution.id,),
+                history=mutation.history,
+                operational=OperationalEvidence(total_duration, tuple(stages)),
+            )
         try:
             domain = compose_task_domain_interpretation(task, temporal, now=clock["timestamp"])
         except TaskInterpretationError:
@@ -1753,6 +2026,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             repository, schema, notes_service, history_recorder
         ),
         direct_task_mutations=direct_task_mutations,
+        work_session_service=work_session_service,
         notes_mutation_actor=notes_mutation_actor,
     )
 
@@ -1896,6 +2170,17 @@ def _segments_to_response(segments: Sequence[object]) -> list[dict[str, object]]
         }
         for segment in segments
     ]
+
+
+def _work_session_to_response(value: WorkSessionSnapshot) -> dict[str, object]:
+    """Serialize one Tasks-owned session without exposing its canonical file path or name."""
+    return {
+        "id": value.id,
+        "task_id": value.task_id,
+        "started_at": value.started_at,
+        "ended_at": value.ended_at,
+        "mutation": {"revision": value.revision, "source_hash": value.source_hash},
+    }
 
 
 def _summary_to_response(value: object) -> dict[str, object]:

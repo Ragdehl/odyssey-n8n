@@ -5,6 +5,7 @@ from __future__ import annotations
 from odyssey_apps.schema_extensions import ApplicationSchemaExtension
 
 TASK_TYPE = "task"
+WORK_SESSION_TYPE = "work_session"
 TASK_STATUS_VALUES = ("pending", "in_progress", "completed", "cancelled")
 
 TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
@@ -79,6 +80,45 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
                     "constraints": {"format": "date-time"},
                     "filterable": True,
                     "calendar_role": "completed",
+                },
+            ],
+        },
+        {
+            "id": WORK_SESSION_TYPE,
+            "name": "Work Session",
+            "description": (
+                "Tasks-owned occurrence recording actual work performed on one canonical Task. "
+                "It is hidden from ordinary Notes and edited only through Tasks operations."
+            ),
+            "examples": ["Work session for Prepare the apartment inventory"],
+            "managed_by": "tasks",
+            "repeatable_identity": True,
+            "notes_visible": False,
+            "referenceable": False,
+            "content_writable": False,
+            "properties": [
+                {
+                    "id": "task_id",
+                    "value_type": "string",
+                    "required": True,
+                    "description": "Stable canonical Task ID owning this Work Session.",
+                    "filterable": False,
+                },
+                {
+                    "id": "started_at",
+                    "value_type": "string",
+                    "required": True,
+                    "description": "Exact offset-aware instant when actual work started.",
+                    "constraints": {"format": "date-time"},
+                    "filterable": False,
+                },
+                {
+                    "id": "ended_at",
+                    "value_type": "string",
+                    "required": False,
+                    "description": "Exact offset-aware instant when actual work ended; absent while active.",
+                    "constraints": {"format": "date-time"},
+                    "filterable": False,
                 },
             ],
         },

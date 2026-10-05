@@ -209,6 +209,22 @@ button:disabled { opacity: .55; }
 .note-task-toggle { display: inline-grid; place-items: center; min-width: 1.8rem; min-height: 1.8rem; padding: 0; margin-right: .25rem; border: 0; background: transparent; color: #a66b3f; font-size: 1.25rem; vertical-align: middle; }
 .note-task-toggle:focus-visible { outline: 2px solid #665ee8; outline-offset: 2px; }
 
+.note-work-sessions { display: grid; gap: .55rem; margin-top: 1rem; padding: .75rem; border: 1px solid rgba(23,32,51,.09); border-radius: .8rem; background: rgba(255,255,255,.72); }
+.work-session-heading { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.work-session-heading h3 { margin: 0; }
+.work-session-start, .work-session-stop { min-height: 2.15rem; padding: .35rem .65rem; }
+.work-session-stop { background: #f2e9e1; color: #744b2e; }
+.work-session-total, .work-session-empty { margin: 0; color: #6b7488; font-size: .84rem; }
+.work-session-list { display: grid; gap: .4rem; }
+.work-session-row { display: flex; align-items: center; justify-content: space-between; gap: .65rem; padding-top: .45rem; border-top: 1px solid rgba(23,32,51,.07); }
+.work-session-row.active .work-session-label { font-weight: 700; }
+.work-session-label { min-width: 0; color: #39445d; font-size: .88rem; }
+.work-session-edit { flex: 0 0 auto; padding: .3rem .5rem; }
+.work-session-row.editing { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: end; }
+.work-session-row label { display: grid; gap: .25rem; color: #626c82; font-size: .76rem; }
+.work-session-row input { min-width: 0; width: 100%; }
+.work-session-edit-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: .4rem; }
+
 .note-subtasks { margin-top: 1rem; }
 .note-subtask { display: flex; align-items: center; gap: .45rem; }
 .note-subtask-status { color: #a66b3f; font-size: 1rem; }
