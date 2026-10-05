@@ -147,6 +147,11 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
     assert "if (operation === 'detail') forwarded.note_id = note_id;" in source
     assert "delete_fact: new Set(['operation', 'note_id', 'fact_locator'" in source
     assert "delete_note: new Set(['operation', 'note_id', 'expected_revision'" in source
+    assert "task_status: new Set(['operation', 'note_id', 'completed'" in source
+    assert "const completed = typeof body.completed === 'boolean'" in source
+    assert "['delete_fact', 'delete_note', 'task_status'].includes(operation)" in source
+    assert "operation !== 'task_status' || completed !== undefined" in source
+    assert "operation === 'task_status' ? { completed }" in source
 
 
 def test_calendar_boundary_uses_render_stable_digit_patterns() -> None:
