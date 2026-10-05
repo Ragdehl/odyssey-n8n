@@ -512,3 +512,38 @@ test("Calendar Day inline links hand navigation to Calendar instead of opening m
   assert.equal(mounted.document.events.at(-1).type, "odyssey:open-calendar-day");
   assert.deepEqual(mounted.document.events.at(-1).detail, {date: "2026-10-01"});
 });
+
+test("Notes list metadata does not override semantic type icon colors", async () => {
+  const css = await readFile(new URL("../odyssey_web/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.type-person, \.type-concept \{ color:/);
+  assert.match(css, /\.type-project, \.type-store \{ color:/);
+  assert.match(css, /\.type-task, \.type-purchase \{ color:/);
+  assert.match(css, /\.note-row > span \{/);
+  assert.doesNotMatch(css, /\.note-row span \{/);
+});
+
+test("legacy Task checklist marker is hidden when it duplicates the Task action", async () => {
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return {
+        kind: "detail",
+        note: {
+          id: payload.note_id, name: "pintar la pared", type: "task",
+          properties: {status: "pending"}, created_at: "2026-10-05", updated_at: "2026-10-05", tags: [],
+        },
+        body_blocks: [{kind: "list_item", segments: [{text: "[ ] pintar la pared."}]}],
+      };
+      if (operation === "backlinks") return {items: []};
+      return page();
+    },
+  });
+
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-paint"}});
+  await flush();
+
+  const body = mounted.elements.detail.querySelector(".note-body");
+  assert.ok(body);
+  assert.equal(body.textContent.includes("pintar la pared."), true);
+  assert.equal(body.textContent.includes("[ ]"), false);
+});

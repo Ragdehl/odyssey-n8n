@@ -59,6 +59,10 @@ def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, ob
                 {
                     "source": _summary_to_response(item.source),
                     "roles": list(item.roles),
+                    "mutation": {
+                        "revision": item.revision,
+                        "source_hash": item.source_hash,
+                    },
                 }
                 for item in value.tasks
             ],

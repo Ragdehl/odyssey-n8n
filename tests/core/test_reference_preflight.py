@@ -21,6 +21,7 @@ from odyssey_core import (
 )
 from odyssey_core.clarification import ClarificationChoice, evidence_digest
 from odyssey_core.notes import Note, serialize_note
+from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetDecision
 
@@ -233,6 +234,31 @@ def test_semantic_reference_lookup_without_type_stays_fail_closed(
     result = run(tmp_path, schema, action(lookup), ids=["must-not-be-used"])
     assert result[0].outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
     assert result[0].reason == "unresolved_existing_target"
+    assert result[0].reference_only is True
+    assert result[0].stable_id is None
+    assert list(tmp_path.rglob("*.md")) == []
+
+
+def test_reference_only_lookup_cannot_create_application_managed_type(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Keep helper references from bypassing an app-owned lifecycle after route authorization."""
+    managed = json.loads(json.dumps(schema))
+    concept = next(item for item in managed["types"] if item["id"] == "concept")
+    concept["managed_by"] = "synthetic-app"
+    projected = planning_schema_for_capability(managed, "synthetic-app")
+    lookup = KnowledgeUnit(
+        SelectionCriteria("Faro", "Faro", "concept", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    result = run(tmp_path, projected, action(lookup), ids=["must-not-be-used"])
+    assert result[0].outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
+    assert result[0].reason == "unresolved_existing_reference"
     assert result[0].reference_only is True
     assert result[0].stable_id is None
     assert list(tmp_path.rglob("*.md")) == []

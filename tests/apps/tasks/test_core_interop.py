@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
-    TaskCheckboxContentTransformer,
     TaskLifecycleGuard,
     TaskOperation,
 )
@@ -165,7 +164,7 @@ def test_task_lifecycle_update_changes_status_and_markdown_checkbox_atomically(
         path="llamar banco.md",
         entity_id="task-bank",
         metadata={"name": "Llamar al banco", "type": "task", "status": "pending"},
-        content="- [ ] Llamar al banco.\n",
+        content="- Llamar al banco.\n",
         actor="fixture",
         now="2026-10-05T07:00:00+02:00",
     )
@@ -209,17 +208,16 @@ def test_task_lifecycle_update_changes_status_and_markdown_checkbox_atomically(
         context_limit=10,
         request_id_factory=lambda: "task-complete",
         write_preflight_guard=TaskLifecycleGuard(TaskOperation.COMPLETE),
-        content_transformer=TaskCheckboxContentTransformer(),
     )
     assert result.status is ApplicationStatus.COMPLETED
     raw = repository.read_text("llamar banco.md")
     assert 'status: "completed"' in raw
     assert 'completed_at: "2026-10-05T07:20:00+02:00"' in raw
-    assert "- [x] Llamar al banco." in raw
+    assert "- Llamar al banco." in raw
     assert "revision: 2" in raw
 
 
-def test_task_checkbox_transformer_fails_closed_when_checkbox_is_missing(tmp_path: Path) -> None:
+def test_task_status_mutation_accepts_legacy_body_without_checkbox(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     vault.mkdir()
     repository = VaultRepository(vault)
@@ -270,13 +268,12 @@ def test_task_checkbox_transformer_fails_closed_when_checkbox_is_missing(tmp_pat
         context_limit=10,
         request_id_factory=lambda: "task-legacy-complete",
         write_preflight_guard=TaskLifecycleGuard(TaskOperation.COMPLETE),
-        content_transformer=TaskCheckboxContentTransformer(),
     )
-    assert result.status is ApplicationStatus.FAILED
+    assert result.status is ApplicationStatus.COMPLETED
     raw = repository.read_text("legacy.md")
-    assert 'status: "pending"' in raw
+    assert 'status: "completed"' in raw
     assert "- Legacy." in raw
-    assert "revision: 1" in raw
+    assert "revision: 2" in raw
 
 
 def test_existing_duplicate_task_titles_require_clarification(tmp_path: Path) -> None:
@@ -290,7 +287,7 @@ def test_existing_duplicate_task_titles_require_clarification(tmp_path: Path) ->
             path=path,
             entity_id=task_id,
             metadata={"name": "Enviar documentación", "type": "task", "status": "pending"},
-            content="- [ ] Enviar documentación.\n",
+            content="- Enviar documentación.\n",
             actor="fixture",
             now="2026-10-05T07:00:00+02:00",
         )

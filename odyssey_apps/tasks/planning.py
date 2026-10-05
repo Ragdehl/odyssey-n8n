@@ -40,7 +40,7 @@ class TaskCorePlanner:
         return self._ensure_relationship_facts(result)
 
     def _ensure_visible_action(self, plan: RequestPlan) -> RequestPlan:
-        """Guarantee a newly created Task has exactly one human-readable Markdown checkbox."""
+        """Guarantee a newly created Task has one human-readable action fact in its body."""
         if self._interpretation.operation is not TaskOperation.CREATE:
             return plan
         action = plan.actions[0]
@@ -55,24 +55,21 @@ class TaskCorePlanner:
             raise RequestPlanningError("Task create target has no visible action wording")
         if label[-1] not in ".!?":
             label += "."
-        checkbox = f"[ ] {label}"
         facts = list(unit.facts)
         anchors = list(unit.fact_temporal_anchors)
+        if not anchors and facts:
+            anchors = [() for _ in facts]
+        elif len(anchors) != len(facts):
+            raise RequestPlanningError("Task facts and temporal anchors are misaligned")
         normalized_label = label.rstrip(".!?").strip().casefold()
-        replaced = False
-        for index, fact in enumerate(facts):
-            if "{{ref:" in fact:
-                continue
-            normalized_fact = fact.strip().rstrip(".!?").strip().casefold()
-            if normalized_fact == normalized_label:
-                facts[index] = checkbox
-                replaced = True
-                break
-        if not replaced:
-            facts.insert(0, checkbox)
+        has_visible_action = any(
+            "{{ref:" not in fact
+            and fact.strip().rstrip(".!?").strip().casefold() == normalized_label
+            for fact in facts
+        )
+        if not has_visible_action:
+            facts.insert(0, label)
             anchors.insert(0, ())
-        elif len(anchors) < len(facts):
-            anchors = [*anchors, *(((),) * (len(facts) - len(anchors)))]
         units[primary_index] = replace(
             unit,
             facts=tuple(facts),

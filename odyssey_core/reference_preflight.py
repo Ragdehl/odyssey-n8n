@@ -25,6 +25,7 @@ from .relationship_evidence import (
     TargetProjectionStatus,
 )
 from .request_planning import KnowledgeReference, KnowledgeUnit, SelectionCriteria, WriteAction
+from .schema_types import is_application_managed_type
 from .storage import VaultRepository
 from .temporal import CALENDAR_DAY_TYPE, CalendarDayRepository
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
@@ -798,17 +799,25 @@ def _decide_reference_only_target(
         self_binding_repository=self_binding_repository,
     )
     if decision.outcome is WriteTargetOutcome.CREATE:
+        if unit.target.type is not None and is_application_managed_type(schema, unit.target.type):
+            return WriteTargetDecision(
+                WriteTargetOutcome.NEEDS_CLARIFICATION,
+                reason="unresolved_existing_reference",
+            )
         return decision
-    if (
-        decision.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION
-        and decision.reason == "ambiguous_existing_target"
-    ):
-        return WriteTargetDecision(
-            WriteTargetOutcome.NEEDS_CLARIFICATION,
-            reason="ambiguous_existing_reference",
-            candidate_note_ids=decision.candidate_note_ids,
-            clarification=decision.clarification,
-        )
+    if decision.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION:
+        if decision.reason == "ambiguous_existing_target":
+            return WriteTargetDecision(
+                WriteTargetOutcome.NEEDS_CLARIFICATION,
+                reason="ambiguous_existing_reference",
+                candidate_note_ids=decision.candidate_note_ids,
+                clarification=decision.clarification,
+            )
+        if decision.reason == "managed_type_requires_application_create":
+            return WriteTargetDecision(
+                WriteTargetOutcome.NEEDS_CLARIFICATION,
+                reason="unresolved_existing_reference",
+            )
     return decision
 
 

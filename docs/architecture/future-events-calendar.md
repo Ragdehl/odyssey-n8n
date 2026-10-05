@@ -287,3 +287,20 @@ This direction does not yet commit Odyssey to:
 Whether Events becomes a dedicated application, a lower-level capability with an optional calendar
 surface, or a combination of both should be decided from the Tasks implementation and real Odyssey
 usage rather than fixed prematurely.
+
+## UX debt: Calendar Day detail versus Notes feed
+
+Calendar Day is currently a Core-managed temporal surface rather than an ordinary Notes-feed type.
+That creates one intentional-but-confusing product asymmetry: a materialized Day can be opened from a
+chat/Calendar `Ver nota` affordance through the generic Note detail renderer, while the same Day is
+excluded from Notes `Ver todas` and from ordinary type filtering.
+
+Do not resolve this merely by exposing `calendar_day` as an ordinary semantic Note type. A later UX
+slice should choose one coherent navigation contract:
+
+- keep Calendar Day outside the Notes feed and open it through a Calendar-owned Day detail surface; or
+- deliberately expose Day records in Notes with clear temporal presentation and filtering semantics.
+
+Whichever option is chosen, direct navigation and browse/discovery must no longer imply contradictory
+visibility rules. This is presentation/navigation debt; Calendar remains a projection/read surface and
+does not gain chat-write authority from the eventual UI choice.

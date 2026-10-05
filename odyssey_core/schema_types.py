@@ -86,10 +86,17 @@ def content_writable_type_ids(schema: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(values)
 
 
+_AUTHORIZED_MANAGED_OWNER = "_authorized_managed_by"
+
+
 def is_application_managed_type(schema: Mapping[str, Any], type_id: str) -> bool:
-    """Return whether one canonical type has an application-owned deterministic lifecycle."""
+    """Return whether one type originates from an application-owned deterministic lifecycle.
+
+    Trusted planner projections retain a private ownership marker after exposing their owning type
+    for one app route.  That marker must not grant generic reference helpers creation authority.
+    """
     return any(
-        item.get("id") == type_id and "managed_by" in item
+        item.get("id") == type_id and ("managed_by" in item or _AUTHORIZED_MANAGED_OWNER in item)
         for item in canonical_type_definitions(schema)
     )
 
@@ -113,5 +120,6 @@ def planning_schema_for_capability(
         raise ValueError("Canonical schema has unusable type data")
     for definition in raw_types:
         if isinstance(definition, dict) and definition.get("managed_by") == capability_id:
+            definition[_AUTHORIZED_MANAGED_OWNER] = capability_id
             definition.pop("managed_by")
     return projected

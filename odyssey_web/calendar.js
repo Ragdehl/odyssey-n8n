@@ -1,11 +1,12 @@
 import {CalendarRequestError, requestCalendar} from "./calendar-client.js";
+import {NotesRequestError, requestNotes} from "./notes-client.js";
 import {typeBadge, typeLabel} from "./notes.js";
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", {month: "long", year: "numeric", timeZone: "UTC"});
 const DAY_FORMAT = new Intl.DateTimeFormat("es-ES", {weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC"});
 
-export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
+export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint = "/api/notes"} = {}) {
   const monthView = root.querySelector("#calendar-month-view");
   const dayView = root.querySelector("#calendar-day-view");
   const title = root.querySelector("#calendar-month-title");
@@ -197,10 +198,20 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
       group.className = "calendar-related-group calendar-task-group";
       const row = document.createElement("div");
       row.className = "calendar-task-row";
-      const status = task.source.properties?.status;
-      const marker = document.createElement("span");
-      marker.className = "calendar-task-status";
-      marker.textContent = status === "completed" ? "☑" : "☐";
+      const taskStatus = task.source.properties?.status;
+      let marker;
+      if (["pending", "in_progress", "completed"].includes(taskStatus)) {
+        const completed = taskStatus === "completed";
+        marker = button(completed ? "☑" : "☐", () => void toggleCalendarTask(task, !completed, marker));
+        marker.className = "calendar-task-status calendar-task-toggle";
+        marker.setAttribute("role", "checkbox");
+        marker.setAttribute("aria-checked", completed ? "true" : "false");
+        marker.setAttribute("aria-label", completed ? `Reabrir ${task.source.name}` : `Completar ${task.source.name}`);
+      } else {
+        marker = document.createElement("span");
+        marker.className = "calendar-task-status";
+        marker.textContent = "⊘";
+      }
       row.append(marker, noteButton(task.source));
       group.append(row);
       const roles = document.createElement("p");
@@ -210,6 +221,33 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
       section.append(group);
     }
     return section;
+  }
+
+  async function toggleCalendarTask(task, completed, control) {
+    control.disabled = true;
+    try {
+      const result = await requestNotes({endpoint: notesEndpoint, operation: "task_status", payload: {
+        note_id: task.source.id, completed, expected_revision: task.mutation.revision,
+        expected_source_hash: task.mutation.source_hash, request_id: calendarMutationRequestId(),
+      }});
+      task.source.properties = {...task.source.properties, status: result.status};
+      if (result.completed_at) task.source.properties.completed_at = result.completed_at;
+      else delete task.source.properties.completed_at;
+      task.mutation = result.mutation;
+      state.monthValue = null;
+      renderDay();
+      status.textContent = completed ? "Tarea completada." : "Tarea reabierta.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = error instanceof NotesRequestError ? "La tarea ha cambiado; vuelve a intentarlo." : "No se ha podido actualizar la tarea.";
+    }
+  }
+
+  function calendarMutationRequestId() {
+    const bytes = new Uint8Array(16);
+    if (!globalThis.crypto?.getRandomValues) throw new NotesRequestError("No se puede preparar la actualización.");
+    globalThis.crypto.getRandomValues(bytes);
+    return `calendar-task-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
   }
 
   function taskRoleLabel(role) {

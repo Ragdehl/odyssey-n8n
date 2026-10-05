@@ -52,7 +52,10 @@ if (notesSurface) {
   mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
 }
 if (calendarSurface) {
-  mountCalendar(calendarSurface, {endpoint: document.querySelector('meta[name="odyssey-calendar-endpoint"]')?.content ?? "/api/calendar"});
+  mountCalendar(calendarSurface, {
+    endpoint: document.querySelector('meta[name="odyssey-calendar-endpoint"]')?.content ?? "/api/calendar",
+    notesEndpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes",
+  });
 }
 function selectSurface(surface) {
   const active = ["chat", "notes", "calendar"].includes(surface) ? surface : "chat";

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
+    TaskCorePlanner,
     TaskInterpretation,
     TaskLifecycleGuard,
     TaskOperation,
@@ -116,7 +117,9 @@ def test_create_task_with_target_date_uses_core_materialization_end_to_end(tmp_p
 
     result = execute_request(
         source,
-        planner=SimpleNamespace(plan=lambda _request: plan, is_local_replay=True),
+        planner=TaskCorePlanner(
+            SimpleNamespace(plan=lambda _request, _context=(): plan, is_local_replay=True), task
+        ),
         repository=repository,
         schema=planning_schema,
         context_index=context,

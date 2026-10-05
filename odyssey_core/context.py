@@ -730,6 +730,132 @@ class ContextIndex:
             temporary.unlink(missing_ok=True)
         return len(projected)
 
+    def refresh_existing_note(
+        self,
+        repository: VaultRepository,
+        schema: dict[str, Any],
+        embedder: TextEmbedder,
+        *,
+        path: str,
+        expected_source_hash: str,
+    ) -> str:
+        """Refresh one already-indexed note without rebuilding unrelated embeddings.
+
+        This bounded path is intended for metadata-only mutations such as Task lifecycle changes.
+        It refuses identity, path, body, or index-contract drift so backlink topology remains
+        unchanged. Callers may safely fall back to ``rebuild`` on any rejection.
+        """
+        if not isinstance(path, str) or not path.endswith(".md"):
+            raise ContextIndexError("Incremental context refresh requires a Markdown path")
+        if not isinstance(expected_source_hash, str) or len(expected_source_hash) != 64:
+            raise ContextIndexError("Incremental context refresh requires the previous source hash")
+        raw = repository.read_text(path)
+        try:
+            note = parse_note(raw)
+            validate_note(note, schema)
+        except (NoteFormatError, NoteValidationError) as error:
+            raise ContextIndexError("Incremental context refresh found an invalid note") from error
+        if note.metadata.get("deleted") is True:
+            raise ContextIndexError("Incremental context refresh cannot remove a note")
+        note_id = cast(str, note.metadata["id"])
+        note_type = cast(str, note.metadata["type"])
+        primary_name = cast(str, note.metadata["name"])
+        canonical_types = _canonical_values(schema, "types")
+        canonical_tags = _canonical_values(schema, "tags")
+        canonical_subtypes = tuple(sorted(_canonical_subtypes(schema)))
+        filter_definitions = _filter_definitions(schema)
+        text = build_context_retrieval_text(note, path)
+        vectors = list(embedder.embed_documents([text]))
+        if len(vectors) != 1:
+            raise ContextIndexError("Embedding runtime returned the wrong number of vectors")
+        vector = _normalized_vector(vectors[0])
+        new_source_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
+        created_at = _normalize_property_value(
+            {"value_type": "string", "constraints": {"format": "date-time"}},
+            note.metadata["created_at"],
+        )
+        updated_at = _normalize_property_value(
+            {"value_type": "string", "constraints": {"format": "date-time"}},
+            note.metadata["updated_at"],
+        )
+        assert isinstance(created_at, str) and isinstance(updated_at, str)
+        aliases = tuple(cast(list[str], note.metadata.get("aliases", [])))
+        lexical_text = " ".join((primary_name, *aliases, *note_tags, text)).casefold()
+        properties: list[tuple[str, str, str | int, str]] = []
+        for field, definition in filter_definitions.items():
+            value = note.metadata.get(field, note.metadata.get("tags") if field == "tags" else None)
+            if value is None:
+                continue
+            values = value if isinstance(value, list) else [value]
+            properties.extend(
+                (
+                    note_id,
+                    field,
+                    _normalize_property_value(definition, item),
+                    definition["value_type"],
+                )
+                for item in values
+            )
+        try:
+            with sqlite3.connect(self.path) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise ContextIndexError("Context index markers are incompatible")
+                if (
+                    metadata.get("model_name") != embedder.model_name
+                    or metadata.get("model_version") != embedder.model_version
+                    or tuple(sorted(json.loads(metadata["canonical_types"]))) != canonical_types
+                    or tuple(sorted(json.loads(metadata["canonical_tags"]))) != canonical_tags
+                    or tuple(sorted(json.loads(metadata["canonical_subtypes"])))
+                    != canonical_subtypes
+                    or json.loads(metadata["filter_definitions"])
+                    != _filter_registry(filter_definitions)
+                    or int(metadata["dimension"]) != len(vector)
+                ):
+                    raise ContextIndexError("Context index contract changed; rebuild is required")
+                row = connection.execute(
+                    "SELECT path, type, primary_name, source_hash FROM notes WHERE id = ?",
+                    (note_id,),
+                ).fetchone()
+                projection = connection.execute(
+                    "SELECT aliases, body_text FROM note_projection WHERE note_id = ?",
+                    (note_id,),
+                ).fetchone()
+                if (
+                    row is None
+                    or projection is None
+                    or row[0] != path
+                    or row[1] != note_type
+                    or row[2] != primary_name
+                    or row[3] != expected_source_hash
+                    or projection[0] != json.dumps(aliases, ensure_ascii=False)
+                    or projection[1] != note.content
+                ):
+                    raise ContextIndexError(
+                        "Incremental context refresh detected identity or body drift"
+                    )
+                connection.execute(
+                    "UPDATE notes SET source_hash = ?, tags = ?, embedding = ? WHERE id = ?",
+                    (new_source_hash, json.dumps(note_tags), _vector_blob(vector), note_id),
+                )
+                connection.execute(
+                    """UPDATE note_projection
+                       SET created_at = ?, updated_at = ?, lexical_text = ?
+                       WHERE note_id = ?""",
+                    (created_at, updated_at, lexical_text, note_id),
+                )
+                connection.execute("DELETE FROM properties WHERE note_id = ?", (note_id,))
+                connection.executemany(
+                    "INSERT INTO properties(note_id, field, value, value_type) VALUES (?, ?, ?, ?)",
+                    properties,
+                )
+        except ContextIndexError:
+            raise
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
+            raise ContextIndexError("Unable to incrementally refresh context index") from error
+        return new_source_hash
+
     def delete(self) -> None:
         """Delete this file only after verifying its context-index markers."""
         if not self.path.exists():

@@ -70,10 +70,11 @@ function validateReference(value) {
   return {source: validateSummary(value.source), blocks: value.blocks.map(validateBlock)};
 }
 function validateTask(value) {
-  if (!value || !Array.isArray(value.roles) || value.roles.some((role) => !["target", "planned_start", "planned_end", "deadline", "completed"].includes(role))) {
+  if (!value || !Array.isArray(value.roles) || value.roles.some((role) => !["target", "planned_start", "planned_end", "deadline", "completed"].includes(role)) ||
+      !value.mutation || !Number.isInteger(value.mutation.revision) || value.mutation.revision < 1 || !/^[a-f0-9]{64}$/.test(value.mutation.source_hash || "")) {
     throw new CalendarRequestError("Tarea de calendario inválida.");
   }
-  return {source: validateSummary(value.source), roles: [...new Set(value.roles)]};
+  return {source: validateSummary(value.source), roles: [...new Set(value.roles)], mutation: {revision: value.mutation.revision, source_hash: value.mutation.source_hash}};
 }
 function validateSummary(value) {
   if (!value || !text(value.id) || !text(value.name) || !text(value.type) || !Array.isArray(value.tags) ||

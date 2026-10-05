@@ -17,7 +17,6 @@ from .interpretation import (
 )
 from .lifecycle import TaskLifecycleGuard
 from .mutations import (
-    TaskCheckboxContentTransformer,
     TaskDirectMutationError,
     TaskDirectMutationResult,
     TaskDirectMutationService,
@@ -30,7 +29,6 @@ __all__ = [
     "TASK_SCHEMA_EXTENSION",
     "TASK_STATUS_VALUES",
     "TASK_TYPE",
-    "TaskCheckboxContentTransformer",
     "TaskDirectMutationError",
     "TaskDirectMutationResult",
     "TaskDirectMutationService",

@@ -374,7 +374,7 @@ export function mountNotes(root, {
     body.className = "note-body";
     renderBody(body, value.body_blocks, open, state.editing && value.mutation
       ? (locator, control) => void deleteFact(value, locator, control)
-      : null);
+      : null, value.note.type === "task" ? value.note.name : null);
     const related = [];
     if (value.note.type === "task") {
       const subtasks = document.createElement("section");
@@ -405,11 +405,15 @@ export function mountNotes(root, {
   async function toggleTask(value, completed, control) {
     control.disabled = true;
     try {
-      await requestNotes({endpoint, operation: "task_status", payload: {
+      const result = await requestNotes({endpoint, operation: "task_status", payload: {
         note_id: value.note.id, completed, expected_revision: value.mutation.revision,
         expected_source_hash: value.mutation.source_hash, request_id: mutationRequestId(),
       }});
-      await open(value.note.id, {history: false});
+      const properties = {...value.note.properties, status: result.status};
+      if (result.completed_at) properties.completed_at = result.completed_at;
+      else delete properties.completed_at;
+      state.current = {...value, note: {...value.note, properties}, mutation: result.mutation};
+      renderDetail();
       status.textContent = completed ? "Tarea completada." : "Tarea reabierta.";
     } catch (error) {
       control.disabled = false;
@@ -756,7 +760,7 @@ function unavailableRow(id) {
   row.dataset.noteId = id;
   return row;
 }
-function renderBody(parent, blocks, open, removeFact = null) {
+function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
   if (!blocks.length) {
     const empty = document.createElement("p");
     empty.className = "note-empty-body";
@@ -772,17 +776,18 @@ function renderBody(parent, blocks, open, removeFact = null) {
         parent.append(list);
       }
       const item = document.createElement("li");
+      const segments = taskName ? legacyTaskActionSegments(block.segments, taskName) : block.segments;
       if (removeFact && block.deletable) {
         item.className = "note-editable-fact";
         const content = document.createElement("span");
         content.className = "note-fact-content";
-        appendBodySegments(content, block.segments, open);
+        appendBodySegments(content, segments, open);
         const remove = button("Eliminar", () => removeFact(block.fact_locator, remove));
         remove.className = "note-fact-delete note-danger-button";
         remove.setAttribute("aria-label", "Eliminar esta información");
         item.append(content, remove);
       } else {
-        appendBodySegments(item, block.segments, open);
+        appendBodySegments(item, segments, open);
       }
       list.append(item);
       continue;
@@ -792,6 +797,16 @@ function renderBody(parent, blocks, open, removeFact = null) {
     appendBodySegments(element, block.segments, open);
     parent.append(element);
   }
+}
+function legacyTaskActionSegments(segments, taskName) {
+  if (!segments.length || segments[0].target_id || typeof segments[0].text !== "string") return segments;
+  const prefix = /^\[[ xX]\]\s+/.exec(segments[0].text);
+  if (!prefix) return segments;
+  const raw = segments.map((segment) => segment.text).join("");
+  const visible = raw.slice(prefix[0].length);
+  const normalize = (value) => value.trim().replace(/[.!?]+$/, "").trim().toLocaleLowerCase("es");
+  if (normalize(visible) !== normalize(taskName)) return segments;
+  return [{...segments[0], text: segments[0].text.slice(prefix[0].length)}, ...segments.slice(1)];
 }
 function appendBodySegments(parent, segments, open) {
   for (const segment of segments) {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -190,8 +191,56 @@ def test_task_create_adds_visible_action_when_shared_plan_is_property_only() -> 
     result = wrapper.plan("Tengo que llamar al banco")
     assert isinstance(result, RequestPlan)
     unit = result.actions[0].units[0]  # type: ignore[union-attr]
-    assert unit.facts == ("[ ] Llamar al banco.",)
+    assert unit.facts == ("Llamar al banco.",)
     assert unit.fact_temporal_anchors == ((),)
+
+
+def test_task_create_keeps_temporal_anchors_aligned_when_visible_action_is_added() -> None:
+    """Regression for the real medical Task that failed after wrapper-inserted body decoration."""
+    create_plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        SelectionCriteria(
+                            None,
+                            "ir al médico el miércoles de la semana que viene para ver los resultados de los análisis de sangre",
+                            "task",
+                            (),
+                            None,
+                        ),
+                        "record",
+                        (
+                            PropertyChange("status", "set", "pending"),
+                            PropertyChange("target_date", "set", "2026-10-14"),
+                        ),
+                        (),
+                        ("Ir al médico para ver los resultados de los análisis de sangre.",),
+                        (),
+                        "one",
+                        fact_temporal_anchors=(("2026-10-14",),),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    wrapper = TaskCorePlanner(
+        FixedPlanner(create_plan),
+        TaskInterpretation(
+            "Tengo que ir al médico el miércoles de la semana que viene para ver los resultados de los análisis de sangre",
+            TaskOperation.CREATE,
+        ),
+    )
+    result = wrapper.plan("x")
+    unit = result.actions[0].units[0]  # type: ignore[union-attr]
+    assert unit.facts == (
+        "ir al médico el miércoles de la semana que viene para ver los resultados de los análisis de sangre.",
+        "Ir al médico para ver los resultados de los análisis de sangre.",
+    )
+    assert len(unit.fact_temporal_anchors) == len(unit.facts) == 2
+    assert unit.fact_temporal_anchors[0] == ()
+    assert unit.fact_temporal_anchors[1] == ("2026-10-14",)
 
 
 def test_task_core_planner_lowers_assignee_and_parent_to_core_references() -> None:
@@ -227,7 +276,7 @@ def test_task_core_planner_lowers_assignee_and_parent_to_core_references() -> No
     result = TaskCorePlanner(FixedPlanner(create_plan), interpretation).plan("x")
     unit = result.actions[0].units[0]  # type: ignore[union-attr]
     assert unit.facts == (
-        "[ ] Reunir documentos.",
+        "Reunir documentos.",
         "Responsable: {{ref:0}}.",
         "Tarea superior: {{ref:1}}.",
     )
@@ -297,3 +346,31 @@ def test_parent_task_guard_rejects_cycle_from_current_canonical_graph(tmp_path: 
     )
     with pytest.raises(WritePreflightGuardError, match="TASK_PARENT_CYCLE"):
         TaskLifecycleGuard(TaskOperation.UPDATE)(action, preflight, repository, current_schema)
+
+
+def test_create_with_additional_context_fact_keeps_temporal_anchor_rows_aligned() -> None:
+    source = (
+        "Tengo que ir al médico el miércoles de la semana que viene "
+        "para ver los resultados de los análisis de sangre"
+    )
+    interpretation = TaskInterpretation(source, TaskOperation.CREATE)
+    unit = KnowledgeUnit(
+        SelectionCriteria("Ir al médico", "Ir al médico", "task", (), None),
+        "record",
+        (PropertyChange("status", "set", "pending"),),
+        (),
+        ("Para ver los resultados de los análisis de sangre.",),
+        (),
+        "one",
+    )
+    planner = TaskCorePlanner(
+        SimpleNamespace(plan=lambda *_: RequestPlan((WriteAction((unit,)),), ())),
+        interpretation,
+    )
+    result = planner.plan(source)
+    primary = result.actions[0].units[0]
+    assert primary.facts == (
+        "Ir al médico.",
+        "Para ver los resultados de los análisis de sangre.",
+    )
+    assert primary.fact_temporal_anchors == ((), ())

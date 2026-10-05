@@ -383,6 +383,77 @@ class SemanticEntityIndex:
             temporary.unlink(missing_ok=True)
         return len(projected)
 
+    def refresh_existing_note(
+        self,
+        repository: VaultRepository,
+        schema: dict[str, Any],
+        embedder: TextEmbedder,
+        *,
+        path: str,
+        expected_source_hash: str,
+    ) -> str | None:
+        """Refresh one stable semantic row, or no-op when its type is not indexed.
+
+        Identity/path changes are deliberately rejected; callers can fall back to a full rebuild.
+        """
+        if not isinstance(path, str) or not path.endswith(".md"):
+            raise SemanticIndexError("Incremental semantic refresh requires a Markdown path")
+        raw = repository.read_text(path)
+        try:
+            note = parse_note(raw)
+            validate_note(note, schema)
+        except (NoteFormatError, NoteValidationError) as error:
+            raise SemanticIndexError(
+                "Incremental semantic refresh found an invalid note"
+            ) from error
+        if note.metadata.get("deleted") is True:
+            raise SemanticIndexError("Incremental semantic refresh cannot remove a note")
+        canonical_types = _canonical_types(schema)
+        note_type = cast(str, note.metadata["type"])
+        if note_type not in canonical_types:
+            return None
+        note_id = cast(str, note.metadata["id"])
+        primary_name = cast(str, note.metadata["name"])
+        text = build_semantic_retrieval_text(note, path)
+        vectors = list(embedder.embed_documents([text]))
+        if len(vectors) != 1:
+            raise SemanticIndexError("Embedding runtime returned the wrong number of vectors")
+        vector = _normalized_vector(vectors[0])
+        new_source_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        try:
+            with sqlite3.connect(self.path) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise SemanticIndexError("Semantic index markers are incompatible")
+                if (
+                    metadata.get("model_name") != embedder.model_name
+                    or metadata.get("model_version") != embedder.model_version
+                    or tuple(sorted(json.loads(metadata["canonical_types"]))) != canonical_types
+                    or int(metadata["dimension"]) != len(vector)
+                ):
+                    raise SemanticIndexError("Semantic index contract changed; rebuild is required")
+                row = connection.execute(
+                    "SELECT path, type, primary_name, source_hash FROM notes WHERE id = ?",
+                    (note_id,),
+                ).fetchone()
+                if (
+                    row is None
+                    or row[0] != path
+                    or row[1] != note_type
+                    or row[2] != primary_name
+                    or row[3] != expected_source_hash
+                ):
+                    raise SemanticIndexError("Incremental semantic refresh detected identity drift")
+                connection.execute(
+                    "UPDATE notes SET source_hash = ?, embedding = ? WHERE id = ?",
+                    (new_source_hash, _vector_blob(vector), note_id),
+                )
+        except SemanticIndexError:
+            raise
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
+            raise SemanticIndexError("Unable to incrementally refresh semantic index") from error
+        return new_source_hash
+
     def delete(self) -> None:
         """Delete this file only after verifying Odyssey semantic-index markers.
 

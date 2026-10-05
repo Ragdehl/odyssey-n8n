@@ -62,6 +62,10 @@ export function validateNotesResponse(value) {
   }
   if (value.kind === "mutation") {
     if (!["fact_deleted", "note_deleted", "task_completed", "task_reopened"].includes(value.operation) || !isText(value.note_id) || !value.history || !isText(value.history.status)) throw new NotesRequestError("Mutación de nota inválida.");
+    if (["task_completed", "task_reopened"].includes(value.operation)) {
+      if (!isText(value.status) || (value.completed_at !== null && value.completed_at !== undefined && !isText(value.completed_at))) throw new NotesRequestError("Mutación de tarea inválida.");
+      return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}, mutation: validateMutationMetadata(value.mutation), status: value.status, completed_at: value.completed_at ?? null};
+    }
     return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}};
   }
   throw new NotesRequestError("Respuesta de notas no compatible.");

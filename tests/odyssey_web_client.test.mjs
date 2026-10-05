@@ -686,13 +686,17 @@ test("Task status mutation transport is explicit and bounded", async () => {
       captured = JSON.parse(options.body);
       return response({payload: {
         kind: "mutation", operation: "task_completed", note_id: "task-bank",
-        history: {status: "COMMITTED"},
+        history: {status: "COMMITTED"}, status: "completed",
+        completed_at: "2026-10-05T10:00:00+02:00",
+        mutation: {revision: 3, source_hash: "b".repeat(64)},
       }});
     },
   });
   assert.equal(captured.operation, "task_status");
   assert.equal(captured.completed, true);
   assert.equal(result.operation, "task_completed");
+  assert.equal(result.status, "completed");
+  assert.equal(result.mutation.revision, 3);
   assert.throws(() => validateNotesResponse({
     kind: "mutation", operation: "task_completed", note_id: "", history: {status: "COMMITTED"},
   }), NotesRequestError);

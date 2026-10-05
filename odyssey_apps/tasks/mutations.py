@@ -4,47 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import re
 from dataclasses import dataclass
 from typing import Any
 
 from odyssey_core.git_history import GitHistoryResult, HistoryRecorder, HistoryStatus
-from odyssey_core.materialization import (
-    ContentTransformRequest,
-    MaterializationError,
-    materialize_update,
-)
+from odyssey_core.materialization import MaterializationError, materialize_update
 from odyssey_core.notes import NoteFormatError, parse_note, validate_note
 from odyssey_core.persistence import ActorInput, PersistenceOperation
 from odyssey_core.request_planning import KnowledgeUnit, PropertyChange, SelectionCriteria
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
 
-from .schema import TASK_STATUS_VALUES, TASK_TYPE
-
-_TASK_CHECKBOX = re.compile(r"(?m)^- \[(?P<mark>[ xX])\] (?P<label>[^\n]+)$")
-
-
-class TaskCheckboxContentTransformer:
-    """Keep one visible Obsidian task checkbox synchronized with structured lifecycle status."""
-
-    def transform(self, request: ContentTransformRequest) -> str:
-        if request.note_type != TASK_TYPE:
-            raise MaterializationError("Task checkbox transformer received a non-task note")
-        status = request.set_metadata.get("status")
-        if status is None:
-            return request.current_body
-        if status not in TASK_STATUS_VALUES:
-            raise MaterializationError("Task checkbox transformer received an invalid status")
-        matches = tuple(_TASK_CHECKBOX.finditer(request.current_body))
-        if len(matches) != 1:
-            raise MaterializationError("Task requires exactly one canonical Markdown checkbox")
-        match = matches[0]
-        desired = "x" if status == "completed" else " "
-        start, end = match.span("mark")
-        if request.current_body[start:end].casefold() == desired:
-            return request.current_body
-        return request.current_body[:start] + desired + request.current_body[end:]
+from .schema import TASK_TYPE
 
 
 class TaskDirectMutationError(ValueError):
@@ -60,6 +31,11 @@ class TaskDirectMutationResult:
     operation: str
     note_id: str
     history: GitHistoryResult
+    path: str
+    revision: int
+    source_hash: str
+    status: str
+    completed_at: str | None
 
 
 class TaskDirectMutationService:
@@ -128,16 +104,37 @@ class TaskDirectMutationService:
                 now=now,
                 request_id=request_id,
                 fact_ordinals=(),
-                content_transformer=TaskCheckboxContentTransformer(),
             )
         except (MaterializationError, ValueError) as error:
             raise TaskDirectMutationError("TASK_UNAVAILABLE") from error
         if result.operation is not PersistenceOperation.UPDATED:
             raise TaskDirectMutationError("TASK_UNAVAILABLE")
+        updated_raw = self.repository.read_text(_path)
+        try:
+            updated_note = parse_note(updated_raw)
+            validate_note(updated_note, self.schema)
+        except (NoteFormatError, ValueError) as error:
+            raise TaskDirectMutationError("TASK_UNAVAILABLE") from error
+        revision = updated_note.metadata.get("revision")
+        updated_status = updated_note.metadata.get("status")
+        completed_at = updated_note.metadata.get("completed_at")
+        if (
+            not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+            or not isinstance(updated_status, str)
+            or (completed_at is not None and not isinstance(completed_at, str))
+        ):
+            raise TaskDirectMutationError("TASK_UNAVAILABLE")
         return TaskDirectMutationResult(
             operation,
             note_id,
             self._record_history(request_id, snapshot, note_id),
+            _path,
+            revision,
+            hashlib.sha256(updated_raw.encode()).hexdigest(),
+            updated_status,
+            completed_at,
         )
 
     def _load_current(

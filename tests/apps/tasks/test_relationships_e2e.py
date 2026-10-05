@@ -134,7 +134,7 @@ def test_assignee_and_parent_resolve_to_canonical_links_and_parent_backlink(tmp_
     assert result.status is ApplicationStatus.COMPLETED
     child_path = next(path for path in repository.list_markdown_paths() if "task-child" in path)
     child = repository.read_text(child_path)
-    assert "- [ ] Reunir documentos." in child
+    assert "- Reunir documentos." in child
     assert "Responsable: [[people/beatriz|Beatriz]]." in child
     assert "Tarea superior: [[preparar dossier - parent|Preparar dossier]]." in child
 
@@ -142,3 +142,66 @@ def test_assignee_and_parent_resolve_to_canonical_links_and_parent_backlink(tmp_
     notes = NotesQueryService(repository, SCHEMA, context)
     backlinks = notes.backlinks("task-parent")
     assert [(item.source.id, item.occurrences) for item in backlinks.items] == [("task-child", 1)]
+
+
+def test_missing_parent_task_clarifies_without_creating_hidden_parent(tmp_path: Path) -> None:
+    """A parent-task reference must not bypass Tasks lifecycle authority by creating itself."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    base_plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        SelectionCriteria("Reservar hotel", "reservar hotel", "task", (), None),
+                        "record",
+                        (PropertyChange("status", "set", "pending"),),
+                        (),
+                        ("Reservar hotel.",),
+                        (),
+                        "one",
+                        fact_temporal_anchors=((),),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    interpretation = TaskInterpretation(
+        "Tengo que reservar hotel como subtarea de preparar el viaje",
+        TaskOperation.CREATE,
+        relationship_mentions=(
+            TaskRelationshipMention("preparar el viaje", TaskRelationshipRole.PARENT_TASK),
+        ),
+    )
+    planner = TaskCorePlanner(SimpleNamespace(plan=lambda *_: base_plan), interpretation)
+    embedder = Embedder()
+    context = ContextIndex(tmp_path / "context.sqlite3")
+    semantic = SemanticEntityIndex(tmp_path / "semantic-tasks.sqlite3")
+    context.rebuild(repository, SCHEMA, embedder)
+    semantic.rebuild(repository, PLANNING_SCHEMA, embedder)
+
+    result = execute_request(
+        interpretation.source_text,
+        planner=planner,
+        repository=repository,
+        schema=PLANNING_SCHEMA,
+        context_index=context,
+        semantic_index=semantic,
+        embedder=embedder,
+        contextual_reasoner=FirstReasoner(),
+        actor="tasks-e2e",
+        now="2026-10-05T07:10:00+02:00",
+        context_limit=10,
+        request_id_factory=lambda: "task-missing-parent",
+        preflight_id_allocator=iter(("task-child", "must-not-create-parent")).__next__,
+        write_preflight_guard=TaskLifecycleGuard(TaskOperation.CREATE),
+    )
+
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.affected_stable_note_ids == ()
+    assert repository.list_markdown_paths() == []
+    primary, parent = result.action_results[0].unit_results
+    assert primary.reason == "DEPENDENCY_FAILED"
+    assert parent.reason == "unresolved_existing_reference"

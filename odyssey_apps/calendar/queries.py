@@ -79,6 +79,8 @@ class CalendarTask:
 
     source: NoteSummary
     roles: tuple[str, ...]
+    revision: int
+    source_hash: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -381,7 +383,14 @@ class CalendarQueryService:
                 if blocks:
                     references.append(CalendarReference(detail.note, blocks))
             if relevant_task:
-                tasks.append(CalendarTask(detail.note, note.calendar_roles[normalized]))
+                tasks.append(
+                    CalendarTask(
+                        detail.note,
+                        note.calendar_roles[normalized],
+                        detail.revision,
+                        detail.source_hash,
+                    )
+                )
 
         def summary_key(summary: NoteSummary) -> tuple[str, str]:
             return (summary.name.casefold(), summary.id)

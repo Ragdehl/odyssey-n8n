@@ -26,7 +26,6 @@ from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
     OpenAITaskInterpreter,
-    TaskCheckboxContentTransformer,
     TaskCorePlanner,
     TaskDirectMutationError,
     TaskDirectMutationService,
@@ -55,7 +54,7 @@ from odyssey_core.clarification import (
     PendingClarification,
     resolve_clarification_reply,
 )
-from odyssey_core.context import ContextFilter, ContextIndex
+from odyssey_core.context import ContextFilter, ContextIndex, ContextIndexError
 from odyssey_core.contextual import OpenAIContextualReasoner
 from odyssey_core.contextual_calibration import load_contextual_calibration_examples
 from odyssey_core.conversations import MAIN_CONVERSATION_ID
@@ -103,7 +102,7 @@ from odyssey_core.request_planning import (
     validate_request_plan,
 )
 from odyssey_core.schema_types import planning_schema_for_capability
-from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex
+from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex, SemanticIndexError
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal_interpretation import (
@@ -177,6 +176,7 @@ class RuntimeComposition:
 
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
+    refresh_task_lifecycle_indexes: Callable[[str, str], None] | None = None
     application_catalog: ApplicationCatalog = field(default_factory=ApplicationCatalog.empty)
     application_router: ApplicationRouter | None = None
     application_executors: Mapping[str, ApplicationExecutor] = field(default_factory=dict)
@@ -764,13 +764,33 @@ class RuntimeComposition:
                         )
                 except (DirectNoteMutationError, TaskDirectMutationError):
                     raise
-                self.refresh_indexes()
-            return {
+                if operation == "task_status" and self.refresh_task_lifecycle_indexes is not None:
+                    try:
+                        self.refresh_task_lifecycle_indexes(
+                            result.path, cast(str, payload["expected_source_hash"])
+                        )
+                    except (ContextIndexError, SemanticIndexError, ValueError):
+                        self.refresh_indexes()
+                else:
+                    self.refresh_indexes()
+            response = {
                 "kind": "mutation",
                 "operation": result.operation,
                 "note_id": result.note_id,
                 "history": {"status": result.history.status.value},
             }
+            if operation == "task_status":
+                response.update(
+                    {
+                        "mutation": {
+                            "revision": result.revision,
+                            "source_hash": result.source_hash,
+                        },
+                        "status": result.status,
+                        "completed_at": result.completed_at,
+                    }
+                )
+            return response
         if operation == "intelligent":
             if (
                 self.intelligent_notes_execute is None
@@ -1224,7 +1244,6 @@ def build_runtime_from_environment() -> RuntimeComposition:
         domain_interpretation: DomainInterpretation | None = None,
         planner_decorator: Callable[[Any], Any] | None = None,
         write_preflight_guard: WritePreflightGuard | None = None,
-        content_transformer: object | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
         clock = _current_time()
@@ -1269,7 +1288,6 @@ def build_runtime_from_environment() -> RuntimeComposition:
             now=clock["timestamp"],
             context_limit=context_limit,
             writer=writer,
-            content_transformer=content_transformer,
             fact_selector=fact_selector,
             semantic_set_selector=semantic_set_selector,
             pending_recorder=pending_recorder,
@@ -1304,6 +1322,31 @@ def build_runtime_from_environment() -> RuntimeComposition:
         for capability_id, index in application_semantic_indexes.items():
             index.rebuild(
                 repository, planning_schema_for_capability(schema, capability_id), embedder
+            )
+
+    def refresh_task_lifecycle_indexes(path: str, expected_source_hash: str) -> None:
+        """Incrementally refresh derived rows after a Task metadata-only lifecycle mutation."""
+        context_index.refresh_existing_note(
+            repository,
+            schema,
+            embedder,
+            path=path,
+            expected_source_hash=expected_source_hash,
+        )
+        semantic_index.refresh_existing_note(
+            repository,
+            schema,
+            embedder,
+            path=path,
+            expected_source_hash=expected_source_hash,
+        )
+        for capability_id, index in application_semantic_indexes.items():
+            index.refresh_existing_note(
+                repository,
+                planning_schema_for_capability(schema, capability_id),
+                embedder,
+                path=path,
+                expected_source_hash=expected_source_hash,
             )
 
     def intelligent_notes(
@@ -1676,7 +1719,6 @@ def build_runtime_from_environment() -> RuntimeComposition:
             domain_interpretation=domain,
             planner_decorator=lambda planner: TaskCorePlanner(planner, task),
             write_preflight_guard=TaskLifecycleGuard(task.operation),
-            content_transformer=TaskCheckboxContentTransformer(),
         )
         return replace(
             core_result,
@@ -1692,6 +1734,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
+        refresh_task_lifecycle_indexes=refresh_task_lifecycle_indexes,
         application_catalog=application_catalog,
         application_router=application_router,
         application_executors=application_executors,
