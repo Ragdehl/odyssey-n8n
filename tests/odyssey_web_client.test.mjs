@@ -663,6 +663,13 @@ test("Notes transport fails closed for a stale cursor, malformed JSON, and netwo
     (error) => error instanceof NotesRequestError && error.code === "STALE_CURSOR",
   );
   await assert.rejects(
+    requestNotes({
+      operation: "query",
+      fetchImpl: async () => response({ok: true, payload: {error: "STALE_CURSOR"}}),
+    }),
+    (error) => error instanceof NotesRequestError && error.code === "STALE_CURSOR",
+  );
+  await assert.rejects(
     requestNotes({operation: "query", fetchImpl: async () => { throw new Error("offline"); }}),
     NotesRequestError,
   );

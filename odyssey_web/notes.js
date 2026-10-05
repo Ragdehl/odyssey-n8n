@@ -25,7 +25,7 @@ export function mountNotes(root, {
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
     editingWorkSessionId: null, editingWorkSessionActivityId: null,
-    workSessionDisclosure: new Map(),
+    workSessionDisclosure: new Map(), feedDirty: false,
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -70,9 +70,15 @@ export function mountNotes(root, {
       renderList();
       renderStatus(page.total);
     } catch (error) {
+      if (error instanceof NotesRequestError && error.code === "STALE_CURSOR" && !reset) {
+        state.cursor = null;
+        state.loading = false;
+        await load({reset: true, mode, snapshotIds, throwOnError});
+        return;
+      }
       if (error instanceof NotesRequestError && error.code === "STALE_CURSOR") {
         state.cursor = null;
-        status.textContent = "Las notas cambiaron. Actualiza la búsqueda.";
+        status.textContent = "Las notas han cambiado. Vuelve a intentarlo.";
       } else {
         status.textContent = "No se han podido cargar las notas.";
       }
@@ -176,8 +182,13 @@ export function mountNotes(root, {
 
   async function refreshCurrentList() {
     state.current = null;
+    state.feedDirty = false;
     showList();
     await load({reset: true, mode: state.query.trim() ? "local" : "feed"});
+  }
+
+  function markFeedDirty() {
+    if (!state.historical) state.feedDirty = true;
   }
 
   async function runIntelligentSearch({throwOnError = false} = {}) {
@@ -314,6 +325,10 @@ export function mountNotes(root, {
       state.current = null;
       state.back = [];
       state.forward = [];
+      if (state.feedDirty && !state.historical) {
+        void refreshCurrentList();
+        return;
+      }
       showList();
       renderList();
       renderStatus();
@@ -431,6 +446,7 @@ export function mountNotes(root, {
       if (result.completed_at) properties.completed_at = result.completed_at;
       else delete properties.completed_at;
       state.current = {...value, note: {...value.note, properties}, mutation: result.mutation};
+      markFeedDirty();
       renderDetail();
       status.textContent = completed ? "Tarea completada." : "Tarea reabierta.";
     } catch (error) {
@@ -866,6 +882,7 @@ export function mountNotes(root, {
         note_id: child.note.id, completed, expected_revision: child.mutation.revision,
         expected_source_hash: child.mutation.source_hash, request_id: mutationRequestId(),
       }});
+      markFeedDirty();
       if (state.current) renderDetail();
       status.textContent = completed ? "Subtarea completada." : "Subtarea reabierta.";
     } catch (error) {
@@ -904,6 +921,7 @@ export function mountNotes(root, {
         parent_note_id: parent.note.id, title, expected_revision: parent.mutation.revision,
         expected_source_hash: parent.mutation.source_hash, request_id: mutationRequestId(),
       }});
+      markFeedDirty();
       renderDetail();
       status.textContent = "Subtarea añadida.";
     } catch (error) {

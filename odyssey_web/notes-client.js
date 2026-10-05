@@ -29,8 +29,9 @@ export async function requestNotes({endpoint = "/api/notes", operation, payload 
   }
   let value;
   try { value = await response.json(); } catch { throw new NotesRequestError("Odyssey devolvió notas inválidas."); }
-  if (!response.ok) {
-    throw new NotesRequestError("No se ha podido completar la consulta.", typeof value?.error === "string" ? value.error : null);
+  const responseError = typeof value?.error === "string" ? value.error : null;
+  if (!response.ok || responseError) {
+    throw new NotesRequestError("No se ha podido completar la consulta.", responseError);
   }
   const result = validateNotesResponse(value);
   const finished = typeof monotonicImpl === "function" ? monotonicImpl() : null;

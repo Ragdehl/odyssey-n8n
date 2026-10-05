@@ -83,8 +83,8 @@ function pageItem(id, name = id) {
   return {id, name, type: "person", updated_at: "2026-09-22T10:00:00Z", tags: [], properties: {}};
 }
 
-function page({mode = "feed", items = [pageItem("a", "Resultado A")], total = items.length, applied_filters = []} = {}) {
-  return {mode, items, total, next_cursor: null, sort: "relevance", applied_filters, snapshot_offset: 0};
+function page({mode = "feed", items = [pageItem("a", "Resultado A")], total = items.length, applied_filters = [], next_cursor = null} = {}) {
+  return {mode, items, total, next_cursor, sort: "relevance", applied_filters, snapshot_offset: 0};
 }
 
 function detail(id, name = id, mutation = null, body_blocks = []) {
@@ -196,6 +196,34 @@ async function mountMutationNote({confirmImpl}) {
   await flush();
   return {mounted, calls};
 }
+
+
+test("load more recovers a stale cursor by restarting the current feed", async () => {
+  let queries = 0;
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation !== "query") return page();
+      queries += 1;
+      if (queries === 1) return page({items: [pageItem("old", "Antes")], total: 2, next_cursor: "old-cursor"});
+      if (queries === 2) {
+        assert.equal(payload.cursor, "old-cursor");
+        throw new NotesRequestError("cursor obsoleto", "STALE_CURSOR");
+      }
+      assert.equal(payload.cursor, null);
+      return page({items: [pageItem("new", "Nueva"), pageItem("old", "Antes")], total: 2});
+    },
+  });
+
+  mounted.elements.list.querySelector(".notes-more").click();
+  await flush();
+  await flush();
+
+  assert.equal(queries, 3);
+  assert.equal(mounted.elements.list.textContent.includes("Nueva"), true);
+  assert.equal(mounted.elements.list.querySelector(".notes-more"), null);
+  assert.equal(mounted.elements.status.textContent, "2 notas");
+});
 
 test("generic open-note event opens the stable note ID through the existing detail path", async () => {
   const calls = [];
@@ -848,7 +876,9 @@ test("inline subtask creation sends one bounded parent mutation and refreshes th
           history: {status: "COMMITTED"}, child: {id: "child-new", name: payload.title, status: "pending"},
         };
       }
-      return page();
+      return created
+        ? page({items: [pageItem("child-new", "Preparar maletas"), pageItem("task-odyssey", "Trabajar en Odyssey")], total: 2})
+        : page({items: [pageItem("task-odyssey", "Trabajar en Odyssey")], total: 1, next_cursor: "old-cursor"});
     },
   });
   mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
@@ -871,6 +901,13 @@ test("inline subtask creation sends one bounded parent mutation and refreshes th
   assert.equal(create.payload.expected_source_hash, "a".repeat(64));
   assert.equal(mounted.elements.detail.textContent.includes("Preparar maletas"), true);
   assert.equal(calls.filter(({operation}) => operation === "task_subtask_create").length, 1);
+
+  mounted.elements.detail.querySelector(".note-view-header").children[0].click();
+  await flush();
+  assert.equal(mounted.elements.list.textContent.includes("Preparar maletas"), true);
+  assert.equal(mounted.elements.status.textContent, "2 notas");
+  const feedQueries = calls.filter(({operation}) => operation === "query");
+  assert.equal(feedQueries.at(-1).payload.cursor, null);
 });
 
 
