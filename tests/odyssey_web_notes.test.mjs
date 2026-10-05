@@ -109,9 +109,9 @@ function taskDetail({sessions = [], status = "pending"} = {}) {
   };
 }
 
-function workSession({ended_at = null, revision = 1, source = "b", activity = []} = {}) {
+function workSession({id = "session-one", ended_at = null, revision = 1, source = "b", activity = []} = {}) {
   return {
-    id: "session-one", task_id: "task-odyssey", started_at: "2026-10-05T18:00:00+02:00",
+    id, task_id: "task-odyssey", started_at: "2026-10-05T18:00:00+02:00",
     ended_at, activity, mutation: {revision, source_hash: source.repeat(64)},
   };
 }
@@ -716,6 +716,171 @@ test("completed Task disables starting a new Work Session but keeps session hist
   assert.equal(mounted.elements.detail.querySelector(".work-session-start").disabled, true);
   assert.equal(mounted.elements.detail.textContent.includes("1 h"), true);
 });
+
+test("Work Session disclosure defaults activity and active sessions open, keeps empty history closed, and preserves a manual close", async () => {
+  const sessions = [
+    workSession({id: "active"}),
+    workSession({id: "with-activity", ended_at: "2026-10-05T19:00:00+02:00", activity: [{id: "a", created_at: "2026-10-05T19:00:00+02:00", text: "Avance"}]}),
+    workSession({id: "empty", ended_at: "2026-10-05T20:00:00+02:00"}),
+  ];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail({sessions});
+      if (operation === "backlinks") return {items: []};
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  assert.equal(mounted.elements.detail.textContent.includes("Avance"), true);
+  assert.equal(mounted.elements.detail.textContent.includes("Sin actividad registrada todavía."), true);
+  const opens = allByClass(mounted.elements.detail, "work-session-open");
+  assert.equal(opens.map((item) => item.textContent).join(","), "Cerrar,Cerrar,Abrir");
+  opens[1].click();
+  await flush();
+  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "Cerrar,Abrir,Abrir");
+  allByClass(mounted.elements.detail, "work-session-open")[0].click();
+  await flush();
+  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "Abrir,Abrir,Abrir");
+});
+
+test("parent subtask checkbox fetches current child tokens for completion and reopen", async () => {
+  const calls = [];
+  let childStatus = "pending";
+  const backlinks = () => ({items: [{source: {id: "child", name: "Hija", type: "task", properties: {status: childStatus}, tags: [], created_at: "x", updated_at: "x"}, snippets: [{block: {segments: [{text: "Tarea superior: [[Padre]]"}]}}]}]});
+  const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
+    calls.push({operation, payload});
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") return payload.note_id === "child"
+      ? {...taskDetail({status: childStatus}), note: {...taskDetail().note, id: "child", name: "Hija", properties: {status: childStatus}}, mutation: {revision: 8, source_hash: "c".repeat(64)}}
+      : taskDetail();
+    if (operation === "backlinks") return backlinks();
+    if (operation === "task_status") { childStatus = payload.completed ? "completed" : "pending"; return {kind: "mutation", operation: payload.completed ? "task_completed" : "task_reopened", note_id: "child", history: {status: "COMMITTED"}, mutation: {revision: 9, source_hash: "d".repeat(64)}, status: childStatus, completed_at: null}; }
+    return page();
+  }});
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  mounted.elements.detail.querySelector(".note-subtask-toggle").click();
+  await flush();
+  assert.equal(calls.filter(({operation}) => operation === "detail").at(-1).payload.note_id, "child");
+  assert.equal(calls.filter(({operation}) => operation === "task_status").at(-1).payload.completed, true);
+  mounted.elements.detail.querySelector(".note-subtask-toggle").click();
+  await flush();
+  assert.equal(calls.filter(({operation}) => operation === "task_status").at(-1).payload.completed, false);
+});
+
+test("parent completion asks before sending task_status when subtasks remain open", async () => {
+  const calls = [];
+  const mounted = await mountNotes({confirmImpl: () => false, requestNotes: async ({operation, payload}) => {
+    calls.push({operation, payload});
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") return taskDetail();
+    if (operation === "backlinks") return {items: [{source: {id: "child", name: "Abierta", type: "task", properties: {status: "pending"}, tags: [], created_at: "x", updated_at: "x"}, snippets: [{block: {segments: [{text: "Tarea superior: [[Padre]]"}]}}]}]};
+    return page();
+  }});
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  mounted.elements.detail.querySelector(".note-task-toggle").click();
+  await flush();
+  assert.equal(calls.some(({operation}) => operation === "task_status"), false);
+});
+
+
+test("parent completion confirms exact open-subtask count and mutates only the parent when accepted", async () => {
+  const calls = [];
+  const confirmations = [];
+  const subtask = (id, name, status) => ({
+    source: {id, name, type: "task", properties: {status}, tags: [], created_at: "x", updated_at: "x"},
+    snippets: [{block: {segments: [{text: "Tarea superior: [[Padre]]"}]}}],
+  });
+  const mounted = await mountNotes({
+    confirmImpl: (message) => { confirmations.push(message); return true; },
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail();
+      if (operation === "backlinks") return {items: [
+        subtask("open-one", "Abierta", "pending"),
+        subtask("open-two", "En curso", "in_progress"),
+        subtask("done", "Hecha", "completed"),
+        subtask("cancelled", "Cancelada", "cancelled"),
+      ]};
+      if (operation === "task_status") return {
+        kind: "mutation", operation: "task_completed", note_id: "task-odyssey",
+        history: {status: "COMMITTED"}, mutation: {revision: 5, source_hash: "e".repeat(64)},
+        status: "completed", completed_at: "2026-10-05T21:00:00+02:00",
+      };
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  mounted.elements.detail.querySelector(".note-task-toggle").click();
+  await flush();
+
+  assert.deepEqual(confirmations, ["Quedan 2 subtareas abiertas. ¿Completar la tarea de todos modos?"]);
+  const lifecycleCalls = calls.filter(({operation}) => operation === "task_status");
+  assert.equal(lifecycleCalls.length, 1);
+  assert.equal(lifecycleCalls[0].payload.note_id, "task-odyssey");
+  assert.equal(lifecycleCalls[0].payload.completed, true);
+  assert.equal(lifecycleCalls.some(({payload}) => payload.note_id?.startsWith("open-")), false);
+});
+
+
+test("inline subtask creation sends one bounded parent mutation and refreshes the canonical backlink list", async () => {
+  const calls = [];
+  let created = false;
+  const childBacklink = {
+    source: {id: "child-new", name: "Preparar maletas", type: "task", properties: {status: "pending"}, tags: [], created_at: "x", updated_at: "x"},
+    snippets: [{block: {segments: [{text: "Tarea superior: [[Trabajar en Odyssey]]"}]}}],
+  };
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail();
+      if (operation === "backlinks") return {items: created ? [childBacklink] : []};
+      if (operation === "task_subtask_create") {
+        created = true;
+        return {
+          kind: "mutation", operation: "task_subtask_created", note_id: "child-new",
+          history: {status: "COMMITTED"}, child: {id: "child-new", name: payload.title, status: "pending"},
+        };
+      }
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  const form = mounted.elements.detail.querySelector(".note-subtask-create-form");
+  assert.ok(form);
+  const input = form.querySelector("input");
+  input.value = "  Preparar maletas  ";
+  form.emit("submit");
+  await flush();
+
+  const create = calls.find(({operation}) => operation === "task_subtask_create");
+  assert.ok(create);
+  assert.deepEqual(Object.keys(create.payload).sort(), [
+    "expected_revision", "expected_source_hash", "parent_note_id", "request_id", "title",
+  ]);
+  assert.equal(create.payload.parent_note_id, "task-odyssey");
+  assert.equal(create.payload.title, "Preparar maletas");
+  assert.equal(create.payload.expected_revision, 4);
+  assert.equal(create.payload.expected_source_hash, "a".repeat(64));
+  assert.equal(mounted.elements.detail.textContent.includes("Preparar maletas"), true);
+  assert.equal(calls.filter(({operation}) => operation === "task_subtask_create").length, 1);
+});
+
+
+function allByClass(root, className, found = []) {
+  for (const child of root.children ?? []) {
+    if ((child.className ?? "").split(" ").includes(className)) found.push(child);
+    allByClass(child, className, found);
+  }
+  return found;
+}
 
 
 test("legacy Task checklist marker is hidden when it duplicates the Task action", async () => {

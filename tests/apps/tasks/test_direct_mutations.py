@@ -23,6 +23,29 @@ BASE = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8")
 SCHEMA = compose_application_schema(BASE, (TASK_SCHEMA_EXTENSION,))
 
 
+class EmptyIndex:
+    """Keep Core preflight deterministic while exact identity handles this fixture."""
+
+    def find_candidates(self, *args: object, **kwargs: object) -> tuple[object, ...]:
+        """Return no semantic candidates."""
+        return ()
+
+
+class EmptyEmbedder:
+    """Satisfy the local Core resolution dependency."""
+
+    model_name = "test"
+    model_version = "1"
+
+
+class NoReasoner:
+    """Fail if exact fixture identity unexpectedly reaches contextual reasoning."""
+
+    def resolve(self, request: object) -> object:
+        """Reject unexpected contextual resolution."""
+        raise AssertionError("unexpected contextual resolution")
+
+
 def _build(tmp_path: Path, status: str = "pending"):
     vault = tmp_path / "vault"
     vault.mkdir()
@@ -94,6 +117,7 @@ def test_checkbox_rejects_stale_or_invalid_transition(tmp_path: Path) -> None:
             actor="test",
             now="2026-10-05T07:10:00+02:00",
         )
+
     with pytest.raises(TaskDirectMutationError, match="STALE_NOTE"):
         service.set_completed(
             note_id="task-bank",
@@ -101,6 +125,94 @@ def test_checkbox_rejects_stale_or_invalid_transition(tmp_path: Path) -> None:
             expected_revision=revision + 1,
             expected_source_hash=source_hash,
             request_id="stale",
+            actor="test",
+            now="2026-10-05T07:10:00+02:00",
+        )
+
+
+def test_subtask_create_uses_core_preflight_and_one_canonical_parent_fact(tmp_path: Path) -> None:
+    repository, _service = _build(tmp_path)
+    service = TaskDirectMutationService(
+        repository,
+        SCHEMA,
+        None,
+        semantic_index=EmptyIndex(),
+        embedder=EmptyEmbedder(),
+        contextual_reasoner=NoReasoner(),
+        semantic_limit=5,
+    )
+    revision, source_hash = _tokens(repository)
+    result = service.create_subtask(
+        parent_note_id="task-bank",
+        title="Pedir el extracto",
+        expected_revision=revision,
+        expected_source_hash=source_hash,
+        request_id="child",
+        actor="test",
+        now="2026-10-05T07:10:00+02:00",
+    )
+    assert result.operation == "task_subtask_created"
+    assert result.status == "pending"
+    child = parse_note(repository.read_text(result.path))
+    assert child.metadata["type"] == "task"
+    assert child.metadata["status"] == "pending"
+    assert child.content.count("Tarea superior:") == 1
+    assert "[[bank|Llamar al banco]]" in child.content
+
+
+def test_subtask_create_rejects_closed_parent(tmp_path: Path) -> None:
+    repository, _service = _build(tmp_path, "completed")
+    service = TaskDirectMutationService(
+        repository,
+        SCHEMA,
+        None,
+        semantic_index=EmptyIndex(),
+        embedder=EmptyEmbedder(),
+        contextual_reasoner=NoReasoner(),
+        semantic_limit=5,
+    )
+    revision, source_hash = _tokens(repository)
+    with pytest.raises(TaskDirectMutationError, match="TASK_PARENT_CLOSED"):
+        service.create_subtask(
+            parent_note_id="task-bank",
+            title="No crear",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="child",
+            actor="test",
+            now="2026-10-05T07:10:00+02:00",
+        )
+
+
+def test_subtask_create_rejects_an_existing_task_title(tmp_path: Path) -> None:
+    repository, _service = _build(tmp_path)
+    create_entity(
+        repository,
+        SCHEMA,
+        path="existing.md",
+        entity_id="task-existing",
+        metadata={"name": "Pedir el extracto", "type": "task", "status": "pending"},
+        content="- Existente.\n",
+        actor="fixture",
+        now="2026-10-05T07:00:00+02:00",
+    )
+    service = TaskDirectMutationService(
+        repository,
+        SCHEMA,
+        None,
+        semantic_index=EmptyIndex(),
+        embedder=EmptyEmbedder(),
+        contextual_reasoner=NoReasoner(),
+        semantic_limit=5,
+    )
+    revision, source_hash = _tokens(repository)
+    with pytest.raises(TaskDirectMutationError, match="TASK_SUBTASK_TARGET_UNAVAILABLE"):
+        service.create_subtask(
+            parent_note_id="task-bank",
+            title="Pedir el extracto",
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id="child",
             actor="test",
             now="2026-10-05T07:10:00+02:00",
         )

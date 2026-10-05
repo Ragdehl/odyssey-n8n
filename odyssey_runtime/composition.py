@@ -892,7 +892,7 @@ class RuntimeComposition:
                     for item in self.work_session_service.list_for_task(result.task_id)
                 ],
             }
-        if operation in {"delete_fact", "delete_note", "task_status"}:
+        if operation in {"delete_fact", "delete_note", "task_status", "task_subtask_create"}:
             if self.direct_notes_mutations is None or self.notes_mutation_actor is None:
                 raise ValueError("Notes mutation service is unavailable")
             request_id = payload.get("request_id")
@@ -936,7 +936,7 @@ class RuntimeComposition:
                             ):
                                 raise WorkSessionError("WORK_SESSION_HISTORY_PRESENT")
                         result = self.direct_notes_mutations.delete_note(**common)
-                    else:
+                    elif operation == "task_status":
                         if self.direct_task_mutations is None:
                             raise ValueError("Task mutation service is unavailable")
                         if set(payload) != {
@@ -949,6 +949,31 @@ class RuntimeComposition:
                             raise ValueError("Task status payload is invalid")
                         result = self.direct_task_mutations.set_completed(
                             **common, completed=payload["completed"]
+                        )
+                    else:
+                        if self.direct_task_mutations is None:
+                            raise ValueError("Task mutation service is unavailable")
+                        if (
+                            set(payload)
+                            != {
+                                "parent_note_id",
+                                "title",
+                                "expected_revision",
+                                "expected_source_hash",
+                                "request_id",
+                            }
+                            or not isinstance(payload.get("parent_note_id"), str)
+                            or not isinstance(payload.get("title"), str)
+                        ):
+                            raise ValueError("Task subtask creation payload is invalid")
+                        result = self.direct_task_mutations.create_subtask(
+                            parent_note_id=payload["parent_note_id"],
+                            title=payload["title"],
+                            expected_revision=cast(int, payload["expected_revision"]),
+                            expected_source_hash=cast(str, payload["expected_source_hash"]),
+                            request_id=request_id,
+                            actor=common["actor"],
+                            now=cast(str, common["now"]),
                         )
                 except (DirectNoteMutationError, TaskDirectMutationError, WorkSessionError):
                     raise
@@ -976,6 +1001,16 @@ class RuntimeComposition:
                         },
                         "status": result.status,
                         "completed_at": result.completed_at,
+                    }
+                )
+            elif operation == "task_subtask_create":
+                response.update(
+                    {
+                        "child": {
+                            "id": result.note_id,
+                            "name": result.name,
+                            "status": result.status,
+                        }
                     }
                 )
             return response
@@ -1656,7 +1691,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
     application_router = OpenAIApplicationRouter.from_environment(application_catalog)
     application_executors: dict[str, ApplicationExecutor] = {}
     direct_task_mutations = (
-        TaskDirectMutationService(repository, schema, history_recorder)
+        TaskDirectMutationService(
+            repository,
+            schema,
+            history_recorder,
+            semantic_index=application_semantic_indexes["tasks"],
+            embedder=embedder,
+            contextual_reasoner=contextual_reasoner,
+            semantic_limit=context_limit,
+        )
         if "tasks" in enabled_application_ids
         else None
     )

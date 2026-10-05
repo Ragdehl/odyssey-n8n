@@ -166,6 +166,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "delete_fact",
                         "delete_note",
                         "task_status",
+                        "task_subtask_create",
                         "work_session_start",
                         "work_session_stop",
                         "work_session_edit",

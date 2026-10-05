@@ -24,7 +24,8 @@ export function mountNotes(root, {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
-    editingWorkSessionId: null, openedWorkSessionId: null, editingWorkSessionActivityId: null,
+    editingWorkSessionId: null, editingWorkSessionActivityId: null,
+    workSessionDisclosure: new Map(),
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -283,7 +284,6 @@ export function mountNotes(root, {
       state.current = value;
       state.editing = false;
       state.editingWorkSessionId = null;
-      state.openedWorkSessionId = null;
       state.editingWorkSessionActivityId = null;
       state.feedScroll = list.scrollTop;
       renderDetail();
@@ -295,7 +295,6 @@ export function mountNotes(root, {
   function showList() {
     state.editing = false;
     state.editingWorkSessionId = null;
-    state.openedWorkSessionId = null;
     state.editingWorkSessionActivityId = null;
     detail.hidden = true;
     listView.hidden = false;
@@ -390,7 +389,7 @@ export function mountNotes(root, {
       const subtasksHeading = document.createElement("h3");
       subtasksHeading.textContent = "Subtareas";
       subtasks.append(subtasksHeading);
-      void appendSubtasks(subtasks, value.note.id);
+      void appendSubtasks(subtasks, value);
       related.push(subtasks);
     }
     const backlinks = document.createElement("section");
@@ -411,6 +410,17 @@ export function mountNotes(root, {
   }
 
   async function toggleTask(value, completed, control) {
+    if (completed) {
+      let subtasks;
+      try {
+        subtasks = await loadSubtasks(value.note.id);
+      } catch {
+        status.textContent = "No se han podido comprobar las subtareas. Vuelve a intentarlo.";
+        return;
+      }
+      const openSubtasks = subtasks.filter((item) => ["pending", "in_progress"].includes(item.source.properties?.status)).length;
+      if (openSubtasks && !confirmImpl(`Quedan ${openSubtasks} subtarea${openSubtasks === 1 ? "" : "s"} abierta${openSubtasks === 1 ? "" : "s"}. ¿Completar la tarea de todos modos?`)) return;
+    }
     control.disabled = true;
     try {
       const result = await requestNotes({endpoint, operation: "task_status", payload: {
@@ -467,7 +477,9 @@ export function mountNotes(root, {
     for (const session of sessions) {
       const row = document.createElement("div");
       const editingSession = state.editingWorkSessionId === session.id;
-      const openedSession = state.openedWorkSessionId === session.id;
+      const openedSession = state.workSessionDisclosure.has(session.id)
+        ? state.workSessionDisclosure.get(session.id)
+        : !session.ended_at || Array.isArray(session.activity) && session.activity.length > 0;
       row.className = `work-session-row${session.ended_at ? "" : " active"}${editingSession ? " editing" : ""}${openedSession ? " opened" : ""}`;
       if (editingSession) {
         const startLabel = document.createElement("label");
@@ -504,7 +516,7 @@ export function mountNotes(root, {
         const actions = document.createElement("div");
         actions.className = "work-session-row-actions";
         const open = button(openedSession ? "Cerrar" : "Abrir", () => {
-          state.openedWorkSessionId = openedSession ? null : session.id;
+          state.workSessionDisclosure.set(session.id, !openedSession);
           state.editingWorkSessionActivityId = null;
           renderDetail();
         });
@@ -612,7 +624,8 @@ export function mountNotes(root, {
       state.current = {...value, work_sessions: result.work_sessions};
       state.editingWorkSessionId = null;
       state.editingWorkSessionActivityId = null;
-      state.openedWorkSessionId = result.work_sessions.find((item) => !item.ended_at)?.id ?? null;
+      const active = result.work_sessions.find((item) => !item.ended_at);
+      if (active) state.workSessionDisclosure.set(active.id, true);
       renderDetail();
       status.textContent = "Sesión de trabajo iniciada.";
     } catch (error) {
@@ -635,7 +648,7 @@ export function mountNotes(root, {
       state.current = {...value, work_sessions: result.work_sessions};
       state.editingWorkSessionId = null;
       state.editingWorkSessionActivityId = null;
-      state.openedWorkSessionId = session.id;
+      state.workSessionDisclosure.set(session.id, true);
       renderDetail();
       status.textContent = "Sesión terminada. Puedes seguir añadiendo actividad si lo necesitas.";
     } catch (error) {
@@ -663,7 +676,7 @@ export function mountNotes(root, {
       }});
       state.current = {...value, work_sessions: result.work_sessions};
       state.editingWorkSessionId = null;
-      state.openedWorkSessionId = session.id;
+      state.workSessionDisclosure.set(session.id, true);
       renderDetail();
       status.textContent = "Sesión de trabajo corregida.";
     } catch (error) {
@@ -690,7 +703,7 @@ export function mountNotes(root, {
         request_id: mutationRequestId(),
       }});
       state.current = {...value, work_sessions: result.work_sessions};
-      state.openedWorkSessionId = session.id;
+      state.workSessionDisclosure.set(session.id, true);
       state.editingWorkSessionActivityId = null;
       renderDetail();
       status.textContent = "Actividad añadida a la sesión.";
@@ -718,7 +731,7 @@ export function mountNotes(root, {
         request_id: mutationRequestId(),
       }});
       state.current = {...value, work_sessions: result.work_sessions};
-      state.openedWorkSessionId = session.id;
+      state.workSessionDisclosure.set(session.id, true);
       state.editingWorkSessionActivityId = null;
       renderDetail();
       status.textContent = "Actividad corregida.";
@@ -741,7 +754,7 @@ export function mountNotes(root, {
         request_id: mutationRequestId(),
       }});
       state.current = {...value, work_sessions: result.work_sessions};
-      state.openedWorkSessionId = session.id;
+      state.workSessionDisclosure.set(session.id, true);
       state.editingWorkSessionActivityId = null;
       renderDetail();
       status.textContent = "Actividad eliminada.";
@@ -794,6 +807,9 @@ export function mountNotes(root, {
     if (error instanceof NotesRequestError && error.code === "WORK_SESSION_END_BEFORE_START") return "La hora de fin no puede ser anterior a la hora de inicio.";
     if (error instanceof NotesRequestError && error.code === "WORK_SESSION_ACTIVITY_INVALID") return "La actividad no es válida.";
     if (error instanceof NotesRequestError && error.code === "WORK_SESSION_ACTIVITY_UNAVAILABLE") return "Esa actividad ha cambiado. Abre de nuevo la sesión antes de modificarla.";
+    if (error instanceof NotesRequestError && error.code === "TASK_PARENT_CLOSED") return "No se pueden añadir subtareas a una tarea completada o cancelada.";
+    if (error instanceof NotesRequestError && error.code === "TASK_SUBTASK_INVALID") return "El título de la subtarea no es válido.";
+    if (error instanceof NotesRequestError && error.code === "TASK_SUBTASK_TARGET_UNAVAILABLE") return "Ya existe una tarea con ese título o no se puede identificar de forma segura.";
     if (error instanceof NotesRequestError && ["WORK_SESSION_NOT_ACTIVE", "WORK_SESSION_UNAVAILABLE", "WORK_SESSION_STATE_INVALID"].includes(error.code)) return "La sesión de trabajo ha cambiado. Abre de nuevo la tarea antes de modificarla.";
     if (error instanceof NotesRequestError && ["STALE_NOTE", "FACT_UNAVAILABLE", "NOTE_UNAVAILABLE", "TASK_UNAVAILABLE", "TASK_INVALID_TRANSITION"].includes(error.code)) return "La nota ha cambiado. Ábrela de nuevo antes de modificarla.";
     return "No se ha podido actualizar la nota.";
@@ -807,26 +823,92 @@ export function mountNotes(root, {
     return item.source.type === "task" && backlinkText(item).includes("Tarea superior:");
   }
 
-  async function appendSubtasks(target, id) {
+  async function loadSubtasks(id) {
+    const value = await requestNotes({endpoint, operation: "backlinks", payload: {note_id: id}});
+    return value.items.filter(isSubtaskBacklink);
+  }
+
+  async function appendSubtasks(target, parent) {
     try {
-      const value = await requestNotes({endpoint, operation: "backlinks", payload: {note_id: id}});
-      const items = value.items.filter(isSubtaskBacklink);
+      const items = await loadSubtasks(parent.note.id);
       if (!items.length) {
         target.append(document.createTextNode("Sin subtareas."));
-        return;
+      } else {
+        for (const item of items) {
+          const row = document.createElement("div");
+          row.className = "backlink note-subtask";
+          const completed = item.source.properties?.status === "completed";
+          const cancelled = item.source.properties?.status === "cancelled";
+          const toggle = button(cancelled ? "⊘" : completed ? "☑" : "☐", () => void toggleSubtask(item.source, !completed, toggle));
+          toggle.className = "note-subtask-toggle";
+          toggle.setAttribute("role", "checkbox");
+          toggle.setAttribute("aria-checked", completed ? "true" : "false");
+          toggle.setAttribute("aria-label", cancelled ? `${item.source.name} cancelada` : completed ? `Reabrir ${item.source.name}` : `Completar ${item.source.name}`);
+          if (cancelled) toggle.disabled = true;
+          const name = button(item.source.name, () => void open(item.source.id));
+          name.className = "note-subtask-name";
+          row.append(toggle, name);
+          target.append(row);
+        }
       }
-      for (const item of items) {
-        const row = button("", () => void open(item.source.id));
-        row.className = "backlink note-subtask";
-        const completed = item.source.properties?.status === "completed";
-        const marker = document.createElement("span");
-        marker.className = "note-subtask-status";
-        marker.textContent = completed ? "☑" : "☐";
-        row.append(marker, document.createTextNode(item.source.name));
-        target.append(row);
-      }
+      if (parent.mutation && ["pending", "in_progress"].includes(parent.note.properties?.status)) target.append(renderSubtaskCreateForm(parent));
     } catch {
       target.append(document.createTextNode("No se han podido cargar las subtareas."));
+    }
+  }
+
+  async function toggleSubtask(summary, completed, control) {
+    control.disabled = true;
+    try {
+      const child = await requestNotes({endpoint, operation: "detail", payload: {note_id: summary.id}});
+      if (!child.mutation || child.note.type !== "task") throw new NotesRequestError("Subtarea no disponible.");
+      await requestNotes({endpoint, operation: "task_status", payload: {
+        note_id: child.note.id, completed, expected_revision: child.mutation.revision,
+        expected_source_hash: child.mutation.source_hash, request_id: mutationRequestId(),
+      }});
+      if (state.current) renderDetail();
+      status.textContent = completed ? "Subtarea completada." : "Subtarea reabierta.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  function renderSubtaskCreateForm(parent) {
+    const form = document.createElement("form");
+    form.className = "note-subtask-create-form";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 240;
+    input.placeholder = "Añadir subtarea…";
+    input.setAttribute("aria-label", "Título de la subtarea");
+    const add = button("+ Añadir subtarea", () => {});
+    add.type = "submit";
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void createSubtask(parent, input, add);
+    });
+    form.append(input, add);
+    return form;
+  }
+
+  async function createSubtask(parent, input, control) {
+    const title = input.value.trim();
+    if (!title) {
+      input.focus();
+      return;
+    }
+    control.disabled = true;
+    try {
+      await requestNotes({endpoint, operation: "task_subtask_create", payload: {
+        parent_note_id: parent.note.id, title, expected_revision: parent.mutation.revision,
+        expected_source_hash: parent.mutation.source_hash, request_id: mutationRequestId(),
+      }});
+      renderDetail();
+      status.textContent = "Subtarea añadida.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
     }
   }
 

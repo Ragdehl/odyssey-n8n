@@ -6,10 +6,16 @@ import json
 from pathlib import Path
 
 from odyssey_apps.schema_extensions import compose_application_schema
-from odyssey_apps.tasks import TASK_SCHEMA_EXTENSION, TaskWorkSessionService
+from odyssey_apps.tasks import (
+    TASK_SCHEMA_EXTENSION,
+    TaskDirectMutationService,
+    TaskWorkSessionService,
+)
 from odyssey_core import create_entity
 from odyssey_core.context import ContextIndex
 from odyssey_core.note_queries import NotesQueryService
+from odyssey_core.notes import parse_note
+from odyssey_core.semantic import SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 from odyssey_runtime.composition import RuntimeComposition
 
@@ -27,6 +33,11 @@ class Embedder:
 
     def embed_queries(self, texts):
         return [[1.0, 0.5] for _ in texts]
+
+
+class NoReasoner:
+    def resolve(self, request):
+        return {"outcome": "UNRESOLVED", "id": None, "ambiguous_ids": []}, {"output_tokens": 0}
 
 
 def test_runtime_task_detail_start_stop_and_edit_share_one_domain_service(tmp_path: Path) -> None:
@@ -129,3 +140,67 @@ def test_runtime_task_detail_start_stop_and_edit_share_one_domain_service(tmp_pa
 
     fresh_detail = runtime.notes("detail", {"note_id": "task-odyssey"})
     assert fresh_detail["work_sessions"] == activity["work_sessions"]
+
+
+def test_runtime_subtask_create_is_a_typed_notes_mutation(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    create_entity(
+        repository,
+        SCHEMA,
+        path="parent.md",
+        entity_id="parent",
+        metadata={"name": "Padre", "type": "task", "status": "pending"},
+        content="- Padre.\n",
+        actor="fixture",
+        now="2026-10-05T17:00:00+02:00",
+    )
+    embedder = Embedder()
+    context = ContextIndex(tmp_path / "context.sqlite3")
+    semantic = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
+    context.rebuild(repository, SCHEMA, embedder)
+    semantic.rebuild(repository, SCHEMA, embedder)
+    refreshes: list[str] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda *args, **kwargs: None,
+        refresh_indexes=lambda: refreshes.append("refresh"),
+        notes_service=NotesQueryService(repository, SCHEMA, context),
+        direct_notes_mutations=object(),
+        direct_task_mutations=TaskDirectMutationService(
+            repository,
+            SCHEMA,
+            None,
+            semantic_index=semantic,
+            embedder=embedder,
+            contextual_reasoner=NoReasoner(),
+            semantic_limit=5,
+        ),
+        notes_mutation_actor=lambda *_args: "runtime-test",
+    )
+    parent = runtime.notes("detail", {"note_id": "parent"})
+    result = runtime.notes(
+        "task_subtask_create",
+        {
+            "parent_note_id": "parent",
+            "title": "Hija",
+            "expected_revision": parent["mutation"]["revision"],
+            "expected_source_hash": parent["mutation"]["source_hash"],
+            "request_id": "subtask-create",
+        },
+    )
+    assert result["operation"] == "task_subtask_created"
+    assert result["child"] == {"id": result["note_id"], "name": "Hija", "status": "pending"}
+    assert refreshes == ["refresh"]
+    created_tasks = []
+    for path in repository.list_markdown_paths():
+        if path == "parent.md":
+            continue
+        note = parse_note(repository.read_text(path))
+        if note.metadata.get("type") == "task":
+            created_tasks.append(note)
+    assert len(created_tasks) == 1
+    child_note = created_tasks[0]
+    assert child_note.metadata["status"] == "pending"
+    assert child_note.content.count("Tarea superior:") == 1
+    assert "[[parent|Padre]]" in child_note.content

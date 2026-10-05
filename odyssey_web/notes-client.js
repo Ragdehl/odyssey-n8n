@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "work_session_start", "work_session_stop", "work_session_edit", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -62,11 +62,20 @@ export function validateNotesResponse(value) {
       items: value.items.map(validateBacklink)};
   }
   if (value.kind === "mutation") {
-    const operations = ["fact_deleted", "note_deleted", "task_completed", "task_reopened", "work_session_started", "work_session_stopped", "work_session_edited", "work_session_activity_added", "work_session_activity_edited", "work_session_activity_deleted"];
+    const operations = ["fact_deleted", "note_deleted", "task_completed", "task_reopened", "task_subtask_created", "work_session_started", "work_session_stopped", "work_session_edited", "work_session_activity_added", "work_session_activity_edited", "work_session_activity_deleted"];
     if (!operations.includes(value.operation) || !isText(value.note_id) || !value.history || !isText(value.history.status)) throw new NotesRequestError("Mutación de nota inválida.");
     if (["task_completed", "task_reopened"].includes(value.operation)) {
       if (!isText(value.status) || (value.completed_at !== null && value.completed_at !== undefined && !isText(value.completed_at))) throw new NotesRequestError("Mutación de tarea inválida.");
       return {kind: "mutation", operation: value.operation, note_id: value.note_id, history: {status: value.history.status}, mutation: validateMutationMetadata(value.mutation), status: value.status, completed_at: value.completed_at ?? null};
+    }
+    if (value.operation === "task_subtask_created") {
+      if (!value.child || typeof value.child !== "object" || Array.isArray(value.child) ||
+          Object.keys(value.child).some((key) => !["id", "name", "status"].includes(key)) ||
+          !isText(value.child.id) || !isText(value.child.name) || value.child.status !== "pending") {
+        throw new NotesRequestError("Mutación de subtarea inválida.");
+      }
+      return {kind: "mutation", operation: value.operation, note_id: value.note_id,
+        history: {status: value.history.status}, child: {...value.child}};
     }
     if (["work_session_started", "work_session_stopped", "work_session_edited", "work_session_activity_added", "work_session_activity_edited", "work_session_activity_deleted"].includes(value.operation)) {
       if (!Array.isArray(value.work_sessions)) throw new NotesRequestError("Mutación de Work Session inválida.");

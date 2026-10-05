@@ -739,6 +739,41 @@ test("Work Session activity mutation remains bounded and validates entry project
 });
 
 
+test("Subtask creation transport is explicit and accepts only the bounded child projection", async () => {
+  let captured;
+  const result = await requestNotes({
+    operation: "task_subtask_create",
+    payload: {
+      parent_note_id: "task-parent", title: "Preparar maletas", expected_revision: 4,
+      expected_source_hash: "a".repeat(64), request_id: "notes-subtask-create",
+    },
+    fetchImpl: async (_endpoint, options) => {
+      captured = JSON.parse(options.body);
+      return response({payload: {
+        kind: "mutation", operation: "task_subtask_created", note_id: "task-child",
+        history: {status: "COMMITTED"},
+        child: {id: "task-child", name: "Preparar maletas", status: "pending"},
+      }});
+    },
+  });
+  assert.deepEqual(Object.keys(captured).sort(), [
+    "expected_revision", "expected_source_hash", "operation", "parent_note_id", "request_id", "title",
+  ]);
+  assert.equal(captured.parent_note_id, "task-parent");
+  assert.equal(result.child.name, "Preparar maletas");
+  assert.throws(() => validateNotesResponse({
+    kind: "mutation", operation: "task_subtask_created", note_id: "task-child",
+    history: {status: "COMMITTED"},
+    child: {id: "task-child", name: "Preparar maletas", status: "pending", path: "secret.md"},
+  }), NotesRequestError);
+  assert.throws(() => validateNotesResponse({
+    kind: "mutation", operation: "task_subtask_created", note_id: "task-child",
+    history: {status: "COMMITTED"},
+    child: {id: "task-child", name: "Preparar maletas", status: "completed"},
+  }), NotesRequestError);
+});
+
+
 test("Task status mutation transport is explicit and bounded", async () => {
   let captured;
   const result = await requestNotes({

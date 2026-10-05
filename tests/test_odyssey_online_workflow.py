@@ -148,16 +148,23 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
     assert "delete_fact: new Set(['operation', 'note_id', 'fact_locator'" in source
     assert "delete_note: new Set(['operation', 'note_id', 'expected_revision'" in source
     assert "task_status: new Set(['operation', 'note_id', 'completed'" in source
+    assert (
+        "task_subtask_create: new Set(['operation', 'parent_note_id', 'title', "
+        "'expected_revision', 'expected_source_hash', 'request_id'])" in source
+    )
     assert "work_session_start: new Set(['operation', 'note_id', 'expected_revision'" in source
     assert "work_session_stop: new Set(['operation', 'session_id', 'expected_revision'" in source
     assert (
         "work_session_edit: new Set(['operation', 'session_id', 'started_at', 'ended_at'" in source
     )
     assert "const completed = typeof body.completed === 'boolean'" in source
+    assert "const parent_note_id = typeof body.parent_note_id === 'string'" in source
+    assert "const subtask_title = typeof body.title === 'string'" in source
     assert (
         "['delete_fact', 'delete_note', 'task_status', 'work_session_start'].includes(operation)"
         in source
     )
+    assert "const subtaskMutation = operation === 'task_subtask_create'" in source
     assert "work_session_activity_add: new Set(['operation', 'session_id', 'text'" in source
     assert (
         "work_session_activity_edit: new Set(['operation', 'session_id', 'activity_id', 'text'"
@@ -172,6 +179,14 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
         in source
     )
     assert "operation !== 'task_status' || completed !== undefined" in source
+    assert "parent_note_id && parent_note_id.length <= 128" in source
+    assert (
+        "subtask_title && subtask_title.trim().length > 0 && subtask_title.length <= 240" in source
+    )
+    assert (
+        "if (subtaskMutation) Object.assign(forwarded, { parent_note_id, title: subtask_title, "
+        "expected_revision, expected_source_hash, request_id });" in source
+    )
     assert "operation !== 'work_session_edit' || (started_at" in source
     assert "activity_text && activity_text.length <= 2000" in source
     assert "activity_id && activity_id.length <= 128" in source

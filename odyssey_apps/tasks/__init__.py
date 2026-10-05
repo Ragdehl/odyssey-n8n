@@ -23,6 +23,7 @@ from .mutations import (
     TaskDirectMutationError,
     TaskDirectMutationResult,
     TaskDirectMutationService,
+    TaskSubtaskCreateResult,
 )
 from .planning import TaskCorePlanner
 from .query import TaskQueryError, TaskQueryService
@@ -43,6 +44,7 @@ __all__ = [
     "TaskDirectMutationError",
     "TaskDirectMutationResult",
     "TaskDirectMutationService",
+    "TaskSubtaskCreateResult",
     "TaskCorePlanner",
     "TaskLifecycleGuard",
     "TaskQueryError",

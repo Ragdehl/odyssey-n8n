@@ -236,6 +236,11 @@ button:disabled { opacity: .55; }
 .work-session-activity-form { display: flex; align-items: flex-end; gap: .45rem; }
 .work-session-activity-form textarea, .work-session-activity-edit-input { resize: vertical; min-height: 2.8rem; }
 
-.note-subtasks { margin-top: 1rem; }
+.note-subtasks { margin-top: 1rem; display: grid; gap: .45rem; }
+.note-subtasks h3 { margin: 0 0 .25rem; }
 .note-subtask { display: flex; align-items: center; gap: .45rem; }
-.note-subtask-status { color: #a66b3f; font-size: 1rem; }
+.note-subtask-toggle { flex: 0 0 auto; min-width: 2rem; padding: .3rem .45rem; }
+.note-subtask-name { min-width: 0; flex: 1 1 auto; text-align: left; padding: .35rem .45rem; }
+.note-subtask-create-form { display: flex; align-items: center; gap: .45rem; margin-top: .25rem; }
+.note-subtask-create-form input { min-width: 0; flex: 1 1 auto; }
+.note-subtask-create-form button { flex: 0 0 auto; }
