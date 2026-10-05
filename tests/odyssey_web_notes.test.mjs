@@ -109,10 +109,10 @@ function taskDetail({sessions = [], status = "pending"} = {}) {
   };
 }
 
-function workSession({ended_at = null, revision = 1, source = "b"} = {}) {
+function workSession({ended_at = null, revision = 1, source = "b", activity = []} = {}) {
   return {
     id: "session-one", task_id: "task-odyssey", started_at: "2026-10-05T18:00:00+02:00",
-    ended_at, mutation: {revision, source_hash: source.repeat(64)},
+    ended_at, activity, mutation: {revision, source_hash: source.repeat(64)},
   };
 }
 
@@ -629,6 +629,74 @@ test("Task Work Session edit submits corrected local date/time without refetchin
   assert.equal(new Date(edit.payload.ended_at).getTime(), new Date("2026-10-05T18:15").getTime());
   assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
   assert.equal(mounted.elements.detail.textContent.includes("45 min"), true);
+});
+
+
+test("Task Work Session activity can be added, edited, and deleted without refetching the Task", async () => {
+  const calls = [];
+  let sessions = [workSession({ended_at: "2026-10-05T19:00:00+02:00"})];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail({sessions});
+      if (operation === "backlinks") return {items: []};
+      if (operation === "work_session_activity_add") {
+        sessions = [workSession({
+          ended_at: "2026-10-05T19:00:00+02:00", revision: 2, source: "c",
+          activity: [{id: "activity-one", created_at: "2026-10-05T19:05:00+02:00", text: payload.text}],
+        })];
+        return {kind: "mutation", operation: "work_session_activity_added", note_id: "task-odyssey", history: {status: "COMMITTED"}, work_sessions: sessions};
+      }
+      if (operation === "work_session_activity_edit") {
+        sessions = [workSession({
+          ended_at: "2026-10-05T19:00:00+02:00", revision: 3, source: "d",
+          activity: [{id: "activity-one", created_at: "2026-10-05T19:05:00+02:00", text: payload.text}],
+        })];
+        return {kind: "mutation", operation: "work_session_activity_edited", note_id: "task-odyssey", history: {status: "COMMITTED"}, work_sessions: sessions};
+      }
+      if (operation === "work_session_activity_delete") {
+        sessions = [workSession({ended_at: "2026-10-05T19:00:00+02:00", revision: 4, source: "e"})];
+        return {kind: "mutation", operation: "work_session_activity_deleted", note_id: "task-odyssey", history: {status: "COMMITTED"}, work_sessions: sessions};
+      }
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+  mounted.elements.detail.querySelector(".work-session-open").click();
+  const form = mounted.elements.detail.querySelector(".work-session-activity-form");
+  const textarea = form.querySelector("textarea");
+  textarea.value = "He terminado los tests.";
+  form.emit("submit");
+  await flush();
+
+  const add = calls.find(({operation}) => operation === "work_session_activity_add");
+  assert.equal(add.payload.session_id, "session-one");
+  assert.equal(add.payload.text, "He terminado los tests.");
+  assert.equal(add.payload.expected_revision, 1);
+  assert.equal(add.payload.expected_source_hash, "b".repeat(64));
+  assert.equal(mounted.elements.detail.textContent.includes("He terminado los tests."), true);
+
+  mounted.elements.detail.querySelector(".work-session-activity-actions").querySelector("button").click();
+  const editInput = mounted.elements.detail.querySelector(".work-session-activity-edit-input");
+  editInput.value = "He terminado todos los tests.";
+  mounted.elements.detail.querySelector(".work-session-activity-actions").querySelector("button").click();
+  await flush();
+  const edit = calls.find(({operation}) => operation === "work_session_activity_edit");
+  assert.equal(edit.payload.activity_id, "activity-one");
+  assert.equal(edit.payload.text, "He terminado todos los tests.");
+  assert.equal(edit.payload.expected_revision, 2);
+
+  const activityRow = mounted.elements.detail.querySelector(".work-session-activity-row");
+  const actions = activityRow.querySelector(".work-session-activity-actions");
+  actions.children[1].click();
+  await flush();
+  const remove = calls.find(({operation}) => operation === "work_session_activity_delete");
+  assert.equal(remove.payload.activity_id, "activity-one");
+  assert.equal(remove.payload.expected_revision, 3);
+  assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
+  assert.equal(mounted.elements.detail.textContent.includes("Sin actividad registrada todavía."), true);
 });
 
 

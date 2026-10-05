@@ -678,7 +678,7 @@ test("Work Session responses stay bounded to task-owned temporal projections", a
   let captured;
   const session = {
     id: "session-one", task_id: "task-bank", started_at: "2026-10-05T18:00:00+02:00",
-    ended_at: null, mutation: {revision: 1, source_hash: "c".repeat(64)},
+    ended_at: null, activity: [], mutation: {revision: 1, source_hash: "c".repeat(64)},
   };
   const result = await requestNotes({
     operation: "work_session_start",
@@ -702,6 +702,39 @@ test("Work Session responses stay bounded to task-owned temporal projections", a
   assert.throws(() => validateNotesResponse({
     kind: "mutation", operation: "work_session_started", note_id: "task-bank",
     history: {status: "COMMITTED"}, work_sessions: [{...session, path: "secret.md"}],
+  }), NotesRequestError);
+});
+
+
+test("Work Session activity mutation remains bounded and validates entry projections", async () => {
+  let captured;
+  const session = {
+    id: "session-one", task_id: "task-bank", started_at: "2026-10-05T18:00:00+02:00",
+    ended_at: null, activity: [{id: "activity-one", created_at: "2026-10-05T18:15:00+02:00", text: "Revisado el calendario."}],
+    mutation: {revision: 2, source_hash: "d".repeat(64)},
+  };
+  const result = await requestNotes({
+    operation: "work_session_activity_add",
+    payload: {
+      session_id: "session-one", text: "Revisado el calendario.", expected_revision: 1,
+      expected_source_hash: "c".repeat(64), request_id: "notes-session-activity",
+    },
+    fetchImpl: async (_endpoint, options) => {
+      captured = JSON.parse(options.body);
+      return response({payload: {
+        kind: "mutation", operation: "work_session_activity_added", note_id: "task-bank",
+        history: {status: "COMMITTED"}, work_sessions: [session],
+      }});
+    },
+  });
+  assert.deepEqual(Object.keys(captured).sort(), [
+    "expected_revision", "expected_source_hash", "operation", "request_id", "session_id", "text",
+  ]);
+  assert.equal(result.work_sessions[0].activity[0].text, "Revisado el calendario.");
+  assert.throws(() => validateNotesResponse({
+    kind: "mutation", operation: "work_session_activity_added", note_id: "task-bank",
+    history: {status: "COMMITTED"},
+    work_sessions: [{...session, activity: [{...session.activity[0], path: "secret.md"}]}],
   }), NotesRequestError);
 });
 

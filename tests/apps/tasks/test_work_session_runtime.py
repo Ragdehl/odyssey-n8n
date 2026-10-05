@@ -51,7 +51,11 @@ def test_runtime_task_detail_start_stop_and_edit_share_one_domain_service(tmp_pa
         refresh_indexes=lambda: refreshes.append("refresh"),
         notes_service=NotesQueryService(repository, SCHEMA, context),
         work_session_service=TaskWorkSessionService(
-            repository, SCHEMA, None, id_allocator=lambda: "session-runtime"
+            repository,
+            SCHEMA,
+            None,
+            id_allocator=lambda: "session-runtime",
+            activity_id_allocator=lambda: "activity-runtime",
         ),
         notes_mutation_actor=lambda *_args: "runtime-test",
     )
@@ -105,7 +109,23 @@ def test_runtime_task_detail_start_stop_and_edit_share_one_domain_service(tmp_pa
     assert edited["operation"] == "work_session_edited"
     assert corrected["started_at"] == "2026-10-05T17:30:00+02:00"
     assert corrected["ended_at"] == "2026-10-05T18:15:00+02:00"
-    assert refreshes == ["refresh", "refresh", "refresh"]
+    assert refreshes == []
+
+    activity = runtime.notes(
+        "work_session_activity_add",
+        {
+            "session_id": corrected["id"],
+            "text": "Corregido el calendario.",
+            "expected_revision": corrected["mutation"]["revision"],
+            "expected_source_hash": corrected["mutation"]["source_hash"],
+            "request_id": "runtime-activity",
+        },
+    )
+    logged = activity["work_sessions"][0]
+    assert activity["operation"] == "work_session_activity_added"
+    assert logged["activity"][0]["id"] == "activity-runtime"
+    assert logged["activity"][0]["text"] == "Corregido el calendario."
+    assert refreshes == []
 
     fresh_detail = runtime.notes("detail", {"note_id": "task-odyssey"})
-    assert fresh_detail["work_sessions"] == edited["work_sessions"]
+    assert fresh_detail["work_sessions"] == activity["work_sessions"]

@@ -24,7 +24,7 @@ export function mountNotes(root, {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
-    editingWorkSessionId: null,
+    editingWorkSessionId: null, openedWorkSessionId: null, editingWorkSessionActivityId: null,
   };
   const search = root.querySelector("#notes-search");
   const searchForm = root.querySelector("#notes-search-form");
@@ -283,6 +283,8 @@ export function mountNotes(root, {
       state.current = value;
       state.editing = false;
       state.editingWorkSessionId = null;
+      state.openedWorkSessionId = null;
+      state.editingWorkSessionActivityId = null;
       state.feedScroll = list.scrollTop;
       renderDetail();
     } catch {
@@ -293,6 +295,8 @@ export function mountNotes(root, {
   function showList() {
     state.editing = false;
     state.editingWorkSessionId = null;
+    state.openedWorkSessionId = null;
+    state.editingWorkSessionActivityId = null;
     detail.hidden = true;
     listView.hidden = false;
     searchDock.hidden = false;
@@ -463,7 +467,8 @@ export function mountNotes(root, {
     for (const session of sessions) {
       const row = document.createElement("div");
       const editingSession = state.editingWorkSessionId === session.id;
-      row.className = `work-session-row${session.ended_at ? "" : " active"}${editingSession ? " editing" : ""}`;
+      const openedSession = state.openedWorkSessionId === session.id;
+      row.className = `work-session-row${session.ended_at ? "" : " active"}${editingSession ? " editing" : ""}${openedSession ? " opened" : ""}`;
       if (editingSession) {
         const startLabel = document.createElement("label");
         startLabel.textContent = "Inicio";
@@ -491,15 +496,29 @@ export function mountNotes(root, {
         actions.append(save, cancel);
         row.append(startLabel, endLabel, actions);
       } else {
+        const main = document.createElement("div");
+        main.className = "work-session-main";
         const label = document.createElement("span");
         label.className = "work-session-label";
         label.textContent = workSessionLabel(session);
-        const edit = button("Editar", () => {
+        const actions = document.createElement("div");
+        actions.className = "work-session-row-actions";
+        const open = button(openedSession ? "Cerrar" : "Abrir", () => {
+          state.openedWorkSessionId = openedSession ? null : session.id;
+          state.editingWorkSessionActivityId = null;
+          renderDetail();
+        });
+        open.className = "work-session-open";
+        const edit = button("Editar horario", () => {
           state.editingWorkSessionId = session.id;
+          state.editingWorkSessionActivityId = null;
           renderDetail();
         });
         edit.className = "work-session-edit";
-        row.append(label, edit);
+        actions.append(open, edit);
+        main.append(label, actions);
+        row.append(main);
+        if (openedSession) row.append(renderWorkSessionActivity(value, session));
       }
       list.append(row);
     }
@@ -507,8 +526,82 @@ export function mountNotes(root, {
     return section;
   }
 
+  function renderWorkSessionActivity(value, session) {
+    const panel = document.createElement("section");
+    panel.className = "work-session-activity";
+    const heading = document.createElement("h4");
+    heading.textContent = "Actividad";
+    panel.append(heading);
+    const entries = Array.isArray(session.activity) ? session.activity : [];
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "work-session-activity-empty";
+      empty.textContent = "Sin actividad registrada todavía.";
+      panel.append(empty);
+    } else {
+      const list = document.createElement("div");
+      list.className = "work-session-activity-list";
+      for (const entry of entries) {
+        const row = document.createElement("div");
+        row.className = "work-session-activity-row";
+        if (state.editingWorkSessionActivityId === entry.id) {
+          const input = document.createElement("textarea");
+          input.rows = 2;
+          input.value = entry.text;
+          input.className = "work-session-activity-edit-input";
+          const actions = document.createElement("div");
+          actions.className = "work-session-activity-actions";
+          const save = button("Guardar", () => void editWorkSessionActivity(value, session, entry, input, save));
+          const cancel = button("Cancelar", () => {
+            state.editingWorkSessionActivityId = null;
+            renderDetail();
+          });
+          actions.append(save, cancel);
+          row.append(input, actions);
+        } else {
+          const content = document.createElement("p");
+          const time = document.createElement("time");
+          time.dateTime = entry.created_at;
+          time.textContent = activityTime(entry.created_at);
+          const text = document.createElement("span");
+          text.textContent = entry.text;
+          content.append(time, document.createTextNode(" · "), text);
+          const actions = document.createElement("div");
+          actions.className = "work-session-activity-actions";
+          const edit = button("Editar", () => {
+            state.editingWorkSessionActivityId = entry.id;
+            renderDetail();
+          });
+          const remove = button("Eliminar", () => void deleteWorkSessionActivity(value, session, entry, remove));
+          remove.className = "note-danger-button";
+          actions.append(edit, remove);
+          row.append(content, actions);
+        }
+        list.append(row);
+      }
+      panel.append(list);
+    }
+    const form = document.createElement("form");
+    form.className = "work-session-activity-form";
+    const input = document.createElement("textarea");
+    input.rows = 2;
+    input.maxLength = 2000;
+    input.placeholder = session.ended_at ? "Añadir algo que hiciste en esta sesión…" : "Añadir lo que estás haciendo…";
+    input.setAttribute("aria-label", "Actividad de la sesión de trabajo");
+    const add = button("Añadir", () => {});
+    add.type = "submit";
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void addWorkSessionActivity(value, session, input, add);
+    });
+    form.append(input, add);
+    panel.append(form);
+    return panel;
+  }
+
   async function startWorkSession(value, control) {
     control.disabled = true;
+    control.textContent = "Iniciando…";
     try {
       const result = await requestNotes({endpoint, operation: "work_session_start", payload: {
         note_id: value.note.id,
@@ -518,16 +611,20 @@ export function mountNotes(root, {
       }});
       state.current = {...value, work_sessions: result.work_sessions};
       state.editingWorkSessionId = null;
+      state.editingWorkSessionActivityId = null;
+      state.openedWorkSessionId = result.work_sessions.find((item) => !item.ended_at)?.id ?? null;
       renderDetail();
       status.textContent = "Sesión de trabajo iniciada.";
     } catch (error) {
       control.disabled = false;
+      control.textContent = "Empezar sesión";
       status.textContent = mutationErrorMessage(error);
     }
   }
 
   async function stopWorkSession(value, session, control) {
     control.disabled = true;
+    control.textContent = "Terminando…";
     try {
       const result = await requestNotes({endpoint, operation: "work_session_stop", payload: {
         session_id: session.id,
@@ -537,10 +634,13 @@ export function mountNotes(root, {
       }});
       state.current = {...value, work_sessions: result.work_sessions};
       state.editingWorkSessionId = null;
+      state.editingWorkSessionActivityId = null;
+      state.openedWorkSessionId = session.id;
       renderDetail();
-      status.textContent = "Sesión de trabajo terminada.";
+      status.textContent = "Sesión terminada. Puedes seguir añadiendo actividad si lo necesitas.";
     } catch (error) {
       control.disabled = false;
+      control.textContent = "Terminar sesión";
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -553,6 +653,7 @@ export function mountNotes(root, {
       return;
     }
     control.disabled = true;
+    control.textContent = "Guardando…";
     try {
       const result = await requestNotes({endpoint, operation: "work_session_edit", payload: {
         session_id: session.id, started_at: startedAt, ended_at: endedAt,
@@ -562,10 +663,91 @@ export function mountNotes(root, {
       }});
       state.current = {...value, work_sessions: result.work_sessions};
       state.editingWorkSessionId = null;
+      state.openedWorkSessionId = session.id;
       renderDetail();
       status.textContent = "Sesión de trabajo corregida.";
     } catch (error) {
       control.disabled = false;
+      control.textContent = "Guardar";
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  async function addWorkSessionActivity(value, session, input, control) {
+    const text = input.value.trim();
+    if (!text) {
+      status.textContent = "Escribe qué has hecho antes de añadirlo.";
+      input.focus();
+      return;
+    }
+    control.disabled = true;
+    control.textContent = "Añadiendo…";
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_activity_add", payload: {
+        session_id: session.id, text,
+        expected_revision: session.mutation.revision,
+        expected_source_hash: session.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.openedWorkSessionId = session.id;
+      state.editingWorkSessionActivityId = null;
+      renderDetail();
+      status.textContent = "Actividad añadida a la sesión.";
+    } catch (error) {
+      control.disabled = false;
+      control.textContent = "Añadir";
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  async function editWorkSessionActivity(value, session, entry, input, control) {
+    const text = input.value.trim();
+    if (!text) {
+      status.textContent = "La actividad no puede quedar vacía.";
+      input.focus();
+      return;
+    }
+    control.disabled = true;
+    control.textContent = "Guardando…";
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_activity_edit", payload: {
+        session_id: session.id, activity_id: entry.id, text,
+        expected_revision: session.mutation.revision,
+        expected_source_hash: session.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.openedWorkSessionId = session.id;
+      state.editingWorkSessionActivityId = null;
+      renderDetail();
+      status.textContent = "Actividad corregida.";
+    } catch (error) {
+      control.disabled = false;
+      control.textContent = "Guardar";
+      status.textContent = mutationErrorMessage(error);
+    }
+  }
+
+  async function deleteWorkSessionActivity(value, session, entry, control) {
+    if (!confirmImpl("¿Eliminar esta actividad de la sesión de trabajo?")) return;
+    control.disabled = true;
+    control.textContent = "Eliminando…";
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_activity_delete", payload: {
+        session_id: session.id, activity_id: entry.id,
+        expected_revision: session.mutation.revision,
+        expected_source_hash: session.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.openedWorkSessionId = session.id;
+      state.editingWorkSessionActivityId = null;
+      renderDetail();
+      status.textContent = "Actividad eliminada.";
+    } catch (error) {
+      control.disabled = false;
+      control.textContent = "Eliminar";
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -610,6 +792,8 @@ export function mountNotes(root, {
     if (error instanceof NotesRequestError && error.code === "WORK_SESSION_TASK_CLOSED") return "No se puede iniciar una sesión en una tarea completada o cancelada.";
     if (error instanceof NotesRequestError && error.code === "WORK_SESSION_HISTORY_PRESENT") return "No se puede eliminar una tarea que tiene sesiones de trabajo registradas.";
     if (error instanceof NotesRequestError && error.code === "WORK_SESSION_END_BEFORE_START") return "La hora de fin no puede ser anterior a la hora de inicio.";
+    if (error instanceof NotesRequestError && error.code === "WORK_SESSION_ACTIVITY_INVALID") return "La actividad no es válida.";
+    if (error instanceof NotesRequestError && error.code === "WORK_SESSION_ACTIVITY_UNAVAILABLE") return "Esa actividad ha cambiado. Abre de nuevo la sesión antes de modificarla.";
     if (error instanceof NotesRequestError && ["WORK_SESSION_NOT_ACTIVE", "WORK_SESSION_UNAVAILABLE", "WORK_SESSION_STATE_INVALID"].includes(error.code)) return "La sesión de trabajo ha cambiado. Abre de nuevo la tarea antes de modificarla.";
     if (error instanceof NotesRequestError && ["STALE_NOTE", "FACT_UNAVAILABLE", "NOTE_UNAVAILABLE", "TASK_UNAVAILABLE", "TASK_INVALID_TRANSITION"].includes(error.code)) return "La nota ha cambiado. Ábrela de nuevo antes de modificarla.";
     return "No se ha podido actualizar la nota.";
@@ -1125,5 +1309,6 @@ function localDateTimePart(value) { if (typeof value !== "string") return ""; co
 function timezoneAwareDateTime(value) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? "" : date.toISOString(); }
 function sessionDurationMs(session) { const start = new Date(session.started_at).valueOf(); const end = session.ended_at ? new Date(session.ended_at).valueOf() : Date.now(); return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : 0; }
 function formatDuration(milliseconds) { const minutes = Math.max(0, Math.round(milliseconds / 60000)); const hours = Math.floor(minutes / 60); const rest = minutes % 60; return hours ? `${hours} h${rest ? ` ${rest} min` : ""}` : `${rest} min`; }
+function activityTime(value) { const date = new Date(value); return Number.isNaN(date.valueOf()) ? "" : date.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"}); }
 function workSessionLabel(session) { const start = new Date(session.started_at); if (Number.isNaN(start.valueOf())) return "Sesión de trabajo"; const day = start.toLocaleDateString(undefined, {day: "numeric", month: "short"}); const time = (date) => date.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit"}); if (!session.ended_at) return `${day} · ${time(start)} — en curso · ${formatDuration(sessionDurationMs(session))}`; const end = new Date(session.ended_at); return Number.isNaN(end.valueOf()) ? `${day} · ${time(start)}` : `${day} · ${time(start)} — ${time(end)} · ${formatDuration(sessionDurationMs(session))}`; }
 function readableDate(value) { const parsed = new Date(value); return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleDateString(); }

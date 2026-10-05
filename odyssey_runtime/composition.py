@@ -39,6 +39,7 @@ from odyssey_apps.tasks import (
     WorkSessionError,
     WorkSessionSnapshot,
     compose_task_domain_interpretation,
+    compose_work_session_activity_date,
     compose_work_session_times,
 )
 from odyssey_core.application import (
@@ -133,8 +134,8 @@ _VAULT_REPOSITORY_TYPE = VaultRepository
 _TASKS_DESCRIPTOR = ApplicationDescriptor(
     id="tasks",
     routing_description=(
-        "task lifecycle, scheduling, completion, obligations, explicit work sessions, and actual "
-        "time tracking for an existing task"
+        "task lifecycle, scheduling, completion, obligations, explicit work sessions, actual time "
+        "tracking, and recording what was done during a work session"
     ),
     dependencies=("temporal",),
 )
@@ -730,7 +731,14 @@ class RuntimeComposition:
                     cursor=payload.get("cursor"),
                 )
             )
-        if operation in {"work_session_start", "work_session_stop", "work_session_edit"}:
+        if operation in {
+            "work_session_start",
+            "work_session_stop",
+            "work_session_edit",
+            "work_session_activity_add",
+            "work_session_activity_edit",
+            "work_session_activity_delete",
+        }:
             if self.work_session_service is None or self.notes_mutation_actor is None:
                 raise ValueError("Work Session service is unavailable")
             request_id = payload.get("request_id")
@@ -773,7 +781,7 @@ class RuntimeComposition:
                         actor=actor,
                         now=now,
                     )
-                else:
+                elif operation == "work_session_edit":
                     if (
                         set(payload)
                         != {
@@ -802,7 +810,78 @@ class RuntimeComposition:
                         actor=actor,
                         now=now,
                     )
-                self.refresh_indexes()
+                elif operation == "work_session_activity_add":
+                    if (
+                        set(payload)
+                        != {
+                            "session_id",
+                            "text",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        }
+                        or not isinstance(payload.get("session_id"), str)
+                        or not isinstance(payload.get("text"), str)
+                    ):
+                        raise ValueError("Work Session activity payload is invalid")
+                    result = self.work_session_service.add_activity(
+                        session_id=payload["session_id"],
+                        text=payload["text"],
+                        expected_revision=cast(int, payload.get("expected_revision")),
+                        expected_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
+                elif operation == "work_session_activity_edit":
+                    if (
+                        set(payload)
+                        != {
+                            "session_id",
+                            "activity_id",
+                            "text",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        }
+                        or not isinstance(payload.get("session_id"), str)
+                        or not isinstance(payload.get("activity_id"), str)
+                        or not isinstance(payload.get("text"), str)
+                    ):
+                        raise ValueError("Work Session activity edit payload is invalid")
+                    result = self.work_session_service.edit_activity(
+                        session_id=payload["session_id"],
+                        activity_id=payload["activity_id"],
+                        text=payload["text"],
+                        expected_revision=cast(int, payload.get("expected_revision")),
+                        expected_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
+                else:
+                    if (
+                        set(payload)
+                        != {
+                            "session_id",
+                            "activity_id",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        }
+                        or not isinstance(payload.get("session_id"), str)
+                        or not isinstance(payload.get("activity_id"), str)
+                    ):
+                        raise ValueError("Work Session activity deletion payload is invalid")
+                    result = self.work_session_service.delete_activity(
+                        session_id=payload["session_id"],
+                        activity_id=payload["activity_id"],
+                        expected_revision=cast(int, payload.get("expected_revision")),
+                        expected_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
             return {
                 "kind": "mutation",
                 "operation": result.operation,
@@ -1818,8 +1897,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
             TaskOperation.START_WORK_SESSION,
             TaskOperation.STOP_WORK_SESSION,
             TaskOperation.EDIT_WORK_SESSION,
+            TaskOperation.ADD_WORK_SESSION_ACTIVITY,
         }:
-            if work_session_service is None or task.task_reference is None:
+            if work_session_service is None:
                 return ApplicationResult(
                     request_id,
                     ApplicationStatus.FAILED,
@@ -1828,65 +1908,88 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     planning_error="WORK_SESSION_UNAVAILABLE",
                     operational=OperationalEvidence(total_duration, tuple(stages)),
                 )
-            resolution_started = perf_counter()
-            try:
-                task_schema = planning_schema_for_capability(schema, "tasks")
-                resolution = resolve_existing_entity(
-                    task.task_reference,
-                    source_text,
-                    type=TASK_TYPE,
-                    repository=repository,
-                    schema=task_schema,
-                    semantic_index=application_semantic_indexes.get("tasks", semantic_index),
-                    embedder=embedder,
-                    contextual_reasoner=contextual_reasoner,
-                    semantic_limit=context_limit,
-                    expand_relationship_context=True,
-                )
-            except Exception as error:
+            resolved_task_id: str | None = None
+            if task.task_reference is not None:
+                resolution_started = perf_counter()
+                try:
+                    task_schema = planning_schema_for_capability(schema, "tasks")
+                    resolution = resolve_existing_entity(
+                        task.task_reference,
+                        source_text,
+                        type=TASK_TYPE,
+                        repository=repository,
+                        schema=task_schema,
+                        semantic_index=application_semantic_indexes.get("tasks", semantic_index),
+                        embedder=embedder,
+                        contextual_reasoner=contextual_reasoner,
+                        semantic_limit=context_limit,
+                        expand_relationship_context=True,
+                    )
+                except Exception as error:
+                    duration = max(0.0, (perf_counter() - resolution_started) * 1000)
+                    stages.append(
+                        OperationalStage(
+                            "tasks.work_session_resolution",
+                            OperationalOutcome.FAILED,
+                            duration,
+                            error_category=type(error).__name__,
+                        )
+                    )
+                    return ApplicationResult(
+                        request_id,
+                        ApplicationStatus.FAILED,
+                        (),
+                        (),
+                        planning_error="WORK_SESSION_RESOLUTION_FAILED",
+                        operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                    )
                 duration = max(0.0, (perf_counter() - resolution_started) * 1000)
+                total_duration += duration
                 stages.append(
                     OperationalStage(
                         "tasks.work_session_resolution",
-                        OperationalOutcome.FAILED,
+                        OperationalOutcome.COMPLETED,
                         duration,
-                        error_category=type(error).__name__,
                     )
                 )
+                if (
+                    resolution.outcome is not ExistingEntityOutcome.RESOLVED
+                    or resolution.id is None
+                ):
+                    code = (
+                        "WORK_SESSION_TASK_AMBIGUOUS"
+                        if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS
+                        or resolution.offers_clarification
+                        else "WORK_SESSION_TASK_UNRESOLVED"
+                    )
+                    return ApplicationResult(
+                        request_id,
+                        ApplicationStatus.NEEDS_ATTENTION,
+                        (),
+                        (),
+                        planning_error=code,
+                        operational=OperationalEvidence(total_duration, tuple(stages)),
+                    )
+                resolved_task_id = resolution.id
+            elif task.operation is not TaskOperation.ADD_WORK_SESSION_ACTIVITY:
                 return ApplicationResult(
                     request_id,
                     ApplicationStatus.FAILED,
                     (),
                     (),
-                    planning_error="WORK_SESSION_RESOLUTION_FAILED",
-                    operational=OperationalEvidence(total_duration + duration, tuple(stages)),
-                )
-            duration = max(0.0, (perf_counter() - resolution_started) * 1000)
-            total_duration += duration
-            stages.append(
-                OperationalStage(
-                    "tasks.work_session_resolution", OperationalOutcome.COMPLETED, duration
-                )
-            )
-            if resolution.outcome is not ExistingEntityOutcome.RESOLVED or resolution.id is None:
-                code = (
-                    "WORK_SESSION_TASK_AMBIGUOUS"
-                    if resolution.outcome is ExistingEntityOutcome.AMBIGUOUS
-                    or resolution.offers_clarification
-                    else "WORK_SESSION_TASK_UNRESOLVED"
-                )
-                return ApplicationResult(
-                    request_id,
-                    ApplicationStatus.NEEDS_ATTENTION,
-                    (),
-                    (),
-                    planning_error=code,
+                    planning_error="WORK_SESSION_UNAVAILABLE",
                     operational=OperationalEvidence(total_duration, tuple(stages)),
                 )
+
             try:
-                started_at, ended_at = compose_work_session_times(
-                    task, temporal, now=clock["timestamp"]
-                )
+                if task.operation is TaskOperation.ADD_WORK_SESSION_ACTIVITY:
+                    session_date = compose_work_session_activity_date(task, temporal)
+                    started_at = ended_at = None
+                else:
+                    session_date = None
+                    started_at, ended_at = compose_work_session_times(
+                        task, temporal, now=clock["timestamp"]
+                    )
             except TaskInterpretationError:
                 return ApplicationResult(
                     request_id,
@@ -1896,32 +1999,44 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     planning_error="WORK_SESSION_TEMPORAL_INVALID",
                     operational=OperationalEvidence(total_duration, tuple(stages)),
                 )
+
             mutation_started = perf_counter()
             try:
                 persistence_actor = _persistence_actor(actor, authenticated_actor)
                 if task.operation is TaskOperation.START_WORK_SESSION:
-                    assert started_at is not None
+                    assert resolved_task_id is not None and started_at is not None
                     mutation = work_session_service.start(
-                        task_id=resolution.id,
+                        task_id=resolved_task_id,
                         started_at=started_at,
                         request_id=request_id,
                         actor=persistence_actor,
                         now=clock["timestamp"],
                     )
                 elif task.operation is TaskOperation.STOP_WORK_SESSION:
-                    assert ended_at is not None
+                    assert resolved_task_id is not None and ended_at is not None
                     mutation = work_session_service.stop_for_task(
-                        task_id=resolution.id,
+                        task_id=resolved_task_id,
+                        ended_at=ended_at,
+                        request_id=request_id,
+                        actor=persistence_actor,
+                        now=clock["timestamp"],
+                    )
+                elif task.operation is TaskOperation.EDIT_WORK_SESSION:
+                    assert resolved_task_id is not None
+                    mutation = work_session_service.edit_for_task(
+                        task_id=resolved_task_id,
+                        started_at=started_at,
                         ended_at=ended_at,
                         request_id=request_id,
                         actor=persistence_actor,
                         now=clock["timestamp"],
                     )
                 else:
-                    mutation = work_session_service.edit_for_task(
-                        task_id=resolution.id,
-                        started_at=started_at,
-                        ended_at=ended_at,
+                    assert task.activity_text is not None
+                    mutation = work_session_service.add_activity_for_task(
+                        task_id=resolved_task_id,
+                        text=task.activity_text,
+                        session_date=session_date,
                         request_id=request_id,
                         actor=persistence_actor,
                         now=clock["timestamp"],
@@ -1969,7 +2084,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         ),
                     ),
                 ),
-                (resolution.id,),
+                (mutation.task_id,),
                 history=mutation.history,
                 operational=OperationalEvidence(total_duration, tuple(stages)),
             )
@@ -2179,6 +2294,10 @@ def _work_session_to_response(value: WorkSessionSnapshot) -> dict[str, object]:
         "task_id": value.task_id,
         "started_at": value.started_at,
         "ended_at": value.ended_at,
+        "activity": [
+            {"id": item.id, "created_at": item.created_at, "text": item.text}
+            for item in value.activity
+        ],
         "mutation": {"revision": value.revision, "source_hash": value.source_hash},
     }
 

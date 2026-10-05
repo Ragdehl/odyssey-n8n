@@ -61,7 +61,14 @@ def _build(tmp_path: Path):
         now="2026-10-05T16:00:00+02:00",
     )
     ids = iter(("session-one", "session-two", "session-three"))
-    service = TaskWorkSessionService(repository, SCHEMA, None, id_allocator=lambda: next(ids))
+    activity_ids = iter(("activity-one", "activity-two", "activity-three"))
+    service = TaskWorkSessionService(
+        repository,
+        SCHEMA,
+        None,
+        id_allocator=lambda: next(ids),
+        activity_id_allocator=lambda: next(activity_ids),
+    )
     return repository, service
 
 
@@ -117,6 +124,120 @@ def test_start_stop_and_edit_work_session_preserve_task_lifecycle(tmp_path: Path
     validate_note(session_note, SCHEMA)
     assert session_note.metadata["task_id"] == "task-odyssey"
     assert session_note.content == ""
+
+
+def test_activity_can_be_added_edited_and_deleted_before_or_after_session_close(
+    tmp_path: Path,
+) -> None:
+    repository, service = _build(tmp_path)
+    revision, source_hash = _task_tokens(repository)
+    started = service.start(
+        task_id="task-odyssey",
+        started_at="2026-10-05T18:00:00+02:00",
+        expected_task_revision=revision,
+        expected_task_source_hash=source_hash,
+        request_id="start-activity",
+        actor="test",
+        now="2026-10-05T18:00:00+02:00",
+    )
+    added = service.add_activity(
+        session_id=started.session.id,
+        text="  Corregido   el selector de notas. ",
+        expected_revision=started.session.revision,
+        expected_source_hash=started.session.source_hash,
+        request_id="activity-add",
+        actor="test",
+        now="2026-10-05T18:14:00+02:00",
+    )
+    assert added.operation == "work_session_activity_added"
+    assert [(item.id, item.created_at, item.text) for item in added.session.activity] == [
+        ("activity-one", "2026-10-05T18:14:00+02:00", "Corregido el selector de notas.")
+    ]
+    raw = repository.read_text(added.path)
+    assert "## Actividad" in raw
+    assert "Corregido el selector de notas." in raw
+    assert "odyssey-work-session-entry:activity-one:2026-10-05T18:14:00+02:00" in raw
+
+    stopped = service.stop(
+        session_id=added.session.id,
+        ended_at="2026-10-05T19:00:00+02:00",
+        expected_revision=added.session.revision,
+        expected_source_hash=added.session.source_hash,
+        request_id="activity-stop",
+        actor="test",
+        now="2026-10-05T19:00:00+02:00",
+    )
+    edited = service.edit_activity(
+        session_id=stopped.session.id,
+        activity_id="activity-one",
+        text="Corregido el selector y añadidos tests.",
+        expected_revision=stopped.session.revision,
+        expected_source_hash=stopped.session.source_hash,
+        request_id="activity-edit",
+        actor="test",
+        now="2026-10-05T19:05:00+02:00",
+    )
+    assert edited.session.activity[0].created_at == "2026-10-05T18:14:00+02:00"
+    assert edited.session.activity[0].text == "Corregido el selector y añadidos tests."
+
+    deleted = service.delete_activity(
+        session_id=edited.session.id,
+        activity_id="activity-one",
+        expected_revision=edited.session.revision,
+        expected_source_hash=edited.session.source_hash,
+        request_id="activity-delete",
+        actor="test",
+        now="2026-10-05T19:10:00+02:00",
+    )
+    assert deleted.operation == "work_session_activity_deleted"
+    assert deleted.session.activity == ()
+    assert parse_note(repository.read_text(deleted.path)).content == ""
+
+
+def test_activity_can_target_unique_active_or_date_scoped_session(tmp_path: Path) -> None:
+    repository, service = _build(tmp_path)
+    revision, source_hash = _task_tokens(repository)
+    started = service.start(
+        task_id="task-odyssey",
+        started_at="2026-10-05T18:00:00+02:00",
+        expected_task_revision=revision,
+        expected_task_source_hash=source_hash,
+        request_id="start-current",
+        actor="test",
+        now="2026-10-05T18:00:00+02:00",
+    )
+    current = service.add_activity_for_task(
+        task_id=None,
+        text="He terminado los tests.",
+        session_date=None,
+        request_id="activity-current",
+        actor="test",
+        now="2026-10-05T18:20:00+02:00",
+    )
+    assert current.session.id == started.session.id
+    assert current.session.activity[0].text == "He terminado los tests."
+    stopped = service.stop(
+        session_id=current.session.id,
+        ended_at="2026-10-05T19:00:00+02:00",
+        expected_revision=current.session.revision,
+        expected_source_hash=current.session.source_hash,
+        request_id="stop-current",
+        actor="test",
+        now="2026-10-05T19:00:00+02:00",
+    )
+    dated = service.add_activity_for_task(
+        task_id="task-odyssey",
+        text="Revisado el calendario.",
+        session_date="2026-10-05",
+        request_id="activity-dated",
+        actor="test",
+        now="2026-10-05T19:10:00+02:00",
+    )
+    assert dated.session.id == stopped.session.id
+    assert [item.text for item in dated.session.activity] == [
+        "He terminado los tests.",
+        "Revisado el calendario.",
+    ]
 
 
 def test_only_one_active_session_is_allowed_globally(tmp_path: Path) -> None:

@@ -158,11 +158,27 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
         "['delete_fact', 'delete_note', 'task_status', 'work_session_start'].includes(operation)"
         in source
     )
-    assert "['work_session_stop', 'work_session_edit'].includes(operation)" in source
+    assert "work_session_activity_add: new Set(['operation', 'session_id', 'text'" in source
+    assert (
+        "work_session_activity_edit: new Set(['operation', 'session_id', 'activity_id', 'text'"
+        in source
+    )
+    assert (
+        "work_session_activity_delete: new Set(['operation', 'session_id', 'activity_id'" in source
+    )
+    assert (
+        "['work_session_stop', 'work_session_edit', 'work_session_activity_add', "
+        "'work_session_activity_edit', 'work_session_activity_delete'].includes(operation)"
+        in source
+    )
     assert "operation !== 'task_status' || completed !== undefined" in source
     assert "operation !== 'work_session_edit' || (started_at" in source
+    assert "activity_text && activity_text.length <= 2000" in source
+    assert "activity_id && activity_id.length <= 128" in source
     assert "operation === 'task_status' ? { completed }" in source
     assert "operation === 'work_session_edit' ? { started_at, ended_at }" in source
+    assert "? { text: activity_text }" in source
+    assert "? { activity_id }" in source
 
 
 def test_calendar_boundary_uses_render_stable_digit_patterns() -> None:

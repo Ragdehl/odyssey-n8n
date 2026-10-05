@@ -169,6 +169,9 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "work_session_start",
                         "work_session_stop",
                         "work_session_edit",
+                        "work_session_activity_add",
+                        "work_session_activity_edit",
+                        "work_session_activity_delete",
                     }:
                         raise ValueError("Notes operation is invalid")
                     actor_payload = {

@@ -9,6 +9,7 @@ import pytest
 
 from odyssey_apps.tasks import (
     OpenAITaskInterpreter,
+    TaskActivityTarget,
     TaskInterpretation,
     TaskInterpretationError,
     TaskOperation,
@@ -18,6 +19,7 @@ from odyssey_apps.tasks import (
     TaskTemporalMention,
     TaskTemporalRole,
     compose_task_domain_interpretation,
+    compose_work_session_activity_date,
     compose_work_session_times,
 )
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
@@ -380,6 +382,53 @@ def test_work_session_requires_grounded_task_reference_and_rejects_schedule_role
         TaskInterpretation(source, TaskOperation.START, task_reference="Odyssey")
 
 
+def test_work_session_activity_supports_current_session_and_exact_date_selection() -> None:
+    current_source = "Apunta en la work session actual que he terminado los tests"
+    current = TaskInterpretation(
+        current_source,
+        TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+        activity_text="he terminado los tests",
+        activity_target=TaskActivityTarget.ACTIVE,
+    )
+    assert compose_work_session_activity_date(current, None) is None
+    assert current.task_reference is None
+
+    dated_source = "En la work session de Odyssey de hoy apunta que corregí el calendario"
+    dated = TaskInterpretation(
+        dated_source,
+        TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+        (TaskTemporalMention("hoy", TaskTemporalRole.WORK_SESSION_AT),),
+        task_reference="Odyssey",
+        activity_text="corregí el calendario",
+        activity_target=TaskActivityTarget.TASK,
+    )
+    resolved = temporal(dated_source, "hoy", "EXACT_DATE", date="2026-10-05")
+    assert compose_work_session_activity_date(dated, resolved) == "2026-10-05"
+
+
+def test_work_session_activity_fails_closed_for_ungrounded_or_wrong_domain_fields() -> None:
+    source = "Apunta en la work session de Odyssey que terminé los tests"
+    with pytest.raises(TaskInterpretationError, match="activity span"):
+        TaskInterpretation(
+            source,
+            TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+            task_reference="Odyssey",
+            activity_text="texto inventado",
+            activity_target=TaskActivityTarget.TASK,
+        )
+    with pytest.raises(TaskInterpretationError, match="session-selection time"):
+        TaskInterpretation(
+            source,
+            TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+            (TaskTemporalMention("Odyssey", TaskTemporalRole.WORK_SESSION_START_AT),),
+            task_reference="Odyssey",
+            activity_text="terminé los tests",
+            activity_target=TaskActivityTarget.TASK,
+        )
+    with pytest.raises(TaskInterpretationError, match="Only Work Session activity"):
+        TaskInterpretation(source, TaskOperation.CREATE, activity_text="terminé los tests")
+
+
 def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() -> None:
     source = "Tengo que llamar al banco el viernes"
 
@@ -399,6 +448,8 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
                         "clear_fields": [],
                         "query_scope": None,
                         "task_reference": "",
+                        "activity_text": "",
+                        "activity_target": "NONE",
                     }
                 ),
                 usage=None,
@@ -410,9 +461,11 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
     result = interpreter.interpret(source)
     assert result.operation is TaskOperation.CREATE
     assert result.task_reference is None
-    assert responses.kwargs["text"]["format"]["schema"]["properties"]["task_reference"] == {
-        "type": "string"
-    }
+    task_reference_schema = responses.kwargs["text"]["format"]["schema"]["properties"][
+        "task_reference"
+    ]
+    assert task_reference_schema["type"] == "string"
+    assert "without deciding whether they resolve" in task_reference_schema["description"]
     assert responses.kwargs["model"] == "gpt-6-luna"
     assert responses.kwargs["reasoning"] == {"effort": "low"}
     assert responses.kwargs["store"] is False

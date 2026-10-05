@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +18,13 @@ from odyssey_core.storage import NoteUnavailableError, VaultRepository
 
 from .schema import TASK_TYPE, WORK_SESSION_TYPE
 
+_WORK_SESSION_PATH_PREFIX = "Work session - "
+_ACTIVITY_HEADING = "## Actividad"
+_ACTIVITY_LINE = re.compile(
+    r"^- (?P<text>.+?) <!-- odyssey-work-session-entry:(?P<id>[A-Za-z0-9_-]{1,128}):(?P<created_at>[^>]+) -->$"
+)
+_MAX_ACTIVITY_TEXT = 2_000
+
 
 class WorkSessionError(ValueError):
     """Reject unavailable, stale, ambiguous, or invalid Work Session mutations."""
@@ -28,6 +36,15 @@ class WorkSessionError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class WorkSessionActivity:
+    """One stable user-authored activity entry inside a Work Session."""
+
+    id: str
+    created_at: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class WorkSessionSnapshot:
     """Expose one bounded Work Session projection with stale-state mutation tokens."""
 
@@ -35,6 +52,7 @@ class WorkSessionSnapshot:
     task_id: str
     started_at: str
     ended_at: str | None
+    activity: tuple[WorkSessionActivity, ...]
     revision: int
     source_hash: str
 
@@ -61,15 +79,18 @@ class TaskWorkSessionService:
         history: HistoryRecorder | None,
         *,
         id_allocator: Callable[[], str] = lambda: str(uuid4()),
+        activity_id_allocator: Callable[[], str] = lambda: str(uuid4()),
     ) -> None:
         self.repository = repository
         self.schema = schema
         self.history = history
         self.id_allocator = id_allocator
+        self.activity_id_allocator = activity_id_allocator
 
     def list_for_task(self, task_id: str) -> tuple[WorkSessionSnapshot, ...]:
         """Return current sessions for one canonical Task, newest first."""
-        self._load_task(task_id)
+        if not isinstance(task_id, str) or not task_id:
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE")
         sessions = [item for item in self._sessions() if item[1].metadata.get("task_id") == task_id]
         snapshots = [self._snapshot(raw, note) for _path, note, raw in sessions]
         snapshots.sort(key=lambda item: (item.started_at, item.id), reverse=True)
@@ -109,7 +130,7 @@ class TaskWorkSessionService:
         ):
             raise WorkSessionError("WORK_SESSION_ID_INVALID")
         name = f"Work session · {task.metadata['name']} · {started_at}"
-        path = f"Work session - {session_id}.md"
+        path = f"{_WORK_SESSION_PATH_PREFIX}{session_id}.md"
         snapshot = self._begin_history(request_id)
         try:
             create_entity(
@@ -325,6 +346,204 @@ class TaskWorkSessionService:
             now=now,
         )
 
+    def add_activity(
+        self,
+        *,
+        session_id: str,
+        text: str,
+        expected_revision: int,
+        expected_source_hash: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> WorkSessionMutationResult:
+        """Append one stable timestamped activity entry to an existing Work Session."""
+        path, note, raw = self._load_session(
+            session_id,
+            expected_revision=expected_revision,
+            expected_source_hash=expected_source_hash,
+        )
+        normalized = self._normalize_activity_text(text)
+        self._validate_datetime(now, "WORK_SESSION_TIME_INVALID")
+        entry_id = self.activity_id_allocator()
+        if (
+            not isinstance(entry_id, str)
+            or not entry_id.strip()
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", entry_id)
+        ):
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_ID_INVALID")
+        entries = list(self._parse_activity(note.content))
+        if any(item.id == entry_id for item in entries):
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_ID_INVALID")
+        entries.append(WorkSessionActivity(entry_id, now, normalized))
+        return self._replace_activity(
+            path=path,
+            note=note,
+            raw=raw,
+            entries=tuple(entries),
+            operation="work_session_activity_added",
+            request_id=request_id,
+            actor=actor,
+            now=now,
+        )
+
+    def edit_activity(
+        self,
+        *,
+        session_id: str,
+        activity_id: str,
+        text: str,
+        expected_revision: int,
+        expected_source_hash: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> WorkSessionMutationResult:
+        """Correct one exact activity entry while preserving its original trace timestamp."""
+        path, note, raw = self._load_session(
+            session_id,
+            expected_revision=expected_revision,
+            expected_source_hash=expected_source_hash,
+        )
+        normalized = self._normalize_activity_text(text)
+        entries = list(self._parse_activity(note.content))
+        matches = [index for index, item in enumerate(entries) if item.id == activity_id]
+        if len(matches) != 1:
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_UNAVAILABLE")
+        index = matches[0]
+        current = entries[index]
+        entries[index] = WorkSessionActivity(current.id, current.created_at, normalized)
+        return self._replace_activity(
+            path=path,
+            note=note,
+            raw=raw,
+            entries=tuple(entries),
+            operation="work_session_activity_edited",
+            request_id=request_id,
+            actor=actor,
+            now=now,
+        )
+
+    def delete_activity(
+        self,
+        *,
+        session_id: str,
+        activity_id: str,
+        expected_revision: int,
+        expected_source_hash: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> WorkSessionMutationResult:
+        """Remove one exact activity entry from a Work Session."""
+        path, note, raw = self._load_session(
+            session_id,
+            expected_revision=expected_revision,
+            expected_source_hash=expected_source_hash,
+        )
+        entries = list(self._parse_activity(note.content))
+        filtered = [item for item in entries if item.id != activity_id]
+        if len(filtered) != len(entries) - 1:
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_UNAVAILABLE")
+        return self._replace_activity(
+            path=path,
+            note=note,
+            raw=raw,
+            entries=tuple(filtered),
+            operation="work_session_activity_deleted",
+            request_id=request_id,
+            actor=actor,
+            now=now,
+        )
+
+    def add_activity_for_task(
+        self,
+        *,
+        task_id: str | None,
+        text: str,
+        session_date: str | None,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> WorkSessionMutationResult:
+        """Append activity to one safely selected active or date-scoped Work Session."""
+        if task_id is not None:
+            self._load_task(task_id)
+            sessions = list(self.list_for_task(task_id))
+        else:
+            sessions = [self._snapshot(raw, note) for _path, note, raw in self._active_sessions()]
+        if session_date is not None:
+            try:
+                wanted_date = datetime.fromisoformat(session_date).date()
+            except ValueError as error:
+                raise WorkSessionError("WORK_SESSION_TEMPORAL_INVALID") from error
+            sessions = [
+                item
+                for item in sessions
+                if self._validate_datetime(item.started_at, "WORK_SESSION_TIME_INVALID").date()
+                == wanted_date
+            ]
+        else:
+            sessions = [item for item in sessions if item.ended_at is None]
+        if not sessions:
+            raise WorkSessionError(
+                "WORK_SESSION_NOT_ACTIVE" if session_date is None else "WORK_SESSION_UNAVAILABLE"
+            )
+        if len(sessions) != 1:
+            raise WorkSessionError("WORK_SESSION_AMBIGUOUS")
+        current = sessions[0]
+        return self.add_activity(
+            session_id=current.id,
+            text=text,
+            expected_revision=current.revision,
+            expected_source_hash=current.source_hash,
+            request_id=request_id,
+            actor=actor,
+            now=now,
+        )
+
+    def _replace_activity(
+        self,
+        *,
+        path: str,
+        note: Any,
+        raw: str,
+        entries: tuple[WorkSessionActivity, ...],
+        operation: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> WorkSessionMutationResult:
+        session_id = str(note.metadata["id"])
+        snapshot = self._begin_history(request_id)
+        try:
+            update_entity(
+                self.repository,
+                self.schema,
+                path=path,
+                expected_id=session_id,
+                expected_revision=int(note.metadata["revision"]),
+                set_metadata={},
+                remove_metadata=(),
+                content=self._render_activity(entries),
+                actor=actor,
+                now=now,
+            )
+            updated_raw = self.repository.read_text(path)
+            updated = parse_note(updated_raw)
+            validate_note(updated, self.schema)
+        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
+        task_id = str(updated.metadata["task_id"])
+        return WorkSessionMutationResult(
+            operation,
+            task_id,
+            self._snapshot(updated_raw, updated),
+            self._record_history(request_id, snapshot, session_id),
+            path,
+            hashlib.sha256(raw.encode()).hexdigest(),
+        )
+
     def _load_task(
         self,
         task_id: str,
@@ -352,7 +571,17 @@ class TaskWorkSessionService:
         expected_revision: int,
         expected_source_hash: str,
     ) -> tuple[str, Any, str]:
-        path, note, raw = self._load_unique(session_id, WORK_SESSION_TYPE)
+        if not isinstance(session_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session_id):
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE")
+        path = f"{_WORK_SESSION_PATH_PREFIX}{session_id}.md"
+        try:
+            raw = self.repository.read_text(path)
+            note = parse_note(raw)
+            validate_note(note, self.schema)
+        except (NoteUnavailableError, NoteFormatError, NoteValidationError, ValueError) as error:
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
+        if note.metadata.get("id") != session_id or note.metadata.get("type") != WORK_SESSION_TYPE:
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE")
         if (
             not isinstance(expected_revision, int)
             or isinstance(expected_revision, bool)
@@ -392,6 +621,8 @@ class TaskWorkSessionService:
     def _sessions(self) -> list[tuple[str, Any, str]]:
         result: list[tuple[str, Any, str]] = []
         for path in self.repository.list_markdown_paths():
+            if not path.startswith(_WORK_SESSION_PATH_PREFIX):
+                continue
             try:
                 raw = self.repository.read_text(path)
                 note = parse_note(raw)
@@ -443,9 +674,68 @@ class TaskWorkSessionService:
             task_id=str(metadata["task_id"]),
             started_at=str(metadata["started_at"]),
             ended_at=(str(metadata["ended_at"]) if metadata.get("ended_at") is not None else None),
+            activity=TaskWorkSessionService._parse_activity(note.content),
             revision=int(metadata["revision"]),
             source_hash=hashlib.sha256(raw.encode()).hexdigest(),
         )
+
+    @staticmethod
+    def _normalize_activity_text(value: str) -> str:
+        if not isinstance(value, str):
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+        normalized = " ".join(value.split())
+        if (
+            not normalized
+            or len(normalized) > _MAX_ACTIVITY_TEXT
+            or "<!--" in normalized
+            or "-->" in normalized
+        ):
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+        return normalized
+
+    @staticmethod
+    def _parse_activity(content: str) -> tuple[WorkSessionActivity, ...]:
+        if not isinstance(content, str):
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+        if not content.strip():
+            return ()
+        lines = content.rstrip().splitlines()
+        if not lines or lines[0] != _ACTIVITY_HEADING:
+            raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+        entries: list[WorkSessionActivity] = []
+        seen_ids: set[str] = set()
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            match = _ACTIVITY_LINE.fullmatch(line)
+            if match is None:
+                raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+            entry_id = match.group("id")
+            if entry_id in seen_ids:
+                raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+            created_at = match.group("created_at")
+            TaskWorkSessionService._validate_datetime(created_at, "WORK_SESSION_ACTIVITY_INVALID")
+            text = TaskWorkSessionService._normalize_activity_text(match.group("text"))
+            entries.append(WorkSessionActivity(entry_id, created_at, text))
+            seen_ids.add(entry_id)
+        return tuple(entries)
+
+    @staticmethod
+    def _render_activity(entries: tuple[WorkSessionActivity, ...]) -> str:
+        if not entries:
+            return ""
+        lines = [_ACTIVITY_HEADING, ""]
+        for entry in entries:
+            text = TaskWorkSessionService._normalize_activity_text(entry.text)
+            TaskWorkSessionService._validate_datetime(
+                entry.created_at, "WORK_SESSION_ACTIVITY_INVALID"
+            )
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", entry.id):
+                raise WorkSessionError("WORK_SESSION_ACTIVITY_INVALID")
+            lines.append(
+                f"- {text} <!-- odyssey-work-session-entry:{entry.id}:{entry.created_at} -->"
+            )
+        return "\n".join(lines) + "\n"
 
     def _begin_history(self, request_id: str) -> object | None:
         if self.history is None:
