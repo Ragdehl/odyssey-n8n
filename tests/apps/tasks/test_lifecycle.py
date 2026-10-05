@@ -14,11 +14,14 @@ from odyssey_apps.tasks import (
     TaskInterpretation,
     TaskLifecycleGuard,
     TaskOperation,
+    TaskRelationshipMention,
+    TaskRelationshipRole,
 )
 from odyssey_core import create_entity
 from odyssey_core.application import WritePreflightGuardError
 from odyssey_core.reference_preflight import UnitTargetPreflight
 from odyssey_core.request_planning import (
+    KnowledgeReference,
     KnowledgeUnit,
     PropertyChange,
     RequestPlan,
@@ -159,3 +162,138 @@ def test_lifecycle_guard_transition_matrix(
     else:
         with pytest.raises(WritePreflightGuardError, match="TASK_INVALID_TRANSITION"):
             guard(plan().actions[0], preflight(), repository, current_schema)
+
+
+def test_task_create_adds_visible_action_when_shared_plan_is_property_only() -> None:
+    create_plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        SelectionCriteria("Llamar al banco", "llamar al banco", "task", (), None),
+                        "record",
+                        (PropertyChange("status", "set", "pending"),),
+                        (),
+                        (),
+                        (),
+                        "one",
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    wrapper = TaskCorePlanner(
+        FixedPlanner(create_plan),
+        TaskInterpretation("Tengo que llamar al banco", TaskOperation.CREATE),
+    )
+    result = wrapper.plan("Tengo que llamar al banco")
+    assert isinstance(result, RequestPlan)
+    unit = result.actions[0].units[0]  # type: ignore[union-attr]
+    assert unit.facts == ("[ ] Llamar al banco.",)
+    assert unit.fact_temporal_anchors == ((),)
+
+
+def test_task_core_planner_lowers_assignee_and_parent_to_core_references() -> None:
+    create_plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        SelectionCriteria(
+                            "Reunir documentos", "reunir documentos", "task", (), None
+                        ),
+                        "record",
+                        (PropertyChange("status", "set", "pending"),),
+                        (),
+                        ("Reunir documentos.",),
+                        (),
+                        "one",
+                        fact_temporal_anchors=((),),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+    interpretation = TaskInterpretation(
+        "Beatriz tiene que reunir documentos para preparar dossier",
+        TaskOperation.CREATE,
+        relationship_mentions=(
+            TaskRelationshipMention("Beatriz", TaskRelationshipRole.ASSIGNEE),
+            TaskRelationshipMention("preparar dossier", TaskRelationshipRole.PARENT_TASK),
+        ),
+    )
+    result = TaskCorePlanner(FixedPlanner(create_plan), interpretation).plan("x")
+    unit = result.actions[0].units[0]  # type: ignore[union-attr]
+    assert unit.facts == (
+        "[ ] Reunir documentos.",
+        "Responsable: {{ref:0}}.",
+        "Tarea superior: {{ref:1}}.",
+    )
+    assert [(ref.role, ref.mention, ref.target_index) for ref in unit.references] == [
+        ("assignee", "Beatriz", 1),
+        ("parent_task", "preparar dossier", 2),
+    ]
+    lookup_units = result.actions[0].units[1:]  # type: ignore[union-attr]
+    assert [
+        (item.target.query, item.target.type, item.reference_lookup_only) for item in lookup_units
+    ] == [
+        ("Beatriz", "person", True),
+        ("preparar dossier", "task", True),
+    ]
+
+
+def test_parent_task_guard_rejects_cycle_from_current_canonical_graph(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    current_schema = schema()
+    create_entity(
+        repository,
+        current_schema,
+        path="a.md",
+        entity_id="task-a",
+        metadata={"name": "A", "type": "task", "status": "pending"},
+        content="- A.\n",
+        actor="fixture",
+        now="2026-10-05T07:00:00+02:00",
+    )
+    create_entity(
+        repository,
+        current_schema,
+        path="b.md",
+        entity_id="task-b",
+        metadata={"name": "B", "type": "task", "status": "pending"},
+        content="- B.\n- Tarea superior: [[a|A]].\n",
+        actor="fixture",
+        now="2026-10-05T07:00:00+02:00",
+    )
+    action = WriteAction(
+        (
+            KnowledgeUnit(
+                SelectionCriteria("A", "A", "task", (), None),
+                "amend",
+                (),
+                (),
+                ("Tarea superior: {{ref:0}}.",),
+                (KnowledgeReference(1, "parent_task", "B"),),
+                fact_temporal_anchors=((),),
+            ),
+            KnowledgeUnit(
+                SelectionCriteria("B", "B", "task", (), None),
+                "record",
+                (),
+                (),
+                (),
+                (),
+                reference_lookup_only=True,
+            ),
+        )
+    )
+    preflight = (
+        UnitTargetPreflight(0, WriteTargetOutcome.UPDATE, stable_id="task-a"),
+        UnitTargetPreflight(1, WriteTargetOutcome.UPDATE, stable_id="task-b", reference_only=True),
+    )
+    with pytest.raises(WritePreflightGuardError, match="TASK_PARENT_CYCLE"):
+        TaskLifecycleGuard(TaskOperation.UPDATE)(action, preflight, repository, current_schema)

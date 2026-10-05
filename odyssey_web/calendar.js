@@ -75,6 +75,7 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
     if (day.journal_count) indicators.append(indicator("diario"));
     if (day.captured_fact_count) indicators.append(indicator("captura"));
     if (day.reference_count) indicators.append(indicator("referencia"));
+  if (day.task_count) indicators.append(indicator("tarea"));
     value.append(indicators);
     value.setAttribute("aria-label", dayAriaLabel(day));
     return value;
@@ -139,6 +140,7 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
     if (day.content.length) sections.append(blockSection("Contenido del día", day.content));
     if (day.journals.length) sections.append(journalSection(day.journals));
     if (day.captures.length) sections.append(captureSection(day.captures));
+    if (day.tasks.length) sections.append(taskSection(day.tasks));
     if (day.references.length) sections.append(referenceSection(day.references));
     if (!sections.children.length) {
       const empty = document.createElement("p");
@@ -186,6 +188,32 @@ export function mountCalendar(root, {endpoint = "/api/calendar"} = {}) {
       section.append(group);
     }
     return section;
+  }
+
+  function taskSection(tasks) {
+    const section = sectionWithHeading("Tareas");
+    for (const task of tasks) {
+      const group = document.createElement("article");
+      group.className = "calendar-related-group calendar-task-group";
+      const row = document.createElement("div");
+      row.className = "calendar-task-row";
+      const status = task.source.properties?.status;
+      const marker = document.createElement("span");
+      marker.className = "calendar-task-status";
+      marker.textContent = status === "completed" ? "☑" : "☐";
+      row.append(marker, noteButton(task.source));
+      group.append(row);
+      const roles = document.createElement("p");
+      roles.className = "calendar-task-roles";
+      roles.textContent = task.roles.map(taskRoleLabel).join(" · ");
+      group.append(roles);
+      section.append(group);
+    }
+    return section;
+  }
+
+  function taskRoleLabel(role) {
+    return ({target: "Prevista", planned_start: "Inicio previsto", planned_end: "Fin previsto", deadline: "Fecha límite", completed: "Completada"})[role] || role;
   }
 
   function referenceSection(references) {
@@ -292,6 +320,7 @@ function dayAriaLabel(day) {
   if (day.journal_count) details.push(`${day.journal_count} diario` + (day.journal_count === 1 ? "" : "s"));
   if (day.captured_fact_count) details.push(`${day.captured_fact_count} hechos capturados`);
   if (day.reference_count) details.push(`${day.reference_count} referencias`);
+  if (day.task_count) details.push(`${day.task_count} tarea` + (day.task_count === 1 ? "" : "s"));
   return `${dayLabel(day.date)}${details.length ? `. ${details.join(", ")}` : ""}`;
 }
 function button(label, action) {

@@ -22,6 +22,7 @@ from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, 
 from .identity_boundary import AuthenticatedActorContext, SelfBindingError, SelfBindingRepository
 from .materialization import (
     BoundedNoteWriter,
+    DeterministicContentTransformer,
     materialize_calendar_day_record,
     materialize_create,
     materialize_delete,
@@ -245,6 +246,7 @@ def execute_request(
     now: str,
     context_limit: int,
     writer: BoundedNoteWriter | None = None,
+    content_transformer: DeterministicContentTransformer | None = None,
     fact_selector: AtomicFactSelector | None = None,
     request_id_factory: Callable[[], str] = allocate_request_id,
     authenticated_actor: AuthenticatedActorContext | None = None,
@@ -274,6 +276,8 @@ def execute_request(
         now: Explicit persistence lifecycle timestamp.
         context_limit: Explicit positive retrieval result budget.
         writer: Optional bounded UPDATE writer.
+        content_transformer: Optional deterministic app-owned Markdown projection applied inside
+            Core's single persistence operation. It has no identity or persistence authority.
         request_id_factory: Injected one-per-request ID generator.
         authenticated_actor: Optional normalized actor context from the trusted integration
             boundary; raw headers, JWTs, and provider credentials are not accepted.
@@ -463,6 +467,7 @@ def execute_request(
                 actor,
                 now,
                 measured_writer,
+                content_transformer,
                 semantic_limit,
                 preflight_id_allocator,
                 request_id,
@@ -876,6 +881,7 @@ def _execute_write(
     actor: ActorInput,
     now: str,
     writer: BoundedNoteWriter | None,
+    content_transformer: DeterministicContentTransformer | None,
     semantic_limit: int,
     id_allocator: Callable[[], str] | None,
     request_id: str,
@@ -901,6 +907,15 @@ def _execute_write(
         unit.target.relational_reference is not None and not unit.reference_lookup_only
         for unit in action.units
     )
+    if content_transformer is not None and (
+        has_relational_target or any(unit.cardinality == "all_matching" for unit in action.units)
+    ):
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason="CONTENT_TRANSFORMER_REQUIRES_SINGLE_DIRECT_TARGET",
+        )
     if complete_set_references and has_relational_target:
         return ActionResult(
             action_index,
@@ -1070,6 +1085,7 @@ def _execute_write(
         executable_ordinals,
         fact_selector,
         spans,
+        content_transformer=content_transformer,
     )
     return ActionResult(
         action_index, action.kind, _action_status(results), unit_results=tuple(results)
@@ -1344,6 +1360,7 @@ def _execute_single_units(
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
     spans: SpanRecorder,
+    content_transformer: DeterministicContentTransformer | None = None,
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
     dependencies = _create_dependencies(action, preflight)
@@ -1425,6 +1442,7 @@ def _execute_single_units(
                     rendered_facts=rendered_facts[index],
                     request_id=request_id,
                     fact_ordinals=unit_ordinals[index],
+                    content_transformer=content_transformer,
                 )
             elif unit.intent == "delete":
                 persisted = spans.invoke(
@@ -1463,6 +1481,7 @@ def _execute_single_units(
                     request_id=request_id,
                     fact_ordinals=unit_ordinals[index],
                     fact_selector=fact_selector,
+                    content_transformer=content_transformer,
                 )
         except Exception as error:
             results[index] = UnitResult(

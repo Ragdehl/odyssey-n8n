@@ -57,6 +57,11 @@ class TaskTemporalRole(StrEnum):
     DEADLINE_AT = "DEADLINE_AT"
 
 
+class TaskRelationshipRole(StrEnum):
+    ASSIGNEE = "ASSIGNEE"
+    PARENT_TASK = "PARENT_TASK"
+
+
 class ResponsesClient(Protocol):
     responses: Any
 
@@ -76,6 +81,20 @@ class TaskTemporalMention:
 
 
 @dataclass(frozen=True, slots=True)
+class TaskRelationshipMention:
+    """Assign exact source wording to one Tasks-owned relationship role without resolving it."""
+
+    text: str
+    role: TaskRelationshipRole
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str) or not self.text.strip():
+            raise TaskInterpretationError("Task relationship wording is invalid")
+        if not isinstance(self.role, TaskRelationshipRole):
+            raise TaskInterpretationError("Task relationship role is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class TaskInterpretation:
     """Carry only Tasks lifecycle meaning and temporal-role assignments."""
 
@@ -84,6 +103,7 @@ class TaskInterpretation:
     temporal_mentions: tuple[TaskTemporalMention, ...] = ()
     clear_fields: tuple[str, ...] = ()
     query_scope: TaskQueryScope | None = None
+    relationship_mentions: tuple[TaskRelationshipMention, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_text, str) or not self.source_text.strip():
@@ -96,6 +116,21 @@ class TaskInterpretation:
             raise TaskInterpretationError("Task temporal mentions are invalid")
         if len(self.temporal_mentions) > 4:
             raise TaskInterpretationError("Task temporal mentions are too large")
+        if not isinstance(self.relationship_mentions, tuple) or not all(
+            isinstance(item, TaskRelationshipMention) for item in self.relationship_mentions
+        ):
+            raise TaskInterpretationError("Task relationship mentions are invalid")
+        if len(self.relationship_mentions) > 2:
+            raise TaskInterpretationError("Task relationship mentions are too large")
+        relationship_roles: set[TaskRelationshipRole] = set()
+        for mention in self.relationship_mentions:
+            if self.source_text.count(mention.text) != 1:
+                raise TaskInterpretationError(
+                    "Task relationship wording must identify one source occurrence"
+                )
+            if mention.role in relationship_roles:
+                raise TaskInterpretationError("Task relationship roles must be unique")
+            relationship_roles.add(mention.role)
         cursor = 0
         roles: set[TaskTemporalRole] = set()
         for mention in self.temporal_mentions:
@@ -121,7 +156,12 @@ class TaskInterpretation:
         }:
             raise TaskInterpretationError("Task cannot set and clear the same temporal property")
         if self.operation is TaskOperation.QUERY:
-            if self.query_scope is None or self.clear_fields or self.temporal_mentions:
+            if (
+                self.query_scope is None
+                or self.clear_fields
+                or self.temporal_mentions
+                or self.relationship_mentions
+            ):
                 raise TaskInterpretationError(
                     "Tasks v0 query requires one lifecycle scope without temporal range semantics"
                 )
@@ -131,14 +171,16 @@ class TaskInterpretation:
             TaskOperation.CREATE,
             TaskOperation.UPDATE,
             TaskOperation.QUERY,
-        } and (self.temporal_mentions or self.clear_fields):
-            raise TaskInterpretationError("Lifecycle transition cannot also reschedule in Tasks v0")
+        } and (self.temporal_mentions or self.clear_fields or self.relationship_mentions):
+            raise TaskInterpretationError(
+                "Lifecycle transition cannot also change task scheduling or relationships"
+            )
         if self.operation is TaskOperation.CREATE and self.clear_fields:
             raise TaskInterpretationError("Task create cannot clear scheduling properties")
         if self.operation is TaskOperation.UPDATE and not (
-            self.temporal_mentions or self.clear_fields
+            self.temporal_mentions or self.clear_fields or self.relationship_mentions
         ):
-            raise TaskInterpretationError("Task update has no scheduling change")
+            raise TaskInterpretationError("Task update has no scheduling or relationship change")
         if self.temporal_mentions and self.clear_fields:
             # Core cannot yet atomically mix property set/remove in one generic unit. Keep the app
             # fail-closed instead of allowing a partial schedule transition.
@@ -279,6 +321,18 @@ def task_interpretation_json_schema() -> dict[str, Any]:
         "required": ["text", "role"],
         "additionalProperties": False,
     }
+    relationship_item = {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "role": {
+                "type": "string",
+                "enum": [item.value for item in TaskRelationshipRole],
+            },
+        },
+        "required": ["text", "role"],
+        "additionalProperties": False,
+    }
     return {
         "type": "object",
         "properties": {
@@ -287,6 +341,11 @@ def task_interpretation_json_schema() -> dict[str, Any]:
                 "type": "array",
                 "maxItems": 4,
                 "items": temporal_item,
+            },
+            "relationship_mentions": {
+                "type": "array",
+                "maxItems": 2,
+                "items": relationship_item,
             },
             "clear_fields": {
                 "type": "array",
@@ -300,7 +359,13 @@ def task_interpretation_json_schema() -> dict[str, Any]:
                 ]
             },
         },
-        "required": ["operation", "temporal_mentions", "clear_fields", "query_scope"],
+        "required": [
+            "operation",
+            "temporal_mentions",
+            "relationship_mentions",
+            "clear_fields",
+            "query_scope",
+        ],
         "additionalProperties": False,
     }
 
@@ -309,6 +374,7 @@ def parse_task_interpretation(payload: Mapping[str, Any], source_text: str) -> T
     if not isinstance(payload, Mapping) or set(payload) != {
         "operation",
         "temporal_mentions",
+        "relationship_mentions",
         "clear_fields",
         "query_scope",
     }:
@@ -331,17 +397,31 @@ def parse_task_interpretation(payload: Mapping[str, Any], source_text: str) -> T
             mentions.append(TaskTemporalMention(raw["text"], TaskTemporalRole(raw["role"])))
         except (TypeError, ValueError) as error:
             raise TaskInterpretationError("Task temporal mention is invalid") from error
+    raw_relationships = payload["relationship_mentions"]
+    if not isinstance(raw_relationships, list):
+        raise TaskInterpretationError("Task relationship mentions are invalid")
+    relationships: list[TaskRelationshipMention] = []
+    for raw in raw_relationships:
+        if not isinstance(raw, Mapping) or set(raw) != {"text", "role"}:
+            raise TaskInterpretationError("Task relationship mention is invalid")
+        try:
+            relationships.append(
+                TaskRelationshipMention(raw["text"], TaskRelationshipRole(raw["role"]))
+            )
+        except (TypeError, ValueError) as error:
+            raise TaskInterpretationError("Task relationship mention is invalid") from error
     clear_fields = payload["clear_fields"]
     if not isinstance(clear_fields, list) or any(
         not isinstance(item, str) for item in clear_fields
     ):
         raise TaskInterpretationError("Task clear fields are invalid")
     return TaskInterpretation(
-        source_text,
-        operation,
-        tuple(mentions),
-        tuple(clear_fields),
-        query_scope,
+        source_text=source_text,
+        operation=operation,
+        temporal_mentions=tuple(mentions),
+        clear_fields=tuple(clear_fields),
+        query_scope=query_scope,
+        relationship_mentions=tuple(relationships),
     )
 
 
@@ -350,7 +430,7 @@ def render_task_prompt() -> str:
     return (
         "You are Odyssey Tasks. Interpret only task lifecycle semantics in the exact routed user "
         "source. Never choose a Core note target, invent a task identity, normalize a date/time, emit "
-        "facts, references, filters, Markdown, or mutation instructions. CREATE means the user is "
+        "facts, references, filters, Markdown, stable IDs, or mutation instructions. CREATE means the user is "
         "creating an actionable commitment, not merely describing a future or past occurrence. START "
         "means move an existing task into active work. COMPLETE, REOPEN, and CANCEL are explicit "
         "lifecycle transitions. UPDATE changes task scheduling without changing lifecycle state. QUERY "
@@ -358,7 +438,11 @@ def render_task_prompt() -> str:
         "exact source text and exactly one role: TARGET_DATE is the day the user intends to address the "
         "task and is not a hard deadline; PLANNED_START_AT and PLANNED_END_AT are exact planned clock "
         "instants; DEADLINE_AT is the hard latest date/time. Do not use DEADLINE_AT merely because a "
-        "task is associated with a date. Do not infer task lifecycle from words like task, future tense, "
+        "task is associated with a date. relationship_mentions may assign exact source wording to "
+        "ASSIGNEE when the user explicitly makes one person responsible, or PARENT_TASK when the "
+        "user explicitly identifies one parent task. Do not resolve either relationship yourself and "
+        "do not infer an assignee merely from who mentioned or benefits from the task. Do not infer "
+        "task lifecycle from words like task, future tense, "
         "or a clock time alone. clear_fields is only for an explicit request to remove an existing "
         "scheduling value. Do not combine lifecycle transitions with schedule changes in v0. QUERY must "
         "choose the narrow query_scope that matches the request. Return only the strict JSON object."

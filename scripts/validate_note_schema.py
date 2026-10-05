@@ -116,6 +116,10 @@ def _validate_types(types: Any) -> None:
                 )
         if "planner_writable" in note_type and not isinstance(note_type["planner_writable"], bool):
             raise SchemaValidationError(f"type {type_id!r} planner_writable must be boolean")
+        if "repeatable_identity" in note_type and not isinstance(
+            note_type["repeatable_identity"], bool
+        ):
+            raise SchemaValidationError(f"type {type_id!r} repeatable_identity must be boolean")
         _validate_properties(note_type["properties"], type_id)
 
 

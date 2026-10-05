@@ -166,7 +166,7 @@ def test_context_candidates_exclude_application_managed_notes(tmp_path: Path, sc
     candidates = index.find_candidates(schema, KeywordEmbedder(), "odyssey", limit=5)
 
     assert [item.id for item in candidates] == ["other"]
-    with pytest.raises(ValueError, match="Unknown ordinary semantic note type"):
+    with pytest.raises(ValueError, match="Unknown referenceable semantic note type"):
         index.find_candidates(schema, KeywordEmbedder(), "2026-10-01", type="calendar_day", limit=5)
 
 

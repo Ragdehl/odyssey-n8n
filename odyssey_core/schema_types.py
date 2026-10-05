@@ -31,6 +31,61 @@ def ordinary_type_ids(schema: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(values)
 
 
+def notes_visible_type_definitions(schema: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """Return canonical types that the general Notes browser may expose.
+
+    Ordinary Core types are visible by default. Application-managed types remain hidden unless
+    their owning extension explicitly opts into Notes visibility. Visibility never grants generic
+    creation or lifecycle mutation authority.
+    """
+    return tuple(
+        item
+        for item in canonical_type_definitions(schema)
+        if "managed_by" not in item or item.get("notes_visible") is True
+    )
+
+
+def notes_visible_type_ids(schema: Mapping[str, Any]) -> frozenset[str]:
+    values = tuple(item.get("id") for item in notes_visible_type_definitions(schema))
+    if not values or not all(isinstance(value, str) and value for value in values):
+        raise ValueError("Canonical schema has unusable type data")
+    return frozenset(values)
+
+
+def referenceable_type_definitions(schema: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """Return types that ordinary facts may reference as existing canonical identities only."""
+    return tuple(
+        item
+        for item in canonical_type_definitions(schema)
+        if "managed_by" not in item or item.get("referenceable") is True
+    )
+
+
+def referenceable_type_ids(schema: Mapping[str, Any]) -> frozenset[str]:
+    values = tuple(item.get("id") for item in referenceable_type_definitions(schema))
+    if not values or not all(isinstance(value, str) and value for value in values):
+        raise ValueError("Canonical schema has unusable type data")
+    return frozenset(values)
+
+
+def content_writable_type_definitions(
+    schema: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], ...]:
+    """Return types that Core may amend with ordinary facts without owning their lifecycle."""
+    return tuple(
+        item
+        for item in canonical_type_definitions(schema)
+        if "managed_by" not in item or item.get("content_writable") is True
+    )
+
+
+def content_writable_type_ids(schema: Mapping[str, Any]) -> frozenset[str]:
+    values = tuple(item.get("id") for item in content_writable_type_definitions(schema))
+    if not values or not all(isinstance(value, str) and value for value in values):
+        raise ValueError("Canonical schema has unusable type data")
+    return frozenset(values)
+
+
 def is_application_managed_type(schema: Mapping[str, Any], type_id: str) -> bool:
     """Return whether one canonical type has an application-owned deterministic lifecycle."""
     return any(

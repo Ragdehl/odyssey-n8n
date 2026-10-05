@@ -488,6 +488,7 @@ test("Notes transport sends only the allowed same-origin operation envelope", as
         fields: [
           {id: "tags", value_type: "array[string]", operators: ["contains"], applies_to: []},
           {id: "updated_at", value_type: "string", operators: ["gte", "lte"], applies_to: [], format: "date-time"},
+          {id: "status", value_type: "string", operators: ["eq"], applies_to: ["task"], controlled_values: ["pending", "completed"]},
         ],
       }});
     },
@@ -499,6 +500,7 @@ test("Notes transport sends only the allowed same-origin operation envelope", as
   assert.deepEqual(JSON.parse(captured.options.body), {operation: "capabilities"});
   assert.equal(result.types[0].id, "person");
   assert.equal(result.fields[1].format, "date-time");
+  assert.deepEqual(result.fields[2].controlled_values, ["pending", "completed"]);
   await assert.rejects(requestNotes({operation: "unsupported"}), NotesRequestError);
 });
 
@@ -669,4 +671,29 @@ test("Notes transport fails closed for a stale cursor, malformed JSON, and netwo
     }),
     NotesRequestError,
   );
+});
+
+
+test("Task status mutation transport is explicit and bounded", async () => {
+  let captured;
+  const result = await requestNotes({
+    operation: "task_status",
+    payload: {
+      note_id: "task-bank", completed: true, expected_revision: 2,
+      expected_source_hash: "a".repeat(64), request_id: "notes-task-toggle",
+    },
+    fetchImpl: async (_endpoint, options) => {
+      captured = JSON.parse(options.body);
+      return response({payload: {
+        kind: "mutation", operation: "task_completed", note_id: "task-bank",
+        history: {status: "COMMITTED"},
+      }});
+    },
+  });
+  assert.equal(captured.operation, "task_status");
+  assert.equal(captured.completed, true);
+  assert.equal(result.operation, "task_completed");
+  assert.throws(() => validateNotesResponse({
+    kind: "mutation", operation: "task_completed", note_id: "", history: {status: "COMMITTED"},
+  }), NotesRequestError);
 });

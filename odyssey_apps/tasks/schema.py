@@ -19,6 +19,10 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
             ),
             "examples": ["Call the bank", "Prepare the apartment inventory"],
             "managed_by": "tasks",
+            "repeatable_identity": True,
+            "notes_visible": True,
+            "referenceable": True,
+            "content_writable": True,
             "properties": [
                 {
                     "id": "status",
@@ -36,6 +40,7 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
                         "Calendar day on which the user intends to address the task; not a deadline."
                     ),
                     "filterable": True,
+                    "calendar_role": "target",
                 },
                 {
                     "id": "planned_start_at",
@@ -44,6 +49,7 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
                     "description": "Exact offset-aware instant when planned task work starts.",
                     "constraints": {"format": "date-time"},
                     "filterable": True,
+                    "calendar_role": "planned_start",
                 },
                 {
                     "id": "planned_end_at",
@@ -52,6 +58,7 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
                     "description": "Exact offset-aware instant when planned task work ends.",
                     "constraints": {"format": "date-time"},
                     "filterable": True,
+                    "calendar_role": "planned_end",
                 },
                 {
                     "id": "deadline_at",
@@ -62,6 +69,7 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
                     ),
                     "constraints": {"format": "temporal-anchor"},
                     "filterable": True,
+                    "calendar_role": "deadline",
                 },
                 {
                     "id": "completed_at",
@@ -70,6 +78,7 @@ TASK_SCHEMA_EXTENSION = ApplicationSchemaExtension(
                     "description": "Exact offset-aware instant when the task became completed.",
                     "constraints": {"format": "date-time"},
                     "filterable": True,
+                    "calendar_role": "completed",
                 },
             ],
         },

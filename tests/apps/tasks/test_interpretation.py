@@ -13,6 +13,8 @@ from odyssey_apps.tasks import (
     TaskInterpretationError,
     TaskOperation,
     TaskQueryScope,
+    TaskRelationshipMention,
+    TaskRelationshipRole,
     TaskTemporalMention,
     TaskTemporalRole,
     compose_task_domain_interpretation,
@@ -146,6 +148,34 @@ def test_query_is_domain_semantics_without_core_target_or_property_mutation() ->
     assert evidence_map(domain) == {"task.query_scope": "OVERDUE"}
 
 
+def test_relationship_mentions_preserve_roles_without_resolving_identity() -> None:
+    source = "Beatriz tiene que reunir documentos para preparar dossier"
+    task = TaskInterpretation(
+        source,
+        TaskOperation.CREATE,
+        relationship_mentions=(
+            TaskRelationshipMention("Beatriz", TaskRelationshipRole.ASSIGNEE),
+            TaskRelationshipMention("preparar dossier", TaskRelationshipRole.PARENT_TASK),
+        ),
+    )
+    assert [(item.text, item.role.value) for item in task.relationship_mentions] == [
+        ("Beatriz", "ASSIGNEE"),
+        ("preparar dossier", "PARENT_TASK"),
+    ]
+
+
+def test_relationship_mentions_are_for_create_or_update_only() -> None:
+    source = "Beatriz ha terminado llamar al banco"
+    with pytest.raises(TaskInterpretationError, match="relationship"):
+        TaskInterpretation(
+            source,
+            TaskOperation.COMPLETE,
+            relationship_mentions=(
+                TaskRelationshipMention("Beatriz", TaskRelationshipRole.ASSIGNEE),
+            ),
+        )
+
+
 def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() -> None:
     source = "Tengo que llamar al banco el viernes"
 
@@ -161,6 +191,7 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
                     {
                         "operation": "CREATE",
                         "temporal_mentions": [{"text": "el viernes", "role": "TARGET_DATE"}],
+                        "relationship_mentions": [],
                         "clear_fields": [],
                         "query_scope": None,
                     }

@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, cast
 
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
-from odyssey_core.schema_types import ordinary_type_ids
+from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.storage import VaultRepository
 
 
@@ -97,9 +97,9 @@ def _normalize_reference(value: str) -> str:
 
 
 def _canonical_types(schema: dict[str, Any]) -> set[str]:
-    """Return ordinary semantic type IDs available to generic identity resolution."""
+    """Return referenceable semantic type IDs available to generic identity resolution."""
     try:
-        type_ids = set(ordinary_type_ids(schema))
+        type_ids = set(referenceable_type_ids(schema))
     except ValueError:
         raise ValueError("Supplied schema is not a usable canonical schema") from None
     if not type_ids:

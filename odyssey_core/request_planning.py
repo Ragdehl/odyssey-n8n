@@ -328,6 +328,7 @@ class KnowledgeUnit:
     destination_type: str | None = None
     reference_lookup_only: bool = False
     fact_temporal_anchors: tuple[tuple[TemporalAnchor, ...], ...] = ()
+    force_create: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from odyssey_core.atomic_facts import capture_heading_date
@@ -38,6 +38,7 @@ class CalendarMonthDay:
     journal_count: int
     captured_fact_count: int
     reference_count: int
+    task_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,14 @@ class CalendarReference:
 
 
 @dataclass(frozen=True, slots=True)
+class CalendarTask:
+    """Represent one canonical Task projected onto a Calendar day by scheduling metadata."""
+
+    source: NoteSummary
+    roles: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CalendarDayView:
     """Represent Calendar's category-preserving projection for one virtual or materialized day."""
 
@@ -82,6 +91,7 @@ class CalendarDayView:
     journals: tuple[CalendarJournal, ...]
     captures: tuple[CalendarCapture, ...]
     references: tuple[CalendarReference, ...]
+    tasks: tuple[CalendarTask, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +105,47 @@ class _ScannedNote:
     body: str
     capture_counts: dict[str, int]
     explicit_dates: tuple[str, ...]
+    calendar_roles: dict[str, tuple[str, ...]]
+
+
+def _calendar_roles_for_note(
+    metadata: dict[str, Any], schema: dict[str, Any]
+) -> dict[str, tuple[str, ...]]:
+    """Project schema-declared calendar-role metadata into local ISO dates.
+
+    The application that owns a type declares which of its properties are calendar coordinates.
+    Calendar reads that canonical declaration rather than hard-coding Tasks lifecycle fields.
+    """
+    note_type = metadata.get("type")
+    definition = next(
+        (item for item in schema.get("types", ()) if item.get("id") == note_type),
+        None,
+    )
+    if not isinstance(definition, dict):
+        return {}
+    by_date: dict[str, list[str]] = {}
+    for property_ in definition.get("properties", ()):
+        if not isinstance(property_, dict):
+            continue
+        role = property_.get("calendar_role")
+        field = property_.get("id")
+        if not isinstance(role, str) or not role or not isinstance(field, str):
+            continue
+        value = metadata.get(field)
+        if not isinstance(value, str):
+            continue
+        try:
+            if len(value) == 10:
+                projected = date.fromisoformat(value).isoformat()
+            else:
+                instant = datetime.fromisoformat(value)
+                if instant.tzinfo is None:
+                    raise ValueError("calendar date-time must be offset-aware")
+                projected = instant.date().isoformat()
+        except ValueError as error:
+            raise CalendarQueryError("Calendar encountered invalid scheduling metadata") from error
+        by_date.setdefault(projected, []).append(role)
+    return {key: tuple(dict.fromkeys(value)) for key, value in by_date.items()}
 
 
 def normalize_month(value: str) -> str:
@@ -244,6 +295,7 @@ class CalendarQueryService:
                     body=body,
                     capture_counts=_capture_counts(body),
                     explicit_dates=explicit_dates,
+                    calendar_roles=_calendar_roles_for_note(dict(note.metadata), self.schema),
                 )
             )
         return tuple(scanned)
@@ -259,6 +311,7 @@ class CalendarQueryService:
                 "journal_count": 0,
                 "captured_fact_count": 0,
                 "reference_count": 0,
+                "task_count": 0,
             }
             for item in dates
         }
@@ -275,6 +328,10 @@ class CalendarQueryService:
             for referenced_date in note.explicit_dates:
                 if referenced_date in state:
                     state[referenced_date]["reference_count"] += 1
+            if note.type == "task":
+                for scheduled_date in note.calendar_roles:
+                    if scheduled_date in state:
+                        state[scheduled_date]["task_count"] += 1
         return CalendarMonth(
             month,
             tuple(CalendarMonthDay(date=item, **state[item]) for item in dates),
@@ -298,11 +355,13 @@ class CalendarQueryService:
         journals: list[CalendarJournal] = []
         captures: list[CalendarCapture] = []
         references: list[CalendarReference] = []
+        tasks: list[CalendarTask] = []
         for note in self._scan():
             relevant_capture = note.capture_counts.get(normalized, 0) > 0
             relevant_reference = normalized in note.explicit_dates
             relevant_journal = note.type == "journal_entry" and note.entry_date == normalized
-            if not (relevant_capture or relevant_reference or relevant_journal):
+            relevant_task = note.type == "task" and normalized in note.calendar_roles
+            if not (relevant_capture or relevant_reference or relevant_journal or relevant_task):
                 continue
             try:
                 detail = self.notes_service.detail(note.id)
@@ -321,6 +380,8 @@ class CalendarQueryService:
                 blocks = _reference_blocks(detail.body_blocks, target_id)
                 if blocks:
                     references.append(CalendarReference(detail.note, blocks))
+            if relevant_task:
+                tasks.append(CalendarTask(detail.note, note.calendar_roles[normalized]))
 
         def summary_key(summary: NoteSummary) -> tuple[str, str]:
             return (summary.name.casefold(), summary.id)
@@ -328,6 +389,7 @@ class CalendarQueryService:
         journals.sort(key=lambda item: summary_key(item.source))
         captures.sort(key=lambda item: summary_key(item.source))
         references.sort(key=lambda item: summary_key(item.source))
+        tasks.sort(key=lambda item: summary_key(item.source))
         return CalendarDayView(
             normalized,
             resolved.materialized,
@@ -335,4 +397,5 @@ class CalendarQueryService:
             tuple(journals),
             tuple(captures),
             tuple(references),
+            tuple(tasks),
         )

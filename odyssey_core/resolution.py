@@ -32,7 +32,7 @@ from odyssey_core.relationship_evidence import (
     RelationshipEvidenceProjector,
     TargetProjectionStatus,
 )
-from odyssey_core.schema_types import ordinary_type_ids
+from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.semantic import (
     SemanticEntityCandidate,
     SemanticEntityIndex,
@@ -82,6 +82,8 @@ class ExistingEntityResolution:
     candidate_ids: tuple[str, ...] = ()
     usage: Mapping[str, Any] | None = None
     has_ambiguous_exact_evidence: bool = False
+    exact_candidate_ids: tuple[str, ...] = ()
+    exact_clarification: ClarificationPresentation | None = None
     clarification: ClarificationPresentation | None = None
 
     @property
@@ -302,6 +304,18 @@ def resolve_existing_entity(
     clarification = _decision_clarification(
         reference, candidate_ids, candidates, repository, schema
     )
+    exact_candidate_ids = (
+        tuple(candidate.id for candidate in exact.candidates)
+        if exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
+        else ()
+    )
+    exact_clarification = (
+        _decision_clarification(
+            reference, exact_candidate_ids, exact.candidates, repository, schema
+        )
+        if exact_candidate_ids
+        else None
+    )
     return ExistingEntityResolution(
         outcome=ExistingEntityOutcome(decision.outcome),
         id=decision.id,
@@ -310,6 +324,8 @@ def resolve_existing_entity(
         has_ambiguous_exact_evidence=(
             exact.outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
         ),
+        exact_candidate_ids=exact_candidate_ids,
+        exact_clarification=exact_clarification,
         usage=_safe_usage(usage),
         clarification=clarification,
     )
@@ -446,11 +462,11 @@ def _expand_relationship_candidates(
     evidence_by_id: dict[str, list[str]] = {candidate.id: [] for candidate in ordered}
     added = 0
 
-    ordinary_types = ordinary_type_ids(schema)
+    referenceable_types = referenceable_type_ids(schema)
 
     def eligible(identity: Any) -> bool:
         return (
-            identity.type in ordinary_types
+            identity.type in referenceable_types
             and (note_type is None or identity.type == note_type)
             and (allowed_candidate_ids is None or identity.id in allowed_candidate_ids)
         )
@@ -541,7 +557,7 @@ def _is_current_active_candidate(
         ) from error
     return (
         note.metadata.get("id") == expected_id
-        and note.metadata.get("type") in ordinary_type_ids(schema)
+        and note.metadata.get("type") in referenceable_type_ids(schema)
         and note.metadata.get("deleted") is not True
     )
 

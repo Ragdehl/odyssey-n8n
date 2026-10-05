@@ -42,6 +42,11 @@ class ApplicationSchemaExtension:
                 raise ApplicationSchemaError(
                     f"Application schema type {type_id!r} must be managed by {self.capability_id!r}"
                 )
+            for flag in ("notes_visible", "referenceable", "content_writable"):
+                if flag in definition and not isinstance(definition[flag], bool):
+                    raise ApplicationSchemaError(
+                        f"Application schema type {type_id!r} {flag} must be boolean"
+                    )
 
 
 def compose_application_schema(

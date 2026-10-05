@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "current_context": {"date":"2026-10-05","time":"09:25:00","timezone":"Europe/Paris"},
+  "now": "2026-10-05T09:25:00+02:00",
+  "task_cases": [
+    {
+      "id":"T1-create-date",
+      "source":"Tengo que llamar al banco el viernes.",
+      "operation":"CREATE",
+      "temporal":[["el viernes","TARGET_DATE"]],
+      "relationships":[],
+      "query_scope":null
+    },
+    {
+      "id":"T2-assignee",
+      "source":"Beatriz tiene que llamar al seguro.",
+      "operation":"CREATE",
+      "temporal":[],
+      "relationships":[["Beatriz","ASSIGNEE"]],
+      "query_scope":null
+    },
+    {
+      "id":"T3-parent",
+      "source":"Tengo que reunir documentos como subtarea de preparar dossier.",
+      "operation":"CREATE",
+      "temporal":[],
+      "relationships":[["preparar dossier","PARENT_TASK"]],
+      "query_scope":null
+    },
+    {
+      "id":"T4-both",
+      "source":"Beatriz tiene que reservar hotel como subtarea de preparar el viaje.",
+      "operation":"CREATE",
+      "temporal":[],
+      "relationships":[["Beatriz","ASSIGNEE"],["preparar el viaje","PARENT_TASK"]],
+      "query_scope":null
+    },
+    {
+      "id":"T5-complete",
+      "source":"Marca enviar documentación como hecha.",
+      "operation":"COMPLETE",
+      "temporal":[],
+      "relationships":[],
+      "query_scope":null
+    }
+  ],
+  "planner_cases": [
+    {"id":"P1-create-date","task_case":"T1-create-date","kind":"task"},
+    {"id":"P2-complete","task_case":"T5-complete","kind":"task"},
+    {
+      "id":"P3-core-content",
+      "source":"Añade a la tarea llamar al banco que tengo que preguntar por las comisiones.",
+      "kind":"core_content"
+    }
+  ]
+}

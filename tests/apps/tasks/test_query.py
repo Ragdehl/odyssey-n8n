@@ -64,3 +64,14 @@ def test_open_and_completed_are_lifecycle_collections(tmp_path: Path) -> None:
         "completadas", TaskQueryScope.COMPLETED, now="2026-10-04T21:36:00+02:00"
     )
     assert [item.id for item in completed.items] == ["done"]
+
+
+def test_query_evidence_contains_selected_lifecycle_metadata_even_when_body_is_empty(
+    tmp_path: Path,
+) -> None:
+    service = build(tmp_path)
+    result = service.query("completadas", TaskQueryScope.COMPLETED, now="2026-10-04T21:36:00+02:00")
+    item = result.items[0]
+    assert "Task: Done" in item.content
+    assert "Status: completed" in item.content
+    assert "Deadline: 2026-10-03" in item.content

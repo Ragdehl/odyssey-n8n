@@ -23,7 +23,7 @@ from odyssey_core.relationship_evidence import (
     RelationshipEvidence,
     RelationshipEvidenceProjector,
 )
-from odyssey_core.schema_types import ordinary_type_ids
+from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
 
@@ -456,9 +456,9 @@ def find_filtered_note_ids(
         ValueError: If filters or the type restriction are not canonical.
         ContextRetrievalError: If a note cannot safely participate in the selection.
     """
-    ordinary_types = ordinary_type_ids(schema)
-    if note_type is not None and note_type not in ordinary_types:
-        raise ValueError(f"Unknown ordinary semantic note type: {note_type!r}")
+    referenceable_types = referenceable_type_ids(schema)
+    if note_type is not None and note_type not in referenceable_types:
+        raise ValueError(f"Unknown referenceable semantic note type: {note_type!r}")
     normalized_filters = _normalize_filters(schema, filters, note_type, ())
     matching_ids: set[str] = set()
     for path in repository.list_markdown_paths():
@@ -469,7 +469,7 @@ def find_filtered_note_ids(
             raise ContextRetrievalError(
                 "Cannot safely inspect a note for deterministic target filtering"
             ) from error
-        if note.metadata.get("type") not in ordinary_types:
+        if note.metadata.get("type") not in referenceable_types:
             continue
         if note.metadata.get("deleted") is not True and _metadata_matches_filters(
             note.metadata, normalized_filters, _filter_definitions(schema)
@@ -762,9 +762,9 @@ class ContextIndex:
             raise ValueError("Context query must not be empty")
         if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             raise ValueError("Context limit must be a positive integer")
-        ordinary_types = ordinary_type_ids(schema)
-        if type is not None and type not in ordinary_types:
-            raise ValueError(f"Unknown ordinary semantic note type: {type!r}")
+        referenceable_types = referenceable_type_ids(schema)
+        if type is not None and type not in referenceable_types:
+            raise ValueError(f"Unknown referenceable semantic note type: {type!r}")
         filter_definitions = _filter_definitions(schema)
         normalized_filters = _normalize_filters(schema, filters, type, required_tags)
         try:
@@ -864,7 +864,7 @@ class ContextIndex:
                     _encoded_tags,
                     blob,
                 ) in rows:
-                    if note_type not in ordinary_types:
+                    if note_type not in referenceable_types:
                         continue
                     if allowed_note_ids is not None and note_id not in allowed_note_ids:
                         continue

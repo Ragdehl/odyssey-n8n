@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from odyssey_core.application import WritePreflightGuardError
@@ -52,6 +53,7 @@ class TaskLifecycleGuard:
         # Preserve Core's own clarification/deferred target outcome rather than replacing it.
         if decision.outcome not in {WriteTargetOutcome.CREATE, WriteTargetOutcome.UPDATE}:
             return
+        _validate_task_relationships(unit, decision, preflight, repository, schema)
         if self.operation is TaskOperation.CREATE:
             if decision.outcome is not WriteTargetOutcome.CREATE:
                 raise WritePreflightGuardError("TASK_ALREADY_EXISTS")
@@ -65,6 +67,85 @@ class TaskLifecycleGuard:
         allowed = _ALLOWED_FROM.get(self.operation)
         if allowed is None or status not in allowed:
             raise WritePreflightGuardError("TASK_INVALID_TRANSITION")
+
+
+_PARENT_LINK = re.compile(r"Tarea superior:\s*\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
+_ASSIGNEE_LINK = re.compile(r"Responsable:\s*\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
+
+
+def _validate_task_relationships(
+    unit,  # type: ignore[no-untyped-def]
+    decision: UnitTargetPreflight,
+    preflight: tuple[UnitTargetPreflight, ...],
+    repository: VaultRepository,
+    schema: dict,
+) -> None:
+    """Keep Tasks role relations singular and parent graphs acyclic after exact Core resolution."""
+    parent_refs = [ref for ref in unit.references if ref.role == "parent_task"]
+    assignee_refs = [ref for ref in unit.references if ref.role == "assignee"]
+    if len(parent_refs) > 1 or len(assignee_refs) > 1:
+        raise WritePreflightGuardError("TASK_RELATIONSHIP_CARDINALITY")
+    if decision.outcome is WriteTargetOutcome.UPDATE and decision.stable_id is not None:
+        current = _load_task(repository, schema, decision.stable_id)
+        if parent_refs and _PARENT_LINK.search(current.content):
+            raise WritePreflightGuardError("TASK_PARENT_ALREADY_SET")
+        if assignee_refs and _ASSIGNEE_LINK.search(current.content):
+            raise WritePreflightGuardError("TASK_ASSIGNEE_ALREADY_SET")
+    if not parent_refs:
+        return
+    reference = parent_refs[0]
+    if reference.target_index is None:
+        raise WritePreflightGuardError("TASK_PARENT_UNAVAILABLE")
+    parent = next((item for item in preflight if item.unit_index == reference.target_index), None)
+    if (
+        parent is None
+        or parent.outcome is not WriteTargetOutcome.UPDATE
+        or parent.stable_id is None
+    ):
+        return
+    task_id = decision.stable_id
+    if task_id is None:
+        raise WritePreflightGuardError("TASK_TARGET_UNAVAILABLE")
+    if parent.stable_id == task_id:
+        raise WritePreflightGuardError("TASK_PARENT_CYCLE")
+    parent_map = _task_parent_map(repository, schema)
+    seen: set[str] = set()
+    cursor: str | None = parent.stable_id
+    while cursor is not None:
+        if cursor == task_id or cursor in seen:
+            raise WritePreflightGuardError("TASK_PARENT_CYCLE")
+        seen.add(cursor)
+        cursor = parent_map.get(cursor)
+
+
+def _task_parent_map(repository: VaultRepository, schema: dict) -> dict[str, str]:
+    notes: list[object] = []
+    path_to_id: dict[str, str] = {}
+    for path in repository.list_markdown_paths():
+        try:
+            note = parse_note(repository.read_text(path))
+            validate_note(note, schema)
+        except (NoteUnavailableError, NoteFormatError, NoteValidationError, ValueError) as error:
+            raise WritePreflightGuardError("TASK_STATE_UNAVAILABLE") from error
+        note_id = note.metadata.get("id")
+        if not isinstance(note_id, str) or not note_id:
+            raise WritePreflightGuardError("TASK_STATE_UNAVAILABLE")
+        path_to_id[path.removesuffix(".md").casefold()] = note_id
+        notes.append(note)
+    result: dict[str, str] = {}
+    for note in notes:
+        if note.metadata.get("type") != TASK_TYPE or note.metadata.get("deleted") is True:
+            continue
+        matches = _PARENT_LINK.findall(note.content)
+        if len(matches) > 1:
+            raise WritePreflightGuardError("TASK_PARENT_CARDINALITY_INVALID")
+        if not matches:
+            continue
+        parent_id = path_to_id.get(matches[0].removesuffix(".md").casefold())
+        if parent_id is None:
+            raise WritePreflightGuardError("TASK_PARENT_UNAVAILABLE")
+        result[str(note.metadata["id"])] = parent_id
+    return result
 
 
 def _load_task(repository: VaultRepository, schema: dict, stable_id: str):  # type: ignore[no-untyped-def]

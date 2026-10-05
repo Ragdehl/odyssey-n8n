@@ -77,12 +77,31 @@ class TaskQueryService:
                 TASK_TYPE,
                 tuple(tags),
                 dict(note.metadata),
-                note.content,
+                _task_evidence_content(note.metadata, note.content),
                 1.0,
             )
             selected.append((_task_sort_key(note.metadata, name), item))
         selected.sort(key=lambda pair: pair[0])
         return ContextPackage(source_text, tuple(item for _key, item in selected[:limit]))
+
+
+def _task_evidence_content(metadata: dict, body: str) -> str:
+    """Present authoritative lifecycle metadata as grounded answer evidence."""
+    labels = (
+        ("name", "Task"),
+        ("status", "Status"),
+        ("target_date", "Target date"),
+        ("planned_start_at", "Planned start"),
+        ("planned_end_at", "Planned end"),
+        ("deadline_at", "Deadline"),
+        ("completed_at", "Completed at"),
+    )
+    lines = [
+        f"{label}: {metadata[field]}" for field, label in labels if metadata.get(field) is not None
+    ]
+    if body.strip():
+        lines.append("Details:\n" + body.strip())
+    return "\n".join(lines)
 
 
 def _matches_scope(metadata: dict, scope: TaskQueryScope, current: datetime) -> bool:

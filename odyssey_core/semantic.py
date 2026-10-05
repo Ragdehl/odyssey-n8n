@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
-from odyssey_core.schema_types import ordinary_type_ids
+from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.storage import VaultRepository
 
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -224,9 +224,9 @@ def build_semantic_retrieval_text(note: Note, path: str) -> str:
 
 
 def _canonical_types(schema: dict[str, Any]) -> tuple[str, ...]:
-    """Return ordinary semantic type IDs indexed for generic identity resolution."""
+    """Return referenceable semantic type IDs indexed for generic identity resolution."""
     try:
-        values = tuple(sorted(ordinary_type_ids(schema)))
+        values = tuple(sorted(referenceable_type_ids(schema)))
     except ValueError:
         raise ValueError("Supplied schema is not a usable canonical schema") from None
     if not values:

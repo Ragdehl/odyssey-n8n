@@ -314,6 +314,15 @@ export function mountNotes(root, {
     });
     back.setAttribute("aria-label", "Volver a resultados de notas");
     const title = document.createElement("h2");
+    if (value.note.type === "task" && value.mutation && ["pending", "in_progress", "completed"].includes(value.note.properties?.status)) {
+      const completed = value.note.properties.status === "completed";
+      const toggle = button(completed ? "☑" : "☐", () => void toggleTask(value, !completed, toggle));
+      toggle.className = "note-task-toggle";
+      toggle.setAttribute("role", "checkbox");
+      toggle.setAttribute("aria-checked", completed ? "true" : "false");
+      toggle.setAttribute("aria-label", completed ? "Reabrir tarea" : "Marcar tarea como completada");
+      title.append(toggle);
+    }
     title.append(typeBadge(value.note.type), document.createTextNode(value.note.name));
     const headerControls = document.createElement("div");
     headerControls.className = "note-edit-controls";
@@ -366,13 +375,24 @@ export function mountNotes(root, {
     renderBody(body, value.body_blocks, open, state.editing && value.mutation
       ? (locator, control) => void deleteFact(value, locator, control)
       : null);
+    const related = [];
+    if (value.note.type === "task") {
+      const subtasks = document.createElement("section");
+      subtasks.className = "note-subtasks";
+      const subtasksHeading = document.createElement("h3");
+      subtasksHeading.textContent = "Subtareas";
+      subtasks.append(subtasksHeading);
+      void appendSubtasks(subtasks, value.note.id);
+      related.push(subtasks);
+    }
     const backlinks = document.createElement("section");
     backlinks.className = "note-backlinks";
     const backlinksHeading = document.createElement("h3");
     backlinksHeading.textContent = "Enlazada desde";
     backlinks.append(backlinksHeading);
-    void appendBacklinks(backlinks, value.note.id);
-    detail.replaceChildren(header, controls, properties, tags, body, backlinks);
+    void appendBacklinks(backlinks, value.note.id, value.note.type === "task");
+    related.push(backlinks);
+    detail.replaceChildren(header, controls, properties, tags, body, ...related);
   }
 
   function mutationRequestId() {
@@ -380,6 +400,21 @@ export function mountNotes(root, {
     if (!globalThis.crypto?.getRandomValues) throw new NotesRequestError("No se puede preparar la actualización.");
     globalThis.crypto.getRandomValues(bytes);
     return `notes-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  async function toggleTask(value, completed, control) {
+    control.disabled = true;
+    try {
+      await requestNotes({endpoint, operation: "task_status", payload: {
+        note_id: value.note.id, completed, expected_revision: value.mutation.revision,
+        expected_source_hash: value.mutation.source_hash, request_id: mutationRequestId(),
+      }});
+      await open(value.note.id, {history: false});
+      status.textContent = completed ? "Tarea completada." : "Tarea reabierta.";
+    } catch (error) {
+      control.disabled = false;
+      status.textContent = mutationErrorMessage(error);
+    }
   }
 
   async function deleteFact(value, factLocator, control) {
@@ -418,18 +453,50 @@ export function mountNotes(root, {
 
   function mutationErrorMessage(error) {
     if (error instanceof NotesRequestError && error.code === "INCOMING_REFERENCES") return "No se puede eliminar esta nota porque otras notas la enlazan.";
-    if (error instanceof NotesRequestError && ["STALE_NOTE", "FACT_UNAVAILABLE", "NOTE_UNAVAILABLE"].includes(error.code)) return "La nota ha cambiado. Ábrela de nuevo antes de modificarla.";
+    if (error instanceof NotesRequestError && ["STALE_NOTE", "FACT_UNAVAILABLE", "NOTE_UNAVAILABLE", "TASK_UNAVAILABLE", "TASK_INVALID_TRANSITION"].includes(error.code)) return "La nota ha cambiado. Ábrela de nuevo antes de modificarla.";
     return "No se ha podido actualizar la nota.";
   }
 
-  async function appendBacklinks(target, id) {
+  function backlinkText(item) {
+    return item.snippets.map((snippet) => snippet.block.segments.map((segment) => segment.text).join("")).join(" ");
+  }
+
+  function isSubtaskBacklink(item) {
+    return item.source.type === "task" && backlinkText(item).includes("Tarea superior:");
+  }
+
+  async function appendSubtasks(target, id) {
     try {
       const value = await requestNotes({endpoint, operation: "backlinks", payload: {note_id: id}});
-      if (!value.items.length) {
+      const items = value.items.filter(isSubtaskBacklink);
+      if (!items.length) {
+        target.append(document.createTextNode("Sin subtareas."));
+        return;
+      }
+      for (const item of items) {
+        const row = button("", () => void open(item.source.id));
+        row.className = "backlink note-subtask";
+        const completed = item.source.properties?.status === "completed";
+        const marker = document.createElement("span");
+        marker.className = "note-subtask-status";
+        marker.textContent = completed ? "☑" : "☐";
+        row.append(marker, document.createTextNode(item.source.name));
+        target.append(row);
+      }
+    } catch {
+      target.append(document.createTextNode("No se han podido cargar las subtareas."));
+    }
+  }
+
+  async function appendBacklinks(target, id, excludeSubtasks = false) {
+    try {
+      const value = await requestNotes({endpoint, operation: "backlinks", payload: {note_id: id}});
+      const items = excludeSubtasks ? value.items.filter((item) => !isSubtaskBacklink(item)) : value.items;
+      if (!items.length) {
         target.append(document.createTextNode("Sin enlaces entrantes."));
         return;
       }
-      for (const item of value.items) {
+      for (const item of items) {
         const row = button("", () => void open(item.source.id));
         row.className = "backlink";
         row.setAttribute("aria-label", `Abrir ${typeLabel(item.source.type)} ${item.source.name}`);
@@ -534,7 +601,11 @@ export function mountNotes(root, {
       } else if (field.value_type === "array[string]" && field.operators.includes("contains")) {
         container.append(textField(`filter-${field.id}`, filterLabel(field.id), "Valores separados por comas", field.id));
       } else if (field.value_type === "string" && field.operators.includes("eq")) {
-        container.append(textField(`filter-${field.id}`, filterLabel(field.id), "Coincidencia exacta", field.id));
+        if (field.controlled_values?.length) {
+          container.append(selectField(`filter-${field.id}`, filterLabel(field.id), field.controlled_values.map((value) => ({id: value, name: controlledValueLabel(field.id, value)}))));
+        } else {
+          container.append(textField(`filter-${field.id}`, filterLabel(field.id), "Coincidencia exacta", field.id));
+        }
       }
     }
   }

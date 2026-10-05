@@ -23,6 +23,7 @@ def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, ob
                     "journal_count": item.journal_count,
                     "captured_fact_count": item.captured_fact_count,
                     "reference_count": item.reference_count,
+                    "task_count": item.task_count,
                 }
                 for item in value.days
             ],
@@ -53,6 +54,13 @@ def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, ob
                     "blocks": [_block_to_response(block) for block in item.blocks],
                 }
                 for item in value.references
+            ],
+            "tasks": [
+                {
+                    "source": _summary_to_response(item.source),
+                    "roles": list(item.roles),
+                }
+                for item in value.tasks
             ],
         }
     raise TypeError("Calendar response is invalid")

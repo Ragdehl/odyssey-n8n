@@ -1,0 +1,234 @@
+{
+  "version": 1,
+  "head": "8f274c47da71dc85926e545f314c0c9982519ca9",
+  "dirty_worktree": true,
+  "matrix_sha256": "84b38f9005fac11d22e8928b8b3c952242143c74ec711ed8d6f49dddf6c08feb",
+  "source_digest": "52911b23792addada5b6ce61acf1b280cb9e7bcd00a6c2a0702936affbec3efd",
+  "provider_attempts": 8,
+  "automatic_retries": 0,
+  "mutation_authority": false,
+  "router_calls": 0,
+  "temporal_provider_calls": 0,
+  "sol_calls": 0,
+  "budget_upper_usd": 0.04141808,
+  "estimated_regional_cost_usd": 0.010276310000000002,
+  "passed": false,
+  "rows": [
+    {
+      "gate": "tasks",
+      "id": "T1-create-date",
+      "passed": true,
+      "actual": {
+        "operation": "CREATE",
+        "temporal": [
+          [
+            "el viernes",
+            "TARGET_DATE"
+          ]
+        ],
+        "relationships": [],
+        "clear_fields": [],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T2-assignee",
+      "passed": true,
+      "actual": {
+        "operation": "CREATE",
+        "temporal": [],
+        "relationships": [
+          [
+            "Beatriz",
+            "ASSIGNEE"
+          ]
+        ],
+        "clear_fields": [],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T3-parent",
+      "passed": true,
+      "actual": {
+        "operation": "CREATE",
+        "temporal": [],
+        "relationships": [
+          [
+            "preparar dossier",
+            "PARENT_TASK"
+          ]
+        ],
+        "clear_fields": [],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T4-both",
+      "passed": true,
+      "actual": {
+        "operation": "CREATE",
+        "temporal": [],
+        "relationships": [
+          [
+            "Beatriz",
+            "ASSIGNEE"
+          ],
+          [
+            "preparar el viaje",
+            "PARENT_TASK"
+          ]
+        ],
+        "clear_fields": [],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "tasks",
+      "id": "T5-complete",
+      "passed": true,
+      "actual": {
+        "operation": "COMPLETE",
+        "temporal": [],
+        "relationships": [],
+        "clear_fields": [],
+        "query_scope": null
+      },
+      "error": null
+    },
+    {
+      "gate": "planner",
+      "id": "P1-create-date",
+      "passed": true,
+      "actual": {
+        "target_type": "task",
+        "intent": "record",
+        "cardinality": "one",
+        "properties": {
+          "status": [
+            "set",
+            "pending"
+          ],
+          "target_date": [
+            "set",
+            "2026-10-09"
+          ]
+        },
+        "facts": [
+          "[ ] llamar al banco."
+        ]
+      },
+      "error": null
+    },
+    {
+      "gate": "planner",
+      "id": "P2-complete",
+      "passed": true,
+      "actual": {
+        "target_type": "task",
+        "intent": "amend",
+        "cardinality": "one",
+        "properties": {
+          "status": [
+            "set",
+            "completed"
+          ],
+          "completed_at": [
+            "set",
+            "2026-10-05T09:25:00+02:00"
+          ]
+        },
+        "facts": []
+      },
+      "error": null
+    },
+    {
+      "gate": "planner",
+      "id": "P3-core-content",
+      "passed": false,
+      "actual": {
+        "target_type": "task",
+        "intent": "record",
+        "cardinality": "one",
+        "properties": {},
+        "facts": [
+          "Tengo que preguntar por las comisiones."
+        ]
+      },
+      "error": null
+    }
+  ],
+  "provider_records": [
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 543,
+      "output_tokens": 91,
+      "response_id": "resp_018d14744ac13c5e016ac35ee2698c87d1801df25ecc7eb27b",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 543,
+      "output_tokens": 93,
+      "response_id": "resp_02daf26432600d38016ac35ee4a55c87d1803593dd7667c0f9",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 546,
+      "output_tokens": 92,
+      "response_id": "resp_024ae40834af5e20016ac35ee6f97487d18147330ebde1d9c1",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 549,
+      "output_tokens": 117,
+      "response_id": "resp_008ba30285894ae6016ac35ee94e8087d1abd420354b6c405b",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 541,
+      "output_tokens": 58,
+      "response_id": "resp_00ce208b6a8ab252016ac35eeb8e7487d1be2a31cf990c05fb",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 13678,
+      "output_tokens": 201,
+      "response_id": "resp_02294cc3ed572ce5016ac35eedc05087d192dff37cd0d697a5",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 13688,
+      "output_tokens": 212,
+      "response_id": "resp_047bc25cea2ca315016ac35ef25ce087d1a2e456f191e54850",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "input_tokens": 12974,
+      "output_tokens": 234,
+      "response_id": "resp_0440f1a1843f6fcc016ac35ef5c13887d18cf6ce0ae19776a2",
+      "status": "completed"
+    }
+  ]
+}

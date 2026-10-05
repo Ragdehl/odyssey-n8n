@@ -34,6 +34,7 @@ def test_calendar_application_dispatches_closed_month_and_day_queries() -> None:
         "journals": [],
         "captures": [],
         "references": [],
+        "tasks": [],
     }
     assert calls == [("month", "2026-10"), ("day", "2026-10-01")]
 

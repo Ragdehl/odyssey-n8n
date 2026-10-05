@@ -17,7 +17,7 @@ from odyssey_core.identity_boundary import (
 )
 from odyssey_core.request_planning import KnowledgeUnit
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
-from odyssey_core.schema_types import ordinary_type_ids
+from odyssey_core.schema_types import content_writable_type_ids, is_application_managed_type
 from odyssey_core.semantic import SemanticEntityIndex, TextEmbedder
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import CALENDAR_DAY_TYPE, CalendarDayRepository
@@ -80,8 +80,10 @@ def decide_write_target(
         embedder: Existing local query embedder.
         contextual_reasoner: Existing injected Phase 11 reasoner boundary.
         semantic_limit: Explicit Phase 11 semantic candidate budget.
-        explicit_new_entity: Explicit application-level NEW authorization. This is not inferred from
-            ordinary record wording and permits a fresh ID despite a deleted identity collision.
+        explicit_new_entity: Explicit application-level NEW authorization for deleted collisions.
+        ``unit.force_create`` is a separate trusted internal occurrence-creation signal added only
+            after provider validation; it bypasses existing-identity resolution for app-owned
+            occurrence types such as Tasks.
 
     Returns:
         Immutable UPDATE, CREATE, or NEEDS_CLARIFICATION authorization only.
@@ -135,6 +137,10 @@ def decide_write_target(
     reference = target.entity or target.query
     if not isinstance(reference, str) or not reference.strip() or not isinstance(target.query, str):
         return _clarification("invalid_target")
+    if unit.force_create:
+        if unit.reference_lookup_only or unit.intent != "record" or target.type is None:
+            return _clarification("invalid_force_create")
+        return WriteTargetDecision(WriteTargetOutcome.CREATE, target_type=target.type)
     allowed_ids = None
     if target.filters:
         allowed_ids = find_filtered_note_ids(
@@ -162,6 +168,16 @@ def decide_write_target(
         expand_relationship_context=True,
         self_note_id=self_note_id,
     )
+    if (
+        target.type is not None
+        and _type_uses_repeatable_identity(schema, target.type)
+        and resolution.has_ambiguous_exact_evidence
+    ):
+        return _clarification(
+            "ambiguous_existing_target",
+            resolution.exact_candidate_ids,
+            resolution.exact_clarification,
+        )
     if resolution.outcome is ExistingEntityOutcome.RESOLVED:
         assert resolution.id is not None
         return WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=resolution.id)
@@ -174,6 +190,8 @@ def decide_write_target(
             "ambiguous_existing_target", resolution.candidate_ids, resolution.clarification
         )
     if unit.intent == "record" and target.type is not None:
+        if is_application_managed_type(schema, target.type):
+            return _clarification("managed_type_requires_application_create")
         if not explicit_new_entity:
             deleted = find_deleted_exact_entity_candidates(
                 repository, schema, reference, type=target.type
@@ -186,10 +204,19 @@ def decide_write_target(
     return _clarification("unresolved_existing_target")
 
 
-def _canonical_types(schema: dict[str, Any]) -> frozenset[str]:
-    """Return ordinary semantic type IDs or reject an unusable schema."""
+def _type_uses_repeatable_identity(schema: dict[str, Any], type_id: str) -> bool:
+    """Return whether equal labels remain distinct occurrences unless deterministically narrowed."""
     try:
-        types = ordinary_type_ids(schema)
+        definition = next(item for item in schema["types"] if item.get("id") == type_id)
+    except (KeyError, StopIteration, TypeError):
+        raise ValueError("Supplied schema is not usable") from None
+    return definition.get("repeatable_identity") is True
+
+
+def _canonical_types(schema: dict[str, Any]) -> frozenset[str]:
+    """Return content-writable semantic type IDs or reject an unusable schema."""
+    try:
+        types = content_writable_type_ids(schema)
     except ValueError:
         raise ValueError("Supplied schema is not usable") from None
     if not types:

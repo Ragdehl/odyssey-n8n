@@ -23,7 +23,7 @@ from odyssey_core.context import (
 )
 from odyssey_core.filtering import supported_filter_operators
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
-from odyssey_core.schema_types import is_application_managed_type, ordinary_type_definitions
+from odyssey_core.schema_types import notes_visible_type_definitions, notes_visible_type_ids
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 
@@ -424,7 +424,7 @@ class NotesQueryService:
 
     def capabilities(self) -> NoteCapabilities:
         """Project ordinary semantic types and their Core-supported browser filters."""
-        visible_types = ordinary_type_definitions(self.schema)
+        visible_types = notes_visible_type_definitions(self.schema)
         universal_fields = {
             item["id"] for item in self.schema["metadata_fields"] if item.get("filterable") is True
         }
@@ -444,6 +444,7 @@ class NotesQueryService:
                     "operators": supported_filter_operators(definition),
                     "applies_to": applies_to,
                     "format": definition.get("constraints", {}).get("format"),
+                    "controlled_values": tuple(definition.get("constraints", {}).get("enum", ())),
                 }
             )
         return NoteCapabilities(
@@ -508,11 +509,8 @@ class NotesQueryService:
             )
         generation, notes = self._grounded_index_notes()
         if mode == "feed":
-            notes = [
-                note
-                for note in notes
-                if not is_application_managed_type(self.schema, note.summary.type)
-            ]
+            visible_type_ids = notes_visible_type_ids(self.schema)
+            notes = [note for note in notes if note.summary.type in visible_type_ids]
         offset = 0
         if saved_cursor is not None:
             saved = saved_cursor

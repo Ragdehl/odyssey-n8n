@@ -6,7 +6,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from odyssey_core.filtering import supported_filter_operators
-from odyssey_core.schema_types import ordinary_type_definitions
+from odyssey_core.schema_types import (
+    content_writable_type_definitions,
+    referenceable_type_definitions,
+)
 
 LIMITATIONS = {
     "not_supported": "An exact exclusion / NOT condition cannot currently be represented deterministically.",
@@ -39,7 +42,7 @@ def build_planner_capabilities(
         returns ``"date-time"``.
     """
     try:
-        types = list(ordinary_type_definitions(schema))
+        types = list(referenceable_type_definitions(schema))
         metadata_fields = list(schema["metadata_fields"])
         type_field = next(field for field in metadata_fields if field["id"] == "type")
     except (KeyError, StopIteration, TypeError, ValueError) as error:
@@ -102,7 +105,7 @@ def build_write_capabilities(schema: Mapping[str, Any]) -> dict[str, Any]:
         ValueError: If the schema is malformed or declares unsupported property semantics.
     """
     try:
-        types = list(ordinary_type_definitions(schema))
+        types = list(content_writable_type_definitions(schema))
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("Canonical schema has unusable write capability data") from error
 
@@ -118,7 +121,10 @@ def build_write_capabilities(schema: Mapping[str, Any]) -> dict[str, Any]:
         except (KeyError, TypeError) as error:
             raise ValueError("Canonical schema has unusable write capability data") from error
         write_properties: dict[str, Any] = {}
+        managed = "managed_by" in note_type
         for field in properties:
+            if managed and field.get("core_writable") is not True:
+                continue
             capability = _write_property_capability(field)
             field_id = field["id"]
             if field_id in write_properties:

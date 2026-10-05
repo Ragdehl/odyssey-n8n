@@ -6,6 +6,8 @@ from .interpretation import (
     TaskInterpretationError,
     TaskOperation,
     TaskQueryScope,
+    TaskRelationshipMention,
+    TaskRelationshipRole,
     TaskTemporalMention,
     TaskTemporalRole,
     compose_task_domain_interpretation,
@@ -14,6 +16,12 @@ from .interpretation import (
     task_interpretation_json_schema,
 )
 from .lifecycle import TaskLifecycleGuard
+from .mutations import (
+    TaskCheckboxContentTransformer,
+    TaskDirectMutationError,
+    TaskDirectMutationResult,
+    TaskDirectMutationService,
+)
 from .planning import TaskCorePlanner
 from .query import TaskQueryError, TaskQueryService
 from .schema import TASK_SCHEMA_EXTENSION, TASK_STATUS_VALUES, TASK_TYPE
@@ -22,6 +30,10 @@ __all__ = [
     "TASK_SCHEMA_EXTENSION",
     "TASK_STATUS_VALUES",
     "TASK_TYPE",
+    "TaskCheckboxContentTransformer",
+    "TaskDirectMutationError",
+    "TaskDirectMutationResult",
+    "TaskDirectMutationService",
     "TaskCorePlanner",
     "TaskLifecycleGuard",
     "TaskQueryError",
@@ -31,6 +43,8 @@ __all__ = [
     "TaskInterpretationError",
     "TaskOperation",
     "TaskQueryScope",
+    "TaskRelationshipRole",
+    "TaskRelationshipMention",
     "TaskTemporalMention",
     "TaskTemporalRole",
     "compose_task_domain_interpretation",

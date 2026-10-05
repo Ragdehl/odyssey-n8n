@@ -26,7 +26,10 @@ from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
     OpenAITaskInterpreter,
+    TaskCheckboxContentTransformer,
     TaskCorePlanner,
+    TaskDirectMutationError,
+    TaskDirectMutationService,
     TaskInterpretationError,
     TaskLifecycleGuard,
     TaskOperation,
@@ -191,6 +194,7 @@ class RuntimeComposition:
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
     ) = None
     direct_notes_mutations: DirectNoteMutationService | None = None
+    direct_task_mutations: TaskDirectMutationService | None = None
     notes_mutation_actor: (
         Callable[[AuthenticatedActorContext | None, ExternalPrincipal | None], object] | None
     ) = None
@@ -707,7 +711,7 @@ class RuntimeComposition:
                     cursor=payload.get("cursor"),
                 )
             )
-        if operation in {"delete_fact", "delete_note"}:
+        if operation in {"delete_fact", "delete_note", "task_status"}:
             if self.direct_notes_mutations is None or self.notes_mutation_actor is None:
                 raise ValueError("Notes mutation service is unavailable")
             request_id = payload.get("request_id")
@@ -735,7 +739,7 @@ class RuntimeComposition:
                         result = self.direct_notes_mutations.delete_fact(
                             **common, fact_locator=payload["fact_locator"]
                         )
-                    else:
+                    elif operation == "delete_note":
                         if set(payload) != {
                             "note_id",
                             "expected_revision",
@@ -744,7 +748,21 @@ class RuntimeComposition:
                         }:
                             raise ValueError("Notes deletion payload is invalid")
                         result = self.direct_notes_mutations.delete_note(**common)
-                except DirectNoteMutationError:
+                    else:
+                        if self.direct_task_mutations is None:
+                            raise ValueError("Task mutation service is unavailable")
+                        if set(payload) != {
+                            "note_id",
+                            "completed",
+                            "expected_revision",
+                            "expected_source_hash",
+                            "request_id",
+                        } or not isinstance(payload.get("completed"), bool):
+                            raise ValueError("Task status payload is invalid")
+                        result = self.direct_task_mutations.set_completed(
+                            **common, completed=payload["completed"]
+                        )
+                except (DirectNoteMutationError, TaskDirectMutationError):
                     raise
                 self.refresh_indexes()
             return {
@@ -1206,6 +1224,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         domain_interpretation: DomainInterpretation | None = None,
         planner_decorator: Callable[[Any], Any] | None = None,
         write_preflight_guard: WritePreflightGuard | None = None,
+        content_transformer: object | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
         clock = _current_time()
@@ -1250,6 +1269,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             now=clock["timestamp"],
             context_limit=context_limit,
             writer=writer,
+            content_transformer=content_transformer,
             fact_selector=fact_selector,
             semantic_set_selector=semantic_set_selector,
             pending_recorder=pending_recorder,
@@ -1404,6 +1424,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
     )
     application_router = OpenAIApplicationRouter.from_environment(application_catalog)
     application_executors: dict[str, ApplicationExecutor] = {}
+    direct_task_mutations = (
+        TaskDirectMutationService(repository, schema, history_recorder)
+        if "tasks" in enabled_application_ids
+        else None
+    )
 
     def execute_temporal_core(
         source_text: str,
@@ -1651,6 +1676,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             domain_interpretation=domain,
             planner_decorator=lambda planner: TaskCorePlanner(planner, task),
             write_preflight_guard=TaskLifecycleGuard(task.operation),
+            content_transformer=TaskCheckboxContentTransformer(),
         )
         return replace(
             core_result,
@@ -1683,6 +1709,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         direct_notes_mutations=DirectNoteMutationService(
             repository, schema, notes_service, history_recorder
         ),
+        direct_task_mutations=direct_task_mutations,
         notes_mutation_actor=notes_mutation_actor,
     )
 

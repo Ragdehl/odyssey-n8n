@@ -35,13 +35,14 @@ export function validateCalendarResponse(value) {
   }
   if (value.kind === "calendar_day") {
     if (!isoDate(value.date) || typeof value.materialized !== "boolean" || !Array.isArray(value.content) ||
-        !Array.isArray(value.journals) || !Array.isArray(value.captures) || !Array.isArray(value.references)) {
+        !Array.isArray(value.journals) || !Array.isArray(value.captures) || !Array.isArray(value.references) || !Array.isArray(value.tasks)) {
       throw new CalendarRequestError("Día inválido.");
     }
     return {
       kind: "calendar_day", date: value.date, materialized: value.materialized,
       content: value.content.map(validateBlock), journals: value.journals.map(validateJournal),
       captures: value.captures.map(validateCapture), references: value.references.map(validateReference),
+      tasks: value.tasks.map(validateTask),
     };
   }
   throw new CalendarRequestError("Respuesta de calendario no compatible.");
@@ -53,7 +54,7 @@ function validateMonthDay(value) {
   return {
     date: value.date, materialized: value.materialized, has_content: value.has_content,
     journal_count: count(value.journal_count), captured_fact_count: count(value.captured_fact_count),
-    reference_count: count(value.reference_count),
+    reference_count: count(value.reference_count), task_count: count(value.task_count),
   };
 }
 function validateJournal(value) {
@@ -67,6 +68,12 @@ function validateCapture(value) {
 function validateReference(value) {
   if (!value || !Array.isArray(value.blocks)) throw new CalendarRequestError("Referencia inválida.");
   return {source: validateSummary(value.source), blocks: value.blocks.map(validateBlock)};
+}
+function validateTask(value) {
+  if (!value || !Array.isArray(value.roles) || value.roles.some((role) => !["target", "planned_start", "planned_end", "deadline", "completed"].includes(role))) {
+    throw new CalendarRequestError("Tarea de calendario inválida.");
+  }
+  return {source: validateSummary(value.source), roles: [...new Set(value.roles)]};
 }
 function validateSummary(value) {
   if (!value || !text(value.id) || !text(value.name) || !text(value.type) || !Array.isArray(value.tags) ||

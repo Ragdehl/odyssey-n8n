@@ -355,6 +355,7 @@ def materialize_create(
     rendered_facts: tuple[str, ...] | None = None,
     request_id: str | None = None,
     fact_ordinals: tuple[int, ...] | None = None,
+    content_transformer: DeterministicContentTransformer | None = None,
 ) -> EntityPersistenceResult:
     """Materialize one preflight-authorized CREATE without semantic rendering.
 
@@ -401,6 +402,19 @@ def materialize_create(
         if request_id is not None and prepared_facts
         else "\n".join(prepared_facts)
     )
+    if content_transformer is not None:
+        content = content_transformer.transform(
+            ContentTransformRequest(
+                preflight.stable_id or "",
+                unit.target.type or "",
+                content,
+                metadata,
+                (),
+                True,
+            )
+        )
+        if not isinstance(content, str):
+            raise MaterializationError("Content transformer must return Markdown text")
     _validate_create_candidate(metadata, content, preflight.stable_id or "", actor, now, schema)
     _materialize_new_calendar_links(
         content, repository=repository, schema=schema, actor=actor, now=now
@@ -529,6 +543,25 @@ class BoundedNoteWriter(Protocol):
 
     def write(self, request: WriterRequest) -> object:
         """Return untrusted structured writer output for one supplied full-note request."""
+
+
+@dataclass(frozen=True, slots=True)
+class ContentTransformRequest:
+    """Describe one deterministic application-owned body projection inside Core persistence."""
+
+    note_id: str
+    note_type: str
+    current_body: str
+    set_metadata: Mapping[str, Any]
+    remove_metadata: tuple[str, ...]
+    creating: bool
+
+
+class DeterministicContentTransformer(Protocol):
+    """Transform canonical Markdown without provider calls or persistence authority."""
+
+    def transform(self, request: ContentTransformRequest) -> str:
+        """Return the complete transformed body or fail closed before persistence."""
 
 
 class OpenAILunaWriter:
@@ -663,6 +696,7 @@ def materialize_update(
     request_id: str | None = None,
     fact_ordinals: tuple[int, ...] | None = None,
     fact_selector: AtomicFactSelector | None = None,
+    content_transformer: DeterministicContentTransformer | None = None,
 ) -> EntityPersistenceResult:
     """Materialize one resolved existing-note UPDATE with one guarded persistence operation.
 
@@ -698,23 +732,34 @@ def materialize_update(
         existing, unit.properties, unit.tag_changes
     )
     prepared_facts = rendered_facts if rendered_facts is not None else unit.facts
+    content = existing.content
+    if content_transformer is not None:
+        content = content_transformer.transform(
+            ContentTransformRequest(
+                decision.existing_note_id or "",
+                str(existing.metadata["type"]),
+                content,
+                set_metadata,
+                remove_metadata,
+                False,
+            )
+        )
+        if not isinstance(content, str):
+            raise MaterializationError("Content transformer must return Markdown text")
     remaining_facts = (
         prepared_facts
         if unit.intent == "remove"
         else tuple(
-            fact
-            for fact in prepared_facts
-            if not is_exact_normalized_duplicate(existing.content, fact)
+            fact for fact in prepared_facts if not is_exact_normalized_duplicate(content, fact)
         )
     )
-    content = existing.content
     if request_id is not None and unit.intent == "remove":
         try:
-            existing_atomic = parse_atomic_facts(existing.content)
+            existing_atomic = parse_atomic_facts(content)
             targets = tuple(
                 target
                 for description in prepared_facts
-                if (target := find_unique_atomic_fact(existing.content, description)) is not None
+                if (target := find_unique_atomic_fact(content, description)) is not None
             )
         except ValueError as error:
             raise MaterializationError("Existing atomic facts are malformed") from error
@@ -743,7 +788,7 @@ def materialize_update(
         if fact_ordinals is None or len(fact_ordinals) != len(prepared_facts):
             raise MaterializationError("Atomic UPDATE requires one deterministic ordinal per fact")
         try:
-            existing_atomic = parse_atomic_facts(existing.content)
+            existing_atomic = parse_atomic_facts(content)
             known = {normalize_atomic_fact(item.text) for item in existing_atomic}
             replayed_ordinals = {
                 item.ordinal for item in existing_atomic if item.request_id == request_id
@@ -763,7 +808,7 @@ def materialize_update(
         addition_anchors = tuple(item[2] for item in additions_with_metadata)
         if additions:
             content = append_atomic_facts(
-                existing.content,
+                content,
                 additions,
                 request_id,
                 addition_ordinals,
@@ -781,15 +826,15 @@ def materialize_update(
                     existing.metadata["type"],
                     unit.intent,
                     remaining_facts,
-                    existing.content,
+                    content,
                 )
             )
         except MaterializationError:
             raise
         except Exception as error:
             raise WriterProviderError("Bounded writer failed") from error
-        operations = validate_writer_output(output, existing.content)
-        content = apply_writer_operations(existing.content, operations)
+        operations = validate_writer_output(output, content)
+        content = apply_writer_operations(content, operations)
         _validate_bound_wikilinks(existing.content, content, remaining_facts, unit.intent)
     _validate_staged_note(existing, schema, set_metadata, remove_metadata, content)
     if not set_metadata and not remove_metadata and content == existing.content:

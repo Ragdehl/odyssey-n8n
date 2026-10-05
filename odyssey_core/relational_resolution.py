@@ -37,7 +37,7 @@ from odyssey_core.resolution import (
     build_provider_evidence,
     resolve_existing_entity,
 )
-from odyssey_core.schema_types import ordinary_type_ids
+from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.semantic_sets import (
     DEFAULT_SEMANTIC_SET_BOUNDS,
     SemanticSetCandidate,
@@ -110,7 +110,7 @@ def resolve_relational_reference(
     if relation is None:
         raise ValueError("Selection has no relational reference")
     projector = RelationshipEvidenceProjector(repository, schema)
-    ordinary_types = ordinary_type_ids(schema)
+    ordinary_types = referenceable_type_ids(schema)
     if relation.source_kind == "self":
         if authenticated_actor is None or self_binding_repository is None:
             raise RelationalResolutionError("relational_source_unavailable")
@@ -394,7 +394,7 @@ def _resolve_qualified_singular_write(
     """
     relation = selection.relational_reference
     assert relation is not None and relation.members == "one"
-    ordinary_types = ordinary_type_ids(schema)
+    ordinary_types = referenceable_type_ids(schema)
     selected_facts = _select_relevant_read_facts(
         relation.reference,
         candidates,

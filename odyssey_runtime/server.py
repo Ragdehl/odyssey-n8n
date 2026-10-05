@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from odyssey_apps.calendar import CalendarQueryError
+from odyssey_apps.tasks import TaskDirectMutationError
 from odyssey_core.conversations import ConversationError
 from odyssey_core.direct_note_mutations import DirectNoteMutationError
 from odyssey_core.identity_boundary import (
@@ -164,6 +165,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "backlinks",
                         "delete_fact",
                         "delete_note",
+                        "task_status",
                     }:
                         raise ValueError("Notes operation is invalid")
                     actor_payload = {
@@ -187,7 +189,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     self._write_json(HTTPStatus.OK, notes_response)
                 except StaleCursorError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
-                except DirectNoteMutationError as error:
+                except (DirectNoteMutationError, TaskDirectMutationError) as error:
                     self._write_json(HTTPStatus.CONFLICT, {"error": error.code})
                 except NotesTelemetryError as error:
                     self._write_json(
