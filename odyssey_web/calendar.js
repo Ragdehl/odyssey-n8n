@@ -27,6 +27,8 @@ export function mountCalendar(root, {
     dayValue: null,
     loading: false,
     expanded: readExpandedState(sessionStorageImpl),
+    monthDetailDate: null,
+    monthDetail: null,
   };
   let dayRequestGeneration = 0;
   const inFlightDays = new Map();
@@ -37,6 +39,10 @@ export function mountCalendar(root, {
     status.textContent = "Cargando…";
     try {
       const month = await requestCalendar({endpoint, operation: "month", payload: {month: value}});
+      if (state.monthValue?.month !== month.month) {
+        state.monthDetailDate = null;
+        state.monthDetail = null;
+      }
       state.month = month.month;
       state.monthValue = month;
       renderMonth();
@@ -79,7 +85,8 @@ export function mountCalendar(root, {
 
   function dayButton(day) {
     const value = button("", () => void openDay(day.date));
-    value.className = "calendar-day-cell";
+    const detailOpen = state.monthDetailDate === day.date;
+    value.className = `calendar-day-cell${detailOpen ? " calendar-day-more-open" : ""}`;
     value.dataset.date = day.date;
     if (day.date === localDate()) value.className += " calendar-day-today";
     if (day.materialized) value.className += " calendar-day-materialized";
@@ -88,11 +95,28 @@ export function mountCalendar(root, {
     number.textContent = String(Number(day.date.slice(-2)));
     const previews = document.createElement("span");
     previews.className = "calendar-day-previews";
-    for (const preview of day.previews) previews.append(previewRow(preview));
+    const items = detailOpen && state.monthDetail
+      ? monthDetailPreviews(state.monthDetail)
+      : day.previews;
+    for (const preview of items) previews.append(previewRow(preview));
     if (day.preview_total > day.previews.length) {
       const overflow = document.createElement("span");
-      overflow.className = "calendar-day-overflow";
-      overflow.textContent = `+${day.preview_total - day.previews.length}`;
+      overflow.className = "calendar-day-overflow calendar-day-more";
+      overflow.setAttribute("role", "button");
+      overflow.setAttribute("tabindex", "0");
+      overflow.textContent = detailOpen
+        ? (state.monthDetail ? "Mostrar menos ↑" : "Cargando…")
+        : `Ver ${day.preview_total - day.previews.length} más ↓`;
+      overflow.addEventListener("click", (event) => {
+        event.stopPropagation?.();
+        void toggleMonthDetail(day);
+      });
+      overflow.addEventListener("keydown", (event) => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        void toggleMonthDetail(day);
+      });
       previews.append(overflow);
     }
     value.append(number, previews);
@@ -118,6 +142,59 @@ export function mountCalendar(root, {
     }
     row.append(copy);
     return row;
+  }
+
+  function monthDetailPreviews(day) {
+    const items = [];
+    if (day.content.length) {
+      items.push({kind: "day_content", source_type: "calendar_day", label: day.date, text: firstBlockText(day.content)});
+    }
+    for (const journal of day.journals) {
+      items.push({kind: "journal", source_type: journal.source.type, label: journal.source.name, text: firstBlockText(journal.content)});
+    }
+    for (const capture of day.captures) {
+      items.push({kind: "capture", source_type: capture.source.type, label: capture.source.name, text: firstBlockText(capture.facts)});
+    }
+    for (const task of day.tasks) {
+      items.push({kind: "task", source_type: task.source.type, label: task.source.name});
+    }
+    for (const reference of day.references) {
+      items.push({kind: "reference", source_type: reference.source.type, label: reference.source.name, text: firstBlockText(reference.blocks)});
+    }
+    return items;
+  }
+
+  function firstBlockText(blocks) {
+    for (const block of blocks) {
+      if (block.kind === "heading") continue;
+      const value = block.segments.map((segment) => segment.text).join("").replace(/\s+/g, " ").trim();
+      if (value) return value;
+    }
+    return undefined;
+  }
+
+  async function toggleMonthDetail(day) {
+    if (state.monthDetailDate === day.date) {
+      state.monthDetailDate = null;
+      state.monthDetail = null;
+      renderMonth();
+      return;
+    }
+    state.monthDetailDate = day.date;
+    state.monthDetail = null;
+    renderMonth();
+    try {
+      const detail = await requestDay(day.date);
+      if (state.monthDetailDate !== day.date) return;
+      state.monthDetail = detail;
+      renderMonth();
+    } catch {
+      if (state.monthDetailDate !== day.date) return;
+      state.monthDetailDate = null;
+      state.monthDetail = null;
+      renderMonth();
+      status.textContent = "No se ha podido cargar el contenido adicional de este día.";
+    }
   }
 
   function renderDensity() {

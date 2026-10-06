@@ -261,7 +261,7 @@ def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
     assert '"Capturado este día"' in calendar
     assert '"Referencias a este día"' in calendar
     assert "calendar-month-preview" in calendar
-    assert '"calendar-day-overflow"' in calendar
+    assert "calendar-day-overflow" in calendar
     assert "calendar-day-indicators" not in calendar
     assert "MONTH_PREVIEW_LIMIT = 4" in client
     assert 'new CustomEvent("odyssey:open-note"' in calendar

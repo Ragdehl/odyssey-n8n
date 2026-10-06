@@ -271,7 +271,7 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   assert.equal(previews[2].textContent.includes("Empezó en Airbus."), true);
   assert.equal(previews[3].textContent.includes("Llamar al banco"), true);
   assert.equal(cells[0].querySelectorAll(".calendar-indicator").length, 0);
-  assert.equal(cells[0].querySelector(".calendar-day-overflow").textContent, "+1");
+  assert.equal(cells[0].querySelector(".calendar-day-overflow").textContent, "Ver 1 más ↓");
   assert.ok(cells[0].querySelector(".note-type"));
 
   cells[0].click();
@@ -347,6 +347,74 @@ test("month density toggle expands the grid and persists for the browser session
   );
   assert.equal(restored.controller.state.expanded, true);
   assert.equal(restored.elements.grid.className, "calendar-grid calendar-grid-expanded");
+});
+
+test("month Ver más loads only that Day, adds an internal-scroll state, and closes the previous Day", async () => {
+  const calls = [];
+  const month = {
+    kind: "calendar_month", month: "2026-10", days: [
+      {
+        date: "2026-10-05", materialized: true, has_content: false,
+        journal_count: 0, captured_fact_count: 5, reference_count: 0, task_count: 0,
+        preview_total: 5,
+        previews: [
+          {kind: "capture", source_type: "person", label: "A", text: "Uno"},
+          {kind: "capture", source_type: "person", label: "B", text: "Dos"},
+          {kind: "capture", source_type: "person", label: "C", text: "Tres"},
+          {kind: "capture", source_type: "person", label: "D", text: "Cuatro"},
+        ],
+      },
+      {
+        date: "2026-10-06", materialized: true, has_content: false,
+        journal_count: 0, captured_fact_count: 5, reference_count: 0, task_count: 0,
+        preview_total: 5,
+        previews: [
+          {kind: "capture", source_type: "person", label: "F", text: "Seis"},
+          {kind: "capture", source_type: "person", label: "G", text: "Siete"},
+          {kind: "capture", source_type: "person", label: "H", text: "Ocho"},
+          {kind: "capture", source_type: "person", label: "I", text: "Nueve"},
+        ],
+      },
+    ],
+  };
+  function day(date, prefix) {
+    return {
+      kind: "calendar_day", date, materialized: true, content: [], journals: [],
+      captures: Array.from({length: 5}, (_, index) => ({
+        source: summary(`${prefix}-${index}`, `${prefix}${index + 1}`),
+        facts: [block(`Contenido ${prefix}${index + 1}`)],
+      })),
+      references: [], tasks: [],
+    };
+  }
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    calls.push({operation, payload});
+    if (operation === "month") return month;
+    return payload.date === "2026-10-05" ? day(payload.date, "A") : day(payload.date, "F");
+  });
+
+  const firstMore = mounted.elements.grid.querySelectorAll(".calendar-day-more")[0];
+  assert.equal(firstMore.textContent, "Ver 1 más ↓");
+  firstMore.click();
+  await flush();
+
+  let cells = mounted.elements.grid.querySelectorAll(".calendar-day-cell");
+  assert.equal(cells[0].className.includes("calendar-day-more-open"), true);
+  assert.equal(cells[0].querySelectorAll(".calendar-month-preview").length, 5);
+  assert.equal(cells[0].querySelector(".calendar-day-more").textContent, "Mostrar menos ↑");
+  assert.equal(cells[0].textContent.includes("Contenido A5"), true);
+  assert.equal(mounted.elements.monthView.hidden, false);
+  assert.equal(calls.filter(({operation}) => operation === "day").length, 1);
+
+  const secondMore = mounted.elements.grid.querySelectorAll(".calendar-day-more")[1];
+  secondMore.click();
+  await flush();
+
+  cells = mounted.elements.grid.querySelectorAll(".calendar-day-cell");
+  assert.equal(cells[0].className.includes("calendar-day-more-open"), false);
+  assert.equal(cells[1].className.includes("calendar-day-more-open"), true);
+  assert.equal(cells[1].textContent.includes("Contenido F5"), true);
+  assert.equal(calls.filter(({operation}) => operation === "day").length, 2);
 });
 
 test("Day navigation opens the previous and next natural dates without returning to month", async () => {

@@ -28,8 +28,12 @@ The month keeps a Monday-to-Sunday seven-column grid. Compared with Calendar v0:
 - compact mode prioritizes the day-specific visible snippet and hides a redundant source Note name; the source label remains the fallback when no meaningful snippet exists (notably Task titles);
 - an explicit expand/compact toggle widens the horizontally scrollable month substantially; expanded mode restores the source Note name and shows up to two visible lines of the day-specific snippet beneath it;
 - the expand/compact choice is presentation-only session state and survives ordinary navigation/reload within the same browser session;
-- when more preview entries exist, the cell shows a compact `+N` overflow indicator;
-- selecting anywhere on the date cell still opens the existing Day view.
+- when more preview entries exist, the cell exposes `Ver N más`; activating it fetches the existing
+  bounded Day projection only for that date and reveals the remaining source rows inside a vertical
+  scroll local to that Day cell;
+- only one Day cell may hold that internal expanded-scroll state at once; opening another closes the
+  previous one, and `Mostrar menos` returns the cell to its bounded month preview;
+- selecting the ordinary Day cell content still opens the existing Day view.
 
 The first version does **not** claim to rank semantic importance. To avoid inventing another ranking
 system, candidates follow Calendar's existing Day category order: Day-owned content, Journal,
@@ -108,7 +112,9 @@ rows actually returned; overflow sources contribute only to the deterministic `p
 
 The browser validates the bounded projection, makes its existing one month request, and renders
 compact Notes type badges plus the day-specific snippet (falling back to the source label only when
-no snippet exists), with `+N` overflow inside the existing whole-cell Day navigation target. After
+no snippet exists). Overflow is loaded on demand through the already-approved Day read operation:
+`Ver N más` opens one cell-local vertical scroll with the full Day category projection, while
+opening another cell closes the previous one. After
 the first isolated-DEV mobile review, the month grid deliberately became horizontally scrollable on
 narrow screens so columns can stay wider, and the semantic type badge was reduced further. A second
 presentation-only toggle now offers an expanded reading mode: wider Day columns, source Note name,

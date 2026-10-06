@@ -200,6 +200,21 @@ button:disabled { opacity: .55; }
 .calendar-preview-text { color: #6a7287; font-weight: 500; }
 .calendar-preview-has-text .calendar-preview-label { display: none; }
 .calendar-day-overflow { color: #6a7287; font-size: .65rem; font-weight: 700; }
+.calendar-day-more { cursor: pointer; text-decoration: underline; text-underline-offset: .12em; }
+.calendar-day-more-open .calendar-day-previews {
+  max-height: 8.7rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: .08rem;
+}
+.calendar-day-more-open .calendar-day-more {
+  position: sticky;
+  bottom: 0;
+  justify-self: start;
+  padding: .12rem .18rem;
+  border-radius: .25rem;
+  background: rgba(249,248,255,.96);
+}
 .calendar-grid-expanded .calendar-weekdays,
 .calendar-grid-expanded .calendar-cells { min-width: 64rem; }
 .calendar-grid-expanded .calendar-day-cell,
