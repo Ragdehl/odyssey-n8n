@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from odyssey_core.git_history import GitHistoryResult, HistoryRecorder, HistoryStatus
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
-from odyssey_core.persistence import ActorInput, create_entity, update_entity
+from odyssey_core.persistence import ActorInput, create_entity, soft_delete_entity, update_entity
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 
 from .schema import TASK_TYPE, WORK_SESSION_TYPE
@@ -344,6 +344,46 @@ class TaskWorkSessionService:
             request_id=request_id,
             actor=actor,
             now=now,
+        )
+
+    def delete(
+        self,
+        *,
+        session_id: str,
+        expected_revision: int,
+        expected_source_hash: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> WorkSessionMutationResult:
+        """Soft-delete one exact Work Session through current stale-state evidence."""
+        path, note, raw = self._load_session(
+            session_id,
+            expected_revision=expected_revision,
+            expected_source_hash=expected_source_hash,
+        )
+        task_id = str(note.metadata["task_id"])
+        prior = self._snapshot(raw, note)
+        history = self._begin_history(request_id)
+        try:
+            soft_delete_entity(
+                self.repository,
+                self.schema,
+                path=path,
+                expected_id=session_id,
+                expected_revision=expected_revision,
+                actor=actor,
+                now=now,
+            )
+        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
+        return WorkSessionMutationResult(
+            "work_session_deleted",
+            task_id,
+            prior,
+            self._record_history(request_id, history, session_id),
+            path,
+            hashlib.sha256(raw.encode()).hexdigest(),
         )
 
     def add_activity(

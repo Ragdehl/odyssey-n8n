@@ -347,8 +347,8 @@ class RuntimeComposition:
                     clarification_store.replace(pending)
                 elif result.clarification_code is None:
                     # A choice with no bounded safe options cannot be resumed in this v1.
+                    # Keep the specific product reason so the UI can explain what was unresolved.
                     response["product_outcome"] = "CANNOT_ANSWER"
-                    response["product_reason"] = "INCOMPLETE_EVIDENCE"
         if (
             store is not None
             and fingerprint is not None
@@ -735,6 +735,7 @@ class RuntimeComposition:
             "work_session_start",
             "work_session_stop",
             "work_session_edit",
+            "work_session_delete",
             "work_session_activity_add",
             "work_session_activity_edit",
             "work_session_activity_delete",
@@ -775,6 +776,22 @@ class RuntimeComposition:
                     result = self.work_session_service.stop(
                         session_id=payload["session_id"],
                         ended_at=now,
+                        expected_revision=cast(int, payload.get("expected_revision")),
+                        expected_source_hash=cast(str, payload.get("expected_source_hash")),
+                        request_id=request_id,
+                        actor=actor,
+                        now=now,
+                    )
+                elif operation == "work_session_delete":
+                    if set(payload) != {
+                        "session_id",
+                        "expected_revision",
+                        "expected_source_hash",
+                        "request_id",
+                    } or not isinstance(payload.get("session_id"), str):
+                        raise ValueError("Work Session deletion payload is invalid")
+                    result = self.work_session_service.delete(
+                        session_id=payload["session_id"],
                         expected_revision=cast(int, payload.get("expected_revision")),
                         expected_source_hash=cast(str, payload.get("expected_source_hash")),
                         request_id=request_id,

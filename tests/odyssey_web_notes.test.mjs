@@ -146,6 +146,7 @@ async function mountNotes({requestNotes, confirmImpl = () => true, sessionStorag
     search: new FakeElement("input"), searchForm: new FakeElement("form"), list: new FakeElement("section"),
     listView: new FakeElement("section"), detail: new FakeElement("section"), sort: new FakeElement("select"),
     status: new FakeElement("p"), chips: new FakeElement("div"), filters: new FakeElement("button"),
+    info: new FakeElement("button"), sortIcon: new FakeElement("span"),
     filterSheet: new FakeElement("dialog"), filterForm: new FakeElement("form"), filterFields: new FakeElement("div"),
     filterClose: new FakeElement("button"), filterClear: new FakeElement("button"),
   };
@@ -155,6 +156,7 @@ async function mountNotes({requestNotes, confirmImpl = () => true, sessionStorag
     ["#notes-search", elements.search], ["#notes-search-form", elements.searchForm], ["#notes-list", elements.list],
     ["#notes-list-view", elements.listView], ["#note-detail", elements.detail], ["#notes-sort", elements.sort],
     ["#notes-status", elements.status], ["#notes-filter-chips", elements.chips], ["#notes-filters", elements.filters],
+    ["#notes-info", elements.info], ["#notes-sort-icon", elements.sortIcon],
   ];
   const rootMap = new Map(rootSelectors);
   root.querySelector = (selector) => rootMap.get(selector) ?? null;
@@ -311,7 +313,7 @@ test("normal Notes browsing loads bounded independent type groups and advances o
   assert.equal(groupElement(mounted, "person").querySelector(".notes-type-count").textContent, "4");
   assert.equal(groupElement(mounted, "task").querySelector(".notes-type-count").textContent, "1");
   assert.equal(mounted.elements.list.textContent.includes("Odyssey organiza tu información en notas de distintos tipos"), false);
-  mounted.elements.list.querySelector(".notes-groups-help-toggle").click();
+  mounted.elements.info.click();
   assert.equal(mounted.elements.list.textContent.includes("Odyssey organiza tu información en notas de distintos tipos"), true);
   assert.equal(mounted.elements.list.textContent.includes("la relaciona con las demás"), true);
 
@@ -865,7 +867,7 @@ test("Calendar Day inline links hand navigation to Calendar instead of opening m
   assert.deepEqual(mounted.document.events.at(-1).detail, {date: "2026-10-01"});
 });
 
-test("backlinks stay compact until the user expands one source", async () => {
+test("backlinks render source occurrences open without disclosure controls", async () => {
   const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
     if (operation === "capabilities") return capabilities();
     if (operation === "detail") return detail(payload.note_id, "Marta");
@@ -887,11 +889,9 @@ test("backlinks stay compact until the user expands one source", async () => {
 
   const occurrences = mounted.elements.detail.querySelector(".backlink-occurrences");
   const disclosure = mounted.elements.detail.querySelector(".backlink-disclosure");
-  assert.equal(occurrences.hidden, true);
-  assert.equal(disclosure["aria-expanded"], "false");
-  disclosure.click();
   assert.equal(occurrences.hidden, false);
-  assert.equal(disclosure["aria-expanded"], "true");
+  assert.equal(disclosure, null);
+  assert.equal(occurrences.querySelectorAll(".backlink-occurrence").length, 2);
 });
 
 test("inline links keep standard link text color while the target icon keeps semantic color", async () => {

@@ -141,6 +141,19 @@ def test_runtime_task_detail_start_stop_and_edit_share_one_domain_service(tmp_pa
     fresh_detail = runtime.notes("detail", {"note_id": "task-odyssey"})
     assert fresh_detail["work_sessions"] == activity["work_sessions"]
 
+    deleted = runtime.notes(
+        "work_session_delete",
+        {
+            "session_id": logged["id"],
+            "expected_revision": logged["mutation"]["revision"],
+            "expected_source_hash": logged["mutation"]["source_hash"],
+            "request_id": "runtime-delete-session",
+        },
+    )
+    assert deleted["operation"] == "work_session_deleted"
+    assert deleted["note_id"] == "task-odyssey"
+    assert deleted["work_sessions"] == []
+
 
 def test_runtime_subtask_create_is_a_typed_notes_mutation(tmp_path: Path) -> None:
     vault = tmp_path / "vault"

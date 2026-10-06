@@ -17,6 +17,8 @@ const ACTION_ICONS = Object.freeze({
   close: ["M7 7l10 10M17 7 7 17"],
   more: ["M5 12h.01M12 12h.01M19 12h.01"],
   info: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 11v6M12 7h.01"],
+  filter: ["M4 5h16l-6 7v5l-4 2v-7L4 5Z"],
+  sort: ["M8 6h12M8 12h9M8 18h6", "m4 5-2 2-2-2M2 7v12", "m-2-2 2 2 2-2"],
   openNote: ["M6 3h9l3 3v15H6z", "M14 3v5h4", "M10 15h7", "m14 12 3 3-3 3"],
   send: ["M4 4l17 8-17 8 3-8-3-8Z", "M7 12h14"],
 });
@@ -80,6 +82,11 @@ export function mountNotes(root, {
   const status = root.querySelector("#notes-status");
   const chips = root.querySelector("#notes-filter-chips");
   const filterButton = root.querySelector("#notes-filters");
+  const infoButton = root.querySelector("#notes-info");
+  const sortIcon = root.querySelector("#notes-sort-icon");
+  if (filterButton) setActionIcon(filterButton, "filter", "Filtrar notas");
+  if (infoButton) setActionIcon(infoButton, "info", "Cómo organiza Odyssey tus notas");
+  sortIcon?.append(actionIcon("sort"));
   const filterSheet = document.querySelector("#notes-filter-sheet");
   const filterForm = document.querySelector("#notes-filter-form");
   const filterFields = document.querySelector("#notes-filter-fields");
@@ -299,22 +306,16 @@ export function mountNotes(root, {
   }
 
   function renderNormalGroups() {
-    const help = document.createElement("section");
-    help.className = "notes-groups-help";
-    const helpToggle = actionButton("info", "Cómo organiza Odyssey tus notas", () => {
-      state.introOpen = !state.introOpen;
-      renderList();
-    }, "notes-groups-help-toggle");
-    helpToggle.setAttribute("aria-expanded", state.introOpen ? "true" : "false");
-    help.append(helpToggle);
+    const prefix = [];
     if (state.introOpen) {
       const intro = document.createElement("p");
       intro.className = "notes-groups-intro";
       intro.textContent = "Odyssey organiza tu información en notas de distintos tipos. Cuando le das información sobre una persona, proyecto, tarea u otro elemento, crea o actualiza su nota y la relaciona con las demás cuando existe un vínculo entre ellas.";
-      help.append(intro);
+      prefix.push(intro);
     }
+    infoButton?.setAttribute("aria-expanded", state.introOpen ? "true" : "false");
     const groups = eligibleTypes().map((type) => typeGroup(type, state.groups.get(type.id)));
-    list.replaceChildren(help, ...groups, createTypeCard());
+    list.replaceChildren(...prefix, ...groups, createTypeCard());
   }
 
   function renderGlobalGroups() {
@@ -880,7 +881,8 @@ export function mountNotes(root, {
           state.editingWorkSessionActivityId = null;
           renderDetail();
         }, "work-session-edit action-time");
-        actions.append(open, edit);
+        const remove = actionButton("delete", "Eliminar sesión", () => void deleteWorkSession(value, session, remove), "work-session-delete note-danger-button action-delete");
+        actions.append(open, edit, remove);
         main.append(label, actions);
         row.append(main);
         if (openedSession) row.append(renderWorkSessionActivity(value, session));
@@ -1022,6 +1024,31 @@ export function mountNotes(root, {
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "stop", "Terminar sesión");
+      detailFeedback(mutationErrorMessage(error));
+    }
+  }
+
+  async function deleteWorkSession(value, session, control) {
+    if (!confirmImpl("¿Eliminar esta sesión de trabajo? Esta acción quitará también su actividad registrada.")) return;
+    control.disabled = true;
+    setActionIcon(control, "more", "Eliminando sesión");
+    try {
+      const result = await requestNotes({endpoint, operation: "work_session_delete", payload: {
+        session_id: session.id,
+        expected_revision: session.mutation.revision,
+        expected_source_hash: session.mutation.source_hash,
+        request_id: mutationRequestId(),
+      }});
+      state.current = {...value, work_sessions: result.work_sessions};
+      state.editingWorkSessionId = null;
+      state.editingWorkSessionActivityId = null;
+      state.workSessionActivityComposerId = null;
+      state.workSessionDisclosure.delete(session.id);
+      renderDetail();
+      detailFeedback("Sesión de trabajo eliminada.");
+    } catch (error) {
+      control.disabled = false;
+      setActionIcon(control, "delete", "Eliminar sesión");
       detailFeedback(mutationErrorMessage(error));
     }
   }
@@ -1302,20 +1329,7 @@ export function mountNotes(root, {
         row.append(typeIcon(item.source.type), document.createTextNode(`${item.source.name} · ${item.occurrences}`));
         const occurrences = document.createElement("div");
         occurrences.className = "backlink-occurrences";
-        occurrences.hidden = true;
-        const disclosure = actionButton("chevronDown", `Ver ${item.occurrences} menciones de ${item.source.name}`, () => {
-          occurrences.hidden = !occurrences.hidden;
-          setActionIcon(
-            disclosure,
-            occurrences.hidden ? "chevronDown" : "chevronUp",
-            occurrences.hidden
-              ? `Ver ${item.occurrences} menciones de ${item.source.name}`
-              : `Ocultar menciones de ${item.source.name}`,
-          );
-          disclosure.setAttribute("aria-expanded", occurrences.hidden ? "false" : "true");
-        }, "backlink-disclosure action-disclosure");
-        disclosure.setAttribute("aria-expanded", "false");
-        header.append(row, disclosure);
+        header.append(row);
         group.append(header);
         for (const snippet of item.snippets) {
           const occurrence = document.createElement("section");
@@ -1500,6 +1514,11 @@ export function mountNotes(root, {
     void refreshCurrentList();
   });
   filterButton?.addEventListener("click", openFilterSheet);
+  infoButton?.addEventListener("click", () => {
+    state.introOpen = !state.introOpen;
+    infoButton.setAttribute("aria-expanded", state.introOpen ? "true" : "false");
+    renderList();
+  });
   document.querySelector("#notes-filter-close")?.addEventListener("click", () => filterSheet?.close());
   document.querySelector("#notes-filter-clear")?.addEventListener("click", () => {
     state.filters = [];

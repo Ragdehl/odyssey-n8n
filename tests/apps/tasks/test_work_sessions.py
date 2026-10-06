@@ -320,3 +320,41 @@ def test_work_sessions_are_hidden_from_normal_notes_feed(tmp_path: Path) -> None
     page = notes.query(mode="feed", sort="updated_desc")
     assert {item.type for item in page.items} == {"task"}
     assert {item.id for item in page.items} == {"task-odyssey", "task-taxes"}
+
+
+def test_work_session_can_be_deleted_with_current_stale_state_tokens(tmp_path: Path) -> None:
+    repository, service = _build(tmp_path)
+    revision, source_hash = _task_tokens(repository)
+    started = service.start(
+        task_id="task-odyssey",
+        started_at="2026-10-05T18:00:00+02:00",
+        expected_task_revision=revision,
+        expected_task_source_hash=source_hash,
+        request_id="delete-start",
+        actor="test",
+        now="2026-10-05T18:00:00+02:00",
+    )
+    deleted = service.delete(
+        session_id=started.session.id,
+        expected_revision=started.session.revision,
+        expected_source_hash=started.session.source_hash,
+        request_id="delete-session",
+        actor="test",
+        now="2026-10-05T18:05:00+02:00",
+    )
+    assert deleted.operation == "work_session_deleted"
+    assert deleted.task_id == "task-odyssey"
+    assert service.list_for_task("task-odyssey") == ()
+    retired = parse_note(repository.read_text(deleted.path))
+    assert retired.metadata["deleted"] is True
+    assert retired.metadata["revision"] == started.session.revision + 1
+
+    with pytest.raises(WorkSessionError, match="STALE_NOTE"):
+        service.delete(
+            session_id=started.session.id,
+            expected_revision=started.session.revision,
+            expected_source_hash=started.session.source_hash,
+            request_id="delete-session-again",
+            actor="test",
+            now="2026-10-05T18:06:00+02:00",
+        )

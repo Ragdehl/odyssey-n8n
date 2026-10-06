@@ -174,7 +174,7 @@ def test_notes_capabilities_forwards_only_its_empty_core_payload() -> None:
         "work_session_activity_delete: new Set(['operation', 'session_id', 'activity_id'" in source
     )
     assert (
-        "['work_session_stop', 'work_session_edit', 'work_session_activity_add', "
+        "['work_session_stop', 'work_session_edit', 'work_session_delete', 'work_session_activity_add', "
         "'work_session_activity_edit', 'work_session_activity_delete'].includes(operation)"
         in source
     )

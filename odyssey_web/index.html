@@ -52,10 +52,12 @@
         </nav>
       </header>
       <section id="notes-list-view" class="notes-list-view" aria-label="Explorar notas">
-        <div class="notes-controls">
-          <button id="notes-filters" class="notes-filter-button" type="button" disabled>Filtros</button>
-          <label class="notes-sort-label" for="notes-sort">Ordenar
-            <select id="notes-sort">
+        <div class="notes-controls" aria-label="Controles de notas">
+          <button id="notes-filters" class="notes-filter-button icon-action" type="button" aria-label="Filtrar notas" title="Filtrar" disabled></button>
+          <label class="notes-sort-control" for="notes-sort" title="Ordenar">
+            <span id="notes-sort-icon" class="notes-sort-icon" aria-hidden="true"></span>
+            <span class="sr-only">Ordenar notas</span>
+            <select id="notes-sort" aria-label="Ordenar notas">
               <option value="relevance">Relevancia</option>
               <option value="updated_desc">Actualizadas recientemente</option>
               <option value="created_desc">Creadas recientemente</option>
@@ -64,7 +66,10 @@
           </label>
         </div>
         <div id="notes-filter-chips" class="notes-filter-chips" aria-label="Filtros activos"></div>
-        <p id="notes-status" class="notes-status" aria-live="polite"></p>
+        <div class="notes-meta">
+          <p id="notes-status" class="notes-status" aria-live="polite"></p>
+          <button id="notes-info" class="notes-info-button icon-action" type="button" aria-label="Cómo organiza Odyssey tus notas" title="Información"></button>
+        </div>
         <section id="notes-list" class="notes-list" aria-label="Resultados de notas"></section>
       </section>
       <article id="note-detail" class="note-detail" hidden></article>
