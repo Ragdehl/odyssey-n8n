@@ -508,6 +508,8 @@ test("month Ver más loads only that Day, adds an internal-scroll state, and clo
   assert.equal(cells[0].className.includes("calendar-day-more-open"), true);
   assert.equal(cells[0].querySelectorAll(".calendar-month-preview").length, 5);
   assert.equal(cells[0].querySelector(".calendar-day-more").textContent, "Mostrar menos ↑");
+  assert.equal(cells[0].querySelector(".calendar-day-previews").querySelector(".calendar-day-more"), null);
+  assert.equal(cells[0].children.at(-1).className.includes("calendar-day-more"), true);
   assert.equal(cells[0].textContent.includes("Contenido A5"), true);
   assert.equal(mounted.elements.monthView.hidden, false);
   assert.equal(calls.filter(({operation}) => operation === "day").length, 1);

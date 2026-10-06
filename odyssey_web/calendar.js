@@ -287,8 +287,9 @@ export function mountCalendar(root, {
       ? [...day.previews, ...detailed.slice(day.previews.length)]
       : day.previews;
     for (const preview of items) previews.append(previewRow(preview));
+    let overflow = null;
     if (day.preview_total > day.previews.length) {
-      const overflow = button(
+      overflow = button(
         detailOpen ? (state.monthDetail ? "Mostrar menos ↑" : "Cargando…") : `Ver ${day.preview_total - day.previews.length} más ↓`,
         (event) => {
           event.stopPropagation?.();
@@ -296,9 +297,9 @@ export function mountCalendar(root, {
         },
       );
       overflow.className = "calendar-day-overflow calendar-day-more";
-      previews.append(overflow);
     }
     value.append(number, previews);
+    if (overflow) value.append(overflow);
     return value;
   }
 
