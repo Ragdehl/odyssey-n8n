@@ -144,9 +144,12 @@ function createPage() {
     chat: new FakeElement("section"),
     notes: new FakeElement("section"),
     calendar: new FakeElement("section"),
+    chatHomeTab: new FakeElement("button"),
     chatTab: new FakeElement("button"),
     notesTab: new FakeElement("button"),
+    notesHomeTab: new FakeElement("button"),
     calendarTab: new FakeElement("button"),
+    calendarHomeTab: new FakeElement("button"),
     notesCalendarTab: new FakeElement("button"),
     calendarChatTab: new FakeElement("button"),
     calendarNotesTab: new FakeElement("button"),
@@ -164,9 +167,12 @@ function createPage() {
     ["#chat-surface", elements.chat],
     ["#notes-surface", elements.notes],
     ["#calendar-surface", elements.calendar],
+    ["#chat-home-tab", elements.chatHomeTab],
     ["#chat-tab", elements.chatTab],
     ["#notes-tab", elements.notesTab],
+    ["#notes-home-tab", elements.notesHomeTab],
     ["#calendar-tab", elements.calendarTab],
+    ["#calendar-home-tab", elements.calendarHomeTab],
     ["#notes-calendar-tab", elements.notesCalendarTab],
     ["#calendar-chat-tab", elements.calendarChatTab],
     ["#calendar-notes-tab", elements.calendarNotesTab],
@@ -186,6 +192,8 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
+  let notesHomeCalls = 0;
+  let calendarHomeCalls = 0;
   globalThis.document = document;
   globalThis.CustomEvent = class CustomEvent {
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
@@ -215,8 +223,8 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
       await persistAssistantTurn();
     },
   };
-  globalThis.__odysseyTestNotes = {mountNotes() {}};
-  globalThis.__odysseyTestCalendar = {mountCalendar() {}};
+  globalThis.__odysseyTestNotes = {mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
+  globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
   const source = await readFile(new URL("../odyssey_web/app.js", import.meta.url), "utf8");
   const testable = source
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
@@ -226,7 +234,12 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
   await globalThis.__odysseyAppReady;
-  return {document, elements, persisted, renderedWithoutRecovery: () => renderedWithoutRecovery};
+  return {
+    document, elements, persisted,
+    renderedWithoutRecovery: () => renderedWithoutRecovery,
+    notesHomeCalls: () => notesHomeCalls,
+    calendarHomeCalls: () => calendarHomeCalls,
+  };
 }
 
 async function flush() {
@@ -368,6 +381,28 @@ test("older conversation pagination preserves an affected-note affordance", asyn
 
   const affordance = page.elements.conversation.children[0].querySelector(".note-set-button");
   assert.equal(affordance.textContent, "Ver nota");
+});
+
+test("fixed app icons keep one navigation order and reset Notes/Calendar to their home surfaces", async () => {
+  const page = await mountApp({
+    turns: [],
+    requestProductResult: async () => { throw new Error("not exercised"); },
+  });
+
+  page.elements.calendarTab.click();
+  assert.equal(page.elements.calendar.hidden, false);
+  assert.equal(page.calendarHomeCalls(), 1);
+  assert.equal(page.elements.calendarTab["aria-current"], "page");
+  assert.equal(page.elements.chatHomeTab["aria-current"], "false");
+
+  page.elements.calendarNotesTab.click();
+  assert.equal(page.elements.notes.hidden, false);
+  assert.equal(page.notesHomeCalls(), 1);
+  assert.equal(page.elements.notesHomeTab["aria-current"], "page");
+
+  page.elements.chatTab.click();
+  assert.equal(page.elements.chat.hidden, false);
+  assert.equal(page.elements.chatHomeTab["aria-current"], "page");
 });
 
 test("Calendar and Notes events switch only the visible application surface", async () => {

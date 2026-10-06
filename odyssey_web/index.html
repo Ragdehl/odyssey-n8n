@@ -14,16 +14,13 @@
 <body>
   <main class="shell">
     <section id="chat-surface" class="app-view chat-view" aria-labelledby="chat-title">
-      <header class="app-header brand" aria-label="Odyssey">
-      <div class="brand-mark" aria-hidden="true">O</div>
-      <div>
+      <header class="app-header app-shell-header brand" aria-label="Odyssey">
         <h1 id="chat-title">Odyssey</h1>
-        <p>Tu memoria, cuando la necesitas.</p>
-      </div>
-      <nav class="app-header-actions" aria-label="Aplicaciones">
-        <button id="notes-tab" class="app-nav-button" type="button">Notas</button>
-        <button id="calendar-tab" class="app-nav-button" type="button">Calendario</button>
-      </nav>
+        <nav class="app-surface-nav" aria-label="Aplicaciones">
+          <button id="chat-home-tab" class="app-nav-button app-nav-chat" type="button" aria-label="Chat" title="Chat">💬</button>
+          <button id="notes-tab" class="app-nav-button app-nav-notes" type="button" aria-label="Notas" title="Notas">📝</button>
+          <button id="calendar-tab" class="app-nav-button app-nav-calendar" type="button" aria-label="Calendario" title="Calendario">📅</button>
+        </nav>
       </header>
       <h2 id="composer-title" class="sr-only">Conversación con Odyssey</h2>
       <section id="interaction" class="conversation" aria-live="polite" aria-atomic="false"></section>
@@ -46,10 +43,13 @@
       </form>
     </section>
     <section id="notes-surface" class="app-view notes-workspace" aria-labelledby="notes-title" hidden>
-      <header class="app-header notes-app-header">
-        <button id="chat-tab" class="app-nav-button" type="button">← Chat</button>
+      <header class="app-header app-shell-header notes-app-header">
         <h1 id="notes-title">Notas</h1>
-        <button id="notes-calendar-tab" class="app-nav-button" type="button">Calendario</button>
+        <nav class="app-surface-nav" aria-label="Aplicaciones">
+          <button id="chat-tab" class="app-nav-button app-nav-chat" type="button" aria-label="Chat" title="Chat">💬</button>
+          <button id="notes-home-tab" class="app-nav-button app-nav-notes" type="button" aria-label="Notas" title="Notas">📝</button>
+          <button id="notes-calendar-tab" class="app-nav-button app-nav-calendar" type="button" aria-label="Calendario" title="Calendario">📅</button>
+        </nav>
       </header>
       <section id="notes-list-view" class="notes-list-view" aria-label="Explorar notas">
         <div class="notes-controls">
@@ -75,10 +75,13 @@
       </form>
     </section>
     <section id="calendar-surface" class="app-view calendar-workspace" aria-labelledby="calendar-title" hidden>
-      <header class="app-header calendar-app-header">
-        <button id="calendar-chat-tab" class="app-nav-button" type="button">← Chat</button>
+      <header class="app-header app-shell-header calendar-app-header">
         <h1 id="calendar-title">Calendario</h1>
-        <button id="calendar-notes-tab" class="app-nav-button" type="button">Notas</button>
+        <nav class="app-surface-nav" aria-label="Aplicaciones">
+          <button id="calendar-chat-tab" class="app-nav-button app-nav-chat" type="button" aria-label="Chat" title="Chat">💬</button>
+          <button id="calendar-notes-tab" class="app-nav-button app-nav-notes" type="button" aria-label="Notas" title="Notas">📝</button>
+          <button id="calendar-home-tab" class="app-nav-button app-nav-calendar" type="button" aria-label="Calendario" title="Calendario">📅</button>
+        </nav>
       </header>
       <nav id="calendar-view-switch" class="calendar-view-switch" aria-label="Vista de calendario">
         <button id="calendar-view-month" type="button" aria-pressed="true">Mes</button>

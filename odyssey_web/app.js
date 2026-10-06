@@ -22,12 +22,15 @@ const MAIN_CONVERSATION_ID = "main";
 const chatSurface = document.querySelector("#chat-surface");
 const notesSurface = document.querySelector("#notes-surface");
 const calendarSurface = document.querySelector("#calendar-surface");
+const chatHomeTab = document.querySelector("#chat-home-tab");
 const chatTab = document.querySelector("#chat-tab");
 const notesTab = document.querySelector("#notes-tab");
+const notesHomeTab = document.querySelector("#notes-home-tab");
 const calendarTab = document.querySelector("#calendar-tab");
 const notesCalendarTab = document.querySelector("#notes-calendar-tab");
 const calendarChatTab = document.querySelector("#calendar-chat-tab");
 const calendarNotesTab = document.querySelector("#calendar-notes-tab");
+const calendarHomeTab = document.querySelector("#calendar-home-tab");
 const clarificationStatus = document.querySelector("#clarification-status");
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
@@ -39,40 +42,55 @@ let recoveryControl = null;
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
   if (!deployment || deployment.environment !== "DEV") return;
-  const marker = document.createElement("p");
+  const marker = document.createElement("span");
   marker.className = "deployment-marker";
   marker.textContent = deployment.commit ? "DEV · " + deployment.commit.slice(0, 12) : "DEV";
-  document.querySelector(".brand")?.append(marker);
+  document.querySelector("#chat-title")?.append(document.createTextNode(" "), marker);
 }
 
 showDeploymentMarker();
 
 // Application controllers remain mounted for the page lifetime so each surface keeps its local state.
-if (notesSurface) {
-  mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"});
-}
-if (calendarSurface) {
-  mountCalendar(calendarSurface, {
+const notesController = notesSurface
+  ? mountNotes(notesSurface, {endpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes"})
+  : null;
+const calendarController = calendarSurface
+  ? mountCalendar(calendarSurface, {
     endpoint: document.querySelector('meta[name="odyssey-calendar-endpoint"]')?.content ?? "/api/calendar",
     notesEndpoint: document.querySelector('meta[name="odyssey-notes-endpoint"]')?.content ?? "/api/notes",
-  });
-}
+  })
+  : null;
 function selectSurface(surface) {
   const active = ["chat", "notes", "calendar"].includes(surface) ? surface : "chat";
   if (chatSurface) chatSurface.hidden = active !== "chat";
   if (notesSurface) notesSurface.hidden = active !== "notes";
   if (calendarSurface) calendarSurface.hidden = active !== "calendar";
   document.documentElement.dataset.activeView = active;
-  chatTab?.setAttribute("aria-current", active === "chat" ? "page" : "false");
-  notesTab?.setAttribute("aria-current", active === "notes" ? "page" : "false");
-  calendarTab?.setAttribute("aria-current", active === "calendar" ? "page" : "false");
+  for (const control of [chatHomeTab, chatTab, calendarChatTab]) {
+    control?.setAttribute("aria-current", active === "chat" ? "page" : "false");
+  }
+  for (const control of [notesTab, notesHomeTab, calendarNotesTab]) {
+    control?.setAttribute("aria-current", active === "notes" ? "page" : "false");
+  }
+  for (const control of [calendarTab, notesCalendarTab, calendarHomeTab]) {
+    control?.setAttribute("aria-current", active === "calendar" ? "page" : "false");
+  }
 }
-chatTab?.addEventListener("click", () => selectSurface("chat"));
-calendarChatTab?.addEventListener("click", () => selectSurface("chat"));
-notesTab?.addEventListener("click", () => selectSurface("notes"));
-calendarNotesTab?.addEventListener("click", () => selectSurface("notes"));
-calendarTab?.addEventListener("click", () => selectSurface("calendar"));
-notesCalendarTab?.addEventListener("click", () => selectSurface("calendar"));
+for (const control of [chatHomeTab, chatTab, calendarChatTab]) {
+  control?.addEventListener("click", () => selectSurface("chat"));
+}
+for (const control of [notesTab, notesHomeTab, calendarNotesTab]) {
+  control?.addEventListener("click", () => {
+    notesController?.showList?.();
+    selectSurface("notes");
+  });
+}
+for (const control of [calendarTab, notesCalendarTab, calendarHomeTab]) {
+  control?.addEventListener("click", () => {
+    calendarController?.showMonth?.();
+    selectSurface("calendar");
+  });
+}
 document.addEventListener("odyssey:open-note", () => selectSurface("notes"));
 document.addEventListener("odyssey:open-calendar-day", () => selectSurface("calendar"));
 selectSurface("chat");

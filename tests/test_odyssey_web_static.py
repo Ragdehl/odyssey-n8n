@@ -135,7 +135,12 @@ def test_chat_notes_and_calendar_are_exclusive_application_views_with_safe_no_js
     assert "chat-surface" in parser.ids
     assert "notes-surface" in parser.ids
     assert "calendar-surface" in parser.ids
-    assert "surface-nav" not in index
+    assert index.count('class="app-surface-nav"') == 3
+    assert all(
+        label in index
+        for label in ['aria-label="Chat"', 'aria-label="Notas"', 'aria-label="Calendario"']
+    )
+    assert "💬" in index and "📝" in index and "📅" in index
     assert index.index('id="chat-surface"') < index.index('id="notes-surface"')
     assert index.index('id="odyssey-form"') < index.index('id="notes-surface"')
     assert index.index('id="notes-search-form"') > index.index('id="notes-surface"')

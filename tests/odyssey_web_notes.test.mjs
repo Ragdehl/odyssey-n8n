@@ -551,7 +551,8 @@ function enterEditMode(mounted) {
 test("read mode renders linked facts once without destructive controls or raw Markdown", async () => {
   const {mounted} = await mountMutationNote({confirmImpl: () => true});
 
-  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "Editar");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "✏️");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle")["aria-label"], "Editar nota");
   assert.equal(mounted.elements.detail.querySelector(".note-delete-button"), null);
   assert.equal(mounted.elements.detail.querySelector(".note-fact-delete"), null);
   assert.equal(mounted.elements.detail.querySelector(".note-actions"), null);
@@ -566,17 +567,18 @@ test("entering and leaving edit mode reveals only safe inline mutation controls"
   const {mounted} = await mountMutationNote({confirmImpl: () => true});
   enterEditMode(mounted);
 
-  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "Hecho");
-  assert.equal(mounted.elements.detail.querySelector(".note-delete-button").textContent, "Eliminar nota");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "✓");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle")["aria-label"], "Terminar edición");
+  assert.equal(mounted.elements.detail.querySelector(".note-delete-button").textContent, "🗑️");
   const factDelete = mounted.elements.detail.querySelector(".note-fact-delete");
-  assert.equal(factDelete.textContent, "Eliminar");
+  assert.equal(factDelete.textContent, "🗑️");
   assert.equal(factDelete.parentNode.textContent.includes("Axel"), true);
   assert.equal(factDelete.parentNode.textContent.includes("Denis"), true);
-  assert.equal(mounted.elements.detail.textContent.includes("Contenido de referencia visible una vez.Eliminar"), false);
+  assert.equal(mounted.elements.detail.textContent.includes("Contenido de referencia visible una vez.🗑️"), false);
 
   mounted.elements.detail.querySelector(".note-edit-toggle").click();
 
-  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "Editar");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "✏️");
   assert.equal(mounted.elements.detail.querySelector(".note-delete-button"), null);
   assert.equal(mounted.elements.detail.querySelector(".note-fact-delete"), null);
 });
@@ -913,7 +915,8 @@ test("Task Work Session start and stop use bounded stale-state tokens and update
   await flush();
 
   const start = mounted.elements.detail.querySelector(".work-session-start");
-  assert.equal(start.textContent, "Empezar sesión");
+  assert.equal(start.textContent, "▶️");
+  assert.equal(start["aria-label"], "Empezar sesión");
   start.click();
   await flush();
   const startCall = calls.find(({operation}) => operation === "work_session_start");
@@ -926,7 +929,8 @@ test("Task Work Session start and stop use bounded stale-state tokens and update
   assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
 
   const stop = mounted.elements.detail.querySelector(".work-session-stop");
-  assert.equal(stop.textContent, "Terminar sesión");
+  assert.equal(stop.textContent, "⏹️");
+  assert.equal(stop["aria-label"], "Terminar sesión");
   stop.click();
   await flush();
   const stopCall = calls.find(({operation}) => operation === "work_session_stop");
@@ -1083,13 +1087,13 @@ test("Work Session disclosure defaults activity and active sessions open, keeps 
   assert.equal(mounted.elements.detail.textContent.includes("Avance"), true);
   assert.equal(mounted.elements.detail.textContent.includes("Sin actividad registrada todavía."), true);
   const opens = allByClass(mounted.elements.detail, "work-session-open");
-  assert.equal(opens.map((item) => item.textContent).join(","), "Cerrar,Cerrar,Abrir");
+  assert.equal(opens.map((item) => item.textContent).join(","), "▴,▴,▾");
   opens[1].click();
   await flush();
-  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "Cerrar,Abrir,Abrir");
+  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "▴,▾,▾");
   allByClass(mounted.elements.detail, "work-session-open")[0].click();
   await flush();
-  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "Abrir,Abrir,Abrir");
+  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "▾,▾,▾");
 });
 
 test("parent subtask checkbox fetches current child tokens for completion and reopen", async () => {
@@ -1221,7 +1225,7 @@ test("inline subtask creation sends one bounded parent mutation and refreshes th
   assert.equal(mounted.elements.detail.textContent.includes("Preparar maletas"), true);
   assert.equal(calls.filter(({operation}) => operation === "task_subtask_create").length, 1);
 
-  mounted.elements.detail.querySelector(".note-view-header").children[0].click();
+  mounted.controller.showList();
   await flush();
   assert.equal(mounted.elements.list.textContent.includes("Preparar maletas"), true);
   assert.equal(mounted.elements.status.textContent, "2 notas");

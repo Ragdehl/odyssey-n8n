@@ -106,8 +106,27 @@ export function mountCalendar(root, {
     }
   }
 
+  function showMonth() {
+    dayRequestGeneration += 1;
+    scheduleRequestGeneration += 1;
+    state.viewMode = "month";
+    writeViewMode(sessionStorageImpl, "month");
+    state.dayValue = null;
+    state.monthDetailDate = null;
+    state.monthDetail = null;
+    status.textContent = "";
+    renderViewSwitch();
+    if (state.monthValue?.month === state.month) renderMonth();
+    else void loadMonth(state.month);
+  }
+
   function selectView(mode) {
-    if (!["month", "7", "3", "1"].includes(mode) || mode === state.viewMode) return;
+    if (!["month", "7", "3", "1"].includes(mode)) return;
+    if (mode === "month") {
+      showMonth();
+      return;
+    }
+    if (mode === state.viewMode && !state.dayValue) return;
     state.viewMode = mode;
     writeViewMode(sessionStorageImpl, mode);
     state.dayValue = null;
@@ -115,12 +134,6 @@ export function mountCalendar(root, {
     state.monthDetail = null;
     renderViewSwitch();
     status.textContent = "";
-    if (mode === "month") {
-      scheduleRequestGeneration += 1;
-      if (state.monthValue?.month === state.month) renderMonth();
-      else void loadMonth(state.month);
-      return;
-    }
     monthView.hidden = true;
     dayView.hidden = true;
     scheduleView.hidden = false;
@@ -431,19 +444,6 @@ export function mountCalendar(root, {
     dayView.hidden = false;
     const header = document.createElement("header");
     header.className = "calendar-day-header";
-    const back = button(state.dayReturnMode === "month" ? "‹ Mes" : "‹ Agenda", () => {
-      dayRequestGeneration += 1;
-      status.textContent = "";
-      state.dayValue = null;
-      if (state.dayReturnMode === "month") {
-        if (state.monthValue?.month === state.month) renderMonth();
-        else void loadMonth(state.month);
-      } else if (state.scheduleValue) {
-        renderSchedule();
-      } else {
-        void loadSchedule(state.scheduleStart);
-      }
-    });
     const navigation = document.createElement("div");
     navigation.className = "calendar-day-date-nav";
     const previousDay = button("←", () => void openDay(shiftDate(day.date, -1)));
@@ -455,7 +455,7 @@ export function mountCalendar(root, {
     nextDay.className = "calendar-day-step calendar-day-next";
     nextDay.setAttribute("aria-label", "Día siguiente");
     navigation.append(previousDay, heading, nextDay);
-    header.append(back, navigation);
+    header.append(navigation);
     const sections = document.createElement("div");
     sections.className = "calendar-day-sections";
     if (day.content.length) sections.append(blockSection("Contenido del día", day.content));
@@ -681,7 +681,7 @@ export function mountCalendar(root, {
   renderViewSwitch();
   if (state.viewMode === "month") void loadMonth();
   else void loadSchedule(state.scheduleStart);
-  return {state, openDay, loadMonth, loadSchedule, selectView};
+  return {state, openDay, loadMonth, loadSchedule, selectView, showMonth};
 }
 
 function sectionWithHeading(label) {

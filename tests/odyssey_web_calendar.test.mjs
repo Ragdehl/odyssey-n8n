@@ -571,7 +571,7 @@ test("returning to month clears a stale Day error after failed date navigation",
   await flush();
   assert.equal(mounted.elements.status.textContent, "No se ha podido abrir este día.");
 
-  mounted.elements.dayView.querySelector(".calendar-day-header").querySelector("button").click();
+  mounted.controller.showMonth();
   await flush();
   assert.equal(mounted.elements.status.textContent, "");
   assert.equal(mounted.elements.monthView.hidden, false);
