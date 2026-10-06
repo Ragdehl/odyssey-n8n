@@ -191,6 +191,9 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .clarification-cancel { margin-top: .6rem; background: transparent; color: #5c6478; }
 .clarification-status { margin: 0 .35rem .35rem; color: #6559b5; font-size: .8rem; }
 .message-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.message-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .3rem; margin-left: auto; }
+.message-actions .note-set-button { margin-top: 0; }
+.message-actions .detail-button { flex: 0 0 2.1rem; width: 2.1rem; min-height: 2.1rem; margin: 0; }
 .eyebrow { color: #6a7287; font-size: .7rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .message-text { margin-top: .35rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
 .partial-notice { margin-top: .6rem; padding-top: .55rem; border-top: 1px solid rgba(23, 32, 51, .08); color: #6e5d25; font-size: .8rem; }

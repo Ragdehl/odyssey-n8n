@@ -83,7 +83,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     )
     assert "appendRetryControl" not in success_flow
     assert 'header.className = "message-header"' in app
-    assert 'article.querySelector(".message-header")?.append(button)' in app
+    assert 'actions.className = "message-actions"' in app
+    assert 'article.querySelector(".message-actions")?.append(button)' in app
     assert "requestDetailSheet.showModal()" in app
     assert 'const MAIN_CONVERSATION_ID = "main"' in app
     assert 'operation: "main"' in app

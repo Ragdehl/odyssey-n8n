@@ -169,7 +169,9 @@ function appendMessage(role, message, status = "", {prepend = false, scroll = tr
   body.textContent = message;
   const header = document.createElement("div");
   header.className = "message-header";
-  header.append(label);
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+  header.append(label, actions);
   article.append(header, body);
   if (status === "partial") {
     const notice = document.createElement("p");
@@ -220,7 +222,7 @@ function appendDetailButton(article, detail) {
   button.setAttribute("aria-label", "Ver detalles de esta solicitud");
   button.textContent = "ⓘ";
   button.addEventListener("click", () => openRequestDetail(detail));
-  article.querySelector(".message-header")?.append(button);
+  article.querySelector(".message-actions")?.append(button);
 }
 
 function appendNoteSetAffordance(article, snapshot) {
@@ -242,7 +244,7 @@ function appendNoteSetAffordance(article, snapshot) {
     count.textContent = String(visible);
     button.append(count);
   }
-  article.append(button);
+  article.querySelector(".message-actions")?.append(button);
 }
 
 function appendDetailLine(parent, label, value) {
