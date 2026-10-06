@@ -5,17 +5,29 @@ import {typeBadge, typeLabel} from "./notes.js";
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", {month: "long", year: "numeric", timeZone: "UTC"});
 const DAY_FORMAT = new Intl.DateTimeFormat("es-ES", {weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC"});
+const CALENDAR_DENSITY_KEY = "odyssey.calendar.month.expanded";
 
-export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint = "/api/notes"} = {}) {
+export function mountCalendar(root, {
+  endpoint = "/api/calendar",
+  notesEndpoint = "/api/notes",
+  sessionStorageImpl = safeSessionStorage(),
+} = {}) {
   const monthView = root.querySelector("#calendar-month-view");
   const dayView = root.querySelector("#calendar-day-view");
   const title = root.querySelector("#calendar-month-title");
   const grid = root.querySelector("#calendar-grid");
   const status = root.querySelector("#calendar-status");
   const today = root.querySelector("#calendar-today");
+  const expand = root.querySelector("#calendar-expand");
   const previous = root.querySelector("#calendar-prev");
   const next = root.querySelector("#calendar-next");
-  const state = {month: localMonth(), monthValue: null, dayValue: null, loading: false};
+  const state = {
+    month: localMonth(),
+    monthValue: null,
+    dayValue: null,
+    loading: false,
+    expanded: readExpandedState(sessionStorageImpl),
+  };
   let dayRequestGeneration = 0;
   const inFlightDays = new Map();
 
@@ -44,6 +56,7 @@ export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint =
     monthView.hidden = false;
     dayView.hidden = true;
     title.textContent = monthLabel(state.monthValue.month);
+    renderDensity();
     const weekdayRow = document.createElement("div");
     weekdayRow.className = "calendar-weekdays";
     for (const weekday of WEEKDAYS) {
@@ -89,13 +102,37 @@ export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint =
 
   function previewRow(preview) {
     const row = document.createElement("span");
-    row.className = "calendar-month-preview";
+    row.className = `calendar-month-preview${preview.text ? " calendar-preview-has-text" : ""}`;
     row.append(typeBadge(preview.source_type));
-    const text = document.createElement("span");
-    text.className = "calendar-preview-text";
-    text.textContent = preview.text || preview.label;
-    row.append(text);
+    const copy = document.createElement("span");
+    copy.className = "calendar-preview-copy";
+    const label = document.createElement("span");
+    label.className = "calendar-preview-label";
+    label.textContent = preview.label;
+    copy.append(label);
+    if (preview.text) {
+      const text = document.createElement("span");
+      text.className = "calendar-preview-text";
+      text.textContent = preview.text;
+      copy.append(text);
+    }
+    row.append(copy);
     return row;
+  }
+
+  function renderDensity() {
+    grid.className = state.expanded ? "calendar-grid calendar-grid-expanded" : "calendar-grid";
+    if (!expand) return;
+    expand.textContent = "⛶";
+    expand.setAttribute("aria-pressed", state.expanded ? "true" : "false");
+    expand.setAttribute("aria-label", state.expanded ? "Vista compacta" : "Vista ampliada");
+    expand.setAttribute("title", state.expanded ? "Vista compacta" : "Vista ampliada");
+  }
+
+  function toggleDensity() {
+    state.expanded = !state.expanded;
+    writeExpandedState(sessionStorageImpl, state.expanded);
+    renderDensity();
   }
 
   function requestDay(value) {
@@ -342,6 +379,7 @@ export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint =
 
   previous?.addEventListener("click", () => void loadMonth(shiftMonth(state.month, -1)));
   next?.addEventListener("click", () => void loadMonth(shiftMonth(state.month, 1)));
+  expand?.addEventListener("click", toggleDensity);
   today?.addEventListener("click", () => {
     state.month = localMonth();
     void openDay(localDate());
@@ -397,3 +435,14 @@ function localDate() {
   return `${now.getFullYear()}-${part(now.getMonth() + 1)}-${part(now.getDate())}`;
 }
 function localMonth() { return localDate().slice(0, 7); }
+function safeSessionStorage() {
+  try { return globalThis.sessionStorage ?? null; } catch { return null; }
+}
+function readExpandedState(storage) {
+  try { return storage?.getItem(CALENDAR_DENSITY_KEY) === "true"; }
+  catch { return false; }
+}
+function writeExpandedState(storage, expanded) {
+  try { storage?.setItem(CALENDAR_DENSITY_KEY, expanded ? "true" : "false"); }
+  catch {}
+}

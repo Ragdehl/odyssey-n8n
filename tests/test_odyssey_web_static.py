@@ -247,6 +247,7 @@ def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
         "calendar-prev",
         "calendar-next",
         "calendar-today",
+        "calendar-expand",
     } <= parser.ids
     assert "/api/calendar" in index
 
@@ -259,7 +260,7 @@ def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
     assert '"Diario"' in calendar
     assert '"Capturado este día"' in calendar
     assert '"Referencias a este día"' in calendar
-    assert '"calendar-month-preview"' in calendar
+    assert "calendar-month-preview" in calendar
     assert '"calendar-day-overflow"' in calendar
     assert "calendar-day-indicators" not in calendar
     assert "MONTH_PREVIEW_LIMIT = 4" in client
@@ -333,7 +334,7 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
 
 
 def test_frontend_has_no_external_asset_or_durable_browser_persistence_dependency() -> None:
-    """Stay self-contained while permitting only optional session-scoped Notes UI state."""
+    """Stay self-contained while permitting only optional session-scoped presentation state."""
 
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
@@ -347,11 +348,11 @@ def test_frontend_has_no_external_asset_or_durable_browser_persistence_dependenc
     assert "https://" not in index
     assert "http://" not in index
     assert "localStorage" not in combined
-    assert "sessionStorage" not in "\n".join(
-        (index, app, client, notes_client, calendar, calendar_client)
-    )
+    assert "sessionStorage" not in "\n".join((index, app, client, notes_client, calendar_client))
     assert "odyssey.notes.collapsed-types.v1" in notes
     assert "safeSessionStorage" in notes
+    assert "odyssey.calendar.month.expanded" in calendar
+    assert "safeSessionStorage" in calendar
     assert "innerHTML" not in combined
     assert "request_id" in client
     assert 'credentials: "same-origin"' in client

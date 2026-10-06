@@ -113,19 +113,25 @@ function deferred() {
   return {promise, resolve, reject};
 }
 
-async function mountCalendar(requestCalendar, requestNotes = async () => { throw new Error("unexpected Notes mutation"); }) {
+async function mountCalendar(
+  requestCalendar,
+  requestNotes = async () => { throw new Error("unexpected Notes mutation"); },
+  sessionStorageImpl,
+) {
   const document = new FakeDocument();
   const root = new FakeElement("section");
   const elements = {
     monthView: new FakeElement("section"), dayView: new FakeElement("article"),
     title: new FakeElement("h2"), grid: new FakeElement("div"), status: new FakeElement("p"),
-    today: new FakeElement("button"), previous: new FakeElement("button"), next: new FakeElement("button"),
+    today: new FakeElement("button"), expand: new FakeElement("button"),
+    previous: new FakeElement("button"), next: new FakeElement("button"),
   };
   elements.dayView.hidden = true;
   const map = new Map([
     ["#calendar-month-view", elements.monthView], ["#calendar-day-view", elements.dayView],
     ["#calendar-month-title", elements.title], ["#calendar-grid", elements.grid],
     ["#calendar-status", elements.status], ["#calendar-today", elements.today],
+    ["#calendar-expand", elements.expand],
     ["#calendar-prev", elements.previous], ["#calendar-next", elements.next],
   ]);
   root.querySelector = (selector) => map.get(selector) ?? null;
@@ -156,7 +162,7 @@ async function mountCalendar(requestCalendar, requestNotes = async () => { throw
   const {mountCalendar: mount} = await import(
     `data:text/javascript;base64,${Buffer.from(`${testable}\n// fixture ${fixtureNumber += 1}`).toString("base64")}`,
   );
-  const controller = mount(root);
+  const controller = mount(root, {sessionStorageImpl});
   await flush();
   return {controller, document, elements};
 }
@@ -260,8 +266,8 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   const previews = cells[0].querySelectorAll(".calendar-month-preview");
   assert.equal(previews.length, 4);
   assert.equal(previews[0].textContent.includes("Compré una bici."), true);
-  assert.equal(previews[0].textContent.includes("1 octubre"), false);
-  assert.equal(previews[2].textContent.includes("Marta"), false);
+  assert.equal(previews[0].querySelector(".calendar-preview-label").textContent, "1 octubre");
+  assert.equal(previews[2].querySelector(".calendar-preview-label").textContent, "Marta");
   assert.equal(previews[2].textContent.includes("Empezó en Airbus."), true);
   assert.equal(previews[3].textContent.includes("Llamar al banco"), true);
   assert.equal(cells[0].querySelectorAll(".calendar-indicator").length, 0);
@@ -296,6 +302,51 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   marta.click();
   assert.equal(mounted.document.events.at(-1).type, "odyssey:open-note");
   assert.deepEqual(mounted.document.events.at(-1).detail, {note_id: "marta"});
+});
+
+test("month density toggle expands the grid and persists for the browser session", async () => {
+  const stored = new Map();
+  const storage = {
+    getItem(key) { return stored.get(key) ?? null; },
+    setItem(key, value) { stored.set(key, value); },
+  };
+  const month = {
+    kind: "calendar_month", month: "2026-10", days: [{
+      date: "2026-10-01", materialized: true, has_content: false,
+      journal_count: 0, captured_fact_count: 1, reference_count: 0, task_count: 0,
+      preview_total: 1,
+      previews: [{kind: "capture", source_type: "person", label: "Marta", text: "Empezó en Airbus y conoció al nuevo equipo."}],
+    }],
+  };
+  const mounted = await mountCalendar(
+    async () => month,
+    async () => { throw new Error("unexpected Notes mutation"); },
+    storage,
+  );
+
+  const preview = mounted.elements.grid.querySelector(".calendar-month-preview");
+  assert.equal(preview.querySelector(".calendar-preview-label").textContent, "Marta");
+  assert.equal(preview.querySelector(".calendar-preview-text").textContent, "Empezó en Airbus y conoció al nuevo equipo.");
+  assert.equal(mounted.controller.state.expanded, false);
+  assert.equal(mounted.elements.grid.className, "calendar-grid");
+  assert.equal(mounted.elements.expand["aria-pressed"], "false");
+  assert.equal(mounted.elements.expand["aria-label"], "Vista ampliada");
+
+  mounted.elements.expand.click();
+
+  assert.equal(mounted.controller.state.expanded, true);
+  assert.equal(mounted.elements.grid.className, "calendar-grid calendar-grid-expanded");
+  assert.equal(mounted.elements.expand["aria-pressed"], "true");
+  assert.equal(mounted.elements.expand["aria-label"], "Vista compacta");
+  assert.equal(stored.get("odyssey.calendar.month.expanded"), "true");
+
+  const restored = await mountCalendar(
+    async () => month,
+    async () => { throw new Error("unexpected Notes mutation"); },
+    storage,
+  );
+  assert.equal(restored.controller.state.expanded, true);
+  assert.equal(restored.elements.grid.className, "calendar-grid calendar-grid-expanded");
 });
 
 test("Day navigation opens the previous and next natural dates without returning to month", async () => {
