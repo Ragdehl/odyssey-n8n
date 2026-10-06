@@ -17,6 +17,7 @@ const ACTION_ICONS = Object.freeze({
   close: ["M7 7l10 10M17 7 7 17"],
   more: ["M5 12h.01M12 12h.01M19 12h.01"],
   openNote: ["M6 3h9l3 3v15H6z", "M14 3v5h4", "M10 15h7", "m14 12 3 3-3 3"],
+  send: ["M4 4l17 8-17 8 3-8-3-8Z", "M7 12h14"],
 });
 
 const TYPE_PRESENTATION = Object.freeze({

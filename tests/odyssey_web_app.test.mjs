@@ -260,6 +260,14 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   };
 }
 
+function conversationMessages(conversation) {
+  return conversation.children.filter((child) => child.className.split(" ").includes("message"));
+}
+
+function conversationDates(conversation) {
+  return conversation.children.filter((child) => child.className === "conversation-date");
+}
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -277,7 +285,7 @@ test("reload mounts one recovery control on its unmatched user turn and removes 
     },
   });
 
-  const userTurn = page.elements.conversation.children[0];
+  const userTurn = conversationMessages(page.elements.conversation)[0];
   const recovery = userTurn.querySelector(".recovery-control");
   const action = recovery.querySelector(".recovery-action");
   assert.equal(recovery.parentNode, userTurn);
@@ -293,11 +301,11 @@ test("reload mounts one recovery control on its unmatched user turn and removes 
   assert.equal(page.renderedWithoutRecovery(), true);
   assert.equal(page.elements.conversation.querySelector(".recovery-control"), null);
   assert.equal(userTurn.querySelector(".recovery-control"), null);
-  assert.deepEqual(page.elements.conversation.children.map((node) => node.className), [
+  assert.deepEqual(conversationMessages(page.elements.conversation).map((node) => node.className), [
     "message message-user",
     "message message-odyssey",
   ]);
-  assert.equal(page.elements.conversation.children[1].textContent.includes("Guardado."), true);
+  assert.equal(conversationMessages(page.elements.conversation)[1].textContent.includes("Guardado."), true);
   assert.equal(page.persisted.length, 1);
   assert.equal(page.persisted[0].request_id, "web-recover");
 });
@@ -310,7 +318,7 @@ test("retryable recovery failure restores its bounded action without a global er
     },
   });
 
-  const userTurn = page.elements.conversation.children[0];
+  const userTurn = conversationMessages(page.elements.conversation)[0];
   const recovery = userTurn.querySelector(".recovery-control");
   const action = recovery.querySelector(".recovery-action");
   action.click();
@@ -320,7 +328,7 @@ test("retryable recovery failure restores its bounded action without a global er
   assert.equal(recovery.dataset.state, "retryable");
   assert.equal(action.textContent, "Recuperar resultado");
   assert.equal(action.disabled, false);
-  assert.equal(page.elements.conversation.children.length, 1);
+  assert.equal(conversationMessages(page.elements.conversation).length, 1);
 });
 
 test("clarification renders grounded controls while leaving the composer usable", async () => {
@@ -378,10 +386,10 @@ test("conversation reload renders the exact durable affected-note affordance", a
     requestProductResult: async () => { throw new Error("not exercised"); },
   });
 
-  const affordance = page.elements.conversation.children[1].querySelector(".note-set-button");
+  const affordance = conversationMessages(page.elements.conversation)[1].querySelector(".note-set-button");
   assert.equal(affordance["aria-label"], "Ver 2 notas");
   assert.equal(affordance.querySelector(".note-set-count").textContent, "2");
-  assert.equal(page.elements.conversation.children[1].textContent.includes("first"), false);
+  assert.equal(conversationMessages(page.elements.conversation)[1].textContent.includes("first"), false);
 });
 
 test("older conversation pagination preserves an affected-note affordance", async () => {
@@ -398,9 +406,50 @@ test("older conversation pagination preserves an affected-note affordance", asyn
   page.elements.conversation.emit("scroll");
   await flush();
 
-  const affordance = page.elements.conversation.children[0].querySelector(".note-set-button");
+  const affordance = conversationMessages(page.elements.conversation)[0].querySelector(".note-set-button");
   assert.equal(affordance["aria-label"], "Ver nota");
   assert.equal(affordance.querySelector(".note-set-count"), null);
+});
+
+test("chat groups messages by local day, shows compact times, omits sender labels, and uses an icon send control", async () => {
+  const atLocalTime = (daysAgo, hour, minute) => {
+    const value = new Date();
+    value.setDate(value.getDate() - daysAgo);
+    value.setHours(hour, minute, 0, 0);
+    return value.toISOString();
+  };
+  const old = atLocalTime(20, 9, 5);
+  const weekday = atLocalTime(3, 10, 10);
+  const yesterday = atLocalTime(1, 11, 20);
+  const today = atLocalTime(0, 14, 45);
+  const expectedWeekday = new Intl.DateTimeFormat("es-ES", {weekday: "long"}).format(new Date(weekday));
+  const expectedOld = new Intl.DateTimeFormat("es-ES", {day: "numeric", month: "long", year: "numeric"}).format(new Date(old));
+
+  const page = await mountApp({
+    turns: [
+      {request_id: "old", role: "user", text: "Antiguo", created_at: old},
+      {request_id: "week", role: "assistant", text: "Semana", created_at: weekday},
+      {request_id: "y1", role: "user", text: "Ayer uno", created_at: yesterday},
+      {request_id: "y2", role: "assistant", text: "Ayer dos", created_at: yesterday},
+      {request_id: "today", role: "user", text: "Hoy", created_at: today},
+    ],
+    requestProductResult: async () => { throw new Error("not exercised"); },
+  });
+
+  const dates = conversationDates(page.elements.conversation);
+  assert.deepEqual(dates.map((item) => item.textContent), [
+    expectedOld,
+    expectedWeekday.charAt(0).toUpperCase() + expectedWeekday.slice(1),
+    "Ayer",
+    "Hoy",
+  ]);
+  const messages = conversationMessages(page.elements.conversation);
+  assert.equal(messages.length, 5);
+  assert.equal(messages.every((message) => message.querySelector(".eyebrow") === null), true);
+  assert.equal(messages.at(-1).querySelector(".message-time").textContent, "14:45");
+  assert.equal(page.elements.send.textContent, "");
+  assert.equal(page.elements.send["aria-label"], "Enviar");
+  assert.notEqual(page.elements.send.querySelector("svg"), null);
 });
 
 test("fixed app icons keep one navigation order and reset Notes/Calendar to their home surfaces", async () => {

@@ -173,16 +173,17 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .notes-search-dock input { min-width: 0; min-height: 2.6rem; border: 0; outline: 0; padding: .45rem .55rem; background: transparent; color: inherit; font: inherit; }
 .notes-search-dock input:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; border-radius: .45rem; }
 .notes-search-dock button { min-width: 2.7rem; padding: .45rem; }
-.conversation { display: flex; flex-direction: column; gap: .7rem; min-height: 0; overflow-y: auto; padding: .25rem .1rem .5rem; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.conversation { display: flex; flex-direction: column; gap: .45rem; min-height: 0; overflow-y: auto; padding: .25rem .1rem .5rem; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .conversation::before { content: ""; flex: 1 0 0; }
-.message { max-width: 88%; padding: .75rem .85rem; border: 1px solid rgba(23, 32, 51, .09); border-radius: 1rem; background: rgba(255, 255, 255, .95); box-shadow: 0 .35rem 1rem rgba(34, 45, 74, .06); }
-.message-user { justify-self: end; background: #eceafd; border-color: rgba(76, 67, 181, .14); }
-.message-odyssey { justify-self: start; }
-.message-loading { color: #677088; }
+.conversation-date { align-self: center; margin: .45rem 0 .18rem; padding: .18rem .5rem; border-radius: 999px; background: rgba(103,96,177,.12); color: #7b8093; font-size: .68rem; font-weight: 750; line-height: 1.2; }
+.message { display: grid; max-width: 82%; gap: .28rem; padding: .55rem .68rem .38rem; border: 1px solid rgba(23, 32, 51, .09); border-radius: .9rem; background: rgba(255, 255, 255, .95); box-shadow: 0 .25rem .75rem rgba(34, 45, 74, .05); }
+.message-user { align-self: flex-end; background: #2b2a3d; border-color: rgba(255,255,255,.08); color: #f5f4ff; }
+.message-odyssey { align-self: flex-start; background: #4138a0; border-color: rgba(131,120,235,.45); color: #fff; }
+.message-loading { color: #ddd9ff; }
 .message-error { color: #7d2b2b; border-color: rgba(160, 48, 48, .2); background: #fff8f7; }
 .message-clarification { width: min(100%, 34rem); }
 .clarification-options { display: grid; gap: .55rem; margin-top: .75rem; }
-.clarification-option { padding: .65rem; border: 1px solid rgba(23, 32, 51, .1); border-radius: .75rem; background: #f8f9fc; }
+.clarification-option { padding: .65rem; border: 1px solid rgba(23, 32, 51, .1); border-radius: .75rem; background: #f8f9fc; color: #28334b; }
 .clarification-option h3, .clarification-option p { margin: 0; }
 .clarification-type { margin-top: .15rem !important; color: #6a7287; font-size: .78rem; }
 .clarification-evidence { margin-top: .4rem !important; line-height: 1.4; }
@@ -190,19 +191,26 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .clarification-controls button, .clarification-cancel { min-height: 2.35rem; padding: .35rem .7rem; }
 .clarification-cancel { margin-top: .6rem; background: transparent; color: #5c6478; }
 .clarification-status { margin: 0 .35rem .35rem; color: #6559b5; font-size: .8rem; }
-.message-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.message-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .3rem; margin-left: auto; }
+.message-header { display: flex; min-height: 0; align-items: center; justify-content: flex-end; gap: .35rem; }
+.message-header:has(.message-actions:empty) { display: none; }
+.message-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .25rem; margin-left: auto; }
 .message-actions .note-set-button { margin-top: 0; }
-.message-actions .detail-button { flex: 0 0 2.1rem; width: 2.1rem; min-height: 2.1rem; margin: 0; }
-.eyebrow { color: #6a7287; font-size: .7rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
-.message-text { margin-top: .35rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.message-actions .detail-button { flex: 0 0 1.9rem; width: 1.9rem; min-height: 1.9rem; margin: 0; }
+.message-odyssey .message-actions .detail-button { color: #ddd9ff; }
+.message-odyssey .message-actions .note-set-button { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; }
+.message-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.38; }
+.message-footer { display: flex; justify-content: flex-end; min-height: .8rem; }
+.message-time { color: #8f95a8; font-size: .62rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.message-odyssey .message-time { color: #cbc7f3; }
 .partial-notice { margin-top: .6rem; padding-top: .55rem; border-top: 1px solid rgba(23, 32, 51, .08); color: #6e5d25; font-size: .8rem; }
 .continuity-warning { margin: .55rem .2rem; color: #6e5d25; font-size: .82rem; text-align: center; }
 .recovery-control { margin: .55rem 0 0; color: var(--muted); font-size: .82rem; }
 .recovery-control p { margin: 0 0 .35rem; }
 .recovery-action { min-height: 2.25rem; }
 
-.composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem .6rem; align-items: end; padding: .6rem; border: 1px solid rgba(23, 32, 51, .1); border-radius: 1rem; background: rgba(255, 255, 255, .97); box-shadow: 0 .5rem 1.5rem rgba(34, 45, 74, .1); }
+.composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem .6rem; align-items: end; padding: .55rem; border: 1px solid rgba(23, 32, 51, .1); border-radius: 1rem; background: rgba(255, 255, 255, .97); box-shadow: 0 .5rem 1.5rem rgba(34, 45, 74, .1); }
+.send-button { display: grid; width: 2.55rem; min-width: 2.55rem; min-height: 2.55rem; place-items: center; padding: 0; border-radius: .8rem; background: #4138a0; color: #fff; }
+.send-button svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 textarea { display: block; width: 100%; min-height: 2.75rem; max-height: 9rem; resize: vertical; border: 0; outline: 0; padding: .6rem; background: transparent; color: inherit; line-height: 1.4; }
 textarea:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; border-radius: .45rem; }
 .hint { grid-column: 1 / -1; order: 3; color: #7b8499; font-size: .72rem; line-height: 1.2; }

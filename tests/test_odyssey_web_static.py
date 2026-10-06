@@ -110,7 +110,12 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     styles = (WEB_ROOT / "styles.css").read_text(encoding="utf-8")
     assert ".app-view { display: grid; height: 100%; min-height: 0;" in styles
     assert ".conversation { display: flex; flex-direction: column;" in styles
-    assert ".message-header { display: flex; align-items: center;" in styles
+    assert ".message-header { display: flex; min-height: 0; align-items: center;" in styles
+    assert ".conversation-date {" in styles
+    assert ".message-time {" in styles
+    assert ".message-user { align-self: flex-end;" in styles
+    assert ".message-odyssey { align-self: flex-start; background: #4138a0;" in styles
+    assert ".send-button {" in styles
     assert (
         ".detail-button { display: inline-grid; flex: 0 0 2.75rem; min-height: 2.75rem;" in styles
     )

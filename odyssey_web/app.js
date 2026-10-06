@@ -45,6 +45,7 @@ for (const [control, icon, label] of [
 ]) {
   if (control) setActionIcon(control, icon, label);
 }
+if (sendButton) setActionIcon(sendButton, "send", "Enviar");
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
 let olderCursor = null;
@@ -120,8 +121,20 @@ async function loadMainConversation() {
   conversation.replaceChildren();
   recoveryControl = null;
   const userMessages = new Map();
+  let visibleDay = null;
   for (const turn of data.turns ?? []) {
-    const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status);
+    const createdAt = validTurnTime(turn.created_at);
+    const day = localDayKey(createdAt);
+    if (day !== visibleDay) {
+      appendDateSeparator(createdAt);
+      visibleDay = day;
+    }
+    const message = appendMessage(
+      turn.role === "assistant" ? "odyssey" : "user",
+      turn.text,
+      turn.status,
+      {createdAt, groupDate: false},
+    );
     if (turn.role === "user" && typeof turn.request_id === "string") {
       userMessages.set(turn.request_id, message);
     }
@@ -155,15 +168,28 @@ void (async () => {
 function setBusy(isBusy) {
   input.disabled = isBusy;
   sendButton.disabled = isBusy;
-  sendButton.textContent = isBusy ? "Enviando…" : "Enviar";
+  setActionIcon(sendButton, "send", isBusy ? "Enviando" : "Enviar");
 }
 
-function appendMessage(role, message, status = "", {prepend = false, scroll = true} = {}) {
+function appendMessage(
+  role,
+  message,
+  status = "",
+  {
+    prepend = false,
+    scroll = true,
+    createdAt = new Date().toISOString(),
+    insert = true,
+    groupDate = true,
+  } = {},
+) {
+  const timestamp = validTurnTime(createdAt);
+  const day = localDayKey(timestamp);
+  if (insert && groupDate && !prepend && day !== lastMessageDay()) appendDateSeparator(timestamp);
   const article = document.createElement("article");
   article.className = "message message-" + role;
-  const label = document.createElement("p");
-  label.className = "eyebrow";
-  label.textContent = role === "user" ? "Tú" : "Odyssey";
+  article.dataset.day = day;
+  article.dataset.createdAt = timestamp;
   const body = document.createElement("p");
   body.className = "message-text";
   body.textContent = message;
@@ -171,17 +197,84 @@ function appendMessage(role, message, status = "", {prepend = false, scroll = tr
   header.className = "message-header";
   const actions = document.createElement("div");
   actions.className = "message-actions";
-  header.append(label, actions);
-  article.append(header, body);
+  header.append(actions);
+  const footer = document.createElement("footer");
+  footer.className = "message-footer";
+  const time = document.createElement("time");
+  time.className = "message-time";
+  time.dateTime = timestamp;
+  time.textContent = messageTime(timestamp);
+  footer.append(time);
+  article.append(header, body, footer);
   if (status === "partial") {
     const notice = document.createElement("p");
     notice.className = "partial-notice";
     notice.textContent = "La respuesta puede ser incompleta.";
     article.append(notice);
   }
-  if (prepend) conversation.prepend(article); else conversation.append(article);
-  if (scroll) conversation.scrollTop = conversation.scrollHeight;
+  if (insert) {
+    if (prepend) conversation.prepend(article);
+    else conversation.append(article);
+  }
+  if (insert && scroll) conversation.scrollTop = conversation.scrollHeight;
   return article;
+}
+
+function validTurnTime(value) {
+  const parsed = typeof value === "string" ? new Date(value) : new Date();
+  return Number.isNaN(parsed.valueOf()) ? new Date().toISOString() : parsed.toISOString();
+}
+
+function localDayKey(value) {
+  const date = new Date(value);
+  const part = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`;
+}
+
+function lastMessageDay() {
+  const children = Array.from(conversation.children);
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    if (children[index].classList?.contains?.("message") || children[index].className?.split(" ").includes("message")) {
+      return children[index].dataset.day ?? null;
+    }
+  }
+  return null;
+}
+
+function appendDateSeparator(value, {prepend = false, insert = true} = {}) {
+  const day = localDayKey(value);
+  const separator = document.createElement("p");
+  separator.className = "conversation-date";
+  separator.dataset.day = day;
+  separator.textContent = conversationDateLabel(value);
+  if (insert) {
+    if (prepend) conversation.prepend(separator);
+    else conversation.append(separator);
+  }
+  return separator;
+}
+
+function conversationDateLabel(value) {
+  const date = new Date(value);
+  const today = new Date();
+  const dayNumber = (item) => Date.UTC(item.getFullYear(), item.getMonth(), item.getDate());
+  const difference = Math.round((dayNumber(today) - dayNumber(date)) / 86_400_000);
+  if (difference === 0) return "Hoy";
+  if (difference === 1) return "Ayer";
+  if (difference > 1 && difference < 7) {
+    const weekday = new Intl.DateTimeFormat("es-ES", {weekday: "long"}).format(date);
+    return weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  }
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function messageTime(value) {
+  const date = new Date(value);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 async function loadOlderConversation() {
@@ -193,13 +286,37 @@ async function loadOlderConversation() {
   try {
     const data = await requestConversation({endpoint: conversationEndpoint, operation: "main", payload: {limit: 40, before: cursor}});
     if (cursor !== olderCursor) return;
-    for (const turn of [...(data.turns ?? [])].reverse()) {
-      const message = appendMessage(turn.role === "assistant" ? "odyssey" : "user", turn.text, turn.status, {prepend: true, scroll: false});
+    const olderNodes = [];
+    let olderDay = null;
+    for (const turn of data.turns ?? []) {
+      const createdAt = validTurnTime(turn.created_at);
+      const day = localDayKey(createdAt);
+      if (day !== olderDay) {
+        olderNodes.push(appendDateSeparator(createdAt, {insert: false}));
+        olderDay = day;
+      }
+      const message = appendMessage(
+        turn.role === "assistant" ? "odyssey" : "user",
+        turn.text,
+        turn.status,
+        {createdAt, insert: false, scroll: false, groupDate: false},
+      );
       if (turn.role === "assistant") {
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
       }
+      olderNodes.push(message);
     }
+    const firstExistingMessage = Array.from(conversation.children).find((child) =>
+      child.className?.split(" ").includes("message"),
+    );
+    if (olderDay && firstExistingMessage?.dataset.day === olderDay) {
+      const duplicate = Array.from(conversation.children).find((child) =>
+        child.className === "conversation-date" && child.dataset.day === olderDay,
+      );
+      duplicate?.remove();
+    }
+    if (olderNodes.length) conversation.prepend(...olderNodes);
     olderCursor = data.before ?? null;
     hasOlder = data.has_older === true;
     conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight;
@@ -395,7 +512,6 @@ function appendContinuityWarning() {
 
 function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
-  message.querySelector(".eyebrow").textContent = resultLabel(result);
   if (result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
     message.querySelector(".message-text").textContent = "Guardado";
     message.classList.add("message-acknowledgement");
@@ -457,17 +573,6 @@ function submitClarificationReply(reply) {
   } catch {
     input.focus();
   }
-}
-
-function resultLabel(result) {
-  return {
-    acknowledgement: result.note_result_snapshot?.kind === "affected_notes" ? "Guardado" : "Hecho",
-    clarification: "Aclara tu solicitud",
-    note_set: "Notas encontradas",
-    cannot_answer: "No puedo responder",
-    empty: "Sin resultados",
-    error: "No completado",
-  }[result.kind] ?? "Odyssey";
 }
 
 async function sendSubmission(submission, isRetry = false, activeRecoveryControl = null) {
