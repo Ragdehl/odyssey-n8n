@@ -310,6 +310,8 @@ test("normal Notes browsing loads bounded independent type groups and advances o
   assert.deepEqual(initial.map(({payload}) => payload.filters.at(-1).value).sort(), ["person", "task"]);
   assert.equal(groupElement(mounted, "person").querySelector(".notes-type-count").textContent, "4");
   assert.equal(groupElement(mounted, "task").querySelector(".notes-type-count").textContent, "1");
+  assert.equal(mounted.elements.list.textContent.includes("Odyssey organiza tu información en notas de distintos tipos"), false);
+  mounted.elements.list.querySelector(".notes-groups-help-toggle").click();
   assert.equal(mounted.elements.list.textContent.includes("Odyssey organiza tu información en notas de distintos tipos"), true);
   assert.equal(mounted.elements.list.textContent.includes("la relaciona con las demás"), true);
 
@@ -844,6 +846,8 @@ test("Calendar Day inline links hand navigation to Calendar instead of opening m
           {text: "Added "},
           {text: "01-10-2026", target_id: "date:2026-10-01", target_type: "calendar_day"},
         ],
+      }, {
+        kind: "list_item", segments: [{text: "Hecho de prueba."}], deletable: true, fact_locator: "r:0",
       }]);
       if (operation === "backlinks") return {kind: "backlinks", target_id: payload.note_id, items: [], total: 0, next_cursor: null};
       return page({items: [pageItem("marta", "Marta")]});
@@ -852,12 +856,42 @@ test("Calendar Day inline links hand navigation to Calendar instead of opening m
   mounted.elements.list.querySelector(".note-row").click();
   await flush();
   const dateLink = mounted.elements.detail.querySelector("a");
+  assert.equal(mounted.elements.detail.textContent.includes("Añadido"), true);
   assert.equal(dateLink.textContent.includes("01-10-2026"), true);
   assert.equal(dateLink.className, "note-inline-link");
   assert.equal(dateLink.querySelector(".note-type").className.includes("type-calendar_day"), true);
   dateLink.click();
   assert.equal(mounted.document.events.at(-1).type, "odyssey:open-calendar-day");
   assert.deepEqual(mounted.document.events.at(-1).detail, {date: "2026-10-01"});
+});
+
+test("backlinks stay compact until the user expands one source", async () => {
+  const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") return detail(payload.note_id, "Marta");
+    if (operation === "backlinks") return {
+      items: [{
+        source: {id: "cloe", name: "Cloe", type: "person"},
+        occurrences: 2,
+        snippets: [
+          {heading: [{text: "Added 29-09-2026"}], block: {segments: [{text: "Va a cenar con Marta."}]}},
+          {heading: [{text: "Added 30-09-2026"}], block: {segments: [{text: "Llama a Marta."}]}},
+        ],
+        snippets_truncated: false,
+      }],
+    };
+    return page({items: [pageItem("marta", "Marta")]});
+  }});
+  mounted.elements.list.querySelector(".note-row").click();
+  await flush();
+
+  const occurrences = mounted.elements.detail.querySelector(".backlink-occurrences");
+  const disclosure = mounted.elements.detail.querySelector(".backlink-disclosure");
+  assert.equal(occurrences.hidden, true);
+  assert.equal(disclosure["aria-expanded"], "false");
+  disclosure.click();
+  assert.equal(occurrences.hidden, false);
+  assert.equal(disclosure["aria-expanded"], "true");
 });
 
 test("inline links keep standard link text color while the target icon keeps semantic color", async () => {
@@ -1016,6 +1050,7 @@ test("Task Work Session activity can be added, edited, and deleted without refet
   mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
   await flush();
   mounted.elements.detail.querySelector(".work-session-open").click();
+  mounted.elements.detail.querySelector(".work-session-activity-heading").querySelector("button").click();
   const form = mounted.elements.detail.querySelector(".work-session-activity-form");
   const textarea = form.querySelector("textarea");
   textarea.value = "He terminado los tests.";
@@ -1051,7 +1086,31 @@ test("Task Work Session activity can be added, edited, and deleted without refet
 });
 
 
-test("completed Task disables starting a new Work Session but keeps session history visible", async () => {
+test("Work Session start failures are visible inside the open Task detail", async () => {
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return capabilities();
+      if (operation === "detail") return taskDetail();
+      if (operation === "backlinks") return {items: []};
+      if (operation === "work_session_start") {
+        throw new NotesRequestError("active session", "WORK_SESSION_ALREADY_ACTIVE");
+      }
+      return page();
+    },
+  });
+  mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
+  await flush();
+
+  mounted.elements.detail.querySelector(".work-session-start").click();
+  await flush();
+
+  assert.equal(
+    mounted.elements.detail.querySelector(".note-detail-status").textContent,
+    "Ya hay una sesión de trabajo activa. Termínala antes de empezar otra.",
+  );
+});
+
+test("completed Task hides starting a new Work Session but keeps session history visible", async () => {
   const mounted = await mountNotes({
     requestNotes: async ({operation, payload}) => {
       if (operation === "capabilities") return capabilities();
@@ -1064,7 +1123,7 @@ test("completed Task disables starting a new Work Session but keeps session hist
   });
   mounted.document.emit("odyssey:open-note", {detail: {note_id: "task-odyssey"}});
   await flush();
-  assert.equal(mounted.elements.detail.querySelector(".work-session-start").disabled, true);
+  assert.equal(mounted.elements.detail.querySelector(".work-session-start"), null);
   assert.equal(mounted.elements.detail.textContent.includes("1 h"), true);
 });
 

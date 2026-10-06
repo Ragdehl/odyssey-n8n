@@ -114,7 +114,12 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert ".conversation-date {" in styles
     assert ".message-time {" in styles
     assert ".message-user { align-self: flex-end;" in styles
-    assert ".message-odyssey { align-self: flex-start; background: #4138a0;" in styles
+    assert (
+        ".message-odyssey { align-self: flex-start; border-bottom-left-radius: .3rem; background: #342f66;"
+        in styles
+    )
+    assert ".message-user::after {" in styles
+    assert ".message-odyssey::after {" in styles
     assert ".send-button {" in styles
     assert (
         ".detail-button { display: inline-grid; flex: 0 0 2.75rem; min-height: 2.75rem;" in styles

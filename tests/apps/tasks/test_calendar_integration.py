@@ -56,9 +56,33 @@ def _calendar(tmp_path: Path) -> CalendarQueryService:
         "- [x] Llamar al banco\n",
     )
     (vault / "llamar al banco - task.md").write_text(serialize_note(note), encoding="utf-8")
+
+    session = Note(
+        {
+            "id": "session-bank",
+            "name": "Work session · Llamar al banco · 2026-10-09T16:10:00+02:00",
+            "type": "work_session",
+            "task_id": "task-bank",
+            "started_at": "2026-10-09T16:10:00+02:00",
+            "ended_at": "2026-10-09T16:55:00+02:00",
+            "created_at": "2026-10-09T16:10:00+02:00",
+            "updated_at": "2026-10-09T16:55:00+02:00",
+            "created_by": {"human": None, "app": "tasks"},
+            "updated_by": {"human": None, "app": "tasks"},
+            "revision": 1,
+            "schema_version": 3,
+            "aliases": [],
+            "tags": [],
+        },
+        "",
+    )
+    (vault / "tasks" / "work-sessions").mkdir(parents=True, exist_ok=True)
+    (vault / "tasks" / "work-sessions" / "session-bank.md").write_text(
+        serialize_note(session), encoding="utf-8"
+    )
     repository = VaultRepository(vault)
     index = ContextIndex(tmp_path / "context.sqlite3")
-    assert index.rebuild(repository, SCHEMA, Embedder()) == 1
+    assert index.rebuild(repository, SCHEMA, Embedder()) == 2
     notes = NotesQueryService(repository, SCHEMA, index)
     return CalendarQueryService(repository, SCHEMA, notes)
 
@@ -95,7 +119,10 @@ def test_task_schedule_uses_planned_interval_and_keeps_date_only_deadline_all_da
     assert ninth.all_day == ()
     assert [
         (item.kind, item.label, item.role, item.start_time, item.end_time) for item in ninth.timed
-    ] == [("task", "Llamar al banco", "planned", "15:35", "17:05")]
+    ] == [
+        ("task", "Llamar al banco", "planned", "15:35", "17:05"),
+        ("work_session", "Llamar al banco", "work_session", "16:10", "16:55"),
+    ]
 
     twelfth = schedule.days[3]
     assert [(item.kind, item.label, item.role, item.start_time) for item in twelfth.all_day] == [

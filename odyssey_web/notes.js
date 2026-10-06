@@ -16,6 +16,7 @@ const ACTION_ICONS = Object.freeze({
   check: ["m5 12 4 4L19 6"],
   close: ["M7 7l10 10M17 7 7 17"],
   more: ["M5 12h.01M12 12h.01M19 12h.01"],
+  info: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 11v6M12 7h.01"],
   openNote: ["M6 3h9l3 3v15H6z", "M14 3v5h4", "M10 15h7", "m14 12 3 3-3 3"],
   send: ["M4 4l17 8-17 8 3-8-3-8Z", "M7 12h14"],
 });
@@ -64,8 +65,9 @@ export function mountNotes(root, {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
-    editingWorkSessionId: null, editingWorkSessionActivityId: null,
+    editingWorkSessionId: null, editingWorkSessionActivityId: null, workSessionActivityComposerId: null,
     workSessionDisclosure: new Map(), feedDirty: false, groups: new Map(), pendingGroupRefresh: false,
+    introOpen: false,
     collapsedTypes: readCollapsedTypes(sessionStorageImpl),
   };
   const search = root.querySelector("#notes-search");
@@ -297,11 +299,22 @@ export function mountNotes(root, {
   }
 
   function renderNormalGroups() {
-    const intro = document.createElement("p");
-    intro.className = "notes-groups-intro";
-    intro.textContent = "Odyssey organiza tu información en notas de distintos tipos. Cuando le das información sobre una persona, proyecto, tarea u otro elemento, crea o actualiza su nota y la relaciona con las demás cuando existe un vínculo entre ellas.";
+    const help = document.createElement("section");
+    help.className = "notes-groups-help";
+    const helpToggle = actionButton("info", "Cómo organiza Odyssey tus notas", () => {
+      state.introOpen = !state.introOpen;
+      renderList();
+    }, "notes-groups-help-toggle");
+    helpToggle.setAttribute("aria-expanded", state.introOpen ? "true" : "false");
+    help.append(helpToggle);
+    if (state.introOpen) {
+      const intro = document.createElement("p");
+      intro.className = "notes-groups-intro";
+      intro.textContent = "Odyssey organiza tu información en notas de distintos tipos. Cuando le das información sobre una persona, proyecto, tarea u otro elemento, crea o actualiza su nota y la relaciona con las demás cuando existe un vínculo entre ellas.";
+      help.append(intro);
+    }
     const groups = eligibleTypes().map((type) => typeGroup(type, state.groups.get(type.id)));
-    list.replaceChildren(intro, ...groups, createTypeCard());
+    list.replaceChildren(help, ...groups, createTypeCard());
   }
 
   function renderGlobalGroups() {
@@ -700,6 +713,9 @@ export function mountNotes(root, {
         }));
       }
     }
+    const detailStatus = document.createElement("p");
+    detailStatus.className = "note-detail-status";
+    detailStatus.setAttribute("aria-live", "polite");
     const properties = document.createElement("dl");
     properties.className = "note-properties";
     for (const [key, raw] of Object.entries(value.note.properties).slice(0, 6)) {
@@ -733,7 +749,13 @@ export function mountNotes(root, {
     backlinks.append(backlinksHeading);
     void appendBacklinks(backlinks, value.note.id, value.note.type === "task");
     related.push(backlinks);
-    detail.replaceChildren(header, controls, properties, tags, body, ...related);
+    detail.replaceChildren(header, controls, detailStatus, properties, tags, body, ...related);
+  }
+
+  function detailFeedback(message) {
+    status.textContent = message;
+    const local = detail.querySelector(".note-detail-status");
+    if (local) local.textContent = message;
   }
 
   function mutationRequestId() {
@@ -749,7 +771,7 @@ export function mountNotes(root, {
       try {
         subtasks = await loadSubtasks(value.note.id);
       } catch {
-        status.textContent = "No se han podido comprobar las subtareas. Vuelve a intentarlo.";
+        detailFeedback("No se han podido comprobar las subtareas. Vuelve a intentarlo.");
         return;
       }
       const openSubtasks = subtasks.filter((item) => ["pending", "in_progress"].includes(item.source.properties?.status)).length;
@@ -767,10 +789,10 @@ export function mountNotes(root, {
       state.current = {...value, note: {...value.note, properties}, mutation: result.mutation};
       markFeedDirty();
       renderDetail();
-      status.textContent = completed ? "Tarea completada." : "Tarea reabierta.";
+      detailFeedback(completed ? "Tarea completada." : "Tarea reabierta.");
     } catch (error) {
       control.disabled = false;
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -783,18 +805,14 @@ export function mountNotes(root, {
     heading.textContent = "Sesiones de trabajo";
     const sessions = Array.isArray(value.work_sessions) ? value.work_sessions : [];
     const active = sessions.find((session) => !session.ended_at) ?? null;
-    const control = actionButton(
-      active ? "stop" : "play",
-      active ? "Terminar sesión" : "Empezar sesión",
-      () => {
-        if (active) void stopWorkSession(value, active, control);
-        else void startWorkSession(value, control);
-      },
-      active ? "work-session-stop action-stop" : "work-session-start action-start",
-    );
     const taskCanStart = ["pending", "in_progress"].includes(value.note.properties?.status);
-    if (!value.mutation || (!active && !taskCanStart)) control.disabled = true;
-    headingRow.append(heading, control);
+    const control = active
+      ? actionButton("stop", "Terminar sesión", () => void stopWorkSession(value, active, control), "work-session-stop action-stop")
+      : taskCanStart && value.mutation
+        ? actionButton("play", "Empezar sesión", () => void startWorkSession(value, control), "work-session-start action-start")
+        : null;
+    headingRow.append(heading);
+    if (control) headingRow.append(control);
     section.append(headingRow);
 
     if (sessions.length) {
@@ -876,9 +894,17 @@ export function mountNotes(root, {
   function renderWorkSessionActivity(value, session) {
     const panel = document.createElement("section");
     panel.className = "work-session-activity";
+    const headingRow = document.createElement("div");
+    headingRow.className = "work-session-activity-heading";
     const heading = document.createElement("h4");
     heading.textContent = "Actividad";
-    panel.append(heading);
+    const composerOpen = state.workSessionActivityComposerId === session.id;
+    const addToggle = actionButton(composerOpen ? "close" : "add", composerOpen ? "Cerrar nueva actividad" : "Añadir actividad", () => {
+      state.workSessionActivityComposerId = composerOpen ? null : session.id;
+      renderDetail();
+    }, composerOpen ? "action-cancel" : "action-add");
+    headingRow.append(heading, addToggle);
+    panel.append(headingRow);
     const entries = Array.isArray(session.activity) ? session.activity : [];
     if (!entries.length) {
       const empty = document.createElement("p");
@@ -927,21 +953,29 @@ export function mountNotes(root, {
       }
       panel.append(list);
     }
-    const form = document.createElement("form");
-    form.className = "work-session-activity-form";
-    const input = document.createElement("textarea");
-    input.rows = 2;
-    input.maxLength = 2000;
-    input.placeholder = session.ended_at ? "Añadir algo que hiciste en esta sesión…" : "Añadir lo que estás haciendo…";
-    input.setAttribute("aria-label", "Actividad de la sesión de trabajo");
-    const add = actionButton("add", "Añadir actividad", () => {}, "action-add");
-    add.type = "submit";
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void addWorkSessionActivity(value, session, input, add);
-    });
-    form.append(input, add);
-    panel.append(form);
+    if (composerOpen) {
+      const form = document.createElement("form");
+      form.className = "work-session-activity-form";
+      const input = document.createElement("textarea");
+      input.rows = 2;
+      input.maxLength = 2000;
+      input.placeholder = session.ended_at ? "Añadir algo que hiciste en esta sesión…" : "Añadir lo que estás haciendo…";
+      input.setAttribute("aria-label", "Actividad de la sesión de trabajo");
+      const add = actionButton("send", "Guardar actividad", () => {}, "action-add");
+      add.type = "submit";
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void addWorkSessionActivity(value, session, input, add);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+        event.preventDefault();
+        form.requestSubmit?.();
+      });
+      form.append(input, add);
+      panel.append(form);
+      queueMicrotask(() => input.focus());
+    }
     return panel;
   }
 
@@ -961,11 +995,11 @@ export function mountNotes(root, {
       const active = result.work_sessions.find((item) => !item.ended_at);
       if (active) state.workSessionDisclosure.set(active.id, true);
       renderDetail();
-      status.textContent = "Sesión de trabajo iniciada.";
+      detailFeedback("Sesión de trabajo iniciada.");
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "play", "Empezar sesión");
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -984,11 +1018,11 @@ export function mountNotes(root, {
       state.editingWorkSessionActivityId = null;
       state.workSessionDisclosure.set(session.id, true);
       renderDetail();
-      status.textContent = "Sesión terminada. Puedes seguir añadiendo actividad si lo necesitas.";
+      detailFeedback("Sesión terminada. Puedes seguir añadiendo actividad si lo necesitas.");
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "stop", "Terminar sesión");
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -996,7 +1030,7 @@ export function mountNotes(root, {
     const startedAt = timezoneAwareDateTime(startInput.value);
     const endedAt = endInput.value ? timezoneAwareDateTime(endInput.value) : null;
     if (!startedAt || (endInput.value && !endedAt)) {
-      status.textContent = "Revisa las fechas y horas de la sesión.";
+      detailFeedback("Revisa las fechas y horas de la sesión.");
       return;
     }
     control.disabled = true;
@@ -1012,18 +1046,18 @@ export function mountNotes(root, {
       state.editingWorkSessionId = null;
       state.workSessionDisclosure.set(session.id, true);
       renderDetail();
-      status.textContent = "Sesión de trabajo corregida.";
+      detailFeedback("Sesión de trabajo corregida.");
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "check", "Guardar horario");
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
   async function addWorkSessionActivity(value, session, input, control) {
     const text = input.value.trim();
     if (!text) {
-      status.textContent = "Escribe qué has hecho antes de añadirlo.";
+      detailFeedback("Escribe qué has hecho antes de añadirlo.");
       input.focus();
       return;
     }
@@ -1039,19 +1073,20 @@ export function mountNotes(root, {
       state.current = {...value, work_sessions: result.work_sessions};
       state.workSessionDisclosure.set(session.id, true);
       state.editingWorkSessionActivityId = null;
+      state.workSessionActivityComposerId = null;
       renderDetail();
-      status.textContent = "Actividad añadida a la sesión.";
+      detailFeedback("Actividad añadida a la sesión.");
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "add", "Añadir actividad");
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
   async function editWorkSessionActivity(value, session, entry, input, control) {
     const text = input.value.trim();
     if (!text) {
-      status.textContent = "La actividad no puede quedar vacía.";
+      detailFeedback("La actividad no puede quedar vacía.");
       input.focus();
       return;
     }
@@ -1068,11 +1103,11 @@ export function mountNotes(root, {
       state.workSessionDisclosure.set(session.id, true);
       state.editingWorkSessionActivityId = null;
       renderDetail();
-      status.textContent = "Actividad corregida.";
+      detailFeedback("Actividad corregida.");
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "check", "Guardar actividad");
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -1091,11 +1126,11 @@ export function mountNotes(root, {
       state.workSessionDisclosure.set(session.id, true);
       state.editingWorkSessionActivityId = null;
       renderDetail();
-      status.textContent = "Actividad eliminada.";
+      detailFeedback("Actividad eliminada.");
     } catch (error) {
       control.disabled = false;
       setActionIcon(control, "delete", "Eliminar actividad");
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -1111,7 +1146,7 @@ export function mountNotes(root, {
       status.textContent = "La información se ha eliminado.";
     } catch (error) {
       control.disabled = false;
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -1129,7 +1164,7 @@ export function mountNotes(root, {
       status.textContent = "La nota se ha retirado.";
     } catch (error) {
       control.disabled = false;
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -1202,10 +1237,10 @@ export function mountNotes(root, {
       }});
       markFeedDirty();
       if (state.current) renderDetail();
-      status.textContent = completed ? "Subtarea completada." : "Subtarea reabierta.";
+      detailFeedback(completed ? "Subtarea completada." : "Subtarea reabierta.");
     } catch (error) {
       control.disabled = false;
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -1241,10 +1276,10 @@ export function mountNotes(root, {
       }});
       markFeedDirty();
       renderDetail();
-      status.textContent = "Subtarea añadida.";
+      detailFeedback("Subtarea añadida.");
     } catch (error) {
       control.disabled = false;
-      status.textContent = mutationErrorMessage(error);
+      detailFeedback(mutationErrorMessage(error));
     }
   }
 
@@ -1257,11 +1292,31 @@ export function mountNotes(root, {
         return;
       }
       for (const item of items) {
+        const group = document.createElement("section");
+        group.className = "backlink-source";
+        const header = document.createElement("div");
+        header.className = "backlink-source-header";
         const row = button("", () => void open(item.source.id));
         row.className = "backlink";
         row.setAttribute("aria-label", `Abrir ${typeLabel(item.source.type)} ${item.source.name}`);
         row.append(typeIcon(item.source.type), document.createTextNode(`${item.source.name} · ${item.occurrences}`));
-        target.append(row);
+        const occurrences = document.createElement("div");
+        occurrences.className = "backlink-occurrences";
+        occurrences.hidden = true;
+        const disclosure = actionButton("chevronDown", `Ver ${item.occurrences} menciones de ${item.source.name}`, () => {
+          occurrences.hidden = !occurrences.hidden;
+          setActionIcon(
+            disclosure,
+            occurrences.hidden ? "chevronDown" : "chevronUp",
+            occurrences.hidden
+              ? `Ver ${item.occurrences} menciones de ${item.source.name}`
+              : `Ocultar menciones de ${item.source.name}`,
+          );
+          disclosure.setAttribute("aria-expanded", occurrences.hidden ? "false" : "true");
+        }, "backlink-disclosure action-disclosure");
+        disclosure.setAttribute("aria-expanded", "false");
+        header.append(row, disclosure);
+        group.append(header);
         for (const snippet of item.snippets) {
           const occurrence = document.createElement("section");
           occurrence.className = "backlink-occurrence";
@@ -1275,14 +1330,16 @@ export function mountNotes(root, {
           context.className = "backlink-context";
           appendBodySegments(context, snippet.block.segments, open);
           occurrence.append(context);
-          target.append(occurrence);
+          occurrences.append(occurrence);
         }
         if (item.snippets_truncated) {
           const more = document.createElement("p");
           more.className = "backlink-more";
           more.textContent = `Se muestran ${item.snippets.length} de ${item.occurrences} menciones.`;
-          target.append(more);
+          occurrences.append(more);
         }
+        group.append(occurrences);
+        target.append(group);
       }
     } catch {
       target.append(document.createTextNode("No se han podido cargar los enlaces entrantes."));
@@ -1519,14 +1576,55 @@ function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
     return;
   }
   let list = null;
+  let pendingCaptureHeading = null;
+  let factGroup = null;
+
+  const ensureFactGroup = () => {
+    if (factGroup || !pendingCaptureHeading) return factGroup;
+    factGroup = document.createElement("section");
+    factGroup.className = "note-fact-group";
+    const heading = document.createElement("h3");
+    heading.className = "note-fact-heading";
+    appendBodySegments(heading, localizeCaptureHeading(pendingCaptureHeading.segments), open);
+    factGroup.append(heading);
+    parent.append(factGroup);
+    list = document.createElement("ul");
+    list.className = "note-fact-list";
+    factGroup.append(list);
+    return factGroup;
+  };
+
   for (const block of blocks) {
+    if (block.kind === "heading" && isCaptureHeading(block.segments)) {
+      pendingCaptureHeading = block;
+      factGroup = null;
+      list = null;
+      continue;
+    }
     if (block.kind === "list_item") {
+      const segments = taskName ? legacyTaskActionSegments(block.segments, taskName) : block.segments;
+      if (taskName && isTaskParentRelation(segments)) {
+        pendingCaptureHeading = null;
+        factGroup = null;
+        list = null;
+        const relation = document.createElement("div");
+        relation.className = "note-task-parent";
+        const label = document.createElement("span");
+        label.className = "note-task-parent-label";
+        label.textContent = "Tarea superior";
+        const value = document.createElement("span");
+        value.className = "note-task-parent-value";
+        appendBodySegments(value, stripTaskParentPrefix(segments), open);
+        relation.append(label, value);
+        parent.append(relation);
+        continue;
+      }
+      if (pendingCaptureHeading) ensureFactGroup();
       if (!list) {
         list = document.createElement("ul");
         parent.append(list);
       }
       const item = document.createElement("li");
-      const segments = taskName ? legacyTaskActionSegments(block.segments, taskName) : block.segments;
       if (removeFact && block.deletable) {
         item.className = "note-editable-fact";
         const content = document.createElement("span");
@@ -1540,11 +1638,37 @@ function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
       list.append(item);
       continue;
     }
+    pendingCaptureHeading = null;
+    factGroup = null;
     list = null;
     const element = document.createElement(block.kind === "heading" ? "h3" : "p");
     appendBodySegments(element, block.segments, open);
     parent.append(element);
   }
+}
+function isCaptureHeading(segments) {
+  return /^Added \d{2}-\d{2}-\d{4}$/.test(segments.map((segment) => segment.text).join(""));
+}
+function localizeCaptureHeading(segments) {
+  let replaced = false;
+  return segments.map((segment) => {
+    if (replaced || segment.target_id || typeof segment.text !== "string") return segment;
+    const text = segment.text.replace(/^Added\b/, "Añadido");
+    if (text !== segment.text) replaced = true;
+    return {...segment, text};
+  });
+}
+function isTaskParentRelation(segments) {
+  return /^Tarea superior:\s*/.test(segments.map((segment) => segment.text).join(""));
+}
+function stripTaskParentPrefix(segments) {
+  let stripped = false;
+  return segments.map((segment) => {
+    if (stripped || segment.target_id || typeof segment.text !== "string") return segment;
+    const text = segment.text.replace(/^Tarea superior:\s*/, "");
+    if (text !== segment.text) stripped = true;
+    return {...segment, text};
+  }).filter((segment) => segment.text || segment.target_id);
 }
 function legacyTaskActionSegments(segments, taskName) {
   if (!segments.length || segments[0].target_id || typeof segments[0].text !== "string") return segments;

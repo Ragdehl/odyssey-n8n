@@ -15,6 +15,7 @@ from odyssey_core.atomic_facts import (
 )
 from odyssey_core.note_queries import (
     NoteBodyBlock,
+    NoteBodySegment,
     NoteDetail,
     NotesQueryError,
     NotesQueryService,
@@ -87,6 +88,7 @@ class CalendarScheduleItem:
     role: str
     start_time: str | None = None
     end_time: str | None = None
+    segments: tuple[NoteBodySegment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -608,13 +610,68 @@ class CalendarQueryService:
                         )
                     )
 
-        for note in self._scan():
+        scanned = self._scan()
+        scanned_by_id = {note.id: note for note in scanned}
+        details: dict[str, NoteDetail] = {}
+
+        def detail(note_id: str) -> NoteDetail:
+            if note_id not in details:
+                try:
+                    details[note_id] = self.notes_service.detail(note_id)
+                except NotesQueryError as error:
+                    raise CalendarQueryError("Calendar schedule source is unavailable") from error
+            return details[note_id]
+
+        def fact_segments(note_id: str, locator: str) -> tuple[NoteBodySegment, ...]:
+            block = next(
+                (block for block in detail(note_id).body_blocks if block.fact_locator == locator),
+                None,
+            )
+            return block.segments if block is not None else ()
+
+        def add_work_session(note: _ScannedNote) -> None:
+            task_id = note.metadata.get("task_id")
+            started_at = note.metadata.get("started_at")
+            if not isinstance(task_id, str) or not isinstance(started_at, str):
+                return
+            task = scanned_by_id.get(task_id)
+            if task is None or task.type != "task":
+                return
+            started_date, start_time = timed_coordinate(started_at)
+            if started_date not in state:
+                return
+            end_time: str | None = None
+            ended_at = note.metadata.get("ended_at")
+            if isinstance(ended_at, str):
+                ended_date, candidate_end = timed_coordinate(ended_at)
+                if ended_date == started_date and candidate_end > start_time:
+                    end_time = candidate_end
+            state[started_date]["timed"].append(
+                CalendarScheduleItem(
+                    "work_session",
+                    task.id,
+                    task.type,
+                    _bounded_preview_text(task.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                    "Sesión de trabajo",
+                    "work_session",
+                    start_time,
+                    end_time,
+                )
+            )
+
+        for note in scanned:
             if note.type == "task":
                 add_task(note)
+            elif note.type == "work_session":
+                add_work_session(note)
             for fact in note.atomic_facts:
-                for anchor in fact.temporal_anchors:
-                    if anchor.date not in state:
-                        continue
+                relevant_anchors = tuple(
+                    anchor for anchor in fact.temporal_anchors if anchor.date in state
+                )
+                if not relevant_anchors:
+                    continue
+                segments = fact_segments(note.id, fact.locator)
+                for anchor in relevant_anchors:
                     item = CalendarScheduleItem(
                         "fact",
                         note.id,
@@ -623,6 +680,8 @@ class CalendarQueryService:
                         _bounded_preview_text(fact.text, _MONTH_PREVIEW_TEXT_LIMIT),
                         "semantic_time" if anchor.time is not None else "semantic_date",
                         anchor.display_time,
+                        None,
+                        segments,
                     )
                     state[anchor.date]["timed" if anchor.time is not None else "all_day"].append(
                         item

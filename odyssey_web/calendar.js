@@ -211,22 +211,37 @@ export function mountCalendar(root, {
   }
 
   function scheduleItem(item, timed) {
-    const value = button("", () => {
+    const activate = () => {
       if (item.source_type === "calendar_day" && item.source_id.startsWith("date:")) {
         void openDay(item.source_id.slice(5));
       } else {
         openNote(item.source_id);
       }
-    });
+    };
+    const value = document.createElement("div");
     value.className = `calendar-schedule-item calendar-schedule-item-${item.kind} calendar-schedule-role-${item.role}`;
+    value.setAttribute("role", "button");
+    value.setAttribute("tabindex", "0");
+    value.addEventListener("click", activate);
+    value.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault?.();
+      activate();
+    });
     value.append(typeBadge(item.source_type));
     const copy = document.createElement("span");
     copy.className = "calendar-schedule-item-copy";
     const label = document.createElement("strong");
     label.textContent = item.label;
     copy.append(label);
-    if (item.text) {
+    if (item.segments?.length) {
       const text = document.createElement("span");
+      text.className = "calendar-schedule-item-text";
+      appendSegments(text, item.segments);
+      copy.append(text);
+    } else if (item.text) {
+      const text = document.createElement("span");
+      text.className = "calendar-schedule-item-text";
       text.textContent = item.text;
       copy.append(text);
     }
@@ -634,6 +649,7 @@ export function mountCalendar(root, {
       link.append(typeBadge(segment.target_type), document.createTextNode(segment.text));
       link.addEventListener("click", (event) => {
         event.preventDefault();
+        event.stopPropagation?.();
         if (segment.target_type === "calendar_day" && segment.target_id.startsWith("date:")) {
           void openDay(segment.target_id.slice(5));
         } else {
@@ -736,7 +752,10 @@ function scheduleItemAriaLabel(item) {
   const time = item.start_time
     ? `${item.start_time}${item.end_time ? ` a ${item.end_time}` : ""}. `
     : "";
-  return `${time}${typeLabel(item.source_type)}: ${item.label}${item.text ? `. ${item.text}` : ""}`;
+  const detail = item.segments?.length
+    ? item.segments.map((segment) => segment.text).join("")
+    : item.text;
+  return `${time}${typeLabel(item.source_type)}: ${item.label}${detail ? `. ${detail}` : ""}`;
 }
 function mondayIndex(value) { const weekday = new Date(`${value}T00:00:00Z`).getUTCDay(); return (weekday + 6) % 7; }
 function localDate() {

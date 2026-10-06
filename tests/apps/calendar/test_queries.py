@@ -238,6 +238,14 @@ def test_schedule_projects_semantic_fact_dates_and_times_without_using_capture_t
     vault.mkdir()
     write(
         vault,
+        "people/ana.md",
+        "ana",
+        "Ana López",
+        "person",
+        "",
+    )
+    write(
+        vault,
         "people/marta.md",
         "marta",
         "Marta",
@@ -246,7 +254,7 @@ def test_schedule_projects_semantic_fact_dates_and_times_without_using_capture_t
         "- Tiene dentista.\n"
         "  <!-- odyssey:fact request=r1 ordinal=0 recorded_at=2026-10-01T08:15:00+02:00 "
         "temporal=2026-10-06T15:35:00+02:00 -->\n"
-        "- Viaja a París.\n"
+        "- Viaja con [[people/ana|Ana López]] a París.\n"
         "  <!-- odyssey:fact request=r2 ordinal=0 recorded_at=2026-10-01T08:16:00+02:00 "
         "temporal=2026-10-07 -->",
     )
@@ -269,8 +277,12 @@ def test_schedule_projects_semantic_fact_dates_and_times_without_using_capture_t
         for item in schedule.days[0].timed
     ] == [("fact", "Marta", "Tiene dentista.", "semantic_time", "15:35", None)]
     assert [(item.kind, item.label, item.text, item.role) for item in schedule.days[1].all_day] == [
-        ("fact", "Marta", "Viaja a París.", "semantic_date")
+        ("fact", "Marta", "Viaja con [[people/ana|Ana López]] a París.", "semantic_date")
     ]
+    segments = schedule.days[1].all_day[0].segments
+    assert [segment.text for segment in segments] == ["Viaja con ", "Ana López", " a París."]
+    assert segments[1].target_id == "ana"
+    assert segments[1].target_type == "person"
     assert schedule.days[0].all_day == ()
     assert schedule.days[2].timed == ()
 

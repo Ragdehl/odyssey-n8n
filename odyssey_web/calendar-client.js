@@ -3,7 +3,7 @@ const MONTH_PREVIEW_LIMIT = 6;
 const MONTH_PREVIEW_LABEL_LIMIT = 80;
 const MONTH_PREVIEW_TEXT_LIMIT = 120;
 const SCHEDULE_DAY_COUNTS = new Set([1, 3, 7]);
-const SCHEDULE_ROLES = new Set(["target", "deadline", "semantic_date", "planned", "semantic_time"]);
+const SCHEDULE_ROLES = new Set(["target", "deadline", "semantic_date", "planned", "semantic_time", "work_session"]);
 
 export class CalendarRequestError extends Error {
   constructor(message) {
@@ -95,10 +95,11 @@ function validateScheduleDay(value, expectedDate) {
   return {date: value.date, all_day: allDay, timed};
 }
 function validateScheduleItem(value, timed) {
-  if (!value || !["task", "fact"].includes(value.kind) || !boundedText(value.source_id, 240) ||
+  if (!value || !["task", "fact", "work_session"].includes(value.kind) || !boundedText(value.source_id, 240) ||
       !boundedText(value.source_type, 80) || !boundedText(value.label, MONTH_PREVIEW_LABEL_LIMIT) ||
       !SCHEDULE_ROLES.has(value.role) ||
-      (value.text !== undefined && !boundedText(value.text, MONTH_PREVIEW_TEXT_LIMIT))) {
+      (value.text !== undefined && !boundedText(value.text, MONTH_PREVIEW_TEXT_LIMIT)) ||
+      (value.segments !== undefined && !Array.isArray(value.segments))) {
     throw new CalendarRequestError("Elemento de agenda inválido.");
   }
   if (timed) {
@@ -112,6 +113,7 @@ function validateScheduleItem(value, timed) {
     kind: value.kind, source_id: value.source_id, source_type: value.source_type,
     label: value.label, role: value.role,
     ...(value.text !== undefined ? {text: value.text} : {}),
+    ...(value.segments !== undefined ? {segments: value.segments.map(validateSegment)} : {}),
     ...(value.start_time !== undefined ? {start_time: value.start_time} : {}),
     ...(value.end_time !== undefined ? {end_time: value.end_time} : {}),
   };

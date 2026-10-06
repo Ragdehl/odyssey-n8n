@@ -80,7 +80,9 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .notes-status .notes-rerun, .notes-status .notes-show-all { min-height: 2.1rem; margin: -.5rem 0; padding: .35rem .45rem; border-radius: .45rem; background: transparent; color: #394d88; text-decoration: underline; text-underline-offset: .15em; }
 .notes-list, .note-detail { min-height: 0; overflow-y: auto; padding: .15rem .05rem .7rem; }
 .notes-list { display: grid; align-content: start; gap: .45rem; }
-.notes-groups-intro { padding: .2rem .15rem .45rem; color: #5f687d; font-size: .84rem; line-height: 1.45; }
+.notes-groups-help { display: grid; justify-items: end; gap: .35rem; }
+.notes-groups-help-toggle { width: 2rem; min-width: 2rem; min-height: 2rem; background: transparent; color: #657087; }
+.notes-groups-intro { width: 100%; padding: .55rem .65rem; border: 1px solid rgba(23,32,51,.08); border-radius: .7rem; background: rgba(255,255,255,.5); color: #5f687d; font-size: .8rem; line-height: 1.45; }
 .notes-type-group { display: grid; gap: .4rem; padding: .6rem; border: 1px solid rgba(23,32,51,.1); border-radius: .85rem; background: rgba(255,255,255,.55); }
 .notes-type-group-header { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto; align-items: center; gap: .35rem; }
 .notes-type-toggle { display: flex; min-width: 0; min-height: 2.35rem; align-items: center; gap: .25rem; padding: .35rem .2rem; background: transparent; color: #263047; text-align: left; }
@@ -115,10 +117,21 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-edit-controls { display: flex; align-items: center; gap: .3rem; margin-left: auto; }
 .note-edit-toggle { background: #e9edfa; color: #39445d; }
 .note-history { display: flex; justify-content: flex-end; gap: .35rem; }
+.note-detail-status { min-height: 0; margin: .1rem .15rem; color: #687189; font-size: .74rem; line-height: 1.3; }
+.note-detail-status:empty { display: none; }
 .note-properties { display: grid; grid-template-columns: minmax(6rem, .8fr) minmax(0, 1.2fr); gap: .3rem .65rem; margin: .8rem 0; font-size: .85rem; }
 .note-properties dt { color: #6a7287; text-transform: capitalize; } .note-properties dd { margin: 0; overflow-wrap: anywhere; }
 .note-tags, .backlink-context { color: #6a7287; font-size: .82rem; overflow-wrap: anywhere; }
-.note-body { line-height: 1.5; overflow-wrap: anywhere; } .note-body p { margin: .8rem 0; } .note-body h3 { margin: 1rem 0 .35rem; font-size: .95rem; } .note-body ul { margin: .7rem 0; padding-left: 1.25rem; } .note-body li + li { margin-top: .35rem; }
+.note-body { display: grid; gap: .55rem; line-height: 1.45; overflow-wrap: anywhere; } .note-body > p { margin: .25rem 0; } .note-body > h3 { margin: .55rem 0 .15rem; font-size: .95rem; } .note-body > ul { margin: .25rem 0; padding-left: 1.25rem; } .note-body li + li { margin-top: .3rem; }
+.note-fact-group { display: grid; gap: .35rem; padding: .55rem .65rem; border: 1px solid rgba(23,32,51,.08); border-radius: .72rem; background: rgba(245,247,251,.58); }
+.note-fact-heading { display: flex; align-items: center; gap: .2rem; margin: 0 !important; color: #71798c; font-size: .72rem !important; font-weight: 700; }
+.note-fact-heading .note-inline-link { font-size: inherit; font-weight: 700; }
+.note-fact-list { display: grid; gap: 0; margin: 0 !important; padding: 0 !important; list-style: none; }
+.note-fact-list > li { padding: .42rem .15rem; }
+.note-fact-list > li + li { margin-top: 0; border-top: 1px solid rgba(23,32,51,.06); }
+.note-task-parent { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .55rem; padding: .5rem .6rem; border: 1px solid rgba(23,32,51,.08); border-radius: .68rem; background: rgba(238,240,247,.66); }
+.note-task-parent-label { color: #747d91; font-size: .72rem; font-weight: 750; }
+.note-task-parent-value { min-width: 0; }
 .note-inline-link { color: #394d88; font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
 .note-inline-link .note-type { width: 1em; height: 1em; margin-right: .16em; vertical-align: -.08em; }
 .note-inline-link svg, .backlink svg { width: .88em; height: .88em; margin-right: .16em; vertical-align: -.08em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -165,10 +178,16 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-editable-fact { display: flex; align-items: start; justify-content: space-between; gap: .5rem; }
 .note-fact-content { min-width: 0; overflow-wrap: anywhere; }
 .note-fact-delete { flex: 0 0 auto; min-height: 2rem; padding: .3rem .45rem; font-size: .76rem; }
-.note-backlinks { display: grid; gap: .4rem; margin-top: 1rem; } .note-backlinks h3 { margin: 0; font-size: .85rem; }
-.backlink { min-height: 2.35rem; text-align: left; color: #39445d; background: #edf0f8; }
-.backlink-occurrence { border-left: 2px solid #d9deef; padding-left: .55rem; }
-.backlink-heading, .backlink-more { margin: 0; color: #6a7287; font-size: .78rem; }
+.note-backlinks { display: grid; gap: .4rem; margin-top: 1.15rem; padding: .7rem; border: 1px solid rgba(23,32,51,.09); border-radius: .8rem; background: rgba(242,244,249,.64); } .note-backlinks h3 { margin: 0 0 .15rem; color: #626c82; font-size: .78rem; letter-spacing: .02em; }
+.backlink-source { display: grid; gap: .28rem; }
+.backlink-source + .backlink-source { padding-top: .35rem; border-top: 1px solid rgba(23,32,51,.06); }
+.backlink-source-header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: .3rem; }
+.backlink { min-height: 2.15rem; padding: .35rem .5rem; text-align: left; color: #39445d; background: #edf0f8; }
+.backlink-disclosure { width: 1.9rem; min-width: 1.9rem; min-height: 1.9rem; }
+.backlink-occurrences { display: grid; gap: .3rem; padding: .15rem .15rem .1rem .45rem; }
+.backlink-occurrence { border-left: 2px solid #d9deef; padding-left: .5rem; }
+.backlink-heading, .backlink-more { margin: 0; color: #6a7287; font-size: .72rem; }
+.backlink-context { margin: .12rem 0 .25rem; }
 .notes-search-dock { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem; padding: .55rem; border: 1px solid rgba(23,32,51,.1); border-radius: 1rem; background: rgba(255,255,255,.97); box-shadow: 0 .5rem 1.5rem rgba(34,45,74,.1); }
 .notes-search-dock input { min-width: 0; min-height: 2.6rem; border: 0; outline: 0; padding: .45rem .55rem; background: transparent; color: inherit; font: inherit; }
 .notes-search-dock input:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; border-radius: .45rem; }
@@ -178,7 +197,11 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .conversation-date { align-self: center; margin: .45rem 0 .18rem; padding: .18rem .5rem; border-radius: 999px; background: rgba(103,96,177,.12); color: #7b8093; font-size: .68rem; font-weight: 750; line-height: 1.2; }
 .message { display: grid; max-width: 82%; gap: .28rem; padding: .55rem .68rem .38rem; border: 1px solid rgba(23, 32, 51, .09); border-radius: .9rem; background: rgba(255, 255, 255, .95); box-shadow: 0 .25rem .75rem rgba(34, 45, 74, .05); }
 .message-user { align-self: flex-end; background: #2b2a3d; border-color: rgba(255,255,255,.08); color: #f5f4ff; }
-.message-odyssey { align-self: flex-start; background: #4138a0; border-color: rgba(131,120,235,.45); color: #fff; }
+.message-user, .message-odyssey { position: relative; }
+.message-user { border-bottom-right-radius: .3rem; }
+.message-user::after { content: ""; position: absolute; right: -.34rem; bottom: -.02rem; width: .55rem; height: .55rem; background: #2b2a3d; clip-path: polygon(0 0, 100% 100%, 0 100%); }
+.message-odyssey { align-self: flex-start; border-bottom-left-radius: .3rem; background: #342f66; border-color: rgba(112,104,177,.4); color: #fff; }
+.message-odyssey::after { content: ""; position: absolute; left: -.34rem; bottom: -.02rem; width: .55rem; height: .55rem; background: #342f66; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
 .message-loading { color: #ddd9ff; }
 .message-error { color: #7d2b2b; border-color: rgba(160, 48, 48, .2); background: #fff8f7; }
 .message-clarification { width: min(100%, 34rem); }
@@ -197,7 +220,7 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .message-actions .note-set-button { margin-top: 0; }
 .message-actions .detail-button { flex: 0 0 1.9rem; width: 1.9rem; min-height: 1.9rem; margin: 0; }
 .message-odyssey .message-actions .detail-button { color: #ddd9ff; }
-.message-odyssey .message-actions .note-set-button { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; }
+.message-odyssey .message-actions .note-set-button { border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; }
 .message-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.38; }
 .message-footer { display: flex; justify-content: flex-end; min-height: .8rem; }
 .message-time { color: #8f95a8; font-size: .62rem; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -341,7 +364,13 @@ button:disabled { opacity: .55; }
 .calendar-schedule-axis { background: rgba(248,249,253,.75); }
 .calendar-schedule-hour { position: absolute; left: 0; right: .28rem; transform: translateY(-.45em); color: #7a8397; font-size: .6rem; text-align: right; font-variant-numeric: tabular-nums; }
 .calendar-schedule-lane { min-width: 0; border-left: 1px solid rgba(23,32,51,.08); background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 59px, rgba(23,32,51,.08) 59px, rgba(23,32,51,.08) 60px); }
-.calendar-schedule-item { min-width: 0; border-radius: .35rem; background: #edf0f8; color: #39445d; text-align: left; overflow: hidden; }
+.calendar-schedule-item { min-width: 0; border-radius: .35rem; background: #edf0f8; color: #39445d; text-align: left; overflow: hidden; cursor: pointer; }
+.calendar-schedule-item:focus-visible { outline: 2px solid #665ee8; outline-offset: -2px; }
+.calendar-schedule-item-work_session { background: #e6f0ed; color: #365b56; }
+.calendar-schedule-lane .calendar-schedule-item-work_session { border-left-color: #6f9690; }
+.calendar-schedule-item-text .calendar-inline-link { display: inline-flex; align-items: baseline; gap: .08rem; }
+.calendar-schedule-item-text .calendar-inline-link .note-type { width: .7rem; height: .7rem; margin-right: .02rem; }
+.calendar-schedule-item-text .calendar-inline-link .note-type svg { width: .58rem; height: .58rem; }
 .calendar-schedule-all-day-column .calendar-schedule-item { display: flex; align-items: flex-start; gap: .12rem; min-height: 1.65rem; padding: .2rem .25rem; font-size: .63rem; }
 .calendar-schedule-lane .calendar-schedule-item { position: absolute; left: .12rem; right: .12rem; display: flex; align-items: flex-start; gap: .12rem; padding: .2rem .24rem; border-left: 3px solid #665ee8; font-size: .64rem; z-index: 1; }
 .calendar-schedule-item .note-type { flex: 0 0 auto; width: .78rem; height: .78rem; }
@@ -423,6 +452,8 @@ button:disabled { opacity: .55; }
 .work-session-edit-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: .4rem; }
 .work-session-activity { display: grid; gap: .5rem; padding: .65rem; border-radius: .65rem; background: rgba(245,247,251,.85); }
 .work-session-activity h4, .work-session-activity p { margin: 0; }
+.work-session-activity-heading { display: flex; align-items: center; justify-content: space-between; gap: .45rem; }
+.work-session-activity-heading .icon-action { width: 1.9rem; min-width: 1.9rem; min-height: 1.9rem; }
 .work-session-activity-empty { color: #6b7488; font-size: .82rem; }
 .work-session-activity-list { display: grid; gap: .4rem; }
 .work-session-activity-row { display: flex; align-items: flex-start; justify-content: space-between; gap: .55rem; padding: .35rem 0; border-bottom: 1px solid rgba(23,32,51,.06); }
@@ -431,11 +462,11 @@ button:disabled { opacity: .55; }
 .work-session-activity-form { display: flex; align-items: flex-end; gap: .45rem; }
 .work-session-activity-form textarea, .work-session-activity-edit-input { resize: vertical; min-height: 2.8rem; }
 
-.note-subtasks { margin-top: 1rem; display: grid; gap: .45rem; }
-.note-subtasks h3 { margin: 0 0 .25rem; }
-.note-subtask { display: flex; align-items: center; gap: .45rem; }
-.note-subtask-toggle { flex: 0 0 auto; min-width: 2rem; padding: .3rem .45rem; }
-.note-subtask-name { min-width: 0; flex: 1 1 auto; text-align: left; padding: .35rem .45rem; }
+.note-subtasks { margin-top: 1rem; display: grid; gap: .4rem; padding: .7rem; border: 1px solid rgba(23,32,51,.09); border-radius: .8rem; background: rgba(247,248,251,.55); }
+.note-subtasks h3 { margin: 0 0 .15rem; font-size: .88rem; }
+.note-subtask { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .35rem; min-height: 2.45rem; padding: .25rem .3rem; border: 1px solid rgba(23,32,51,.07); border-radius: .6rem; background: rgba(255,255,255,.7); }
+.note-subtask-toggle { flex: 0 0 auto; min-width: 1.8rem; min-height: 1.8rem; padding: .15rem; background: transparent; color: #966341; }
+.note-subtask-name { min-width: 0; min-height: 1.9rem; text-align: left; padding: .25rem .35rem; background: transparent; color: #39445d; }
 .note-subtask-create-form { display: flex; align-items: center; gap: .45rem; margin-top: .25rem; }
 .note-subtask-create-form input { min-width: 0; flex: 1 1 auto; }
 .note-subtask-create-form button { flex: 0 0 auto; }

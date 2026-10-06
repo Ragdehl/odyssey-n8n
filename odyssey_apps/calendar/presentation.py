@@ -105,6 +105,7 @@ def _schedule_item_to_response(item: CalendarScheduleItem) -> dict[str, object]:
         "label": item.label,
         "role": item.role,
         **({"text": item.text} if item.text is not None else {}),
+        **({"segments": _segments_to_response(item.segments)} if item.segments else {}),
         **({"start_time": item.start_time} if item.start_time is not None else {}),
         **({"end_time": item.end_time} if item.end_time is not None else {}),
     }

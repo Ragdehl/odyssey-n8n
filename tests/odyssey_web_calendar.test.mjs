@@ -224,8 +224,15 @@ test("Calendar client sends only the bounded same-origin operation and validates
     kind: "calendar_schedule", start_date: "2026-10-06", day_count: 3, days: [
       {
         date: "2026-10-06",
-        all_day: [{kind: "fact", source_id: "marta", source_type: "person", label: "Marta", text: "Viaja.", role: "semantic_date"}],
-        timed: [{kind: "task", source_id: "task-1", source_type: "task", label: "Pintar", role: "planned", start_time: "14:00", end_time: "16:00"}],
+        all_day: [{
+          kind: "fact", source_id: "marta", source_type: "person", label: "Marta",
+          text: "Viaja con [[people/ana|Ana]].", role: "semantic_date",
+          segments: [{text: "Viaja con "}, {text: "Ana", target_id: "ana", target_type: "person"}, {text: "."}],
+        }],
+        timed: [
+          {kind: "task", source_id: "task-1", source_type: "task", label: "Pintar", role: "planned", start_time: "14:00", end_time: "16:00"},
+          {kind: "work_session", source_id: "task-1", source_type: "task", label: "Pintar", text: "Sesión de trabajo", role: "work_session", start_time: "16:15", end_time: "17:00"},
+        ],
       },
       {date: "2026-10-07", all_day: [], timed: []},
       {date: "2026-10-08", all_day: [], timed: []},
@@ -233,6 +240,8 @@ test("Calendar client sends only the bounded same-origin operation and validates
   });
   assert.equal(schedule.day_count, 3);
   assert.equal(schedule.days[0].timed[0].start_time, "14:00");
+  assert.equal(schedule.days[0].timed[1].kind, "work_session");
+  assert.equal(schedule.days[0].all_day[0].segments[1].target_id, "ana");
   assert.throws(() => validateCalendarResponse({
     kind: "calendar_schedule", start_date: "2026-10-06", day_count: 2, days: [],
   }), CalendarRequestError);
@@ -414,10 +423,21 @@ test("3-day schedule renders timed/all-day items and swipes by one full window",
     days: Array.from({length: dayCount}, (_, index) => ({
       date: shift(startDate, index),
       all_day: index === 0
-        ? [{kind: "fact", source_id: "marta", source_type: "person", label: "Marta", text: "Viaja a París.", role: "semantic_date"}]
+        ? [{
+          kind: "fact", source_id: "marta", source_type: "person", label: "Marta",
+          text: "Viaja con [[people/ana|Ana López]] a París.", role: "semantic_date",
+          segments: [
+            {text: "Viaja con "},
+            {text: "Ana López", target_id: "ana", target_type: "person"},
+            {text: " a París."},
+          ],
+        }]
         : [],
       timed: index === 0
-        ? [{kind: "task", source_id: "task-paint", source_type: "task", label: "Pintar la pared", role: "planned", start_time: "14:00", end_time: "16:00"}]
+        ? [
+          {kind: "task", source_id: "task-paint", source_type: "task", label: "Pintar la pared", role: "planned", start_time: "14:00", end_time: "16:00"},
+          {kind: "work_session", source_id: "task-paint", source_type: "task", label: "Pintar la pared", text: "Sesión de trabajo", role: "work_session", start_time: "16:10", end_time: "16:55"},
+        ]
         : [],
     })),
   });
@@ -441,7 +461,20 @@ test("3-day schedule renders timed/all-day items and swipes by one full window",
   assert.equal(timed.style.top, "840px");
   assert.equal(timed.style.height, "120px");
   assert.equal(timed.textContent.includes("Pintar la pared"), true);
-  assert.equal(mounted.elements.scheduleGrid.textContent.includes("Viaja a París."), true);
+  assert.equal(mounted.elements.scheduleGrid.textContent.includes("[["), false);
+  assert.equal(mounted.elements.scheduleGrid.textContent.includes("Viaja con Ana López a París."), true);
+  const inline = mounted.elements.scheduleGrid.querySelector(".calendar-inline-link");
+  assert.equal(inline.textContent.includes("Ana López"), true);
+  inline.click();
+  assert.equal(mounted.document.events.at(-1).type, "odyssey:open-note");
+  assert.deepEqual(mounted.document.events.at(-1).detail, {note_id: "ana"});
+
+  const workSession = mounted.elements.scheduleGrid.querySelector(".calendar-schedule-item-work_session");
+  assert.equal(workSession.style.top, "970px");
+  assert.equal(workSession.style.height, "45px");
+  assert.equal(workSession.textContent.includes("Sesión de trabajo"), true);
+  workSession.click();
+  assert.deepEqual(mounted.document.events.at(-1).detail, {note_id: "task-paint"});
 
   mounted.elements.scheduleGrid.emit("touchstart", {touches: [{clientX: 220, clientY: 100}]});
   mounted.elements.scheduleGrid.emit("touchend", {changedTouches: [{clientX: 100, clientY: 105}]});
