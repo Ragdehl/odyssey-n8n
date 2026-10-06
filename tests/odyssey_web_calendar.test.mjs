@@ -260,8 +260,10 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   const previews = cells[0].querySelectorAll(".calendar-month-preview");
   assert.equal(previews.length, 4);
   assert.equal(previews[0].textContent.includes("Compré una bici."), true);
-  assert.equal(previews[2].textContent.includes("Marta"), true);
+  assert.equal(previews[0].textContent.includes("1 octubre"), false);
+  assert.equal(previews[2].textContent.includes("Marta"), false);
   assert.equal(previews[2].textContent.includes("Empezó en Airbus."), true);
+  assert.equal(previews[3].textContent.includes("Llamar al banco"), true);
   assert.equal(cells[0].querySelectorAll(".calendar-indicator").length, 0);
   assert.equal(cells[0].querySelector(".calendar-day-overflow").textContent, "+1");
   assert.ok(cells[0].querySelector(".note-type"));

@@ -20,11 +20,12 @@ canonical information already projected onto that date.
 The month keeps a Monday-to-Sunday seven-column grid. Compared with Calendar v0:
 
 - date cells become taller and visually denser;
+- on narrow screens the month grid may scroll horizontally so Day cells can remain meaningfully wider instead of forcing all seven columns into the viewport;
 - the day number becomes a small, secondary label near the top;
 - the current colored dots disappear;
 - each date shows up to **four** compact preview rows;
-- a preview row uses the same semantic Note-type icon/color presentation already shared by Notes;
-- a row shows the source label and, when available, a short visible-content snippet;
+- a preview row uses the same semantic Note-type icon/color presentation already shared by Notes, at a smaller month-view size;
+- when a day-specific visible snippet exists, the row shows that content without repeating the source Note name; source label is only a fallback when no meaningful snippet exists (notably Task titles);
 - when more preview entries exist, the cell shows a compact `+N` overflow indicator;
 - selecting anywhere on the date cell still opens the existing Day view.
 
@@ -104,6 +105,9 @@ source-name/ID ordering within a category. Core Note detail is resolved only for
 rows actually returned; overflow sources contribute only to the deterministic `preview_total`.
 
 The browser validates the bounded projection, makes its existing one month request, and renders
-compact Notes type badges, labels, optional snippets, and `+N` overflow inside the existing
-whole-cell Day navigation target. No preview row is independently navigable. The change introduces
-no provider, prompt, model, workflow, persistence, index, or deployment change.
+compact Notes type badges plus the day-specific snippet (falling back to the source label only when
+no snippet exists), with `+N` overflow inside the existing whole-cell Day navigation target. After
+the first isolated-DEV mobile review, the month grid deliberately became horizontally scrollable on
+narrow screens so columns can stay wider, and the semantic type badge was reduced further. No preview
+row is independently navigable. The change introduces no provider, prompt, model, workflow,
+persistence, index, or deployment change.

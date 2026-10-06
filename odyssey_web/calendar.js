@@ -91,16 +91,10 @@ export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint =
     const row = document.createElement("span");
     row.className = "calendar-month-preview";
     row.append(typeBadge(preview.source_type));
-    const label = document.createElement("span");
-    label.className = "calendar-preview-label";
-    label.textContent = preview.label;
-    row.append(label);
-    if (preview.text) {
-      const text = document.createElement("span");
-      text.className = "calendar-preview-text";
-      text.textContent = preview.text;
-      row.append(text);
-    }
+    const text = document.createElement("span");
+    text.className = "calendar-preview-text";
+    text.textContent = preview.text || preview.label;
+    row.append(text);
     return row;
   }
 
