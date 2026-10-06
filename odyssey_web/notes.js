@@ -14,6 +14,23 @@ const TYPE_PRESENTATION = Object.freeze({
   journal_entry: {label: "Entrada de diario", paths: ["M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 1V4Z", "M8 8h7M8 12h7M8 16h5"]},
   calendar_day: {label: "Día de calendario", paths: ["M5 4h14v16H5z", "M8 2v4m8-4v4M5 9h14", "M9 13h2v2H9z"]},
 });
+const TYPE_DESCRIPTIONS_ES = Object.freeze({
+  concept: "Tema, idea o concepto identificable que puede acumular información y relacionarse con otras notas.",
+  project: "Proyecto o ámbito de trabajo orientado a un objetivo que puede acumular información y tareas.",
+  task: "Compromiso o acción gestionada por Tareas, con estado, planificación temporal y contexto relacionado.",
+  document: "Documento o archivo que merece representarse como un elemento de conocimiento independiente.",
+  person: "Persona con una identidad reutilizable que puede relacionarse con tus notas y conocimientos.",
+  journal_entry: "Entrada de diario antigua conservada por compatibilidad. Las nuevas entradas cotidianas se guardan en el día correspondiente del Calendario.",
+});
+const PROPERTY_DESCRIPTIONS_ES = Object.freeze({
+  "journal_entry.entry_date": "Fecha a la que pertenece la entrada de diario antigua.",
+  "task.status": "Estado actual de la tarea.",
+  "task.target_date": "Día en el que quieres abordar la tarea; no es una fecha límite.",
+  "task.planned_start_at": "Fecha y hora exactas previstas para empezar a trabajar en la tarea.",
+  "task.planned_end_at": "Fecha y hora exactas previstas para terminar el trabajo planificado.",
+  "task.deadline_at": "Fecha límite estricta de la tarea, con o sin hora exacta.",
+  "task.completed_at": "Fecha y hora exactas en las que la tarea se marcó como completada.",
+});
 const GENERAL_FIELDS = new Set(["type", "tags", "created_at", "updated_at"]);
 const GROUP_PAGE_SIZE = 3;
 const COLLAPSED_TYPES_KEY = "odyssey.notes.collapsed-types.v1";
@@ -29,7 +46,7 @@ export function mountNotes(root, {
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
     snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
     editingWorkSessionId: null, editingWorkSessionActivityId: null,
-    workSessionDisclosure: new Map(), feedDirty: false, groups: new Map(),
+    workSessionDisclosure: new Map(), feedDirty: false, groups: new Map(), pendingGroupRefresh: false,
     collapsedTypes: readCollapsedTypes(sessionStorageImpl),
   };
   const search = root.querySelector("#notes-search");
@@ -56,6 +73,12 @@ export function mountNotes(root, {
       return;
     }
     await loadGlobal({reset, mode, snapshotIds, throwOnError});
+  }
+
+  function flushPendingGroupRefresh() {
+    if (!state.pendingGroupRefresh || state.loading) return;
+    state.pendingGroupRefresh = false;
+    void load({reset: true, mode: state.query.trim() ? "local" : "feed"});
   }
 
   async function loadGlobal({reset, mode, snapshotIds, throwOnError}) {
@@ -98,11 +121,15 @@ export function mountNotes(root, {
       if (throwOnError) throw error;
     } finally {
       state.loading = false;
+      flushPendingGroupRefresh();
     }
   }
 
   async function loadGroups({reset, mode, throwOnError}) {
-    if (state.loading) return;
+    if (state.loading) {
+      if (reset) state.pendingGroupRefresh = true;
+      return;
+    }
     state.loading = true;
     state.historical = false;
     state.mode = mode;
@@ -126,6 +153,7 @@ export function mountNotes(root, {
       if (throwOnError) throw error;
     } finally {
       state.loading = false;
+      flushPendingGroupRefresh();
     }
   }
 
@@ -252,7 +280,7 @@ export function mountNotes(root, {
   function renderNormalGroups() {
     const intro = document.createElement("p");
     intro.className = "notes-groups-intro";
-    intro.textContent = "Estos son los tipos de nota que Odyssey usa para organizar tu información. Algunos pueden crearse automáticamente.";
+    intro.textContent = "Odyssey organiza tu información en notas de distintos tipos. Cuando le das información sobre una persona, proyecto, tarea u otro elemento, crea o actualiza su nota y la relaciona con las demás cuando existe un vínculo entre ellas.";
     const groups = eligibleTypes().map((type) => typeGroup(type, state.groups.get(type.id)));
     list.replaceChildren(intro, ...groups, createTypeCard());
   }
@@ -324,6 +352,13 @@ export function mountNotes(root, {
     const count = document.createElement("span");
     count.className = "notes-type-count";
     count.textContent = String(group.total ?? 0);
+    const add = button("＋", () => {
+      createMessage.hidden = false;
+      add.setAttribute("aria-expanded", "true");
+    });
+    add.className = "notes-type-create-button";
+    add.setAttribute("aria-label", `Crear nota de tipo ${typeLabel(type.id)}`);
+    add.setAttribute("aria-expanded", "false");
     const info = button("i", () => {
       details.hidden = !details.hidden;
       info.setAttribute("aria-expanded", details.hidden ? "false" : "true");
@@ -331,7 +366,11 @@ export function mountNotes(root, {
     info.className = "notes-type-info-button";
     info.setAttribute("aria-label", `Información sobre ${typeLabel(type.id)}`);
     info.setAttribute("aria-expanded", "false");
-    header.append(toggle, count, info);
+    header.append(toggle, count, add, info);
+    const createMessage = document.createElement("p");
+    createMessage.className = "notes-type-action-message";
+    createMessage.textContent = `Próximamente · Podrás crear una nota de tipo ${typeLabel(type.id)} desde aquí.`;
+    createMessage.hidden = true;
     const details = typeInformation(type);
     details.hidden = true;
     const body = document.createElement("div");
@@ -349,7 +388,7 @@ export function mountNotes(root, {
       more.className = "notes-group-more";
       body.append(more);
     }
-    section.append(header, details, body);
+    section.append(header, createMessage, details, body);
     return section;
   }
 
@@ -357,7 +396,7 @@ export function mountNotes(root, {
     const details = document.createElement("div");
     details.className = "notes-type-information";
     const description = document.createElement("p");
-    description.textContent = type.description;
+    description.textContent = localizedTypeDescription(type);
     details.append(description);
     if (type.properties.length) {
       const properties = document.createElement("ul");
@@ -365,11 +404,22 @@ export function mountNotes(root, {
         const item = document.createElement("li");
         const requirement = property.required ? "obligatoria" : "opcional";
         const filtering = property.filterable ? "filtrable" : "no filtrable";
-        item.textContent = `${filterLabel(property.id)}: ${property.description} (${requirement} · ${property.value_type} · ${filtering})`;
+        item.textContent = `${filterLabel(property.id)}: ${localizedPropertyDescription(type.id, property)} (${requirement} · ${localizedValueType(property.value_type)} · ${filtering})`;
         properties.append(item);
       }
       details.append(properties);
     }
+    const edit = button("Editar tipo", () => {
+      editMessage.hidden = false;
+      edit.setAttribute("aria-expanded", "true");
+    });
+    edit.className = "notes-type-edit-button";
+    edit.setAttribute("aria-expanded", "false");
+    const editMessage = document.createElement("p");
+    editMessage.className = "notes-type-edit-message";
+    editMessage.textContent = "Próximamente · Podrás editar la descripción y las propiedades de este tipo.";
+    editMessage.hidden = true;
+    details.append(edit, editMessage);
     return details;
   }
 
@@ -471,6 +521,7 @@ export function mountNotes(root, {
       if (throwOnError) throw error;
     } finally {
       state.loading = false;
+      flushPendingGroupRefresh();
     }
   }
 
@@ -1640,8 +1691,22 @@ function numberRangeField(prefix, label, field) {
   }
   return group;
 }
+function localizedTypeDescription(type) {
+  return TYPE_DESCRIPTIONS_ES[type.id] ?? type.description;
+}
+function localizedPropertyDescription(typeId, property) {
+  return PROPERTY_DESCRIPTIONS_ES[`${typeId}.${property.id}`] ?? property.description;
+}
+function localizedValueType(valueType) {
+  return ({string: "texto", date: "fecha", integer: "número entero", "array[string]": "lista de textos"})[valueType] ?? valueType;
+}
 function filterLabel(field) {
-  return ({type: "Tipo", tags: "Etiqueta", created_at: "Creada", updated_at: "Actualizada", entry_date: "Fecha de la entrada"})[field] ?? field.replaceAll("_", " ");
+  return ({
+    type: "Tipo", tags: "Etiqueta", created_at: "Creada", updated_at: "Actualizada",
+    entry_date: "Fecha de la entrada", status: "Estado", target_date: "Fecha objetivo",
+    planned_start_at: "Inicio previsto", planned_end_at: "Fin previsto", deadline_at: "Fecha límite",
+    completed_at: "Completada el",
+  })[field] ?? field.replaceAll("_", " ");
 }
 function controlledValueLabel(field, value) {
   if (field === "status") {

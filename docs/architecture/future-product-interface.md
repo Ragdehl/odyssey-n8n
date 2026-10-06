@@ -244,6 +244,23 @@ Do not implement browser editing as an independent CRUD store or expose unrestri
 the normal editing surface. Decide from real use how structured fact/property editing and
 conversational correction should share the same Core operations.
 
+The intended Notes authoring direction now includes three concrete product needs observed in grouped
+Notes use:
+
+- each active user-visible type group should eventually create a new Note of that type from a direct
+  `+` entry point; legacy compatibility-only types should not remain permanently exposed as ordinary
+  creatable types in the final catalog;
+- the type information panel should eventually edit that type's user-facing description and
+  configurable properties through a structured authoring surface, optionally assisted by a bounded
+  conversational helper rather than requiring raw schema editing;
+- an open Note should eventually allow manual editing of ordinary user-editable properties. System
+  identity/provenance fields such as stable ID, creation/update provenance and timestamps remain
+  non-editable, and application-owned lifecycle fields remain protected unless their owning
+  application exposes an explicit safe mutation contract.
+
+Grouped Notes may expose non-mutating work-in-progress controls for those future paths before their
+Core/schema mutation contracts exist; they must never simulate a successful write.
+
 Issue #134's future fact edit/delete, multi-select deletion, explicit `@` binding, and stable-ID
 rename must reuse the Core mutation, stale-write and staged-clarification boundaries proposed in
 [Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md). UI-4 remains a
@@ -339,4 +356,9 @@ Decide with real Odyssey usage:
 7. which note-editing mode should come first;
 8. which usage graphs deserve a permanent dashboard;
 9. exact roles/permissions for advanced diagnostics once Odyssey becomes multi-user;
-10. whether a concrete capability ever needs a specialized surface beyond the main conversation.
+10. whether a concrete capability ever needs a specialized surface beyond the main conversation;
+11. the product-wide localization contract: one language switch must translate navigation, controls,
+    help/onboarding copy, type/property presentation and validation messages without changing
+    canonical schema semantics or stored knowledge;
+12. the exact note-type authoring UX: structured form first, conversational assistant first, or a
+    hybrid, and which schema changes remain admin/advanced-only.

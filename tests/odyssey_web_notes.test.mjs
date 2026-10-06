@@ -309,7 +309,8 @@ test("normal Notes browsing loads bounded independent type groups and advances o
   assert.deepEqual(initial.map(({payload}) => payload.filters.at(-1).value).sort(), ["person", "task"]);
   assert.equal(groupElement(mounted, "person").querySelector(".notes-type-count").textContent, "4");
   assert.equal(groupElement(mounted, "task").querySelector(".notes-type-count").textContent, "1");
-  assert.equal(mounted.elements.list.textContent.includes("tipos de nota que Odyssey usa"), true);
+  assert.equal(mounted.elements.list.textContent.includes("Odyssey organiza tu información en notas de distintos tipos"), true);
+  assert.equal(mounted.elements.list.textContent.includes("la relaciona con las demás"), true);
 
   mounted.elements.list.emit("scroll");
   await flush();
@@ -380,6 +381,71 @@ test("general controls refresh every group while Task status skips incompatible 
   assert.equal(queries.length, 1);
   assert.equal(queries[0].payload.filters.at(-1).value, "person");
   assert.equal(mounted.elements.chips.textContent.includes("Tipo"), true);
+});
+
+test("clearing local search while a refresh is in flight restores the latest empty-query feed", async () => {
+  let releaseLocal;
+  const localGate = new Promise((resolve) => { releaseLocal = resolve; });
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return groupedCapabilities();
+      const type = payload.filters.find((filter) => filter.field === "type").value;
+      if (payload.mode === "local") {
+        await localGate;
+        return type === "person"
+          ? page({items: [pageItem("oriol", "Oriol")], total: 1})
+          : page({items: [], total: 0});
+      }
+      return page({items: [pageItem(`feed-${type}`, type, type)], total: 1});
+    },
+  });
+
+  mounted.elements.search.value = "oriol";
+  mounted.elements.search.emit("input");
+  await flush();
+  mounted.elements.search.value = "";
+  mounted.elements.search.emit("input");
+  await flush();
+
+  assert.equal(mounted.controller.state.pendingGroupRefresh, true);
+  releaseLocal();
+  await flush();
+  await flush();
+
+  const tail = calls.filter(({operation}) => operation === "query").slice(-2);
+  assert.equal(tail.length, 2);
+  assert.equal(tail.every(({payload}) => payload.mode === "feed" && payload.query === ""), true);
+  assert.equal(groupElement(mounted, "person").querySelectorAll(".note-row").length, 1);
+  assert.equal(groupElement(mounted, "task").querySelectorAll(".note-row").length, 1);
+  assert.equal(mounted.elements.status.textContent, "2 notas");
+});
+
+test("type information is localized and future authoring controls are presentation-only", async () => {
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      calls.push({operation, payload});
+      if (operation === "capabilities") return groupedCapabilities();
+      const type = payload.filters.find((filter) => filter.field === "type").value;
+      return page({items: [pageItem(`${type}-1`, type, type)], total: 1});
+    },
+  });
+  const before = calls.length;
+  const task = groupElement(mounted, "task");
+
+  task.querySelector(".notes-type-info-button").click();
+  assert.equal(task.textContent.includes("Compromiso o acción gestionada por Tareas"), true);
+  assert.equal(task.textContent.includes("Estado: Estado actual de la tarea."), true);
+  assert.equal(task.textContent.includes("Current lifecycle state"), false);
+
+  task.querySelector(".notes-type-edit-button").click();
+  assert.equal(task.textContent.includes("Podrás editar la descripción y las propiedades"), true);
+
+  task.querySelector(".notes-type-create-button").click();
+  assert.equal(task.textContent.includes("Podrás crear una nota de tipo Tarea desde aquí"), true);
+  assert.equal(calls.length, before);
 });
 
 test("collapse state is session-only and storage failures degrade safely", async () => {
