@@ -8,7 +8,13 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from odyssey_core.atomic_facts import capture_heading_date
-from odyssey_core.note_queries import NoteBodyBlock, NotesQueryError, NotesQueryService, NoteSummary
+from odyssey_core.note_queries import (
+    NoteBodyBlock,
+    NoteDetail,
+    NotesQueryError,
+    NotesQueryService,
+    NoteSummary,
+)
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 from odyssey_core.temporal import (
@@ -22,6 +28,9 @@ from odyssey_core.temporal import (
 
 _MONTH = re.compile(r"^(\d{4})-(\d{2})$")
 _LEVEL_ONE_HEADING = re.compile(r"^#\s+")
+_MONTH_PREVIEW_LIMIT = 4
+_MONTH_PREVIEW_LABEL_LIMIT = 80
+_MONTH_PREVIEW_TEXT_LIMIT = 120
 
 
 class CalendarQueryError(RuntimeError):
@@ -29,8 +38,18 @@ class CalendarQueryError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class CalendarMonthPreview:
+    """Represent one presentation-only semantic source preview for a Calendar month Day."""
+
+    kind: str
+    source_type: str
+    label: str
+    text: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class CalendarMonthDay:
-    """Represent bounded Calendar activity indicators for one date."""
+    """Represent one month Day with stable activity counts and bounded previews."""
 
     date: str
     materialized: bool
@@ -39,6 +58,8 @@ class CalendarMonthDay:
     captured_fact_count: int
     reference_count: int
     task_count: int = 0
+    preview_total: int = 0
+    previews: tuple[CalendarMonthPreview, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +122,7 @@ class _ScannedNote:
     """Hold validated Markdown facts needed by the bounded Calendar scan."""
 
     id: str
+    name: str
     type: str
     entry_date: str | None
     calendar_date: str | None
@@ -246,6 +268,25 @@ def _journal_blocks(blocks: tuple[NoteBodyBlock, ...]) -> tuple[NoteBodyBlock, .
     return tuple(block for block in blocks if _visible_heading_date(block) is None)
 
 
+def _bounded_preview_text(value: str, limit: int) -> str:
+    """Normalize and bound one non-authoritative month-preview display string."""
+    compact = " ".join(value.split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[: limit - 1].rstrip()}…"
+
+
+def _preview_text(blocks: tuple[NoteBodyBlock, ...]) -> str | None:
+    """Return one bounded visible Core-rendered snippet without exposing Markdown."""
+    for block in blocks:
+        if block.kind == "heading":
+            continue
+        text = "".join(segment.text for segment in block.segments)
+        if text.strip():
+            return _bounded_preview_text(text, _MONTH_PREVIEW_TEXT_LIMIT)
+    return None
+
+
 class CalendarQueryService:
     """Project virtual/materialized Calendar Days without giving the browser Markdown authority."""
 
@@ -282,6 +323,7 @@ class CalendarQueryService:
             scanned.append(
                 _ScannedNote(
                     id=str(note.metadata["id"]),
+                    name=str(note.metadata["name"]),
                     type=note_type,
                     entry_date=(
                         str(note.metadata["entry_date"])
@@ -303,7 +345,7 @@ class CalendarQueryService:
         return tuple(scanned)
 
     def month(self, value: str) -> CalendarMonth:
-        """Return every day in one month with bounded deterministic activity indicators."""
+        """Return every day with preserved counts and four ordered visible source previews."""
         month = normalize_month(value)
         dates = _month_dates(month)
         state = {
@@ -314,29 +356,100 @@ class CalendarQueryService:
                 "captured_fact_count": 0,
                 "reference_count": 0,
                 "task_count": 0,
+                "candidates": {
+                    "day_content": [],
+                    "journal": [],
+                    "capture": [],
+                    "task": [],
+                    "reference": [],
+                },
             }
             for item in dates
         }
-        for note in self._scan():
+        scanned = self._scan()
+        scanned_by_id = {note.id: note for note in scanned}
+        for note in scanned:
             if note.calendar_date in state:
                 state[note.calendar_date]["materialized"] = True
                 state[note.calendar_date]["has_content"] = bool(note.body.strip())
+                if note.body.strip():
+                    state[note.calendar_date]["candidates"]["day_content"].append(note.id)
             if note.entry_date in state:
                 state[note.entry_date]["journal_count"] += 1
+                state[note.entry_date]["candidates"]["journal"].append(note.id)
             if note.type != "journal_entry":
                 for captured_date, count in note.capture_counts.items():
                     if captured_date in state:
                         state[captured_date]["captured_fact_count"] += count
+                        if count:
+                            state[captured_date]["candidates"]["capture"].append(note.id)
             for referenced_date in note.explicit_dates:
                 if referenced_date in state:
                     state[referenced_date]["reference_count"] += 1
+                    if not (note.type == "journal_entry" and note.entry_date == referenced_date):
+                        state[referenced_date]["candidates"]["reference"].append(note.id)
             if note.type == "task":
                 for scheduled_date in note.calendar_roles:
                     if scheduled_date in state:
                         state[scheduled_date]["task_count"] += 1
+                        state[scheduled_date]["candidates"]["task"].append(note.id)
+
+        details: dict[str, NoteDetail] = {}
+
+        def detail(note_id: str) -> NoteDetail:
+            """Resolve one related source through the existing Core Note detail boundary."""
+            if note_id not in details:
+                try:
+                    details[note_id] = self.notes_service.detail(note_id)
+                except NotesQueryError as error:
+                    raise CalendarQueryError("Calendar preview source is unavailable") from error
+            return details[note_id]
+
+        def preview(kind: str, note_id: str, target_date: str) -> CalendarMonthPreview:
+            """Build one visible category preview through Core-resolved presentation blocks."""
+            scanned_note = scanned_by_id[note_id]
+            blocks = detail(note_id).body_blocks
+            if kind == "journal":
+                blocks = _journal_blocks(blocks)
+            elif kind == "capture":
+                blocks = _capture_blocks(blocks, target_date)
+            elif kind == "reference":
+                blocks = _reference_blocks(blocks, calendar_day_id(target_date))
+            return CalendarMonthPreview(
+                kind,
+                scanned_note.type,
+                _bounded_preview_text(scanned_note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                _preview_text(blocks),
+            )
+
+        result: list[CalendarMonthDay] = []
+        for item in dates:
+            day_state = state[item]
+            ordered_ids: list[tuple[str, str]] = []
+            for kind in ("day_content", "journal", "capture", "task", "reference"):
+                source_ids = day_state["candidates"][kind]
+                source_ids.sort(
+                    key=lambda source_id: (
+                        scanned_by_id[source_id].name.casefold(),
+                        source_id,
+                    )
+                )
+                ordered_ids.extend((kind, source_id) for source_id in source_ids)
+            public_state = {key: value for key, value in day_state.items() if key != "candidates"}
+            result.append(
+                CalendarMonthDay(
+                    date=item,
+                    **public_state,
+                    preview_total=len(ordered_ids),
+                    previews=tuple(
+                        preview(kind, source_id, item)
+                        for kind, source_id in ordered_ids[:_MONTH_PREVIEW_LIMIT]
+                    ),
+                )
+            )
         return CalendarMonth(
             month,
-            tuple(CalendarMonthDay(date=item, **state[item]) for item in dates),
+            tuple(result),
         )
 
     def day(self, value: str) -> CalendarDayView:

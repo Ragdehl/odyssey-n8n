@@ -111,6 +111,15 @@ def service(tmp_path: Path, schema: dict) -> CalendarQueryService:
     )
     write(
         vault,
+        "journal/extra.md",
+        "journal-extra",
+        "Z diario extra",
+        "journal_entry",
+        "Otro momento del día.",
+        properties={"entry_date": "2026-10-01"},
+    )
+    write(
+        vault,
         "projects/trip.md",
         "trip",
         "Viaje",
@@ -136,14 +145,88 @@ def test_month_projects_materialization_content_and_distinct_temporal_categories
     assert first.date == "2026-10-01"
     assert first.materialized is True
     assert first.has_content is True
-    assert first.journal_count == 1
+    assert first.journal_count == 2
     assert first.captured_fact_count == 2
     assert first.reference_count == 1
+    assert first.preview_total == 5
+    assert [(item.kind, item.label, item.text) for item in first.previews] == [
+        ("day_content", "2026-10-01", "Compré una bici."),
+        ("journal", "Diario del jueves", "Hoy fue un buen día."),
+        ("journal", "Z diario extra", "Otro momento del día."),
+        ("capture", "Marta", "Empezó en Airbus."),
+    ]
     second = month.days[1]
     assert second.materialized is False
     assert second.journal_count == 1
     assert second.captured_fact_count == 0
     assert second.reference_count == 0
+
+
+def test_month_preview_is_category_ordered_source_sorted_and_strictly_bounded(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep the month preview presentation-only, deterministic, and capped at four rows."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(
+        vault,
+        "calendar/days/2026-10-01.md",
+        "date:2026-10-01",
+        "Day",
+        "calendar_day",
+        "Day text.",
+        properties={"date": "2026-10-01"},
+    )
+    write(
+        vault,
+        "journal/z.md",
+        "z-journal",
+        "Zeta",
+        "journal_entry",
+        "Zeta text.",
+        properties={"entry_date": "2026-10-01"},
+    )
+    write(
+        vault,
+        "journal/a.md",
+        "a-journal",
+        "Álpha",
+        "journal_entry",
+        "Álpha text.",
+        properties={"entry_date": "2026-10-01"},
+    )
+    write(
+        vault,
+        "people/marta.md",
+        "marta",
+        "Marta",
+        "person",
+        "# Added [[calendar/days/2026-10-01|01-10-2026]]\n- Captura visible.",
+    )
+    write(
+        vault,
+        "projects/trip.md",
+        "trip",
+        "Viaje",
+        "project",
+        "Referencia [[calendar/days/2026-10-01|1 de octubre]].",
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    index.rebuild(repository, schema, Embedder())
+    calendar = CalendarQueryService(
+        repository, schema, NotesQueryService(repository, schema, index)
+    )
+
+    day = calendar.month("2026-10").days[0]
+    assert (day.journal_count, day.captured_fact_count, day.reference_count) == (2, 1, 1)
+    assert day.preview_total == 5
+    assert [(item.kind, item.label) for item in day.previews] == [
+        ("day_content", "Day"),
+        ("journal", "Zeta"),
+        ("journal", "Álpha"),
+        ("capture", "Marta"),
+    ]
 
 
 def test_day_keeps_own_content_journal_capture_and_explicit_reference_separate(
@@ -156,7 +239,7 @@ def test_day_keeps_own_content_journal_capture_and_explicit_reference_separate(
     assert "Compré una bici." in " ".join(
         "".join(segment.text for segment in block.segments) for block in day.content
     )
-    assert [item.source.id for item in day.journals] == ["journal-one"]
+    assert [item.source.id for item in day.journals] == ["journal-one", "journal-extra"]
     journal_text = " ".join(
         "".join(segment.text for segment in block.segments) for block in day.journals[0].content
     )

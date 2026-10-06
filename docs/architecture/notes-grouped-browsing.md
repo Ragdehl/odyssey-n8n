@@ -1,6 +1,6 @@
 # Notes grouped browsing UX
 
-Status: **implemented and in isolated DEV for human review; grouped-Notes polish remains iterative before the Calendar redesign**.
+Status: **implemented and user-validated in isolated DEV; future Notes authoring controls remain deferred**.
 
 This follow-on to [UI-2 read-only Notes](ui-2-read-only-notes.md) replaces the flat Notes landing
 feed with mobile-first groups derived from the runtime-composed Notes capability projection. It does

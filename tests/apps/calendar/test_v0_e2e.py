@@ -110,9 +110,17 @@ def test_real_write_chronology_journal_and_day_projection_end_to_end(tmp_path: P
     assert first.journal_count == 1
     assert first.captured_fact_count == 1
     assert first.reference_count == 0
+    assert [(item.kind, item.source_type, item.label) for item in first.previews] == [
+        ("day_content", "calendar_day", "2026-10-01"),
+        ("journal", "journal_entry", "Diario 1 octubre"),
+        ("capture", "person", "Marta"),
+    ]
     assert fifth.date == "2026-10-05"
     assert fifth.materialized is True
     assert fifth.reference_count == 1
+    assert [(item.kind, item.source_type, item.label) for item in fifth.previews] == [
+        ("reference", "person", "Marta")
+    ]
 
     day = calendar.day("2026-10-01")
     assert day.materialized is True

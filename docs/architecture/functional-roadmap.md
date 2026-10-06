@@ -121,12 +121,14 @@ and natural-language continuation in isolated DEV, deterministic validation rema
 final reviewed Luna/low planner evidence fixed the blocking ownership regression while retaining the
 approved fail-closed degradations. PROD has not been promoted to #148.
 
-[Notes grouped browsing UX](notes-grouped-browsing.md) is implemented on the current feature branch
-with provider-free verification pending final closeout. Runtime-composed Notes capabilities own the
-visible type descriptions/properties; ordinary feed/local browsing has independent bounded type
-cursors, while intelligent and historical result sets preserve one global deterministic authority.
-Calendar Day remains outside Notes-visible groups. Calendar redesign is the next UX phase and is not
-included in this change.
+[Notes grouped browsing UX](notes-grouped-browsing.md) is implemented and user-validated in isolated
+DEV. Runtime-composed Notes capabilities own the visible type descriptions/properties; ordinary
+feed/local browsing has independent bounded type cursors, while intelligent and historical result
+sets preserve one global deterministic authority. Calendar Day remains outside Notes-visible groups.
+The follow-on [Calendar rich month view](calendar-rich-month-view.md) replaces dot-only monthly
+indicators with a bounded four-row semantic preview while preserving one month request and the
+existing Day navigation boundary; its implementation is complete and isolated-DEV visual review is
+next.
 
 [Temporal Foundation v1](temporal-foundation-v1.md) is provider-free complete. Calendar v0 and
 Application Boundary + Router v0 have completed their earlier focused live gates and isolated-DEV
@@ -198,8 +200,8 @@ Application Boundary + Router v0                                    ✅ Attempt 
 Temporal Foundation v1 — shared date/date-time contract              ✅ provider-free complete; Calendar artifacts unchanged
 Journal/Temporal convergence follow-up                              ➡️ isolated DEV user-visible validation pending
 Tasks — first lifecycle-heavy domain application                  ⬜ after DEV user-path recheck
-Notes grouped browsing UX                                         ➡️ implementation complete on feature branch; review/DEV adoption pending
-Calendar redesign                                                 ⬜ next UX phase; not part of grouped Notes
+Notes grouped browsing UX                                         ✅ isolated DEV user-validated; future authoring controls deferred
+Calendar rich month view                                          ➡️ implementation complete; isolated DEV visual review next
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned

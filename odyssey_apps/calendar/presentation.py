@@ -24,6 +24,16 @@ def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, ob
                     "captured_fact_count": item.captured_fact_count,
                     "reference_count": item.reference_count,
                     "task_count": item.task_count,
+                    "preview_total": item.preview_total,
+                    "previews": [
+                        {
+                            "kind": preview.kind,
+                            "source_type": preview.source_type,
+                            "label": preview.label,
+                            **({"text": preview.text} if preview.text is not None else {}),
+                        }
+                        for preview in item.previews
+                    ],
                 }
                 for item in value.days
             ],

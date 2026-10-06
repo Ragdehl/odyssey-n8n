@@ -1,3 +1,8 @@
+const MONTH_PREVIEW_KINDS = new Set(["day_content", "journal", "capture", "task", "reference"]);
+const MONTH_PREVIEW_LIMIT = 4;
+const MONTH_PREVIEW_LABEL_LIMIT = 80;
+const MONTH_PREVIEW_TEXT_LIMIT = 120;
+
 export class CalendarRequestError extends Error {
   constructor(message) {
     super(message);
@@ -50,12 +55,26 @@ export function validateCalendarResponse(value) {
 
 function validateMonthDay(value) {
   if (!value || !isoDate(value.date) || typeof value.materialized !== "boolean" ||
-      typeof value.has_content !== "boolean") throw new CalendarRequestError("Día mensual inválido.");
+      typeof value.has_content !== "boolean" || !Array.isArray(value.previews)) throw new CalendarRequestError("Día mensual inválido.");
+  const previews = value.previews.map(validateMonthPreview);
+  const previewTotal = count(value.preview_total);
+  if (previews.length > MONTH_PREVIEW_LIMIT || previews.length > previewTotal) throw new CalendarRequestError("Vista previa mensual inválida.");
   return {
     date: value.date, materialized: value.materialized, has_content: value.has_content,
     journal_count: count(value.journal_count), captured_fact_count: count(value.captured_fact_count),
     reference_count: count(value.reference_count), task_count: count(value.task_count),
+    preview_total: previewTotal, previews,
   };
+}
+function validateMonthPreview(value) {
+  if (!value || !MONTH_PREVIEW_KINDS.has(value.kind) || !boundedText(value.source_type, 80) ||
+      !boundedText(value.label, MONTH_PREVIEW_LABEL_LIMIT) ||
+      (value.text !== undefined && !boundedText(value.text, MONTH_PREVIEW_TEXT_LIMIT))) {
+    throw new CalendarRequestError("Vista previa mensual inválida.");
+  }
+  return value.text === undefined
+    ? {kind: value.kind, source_type: value.source_type, label: value.label}
+    : {kind: value.kind, source_type: value.source_type, label: value.label, text: value.text};
 }
 function validateJournal(value) {
   if (!value || !Array.isArray(value.content)) throw new CalendarRequestError("Diario inválido.");
@@ -94,6 +113,7 @@ function validateSegment(value) {
   return linked ? {text: value.text, target_id: value.target_id, target_type: value.target_type} : {text: value.text};
 }
 function count(value) { if (!Number.isInteger(value) || value < 0) throw new CalendarRequestError("Conteo de calendario inválido."); return value; }
+function boundedText(value, maximum) { return typeof value === "string" && value.length > 0 && [...value].length <= maximum; }
 function text(value) { return typeof value === "string" && value.length > 0; }
 function isoDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

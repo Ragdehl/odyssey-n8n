@@ -172,6 +172,8 @@ test("Calendar client sends only the bounded same-origin operation and validates
           kind: "calendar_month", month: "2026-10", days: [{
             date: "2026-10-01", materialized: false, has_content: false,
             journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 0,
+            preview_total: 1,
+            previews: [{kind: "capture", source_type: "person", label: "Marta", text: "Empezó en Airbus."}],
           }],
         };
       },
@@ -179,6 +181,10 @@ test("Calendar client sends only the bounded same-origin operation and validates
   };
   const value = await realRequestCalendar({operation: "month", payload: {month: "2026-10"}, fetchImpl});
   assert.equal(value.kind, "calendar_month");
+  assert.deepEqual(value.days[0].previews, [
+    {kind: "capture", source_type: "person", label: "Marta", text: "Empezó en Airbus."},
+  ]);
+  assert.equal(value.days[0].preview_total, 1);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].credentials, "same-origin");
   assert.deepEqual(JSON.parse(requests[0].body), {operation: "month", month: "2026-10"});
@@ -190,6 +196,27 @@ test("Calendar client sends only the bounded same-origin operation and validates
   });
   assert.equal(day.journals[0].source.type, "journal_entry");
   assert.equal(day.journals[0].content[0].segments[0].text, "Texto del diario.");
+  assert.throws(() => validateCalendarResponse({
+    kind: "calendar_month", month: "2026-10", days: [{
+      date: "2026-10-01", materialized: false, has_content: false,
+      journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 0,
+      preview_total: 5, previews: Array.from({length: 5}, () => ({kind: "journal", source_type: "journal_entry", label: "Diario"})),
+    }],
+  }), CalendarRequestError);
+  assert.throws(() => validateCalendarResponse({
+    kind: "calendar_month", month: "2026-10", days: [{
+      date: "2026-10-01", materialized: false, has_content: false,
+      journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 0,
+      preview_total: 1, previews: [{kind: "unknown", source_type: "person", label: "Marta"}],
+    }],
+  }), CalendarRequestError);
+  assert.throws(() => validateCalendarResponse({
+    kind: "calendar_month", month: "2026-10", days: [{
+      date: "2026-10-01", materialized: false, has_content: false,
+      journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 0,
+      preview_total: 1, previews: [{kind: "capture", source_type: "person", label: "Marta", text: "x".repeat(121)}],
+    }],
+  }), CalendarRequestError);
   assert.throws(() => validateCalendarResponse({kind: "calendar_day", date: "bad"}), CalendarRequestError);
 });
 
@@ -197,8 +224,18 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   const calls = [];
   const month = {
     kind: "calendar_month", month: "2026-10", days: [
-      {date: "2026-10-01", materialized: true, has_content: true, journal_count: 1, captured_fact_count: 2, reference_count: 1, task_count: 0},
-      {date: "2026-10-02", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+      {
+        date: "2026-10-01", materialized: true, has_content: true,
+        journal_count: 1, captured_fact_count: 2, reference_count: 1, task_count: 0,
+        preview_total: 5,
+        previews: [
+          {kind: "day_content", source_type: "calendar_day", label: "1 octubre", text: "Compré una bici."},
+          {kind: "journal", source_type: "journal_entry", label: "Diario", text: "Buen día."},
+          {kind: "capture", source_type: "person", label: "Marta", text: "Empezó en Airbus."},
+          {kind: "task", source_type: "task", label: "Llamar al banco"},
+        ],
+      },
+      {date: "2026-10-02", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, preview_total: 0, previews: []},
     ],
   };
   const day = {
@@ -220,12 +257,20 @@ test("month to Day to related Note is a bounded Calendar UI end-to-end flow", as
   const cells = mounted.elements.grid.querySelectorAll(".calendar-day-cell");
   assert.equal(cells.length, 2);
   assert.equal(cells[0].dataset.date, "2026-10-01");
-  assert.equal(cells[0].querySelectorAll(".calendar-indicator").length, 4);
+  const previews = cells[0].querySelectorAll(".calendar-month-preview");
+  assert.equal(previews.length, 4);
+  assert.equal(previews[0].textContent.includes("Compré una bici."), true);
+  assert.equal(previews[2].textContent.includes("Marta"), true);
+  assert.equal(previews[2].textContent.includes("Empezó en Airbus."), true);
+  assert.equal(cells[0].querySelectorAll(".calendar-indicator").length, 0);
+  assert.equal(cells[0].querySelector(".calendar-day-overflow").textContent, "+1");
+  assert.ok(cells[0].querySelector(".note-type"));
 
   cells[0].click();
   await flush();
 
   assert.deepEqual(calls.at(-1), {operation: "day", payload: {date: "2026-10-01"}});
+  assert.equal(calls.filter((call) => call.operation === "month").length, 1);
   assert.equal(mounted.elements.monthView.hidden, true);
   assert.equal(mounted.elements.dayView.hidden, false);
   assert.equal(mounted.elements.dayView.textContent.includes("Contenido del día"), true);
@@ -256,7 +301,7 @@ test("Day navigation opens the previous and next natural dates without returning
   const mounted = await mountCalendar(async ({operation, payload}) => {
     calls.push({operation, payload});
     if (operation === "month") {
-      return {kind: "calendar_month", month: "2026-10", days: [{date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0}]};
+      return {kind: "calendar_month", month: "2026-10", days: [{date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, preview_total: 0, previews: []}]};
     }
     return {kind: "calendar_day", date: payload.date, materialized: false, content: [], journals: [], captures: [], references: [], tasks: []};
   });
@@ -277,7 +322,7 @@ test("returning to month clears a stale Day error after failed date navigation",
   const mounted = await mountCalendar(async ({operation, payload}) => {
     if (operation === "month") return {
       kind: "calendar_month", month: "2026-10", days: [
-        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, preview_total: 0, previews: []},
       ],
     };
     if (payload.date === "2026-09-30") throw new CalendarRequestError("broken Day");
@@ -298,7 +343,7 @@ test("returning to month clears a stale Day error after failed date navigation",
 
 test("an empty virtual Day opens without materializing content in the browser", async () => {
   const mounted = await mountCalendar(async ({operation, payload}) => operation === "month"
-    ? {kind: "calendar_month", month: payload.month, days: [{date: "2026-10-02", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0}]}
+    ? {kind: "calendar_month", month: payload.month, days: [{date: "2026-10-02", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, preview_total: 0, previews: []}]}
     : {kind: "calendar_day", date: payload.date, materialized: false, content: [], journals: [], captures: [], references: [], tasks: []});
 
   mounted.elements.grid.querySelector(".calendar-day-cell").click();
@@ -313,7 +358,7 @@ test("duplicate in-flight Day navigation shares one request", async () => {
     calls.push({operation, payload});
     if (operation === "month") return {
       kind: "calendar_month", month: "2026-10", days: [
-        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, preview_total: 0, previews: []},
       ],
     };
     return pending.promise;
@@ -336,7 +381,7 @@ test("only the newest Day request may update the visible state", async () => {
   const mounted = await mountCalendar(async ({operation, payload}) => {
     if (operation === "month") return {
       kind: "calendar_month", month: "2026-10", days: [
-        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0},
+        {date: "2026-10-01", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, preview_total: 0, previews: []},
       ],
     };
     if (payload.date === "2026-09-25") return pending25.promise;
@@ -370,7 +415,7 @@ test("Calendar Task checkbox uses the bounded Notes lifecycle mutation and updat
   };
   const mounted = await mountCalendar(
     async ({operation, payload}) => operation === "month"
-      ? {kind: "calendar_month", month: payload.month, days: [{date: "2026-10-09", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 1}]}
+      ? {kind: "calendar_month", month: payload.month, days: [{date: "2026-10-09", materialized: false, has_content: false, journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 1, preview_total: 0, previews: []}]}
       : {kind: "calendar_day", date: payload.date, materialized: false, content: [], journals: [], captures: [], references: [], tasks: [task]},
     async ({operation, payload}) => {
       noteCalls.push({operation, payload});

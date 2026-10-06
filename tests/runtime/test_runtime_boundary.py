@@ -10,7 +10,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from odyssey_apps.calendar import CalendarApplication, CalendarDayView, CalendarJournal
+from odyssey_apps.calendar import (
+    CalendarApplication,
+    CalendarDayView,
+    CalendarJournal,
+    CalendarMonth,
+    CalendarMonthDay,
+    CalendarMonthPreview,
+)
 from odyssey_core.application import (
     ActionResult,
     ActionStatus,
@@ -532,6 +539,65 @@ def test_http_calendar_boundary_serializes_journal_source_and_content() -> None:
                 "content": [{"kind": "paragraph", "segments": [{"text": "Buen día."}]}],
             }
         ]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_http_calendar_month_serializes_bounded_preview_projection() -> None:
+    """Carry the four-row Calendar preview through the real runtime HTTP boundary."""
+    user = OdysseyUser.new()
+    month = CalendarMonth(
+        "2026-10",
+        (
+            CalendarMonthDay(
+                "2026-10-01",
+                True,
+                True,
+                1,
+                2,
+                1,
+                preview_total=5,
+                previews=(
+                    CalendarMonthPreview("day_content", "calendar_day", "Day", "Visible text."),
+                    CalendarMonthPreview("journal", "journal_entry", "Diario", None),
+                    CalendarMonthPreview("capture", "person", "Marta", "Captured text."),
+                    CalendarMonthPreview("task", "task", "Llamar", None),
+                ),
+            ),
+        ),
+    )
+    runtime = RuntimeComposition(
+        core_execute=lambda *args, **kwargs: _result(),
+        refresh_indexes=lambda: None,
+        calendar_application=CalendarApplication(SimpleNamespace(month=lambda value: month)),
+    )
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "month",
+                    "month": "2026-10",
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        day = json.loads(response.read())["days"][0]
+        assert day["preview_total"] == 5
+        assert len(day["previews"]) == 4
+        assert day["previews"][0] == {
+            "kind": "day_content",
+            "source_type": "calendar_day",
+            "label": "Day",
+            "text": "Visible text.",
+        }
+        assert "text" not in day["previews"][1]
     finally:
         server.shutdown()
         server.server_close()

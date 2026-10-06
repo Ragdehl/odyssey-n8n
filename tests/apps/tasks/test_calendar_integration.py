@@ -67,6 +67,11 @@ def test_task_dates_are_calendar_projection_coordinates(tmp_path: Path) -> None:
     month = calendar.month("2026-10")
     counts = {day.date: day.task_count for day in month.days if day.task_count}
     assert counts == {"2026-10-09": 1, "2026-10-10": 1, "2026-10-12": 1}
+    ninth_month = next(day for day in month.days if day.date == "2026-10-09")
+    assert ninth_month.preview_total == 1
+    assert [(item.kind, item.source_type, item.label) for item in ninth_month.previews] == [
+        ("task", "task", "Llamar al banco")
+    ]
 
     ninth = calendar.day("2026-10-09")
     assert [(item.source.id, item.roles) for item in ninth.tasks] == [

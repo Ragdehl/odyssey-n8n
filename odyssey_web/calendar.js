@@ -65,21 +65,43 @@ export function mountCalendar(root, {endpoint = "/api/calendar", notesEndpoint =
   }
 
   function dayButton(day) {
-    const value = button(String(Number(day.date.slice(-2))), () => void openDay(day.date));
+    const value = button("", () => void openDay(day.date));
     value.className = "calendar-day-cell";
     value.dataset.date = day.date;
     if (day.date === localDate()) value.className += " calendar-day-today";
     if (day.materialized) value.className += " calendar-day-materialized";
-    const indicators = document.createElement("span");
-    indicators.className = "calendar-day-indicators";
-    if (day.has_content) indicators.append(indicator("contenido"));
-    if (day.journal_count) indicators.append(indicator("diario"));
-    if (day.captured_fact_count) indicators.append(indicator("captura"));
-    if (day.reference_count) indicators.append(indicator("referencia"));
-  if (day.task_count) indicators.append(indicator("tarea"));
-    value.append(indicators);
+    const number = document.createElement("span");
+    number.className = "calendar-day-number";
+    number.textContent = String(Number(day.date.slice(-2)));
+    const previews = document.createElement("span");
+    previews.className = "calendar-day-previews";
+    for (const preview of day.previews) previews.append(previewRow(preview));
+    if (day.preview_total > day.previews.length) {
+      const overflow = document.createElement("span");
+      overflow.className = "calendar-day-overflow";
+      overflow.textContent = `+${day.preview_total - day.previews.length}`;
+      previews.append(overflow);
+    }
+    value.append(number, previews);
     value.setAttribute("aria-label", dayAriaLabel(day));
     return value;
+  }
+
+  function previewRow(preview) {
+    const row = document.createElement("span");
+    row.className = "calendar-month-preview";
+    row.append(typeBadge(preview.source_type));
+    const label = document.createElement("span");
+    label.className = "calendar-preview-label";
+    label.textContent = preview.label;
+    row.append(label);
+    if (preview.text) {
+      const text = document.createElement("span");
+      text.className = "calendar-preview-text";
+      text.textContent = preview.text;
+      row.append(text);
+    }
+    return row;
   }
 
   function requestDay(value) {
@@ -345,12 +367,6 @@ function sectionWithHeading(label) {
   heading.textContent = label;
   section.append(heading);
   return section;
-}
-function indicator(kind) {
-  const value = document.createElement("span");
-  value.className = `calendar-indicator calendar-indicator-${kind}`;
-  value.setAttribute("aria-hidden", "true");
-  return value;
 }
 function dayAriaLabel(day) {
   const details = [];
