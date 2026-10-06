@@ -247,7 +247,7 @@ test("Calendar client sends only the bounded same-origin operation and validates
     kind: "calendar_month", month: "2026-10", days: [{
       date: "2026-10-01", materialized: false, has_content: false,
       journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 0,
-      preview_total: 5, previews: Array.from({length: 5}, () => ({kind: "journal", source_type: "journal_entry", label: "Diario"})),
+      preview_total: 7, previews: Array.from({length: 7}, () => ({kind: "journal", source_type: "journal_entry", label: "Diario"})),
     }],
   }), CalendarRequestError);
   assert.throws(() => validateCalendarResponse({
@@ -354,9 +354,12 @@ test("month density toggle expands the grid and persists for the browser session
   const month = {
     kind: "calendar_month", month: "2026-10", days: [{
       date: "2026-10-01", materialized: true, has_content: false,
-      journal_count: 0, captured_fact_count: 1, reference_count: 0, task_count: 0,
-      preview_total: 1,
-      previews: [{kind: "capture", source_type: "person", label: "Marta", text: "Empezó en Airbus y conoció al nuevo equipo."}],
+      journal_count: 0, captured_fact_count: 6, reference_count: 0, task_count: 0,
+      preview_total: 6,
+      previews: Array.from({length: 6}, (_, index) => ({
+        kind: "capture", source_type: "person", label: `Persona ${index + 1}`,
+        text: `Fact ${index + 1} del día.`,
+      })),
     }],
   };
   const mounted = await mountCalendar(
@@ -366,8 +369,10 @@ test("month density toggle expands the grid and persists for the browser session
   );
 
   const preview = mounted.elements.grid.querySelector(".calendar-month-preview");
-  assert.equal(preview.querySelector(".calendar-preview-label").textContent, "Marta");
-  assert.equal(preview.querySelector(".calendar-preview-text").textContent, "Empezó en Airbus y conoció al nuevo equipo.");
+  assert.equal(preview.querySelector(".calendar-preview-label").textContent, "Persona 1");
+  assert.equal(preview.querySelector(".calendar-preview-text").textContent, "Fact 1 del día.");
+  assert.equal(mounted.elements.grid.querySelectorAll(".calendar-month-preview").length, 4);
+  assert.equal(mounted.elements.grid.querySelector(".calendar-day-more").textContent, "Ver 2 más ↓");
   assert.equal(mounted.controller.state.expanded, false);
   assert.equal(mounted.elements.grid.className, "calendar-grid");
   assert.equal(mounted.elements.expand["aria-pressed"], "false");
@@ -379,6 +384,8 @@ test("month density toggle expands the grid and persists for the browser session
   assert.equal(mounted.elements.grid.className, "calendar-grid calendar-grid-expanded");
   assert.equal(mounted.elements.expand["aria-pressed"], "true");
   assert.equal(mounted.elements.expand["aria-label"], "Vista compacta");
+  assert.equal(mounted.elements.grid.querySelectorAll(".calendar-month-preview").length, 6);
+  assert.equal(mounted.elements.grid.querySelector(".calendar-day-more"), null);
   assert.equal(stored.get("odyssey.calendar.month.expanded"), "true");
 
   const restored = await mountCalendar(

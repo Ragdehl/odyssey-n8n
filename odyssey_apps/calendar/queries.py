@@ -33,7 +33,7 @@ from odyssey_core.temporal import (
 
 _MONTH = re.compile(r"^(\d{4})-(\d{2})$")
 _LEVEL_ONE_HEADING = re.compile(r"^#\s+")
-_MONTH_PREVIEW_LIMIT = 4
+_MONTH_PREVIEW_LIMIT = 6
 _MONTH_PREVIEW_LABEL_LIMIT = 80
 _MONTH_PREVIEW_TEXT_LIMIT = 120
 

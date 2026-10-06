@@ -154,6 +154,7 @@ def test_month_projects_materialization_content_and_distinct_temporal_categories
         ("journal", "Diario del jueves", "Hoy fue un buen día."),
         ("journal", "Z diario extra", "Otro momento del día."),
         ("capture", "Marta", "Empezó en Airbus."),
+        ("reference", "Viaje", "La reserva corresponde al 1 de octubre."),
     ]
     second = month.days[1]
     assert second.materialized is False
@@ -165,7 +166,7 @@ def test_month_projects_materialization_content_and_distinct_temporal_categories
 def test_month_preview_is_category_ordered_source_sorted_and_strictly_bounded(
     tmp_path: Path, schema: dict
 ) -> None:
-    """Keep the month preview presentation-only, deterministic, and capped at four rows."""
+    """Keep the month preview presentation-only, deterministic, and bounded."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write(
@@ -226,6 +227,7 @@ def test_month_preview_is_category_ordered_source_sorted_and_strictly_bounded(
         ("journal", "Zeta"),
         ("journal", "Álpha"),
         ("capture", "Marta"),
+        ("reference", "Viaje"),
     ]
 
 

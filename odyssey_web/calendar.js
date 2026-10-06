@@ -283,14 +283,16 @@ export function mountCalendar(root, {
     const previews = document.createElement("div");
     previews.className = "calendar-day-previews";
     const detailed = detailOpen && state.monthDetail ? monthDetailPreviews(state.monthDetail) : [];
+    const baseLimit = state.expanded ? 6 : 4;
+    const baseItems = day.previews.slice(0, baseLimit);
     const items = detailOpen
       ? [...day.previews, ...detailed.slice(day.previews.length)]
-      : day.previews;
+      : baseItems;
     for (const preview of items) previews.append(previewRow(preview));
     let overflow = null;
-    if (day.preview_total > day.previews.length) {
+    if (day.preview_total > baseItems.length) {
       overflow = button(
-        detailOpen ? (state.monthDetail ? "Mostrar menos ↑" : "Cargando…") : `Ver ${day.preview_total - day.previews.length} más ↓`,
+        detailOpen ? (state.monthDetail ? "Mostrar menos ↑" : "Cargando…") : `Ver ${day.preview_total - baseItems.length} más ↓`,
         (event) => {
           event.stopPropagation?.();
           void toggleMonthDetail(day);
@@ -389,7 +391,7 @@ export function mountCalendar(root, {
   function toggleDensity() {
     state.expanded = !state.expanded;
     writeExpandedState(sessionStorageImpl, state.expanded);
-    renderDensity();
+    renderMonth();
   }
 
   function requestDay(value) {

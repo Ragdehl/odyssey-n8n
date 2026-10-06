@@ -233,6 +233,11 @@ button:disabled { opacity: .55; }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+.calendar-grid-expanded .calendar-day-more-open .calendar-preview-text {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: initial;
+}
 .calendar-schedule-view { display: grid; min-height: 0; align-content: start; gap: .55rem; }
 .calendar-schedule-controls { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: .4rem; }
 .calendar-schedule-controls h2 { margin: 0; min-width: 0; font-size: .95rem; text-align: center; text-transform: capitalize; }

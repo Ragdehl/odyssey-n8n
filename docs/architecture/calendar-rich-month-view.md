@@ -23,7 +23,8 @@ The month keeps a Monday-to-Sunday seven-column grid. Compared with Calendar v0:
 - on narrow screens the month grid may scroll horizontally so Day cells can remain meaningfully wider instead of forcing all seven columns into the viewport;
 - the day number becomes a small, secondary label near the top;
 - the current colored dots disappear;
-- each date shows up to **four** compact preview rows;
+- the month transport keeps a strict bound of **six** preview rows per date;
+- compact mode renders the first **four** rows, while expanded mode renders up to **six** rows before offering overflow;
 - a preview row uses the same semantic Note-type icon/color presentation already shared by Notes, at a smaller month-view size;
 - compact mode prioritizes the day-specific visible snippet and hides a redundant source Note name; the source label remains the fallback when no meaningful snippet exists (notably Task titles);
 - an explicit expand/compact toggle widens the horizontally scrollable month substantially; expanded mode restores the source Note name and shows up to two visible lines of the day-specific snippet beneath it;
@@ -33,6 +34,8 @@ The month keeps a Monday-to-Sunday seven-column grid. Compared with Calendar v0:
   scroll local to that Day cell;
 - only one Day cell may hold that internal expanded-scroll state at once; opening another closes the
   previous one, and `Mostrar menos` returns the cell to its bounded month preview;
+- once `Ver más` opens a Day cell, fact text is no longer line-clamped: the fixed-height cell keeps
+  its internal scroll and lets the user read complete fact lines without clipping them;
 - selecting the ordinary Day cell content still opens the existing Day view.
 
 The first version does **not** claim to rank semantic importance. To avoid inventing another ranking

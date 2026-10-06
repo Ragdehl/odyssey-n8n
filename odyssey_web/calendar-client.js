@@ -1,5 +1,5 @@
 const MONTH_PREVIEW_KINDS = new Set(["day_content", "journal", "capture", "task", "reference"]);
-const MONTH_PREVIEW_LIMIT = 4;
+const MONTH_PREVIEW_LIMIT = 6;
 const MONTH_PREVIEW_LABEL_LIMIT = 80;
 const MONTH_PREVIEW_TEXT_LIMIT = 120;
 const SCHEDULE_DAY_COUNTS = new Set([1, 3, 7]);
