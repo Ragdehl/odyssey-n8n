@@ -54,6 +54,15 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
   font-size: 1rem;
   line-height: 1;
 }
+.app-nav-button svg, .icon-action svg, .note-set-button svg, .clarification-inspect svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .app-nav-button[aria-current="page"] { transform: translateY(-1px); box-shadow: 0 .2rem .6rem rgba(34,45,74,.12); }
 .app-nav-chat[aria-current="page"] { background: #ece8ff; border-color: #8a7be6; }
 .app-nav-notes[aria-current="page"] { background: #e8eefc; border-color: #7f91c8; }
@@ -135,6 +144,23 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .icon-action.action-stop, .icon-action.action-delete { background: #f7e9e8; border-color: #e5bfbc; color: #8b3131; }
 .icon-action.action-cancel, .icon-action.action-disclosure { background: #f0f1f5; border-color: #d8dce7; color: #59627a; }
 .icon-action:focus-visible { outline: 2px solid #665ee8; outline-offset: 2px; }
+.note-set-button {
+  display: inline-flex;
+  width: auto;
+  min-width: 2.1rem;
+  min-height: 2.1rem;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  margin-top: .55rem;
+  padding: .35rem .48rem;
+  border: 1px solid #8a7be6;
+  border-radius: .65rem;
+  background: #ece8ff;
+  color: #4f46a8;
+}
+.note-set-count { min-width: 1.05rem; font-size: .68rem; font-weight: 800; line-height: 1; text-align: center; }
+.clarification-inspect { width: 2.1rem; min-width: 2.1rem; min-height: 2.1rem; padding: 0; background: #ece8ff; color: #4f46a8; }
 .note-danger-button { min-height: 2rem; padding: 0; background: #f7e9e8; color: #8b3131; white-space: nowrap; }
 .note-editable-fact { display: flex; align-items: start; justify-content: space-between; gap: .5rem; }
 .note-fact-content { min-width: 0; overflow-wrap: anywhere; }

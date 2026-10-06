@@ -168,11 +168,35 @@ async function mountNotes({requestNotes, confirmImpl = () => true, sessionStorag
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
   };
   globalThis.__odysseyTestNotesClient = {NotesRequestError, requestNotes};
+  globalThis.__odysseyTestIcons = {
+    setActionIcon(control, _name, label) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      control.replaceChildren(svg);
+      control.setAttribute("aria-label", label);
+      control.setAttribute("title", label);
+      return control;
+    },
+    actionButton(_name, label, action, classes = "") {
+      const control = document.createElement("button");
+      control.type = "button";
+      control.className = `icon-action ${classes}`.trim();
+      control.setAttribute("aria-label", label);
+      control.setAttribute("title", label);
+      control.append(document.createElementNS("http://www.w3.org/2000/svg", "svg"));
+      control.addEventListener("click", action);
+      return control;
+    },
+  };
   const source = await readFile(new URL("../odyssey_web/notes.js", import.meta.url), "utf8");
-  const testable = source.replace(
-    'import {NotesRequestError, requestNotes} from "./notes-client.js";',
-    "const {NotesRequestError, requestNotes} = globalThis.__odysseyTestNotesClient;",
-  );
+  const testable = source
+    .replace(
+      'import {actionButton as iconButton, setActionIcon as setIconButton} from "./action-icons.js";',
+      "const {actionButton: iconButton, setActionIcon: setIconButton} = globalThis.__odysseyTestIcons;",
+    )
+    .replace(
+      'import {NotesRequestError, requestNotes} from "./notes-client.js";',
+      "const {NotesRequestError, requestNotes} = globalThis.__odysseyTestNotesClient;",
+    );
   const {mountNotes: mount} = await import(
     `data:text/javascript;base64,${Buffer.from(`${testable}\n// fixture ${fixtureNumber += 1}`).toString("base64")}`,
   );
@@ -551,7 +575,7 @@ function enterEditMode(mounted) {
 test("read mode renders linked facts once without destructive controls or raw Markdown", async () => {
   const {mounted} = await mountMutationNote({confirmImpl: () => true});
 
-  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "✏️");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle")["aria-label"], "Editar nota");
   assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle")["aria-label"], "Editar nota");
   assert.equal(mounted.elements.detail.querySelector(".note-delete-button"), null);
   assert.equal(mounted.elements.detail.querySelector(".note-fact-delete"), null);
@@ -567,18 +591,17 @@ test("entering and leaving edit mode reveals only safe inline mutation controls"
   const {mounted} = await mountMutationNote({confirmImpl: () => true});
   enterEditMode(mounted);
 
-  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "✓");
   assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle")["aria-label"], "Terminar edición");
-  assert.equal(mounted.elements.detail.querySelector(".note-delete-button").textContent, "🗑️");
+  assert.equal(mounted.elements.detail.querySelector(".note-delete-button")["aria-label"], "Eliminar nota");
   const factDelete = mounted.elements.detail.querySelector(".note-fact-delete");
-  assert.equal(factDelete.textContent, "🗑️");
+  assert.equal(factDelete["aria-label"], "Eliminar esta información");
   assert.equal(factDelete.parentNode.textContent.includes("Axel"), true);
   assert.equal(factDelete.parentNode.textContent.includes("Denis"), true);
-  assert.equal(mounted.elements.detail.textContent.includes("Contenido de referencia visible una vez.🗑️"), false);
+  assert.equal(mounted.elements.detail.textContent.includes("Contenido de referencia visible una vez.Eliminar"), false);
 
   mounted.elements.detail.querySelector(".note-edit-toggle").click();
 
-  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle").textContent, "✏️");
+  assert.equal(mounted.elements.detail.querySelector(".note-edit-toggle")["aria-label"], "Editar nota");
   assert.equal(mounted.elements.detail.querySelector(".note-delete-button"), null);
   assert.equal(mounted.elements.detail.querySelector(".note-fact-delete"), null);
 });
@@ -915,7 +938,7 @@ test("Task Work Session start and stop use bounded stale-state tokens and update
   await flush();
 
   const start = mounted.elements.detail.querySelector(".work-session-start");
-  assert.equal(start.textContent, "▶️");
+  assert.equal(start["aria-label"], "Empezar sesión");
   assert.equal(start["aria-label"], "Empezar sesión");
   start.click();
   await flush();
@@ -929,7 +952,7 @@ test("Task Work Session start and stop use bounded stale-state tokens and update
   assert.equal(calls.filter(({operation}) => operation === "detail").length, 1);
 
   const stop = mounted.elements.detail.querySelector(".work-session-stop");
-  assert.equal(stop.textContent, "⏹️");
+  assert.equal(stop["aria-label"], "Terminar sesión");
   assert.equal(stop["aria-label"], "Terminar sesión");
   stop.click();
   await flush();
@@ -1087,13 +1110,13 @@ test("Work Session disclosure defaults activity and active sessions open, keeps 
   assert.equal(mounted.elements.detail.textContent.includes("Avance"), true);
   assert.equal(mounted.elements.detail.textContent.includes("Sin actividad registrada todavía."), true);
   const opens = allByClass(mounted.elements.detail, "work-session-open");
-  assert.equal(opens.map((item) => item.textContent).join(","), "▴,▴,▾");
+  assert.deepEqual(opens.map((item) => item["aria-label"]), ["Contraer sesión", "Contraer sesión", "Expandir sesión"]);
   opens[1].click();
   await flush();
-  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "▴,▾,▾");
+  assert.deepEqual(allByClass(mounted.elements.detail, "work-session-open").map((item) => item["aria-label"]), ["Contraer sesión", "Expandir sesión", "Expandir sesión"]);
   allByClass(mounted.elements.detail, "work-session-open")[0].click();
   await flush();
-  assert.equal(allByClass(mounted.elements.detail, "work-session-open").map((item) => item.textContent).join(","), "▾,▾,▾");
+  assert.deepEqual(allByClass(mounted.elements.detail, "work-session-open").map((item) => item["aria-label"]), ["Expandir sesión", "Expandir sesión", "Expandir sesión"]);
 });
 
 test("parent subtask checkbox fetches current child tokens for completion and reopen", async () => {

@@ -223,11 +223,30 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
       await persistAssistantTurn();
     },
   };
+  globalThis.__odysseyTestIcons = {
+    setActionIcon(control, _name, label) {
+      const svg = new FakeElement("svg");
+      control.replaceChildren(svg);
+      control.setAttribute("aria-label", label);
+      control.setAttribute("title", label);
+      return control;
+    },
+    actionButton(_name, label, action, classes = "") {
+      const control = new FakeElement("button");
+      control.className = `icon-action ${classes}`.trim();
+      control.setAttribute("aria-label", label);
+      control.setAttribute("title", label);
+      control.append(new FakeElement("svg"));
+      control.addEventListener("click", action);
+      return control;
+    },
+  };
   globalThis.__odysseyTestNotes = {mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
   globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
   const source = await readFile(new URL("../odyssey_web/app.js", import.meta.url), "utf8");
   const testable = source
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
+    .replace('import {actionButton, setActionIcon} from "./action-icons.js";', "const {actionButton, setActionIcon} = globalThis.__odysseyTestIcons;")
     .replace('import {mountNotes} from "./notes.js";', "const {mountNotes} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
@@ -361,7 +380,8 @@ test("conversation reload renders the exact durable affected-note affordance", a
   });
 
   const affordance = page.elements.conversation.children[1].querySelector(".note-set-button");
-  assert.equal(affordance.textContent, "Ver 2 notas");
+  assert.equal(affordance["aria-label"], "Ver 2 notas");
+  assert.equal(affordance.querySelector(".note-set-count").textContent, "2");
   assert.equal(page.elements.conversation.children[1].textContent.includes("first"), false);
 });
 
@@ -380,7 +400,8 @@ test("older conversation pagination preserves an affected-note affordance", asyn
   await flush();
 
   const affordance = page.elements.conversation.children[0].querySelector(".note-set-button");
-  assert.equal(affordance.textContent, "Ver nota");
+  assert.equal(affordance["aria-label"], "Ver nota");
+  assert.equal(affordance.querySelector(".note-set-count"), null);
 });
 
 test("fixed app icons keep one navigation order and reset Notes/Calendar to their home surfaces", async () => {

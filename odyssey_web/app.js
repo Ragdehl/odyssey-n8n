@@ -6,6 +6,7 @@ import {
   requestProductResult,
   requestConversation,
 } from "./client.js";
+import {actionButton, setActionIcon} from "./action-icons.js";
 import {mountNotes} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
 
@@ -32,6 +33,19 @@ const calendarChatTab = document.querySelector("#calendar-chat-tab");
 const calendarNotesTab = document.querySelector("#calendar-notes-tab");
 const calendarHomeTab = document.querySelector("#calendar-home-tab");
 const clarificationStatus = document.querySelector("#clarification-status");
+for (const [control, icon, label] of [
+  [chatHomeTab, "chat", "Chat"],
+  [chatTab, "chat", "Chat"],
+  [calendarChatTab, "chat", "Chat"],
+  [notesTab, "notes", "Notas"],
+  [notesHomeTab, "notes", "Notas"],
+  [calendarNotesTab, "notes", "Notas"],
+  [calendarTab, "calendar", "Calendario"],
+  [notesCalendarTab, "calendar", "Calendario"],
+  [calendarHomeTab, "calendar", "Calendario"],
+]) {
+  if (control) setActionIcon(control, icon, label);
+}
 let conversationId = MAIN_CONVERSATION_ID;
 let retrySubmission = null;
 let olderCursor = null;
@@ -217,15 +231,18 @@ function appendNoteSetAffordance(article, snapshot) {
       (snapshot.version !== 1 && snapshot.version !== 2) ||
       (snapshot.version === 1 && typeof snapshot.query !== "string") ||
       (snapshot.version === 2 && (snapshot.kind !== "affected_notes" || snapshot.total < 1))) return;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "note-set-button";
   const visible = snapshot.truncated ? `${snapshot.note_ids.length} de ${snapshot.total}` : snapshot.total;
-  button.textContent = snapshot.total === 1 ? "Ver nota" : `Ver ${visible} notas`;
-  button.addEventListener("click", () => {
+  const label = snapshot.total === 1 ? "Ver nota" : `Ver ${visible} notas`;
+  const button = actionButton("openNote", label, () => {
     selectSurface("notes");
     document.dispatchEvent(new CustomEvent("odyssey:open-note-snapshot", {detail: snapshot}));
-  });
+  }, "note-set-button action-open-note");
+  if (snapshot.total > 1) {
+    const count = document.createElement("span");
+    count.className = "note-set-count";
+    count.textContent = String(visible);
+    button.append(count);
+  }
   article.append(button);
 }
 
@@ -407,13 +424,10 @@ function appendClarificationCard(article, clarification) {
     choose.type = "button";
     choose.textContent = "Elegir";
     choose.addEventListener("click", () => submitClarificationReply(`He elegido a ${option.label}.`));
-    const inspect = document.createElement("button");
-    inspect.type = "button";
-    inspect.textContent = "Ver nota";
-    inspect.addEventListener("click", () => {
+    const inspect = actionButton("openNote", "Ver nota", () => {
       selectSurface("notes");
       document.dispatchEvent(new CustomEvent("odyssey:open-note", {detail: {note_id: option.id}}));
-    });
+    }, "clarification-inspect action-open-note");
     controls.append(choose, inspect);
     row.append(heading);
     if (option.note_type && option.evidence) {

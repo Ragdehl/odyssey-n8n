@@ -140,7 +140,8 @@ def test_chat_notes_and_calendar_are_exclusive_application_views_with_safe_no_js
         label in index
         for label in ['aria-label="Chat"', 'aria-label="Notas"', 'aria-label="Calendario"']
     )
-    assert "💬" in index and "📝" in index and "📅" in index
+    assert "💬" not in index and "📝" not in index and "📅" not in index
+    assert "./action-icons.js" in (WEB_ROOT / "app.js").read_text(encoding="utf-8")
     assert index.index('id="chat-surface"') < index.index('id="notes-surface"')
     assert index.index('id="odyssey-form"') < index.index('id="notes-surface"')
     assert index.index('id="notes-search-form"') > index.index('id="notes-surface"')
@@ -330,6 +331,7 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
     routes = {path.relative_to(root).as_posix() for path in modules}
     assert routes == {
         "app.js",
+        "action-icons.js",
         "client.js",
         "notes.js",
         "notes-client.js",
