@@ -1,5 +1,5 @@
 {
-  "version": "3.0.4",
+  "version": "3.0.5",
   "examples": [
     {
       "id": "teach-domain-date",
@@ -212,7 +212,7 @@
     },
     {
       "id": "teach-source-relationship-participants",
-      "request": "Remember that Hana and Luis joined me for a museum visit.",
+      "request": "Remember that I had dinner with my spouse and my children.",
       "result": {
         "outcome": "PLAN",
         "actions": [
@@ -234,15 +234,25 @@
                   {
                     "parts": [
                       {
+                        "kind": "literal",
+                        "text": "I had dinner with "
+                      },
+                      {
                         "kind": "identity",
-                        "text": "Hana",
+                        "text": "my spouse",
                         "identity": {
-                          "description": "Hana",
+                          "description": "my spouse",
                           "binding": "described",
-                          "direct_name": "Hana",
+                          "direct_name": null,
                           "note_type": "person",
                           "filters": [],
-                          "candidate_scope": null
+                          "candidate_scope": {
+                            "source": {
+                              "kind": "SELF"
+                            },
+                            "member_query": "my spouse",
+                            "extent": "one_member"
+                          }
                         }
                       },
                       {
@@ -251,19 +261,25 @@
                       },
                       {
                         "kind": "identity",
-                        "text": "Luis",
+                        "text": "my children",
                         "identity": {
-                          "description": "Luis",
+                          "description": "my children",
                           "binding": "described",
-                          "direct_name": "Luis",
+                          "direct_name": null,
                           "note_type": "person",
                           "filters": [],
-                          "candidate_scope": null
+                          "candidate_scope": {
+                            "source": {
+                              "kind": "SELF"
+                            },
+                            "member_query": "my children",
+                            "extent": "complete_set"
+                          }
                         }
                       },
                       {
                         "kind": "literal",
-                        "text": " joined me for a museum visit."
+                        "text": "."
                       }
                     ]
                   }
@@ -279,7 +295,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "The authenticated human owns this one relationship fact. Keep one self-targeted operation and encode each safely selectable participant as an identity part; do not create participant-targeted operations."
+      "lesson": "Keep coordinated relationship-bounded participants as separate identity parts. A singular relative uses one_member; a whole current finite relative set uses complete_set. Do not collapse or literalize them."
     },
     {
       "id": "teach-relational-target-with-described-reference",

@@ -546,6 +546,45 @@ def test_complete_relational_set_fact_reference_stays_unresolved_until_core_pref
     assert reference.selection.relational_reference.members == "complete_set"
 
 
+def test_elliptical_coordinated_relatives_compile_as_independent_reference_scopes(
+    schema: dict,
+) -> None:
+    """Keep exact surface text while semantic identity restores an elided possessive."""
+    wife = person(
+        "mi mujer",
+        scope=scoped_self("mi mujer", CandidateScopeExtent.ONE_MEMBER),
+    )
+    children = person(
+        "mis hijos",
+        scope=scoped_self("mis hijos", CandidateScopeExtent.COMPLETE_SET),
+    )
+    action = compile_one(
+        schema,
+        operation(
+            person("2026-10-06", name="2026-10-06"),
+            fact(
+                LiteralPart("Hoy hemos cenado con "),
+                IdentityPart("mi mujer", wife),
+                LiteralPart(" e "),
+                IdentityPart("hijos", children),
+                LiteralPart(" una quiche muy buena."),
+            ),
+        ),
+    )
+    unit = action.units[0]
+    assert unit.facts == (
+        "Hoy hemos cenado con {{ref:0}} e hijos ({{ref:1}}) una quiche muy buena.",
+    )
+    assert [reference.mention for reference in unit.references] == ["mi mujer", "hijos"]
+    assert unit.references[0].target_index == 1
+    wife_lookup = action.units[1]
+    assert wife_lookup.reference_lookup_only is True
+    assert wife_lookup.target.relational_reference.reference == "mi mujer"
+    assert wife_lookup.target.relational_reference.members == "one"
+    assert unit.references[1].selection.relational_reference.reference == "mis hijos"
+    assert unit.references[1].selection.relational_reference.members == "complete_set"
+
+
 def test_properties_tags_intents_migration_bulk_and_complete_set_use_core_validation(
     schema: dict,
 ) -> None:

@@ -188,6 +188,30 @@ def resolve_relational_reference(
             chosen_identity_id,
             ordinary_types,
         )
+    # Repeated canonical facts can legitimately restate the same singular relationship.
+    # Collapse them only when every literal relationship match projects completely to the
+    # same one current identity; repeated evidence is not identity ambiguity by itself.
+    literal_matches = tuple(
+        (fact, direction)
+        for fact, direction in candidates
+        if relation.reference.casefold() in fact.text.casefold()
+    )
+    if not allow_identity_clarification and len(literal_matches) > 1:
+        equivalent = _collapse_equivalent_singular_matches(
+            selection,
+            source_id,
+            projector,
+            incoming_projection,
+            literal_matches,
+            evidence_guard,
+            ordinary_types,
+        )
+        if equivalent is not None:
+            return equivalent
+        raise RelationalResolutionError(
+            "relational_evidence_ambiguous", evidence_guard=evidence_guard
+        )
+
     decision, _usage = contextual_reasoner.resolve(
         ContextualResolutionRequest(
             reference=relation.reference,
@@ -202,16 +226,6 @@ def resolve_relational_reference(
     # Mutations retain strict identity authority: ambiguity never authorizes a write.
     # A caller may, however, request a bounded fallback that reuses the read-side
     # relevance selector only to expose grounded identities for human clarification.
-    if (
-        not allow_identity_clarification
-        and sum(
-            relation.reference.casefold() in fact.text.casefold() for fact, _direction in candidates
-        )
-        > 1
-    ):
-        raise RelationalResolutionError(
-            "relational_evidence_ambiguous", evidence_guard=evidence_guard
-        )
     selected = validate_contextual_decision(
         decision, frozenset(fact.locator for fact, _direction in candidates)
     )
@@ -234,22 +248,45 @@ def resolve_relational_reference(
             )
         grounded: list[CanonicalIdentity] = []
         evidence_by_id: dict[str, list[str]] = {}
+        complete_singletons: list[
+            tuple[CanonicalFact, EvidenceDirection, Any, CanonicalIdentity]
+        ] = []
+        all_selected_complete_singletons = True
         for fact, direction in selected_facts:
             projection = projector.project_targets(fact.source.id, fact.locator)
             if projection.status is not TargetProjectionStatus.COMPLETE:
+                all_selected_complete_singletons = False
                 continue
             targets = (
                 (projection.source,)
                 if direction is EvidenceDirection.INCOMING and projection.source is not None
-                else projection.targets
+                else tuple(target for target in projection.targets if target.type in ordinary_types)
             )
-            for target in targets:
-                if target is None or target.type not in ordinary_types:
-                    continue
+            ordinary_targets = tuple(
+                target for target in targets if target is not None and target.type in ordinary_types
+            )
+            if len(ordinary_targets) == 1:
+                complete_singletons.append((fact, direction, projection, ordinary_targets[0]))
+            else:
+                all_selected_complete_singletons = False
+            for target in ordinary_targets:
                 if target.id not in {item.id for item in grounded}:
                     grounded.append(target)
                 evidence_by_id.setdefault(target.id, []).append(_bounded_fact_evidence(fact))
         options = tuple(target.id for target in grounded)
+        if (
+            relation.members == "one"
+            and len(options) == 1
+            and all_selected_complete_singletons
+            and len(complete_singletons) == len(selected_facts)
+        ):
+            fact, direction, projection, target = complete_singletons[0]
+            source = (
+                incoming_projection.entity if incoming_projection is not None else projection.source
+            )
+            return ResolvedRelationalReference(
+                source, projection.source, fact.locator, direction, (target,), evidence_guard
+            )
         if relation.members == "one" and 1 < len(options) <= 4:
             raise RelationalResolutionError(
                 "relational_evidence_ambiguous",
@@ -340,6 +377,50 @@ def resolve_relational_reference(
     source = incoming_projection.entity if incoming_projection is not None else projection.source
     return ResolvedRelationalReference(
         source, projection.source, selected.id, direction, targets, evidence_guard
+    )
+
+
+def _collapse_equivalent_singular_matches(
+    selection: SelectionCriteria,
+    source_id: str,
+    projector: RelationshipEvidenceProjector,
+    incoming_projection: Any,
+    candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...],
+    evidence_guard: str,
+    ordinary_types: frozenset[str],
+) -> ResolvedRelationalReference | None:
+    """Treat repeated relationship evidence as one identity only when projections agree exactly."""
+    rows: list[tuple[CanonicalFact, EvidenceDirection, Any, CanonicalIdentity]] = []
+    target_ids: set[str] = set()
+    for fact, direction in candidates:
+        projection = projector.project_targets(fact.source.id, fact.locator)
+        if projection.status is not TargetProjectionStatus.COMPLETE or projection.source is None:
+            return None
+        if direction is EvidenceDirection.OUTGOING:
+            targets = tuple(
+                target for target in projection.targets if target.type in ordinary_types
+            )
+        elif direction is EvidenceDirection.INCOMING:
+            if not any(target.id == source_id for target in projection.targets):
+                return None
+            targets = (projection.source,) if projection.source.type in ordinary_types else ()
+        else:
+            return None
+        if len(targets) != 1:
+            return None
+        target = targets[0]
+        if selection.type is not None and target.type != selection.type:
+            return None
+        target_ids.add(target.id)
+        rows.append((fact, direction, projection, target))
+    if len(target_ids) != 1 or not rows:
+        return None
+    fact, direction, projection, target = rows[0]
+    source = incoming_projection.entity if incoming_projection is not None else projection.source
+    if source is None:
+        return None
+    return ResolvedRelationalReference(
+        source, projection.source, fact.locator, direction, (target,), evidence_guard
     )
 
 

@@ -922,10 +922,20 @@ def test_source_relationship_teaching_example_compiles_participant_identities(
     lookups = [unit for unit in action.units if unit.reference_lookup_only]
     assert len(material) == 1
     assert material[0].target.self_target == "self"
-    assert material[0].facts == ("{{ref:0}} and {{ref:1}} joined me for a museum visit.",)
-    assert {reference.mention for reference in material[0].references} == {"Hana", "Luis"}
-    assert {unit.target.query for unit in lookups} == {"Hana", "Luis"}
-    assert len(lookups) == 2
+    assert material[0].facts == ("I had dinner with {{ref:0}} and my children ({{ref:1}}).",)
+    assert {reference.mention for reference in material[0].references} == {
+        "my spouse",
+        "my children",
+    }
+    assert {unit.target.query for unit in lookups} == {"my spouse"}
+    assert len(lookups) == 1
+    complete_set = next(
+        reference for reference in material[0].references if reference.mention == "my children"
+    )
+    assert complete_set.target_index is None
+    assert complete_set.selection is not None
+    assert complete_set.selection.relational_reference is not None
+    assert complete_set.selection.relational_reference.members == "complete_set"
 
 
 def test_every_v3_teaching_example_validates_and_writes_are_semantic_only(

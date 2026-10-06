@@ -720,6 +720,145 @@ def test_conflicting_singular_relation_targets_offer_options_only_for_reads(
     assert reasoner.requests == []
 
 
+def test_reference_only_singular_relation_collapses_duplicate_facts_with_same_target(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Two canonical spouse facts naming the same person are corroboration, not ambiguity."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    body = (
+        fact("Mi mujer es [[people/beatriz|Beatriz Carrero]].", 0)
+        + "\n\n"
+        + fact("Mi mujer se llama [[people/beatriz|Beatriz Carrero]].", 1)
+    )
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", body)
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz Carrero", "")
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "yo",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": "self",
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Cenó con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": "mi mujer",
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "mi mujer",
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "identity",
+                                "mention": "mi mujer",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+    reasoner = FactReasoner(outcome="AMBIGUOUS")
+
+    result = run(vault, schema, plan, reasoner=reasoner)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert reasoner.requests == []
+    edgar = parse_note((vault / "people/edgar.md").read_text()).content
+    assert "Cenó con [[people/beatriz|Beatriz Carrero]]." in edgar
+
+
+def test_reference_only_singular_relation_keeps_distinct_targets_ambiguous(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Repeated wording that actually points to different identities must still fail closed."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    body = (
+        fact("Mi mujer es [[people/beatriz|Beatriz]].", 0)
+        + "\n\n"
+        + fact("Mi mujer es [[people/marta|Marta]].", 1)
+    )
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", body)
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    before = (vault / "people/edgar.md").read_bytes()
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "yo",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": "self",
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Cenó con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": "mi mujer",
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "mi mujer",
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "identity",
+                                "mention": "mi mujer",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    lookup = result.action_results[0].unit_results[1]
+    assert lookup.reason == "unresolved_existing_reference"
+    assert (vault / "people/edgar.md").read_bytes() == before
+
+
 def test_semantic_relation_wording_selects_all_relevant_facts_without_literal_matching(
     tmp_path: Path, schema: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -437,3 +437,10 @@ def test_calendar_day_target_consumes_date_but_keeps_exact_clock_anchor() -> Non
     assert [[anchor.value for anchor in row] for row in unit.fact_temporal_anchors] == [
         ["2026-10-03T15:35:00+02:00"]
     ]
+
+
+def test_semantic_write_prompt_preserves_elided_coordinated_relationship_scopes() -> None:
+    prompt = render_semantic_write_planner_prompt(schema(), CURRENT)
+    assert "mi mujer e hijos" in prompt
+    assert 'member_query="mis hijos"' in prompt
+    assert "Shared possessives distribute" in prompt
