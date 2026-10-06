@@ -141,7 +141,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 try:
                     payload = self._read_payload()
                     operation = payload.pop("operation", None)
-                    if operation not in {"month", "day"}:
+                    if operation not in {"month", "day", "schedule"}:
                         raise ValueError("Calendar operation is invalid")
                     actor_payload = {
                         key: payload.pop(key)

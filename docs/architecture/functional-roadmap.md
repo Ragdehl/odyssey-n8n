@@ -127,8 +127,11 @@ feed/local browsing has independent bounded type cursors, while intelligent and 
 sets preserve one global deterministic authority. Calendar Day remains outside Notes-visible groups.
 The follow-on [Calendar rich month view](calendar-rich-month-view.md) replaces dot-only monthly
 indicators with a bounded four-row semantic preview while preserving one month request and the
-existing Day navigation boundary; its implementation is complete and isolated-DEV visual review is
-next.
+existing Day navigation boundary; compact/expanded month modes and per-Day `Ver más` are now
+user-validated in isolated DEV. The next [Calendar multi-day schedule view](calendar-multiday-schedule-view.md)
+adds a read-only 1/3/7-day hourly projection over existing exact Task planning coordinates and semantic
+fact anchors, with window-sized swipe navigation; implementation is complete and isolated-DEV mobile
+review is next.
 
 [Temporal Foundation v1](temporal-foundation-v1.md) is provider-free complete. Calendar v0 and
 Application Boundary + Router v0 have completed their earlier focused live gates and isolated-DEV
@@ -201,7 +204,8 @@ Temporal Foundation v1 — shared date/date-time contract              ✅ provi
 Journal/Temporal convergence follow-up                              ➡️ isolated DEV user-visible validation pending
 Tasks — first lifecycle-heavy domain application                  ⬜ after DEV user-path recheck
 Notes grouped browsing UX                                         ✅ isolated DEV user-validated; future authoring controls deferred
-Calendar rich month view                                          ➡️ implementation complete; isolated DEV visual review next
+Calendar rich month view                                          ✅ isolated DEV user-validated
+Calendar multi-day 1/3/7 schedule view                            ➡️ implementation complete; isolated DEV mobile review next
 Events — timed occurrence semantics on Calendar                   ⬜ after Tasks
 Reminders — lower-level delivery for Tasks / Events               ⬜ planned as needed
 Maintainability checkpoint — bounded cleanup after calendar path  ⬜ planned
@@ -328,7 +332,10 @@ Tasks — first lifecycle-heavy domain application
 Notes grouped browsing UX
         |
         v
-Calendar redesign
+Calendar rich month view
+        |
+        v
+Calendar 1/3/7-day read-only schedule projection
         |
         v
 Events — timed occurrence semantics on Calendar

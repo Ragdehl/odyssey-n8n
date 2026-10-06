@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from odyssey_core.atomic_facts import capture_heading_date
+from odyssey_core.atomic_facts import (
+    AtomicFact,
+    AtomicFactError,
+    capture_heading_date,
+    parse_atomic_facts,
+)
 from odyssey_core.note_queries import (
     NoteBodyBlock,
     NoteDetail,
@@ -71,6 +76,38 @@ class CalendarMonth:
 
 
 @dataclass(frozen=True, slots=True)
+class CalendarScheduleItem:
+    """Represent one grounded all-day or timed item in a bounded schedule projection."""
+
+    kind: str
+    source_id: str
+    source_type: str
+    label: str
+    text: str | None
+    role: str
+    start_time: str | None = None
+    end_time: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CalendarScheduleDay:
+    """Represent one date in a bounded 1/3/7-day schedule window."""
+
+    date: str
+    all_day: tuple[CalendarScheduleItem, ...]
+    timed: tuple[CalendarScheduleItem, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CalendarSchedule:
+    """Represent one deterministic consecutive Calendar schedule window."""
+
+    start_date: str
+    day_count: int
+    days: tuple[CalendarScheduleDay, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CalendarJournal:
     """Represent a journal's semantic association with one Calendar day."""
 
@@ -127,6 +164,8 @@ class _ScannedNote:
     entry_date: str | None
     calendar_date: str | None
     body: str
+    metadata: dict[str, Any]
+    atomic_facts: tuple[AtomicFact, ...]
     capture_counts: dict[str, int]
     explicit_dates: tuple[str, ...]
     calendar_roles: dict[str, tuple[str, ...]]
@@ -317,8 +356,11 @@ class CalendarQueryService:
             body = note.content
             try:
                 explicit_dates = calendar_day_link_dates(_without_capture_headings(body))
-            except TemporalValueError as error:
-                raise CalendarQueryError("Calendar encountered an invalid temporal link") from error
+                atomic_facts = parse_atomic_facts(body)
+            except (TemporalValueError, AtomicFactError) as error:
+                raise CalendarQueryError(
+                    "Calendar encountered invalid temporal evidence"
+                ) from error
             note_type = str(note.metadata["type"])
             scanned.append(
                 _ScannedNote(
@@ -337,6 +379,8 @@ class CalendarQueryService:
                         else None
                     ),
                     body=body,
+                    metadata=dict(note.metadata),
+                    atomic_facts=atomic_facts,
                     capture_counts=_capture_counts(body),
                     explicit_dates=explicit_dates,
                     calendar_roles=_calendar_roles_for_note(dict(note.metadata), self.schema),
@@ -451,6 +495,154 @@ class CalendarQueryService:
             month,
             tuple(result),
         )
+
+    def schedule(self, start_date: str, day_count: int) -> CalendarSchedule:
+        """Return one deterministic 1/3/7-day schedule from grounded temporal evidence."""
+        try:
+            normalized = normalize_iso_date(start_date)
+        except TemporalValueError as error:
+            raise CalendarQueryError("Calendar schedule start date is invalid") from error
+        if day_count not in {1, 3, 7}:
+            raise CalendarQueryError("Calendar schedule day count is unsupported")
+
+        start = date.fromisoformat(normalized)
+        dates = tuple((start + timedelta(days=offset)).isoformat() for offset in range(day_count))
+        state: dict[str, dict[str, list[CalendarScheduleItem]]] = {
+            item: {"all_day": [], "timed": []} for item in dates
+        }
+
+        def timed_coordinate(value: str) -> tuple[str, str]:
+            try:
+                instant = datetime.fromisoformat(value)
+            except ValueError as error:
+                raise CalendarQueryError(
+                    "Calendar encountered invalid timed scheduling metadata"
+                ) from error
+            if instant.tzinfo is None or instant.utcoffset() is None:
+                raise CalendarQueryError("Calendar encountered naive timed scheduling metadata")
+            return instant.date().isoformat(), instant.strftime("%H:%M")
+
+        def add_task(note: _ScannedNote) -> None:
+            metadata = note.metadata
+            planned_date: str | None = None
+            planned_start_time: str | None = None
+            planned_start = metadata.get("planned_start_at")
+            if isinstance(planned_start, str):
+                planned_date, planned_start_time = timed_coordinate(planned_start)
+                start_time = planned_start_time
+                end_time: str | None = None
+                planned_end = metadata.get("planned_end_at")
+                if isinstance(planned_end, str):
+                    end_date, candidate_end = timed_coordinate(planned_end)
+                    if end_date == planned_date and candidate_end > start_time:
+                        end_time = candidate_end
+                if planned_date in state:
+                    state[planned_date]["timed"].append(
+                        CalendarScheduleItem(
+                            "task",
+                            note.id,
+                            note.type,
+                            _bounded_preview_text(note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                            None,
+                            "planned",
+                            start_time,
+                            end_time,
+                        )
+                    )
+
+            deadline_date: str | None = None
+            deadline = metadata.get("deadline_at")
+            if isinstance(deadline, str):
+                if len(deadline) == 10:
+                    try:
+                        deadline_date = normalize_iso_date(deadline)
+                    except TemporalValueError as error:
+                        raise CalendarQueryError(
+                            "Calendar encountered invalid task deadline"
+                        ) from error
+                    if deadline_date in state:
+                        state[deadline_date]["all_day"].append(
+                            CalendarScheduleItem(
+                                "task",
+                                note.id,
+                                note.type,
+                                _bounded_preview_text(note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                                None,
+                                "deadline",
+                            )
+                        )
+                else:
+                    deadline_date, deadline_time = timed_coordinate(deadline)
+                    if deadline_date in state and not (
+                        deadline_date == planned_date and deadline_time == planned_start_time
+                    ):
+                        state[deadline_date]["timed"].append(
+                            CalendarScheduleItem(
+                                "task",
+                                note.id,
+                                note.type,
+                                _bounded_preview_text(note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                                None,
+                                "deadline",
+                                deadline_time,
+                            )
+                        )
+
+            target = metadata.get("target_date")
+            if isinstance(target, str):
+                try:
+                    target_date = normalize_iso_date(target)
+                except TemporalValueError as error:
+                    raise CalendarQueryError(
+                        "Calendar encountered invalid task target date"
+                    ) from error
+                if target_date not in {planned_date, deadline_date} and target_date in state:
+                    state[target_date]["all_day"].append(
+                        CalendarScheduleItem(
+                            "task",
+                            note.id,
+                            note.type,
+                            _bounded_preview_text(note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                            None,
+                            "target",
+                        )
+                    )
+
+        for note in self._scan():
+            if note.type == "task":
+                add_task(note)
+            for fact in note.atomic_facts:
+                for anchor in fact.temporal_anchors:
+                    if anchor.date not in state:
+                        continue
+                    item = CalendarScheduleItem(
+                        "fact",
+                        note.id,
+                        note.type,
+                        _bounded_preview_text(note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                        _bounded_preview_text(fact.text, _MONTH_PREVIEW_TEXT_LIMIT),
+                        "semantic_time" if anchor.time is not None else "semantic_date",
+                        anchor.display_time,
+                    )
+                    state[anchor.date]["timed" if anchor.time is not None else "all_day"].append(
+                        item
+                    )
+
+        result: list[CalendarScheduleDay] = []
+        for item in dates:
+            all_day = state[item]["all_day"]
+            timed = state[item]["timed"]
+            all_day.sort(key=lambda entry: (entry.label.casefold(), entry.source_id, entry.role))
+            timed.sort(
+                key=lambda entry: (
+                    entry.start_time or "99:99",
+                    entry.label.casefold(),
+                    entry.source_id,
+                    entry.role,
+                )
+            )
+            result.append(CalendarScheduleDay(item, tuple(all_day), tuple(timed)))
+        return CalendarSchedule(normalized, day_count, tuple(result))
 
     def day(self, value: str) -> CalendarDayView:
         """Return one virtual or materialized Day split into approved semantic categories."""

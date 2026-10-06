@@ -42,6 +42,7 @@ def _calendar(tmp_path: Path) -> CalendarQueryService:
             "target_date": "2026-10-09",
             "deadline_at": "2026-10-12",
             "planned_start_at": "2026-10-09T15:35:00+02:00",
+            "planned_end_at": "2026-10-09T17:05:00+02:00",
             "completed_at": "2026-10-10T08:05:00+02:00",
             "created_at": "2026-10-05T07:00:00+02:00",
             "updated_at": "2026-10-10T08:05:00+02:00",
@@ -75,9 +76,33 @@ def test_task_dates_are_calendar_projection_coordinates(tmp_path: Path) -> None:
 
     ninth = calendar.day("2026-10-09")
     assert [(item.source.id, item.roles) for item in ninth.tasks] == [
-        ("task-bank", ("target", "planned_start"))
+        ("task-bank", ("target", "planned_start", "planned_end"))
     ]
     tenth = calendar.day("2026-10-10")
     assert tenth.tasks[0].roles == ("completed",)
     twelfth = calendar.day("2026-10-12")
     assert twelfth.tasks[0].roles == ("deadline",)
+
+
+def test_task_schedule_uses_planned_interval_and_keeps_date_only_deadline_all_day(
+    tmp_path: Path,
+) -> None:
+    calendar = _calendar(tmp_path)
+
+    schedule = calendar.schedule("2026-10-09", 7)
+
+    ninth = schedule.days[0]
+    assert ninth.all_day == ()
+    assert [
+        (item.kind, item.label, item.role, item.start_time, item.end_time) for item in ninth.timed
+    ] == [("task", "Llamar al banco", "planned", "15:35", "17:05")]
+
+    twelfth = schedule.days[3]
+    assert [(item.kind, item.label, item.role, item.start_time) for item in twelfth.all_day] == [
+        ("task", "Llamar al banco", "deadline", None)
+    ]
+
+    # completed_at is lifecycle history, not a planning-grid coordinate.
+    tenth = schedule.days[1]
+    assert tenth.all_day == ()
+    assert tenth.timed == ()

@@ -248,6 +248,17 @@ def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
         "calendar-next",
         "calendar-today",
         "calendar-expand",
+        "calendar-view-switch",
+        "calendar-view-month",
+        "calendar-view-7",
+        "calendar-view-3",
+        "calendar-view-1",
+        "calendar-schedule-view",
+        "calendar-schedule-title",
+        "calendar-schedule-grid",
+        "calendar-schedule-prev",
+        "calendar-schedule-next",
+        "calendar-schedule-today",
     } <= parser.ids
     assert "/api/calendar" in index
 
@@ -256,6 +267,7 @@ def test_calendar_v0_has_month_day_navigation_and_safe_note_handoff() -> None:
     notes = (WEB_ROOT / "notes.js").read_text(encoding="utf-8")
     assert 'operation: "month"' in calendar
     assert 'operation: "day"' in calendar
+    assert 'operation: "schedule"' in calendar
     assert '"Contenido del día"' in calendar
     assert '"Diario"' in calendar
     assert '"Capturado este día"' in calendar
@@ -352,6 +364,7 @@ def test_frontend_has_no_external_asset_or_durable_browser_persistence_dependenc
     assert "odyssey.notes.collapsed-types.v1" in notes
     assert "safeSessionStorage" in notes
     assert "odyssey.calendar.month.expanded" in calendar
+    assert "odyssey.calendar.view-mode" in calendar
     assert "safeSessionStorage" in calendar
     assert "innerHTML" not in combined
     assert "request_id" in client

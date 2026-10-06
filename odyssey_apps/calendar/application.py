@@ -28,4 +28,15 @@ class CalendarApplication:
             if set(payload) != {"date"} or not isinstance(payload.get("date"), str):
                 raise ValueError("Calendar day payload is invalid")
             return calendar_to_response(self._queries.day(payload["date"]))
+        if operation == "schedule":
+            if (
+                set(payload) != {"start_date", "day_count"}
+                or not isinstance(payload.get("start_date"), str)
+                or not isinstance(payload.get("day_count"), int)
+                or isinstance(payload.get("day_count"), bool)
+            ):
+                raise ValueError("Calendar schedule payload is invalid")
+            return calendar_to_response(
+                self._queries.schedule(payload["start_date"], payload["day_count"])
+            )
         raise ValueError("Calendar operation is unsupported")

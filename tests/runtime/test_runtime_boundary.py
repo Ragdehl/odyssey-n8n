@@ -471,9 +471,35 @@ def test_http_calendar_boundary_projects_month_and_day_with_typed_actor() -> Non
         response = connection.getresponse()
         assert response.status == 200
         assert json.loads(response.read()) == {"kind": "calendar_day", "date": "2026-10-01"}
+
+        connection.request(
+            "POST",
+            "/calendar",
+            body=json.dumps(
+                {
+                    "operation": "schedule",
+                    "start_date": "2026-10-06",
+                    "day_count": 3,
+                    "authenticated_actor": {"stable_user_id": user.stable_user_id},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {
+            "kind": "calendar_schedule",
+            "start_date": "2026-10-06",
+            "day_count": 3,
+        }
         assert calls == [
             ("month", {"month": "2026-10"}, user.stable_user_id, None),
             ("day", {"date": "2026-10-01"}, user.stable_user_id, None),
+            (
+                "schedule",
+                {"start_date": "2026-10-06", "day_count": 3},
+                user.stable_user_id,
+                None,
+            ),
         ]
     finally:
         server.shutdown()

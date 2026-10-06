@@ -5,7 +5,10 @@ import {typeBadge, typeLabel} from "./notes.js";
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
 const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", {month: "long", year: "numeric", timeZone: "UTC"});
 const DAY_FORMAT = new Intl.DateTimeFormat("es-ES", {weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC"});
+const SCHEDULE_DAY_FORMAT = new Intl.DateTimeFormat("es-ES", {weekday: "short", day: "numeric", month: "short", timeZone: "UTC"});
 const CALENDAR_DENSITY_KEY = "odyssey.calendar.month.expanded";
+const CALENDAR_VIEW_KEY = "odyssey.calendar.view-mode";
+const SCHEDULE_HOUR_HEIGHT = 60;
 
 export function mountCalendar(root, {
   endpoint = "/api/calendar",
@@ -13,6 +16,7 @@ export function mountCalendar(root, {
   sessionStorageImpl = safeSessionStorage(),
 } = {}) {
   const monthView = root.querySelector("#calendar-month-view");
+  const scheduleView = root.querySelector("#calendar-schedule-view");
   const dayView = root.querySelector("#calendar-day-view");
   const title = root.querySelector("#calendar-month-title");
   const grid = root.querySelector("#calendar-grid");
@@ -21,16 +25,33 @@ export function mountCalendar(root, {
   const expand = root.querySelector("#calendar-expand");
   const previous = root.querySelector("#calendar-prev");
   const next = root.querySelector("#calendar-next");
+  const scheduleTitle = root.querySelector("#calendar-schedule-title");
+  const scheduleGrid = root.querySelector("#calendar-schedule-grid");
+  const schedulePrevious = root.querySelector("#calendar-schedule-prev");
+  const scheduleNext = root.querySelector("#calendar-schedule-next");
+  const scheduleToday = root.querySelector("#calendar-schedule-today");
+  const viewButtons = new Map([
+    ["month", root.querySelector("#calendar-view-month")],
+    ["7", root.querySelector("#calendar-view-7")],
+    ["3", root.querySelector("#calendar-view-3")],
+    ["1", root.querySelector("#calendar-view-1")],
+  ]);
   const state = {
     month: localMonth(),
     monthValue: null,
     dayValue: null,
     loading: false,
     expanded: readExpandedState(sessionStorageImpl),
+    viewMode: readViewMode(sessionStorageImpl),
+    scheduleStart: localDate(),
+    scheduleValue: null,
+    dayReturnMode: "month",
     monthDetailDate: null,
     monthDetail: null,
   };
   let dayRequestGeneration = 0;
+  let scheduleRequestGeneration = 0;
+  let swipeStart = null;
   const inFlightDays = new Map();
 
   async function loadMonth(value = state.month) {
@@ -56,10 +77,167 @@ export function mountCalendar(root, {
     }
   }
 
+  async function loadSchedule(value = state.scheduleStart) {
+    const dayCount = Number(state.viewMode);
+    if (![1, 3, 7].includes(dayCount)) return;
+    const generation = ++scheduleRequestGeneration;
+    status.textContent = "Cargando agenda…";
+    try {
+      const schedule = await requestCalendar({
+        endpoint, operation: "schedule", payload: {start_date: value, day_count: dayCount},
+      });
+      if (generation !== scheduleRequestGeneration || state.viewMode === "month") return;
+      state.scheduleStart = schedule.start_date;
+      state.scheduleValue = schedule;
+      renderSchedule();
+      status.textContent = "";
+    } catch (error) {
+      if (generation !== scheduleRequestGeneration) return;
+      status.textContent = error instanceof CalendarRequestError
+        ? "No se ha podido cargar la agenda."
+        : "La agenda no está disponible.";
+    }
+  }
+
+  function renderViewSwitch() {
+    for (const [mode, control] of viewButtons) {
+      if (!control) continue;
+      control.setAttribute("aria-pressed", state.viewMode === mode ? "true" : "false");
+    }
+  }
+
+  function selectView(mode) {
+    if (!["month", "7", "3", "1"].includes(mode) || mode === state.viewMode) return;
+    state.viewMode = mode;
+    writeViewMode(sessionStorageImpl, mode);
+    state.dayValue = null;
+    state.monthDetailDate = null;
+    state.monthDetail = null;
+    renderViewSwitch();
+    status.textContent = "";
+    if (mode === "month") {
+      scheduleRequestGeneration += 1;
+      if (state.monthValue?.month === state.month) renderMonth();
+      else void loadMonth(state.month);
+      return;
+    }
+    monthView.hidden = true;
+    dayView.hidden = true;
+    scheduleView.hidden = false;
+    state.scheduleValue = null;
+    void loadSchedule(state.scheduleStart);
+  }
+
+  function navigateSchedule(direction) {
+    const dayCount = Number(state.viewMode);
+    if (![1, 3, 7].includes(dayCount)) return;
+    state.scheduleStart = shiftDate(state.scheduleStart, direction * dayCount);
+    void loadSchedule(state.scheduleStart);
+  }
+
+  function renderSchedule() {
+    const schedule = state.scheduleValue;
+    if (!schedule) return;
+    renderViewSwitch();
+    monthView.hidden = true;
+    dayView.hidden = true;
+    scheduleView.hidden = false;
+    scheduleTitle.textContent = scheduleRangeLabel(schedule.start_date, schedule.day_count);
+    scheduleGrid.className = `calendar-schedule-grid calendar-schedule-${schedule.day_count}`;
+
+    const header = document.createElement("div");
+    header.className = "calendar-schedule-header";
+    const headerAxis = document.createElement("span");
+    headerAxis.className = "calendar-schedule-axis-spacer";
+    header.append(headerAxis);
+    for (const day of schedule.days) {
+      const dayControl = button(scheduleDayLabel(day.date), () => void openDay(day.date));
+      dayControl.className = "calendar-schedule-day-heading";
+      if (day.date === localDate()) dayControl.className += " calendar-schedule-day-today";
+      header.append(dayControl);
+    }
+
+    const allDay = document.createElement("div");
+    allDay.className = "calendar-schedule-all-day";
+    const allDayLabel = document.createElement("span");
+    allDayLabel.className = "calendar-schedule-all-day-label";
+    allDayLabel.textContent = "Sin hora";
+    allDay.append(allDayLabel);
+    for (const day of schedule.days) {
+      const column = document.createElement("div");
+      column.className = "calendar-schedule-all-day-column";
+      for (const item of day.all_day) column.append(scheduleItem(item, false));
+      allDay.append(column);
+    }
+
+    const scroll = document.createElement("div");
+    scroll.className = "calendar-schedule-scroll";
+    const timeline = document.createElement("div");
+    timeline.className = "calendar-schedule-timeline";
+    const axis = document.createElement("div");
+    axis.className = "calendar-schedule-axis";
+    for (let hour = 0; hour < 24; hour += 1) {
+      const label = document.createElement("span");
+      label.className = "calendar-schedule-hour";
+      label.textContent = `${String(hour).padStart(2, "0")}:00`;
+      label.style.top = `${hour * SCHEDULE_HOUR_HEIGHT}px`;
+      axis.append(label);
+    }
+    timeline.append(axis);
+    for (const day of schedule.days) {
+      const lane = document.createElement("div");
+      lane.className = "calendar-schedule-lane";
+      for (const item of day.timed) lane.append(scheduleItem(item, true));
+      timeline.append(lane);
+    }
+    scroll.append(timeline);
+    scheduleGrid.replaceChildren(header, allDay, scroll);
+    queueMicrotask(() => {
+      if (scroll.scrollTop === 0) scroll.scrollTop = 6 * SCHEDULE_HOUR_HEIGHT;
+    });
+  }
+
+  function scheduleItem(item, timed) {
+    const value = button("", () => {
+      if (item.source_type === "calendar_day" && item.source_id.startsWith("date:")) {
+        void openDay(item.source_id.slice(5));
+      } else {
+        openNote(item.source_id);
+      }
+    });
+    value.className = `calendar-schedule-item calendar-schedule-item-${item.kind} calendar-schedule-role-${item.role}`;
+    value.append(typeBadge(item.source_type));
+    const copy = document.createElement("span");
+    copy.className = "calendar-schedule-item-copy";
+    const label = document.createElement("strong");
+    label.textContent = item.label;
+    copy.append(label);
+    if (item.text) {
+      const text = document.createElement("span");
+      text.textContent = item.text;
+      copy.append(text);
+    }
+    if (timed) {
+      const start = minutesForClock(item.start_time);
+      const end = item.end_time ? minutesForClock(item.end_time) : null;
+      value.style.top = `${start}px`;
+      value.style.height = `${end !== null && end > start ? Math.max(32, end - start) : 34}px`;
+      const time = document.createElement("span");
+      time.className = "calendar-schedule-item-time";
+      time.textContent = item.end_time ? `${item.start_time}–${item.end_time}` : item.start_time;
+      copy.append(time);
+    }
+    value.append(copy);
+    value.setAttribute("aria-label", scheduleItemAriaLabel(item));
+    return value;
+  }
+
   function renderMonth() {
     if (!state.monthValue) return;
     status.textContent = "";
+    renderViewSwitch();
     monthView.hidden = false;
+    scheduleView.hidden = true;
     dayView.hidden = true;
     title.textContent = monthLabel(state.monthValue.month);
     renderDensity();
@@ -222,6 +400,7 @@ export function mountCalendar(root, {
   }
 
   async function openDay(value) {
+    state.dayReturnMode = state.viewMode;
     const generation = ++dayRequestGeneration;
     status.textContent = "Cargando día…";
     try {
@@ -244,15 +423,22 @@ export function mountCalendar(root, {
     const day = state.dayValue;
     if (!day) return;
     monthView.hidden = true;
+    scheduleView.hidden = true;
     dayView.hidden = false;
     const header = document.createElement("header");
     header.className = "calendar-day-header";
-    const back = button("‹ Mes", () => {
+    const back = button(state.dayReturnMode === "month" ? "‹ Mes" : "‹ Agenda", () => {
       dayRequestGeneration += 1;
       status.textContent = "";
       state.dayValue = null;
-      if (state.monthValue?.month === state.month) renderMonth();
-      else void loadMonth(state.month);
+      if (state.dayReturnMode === "month") {
+        if (state.monthValue?.month === state.month) renderMonth();
+        else void loadMonth(state.month);
+      } else if (state.scheduleValue) {
+        renderSchedule();
+      } else {
+        void loadSchedule(state.scheduleStart);
+      }
     });
     const navigation = document.createElement("div");
     navigation.className = "calendar-day-date-nav";
@@ -461,12 +647,37 @@ export function mountCalendar(root, {
     state.month = localMonth();
     void openDay(localDate());
   });
+  schedulePrevious?.addEventListener("click", () => navigateSchedule(-1));
+  scheduleNext?.addEventListener("click", () => navigateSchedule(1));
+  scheduleToday?.addEventListener("click", () => {
+    state.scheduleStart = localDate();
+    void loadSchedule(state.scheduleStart);
+  });
+  for (const [mode, control] of viewButtons) control?.addEventListener("click", () => selectView(mode));
+  scheduleGrid?.addEventListener("touchstart", (event) => {
+    const touch = event.touches?.[0];
+    swipeStart = touch ? {x: touch.clientX, y: touch.clientY} : null;
+  }, {passive: true});
+  scheduleGrid?.addEventListener("touchend", (event) => {
+    const touch = event.changedTouches?.[0];
+    if (!swipeStart || !touch) {
+      swipeStart = null;
+      return;
+    }
+    const dx = touch.clientX - swipeStart.x;
+    const dy = touch.clientY - swipeStart.y;
+    swipeStart = null;
+    if (Math.abs(dx) < 55 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+    navigateSchedule(dx < 0 ? 1 : -1);
+  }, {passive: true});
   document.addEventListener("odyssey:open-calendar-day", (event) => {
     const value = event.detail?.date;
     if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) void openDay(value);
   });
-  void loadMonth();
-  return {state, openDay, loadMonth};
+  renderViewSwitch();
+  if (state.viewMode === "month") void loadMonth();
+  else void loadSchedule(state.scheduleStart);
+  return {state, openDay, loadMonth, loadSchedule, selectView};
 }
 
 function sectionWithHeading(label) {
@@ -505,6 +716,24 @@ function shiftMonth(value, offset) {
 }
 function monthLabel(value) { return MONTH_FORMAT.format(new Date(`${value}-01T00:00:00Z`)); }
 function dayLabel(value) { const label = DAY_FORMAT.format(new Date(`${value}T00:00:00Z`)); return label.charAt(0).toUpperCase() + label.slice(1); }
+function scheduleDayLabel(value) {
+  const label = SCHEDULE_DAY_FORMAT.format(new Date(`${value}T00:00:00Z`)).replace(".", "");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+function scheduleRangeLabel(startDate, dayCount) {
+  const endDate = shiftDate(startDate, dayCount - 1);
+  return dayCount === 1 ? scheduleDayLabel(startDate) : `${scheduleDayLabel(startDate)} – ${scheduleDayLabel(endDate)}`;
+}
+function minutesForClock(value) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+function scheduleItemAriaLabel(item) {
+  const time = item.start_time
+    ? `${item.start_time}${item.end_time ? ` a ${item.end_time}` : ""}. `
+    : "";
+  return `${time}${typeLabel(item.source_type)}: ${item.label}${item.text ? `. ${item.text}` : ""}`;
+}
 function mondayIndex(value) { const weekday = new Date(`${value}T00:00:00Z`).getUTCDay(); return (weekday + 6) % 7; }
 function localDate() {
   const now = new Date();
@@ -514,6 +743,17 @@ function localDate() {
 function localMonth() { return localDate().slice(0, 7); }
 function safeSessionStorage() {
   try { return globalThis.sessionStorage ?? null; } catch { return null; }
+}
+function readViewMode(storage) {
+  try {
+    const value = storage?.getItem(CALENDAR_VIEW_KEY);
+    return ["month", "7", "3", "1"].includes(value) ? value : "month";
+  } catch {
+    return "month";
+  }
+}
+function writeViewMode(storage, mode) {
+  try { storage?.setItem(CALENDAR_VIEW_KEY, mode); } catch {}
 }
 function readExpandedState(storage) {
   try { return storage?.getItem(CALENDAR_DENSITY_KEY) === "true"; }

@@ -2,6 +2,8 @@ const MONTH_PREVIEW_KINDS = new Set(["day_content", "journal", "capture", "task"
 const MONTH_PREVIEW_LIMIT = 4;
 const MONTH_PREVIEW_LABEL_LIMIT = 80;
 const MONTH_PREVIEW_TEXT_LIMIT = 120;
+const SCHEDULE_DAY_COUNTS = new Set([1, 3, 7]);
+const SCHEDULE_ROLES = new Set(["target", "deadline", "semantic_date", "planned", "semantic_time"]);
 
 export class CalendarRequestError extends Error {
   constructor(message) {
@@ -13,7 +15,7 @@ export class CalendarRequestError extends Error {
 export async function requestCalendar({
   endpoint = "/api/calendar", operation, payload = {}, fetchImpl = globalThis.fetch,
 }) {
-  if (!["month", "day"].includes(operation)) throw new CalendarRequestError("Operación de calendario no compatible.");
+  if (!["month", "day", "schedule"].includes(operation)) throw new CalendarRequestError("Operación de calendario no compatible.");
   let response;
   try {
     response = await fetchImpl(endpoint, {
@@ -37,6 +39,14 @@ export function validateCalendarResponse(value) {
     const days = value.days.map(validateMonthDay);
     if (days.some((day) => day.date.slice(0, 7) !== value.month)) throw new CalendarRequestError("Mes inconsistente.");
     return {kind: "calendar_month", month: value.month, days};
+  }
+  if (value.kind === "calendar_schedule") {
+    if (!isoDate(value.start_date) || !SCHEDULE_DAY_COUNTS.has(value.day_count) ||
+        !Array.isArray(value.days) || value.days.length !== value.day_count) {
+      throw new CalendarRequestError("Agenda de calendario inválida.");
+    }
+    const days = value.days.map((day, index) => validateScheduleDay(day, shiftIsoDate(value.start_date, index)));
+    return {kind: "calendar_schedule", start_date: value.start_date, day_count: value.day_count, days};
   }
   if (value.kind === "calendar_day") {
     if (!isoDate(value.date) || typeof value.materialized !== "boolean" || !Array.isArray(value.content) ||
@@ -75,6 +85,36 @@ function validateMonthPreview(value) {
   return value.text === undefined
     ? {kind: value.kind, source_type: value.source_type, label: value.label}
     : {kind: value.kind, source_type: value.source_type, label: value.label, text: value.text};
+}
+function validateScheduleDay(value, expectedDate) {
+  if (!value || value.date !== expectedDate || !Array.isArray(value.all_day) || !Array.isArray(value.timed)) {
+    throw new CalendarRequestError("Día de agenda inválido.");
+  }
+  const allDay = value.all_day.map((item) => validateScheduleItem(item, false));
+  const timed = value.timed.map((item) => validateScheduleItem(item, true));
+  return {date: value.date, all_day: allDay, timed};
+}
+function validateScheduleItem(value, timed) {
+  if (!value || !["task", "fact"].includes(value.kind) || !boundedText(value.source_id, 240) ||
+      !boundedText(value.source_type, 80) || !boundedText(value.label, MONTH_PREVIEW_LABEL_LIMIT) ||
+      !SCHEDULE_ROLES.has(value.role) ||
+      (value.text !== undefined && !boundedText(value.text, MONTH_PREVIEW_TEXT_LIMIT))) {
+    throw new CalendarRequestError("Elemento de agenda inválido.");
+  }
+  if (timed) {
+    if (!clock(value.start_time) || (value.end_time !== undefined && !clock(value.end_time))) {
+      throw new CalendarRequestError("Hora de agenda inválida.");
+    }
+  } else if (value.start_time !== undefined || value.end_time !== undefined) {
+    throw new CalendarRequestError("Elemento sin hora inválido.");
+  }
+  return {
+    kind: value.kind, source_id: value.source_id, source_type: value.source_type,
+    label: value.label, role: value.role,
+    ...(value.text !== undefined ? {text: value.text} : {}),
+    ...(value.start_time !== undefined ? {start_time: value.start_time} : {}),
+    ...(value.end_time !== undefined ? {end_time: value.end_time} : {}),
+  };
 }
 function validateJournal(value) {
   if (!value || !Array.isArray(value.content)) throw new CalendarRequestError("Diario inválido.");
@@ -115,6 +155,12 @@ function validateSegment(value) {
 function count(value) { if (!Number.isInteger(value) || value < 0) throw new CalendarRequestError("Conteo de calendario inválido."); return value; }
 function boundedText(value, maximum) { return typeof value === "string" && value.length > 0 && [...value].length <= maximum; }
 function text(value) { return typeof value === "string" && value.length > 0; }
+function clock(value) { return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value); }
+function shiftIsoDate(value, offset) {
+  const current = new Date(`${value}T00:00:00Z`);
+  current.setUTCDate(current.getUTCDate() + offset);
+  return current.toISOString().slice(0, 10);
+}
 function isoDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);

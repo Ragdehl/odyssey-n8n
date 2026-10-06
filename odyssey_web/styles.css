@@ -172,11 +172,14 @@ button:disabled { opacity: .55; }
 
 .app-header-actions { display: flex; align-items: center; gap: .35rem; margin-left: auto; }
 .app-header-actions .app-nav-button { margin-left: 0; }
-.calendar-workspace { grid-template-rows: auto auto minmax(0, 1fr); }
+.calendar-workspace { grid-template-rows: auto auto auto minmax(0, 1fr); }
 .calendar-app-header { justify-content: space-between; padding-bottom: .55rem; border-bottom: 1px solid rgba(23,32,51,.1); }
 .calendar-app-header .app-nav-button { margin-left: 0; }
+.calendar-view-switch { display: flex; justify-content: center; gap: .25rem; }
+.calendar-view-switch button { min-height: 2rem; padding: .3rem .55rem; background: #e7e9f4; color: #4d5870; font-size: .75rem; }
+.calendar-view-switch button[aria-pressed="true"] { background: #4138a0; color: #fff; }
 .calendar-status { min-height: 1.1rem; color: #6a7287; font-size: .78rem; }
-.calendar-month-view, .calendar-day-view { min-height: 0; overflow-y: auto; }
+.calendar-month-view, .calendar-day-view, .calendar-schedule-view { min-height: 0; overflow-y: auto; }
 .calendar-month-view { display: grid; align-content: start; gap: .7rem; }
 .calendar-month-controls { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto auto; align-items: center; gap: .4rem; }
 .calendar-month-controls h2 { margin: 0; text-align: center; font-size: 1.05rem; text-transform: capitalize; }
@@ -229,6 +232,47 @@ button:disabled { opacity: .55; }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+.calendar-schedule-view { display: grid; min-height: 0; align-content: start; gap: .55rem; }
+.calendar-schedule-controls { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: .4rem; }
+.calendar-schedule-controls h2 { margin: 0; min-width: 0; font-size: .95rem; text-align: center; text-transform: capitalize; }
+.calendar-schedule-controls button { min-height: 2.15rem; min-width: 2.15rem; padding: .3rem .5rem; }
+.calendar-schedule-grid { display: grid; min-height: 0; grid-template-rows: auto auto minmax(0,1fr); border: 1px solid rgba(23,32,51,.09); border-radius: .7rem; overflow: hidden; background: rgba(255,255,255,.55); }
+.calendar-schedule-header, .calendar-schedule-all-day, .calendar-schedule-timeline { display: grid; min-width: 0; grid-template-columns: 3.2rem repeat(3, minmax(0,1fr)); }
+.calendar-schedule-1 .calendar-schedule-header,
+.calendar-schedule-1 .calendar-schedule-all-day,
+.calendar-schedule-1 .calendar-schedule-timeline { grid-template-columns: 3.2rem minmax(0,1fr); }
+.calendar-schedule-7 .calendar-schedule-header,
+.calendar-schedule-7 .calendar-schedule-all-day,
+.calendar-schedule-7 .calendar-schedule-timeline { grid-template-columns: 3.2rem repeat(7, minmax(0,1fr)); }
+.calendar-schedule-header { border-bottom: 1px solid rgba(23,32,51,.09); background: rgba(248,249,253,.96); }
+.calendar-schedule-axis-spacer { min-width: 0; }
+.calendar-schedule-day-heading { min-width: 0; min-height: 2.6rem; padding: .28rem .15rem; border-radius: 0; background: transparent; color: #4b556d; font-size: .72rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-schedule-day-today { color: #554dcc; box-shadow: inset 0 -2px 0 #665ee8; }
+.calendar-schedule-all-day { align-items: start; border-bottom: 1px solid rgba(23,32,51,.09); background: rgba(250,250,252,.9); }
+.calendar-schedule-all-day-label { padding: .38rem .2rem; color: #7a8397; font-size: .6rem; text-align: right; }
+.calendar-schedule-all-day-column { display: grid; min-width: 0; gap: .12rem; padding: .22rem .12rem; border-left: 1px solid rgba(23,32,51,.07); }
+.calendar-schedule-scroll { min-height: 18rem; max-height: 65vh; overflow-y: auto; overscroll-behavior-y: contain; }
+.calendar-schedule-timeline { position: relative; height: 1440px; }
+.calendar-schedule-axis, .calendar-schedule-lane { position: relative; height: 1440px; }
+.calendar-schedule-axis { background: rgba(248,249,253,.75); }
+.calendar-schedule-hour { position: absolute; left: 0; right: .28rem; transform: translateY(-.45em); color: #7a8397; font-size: .6rem; text-align: right; font-variant-numeric: tabular-nums; }
+.calendar-schedule-lane { min-width: 0; border-left: 1px solid rgba(23,32,51,.08); background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 59px, rgba(23,32,51,.08) 59px, rgba(23,32,51,.08) 60px); }
+.calendar-schedule-item { min-width: 0; border-radius: .35rem; background: #edf0f8; color: #39445d; text-align: left; overflow: hidden; }
+.calendar-schedule-all-day-column .calendar-schedule-item { display: flex; align-items: flex-start; gap: .12rem; min-height: 1.65rem; padding: .2rem .25rem; font-size: .63rem; }
+.calendar-schedule-lane .calendar-schedule-item { position: absolute; left: .12rem; right: .12rem; display: flex; align-items: flex-start; gap: .12rem; padding: .2rem .24rem; border-left: 3px solid #665ee8; font-size: .64rem; z-index: 1; }
+.calendar-schedule-item .note-type { flex: 0 0 auto; width: .78rem; height: .78rem; }
+.calendar-schedule-item .note-type svg { width: .62rem; height: .62rem; }
+.calendar-schedule-item-copy { display: grid; min-width: 0; gap: .08rem; line-height: 1.15; }
+.calendar-schedule-item-copy strong, .calendar-schedule-item-copy span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.calendar-schedule-item-copy strong { font-size: .66rem; }
+.calendar-schedule-item-copy > span:not(.calendar-schedule-item-time) { color: #626c82; }
+.calendar-schedule-item-time { color: #4d5870; font-size: .56rem; font-variant-numeric: tabular-nums; }
+.calendar-schedule-7 .calendar-schedule-item { padding-left: .12rem; padding-right: .12rem; }
+.calendar-schedule-7 .calendar-schedule-item .note-type { display: none; }
+.calendar-schedule-7 .calendar-schedule-item-copy > span:not(.calendar-schedule-item-time) { display: none; }
+.calendar-schedule-7 .calendar-schedule-item-copy strong { font-size: .57rem; }
+.calendar-schedule-7 .calendar-schedule-item-time { font-size: .52rem; }
+
 .calendar-day-view { padding: .1rem .05rem .7rem; }
 .calendar-day-header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .55rem; margin-bottom: .8rem; }
 .calendar-day-header > button, .calendar-day-date-nav button { min-height: 2.25rem; padding: .35rem .55rem; background: #e7e9f4; color: #39445d; }

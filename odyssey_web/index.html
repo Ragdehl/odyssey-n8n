@@ -80,6 +80,12 @@
         <h1 id="calendar-title">Calendario</h1>
         <button id="calendar-notes-tab" class="app-nav-button" type="button">Notas</button>
       </header>
+      <nav id="calendar-view-switch" class="calendar-view-switch" aria-label="Vista de calendario">
+        <button id="calendar-view-month" type="button" aria-pressed="true">Mes</button>
+        <button id="calendar-view-7" type="button" aria-pressed="false">7 días</button>
+        <button id="calendar-view-3" type="button" aria-pressed="false">3 días</button>
+        <button id="calendar-view-1" type="button" aria-pressed="false">1 día</button>
+      </nav>
       <p id="calendar-status" class="calendar-status" aria-live="polite"></p>
       <section id="calendar-month-view" class="calendar-month-view">
         <div class="calendar-month-controls">
@@ -90,6 +96,15 @@
           <button id="calendar-expand" type="button" aria-label="Vista ampliada" aria-pressed="false" title="Vista ampliada">⛶</button>
         </div>
         <div id="calendar-grid" class="calendar-grid" aria-label="Vista mensual"></div>
+      </section>
+      <section id="calendar-schedule-view" class="calendar-schedule-view" hidden>
+        <div class="calendar-schedule-controls">
+          <button id="calendar-schedule-prev" type="button" aria-label="Periodo anterior">‹</button>
+          <h2 id="calendar-schedule-title"></h2>
+          <button id="calendar-schedule-next" type="button" aria-label="Periodo siguiente">›</button>
+          <button id="calendar-schedule-today" type="button">Hoy</button>
+        </div>
+        <div id="calendar-schedule-grid" class="calendar-schedule-grid" aria-label="Agenda por horas"></div>
       </section>
       <article id="calendar-day-view" class="calendar-day-view" hidden></article>
     </section>

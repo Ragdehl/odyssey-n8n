@@ -195,7 +195,14 @@ Core-managed Day notes do not appear in the ordinary Notes feed by default, alth
 
 Week uses Monday through Sunday in v0. Locale/user-configurable week starts are deferred. Week/month/year are calculated views over date ranges, not separately persisted Notes in this phase.
 
-A full scheduling-style hourly week/day/three-day grid remains deferred until Events provides lifecycle-owned timed objects that justify it. The data foundation is nevertheless ready earlier: atomic facts can already carry semantic `TemporalAnchor` times and independent `recorded_at` capture times, so a later Day Agenda/Activity presentation can order existing knowledge by semantic time or capture time without inventing hours retroactively. Calendar v0 must not create an empty Google-Calendar-style scheduling UI before the event contract exists.
+The original v0 decision deferred a scheduling-style hourly week/day/three-day grid until real timed
+objects justified it. That condition is now partially met: Tasks owns structured planned start/end
+coordinates and Core atomic facts can carry exact semantic `TemporalAnchor` times. The later
+[Calendar multi-day schedule view](calendar-multiday-schedule-view.md) therefore adds a read-only
+1/3/7-day hourly projection over those existing canonical coordinates without inventing hours or
+creating Event semantics inside Calendar. `recorded_at` remains capture chronology, never semantic
+schedule position. Events still owns future occurrence lifecycle/recurrence and will project into the
+same schedule surface rather than requiring a second calendar model.
 
 Implementation note after Slice 4: Calendar now owns its deterministic `month` + `day` projection and presentation boundary under `odyssey_apps/calendar/`, while reusable temporal/Day primitives remain in Core. It also has a dedicated framework-free browser surface. Month projection scans current validated canonical Markdown and exposes bounded indicators for Day-owned content, Journal `entry_date`, same-day captured facts, and explicit temporal references; Day projection keeps those categories separate and opens virtual dates without materialization. Browser responses contain only Core-resolved presentation blocks and stable Note summaries, never raw vault paths or browser-side Markdown parsing authority. Notes date links hand navigation to Calendar, while Calendar related-note controls hand navigation back to Notes. Provider-free backend and browser end-to-end tests cover real canonical write -> Day chronology/materialization -> index rebuild -> month/Day projection and month -> Day -> related Note navigation. The checked-in DEV route inventory includes the Calendar modules/API, but no live DEV or public-route deployment is implied by the implementation commit.
 

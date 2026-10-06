@@ -21,6 +21,8 @@ class FakeElement {
     this.tagName = tagName;
     this.children = [];
     this.dataset = {};
+    this.style = {};
+    this.scrollTop = 0;
     this.className = "";
     this.hidden = false;
     this.parentNode = null;
@@ -121,18 +123,33 @@ async function mountCalendar(
   const document = new FakeDocument();
   const root = new FakeElement("section");
   const elements = {
-    monthView: new FakeElement("section"), dayView: new FakeElement("article"),
+    monthView: new FakeElement("section"), scheduleView: new FakeElement("section"),
+    dayView: new FakeElement("article"),
     title: new FakeElement("h2"), grid: new FakeElement("div"), status: new FakeElement("p"),
     today: new FakeElement("button"), expand: new FakeElement("button"),
     previous: new FakeElement("button"), next: new FakeElement("button"),
+    scheduleTitle: new FakeElement("h2"), scheduleGrid: new FakeElement("div"),
+    schedulePrevious: new FakeElement("button"), scheduleNext: new FakeElement("button"),
+    scheduleToday: new FakeElement("button"),
+    viewMonth: new FakeElement("button"), view7: new FakeElement("button"),
+    view3: new FakeElement("button"), view1: new FakeElement("button"),
   };
+  elements.scheduleView.hidden = true;
   elements.dayView.hidden = true;
   const map = new Map([
-    ["#calendar-month-view", elements.monthView], ["#calendar-day-view", elements.dayView],
+    ["#calendar-month-view", elements.monthView], ["#calendar-schedule-view", elements.scheduleView],
+    ["#calendar-day-view", elements.dayView],
     ["#calendar-month-title", elements.title], ["#calendar-grid", elements.grid],
     ["#calendar-status", elements.status], ["#calendar-today", elements.today],
     ["#calendar-expand", elements.expand],
     ["#calendar-prev", elements.previous], ["#calendar-next", elements.next],
+    ["#calendar-schedule-title", elements.scheduleTitle],
+    ["#calendar-schedule-grid", elements.scheduleGrid],
+    ["#calendar-schedule-prev", elements.schedulePrevious],
+    ["#calendar-schedule-next", elements.scheduleNext],
+    ["#calendar-schedule-today", elements.scheduleToday],
+    ["#calendar-view-month", elements.viewMonth], ["#calendar-view-7", elements.view7],
+    ["#calendar-view-3", elements.view3], ["#calendar-view-1", elements.view1],
   ]);
   root.querySelector = (selector) => map.get(selector) ?? null;
   globalThis.document = document;
@@ -202,6 +219,30 @@ test("Calendar client sends only the bounded same-origin operation and validates
   });
   assert.equal(day.journals[0].source.type, "journal_entry");
   assert.equal(day.journals[0].content[0].segments[0].text, "Texto del diario.");
+
+  const schedule = validateCalendarResponse({
+    kind: "calendar_schedule", start_date: "2026-10-06", day_count: 3, days: [
+      {
+        date: "2026-10-06",
+        all_day: [{kind: "fact", source_id: "marta", source_type: "person", label: "Marta", text: "Viaja.", role: "semantic_date"}],
+        timed: [{kind: "task", source_id: "task-1", source_type: "task", label: "Pintar", role: "planned", start_time: "14:00", end_time: "16:00"}],
+      },
+      {date: "2026-10-07", all_day: [], timed: []},
+      {date: "2026-10-08", all_day: [], timed: []},
+    ],
+  });
+  assert.equal(schedule.day_count, 3);
+  assert.equal(schedule.days[0].timed[0].start_time, "14:00");
+  assert.throws(() => validateCalendarResponse({
+    kind: "calendar_schedule", start_date: "2026-10-06", day_count: 2, days: [],
+  }), CalendarRequestError);
+  assert.throws(() => validateCalendarResponse({
+    kind: "calendar_schedule", start_date: "2026-10-06", day_count: 1, days: [{
+      date: "2026-10-06",
+      all_day: [{kind: "fact", source_id: "marta", source_type: "person", label: "Marta", role: "semantic_date", start_time: "08:00"}],
+      timed: [],
+    }],
+  }), CalendarRequestError);
   assert.throws(() => validateCalendarResponse({
     kind: "calendar_month", month: "2026-10", days: [{
       date: "2026-10-01", materialized: false, has_content: false,
@@ -347,6 +388,71 @@ test("month density toggle expands the grid and persists for the browser session
   );
   assert.equal(restored.controller.state.expanded, true);
   assert.equal(restored.elements.grid.className, "calendar-grid calendar-grid-expanded");
+});
+
+test("3-day schedule renders timed/all-day items and swipes by one full window", async () => {
+  const stored = new Map([["odyssey.calendar.view-mode", "3"]]);
+  const storage = {
+    getItem(key) { return stored.get(key) ?? null; },
+    setItem(key, value) { stored.set(key, value); },
+  };
+  const calls = [];
+  const shift = (value, offset) => {
+    const current = new Date(`${value}T00:00:00Z`);
+    current.setUTCDate(current.getUTCDate() + offset);
+    return current.toISOString().slice(0, 10);
+  };
+  const scheduleFor = (startDate, dayCount) => ({
+    kind: "calendar_schedule", start_date: startDate, day_count: dayCount,
+    days: Array.from({length: dayCount}, (_, index) => ({
+      date: shift(startDate, index),
+      all_day: index === 0
+        ? [{kind: "fact", source_id: "marta", source_type: "person", label: "Marta", text: "Viaja a París.", role: "semantic_date"}]
+        : [],
+      timed: index === 0
+        ? [{kind: "task", source_id: "task-paint", source_type: "task", label: "Pintar la pared", role: "planned", start_time: "14:00", end_time: "16:00"}]
+        : [],
+    })),
+  });
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    calls.push({operation, payload});
+    if (operation === "schedule") return scheduleFor(payload.start_date, payload.day_count);
+    if (operation === "day") {
+      return {kind: "calendar_day", date: payload.date, materialized: false, content: [], journals: [], captures: [], references: [], tasks: []};
+    }
+    throw new Error("unexpected operation");
+  }, async () => { throw new Error("unexpected Notes mutation"); }, storage);
+
+  assert.equal(calls[0].operation, "schedule");
+  assert.equal(calls[0].payload.day_count, 3);
+  const firstStart = calls[0].payload.start_date;
+  assert.equal(mounted.elements.monthView.hidden, true);
+  assert.equal(mounted.elements.scheduleView.hidden, false);
+  assert.equal(mounted.elements.view3["aria-pressed"], "true");
+  assert.equal(mounted.elements.scheduleGrid.querySelectorAll(".calendar-schedule-day-heading").length, 3);
+  const timed = mounted.elements.scheduleGrid.querySelector(".calendar-schedule-item-task");
+  assert.equal(timed.style.top, "840px");
+  assert.equal(timed.style.height, "120px");
+  assert.equal(timed.textContent.includes("Pintar la pared"), true);
+  assert.equal(mounted.elements.scheduleGrid.textContent.includes("Viaja a París."), true);
+
+  mounted.elements.scheduleGrid.emit("touchstart", {touches: [{clientX: 220, clientY: 100}]});
+  mounted.elements.scheduleGrid.emit("touchend", {changedTouches: [{clientX: 100, clientY: 105}]});
+  await flush();
+
+  const scheduleCalls = calls.filter(({operation}) => operation === "schedule");
+  assert.equal(scheduleCalls.length, 2);
+  assert.deepEqual(scheduleCalls.at(-1).payload, {start_date: shift(firstStart, 3), day_count: 3});
+
+  mounted.elements.view7.click();
+  await flush();
+  assert.equal(stored.get("odyssey.calendar.view-mode"), "7");
+  assert.equal(calls.filter(({operation}) => operation === "schedule").at(-1).payload.day_count, 7);
+
+  const noteItem = mounted.elements.scheduleGrid.querySelector(".calendar-schedule-item-fact");
+  noteItem.click();
+  assert.equal(mounted.document.events.at(-1).type, "odyssey:open-note");
+  assert.deepEqual(mounted.document.events.at(-1).detail, {note_id: "marta"});
 });
 
 test("month Ver más loads only that Day, adds an internal-scroll state, and closes the previous Day", async () => {

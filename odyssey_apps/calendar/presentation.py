@@ -6,10 +6,12 @@ from collections.abc import Sequence
 
 from odyssey_core.note_queries import NoteBodyBlock, NoteBodySegment, NoteSummary
 
-from .queries import CalendarDayView, CalendarMonth
+from .queries import CalendarDayView, CalendarMonth, CalendarSchedule, CalendarScheduleItem
 
 
-def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, object]:
+def calendar_to_response(
+    value: CalendarMonth | CalendarDayView | CalendarSchedule,
+) -> dict[str, object]:
     """Serialize a Calendar query result without exposing paths or Markdown authority."""
     if isinstance(value, CalendarMonth):
         return {
@@ -36,6 +38,20 @@ def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, ob
                     ],
                 }
                 for item in value.days
+            ],
+        }
+    if isinstance(value, CalendarSchedule):
+        return {
+            "kind": "calendar_schedule",
+            "start_date": value.start_date,
+            "day_count": value.day_count,
+            "days": [
+                {
+                    "date": day.date,
+                    "all_day": [_schedule_item_to_response(item) for item in day.all_day],
+                    "timed": [_schedule_item_to_response(item) for item in day.timed],
+                }
+                for day in value.days
             ],
         }
     if isinstance(value, CalendarDayView):
@@ -78,6 +94,20 @@ def calendar_to_response(value: CalendarMonth | CalendarDayView) -> dict[str, ob
             ],
         }
     raise TypeError("Calendar response is invalid")
+
+
+def _schedule_item_to_response(item: CalendarScheduleItem) -> dict[str, object]:
+    """Serialize one grounded schedule item without exposing canonical storage details."""
+    return {
+        "kind": item.kind,
+        "source_id": item.source_id,
+        "source_type": item.source_type,
+        "label": item.label,
+        "role": item.role,
+        **({"text": item.text} if item.text is not None else {}),
+        **({"start_time": item.start_time} if item.start_time is not None else {}),
+        **({"end_time": item.end_time} if item.end_time is not None else {}),
+    }
 
 
 def _block_to_response(block: NoteBodyBlock) -> dict[str, object]:

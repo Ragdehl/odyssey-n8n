@@ -229,6 +229,59 @@ def test_month_preview_is_category_ordered_source_sorted_and_strictly_bounded(
     ]
 
 
+def test_schedule_projects_semantic_fact_dates_and_times_without_using_capture_time(
+    tmp_path: Path, schema: dict
+) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write(
+        vault,
+        "people/marta.md",
+        "marta",
+        "Marta",
+        "person",
+        "# Added [[calendar/days/2026-10-01|01-10-2026]]\n"
+        "- Tiene dentista.\n"
+        "  <!-- odyssey:fact request=r1 ordinal=0 recorded_at=2026-10-01T08:15:00+02:00 "
+        "temporal=2026-10-06T15:35:00+02:00 -->\n"
+        "- Viaja a París.\n"
+        "  <!-- odyssey:fact request=r2 ordinal=0 recorded_at=2026-10-01T08:16:00+02:00 "
+        "temporal=2026-10-07 -->",
+    )
+    repository = VaultRepository(vault)
+    index = ContextIndex(tmp_path / "runtime" / "context.sqlite3")
+    index.rebuild(repository, schema, Embedder())
+    calendar = CalendarQueryService(
+        repository, schema, NotesQueryService(repository, schema, index)
+    )
+
+    schedule = calendar.schedule("2026-10-06", 3)
+
+    assert [day.date for day in schedule.days] == [
+        "2026-10-06",
+        "2026-10-07",
+        "2026-10-08",
+    ]
+    assert [
+        (item.kind, item.label, item.text, item.role, item.start_time, item.end_time)
+        for item in schedule.days[0].timed
+    ] == [("fact", "Marta", "Tiene dentista.", "semantic_time", "15:35", None)]
+    assert [(item.kind, item.label, item.text, item.role) for item in schedule.days[1].all_day] == [
+        ("fact", "Marta", "Viaja a París.", "semantic_date")
+    ]
+    assert schedule.days[0].all_day == ()
+    assert schedule.days[2].timed == ()
+
+
+@pytest.mark.parametrize("day_count", [0, 2, 4, 8])
+def test_schedule_rejects_unsupported_window_sizes(
+    tmp_path: Path, schema: dict, day_count: int
+) -> None:
+    calendar = service(tmp_path, schema)
+    with pytest.raises(CalendarQueryError):
+        calendar.schedule("2026-10-01", day_count)
+
+
 def test_day_keeps_own_content_journal_capture_and_explicit_reference_separate(
     tmp_path: Path, schema: dict
 ) -> None:

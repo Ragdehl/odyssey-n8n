@@ -17,6 +17,9 @@ from .queries import (
     CalendarQueryError,
     CalendarQueryService,
     CalendarReference,
+    CalendarSchedule,
+    CalendarScheduleDay,
+    CalendarScheduleItem,
     normalize_month,
 )
 
@@ -31,6 +34,9 @@ __all__ = [
     "CalendarQueryError",
     "CalendarQueryService",
     "CalendarReference",
+    "CalendarSchedule",
+    "CalendarScheduleDay",
+    "CalendarScheduleItem",
     "calendar_to_response",
     "normalize_month",
 ]
