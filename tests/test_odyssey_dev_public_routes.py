@@ -71,7 +71,6 @@ def test_inventory_is_the_complete_explicit_ui2_product_surface() -> None:
         ("GET", "/api/odyssey", "static"),
         ("GET", "/api/styles.css", "static"),
         ("GET", "/api/environment.js", "static"),
-        ("GET", "/api/action-icons.js", "static"),
         ("GET", "/api/app.js", "static"),
         ("GET", "/api/client.js", "static"),
         ("GET", "/api/notes.js", "static"),

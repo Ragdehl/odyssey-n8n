@@ -1,6 +1,23 @@
 /** In-memory presentation/state controller for the dependency-free Notes application view. */
-import {actionButton as iconButton, setActionIcon as setIconButton} from "./action-icons.js";
 import {NotesRequestError, requestNotes} from "./notes-client.js";
+
+const ACTION_ICONS = Object.freeze({
+  chat: ["M21 12a8 8 0 0 1-8 8H7l-4 2 1.3-4.2A8 8 0 1 1 21 12Z"],
+  notes: ["M6 3h9l3 3v15H6z", "M14 3v5h4", "M9 12h6M9 16h6"],
+  calendar: ["M5 5h14v14H5z", "M8 3v4M16 3v4M5 9h14", "M9 13h2v2H9z"],
+  edit: ["M4 20l4.5-1 10-10-3.5-3.5-10 10L4 20Z", "m13.5-15.5 3.5 3.5"],
+  delete: ["M5 7h14", "M9 7V4h6v3", "M8 10v8M12 10v8M16 10v8", "M6 7l1 14h10l1-14"],
+  add: ["M12 5v14M5 12h14"],
+  play: ["M8 5v14l11-7L8 5Z"],
+  stop: ["M7 7h10v10H7z"],
+  clock: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "M12 7v5l3 2"],
+  chevronUp: ["m7 14 5-5 5 5"],
+  chevronDown: ["m7 10 5 5 5-5"],
+  check: ["m5 12 4 4L19 6"],
+  close: ["M7 7l10 10M17 7 7 17"],
+  more: ["M5 12h.01M12 12h.01M19 12h.01"],
+  openNote: ["M6 3h9l3 3v15H6z", "M14 3v5h4", "M10 15h7", "m14 12 3 3-3 3"],
+});
 
 const TYPE_PRESENTATION = Object.freeze({
   concept: {label: "Concepto", paths: ["M12 3a6 6 0 0 0-3.8 10.6c.8.6 1.3 1.5 1.5 2.4h4.6c.2-.9.7-1.8 1.5-2.4A6 6 0 0 0 12 3Z", "M10 19h4M10.5 22h3"]},
@@ -650,13 +667,13 @@ export function mountNotes(root, {
     title.append(typeBadge(value.note.type), document.createTextNode(value.note.name));
     const headerControls = document.createElement("div");
     headerControls.className = "note-edit-controls";
-    const edit = iconButton(state.editing ? "check" : "edit", state.editing ? "Terminar edición" : "Editar nota", () => {
+    const edit = actionButton(state.editing ? "check" : "edit", state.editing ? "Terminar edición" : "Editar nota", () => {
       state.editing = !state.editing;
       renderDetail();
     }, "note-edit-toggle action-edit");
     headerControls.append(edit);
     if (state.editing && value.mutation) {
-      const removeNote = iconButton("delete", "Eliminar nota", () => void deleteNote(value, removeNote), "note-danger-button note-delete-button action-delete");
+      const removeNote = actionButton("delete", "Eliminar nota", () => void deleteNote(value, removeNote), "note-danger-button note-delete-button action-delete");
       headerControls.append(removeNote);
     }
     header.append(title, headerControls);
@@ -765,7 +782,7 @@ export function mountNotes(root, {
     heading.textContent = "Sesiones de trabajo";
     const sessions = Array.isArray(value.work_sessions) ? value.work_sessions : [];
     const active = sessions.find((session) => !session.ended_at) ?? null;
-    const control = iconButton(
+    const control = actionButton(
       active ? "stop" : "play",
       active ? "Terminar sesión" : "Empezar sesión",
       () => {
@@ -819,8 +836,8 @@ export function mountNotes(root, {
         endLabel.append(end);
         const actions = document.createElement("div");
         actions.className = "work-session-edit-actions";
-        const save = iconButton("check", "Guardar horario", () => void saveWorkSessionEdit(value, session, start, end, save), "work-session-save action-save");
-        const cancel = iconButton("close", "Cancelar edición", () => {
+        const save = actionButton("check", "Guardar horario", () => void saveWorkSessionEdit(value, session, start, end, save), "work-session-save action-save");
+        const cancel = actionButton("close", "Cancelar edición", () => {
           state.editingWorkSessionId = null;
           renderDetail();
         }, "work-session-cancel action-cancel");
@@ -834,12 +851,12 @@ export function mountNotes(root, {
         label.textContent = workSessionLabel(session);
         const actions = document.createElement("div");
         actions.className = "work-session-row-actions";
-        const open = iconButton(openedSession ? "chevronUp" : "chevronDown", openedSession ? "Contraer sesión" : "Expandir sesión", () => {
+        const open = actionButton(openedSession ? "chevronUp" : "chevronDown", openedSession ? "Contraer sesión" : "Expandir sesión", () => {
           state.workSessionDisclosure.set(session.id, !openedSession);
           state.editingWorkSessionActivityId = null;
           renderDetail();
         }, "work-session-open action-disclosure");
-        const edit = iconButton("clock", "Editar horario", () => {
+        const edit = actionButton("clock", "Editar horario", () => {
           state.editingWorkSessionId = session.id;
           state.editingWorkSessionActivityId = null;
           renderDetail();
@@ -880,8 +897,8 @@ export function mountNotes(root, {
           input.className = "work-session-activity-edit-input";
           const actions = document.createElement("div");
           actions.className = "work-session-activity-actions";
-          const save = iconButton("check", "Guardar actividad", () => void editWorkSessionActivity(value, session, entry, input, save), "action-save");
-          const cancel = iconButton("close", "Cancelar edición", () => {
+          const save = actionButton("check", "Guardar actividad", () => void editWorkSessionActivity(value, session, entry, input, save), "action-save");
+          const cancel = actionButton("close", "Cancelar edición", () => {
             state.editingWorkSessionActivityId = null;
             renderDetail();
           }, "action-cancel");
@@ -897,11 +914,11 @@ export function mountNotes(root, {
           content.append(time, document.createTextNode(" · "), text);
           const actions = document.createElement("div");
           actions.className = "work-session-activity-actions";
-          const edit = iconButton("edit", "Editar actividad", () => {
+          const edit = actionButton("edit", "Editar actividad", () => {
             state.editingWorkSessionActivityId = entry.id;
             renderDetail();
           }, "action-edit");
-          const remove = iconButton("delete", "Eliminar actividad", () => void deleteWorkSessionActivity(value, session, entry, remove), "note-danger-button action-delete");
+          const remove = actionButton("delete", "Eliminar actividad", () => void deleteWorkSessionActivity(value, session, entry, remove), "note-danger-button action-delete");
           actions.append(edit, remove);
           row.append(content, actions);
         }
@@ -916,7 +933,7 @@ export function mountNotes(root, {
     input.maxLength = 2000;
     input.placeholder = session.ended_at ? "Añadir algo que hiciste en esta sesión…" : "Añadir lo que estás haciendo…";
     input.setAttribute("aria-label", "Actividad de la sesión de trabajo");
-    const add = iconButton("add", "Añadir actividad", () => {}, "action-add");
+    const add = actionButton("add", "Añadir actividad", () => {}, "action-add");
     add.type = "submit";
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -929,7 +946,7 @@ export function mountNotes(root, {
 
   async function startWorkSession(value, control) {
     control.disabled = true;
-    setIconButton(control, "more", "Iniciando sesión");
+    setActionIcon(control, "more", "Iniciando sesión");
     try {
       const result = await requestNotes({endpoint, operation: "work_session_start", payload: {
         note_id: value.note.id,
@@ -946,14 +963,14 @@ export function mountNotes(root, {
       status.textContent = "Sesión de trabajo iniciada.";
     } catch (error) {
       control.disabled = false;
-      setIconButton(control, "play", "Empezar sesión");
+      setActionIcon(control, "play", "Empezar sesión");
       status.textContent = mutationErrorMessage(error);
     }
   }
 
   async function stopWorkSession(value, session, control) {
     control.disabled = true;
-    setIconButton(control, "more", "Terminando sesión");
+    setActionIcon(control, "more", "Terminando sesión");
     try {
       const result = await requestNotes({endpoint, operation: "work_session_stop", payload: {
         session_id: session.id,
@@ -969,7 +986,7 @@ export function mountNotes(root, {
       status.textContent = "Sesión terminada. Puedes seguir añadiendo actividad si lo necesitas.";
     } catch (error) {
       control.disabled = false;
-      setIconButton(control, "stop", "Terminar sesión");
+      setActionIcon(control, "stop", "Terminar sesión");
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -982,7 +999,7 @@ export function mountNotes(root, {
       return;
     }
     control.disabled = true;
-    setIconButton(control, "more", "Guardando horario");
+    setActionIcon(control, "more", "Guardando horario");
     try {
       const result = await requestNotes({endpoint, operation: "work_session_edit", payload: {
         session_id: session.id, started_at: startedAt, ended_at: endedAt,
@@ -997,7 +1014,7 @@ export function mountNotes(root, {
       status.textContent = "Sesión de trabajo corregida.";
     } catch (error) {
       control.disabled = false;
-      setIconButton(control, "check", "Guardar horario");
+      setActionIcon(control, "check", "Guardar horario");
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -1010,7 +1027,7 @@ export function mountNotes(root, {
       return;
     }
     control.disabled = true;
-    setIconButton(control, "more", "Añadiendo actividad");
+    setActionIcon(control, "more", "Añadiendo actividad");
     try {
       const result = await requestNotes({endpoint, operation: "work_session_activity_add", payload: {
         session_id: session.id, text,
@@ -1025,7 +1042,7 @@ export function mountNotes(root, {
       status.textContent = "Actividad añadida a la sesión.";
     } catch (error) {
       control.disabled = false;
-      setIconButton(control, "add", "Añadir actividad");
+      setActionIcon(control, "add", "Añadir actividad");
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -1038,7 +1055,7 @@ export function mountNotes(root, {
       return;
     }
     control.disabled = true;
-    setIconButton(control, "more", "Guardando actividad");
+    setActionIcon(control, "more", "Guardando actividad");
     try {
       const result = await requestNotes({endpoint, operation: "work_session_activity_edit", payload: {
         session_id: session.id, activity_id: entry.id, text,
@@ -1053,7 +1070,7 @@ export function mountNotes(root, {
       status.textContent = "Actividad corregida.";
     } catch (error) {
       control.disabled = false;
-      setIconButton(control, "check", "Guardar actividad");
+      setActionIcon(control, "check", "Guardar actividad");
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -1061,7 +1078,7 @@ export function mountNotes(root, {
   async function deleteWorkSessionActivity(value, session, entry, control) {
     if (!confirmImpl("¿Eliminar esta actividad de la sesión de trabajo?")) return;
     control.disabled = true;
-    setIconButton(control, "more", "Eliminando actividad");
+    setActionIcon(control, "more", "Eliminando actividad");
     try {
       const result = await requestNotes({endpoint, operation: "work_session_activity_delete", payload: {
         session_id: session.id, activity_id: entry.id,
@@ -1076,7 +1093,7 @@ export function mountNotes(root, {
       status.textContent = "Actividad eliminada.";
     } catch (error) {
       control.disabled = false;
-      setIconButton(control, "delete", "Eliminar actividad");
+      setActionIcon(control, "delete", "Eliminar actividad");
       status.textContent = mutationErrorMessage(error);
     }
   }
@@ -1199,7 +1216,7 @@ export function mountNotes(root, {
     input.maxLength = 240;
     input.placeholder = "Añadir subtarea…";
     input.setAttribute("aria-label", "Título de la subtarea");
-    const add = iconButton("add", "Añadir subtarea", () => {}, "action-add");
+    const add = actionButton("add", "Añadir subtarea", () => {}, "action-add");
     add.type = "submit";
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -1514,7 +1531,7 @@ function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
         const content = document.createElement("span");
         content.className = "note-fact-content";
         appendBodySegments(content, segments, open);
-        const remove = iconButton("delete", "Eliminar esta información", () => removeFact(block.fact_locator, remove), "note-fact-delete note-danger-button action-delete");
+        const remove = actionButton("delete", "Eliminar esta información", () => removeFact(block.fact_locator, remove), "note-fact-delete note-danger-button action-delete");
         item.append(content, remove);
       } else {
         appendBodySegments(item, segments, open);
@@ -1567,6 +1584,34 @@ function humanizeBacklinkHeading(segments) {
   const match = /^Added (\d{2})-(\d{2})-(\d{4})$/.exec(raw);
   return match ? [{text: `${match[1]}/${match[2]}/${match[3]}`}] : segments;
 }
+export function actionIcon(name) {
+  const paths = ACTION_ICONS[name] ?? ACTION_ICONS.notes;
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("focusable", "false");
+  for (const pathData of paths) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    icon.append(path);
+  }
+  return icon;
+}
+export function setActionIcon(control, name, label) {
+  control.replaceChildren(actionIcon(name));
+  control.setAttribute("aria-label", label);
+  control.setAttribute("title", label);
+  return control;
+}
+export function actionButton(name, label, action, classes = "") {
+  const control = document.createElement("button");
+  control.type = "button";
+  control.className = `icon-action ${classes}`.trim();
+  setActionIcon(control, name, label);
+  control.addEventListener("click", action);
+  return control;
+}
+
 export function typeBadge(type) {
   const badge = document.createElement("span");
   badge.className = `note-type type-${type}`;

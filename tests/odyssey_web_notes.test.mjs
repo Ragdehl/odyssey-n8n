@@ -168,31 +168,8 @@ async function mountNotes({requestNotes, confirmImpl = () => true, sessionStorag
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
   };
   globalThis.__odysseyTestNotesClient = {NotesRequestError, requestNotes};
-  globalThis.__odysseyTestIcons = {
-    setActionIcon(control, _name, label) {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      control.replaceChildren(svg);
-      control.setAttribute("aria-label", label);
-      control.setAttribute("title", label);
-      return control;
-    },
-    actionButton(_name, label, action, classes = "") {
-      const control = document.createElement("button");
-      control.type = "button";
-      control.className = `icon-action ${classes}`.trim();
-      control.setAttribute("aria-label", label);
-      control.setAttribute("title", label);
-      control.append(document.createElementNS("http://www.w3.org/2000/svg", "svg"));
-      control.addEventListener("click", action);
-      return control;
-    },
-  };
   const source = await readFile(new URL("../odyssey_web/notes.js", import.meta.url), "utf8");
   const testable = source
-    .replace(
-      'import {actionButton as iconButton, setActionIcon as setIconButton} from "./action-icons.js";',
-      "const {actionButton: iconButton, setActionIcon: setIconButton} = globalThis.__odysseyTestIcons;",
-    )
     .replace(
       'import {NotesRequestError, requestNotes} from "./notes-client.js";',
       "const {NotesRequestError, requestNotes} = globalThis.__odysseyTestNotesClient;",

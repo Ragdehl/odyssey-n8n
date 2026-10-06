@@ -6,8 +6,7 @@ import {
   requestProductResult,
   requestConversation,
 } from "./client.js";
-import {actionButton, setActionIcon} from "./action-icons.js";
-import {mountNotes} from "./notes.js";
+import {actionButton, mountNotes, setActionIcon} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
 
 const form = document.querySelector("#odyssey-form");

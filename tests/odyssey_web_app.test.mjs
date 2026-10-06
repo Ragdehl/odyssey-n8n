@@ -241,13 +241,12 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
       return control;
     },
   };
-  globalThis.__odysseyTestNotes = {mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
+  globalThis.__odysseyTestNotes = {...globalThis.__odysseyTestIcons, mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
   globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
   const source = await readFile(new URL("../odyssey_web/app.js", import.meta.url), "utf8");
   const testable = source
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
-    .replace('import {actionButton, setActionIcon} from "./action-icons.js";', "const {actionButton, setActionIcon} = globalThis.__odysseyTestIcons;")
-    .replace('import {mountNotes} from "./notes.js";', "const {mountNotes} = globalThis.__odysseyTestNotes;")
+    .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
