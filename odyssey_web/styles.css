@@ -188,7 +188,7 @@ button:disabled { opacity: .55; }
 .calendar-weekdays, .calendar-cells { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .12rem; min-width: 32rem; }
 .calendar-weekdays span { padding: .12rem 0; color: #747d91; font-size: .7rem; font-weight: 800; text-align: center; }
 .calendar-blank { min-height: 7.3rem; }
-.calendar-day-cell { display: grid; min-width: 0; min-height: 7.3rem; align-content: start; justify-items: stretch; gap: .2rem; overflow: hidden; padding: .25rem .2rem; border: 1px solid rgba(23,32,51,.09); border-radius: .6rem; background: rgba(255,255,255,.92); color: #28334b; font-weight: 750; text-align: left; }
+.calendar-day-cell { display: grid; min-width: 0; min-height: 7.3rem; align-content: start; justify-items: stretch; gap: .2rem; overflow: hidden; padding: .25rem .2rem; border: 1px solid rgba(23,32,51,.09); border-radius: .6rem; background: rgba(255,255,255,.92); color: #28334b; font-weight: 750; text-align: left; cursor: pointer; }
 .calendar-day-cell:focus-visible { outline: 2px solid #665ee8; outline-offset: 1px; }
 .calendar-day-today { border: 2px solid #665ee8; padding: calc(.25rem - 1px) calc(.2rem - 1px); }
 .calendar-day-materialized { background: #f9f8ff; }
@@ -203,17 +203,20 @@ button:disabled { opacity: .55; }
 .calendar-preview-text { color: #6a7287; font-weight: 500; }
 .calendar-preview-has-text .calendar-preview-label { display: none; }
 .calendar-day-overflow { color: #6a7287; font-size: .65rem; font-weight: 700; }
-.calendar-day-more { cursor: pointer; text-decoration: underline; text-underline-offset: .12em; }
+.calendar-day-more { justify-self: start; min-height: 1.35rem; padding: 0; border: 0; background: transparent; color: #6a7287; cursor: pointer; font-size: .65rem; font-weight: 700; text-decoration: underline; text-underline-offset: .12em; }
 .calendar-day-more-open .calendar-day-previews {
-  max-height: 8.7rem;
+  max-height: 9.4rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-right: .08rem;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding-right: .12rem;
+  scrollbar-width: thin;
 }
 .calendar-day-more-open .calendar-day-more {
   position: sticky;
   bottom: 0;
-  justify-self: start;
+  z-index: 1;
   padding: .12rem .18rem;
   border-radius: .25rem;
   background: rgba(249,248,255,.96);

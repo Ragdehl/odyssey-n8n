@@ -262,45 +262,46 @@ export function mountCalendar(root, {
   }
 
   function dayButton(day) {
-    const value = button("", () => void openDay(day.date));
+    const value = document.createElement("div");
     const detailOpen = state.monthDetailDate === day.date;
     value.className = `calendar-day-cell${detailOpen ? " calendar-day-more-open" : ""}`;
     value.dataset.date = day.date;
+    value.setAttribute("role", "button");
+    value.setAttribute("tabindex", "0");
+    value.setAttribute("aria-label", dayAriaLabel(day));
+    value.addEventListener("click", () => void openDay(day.date));
+    value.addEventListener("keydown", (event) => {
+      if (event.target !== value || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault?.();
+      void openDay(day.date);
+    });
     if (day.date === localDate()) value.className += " calendar-day-today";
     if (day.materialized) value.className += " calendar-day-materialized";
     const number = document.createElement("span");
     number.className = "calendar-day-number";
     number.textContent = String(Number(day.date.slice(-2)));
-    const previews = document.createElement("span");
+    const previews = document.createElement("div");
     previews.className = "calendar-day-previews";
-    const items = detailOpen && state.monthDetail
-      ? monthDetailPreviews(state.monthDetail)
+    const detailed = detailOpen && state.monthDetail ? monthDetailPreviews(state.monthDetail) : [];
+    const items = detailOpen
+      ? [...day.previews, ...detailed.slice(day.previews.length)]
       : day.previews;
     for (const preview of items) previews.append(previewRow(preview));
     if (day.preview_total > day.previews.length) {
-      const overflow = document.createElement("span");
+      const overflow = button(
+        detailOpen ? (state.monthDetail ? "Mostrar menos ↑" : "Cargando…") : `Ver ${day.preview_total - day.previews.length} más ↓`,
+        (event) => {
+          event.stopPropagation?.();
+          void toggleMonthDetail(day);
+        },
+      );
       overflow.className = "calendar-day-overflow calendar-day-more";
-      overflow.setAttribute("role", "button");
-      overflow.setAttribute("tabindex", "0");
-      overflow.textContent = detailOpen
-        ? (state.monthDetail ? "Mostrar menos ↑" : "Cargando…")
-        : `Ver ${day.preview_total - day.previews.length} más ↓`;
-      overflow.addEventListener("click", (event) => {
-        event.stopPropagation?.();
-        void toggleMonthDetail(day);
-      });
-      overflow.addEventListener("keydown", (event) => {
-        if (!["Enter", " "].includes(event.key)) return;
-        event.preventDefault?.();
-        event.stopPropagation?.();
-        void toggleMonthDetail(day);
-      });
       previews.append(overflow);
     }
     value.append(number, previews);
-    value.setAttribute("aria-label", dayAriaLabel(day));
     return value;
   }
+
 
   function previewRow(preview) {
     const row = document.createElement("span");

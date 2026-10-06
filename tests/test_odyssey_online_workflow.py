@@ -203,6 +203,15 @@ def test_calendar_boundary_uses_render_stable_digit_patterns() -> None:
     assert "/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/" in source
 
 
+def test_calendar_boundary_forwards_only_bounded_schedule_windows() -> None:
+    """Allow the 1/3/7-day schedule projection without opening the Calendar envelope."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "operation === 'schedule' ? new Set(['operation', 'start_date', 'day_count'])" in source
+    assert "[1,3,7].includes(day_count)" in source
+    assert "...(start_date ? { start_date } : {})" in source
+    assert "...(day_count ? { day_count } : {})" in source
+
+
 def test_notes_detail_body_is_not_mistaken_for_an_http_wrapper() -> None:
     """Return a typed NoteDetail object intact even though it contains canonical body text."""
 
