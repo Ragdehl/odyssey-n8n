@@ -313,8 +313,13 @@ def test_collection_membership_anchor_instruction_is_generic_and_collection_sche
         "set it to null for every result_shape=single regardless of presentation intent" in prompt
     )
     assert hashlib.sha256(encoded_schema).hexdigest() == (
-        "9ac3869685e8df09b863398edee3c1f2a28505cc6429490c51c106952357a322"
+        "47c84b947c9bc3a364b4470e1194a45b57a7e0a0d4ccc6b3bf712319f0661634"
     )
+    assert collection_action_schema["properties"]["plan"]["properties"]["filters"] == {
+        "type": "array",
+        "items": {"type": "string"},
+        "maxItems": 0,
+    }
     fixed_instructions = prompt.split("Planner retrieval/selection capabilities", 1)[0].casefold()
     assert all(
         term not in fixed_instructions

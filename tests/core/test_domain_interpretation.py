@@ -133,7 +133,7 @@ def test_domain_handoff_retires_old_journal_prompt_and_pins_current_luna_candida
         "3825f67eb4a209d709193cb1d928b94d7cd1a8b1035bba78f2f54f2b7275f143"
     )
     assert hashlib.sha256(encoded).hexdigest() == (
-        "72698d25b7d8c491c41b2821473f955dd29a085ca9f41155a9af3f5688b032f7"
+        "3d37079cdd04a807c92f0541e9d0977e9fe39971c330157975168ec7a2446c2d"
     )
 
 

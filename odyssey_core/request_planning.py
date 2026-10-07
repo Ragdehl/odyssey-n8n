@@ -1724,9 +1724,13 @@ def _collection_selection_json_schema(direct_selection_schema: Mapping[str, Any]
     collection_selection = deepcopy(direct_selection_schema)
     properties = collection_selection["properties"]
     properties["entity"] = {"type": "null"}
-    empty_filters_schema = deepcopy(direct_selection_schema["properties"]["filters"])
-    empty_filters_schema["maxItems"] = 0
-    properties["filters"] = empty_filters_schema
+    # Collection retrieval forbids direct filters entirely. Repeating the dynamic filter union
+    # here used to serialize ~11 KB of impossible item shapes even though maxItems=0.
+    properties["filters"] = {
+        "type": "array",
+        "items": {"type": "string"},
+        "maxItems": 0,
+    }
     properties["link_scope"] = {"type": "null"}
     properties["self_target"] = {"type": "null"}
     properties["relational_reference"] = {"type": "null"}

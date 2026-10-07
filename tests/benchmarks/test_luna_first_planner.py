@@ -59,6 +59,8 @@ from benchmarks.luna_first_planner.run_live_v2 import (
     reserve_evidence_path,
     run_cases_v2,
 )
+from odyssey_apps.schema_extensions import compose_application_schema
+from odyssey_apps.tasks import TASK_SCHEMA_EXTENSION
 from odyssey_core.experimental_luna_planning import (
     LUNA_EXPERIMENT_AUTOMATIC_RETRIES,
     LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -310,6 +312,29 @@ def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     assert write_branch_bytes <= int(7_343 * 0.75)
     assert prompt_bytes < 40_000
     assert schema_bytes < 25_000
+
+
+def test_production_composed_luna_input_budget_stays_compact(
+    schema: dict[str, Any],
+) -> None:
+    """Guard the real DEV planner shape, including Tasks, against silent token regressions."""
+    production_schema = compose_application_schema(schema, (TASK_SCHEMA_EXTENSION,))
+    result_schema = luna_experimental_result_json_schema(production_schema)
+    schema_bytes = len(
+        json.dumps(result_schema, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    prompt_bytes = len(
+        render_luna_experimental_prompt(production_schema, BASELINE_CONTEXT).encode("utf-8")
+    )
+    collection_filters = result_schema["$defs"]["collection_selection"]["properties"]["filters"]
+
+    assert collection_filters == {
+        "type": "array",
+        "items": {"type": "string"},
+        "maxItems": 0,
+    }
+    assert schema_bytes < 21_000
+    assert prompt_bytes < 40_000
 
 
 def test_luna_prompt_contains_one_semantic_write_language(schema: dict[str, Any]) -> None:
