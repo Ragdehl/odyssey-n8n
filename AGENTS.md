@@ -50,6 +50,16 @@ Current DEV/server actor isolation must remain enforced at the outer authenticat
 
 ## Development principles
 
+### Regression memory for real chat failures
+
+When a real Odyssey chat interaction reveals a new semantic failure mode, preserve that exact case as
+a deterministic regression sentinel before considering the fix complete. If the failure depends on
+LLM interpretation or prompt behavior, also run the smallest relevant live Luna check during the
+change when credentials are available; keep deterministic tests as the CI authority so provider
+variance never weakens the gate. Generalize the regression with additional note types or equivalent
+shapes when the product invariant is type-generic. Do not remove or relax an accepted real-chat
+sentinel merely to make a later prompt or architecture change pass.
+
 ### Human-approved singular identity creation invariant
 
 For WRITE, when semantic planning classifies a mention as one singular identity with a canonical

@@ -6,6 +6,7 @@ retrieval, mutation, delegation, fallback, or action-execution capability.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections import Counter
@@ -24,6 +25,7 @@ from odyssey_core.observability import (
     normalize_provider_usage,
 )
 from odyssey_core.request_planning import (
+    LUNA_DYNAMIC_CONTEXT_MARKER,
     PlannerClarification,
     PlannerValidationCode,
     PlannerValidationStage,
@@ -338,7 +340,10 @@ def render_luna_experimental_prompt(
         size_components=size_components,
         domain_interpretation=domain_interpretation,
     )
-    prompt = f"""{semantic_prompt}
+    if semantic_prompt.count(LUNA_DYNAMIC_CONTEXT_MARKER) != 1:
+        raise RuntimeError("Luna semantic prompt dynamic boundary is invalid")
+    semantic_static, semantic_dynamic = semantic_prompt.split(LUNA_DYNAMIC_CONTEXT_MARKER, 1)
+    luna_static = f"""{semantic_static}
 
 Choose the outcome before drafting fields:
 1. PLAN only when every material intent is preserved by the inherited RequestPlan semantics without unsafe approximation.
@@ -357,9 +362,10 @@ Teaching examples (not evaluation cases):
 
 {rendered_examples}
 """
+    prompt = luna_static + LUNA_DYNAMIC_CONTEXT_MARKER + semantic_dynamic
     if size_components is not None:
-        size_components["luna_rules_examples_bytes"] = len(prompt.encode("utf-8")) - len(
-            semantic_prompt.encode("utf-8")
+        size_components["luna_rules_examples_bytes"] = len(luna_static.encode("utf-8")) - len(
+            semantic_static.encode("utf-8")
         )
     return prompt
 
@@ -564,6 +570,12 @@ class OpenAILunaExperimentalPlanner:
             raise
         recorder.add("input_build", input_started)
         self.last_input_sizes = sizes
+        if prompt.count(LUNA_DYNAMIC_CONTEXT_MARKER) != 1:
+            raise RuntimeError("Luna prompt cache boundary is invalid")
+        stable_prompt, dynamic_prompt = prompt.split(LUNA_DYNAMIC_CONTEXT_MARKER, 1)
+        cache_key = (
+            "odyssey-luna-first-" + hashlib.sha256(stable_prompt.encode("utf-8")).hexdigest()[:32]
+        )
         provider_started = self._monotonic()
         try:
             response = self._client.responses.create(
@@ -571,10 +583,22 @@ class OpenAILunaExperimentalPlanner:
                 reasoning={"effort": self.reasoning_effort},
                 store=False,
                 max_output_tokens=self.max_output_tokens,
+                prompt_cache_key=cache_key,
+                prompt_cache_options={"mode": "explicit"},
                 input=[
                     {
                         "role": "system",
-                        "content": prompt,
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": stable_prompt,
+                                "prompt_cache_breakpoint": {"mode": "explicit"},
+                            },
+                            {
+                                "type": "input_text",
+                                "text": LUNA_DYNAMIC_CONTEXT_MARKER + dynamic_prompt,
+                            },
+                        ],
                     },
                     {"role": "user", "content": request},
                 ],

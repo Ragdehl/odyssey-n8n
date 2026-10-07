@@ -54,6 +54,7 @@ SELF_TARGET = "self"
 _CURRENT_CONTEXT_KEYS = frozenset({"date", "time", "timezone"})
 _RETRIEVAL_CAPABILITY_PLACEHOLDER = "{{RETRIEVAL_CAPABILITIES}}"
 _WRITE_CAPABILITY_PLACEHOLDER = "{{WRITE_CAPABILITIES}}"
+LUNA_DYNAMIC_CONTEXT_MARKER = "\n\nRuntime request context (dynamic, not cache-stable):\n"
 _REFERENCE_MARKER_PATTERN = re.compile(r"\{\{ref:(\d+)\}\}")
 _CALENDAR_DAY_LINK_PATTERN = re.compile(r"\[\[calendar/days/(\d{4}-\d{2}-\d{2})\|([^\]\r\n|]+)\]\]")
 _CLOCK_AFTER_LINK_PATTERN = re.compile(r"^[ \t]+(\d{2}:\d{2}(?::\d{2})?)")
@@ -121,7 +122,7 @@ For every semantic write, determine ownership before mutation payload. target.de
 
 After ownership is fixed, decompose only the new durable knowledge. Group compatible changes for the same logical target inside one operation; different intents remain distinct operations. Atomicity is semantic, not punctuation-based: use separate facts for independently meaningful knowledge, but keep clauses with dependent reasons, explanation, reflection, or decision wording together. Preserve operation, fact, and part order. Use only record, amend, remove, and delete. Explicit correction uses remove for false prior knowledge and amend for corrected knowledge. Amend/remove require a material payload; delete carries none. destination_type is null except for explicit metadata-only reclassification with intent=amend and apply_to=one.
 
-Facts contain ordered parts. A literal part preserves wording that does not semantically denote an Odyssey identity. An identity part contains the exact occurrence text plus identity semantics. Use identity parts whenever participant wording semantically denotes one reusable Odyssey identity or one complete finite relationship-bounded set, even when the planner cannot know whether canonical evidence exists or which concrete identity will ground it. Identity classification is semantic; existence and unique grounding are not planner prerequisites. Never literalize identity-denoting wording because canonical evidence may be missing, ambiguous, stale, or unavailable to the planner. Core alone grounds and resolves identities after planning. candidate_scope describes the requested candidate universe without asserting that its source, relationship, or members exist. Do not promote ordinary places, dates, URLs, paths, external identifiers, or context into identities merely because they are nouns or proper names. One identity part/candidate_scope denotes one identity universe. Split coordinated relationship scopes. Shared possessives distribute: “mi mujer e hijos” => “mi mujer” SELF/one_member + “hijos” member_query="mis hijos" SELF/complete_set. Keep surface text exact; never use literal as a fallback for an identity-denoting conjunct. Use candidate_scope.extent=one_member when the occurrence denotes one member and complete_set only when the occurrence itself denotes the whole current finite set described through one SELF or SOURCE_DESCRIPTION relationship source. Preserve the exact set wording in the identity part and never enumerate, name, count, or otherwise supply its concrete members yourself: Core re-grounds the relationship and derives every member. For one_member with a canonical note_type, genuinely absent relationship evidence resumes ordinary typed identity resolution and may CREATE the identity; never literalize that singular typed occurrence. Only complete_set wording may fall back to its exact literal set wording when no relationship evidence exists, removing only the internal reference mechanics. Ambiguous, incomplete, stale, or changing evidence fails closed. Plural grammar alone never authorizes complete_set. An identity part must not select its own operation target. Reuse the same semantic identity wording within the same write action when occurrences refer to the same identity or set; Core derives all reference markers, indexes, lookup units, roles, member expansion, and binding mechanics. Never emit those mechanical fields, stable IDs, Markdown wikilinks, or inferred inverse writes.
+Facts contain ordered parts. A literal part preserves wording that does not semantically denote an Odyssey identity. An identity part contains the exact occurrence text plus identity semantics. Use identity parts whenever participant wording semantically denotes one reusable Odyssey identity or one complete finite relationship-bounded set, even when the planner cannot know whether canonical evidence exists or which concrete identity will ground it. Identity classification is semantic; existence and unique grounding are not planner prerequisites. Never literalize identity-denoting wording because canonical evidence may be missing, ambiguous, stale, or unavailable to the planner. Core alone grounds and resolves identities after planning. Literal or unresolved group context must not swallow a nested reusable identity: split the exact surface occurrence out as its own identity part while leaving the unresolved surrounding wording literal. Example: “unos papás del cole de Cloe” => literal “unos papás del cole de ” + identity “Cloe”; do not invent an identity for “unos papás”. The same rule is type-generic: “unas ideas sobre el proyecto Faro” preserves the surrounding literal wording and represents “el proyecto Faro” as its project identity, and equivalent nested occurrences of any canonical note type stay semantic. candidate_scope describes the requested candidate universe without asserting that its source, relationship, or members exist. Do not promote ordinary places, dates, URLs, paths, external identifiers, or context into identities merely because they are nouns or proper names. One identity part/candidate_scope denotes one identity universe. Split coordinated relationship scopes. Shared possessives distribute: “mi mujer e hijos” => “mi mujer” SELF/one_member + “hijos” member_query="mis hijos" SELF/complete_set. Keep surface text exact; never use literal as a fallback for an identity-denoting conjunct. Use candidate_scope.extent=one_member when the occurrence denotes one member and complete_set only when the occurrence itself denotes the whole current finite set described through one SELF or SOURCE_DESCRIPTION relationship source. Preserve the exact set wording in the identity part and never enumerate, name, count, or otherwise supply its concrete members yourself: Core re-grounds the relationship and derives every member. For one_member with a canonical note_type, genuinely absent relationship evidence resumes ordinary typed identity resolution and may CREATE the identity; never literalize that singular typed occurrence. Only complete_set wording may fall back to its exact literal set wording when no relationship evidence exists, removing only the internal reference mechanics. Ambiguous, incomplete, stale, or changing evidence fails closed. Plural grammar alone never authorizes complete_set. An identity part must not select its own operation target. Reuse the same semantic identity wording within the same write action when occurrences refer to the same identity or set; Core derives all reference markers, indexes, lookup units, roles, member expansion, and binding mechanics. Never emit those mechanical fields, stable IDs, Markdown wikilinks, or inferred inverse writes.
 
 Properties, filters, note types, destination types, and property value types come only from the supplied dynamic capabilities. Tags are explicit free-form metadata; never infer tags from semantic words. Candidate complete_set and all_matching are distinct: complete_set is one relationship-bounded source operation, while all_matching is a bulk selection. If safe ownership, action boundaries, candidate scope, or correction shape remains uncertain, ESCALATE instead of approximating. Do not ESCALATE merely because an identity may not exist or may fail to resolve; Core owns that uncertainty.""",
     "For a write, determine semantic ownership": "",
@@ -488,14 +489,17 @@ def _render_request_planner_prompt_template(
         raise RuntimeError("Request planner retrieval capability placeholder is invalid")
     if template.count(_WRITE_CAPABILITY_PLACEHOLDER) != 1:
         raise RuntimeError("Request planner write capability placeholder is invalid")
-    retrieval = build_planner_capabilities(schema, current_context=current_context)
+    retrieval = build_planner_capabilities(
+        schema,
+        current_context=None if semantic_write_mode else current_context,
+    )
     writable = build_write_capabilities(schema)
     authorized_calendar_dates = planner_authorized_calendar_dates(
         current_context, domain_interpretation
     )
+    managed_destinations: dict[str, Any] = {}
     if authorized_calendar_dates:
-        writable = dict(writable)
-        writable["managed_destinations"] = {
+        managed_destinations = {
             CALENDAR_DAY_TYPE: {
                 "authorized_dates": list(authorized_calendar_dates),
                 "description": (
@@ -508,6 +512,9 @@ def _render_request_planner_prompt_template(
                 ),
             }
         }
+        if not semantic_write_mode:
+            writable = dict(writable)
+            writable["managed_destinations"] = managed_destinations
     retrieval_json = json.dumps(retrieval, ensure_ascii=False, separators=(",", ":"))
     writable_json = json.dumps(writable, ensure_ascii=False, separators=(",", ":"))
     rendered = template.replace(
@@ -519,6 +526,15 @@ def _render_request_planner_prompt_template(
         writable_json,
     )
     context_bytes = 0
+    if semantic_write_mode:
+        runtime_context: dict[str, Any] = {"current_context": dict(current_context)}
+        if managed_destinations:
+            runtime_context["managed_destinations"] = managed_destinations
+        dynamic_context = LUNA_DYNAMIC_CONTEXT_MARKER + json.dumps(
+            runtime_context, ensure_ascii=False, separators=(",", ":")
+        )
+        prompt += dynamic_context
+        context_bytes += len(dynamic_context.encode("utf-8"))
     if conversation_context:
         bounded = [
             {"role": item.get("role"), "text": item.get("text")} for item in conversation_context
@@ -528,7 +544,7 @@ def _render_request_planner_prompt_template(
             + json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
         )
         prompt += context_section
-        context_bytes = len(context_section.encode("utf-8"))
+        context_bytes += len(context_section.encode("utf-8"))
     if domain_interpretation is not None:
         domain_section = _render_domain_interpretation_section(
             domain_interpretation, semantic_write_mode=semantic_write_mode

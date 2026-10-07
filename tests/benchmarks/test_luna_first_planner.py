@@ -728,6 +728,67 @@ def test_luna_call_has_one_attempt_zero_retries_and_explicit_cap(
     assert planner.last_error_chain is None
 
 
+def test_luna_provider_uses_explicit_cache_boundary_with_dynamic_suffix(
+    schema: dict[str, Any],
+) -> None:
+    """Keep the large planner prefix cache-stable while request context remains dynamic."""
+    payload = {
+        "result": {
+            "outcome": "ESCALATE",
+            "actions": None,
+            "limitations": None,
+            "clarification_code": None,
+        }
+    }
+    response = SimpleNamespace(
+        status="completed", id="resp_cache", output_text=json.dumps(payload), usage=None
+    )
+    calls: list[dict[str, Any]] = []
+    client = SimpleNamespace(
+        responses=SimpleNamespace(create=lambda **kwargs: calls.append(kwargs) or response)
+    )
+    first = OpenAILunaExperimentalPlanner(client, schema, CONTEXT)
+    second = OpenAILunaExperimentalPlanner(
+        client,
+        schema,
+        {"date": "2026-09-10", "time": "18:45", "timezone": "Europe/Paris"},
+    )
+
+    assert isinstance(
+        first.plan(
+            "Handle this safely",
+            conversation_context=({"role": "user", "text": "Context A"},),
+        ),
+        PlannerEscalation,
+    )
+    assert isinstance(
+        second.plan(
+            "Handle this safely",
+            conversation_context=({"role": "user", "text": "Context B"},),
+        ),
+        PlannerEscalation,
+    )
+
+    assert len(calls) == 2
+    for call in calls:
+        assert call["prompt_cache_options"] == {"mode": "explicit"}
+        assert call["prompt_cache_key"].startswith("odyssey-luna-first-")
+        system_content = call["input"][0]["content"]
+        assert isinstance(system_content, list) and len(system_content) == 2
+        assert system_content[0]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+        assert system_content[0]["type"] == system_content[1]["type"] == "input_text"
+
+    first_content = calls[0]["input"][0]["content"]
+    second_content = calls[1]["input"][0]["content"]
+    assert calls[0]["prompt_cache_key"] == calls[1]["prompt_cache_key"]
+    assert first_content[0]["text"] == second_content[0]["text"]
+    assert first_content[1]["text"] != second_content[1]["text"]
+    assert "Context A" not in first_content[0]["text"]
+    assert "Context A" in first_content[1]["text"]
+    assert '"current_context":{"date":"2026-09-09"' not in first_content[0]["text"]
+    assert '"current_context":{"date":"2026-09-09"' in first_content[1]["text"]
+
+
 def test_luna_and_sol_semantic_frontends_send_identical_contract_except_model(
     schema: dict[str, Any],
 ) -> None:

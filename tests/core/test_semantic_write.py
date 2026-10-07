@@ -416,6 +416,65 @@ def test_repeated_reference_and_cross_operation_reference_reuse_core_lookup(sche
     assert lookup.target.entity == "Faro"
 
 
+def test_chat_regression_unresolved_group_keeps_nested_cloe_identity(schema: dict) -> None:
+    """Regression: unknown school parents stay literal while Cloe remains a semantic link."""
+    cloe = person("Cloe", name="Cloe")
+    action = compile_one(
+        schema,
+        operation(
+            IdentityIntent("yo", IdentityBinding.SELF, note_type="person"),
+            fact(
+                LiteralPart("Voy a jugar a fútbol con unos papás del cole de "),
+                IdentityPart("Cloe", cloe),
+                LiteralPart("."),
+            ),
+        ),
+    )
+
+    source, lookup = action.units
+    assert source.facts == ("Voy a jugar a fútbol con unos papás del cole de {{ref:0}}.",)
+    assert source.references[0].mention == "Cloe"
+    assert source.references[0].target_index == 1
+    assert lookup.reference_lookup_only is True
+    assert lookup.target.entity == "Cloe"
+    assert lookup.target.type == "person"
+
+
+@pytest.mark.parametrize(
+    ("note_type", "mention", "direct_name"),
+    [
+        ("person", "Cloe", "Cloe"),
+        ("project", "el proyecto Faro", "Faro"),
+        ("document", "el documento Contrato 2026", "Contrato 2026"),
+        ("concept", "el concepto Zero Inbox", "Zero Inbox"),
+    ],
+)
+def test_literal_context_can_contain_one_nested_typed_identity(
+    schema: dict, note_type: str, mention: str, direct_name: str
+) -> None:
+    """Keep unresolved surrounding wording literal without swallowing a reusable identity."""
+    nested = IdentityIntent(mention, IdentityBinding.DESCRIBED, direct_name, note_type)
+    action = compile_one(
+        schema,
+        operation(
+            IdentityIntent("yo", IdentityBinding.SELF, note_type="person"),
+            fact(
+                LiteralPart("He hablado con gente relacionada con "),
+                IdentityPart(mention, nested),
+                LiteralPart("."),
+            ),
+        ),
+    )
+
+    source, lookup = action.units
+    assert source.facts == ("He hablado con gente relacionada con {{ref:0}}.",)
+    assert source.references[0].mention == mention
+    assert source.references[0].target_index == 1
+    assert lookup.reference_lookup_only is True
+    assert lookup.target.type == note_type
+    assert lookup.target.entity == direct_name
+
+
 def test_same_identity_with_distinct_mentions_preserves_each_occurrence(schema: dict) -> None:
     """Do not collapse distinct pending wording merely because identity evidence matches."""
     faro = IdentityIntent("el proyecto Faro", IdentityBinding.DESCRIBED, "Faro", "project")
