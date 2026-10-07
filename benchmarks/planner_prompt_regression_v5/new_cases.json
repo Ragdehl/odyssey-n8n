@@ -20,34 +20,34 @@
     {
       "id": "PPRV5-NESTED-PROJECT-01",
       "lineage": "nested_identity",
-      "request": "He apuntado unas ideas sobre el proyecto Faro.",
+      "request": "Voy a comer con unos colaboradores del proyecto Faro.",
       "expect": {
         "note_type": "project",
         "mention": "el proyecto Faro",
         "entity": "Faro",
-        "forbidden_identity_terms": ["ideas"]
+        "forbidden_identity_terms": ["colaboradores"]
       }
     },
     {
       "id": "PPRV5-NESTED-DOCUMENT-01",
       "lineage": "nested_identity",
-      "request": "He hecho un comentario sobre el documento Contrato 2026.",
+      "request": "Voy a comer con gente que trabaja sobre el documento Contrato 2026.",
       "expect": {
         "note_type": "document",
         "mention": "el documento Contrato 2026",
         "entity": "Contrato 2026",
-        "forbidden_identity_terms": ["comentario"]
+        "forbidden_identity_terms": ["gente", "trabaja"]
       }
     },
     {
       "id": "PPRV5-NESTED-CONCEPT-01",
       "lineage": "nested_identity",
-      "request": "He estado hablando sobre el concepto Zero Inbox.",
+      "request": "Voy a comer con gente interesada en el concepto Zero Inbox.",
       "expect": {
         "note_type": "concept",
         "mention": "el concepto Zero Inbox",
         "entity": "Zero Inbox",
-        "forbidden_identity_terms": []
+        "forbidden_identity_terms": ["gente", "interesada"]
       }
     },
     {

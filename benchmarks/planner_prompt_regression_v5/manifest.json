@@ -6,9 +6,9 @@
   "inherited_contract": "planner_prompt_regression_v1 minus obsolete SWR07/SWR08/SWR10",
   "successor_contract": "semantic_write_resolution_current_v1",
   "sha256": {
-    "new_cases_sha256": "d98ff0ebfa0f3ee0c22d906750c113c46243d809b9ed2a802a30eda7a68a9e30",
+    "new_cases_sha256": "2c846e030d569289554f4aa13d208c699e44d4a6024924847d5f661060520f99",
     "current_successor_sha256": "4762e63a757cbf025e58e524747a5cb7794ecd6fd3b8d3f53a3d175a48f37732",
-    "prompt_sha256": "46983ae82857c34ae7720002a303551add48307ae521471d1972f30b4502ec57",
+    "prompt_sha256": "b5663debabc32c6d9444e0282b24970736bfa38526e1be94c6265cb6dc6f04a6",
     "provider_schema_sha256": "24de52c9398bddacb93e923001776c97720e3e4c6ea6ee9dda73a01d83a89d05",
     "teaching_examples_sha256": "8bef64700e58361a667ae85d49bbdb3b6fc574d9674a3d47c60c2fee59e4acc1"
   }
