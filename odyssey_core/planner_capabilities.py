@@ -78,6 +78,11 @@ def build_planner_capabilities(
             capability = _filter_capability(field, type_ids)
             filters[field["id"]] = capability
     for note_type in types:
+        # App-owned lifecycle filters belong only to the trusted owner route. The generic
+        # planner may still reference the managed identity type, but it must not interpret
+        # lifecycle fields owned by another application.
+        if "managed_by" in note_type:
+            continue
         for field in note_type["properties"]:
             if field.get("filterable"):
                 _merge_filter_capability(filters, field, note_type["id"])

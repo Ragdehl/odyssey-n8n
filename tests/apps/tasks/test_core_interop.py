@@ -24,6 +24,7 @@ from odyssey_core.request_planning import (
     SelectionCriteria,
     WriteAction,
 )
+from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic import SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 from odyssey_core.write_target import WriteTargetOutcome, decide_write_target
@@ -71,6 +72,28 @@ def test_generic_contract_exposes_task_identity_but_not_lifecycle_properties() -
     assert "task" in retrieval["types"]
     assert "task" in writes["types"]
     assert writes["types"]["task"]["properties"] == {}
+    for field in (
+        "status",
+        "target_date",
+        "planned_start_at",
+        "planned_end_at",
+        "deadline_at",
+        "completed_at",
+    ):
+        assert field not in retrieval["filters"]
+
+
+def test_tasks_route_reclaims_its_lifecycle_filters_without_expanding_generic_core() -> None:
+    retrieval = build_planner_capabilities(planning_schema_for_capability(SCHEMA, "tasks"))
+    for field in (
+        "status",
+        "target_date",
+        "planned_start_at",
+        "planned_end_at",
+        "deadline_at",
+        "completed_at",
+    ):
+        assert retrieval["filters"][field]["applies_to"] == ["task"]
 
 
 def test_core_can_add_ordinary_fact_to_existing_task(tmp_path: Path) -> None:
