@@ -444,3 +444,14 @@ def test_semantic_write_prompt_preserves_elided_coordinated_relationship_scopes(
     assert "mi mujer e hijos" in prompt
     assert 'member_query="mis hijos"' in prompt
     assert "Shared possessives distribute" in prompt
+    assert (
+        "Identity classification is semantic; existence and unique grounding are not planner prerequisites"
+        in prompt
+    )
+    assert "Never literalize identity-denoting wording" in prompt
+    assert "Core alone grounds and resolves identities after planning" in prompt
+    assert (
+        "Do not ESCALATE merely because an identity may not exist or may fail to resolve" in prompt
+    )
+    assert "identity promotion remains uncertain" not in prompt
+    assert "safely groundable Odyssey identity" not in prompt

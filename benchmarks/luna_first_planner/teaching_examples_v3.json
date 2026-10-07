@@ -1,5 +1,5 @@
 {
-  "version": "3.0.5",
+  "version": "3.0.6",
   "examples": [
     {
       "id": "teach-domain-date",
@@ -295,7 +295,7 @@
         "clarification_code": null,
         "presentation_intent": "answer"
       },
-      "lesson": "Keep coordinated relationship-bounded participants as separate identity parts. A singular relative uses one_member; a whole current finite relative set uses complete_set. Do not collapse or literalize them."
+      "lesson": "Classify relationship participants semantically without requiring proof that they exist. Keep coordinated scopes as separate identity parts: a singular relative uses one_member and a whole current finite relative set uses complete_set. Never literalize them merely because grounding evidence is unknown; Core resolves them afterward."
     },
     {
       "id": "teach-relational-target-with-described-reference",

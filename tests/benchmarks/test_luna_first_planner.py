@@ -811,7 +811,7 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     )
     assert "Selection semantics take precedence over presentation" in prompt
     assert "presentation_intent MUST be answer even when the user asks to show notes" in prompt
-    assert "identity parts for distinct participants" in prompt
+    assert "Use identity parts whenever participant wording semantically denotes" in prompt
     assert "never transfers ownership of a different predicate to its source" in prompt
     assert "keep that subject as the operation target" in prompt
     assert "Candidate scope applies uniformly to every described semantic identity" in prompt
@@ -820,7 +820,10 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
         "whether that identity is the operation target or an identity part inside a fact" in prompt
     )
     assert "Never drop a required candidate_scope because the identity is non-person" in prompt
-    assert "A literal part preserves non-identity wording exactly" in prompt
+    assert (
+        "A literal part preserves wording that does not semantically denote an Odyssey identity"
+        in prompt
+    )
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
