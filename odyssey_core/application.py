@@ -258,6 +258,7 @@ def execute_request(
     conversation_context: Sequence[Mapping[str, str]] = (),
     clarification_choice: ClarificationChoice | None = None,
     write_preflight_guard: WritePreflightGuard | None = None,
+    progress_callback: Callable[[str, Mapping[str, object]], None] | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -304,6 +305,17 @@ def execute_request(
         authenticated_actor, AuthenticatedActorContext
     ):
         raise ValueError("authenticated actor context is invalid")
+
+    def notify_progress(stage: str, payload: Mapping[str, object] | None = None) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(stage, payload or {})
+        except Exception:
+            # UX progress is observational and must never change Core semantics.
+            return
+
+    notify_progress("planner.started")
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic, planner_started)
     try:
@@ -384,6 +396,17 @@ def execute_request(
         )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a PlannerResult")
+    references: list[str] = []
+    for planned_action in plan.actions:
+        for unit in getattr(planned_action, "units", ()):
+            for reference in getattr(unit, "references", ()):
+                mention = getattr(reference, "mention", None)
+                if isinstance(mention, str) and mention.strip() and mention not in references:
+                    references.append(mention.strip())
+    notify_progress(
+        "planner.ready",
+        {"references": tuple(references[:6]), "action_count": len(plan.actions)},
+    )
     planner_calls = _planner_attempts(planner, provider_recorder.calls)
 
     history_snapshot: GitHistorySnapshot | None = None
@@ -402,6 +425,7 @@ def execute_request(
     affected: list[str] = []
     next_fact_ordinal = 0
     for action_index, action in enumerate(plan.actions):
+        notify_progress(f"action.{action.kind}.started", {"ordinal": action_index + 1})
         provider_start = len(provider_recorder.calls)
         action_started = monotonic()
         provider_recorder.origin = action_started

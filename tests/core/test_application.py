@@ -1110,3 +1110,39 @@ def test_semantic_lookup_ambiguity_blocks_source_write_until_clarified(
     assert source_result.reason == "DEPENDENCY_FAILED"
     assert lookup_result.status is UnitStatus.DEFERRED
     assert lookup_result.reason == "ambiguous_existing_reference"
+
+
+def test_progress_callback_reports_planner_references_and_write_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expose only bounded semantic milestones without affecting write semantics."""
+    events: list[tuple[str, dict[str, object]]] = []
+    plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    unit("Laura", references=(KnowledgeReference(1, "friend", "Cloe"),)),
+                    unit("Cloe"),
+                )
+            ),
+        ),
+        (),
+    )
+    monkeypatch.setattr(
+        application,
+        "_execute_write",
+        lambda *_args, **_kwargs: application.ActionResult(
+            0, "write", application.ActionStatus.COMPLETED
+        ),
+    )
+
+    result = run(
+        plan,
+        monkeypatch,
+        progress_callback=lambda stage, payload: events.append((stage, dict(payload))),
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert events[0] == ("planner.started", {})
+    assert ("planner.ready", {"references": ("Cloe",), "action_count": 1}) in events
+    assert ("action.write.started", {"ordinal": 1}) in events

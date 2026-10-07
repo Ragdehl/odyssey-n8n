@@ -7,6 +7,7 @@ import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -121,6 +122,7 @@ from odyssey_core.temporal_interpretation import (
 from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .delivery_results import LocalDeliveryResultStore
+from .progress import ProductProgressStore
 from .routing import (
     ApplicationExecutor,
     ApplicationRouter,
@@ -128,6 +130,18 @@ from .routing import (
     is_route_execution_id,
 )
 from .serialization import application_result_to_response, operational_to_response
+
+ProgressReporter = Callable[[str, Mapping[str, object]], None]
+_PROGRESS_REPORTER: ContextVar[ProgressReporter | None] = ContextVar(
+    "odyssey_progress_reporter", default=None
+)
+
+
+def _emit_progress(stage: str, payload: Mapping[str, object] | None = None) -> None:
+    reporter = _PROGRESS_REPORTER.get()
+    if reporter is not None:
+        reporter(stage, payload or {})
+
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
 
@@ -275,6 +289,7 @@ class RuntimeComposition:
     direct_notes_mutations: DirectNoteMutationService | None = None
     direct_task_mutations: TaskDirectMutationService | None = None
     work_session_service: TaskWorkSessionService | None = None
+    product_progress_store: ProductProgressStore | None = None
     notes_mutation_actor: (
         Callable[[AuthenticatedActorContext | None, ExternalPrincipal | None], object] | None
     ) = None
@@ -299,6 +314,8 @@ class RuntimeComposition:
         another planner or mutation pass.
         """
         actor = self._resolve_actor(authenticated_actor, external_principal)
+        if request_id is not None and self.product_progress_store is not None:
+            self.product_progress_store.begin(actor, request_id)
         store: LocalDeliveryResultStore | None = None
         fingerprint: str | None = None
         if request_id is not None and conversation_id is not None:
@@ -370,7 +387,9 @@ class RuntimeComposition:
                         pending.evidence_guards[option_index],
                         pending.source_evidence_guard,
                     )
-                    result = self.execute(
+                    result = self._execute_with_progress(
+                        actor,
+                        request_id,
                         user_request,
                         request_id,
                         conversation_id,
@@ -383,7 +402,9 @@ class RuntimeComposition:
                     return self._finish_product_result(
                         result, store, fingerprint, clarification_store, force_replay=True
                     )
-            result = self.execute(
+            result = self._execute_with_progress(
+                actor,
+                request_id,
                 user_request,
                 request_id,
                 conversation_id,
@@ -393,6 +414,91 @@ class RuntimeComposition:
                 None,
             )
             return self._finish_product_result(result, store, fingerprint, clarification_store)
+
+    def _execute_with_progress(
+        self,
+        actor: str,
+        request_id: str | None,
+        *args: object,
+        **kwargs: object,
+    ) -> ApplicationResult:
+        """Run one product execution with a transient user-safe progress reporter bound to it."""
+        if request_id is None or self.product_progress_store is None:
+            return self.execute(*args, **kwargs)
+        token = _PROGRESS_REPORTER.set(
+            lambda stage, payload: self._record_progress_event(actor, request_id, stage, payload)
+        )
+        try:
+            result = self.execute(*args, **kwargs)
+            self.product_progress_store.update(actor, request_id, "finalizing", 94)
+            return result
+        finally:
+            _PROGRESS_REPORTER.reset(token)
+
+    def _record_progress_event(
+        self,
+        actor: str,
+        request_id: str,
+        stage: str,
+        payload: Mapping[str, object],
+    ) -> None:
+        """Translate internal milestones into one bounded latest-only UX snapshot."""
+        if self.product_progress_store is None:
+            return
+        progress_by_stage = {
+            "routing.started": 8,
+            "routing.ready": 18,
+            "temporal.started": 28,
+            "temporal.ready": 42,
+            "planner.started": 50,
+            "planner.ready": 68,
+            "action.retrieve.started": 76,
+            "action.delegate.started": 78,
+            "action.write.started": 84,
+        }
+        progress = progress_by_stage.get(stage)
+        if progress is None:
+            return
+        details: tuple[str, ...] = ()
+        if stage == "routing.ready":
+            route_count = payload.get("route_count")
+            if isinstance(route_count, int) and route_count > 1:
+                details = (str(route_count),)
+        elif stage == "temporal.ready":
+            values = payload.get("values")
+            if isinstance(values, tuple):
+                details = tuple(value for value in values if isinstance(value, str))[:6]
+        elif stage == "planner.ready":
+            references = payload.get("references")
+            if isinstance(references, tuple):
+                details = tuple(value for value in references if isinstance(value, str))[:6]
+        self.product_progress_store.update(actor, request_id, stage, progress, details)
+
+    def product_progress(
+        self,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Return the latest transient progress visible to the same authenticated actor."""
+        if not isinstance(request_id, str) or not request_id:
+            raise ValueError("request_id must be non-empty")
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        snapshot = (
+            self.product_progress_store.read(actor, request_id)
+            if self.product_progress_store is not None
+            else None
+        )
+        if snapshot is None:
+            return {
+                "request_id": request_id,
+                "stage": "starting",
+                "progress": 0,
+                "details": [],
+                "sequence": 0,
+                "complete": False,
+            }
+        return snapshot.to_response()
 
     def _finish_product_result(
         self,
@@ -1232,6 +1338,7 @@ class RuntimeComposition:
                 conversation_context=self._routing_conversation_context(
                     authenticated_actor, conversation_id, request_id
                 ),
+                progress_callback=_emit_progress,
             )
         elif conversation_id is None:
             if authenticated_actor is None:
@@ -1653,6 +1760,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ),
             clarification_choice=clarification_choice,
             write_preflight_guard=write_preflight_guard,
+            progress_callback=_emit_progress,
         )
         calls = getattr(planner, "last_provider_calls", ())
         return _replace_planner_provider_calls(result, calls)
@@ -1866,6 +1974,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         interpreter = OpenAITemporalInterpreter.from_environment(
             {key: clock[key] for key in ("date", "time", "timezone")}
         )
+        _emit_progress("temporal.started")
         started = perf_counter()
         try:
             temporal = interpreter.interpret(source_text, conversation_context)
@@ -1914,6 +2023,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
             usage=normalize_provider_usage(interpreter.last_usage),
             provider_calls=provider_calls,
         )
+        temporal_values = []
+        for mention in temporal.mentions:
+            value = mention.resolution.exact_datetime or mention.resolution.exact_date
+            if value is not None:
+                temporal_values.append(f"{mention.temporal_text}: {value}")
+        _emit_progress("temporal.ready", {"values": tuple(temporal_values)})
         temporal_kinds = temporal.kinds()
         if any(kind is TemporalResolutionKind.UNSPECIFIED for kind in temporal_kinds):
             return ApplicationResult(
@@ -2330,6 +2445,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         ),
         direct_task_mutations=direct_task_mutations,
         work_session_service=work_session_service,
+        product_progress_store=ProductProgressStore(),
         notes_mutation_actor=notes_mutation_actor,
     )
 
