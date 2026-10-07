@@ -50,6 +50,27 @@ Current DEV/server actor isolation must remain enforced at the outer authenticat
 
 ## Development principles
 
+### Human-approved singular identity creation invariant
+
+For WRITE, when semantic planning classifies a mention as one singular identity with a canonical
+`note_type`, failure to ground that identity does **not** turn it into literal text. Preserve the
+ordinary typed identity lifecycle: resolve/reuse an existing canonical identity when safe; if no
+identity resolves and there is genuinely no conflicting evidence, Core may CREATE the typed note.
+This applies whether the singular identity was described directly or through a `one_member`
+candidate scope.
+
+Literal fallback is reserved for wording that denotes a true `complete_set`/group when no complete
+canonical member set can be grounded; Odyssey must not invent a placeholder entity for that group.
+Ambiguous, incomplete, stale, or contradictory evidence remains fail-closed and must never be
+converted into CREATE or literal fallback merely to make the write succeed.
+
+This is an explicit human-approved product invariant, not an implementation convenience. Any future
+proposal that would make a singular typed identity become literal text, or remove its ordinary
+CREATE authority solely because grounding failed, is a material product-contract change. **Stop and
+ask the human before implementing it, and explicitly state that the proposal conflicts with this
+accepted invariant.** Keep deterministic regression sentinels for both the singular CREATE behavior
+and the complete-set literal fallback.
+
 - Prefer the simplest working solution and challenge unnecessary complexity.
 - Understand the user-visible requirement before optimizing implementation details.
 - Keep changes small, reviewable, and testable; avoid unrelated edits.

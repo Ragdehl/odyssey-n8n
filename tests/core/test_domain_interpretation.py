@@ -450,14 +450,9 @@ def test_semantic_write_prompt_preserves_elided_coordinated_relationship_scopes(
     )
     assert "Never literalize identity-denoting wording" in prompt
     assert "Core alone grounds and resolves identities after planning" in prompt
-    assert (
-        "absence of any relationship evidence may preserve the exact occurrence as literal text"
-        in prompt
-    )
-    assert (
-        "If no relationship evidence exists, Core preserves the exact set wording literally"
-        in prompt
-    )
+    assert "A singular typed identity must never become literal text" in prompt
+    assert "may reuse an existing identity or CREATE one" in prompt
+    assert "Only complete_set wording may fall back to its exact literal set wording" in prompt
     assert (
         "Do not ESCALATE merely because an identity may not exist or may fail to resolve" in prompt
     )

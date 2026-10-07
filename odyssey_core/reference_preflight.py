@@ -777,13 +777,16 @@ def _decide_reference_only_target(
     self_binding_repository: SelfBindingRepository | None = None,
     semantic_set_selector: Any | None = None,
 ) -> WriteTargetDecision:
-    """Resolve one semantic reference and preserve schema-backed entity creation authority.
+    """Resolve one semantic reference while preserving typed singular CREATE authority.
 
-    A bounded relationship reference resolves only inside its current canonical member set and never
-    falls back to global semantic search. Ordinary reference selections keep the layered resolver; a
-    canonical ``target.type`` may still authorize CREATE when no existing identity is found.
+    A bounded relationship reference uses current canonical relationship evidence first. If that
+    evidence is genuinely absent for one typed identity, Core resumes the ordinary typed identity
+    resolver, which may safely reuse or CREATE that identity. Ambiguous, incomplete, or stale
+    relationship evidence never widens to global resolution. Complete-set references remain
+    relationship-bound and cannot become placeholder identities.
     """
     if unit.target.relational_reference is not None:
+        relation = unit.target.relational_reference
         try:
             resolved = resolve_relational_reference(
                 unit.target,
@@ -799,21 +802,24 @@ def _decide_reference_only_target(
                 refine_singular_with_query=True,
             )
         except RelationalResolutionError as error:
+            if not (error.evidence_absent and relation.members == "one"):
+                return WriteTargetDecision(
+                    WriteTargetOutcome.NEEDS_CLARIFICATION,
+                    reason=str(error),
+                    candidate_note_ids=error.candidate_ids,
+                    clarification=error.clarification,
+                )
+            unit = replace(unit, target=replace(unit.target, relational_reference=None))
+        else:
+            if len(resolved.targets) == 1:
+                return WriteTargetDecision(
+                    WriteTargetOutcome.UPDATE, existing_note_id=resolved.targets[0].id
+                )
             return WriteTargetDecision(
                 WriteTargetOutcome.NEEDS_CLARIFICATION,
-                reason=("relational_evidence_absent" if error.evidence_absent else str(error)),
-                candidate_note_ids=error.candidate_ids,
-                clarification=error.clarification,
+                reason="ambiguous_existing_reference",
+                candidate_note_ids=tuple(target.id for target in resolved.targets),
             )
-        if len(resolved.targets) == 1:
-            return WriteTargetDecision(
-                WriteTargetOutcome.UPDATE, existing_note_id=resolved.targets[0].id
-            )
-        return WriteTargetDecision(
-            WriteTargetOutcome.NEEDS_CLARIFICATION,
-            reason="ambiguous_existing_reference",
-            candidate_note_ids=tuple(target.id for target in resolved.targets),
-        )
 
     decision = decide_write_target(
         unit,

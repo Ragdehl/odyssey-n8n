@@ -1274,6 +1274,39 @@ def _execute_relational_write(
         if rendering.pending_references:
             raise RelationshipWritePreflightError("Relationship member binding is incomplete")
     except RelationalResolutionError as error:
+        if error.evidence_absent and relation.members == "one" and clarification_choice is None:
+            fallback_unit = replace(
+                unit,
+                target=replace(unit.target, relational_reference=None),
+            )
+            fallback_action = replace(
+                action,
+                units=tuple(
+                    fallback_unit if index == relational_index else candidate
+                    for index, candidate in enumerate(action.units)
+                ),
+            )
+            return _execute_write(
+                action_index,
+                fallback_action,
+                repository,
+                schema,
+                semantic_index,
+                embedder,
+                contextual_reasoner,
+                actor,
+                now,
+                writer,
+                semantic_limit,
+                id_allocator,
+                request_id,
+                unit_ordinals,
+                fact_selector,
+                semantic_set_selector,
+                authenticated_actor,
+                self_binding_repository,
+                spans,
+            )
         return ActionResult(
             action_index,
             action.kind,
@@ -1373,14 +1406,6 @@ def _execute_single_units(
     results: dict[int, UnitResult] = {}
     for index, target in enumerate(preflight):
         if target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION:
-            if target.reference_only and target.reason == "relational_evidence_absent":
-                results[index] = UnitResult(
-                    index,
-                    UnitStatus.SUCCEEDED,
-                    operation="REFERENCE_LITERALIZED",
-                    materially_affected=False,
-                )
-                continue
             results[index] = UnitResult(
                 index,
                 UnitStatus.DEFERRED,

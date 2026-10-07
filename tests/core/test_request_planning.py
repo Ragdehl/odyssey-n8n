@@ -2224,6 +2224,9 @@ def test_prompt_leaves_journal_entry_classification_schema_driven(schema: dict) 
     )
     assert "Minimize note mutations without changing semantic ownership" in prompt
     assert "preserve those subjects as separate write targets" in prompt
+    assert "missing relationship evidence for one typed singular identity" in prompt
+    assert "Core may resume normal typed resolution and CREATE" in prompt
+    assert "complete-set relational wording never authorizes CREATE" in prompt
 
 
 def test_write_prompt_does_not_embed_live_gate_fixture_examples(schema: dict) -> None:

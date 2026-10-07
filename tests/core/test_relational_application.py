@@ -2625,10 +2625,10 @@ def test_legacy_journal_source_with_two_relational_fact_references_stays_bounded
     )
 
 
-def test_relational_fact_reference_without_evidence_stays_literal_and_never_escapes_global_search(
+def test_relational_fact_reference_without_relationship_evidence_resumes_typed_identity_resolution(
     tmp_path: Path, schema: dict
 ) -> None:
-    """Persist exact wording when a bounded fact participant has no relationship evidence."""
+    """Preserve the ordinary typed identity lifecycle when relationship evidence is absent."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
@@ -2695,14 +2695,150 @@ def test_relational_fact_reference_without_evidence_stays_literal_and_never_esca
     assert result.status is application.ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("cloe",)
     content = parse_note((vault / "people/cloe.md").read_text()).content
-    assert f"Va al parque con {query}." in content
+    assert "Va al parque con [[people/marta|Marta Test]]." in content
+    assert query not in content
     assert (vault / "people/marta.md").read_bytes() == before[vault / "people/marta.md"]
     source_result, lookup_result = result.action_results[0].unit_results
     assert source_result.status is application.UnitStatus.SUCCEEDED
     assert lookup_result.status is application.UnitStatus.SUCCEEDED
-    assert lookup_result.operation == "REFERENCE_LITERALIZED"
+    assert lookup_result.operation == "REFERENCE_BOUND"
     assert lookup_result.materially_affected is False
-    assert reasoner.requests == []
+    assert [request.reference for request in reasoner.requests] == [query]
+
+
+def test_relational_fact_reference_without_identity_match_creates_typed_person(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A singular typed participant remains a canonical identity even without relationship evidence."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    mention = "mi prima Test 9472"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": "Cloe",
+                            "query": "Cloe",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Fue al parque con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": mention,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": mention,
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": mention,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    source_result, lookup_result = result.action_results[0].unit_results
+    assert source_result.status is application.UnitStatus.SUCCEEDED
+    assert lookup_result.status is application.UnitStatus.SUCCEEDED
+    assert lookup_result.operation == "CREATED"
+    assert lookup_result.stable_note_id is not None
+
+    created = [
+        path
+        for path in domain_markdown_paths(vault)
+        if parse_note(path.read_text()).metadata.get("id") == lookup_result.stable_note_id
+    ]
+    assert len(created) == 1
+    created_note = parse_note(created[0].read_text())
+    assert created_note.metadata["type"] == "person"
+    assert created_note.metadata["name"] == mention
+    source = parse_note((vault / "people/cloe.md").read_text()).content
+    assert f"|{mention}]]" in source
+    assert f"con {mention}." not in source
+
+
+def test_singular_relational_target_without_evidence_creates_typed_identity(
+    tmp_path: Path, schema: dict
+) -> None:
+    """The same singular-identity CREATE invariant applies when the relation identifies the target."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    target = "mi prima Test 9473"
+    plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        SelectionCriteria(
+                            None,
+                            target,
+                            "person",
+                            (),
+                            None,
+                            relational_reference=RelationalReference(
+                                target,
+                                "self",
+                                None,
+                                "one",
+                            ),
+                        ),
+                        "record",
+                        (),
+                        (),
+                        ("Vive en Lyon.",),
+                        (),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    unit_result = result.action_results[0].unit_results[0]
+    assert unit_result.status is application.UnitStatus.SUCCEEDED
+    assert unit_result.operation == "CREATED"
+    assert unit_result.stable_note_id is not None
+    created = next(
+        path
+        for path in domain_markdown_paths(vault)
+        if parse_note(path.read_text()).metadata.get("id") == unit_result.stable_note_id
+    )
+    note = parse_note(created.read_text())
+    assert note.metadata["type"] == "person"
+    assert note.metadata["name"] == target
+    assert "Vive en Lyon." in note.content
 
 
 def test_relational_fact_reference_with_existing_but_irrelevant_evidence_fails_closed(
