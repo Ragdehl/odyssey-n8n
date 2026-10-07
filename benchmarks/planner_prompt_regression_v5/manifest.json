@@ -8,7 +8,7 @@
   "sha256": {
     "new_cases_sha256": "d98ff0ebfa0f3ee0c22d906750c113c46243d809b9ed2a802a30eda7a68a9e30",
     "current_successor_sha256": "4762e63a757cbf025e58e524747a5cb7794ecd6fd3b8d3f53a3d175a48f37732",
-    "prompt_sha256": "dd1395598f7d61924da8f6b3870d5f71b222375448d27d7e4054bb70cb4e2ff4",
+    "prompt_sha256": "46983ae82857c34ae7720002a303551add48307ae521471d1972f30b4502ec57",
     "provider_schema_sha256": "24de52c9398bddacb93e923001776c97720e3e4c6ea6ee9dda73a01d83a89d05",
     "teaching_examples_sha256": "8bef64700e58361a667ae85d49bbdb3b6fc574d9674a3d47c60c2fee59e4acc1"
   }

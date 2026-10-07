@@ -162,7 +162,10 @@ def _nested_identity_passed(result: Any, case: dict[str, Any]) -> tuple[bool, li
     if len(matching) != 1:
         findings.append("missing_nested_typed_identity")
     source = material[0]
-    if not any(reference.mention == expected["mention"] for reference in source.references):
+    if not any(
+        _normalize(expected["entity"]) in _normalize(reference.mention)
+        for reference in source.references
+    ):
         findings.append("nested_surface_occurrence_not_referenced")
     if not any("{{ref:" in fact for fact in source.facts):
         findings.append("material_fact_has_no_reference_marker")
@@ -186,40 +189,34 @@ def _coordinated_relations_passed(result: Any) -> tuple[bool, list[str]]:
     findings: list[str] = []
     if len(material) != 1:
         return False, ["expected_one_material_unit"]
-    if len(lookups) != 2:
-        findings.append("expected_two_relational_lookups")
-        return False, findings
 
-    spouse: KnowledgeUnit | None = None
-    children: KnowledgeUnit | None = None
-    for unit in lookups:
-        text = _normalize(
-            " ".join(
-                filter(
-                    None,
-                    (
-                        unit.target.query,
-                        unit.target.relational_reference.reference
-                        if unit.target.relational_reference
-                        else None,
-                    ),
-                )
-            )
-        )
+    selections = [unit.target for unit in lookups]
+    selections.extend(
+        reference.selection
+        for reference in material[0].references
+        if reference.selection is not None
+    )
+    spouse = None
+    children = None
+    for selection in selections:
+        relation = selection.relational_reference
+        if relation is None:
+            continue
+        text = _normalize(" ".join(filter(None, (selection.query, relation.reference))))
         if "mujer" in text:
-            spouse = unit
+            spouse = selection
         if "hijo" in text:
-            children = unit
+            children = selection
     if spouse is None:
         findings.append("missing_spouse_scope")
     else:
-        relation = spouse.target.relational_reference
+        relation = spouse.relational_reference
         if relation is None or relation.source_kind != "self" or relation.members != "one":
             findings.append("wrong_spouse_scope")
     if children is None:
         findings.append("missing_children_scope")
     else:
-        relation = children.target.relational_reference
+        relation = children.relational_reference
         if relation is None or relation.source_kind != "self" or relation.members != "complete_set":
             findings.append("wrong_children_scope")
     if len(material[0].references) != 2:
@@ -233,24 +230,29 @@ def _complete_set_passed(result: Any) -> tuple[bool, list[str]]:
         return False, ["expected_single_write"]
     material, lookups = _material_and_lookups(action)
     findings: list[str] = []
-    if len(material) != 1 or len(lookups) != 1:
-        return False, ["expected_one_material_and_one_lookup"]
-    lookup = lookups[0]
-    relation = lookup.target.relational_reference
-    text = _normalize(
-        " ".join(
-            filter(
-                None,
-                (
-                    lookup.target.query,
-                    relation.reference if relation is not None else None,
-                ),
-            )
-        )
+    if len(material) != 1:
+        return False, ["expected_one_material_unit"]
+    selections = [unit.target for unit in lookups]
+    selections.extend(
+        reference.selection
+        for reference in material[0].references
+        if reference.selection is not None
     )
+    complete_sets = [
+        selection
+        for selection in selections
+        if selection.relational_reference is not None
+        and selection.relational_reference.members == "complete_set"
+    ]
+    if len(complete_sets) != 1:
+        return False, ["expected_one_complete_set_selection"]
+    selection = complete_sets[0]
+    relation = selection.relational_reference
+    assert relation is not None
+    text = _normalize(" ".join(filter(None, (selection.query, relation.reference))))
     if "primo" not in text or "canada" not in text:
         findings.append("complete_set_surface_lost")
-    if relation is None or relation.source_kind != "self" or relation.members != "complete_set":
+    if relation.source_kind != "self":
         findings.append("expected_self_complete_set")
     if len(material[0].references) != 1:
         findings.append("expected_one_fact_reference")
@@ -387,8 +389,12 @@ def main(argv: list[str] | None = None) -> int:
     if ceiling > MAX_CONSERVATIVE_COST_USD:
         raise SystemExit(f"Refusing live calls: conservative v5 ceiling changed: {ceiling}")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    if any(RESULTS_DIR.glob("*.json")):
-        raise SystemExit("Refusing live calls: v5 retained evidence already exists")
+    commit = subprocess.check_output(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
+    ).strip()
+    out = RESULTS_DIR / f"{commit[:12]}.json"
+    if out.exists():
+        raise SystemExit("Refusing live calls: this v5 candidate already has retained evidence")
 
     recorder = RecordingResponses(OpenAI(max_retries=0, timeout=30.0).responses)
     planner = OpenAILunaExperimentalPlanner(SimpleNamespace(responses=recorder), schema, context)

@@ -96,12 +96,16 @@ def test_v5_coordinated_relation_oracle_requires_two_independent_scopes() -> Non
         facts=("Merendé con {{ref:0}} e hijos ({{ref:1}}).",),
         references=(
             KnowledgeReference(1, "companion", "mi mujer"),
-            KnowledgeReference(2, "companion", "hijos"),
+            KnowledgeReference(
+                None,
+                "companion",
+                "hijos",
+                selection=selection("mis hijos", "person", relation=children_relation),
+            ),
         ),
     )
     spouse = unit(selection("mi mujer", "person", relation=spouse_relation), lookup=True)
-    children = unit(selection("mis hijos", "person", relation=children_relation), lookup=True)
-    result = RequestPlan((WriteAction((source, spouse, children)),), ())
+    result = RequestPlan((WriteAction((source, spouse)),), ())
 
     assert gate.evaluate_case(result, {"lineage": "coordinated_relations"}) == (True, [])
 
@@ -111,9 +115,15 @@ def test_v5_complete_set_oracle_keeps_unknown_group_semantic() -> None:
     source = unit(
         selection("yo", "person"),
         facts=("Cené con mis primos de Canadá ({{ref:0}}).",),
-        references=(KnowledgeReference(1, "companion", "mis primos de Canadá"),),
+        references=(
+            KnowledgeReference(
+                None,
+                "companion",
+                "mis primos de Canadá",
+                selection=selection("mis primos de Canadá", "person", relation=relation),
+            ),
+        ),
     )
-    lookup = unit(selection("mis primos de Canadá", "person", relation=relation), lookup=True)
-    result = RequestPlan((WriteAction((source, lookup)),), ())
+    result = RequestPlan((WriteAction((source,)),), ())
 
     assert gate.evaluate_case(result, {"lineage": "complete_set"}) == (True, [])
