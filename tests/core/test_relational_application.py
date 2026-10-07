@@ -2706,15 +2706,23 @@ def test_relational_fact_reference_without_relationship_evidence_resumes_typed_i
     assert [request.reference for request in reasoner.requests] == [query]
 
 
-def test_relational_fact_reference_without_identity_match_creates_typed_person(
-    tmp_path: Path, schema: dict
+@pytest.mark.parametrize(
+    ("note_type", "mention"),
+    [
+        ("person", "mi prima Test 9472"),
+        ("project", "el proyecto Test 9472"),
+        ("document", "el documento Test 9472"),
+        ("concept", "el concepto Test 9472"),
+    ],
+)
+def test_relational_fact_reference_without_identity_match_preserves_generic_typed_creation(
+    tmp_path: Path, schema: dict, note_type: str, mention: str
 ) -> None:
-    """A singular typed participant remains a canonical identity even without relationship evidence."""
+    """A singular typed participant keeps the generic NoteSchema creation lifecycle."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
     write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
-    mention = "mi prima Test 9472"
     raw = {
         "actions": [
             {
@@ -2735,13 +2743,13 @@ def test_relational_fact_reference_without_identity_match_creates_typed_person(
                         "intent": "record",
                         "properties": [],
                         "tag_changes": [],
-                        "facts": ["Fue al parque con {{ref:0}}."],
+                        "facts": ["He interactuado con {{ref:0}}."],
                         "references": [
                             {
                                 "selection": {
                                     "entity": None,
                                     "query": mention,
-                                    "type": "person",
+                                    "type": note_type,
                                     "filters": [],
                                     "relational_reference": {
                                         "reference": mention,
@@ -2750,7 +2758,7 @@ def test_relational_fact_reference_without_identity_match_creates_typed_person(
                                         "members": "one",
                                     },
                                 },
-                                "role": "companion",
+                                "role": "related",
                                 "mention": mention,
                             }
                         ],
@@ -2778,7 +2786,7 @@ def test_relational_fact_reference_without_identity_match_creates_typed_person(
     ]
     assert len(created) == 1
     created_note = parse_note(created[0].read_text())
-    assert created_note.metadata["type"] == "person"
+    assert created_note.metadata["type"] == note_type
     assert created_note.metadata["name"] == mention
     source = parse_note((vault / "people/cloe.md").read_text()).content
     assert f"|{mention}]]" in source
