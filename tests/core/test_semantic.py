@@ -404,3 +404,65 @@ def test_rebuild_accepts_a_read_only_vault(tmp_path: Path, schema: dict) -> None
         assert index.rebuild(VaultRepository(vault), schema, KeywordEmbedder()) == 1
     finally:
         vault.chmod(original_mode)
+
+
+def test_incremental_semantic_refresh_matches_full_rebuild_for_create_update_delete(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Keep incremental semantic state byte-for-byte equivalent at the row level."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    embedder = KeywordEmbedder()
+    write_note(vault, "people/Ada.md", valid_note("ada", "person", "Wife and project notes."))
+    write_note(vault, "projects/Odyssey.md", valid_note("odyssey", "project", "Odyssey project."))
+
+    incremental = SemanticEntityIndex(tmp_path / "semantic-incremental.sqlite3")
+    incremental.rebuild(repository, schema, embedder)
+
+    write_note(vault, "people/Ada.md", valid_note("ada", "person", "Updated spouse context."))
+    write_note(vault, "people/Bruno.md", valid_note("bruno", "person", "Partner project context."))
+    write_note(
+        vault,
+        "projects/Odyssey.md",
+        valid_note("odyssey", "project", "Odyssey project.", deleted=True),
+    )
+
+    assert (
+        incremental.refresh_notes(
+            repository, schema, embedder, note_ids=("ada", "bruno", "odyssey")
+        )
+        == 2
+    )
+
+    rebuilt = SemanticEntityIndex(tmp_path / "semantic-rebuilt.sqlite3")
+    rebuilt.rebuild(repository, schema, embedder)
+
+    def rows(index: SemanticEntityIndex) -> list[tuple[object, ...]]:
+        with sqlite3.connect(index.path) as connection:
+            return list(
+                connection.execute(
+                    "SELECT id, path, type, primary_name, source_hash, embedding FROM notes ORDER BY id"
+                )
+            )
+
+    assert rows(incremental) == rows(rebuilt)
+
+
+def test_incremental_semantic_refresh_fails_closed_on_unrelated_drift(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Force the runtime fallback when an unreported canonical note changed."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    embedder = KeywordEmbedder()
+    write_note(vault, "people/Ada.md", valid_note("ada", "person", "Original."))
+    write_note(vault, "people/Bruno.md", valid_note("bruno", "person", "Original."))
+    index = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
+    index.rebuild(repository, schema, embedder)
+
+    write_note(vault, "people/Ada.md", valid_note("ada", "person", "Changed outside mutation."))
+
+    with pytest.raises(SemanticIndexError, match="unrelated index drift"):
+        index.refresh_notes(repository, schema, embedder, note_ids=("bruno",))

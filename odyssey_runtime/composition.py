@@ -188,6 +188,7 @@ class RuntimeComposition:
 
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
+    refresh_affected_indexes: Callable[[Sequence[str]], None] | None = None
     refresh_task_lifecycle_indexes: Callable[[str, str], None] | None = None
     application_catalog: ApplicationCatalog = field(default_factory=ApplicationCatalog.empty)
     application_router: ApplicationRouter | None = None
@@ -1002,7 +1003,10 @@ class RuntimeComposition:
                     except (ContextIndexError, SemanticIndexError, ValueError):
                         self.refresh_indexes()
                 else:
-                    self.refresh_indexes()
+                    if self.refresh_affected_indexes is not None:
+                        self.refresh_affected_indexes((result.note_id,))
+                    else:
+                        self.refresh_indexes()
             response = {
                 "kind": "mutation",
                 "operation": result.operation,
@@ -1169,7 +1173,10 @@ class RuntimeComposition:
         if result.affected_stable_note_ids:
             refresh_started = self.monotonic()
             try:
-                self.refresh_indexes()
+                if self.refresh_affected_indexes is not None:
+                    self.refresh_affected_indexes(result.affected_stable_note_ids)
+                else:
+                    self.refresh_indexes()
             except Exception as error:
                 stages.append(
                     OperationalStage(
@@ -1563,6 +1570,26 @@ def build_runtime_from_environment() -> RuntimeComposition:
             index.rebuild(
                 repository, planning_schema_for_capability(schema, capability_id), embedder
             )
+
+    def refresh_affected_indexes(note_ids: Sequence[str]) -> None:
+        """Incrementally reconcile exactly the notes changed by one serialized mutation.
+
+        Incremental refresh verifies unrelated rows before changing derived state. Any contract
+        mismatch, unrelated drift, or unsupported edge case falls back to the established atomic
+        full rebuild so correctness remains the authority over latency.
+        """
+        try:
+            context_index.refresh_notes(repository, schema, embedder, note_ids=note_ids)
+            semantic_index.refresh_notes(repository, schema, embedder, note_ids=note_ids)
+            for capability_id, index in application_semantic_indexes.items():
+                index.refresh_notes(
+                    repository,
+                    planning_schema_for_capability(schema, capability_id),
+                    embedder,
+                    note_ids=note_ids,
+                )
+        except (ContextIndexError, SemanticIndexError, ValueError):
+            refresh_indexes()
 
     def refresh_task_lifecycle_indexes(path: str, expected_source_hash: str) -> None:
         """Incrementally refresh derived rows after a Task metadata-only lifecycle mutation."""
@@ -2182,6 +2209,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
+        refresh_affected_indexes=refresh_affected_indexes,
         refresh_task_lifecycle_indexes=refresh_task_lifecycle_indexes,
         application_catalog=application_catalog,
         application_router=application_router,

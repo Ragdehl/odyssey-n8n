@@ -1138,6 +1138,21 @@ def test_runtime_refreshes_indexes_after_core_reports_a_mutation() -> None:
     assert refreshed == [True]
 
 
+def test_runtime_prefers_incremental_refresh_for_exact_affected_notes() -> None:
+    """Use the bounded affected-ID refresher instead of a full rebuild after normal writes."""
+    full_refreshes: list[bool] = []
+    incremental_refreshes: list[tuple[str, ...]] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: full_refreshes.append(True),
+        refresh_affected_indexes=lambda note_ids: incremental_refreshes.append(tuple(note_ids)),
+    )
+
+    assert runtime.execute("remember this").request_id == "request-test"
+    assert incremental_refreshes == [("note-test",)]
+    assert full_refreshes == []
+
+
 def test_runtime_exposes_index_refresh_failure_after_core_mutation() -> None:
     """Leave post-Core refresh failure explicit while preserving Core's mutation result boundary."""
     calls: list[tuple[str, str | None]] = []

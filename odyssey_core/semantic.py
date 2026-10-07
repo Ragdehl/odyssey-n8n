@@ -383,6 +383,128 @@ class SemanticEntityIndex:
             temporary.unlink(missing_ok=True)
         return len(projected)
 
+    def refresh_notes(
+        self,
+        repository: VaultRepository,
+        schema: dict[str, Any],
+        embedder: TextEmbedder,
+        *,
+        note_ids: Sequence[str],
+    ) -> int:
+        """Incrementally reconcile affected semantic rows against authoritative Markdown.
+
+        The caller supplies the exact stable identities mutated by one serialized product
+        execution. Unaffected indexed rows are verified against the current vault before any
+        replacement occurs. CREATE, UPDATE, type changes, soft deletion, and disappearance are
+        handled in one transaction; incompatible contracts or unrelated drift fail closed so the
+        runtime can fall back to a full rebuild.
+        """
+        requested = tuple(dict.fromkeys(note_ids))
+        if not requested or any(
+            not isinstance(note_id, str) or not note_id for note_id in requested
+        ):
+            raise SemanticIndexError("Incremental semantic refresh requires stable note IDs")
+        canonical_types = _canonical_types(schema)
+        current: dict[str, _ProjectedNote] = {}
+        seen_ids: set[str] = set()
+        for path in repository.list_markdown_paths():
+            raw = repository.read_text(path)
+            try:
+                note = parse_note(raw)
+                validate_note(note, schema)
+            except (NoteFormatError, NoteValidationError) as error:
+                raise SemanticIndexError(f"Cannot safely index invalid note: {path}") from error
+            note_id = cast(str, note.metadata["id"])
+            if note_id in seen_ids:
+                raise SemanticIndexError(f"Cannot safely index duplicate note ID: {note_id}")
+            seen_ids.add(note_id)
+            if note.metadata.get("deleted") is True:
+                continue
+            note_type = cast(str, note.metadata["type"])
+            if note_type not in canonical_types:
+                continue
+            current[note_id] = _ProjectedNote(
+                path=path,
+                id=note_id,
+                type=note_type,
+                primary_name=cast(str, note.metadata["name"]),
+                source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                text=build_semantic_retrieval_text(note, path),
+            )
+
+        selected = [current[note_id] for note_id in requested if note_id in current]
+        vectors = list(embedder.embed_documents([item.text for item in selected]))
+        if len(vectors) != len(selected):
+            raise SemanticIndexError("Embedding runtime returned the wrong number of vectors")
+        normalized = [_normalized_vector(vector) for vector in vectors]
+        dimensions = {len(vector) for vector in normalized}
+        if len(dimensions) > 1:
+            raise SemanticIndexError("Embedding runtime returned inconsistent dimensions")
+
+        affected = frozenset(requested)
+        try:
+            with sqlite3.connect(self.path) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise SemanticIndexError("Semantic index markers are incompatible")
+                if (
+                    metadata.get("model_name") != embedder.model_name
+                    or metadata.get("model_version") != embedder.model_version
+                    or tuple(sorted(json.loads(metadata["canonical_types"]))) != canonical_types
+                ):
+                    raise SemanticIndexError("Semantic index contract changed; rebuild is required")
+                dimension = int(metadata["dimension"])
+                if dimensions and dimensions != {dimension}:
+                    raise SemanticIndexError("Semantic index contract changed; rebuild is required")
+
+                indexed = {
+                    row[0]: row[1:]
+                    for row in connection.execute(
+                        "SELECT id, path, type, primary_name, source_hash FROM notes"
+                    )
+                }
+                current_identity = {
+                    note_id: (item.path, item.type, item.primary_name, item.source_hash)
+                    for note_id, item in current.items()
+                }
+                for note_id, identity in current_identity.items():
+                    if note_id not in affected and indexed.get(note_id) != identity:
+                        raise SemanticIndexError(
+                            "Incremental semantic refresh detected unrelated index drift"
+                        )
+                if any(
+                    note_id not in affected and note_id not in current_identity
+                    for note_id in indexed
+                ):
+                    raise SemanticIndexError(
+                        "Incremental semantic refresh detected unrelated index drift"
+                    )
+
+                connection.executemany(
+                    "DELETE FROM notes WHERE id = ?",
+                    ((note_id,) for note_id in requested),
+                )
+                connection.executemany(
+                    """INSERT INTO notes(id, path, type, primary_name, source_hash, embedding)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    [
+                        (
+                            item.id,
+                            item.path,
+                            item.type,
+                            item.primary_name,
+                            item.source_hash,
+                            _vector_blob(vector),
+                        )
+                        for item, vector in zip(selected, normalized, strict=True)
+                    ],
+                )
+        except SemanticIndexError:
+            raise
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
+            raise SemanticIndexError("Unable to incrementally refresh semantic index") from error
+        return len(selected)
+
     def refresh_existing_note(
         self,
         repository: VaultRepository,

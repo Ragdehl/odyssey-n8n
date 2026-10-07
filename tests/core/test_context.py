@@ -925,3 +925,77 @@ def test_duplicate_ids_fail_rebuild(tmp_path: Path, schema: dict) -> None:
         ContextIndex(tmp_path / "context.sqlite3").rebuild(
             VaultRepository(vault), schema, KeywordEmbedder()
         )
+
+
+def test_incremental_context_refresh_matches_rebuild_and_recomputes_global_links(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Update only affected embeddings while keeping CREATE/DELETE backlink topology exact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    embedder = KeywordEmbedder()
+    write_note(
+        vault,
+        "ideas/source.md",
+        note(
+            "source",
+            "concept",
+            "Links to [[people/new-person|New Person]] and [[people/old-person|Old Person]].",
+        ),
+    )
+    write_note(vault, "people/old-person.md", note("old", "person", "Old person."))
+    write_note(vault, "ideas/changed.md", note("changed", "concept", "Interface idea."))
+
+    incremental = ContextIndex(tmp_path / "context-incremental.sqlite3")
+    incremental.rebuild(repository, schema, embedder)
+
+    write_note(vault, "people/new-person.md", note("new", "person", "New mobile person."))
+    write_note(
+        vault,
+        "people/old-person.md",
+        note("old", "person", "Old person.", deleted=True),
+    )
+    write_note(vault, "ideas/changed.md", note("changed", "concept", "Updated Odyssey GUI."))
+
+    assert (
+        incremental.refresh_notes(repository, schema, embedder, note_ids=("new", "old", "changed"))
+        == 2
+    )
+
+    rebuilt = ContextIndex(tmp_path / "context-rebuilt.sqlite3")
+    rebuilt.rebuild(repository, schema, embedder)
+
+    queries = {
+        "notes": "SELECT id, path, type, primary_name, source_hash, tags, embedding FROM notes ORDER BY id",
+        "properties": "SELECT note_id, field, value, value_type FROM properties ORDER BY note_id, field, value",
+        "projection": "SELECT note_id, created_at, updated_at, aliases, lexical_text, body_text FROM note_projection ORDER BY note_id",
+        "links": "SELECT source_id, target_id, target_text, label, occurrence_count, context FROM note_links ORDER BY source_id, target_id, target_text, label",
+    }
+    for query in queries.values():
+        with sqlite3.connect(incremental.path) as left, sqlite3.connect(rebuilt.path) as right:
+            assert list(left.execute(query)) == list(right.execute(query))
+
+    with sqlite3.connect(incremental.path) as connection:
+        assert connection.execute(
+            "SELECT target_id FROM note_links WHERE source_id = 'source'"
+        ).fetchall() == [("new",)]
+
+
+def test_incremental_context_refresh_fails_closed_on_unrelated_drift(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Reject an incremental write when a different canonical note changed unexpectedly."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    embedder = KeywordEmbedder()
+    write_note(vault, "ideas/a.md", note("a", "concept", "Original."))
+    write_note(vault, "ideas/b.md", note("b", "concept", "Original."))
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    index.rebuild(repository, schema, embedder)
+
+    write_note(vault, "ideas/a.md", note("a", "concept", "Changed outside mutation."))
+
+    with pytest.raises(ContextIndexError, match="unrelated index drift"):
+        index.refresh_notes(repository, schema, embedder, note_ids=("b",))

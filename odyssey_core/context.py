@@ -730,6 +730,222 @@ class ContextIndex:
             temporary.unlink(missing_ok=True)
         return len(projected)
 
+    def refresh_notes(
+        self,
+        repository: VaultRepository,
+        schema: dict[str, Any],
+        embedder: TextEmbedder,
+        *,
+        note_ids: Sequence[str],
+    ) -> int:
+        """Incrementally reconcile affected context rows and global link topology.
+
+        Stable IDs identify exactly the notes mutated by one serialized product execution.
+        Embeddings and projections are recomputed only for those active notes. The inexpensive
+        wikilink graph is rebuilt from stored body projections so CREATE/DELETE can safely change
+        backlink resolution without re-embedding unrelated notes. Unrelated vault/index drift or
+        an incompatible contract fails closed, allowing the runtime to fall back to a full rebuild.
+        """
+        requested = tuple(dict.fromkeys(note_ids))
+        if not requested or any(
+            not isinstance(note_id, str) or not note_id for note_id in requested
+        ):
+            raise ContextIndexError("Incremental context refresh requires stable note IDs")
+        canonical_types = _canonical_values(schema, "types")
+        canonical_tags = _canonical_values(schema, "tags")
+        canonical_subtypes = tuple(sorted(_canonical_subtypes(schema)))
+        filter_definitions = _filter_definitions(schema)
+
+        current: dict[str, tuple[Any, ...]] = {}
+        seen_ids: set[str] = set()
+        for path in repository.list_markdown_paths():
+            raw = repository.read_text(path)
+            try:
+                note = parse_note(raw)
+                validate_note(note, schema)
+            except (NoteFormatError, NoteValidationError) as error:
+                raise ContextIndexError(f"Cannot safely index invalid note: {path}") from error
+            note_id = cast(str, note.metadata["id"])
+            if note_id in seen_ids:
+                raise ContextIndexError(f"Cannot safely index duplicate note ID: {note_id}")
+            seen_ids.add(note_id)
+            if note.metadata.get("deleted") is True:
+                continue
+            note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
+            created_at = _normalize_property_value(
+                {"value_type": "string", "constraints": {"format": "date-time"}},
+                note.metadata["created_at"],
+            )
+            updated_at = _normalize_property_value(
+                {"value_type": "string", "constraints": {"format": "date-time"}},
+                note.metadata["updated_at"],
+            )
+            assert isinstance(created_at, str) and isinstance(updated_at, str)
+            aliases = tuple(cast(list[str], note.metadata.get("aliases", [])))
+            retrieval_text = build_context_retrieval_text(note, path)
+            lexical_text = " ".join(
+                (cast(str, note.metadata["name"]), *aliases, *note_tags, retrieval_text)
+            ).casefold()
+            properties: list[tuple[str, str, str | int, str]] = []
+            for field, definition in filter_definitions.items():
+                value = note.metadata.get(
+                    field, note.metadata.get("tags") if field == "tags" else None
+                )
+                if value is None:
+                    continue
+                values = value if isinstance(value, list) else [value]
+                properties.extend(
+                    (
+                        note_id,
+                        field,
+                        _normalize_property_value(definition, item),
+                        definition["value_type"],
+                    )
+                    for item in values
+                )
+            current[note_id] = (
+                path,
+                cast(str, note.metadata["type"]),
+                cast(str, note.metadata["name"]),
+                hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                note_tags,
+                retrieval_text,
+                created_at,
+                updated_at,
+                aliases,
+                lexical_text,
+                note.content,
+                tuple(properties),
+            )
+
+        selected = [(note_id, current[note_id]) for note_id in requested if note_id in current]
+        vectors = list(embedder.embed_documents([item[1][5] for item in selected]))
+        if len(vectors) != len(selected):
+            raise ContextIndexError("Embedding runtime returned the wrong number of vectors")
+        normalized = [_normalized_vector(vector) for vector in vectors]
+        dimensions = {len(vector) for vector in normalized}
+        if len(dimensions) > 1:
+            raise ContextIndexError("Embedding runtime returned inconsistent dimensions")
+
+        affected = frozenset(requested)
+        try:
+            with sqlite3.connect(self.path) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise ContextIndexError("Context index markers are incompatible")
+                if (
+                    metadata.get("model_name") != embedder.model_name
+                    or metadata.get("model_version") != embedder.model_version
+                    or tuple(sorted(json.loads(metadata["canonical_types"]))) != canonical_types
+                    or tuple(sorted(json.loads(metadata["canonical_tags"]))) != canonical_tags
+                    or tuple(sorted(json.loads(metadata["canonical_subtypes"])))
+                    != canonical_subtypes
+                    or json.loads(metadata["filter_definitions"])
+                    != _filter_registry(filter_definitions)
+                ):
+                    raise ContextIndexError("Context index contract changed; rebuild is required")
+                dimension = int(metadata["dimension"])
+                if dimensions and dimensions != {dimension}:
+                    raise ContextIndexError("Context index contract changed; rebuild is required")
+
+                indexed = {
+                    row[0]: row[1:]
+                    for row in connection.execute(
+                        "SELECT id, path, type, primary_name, source_hash FROM notes"
+                    )
+                }
+                current_identity = {
+                    note_id: (item[0], item[1], item[2], item[3])
+                    for note_id, item in current.items()
+                }
+                for note_id, identity in current_identity.items():
+                    if note_id not in affected and indexed.get(note_id) != identity:
+                        raise ContextIndexError(
+                            "Incremental context refresh detected unrelated index drift"
+                        )
+                if any(
+                    note_id not in affected and note_id not in current_identity
+                    for note_id in indexed
+                ):
+                    raise ContextIndexError(
+                        "Incremental context refresh detected unrelated index drift"
+                    )
+
+                connection.execute("DELETE FROM note_links")
+                connection.executemany(
+                    "DELETE FROM properties WHERE note_id = ?",
+                    ((note_id,) for note_id in requested),
+                )
+                connection.executemany(
+                    "DELETE FROM note_projection WHERE note_id = ?",
+                    ((note_id,) for note_id in requested),
+                )
+                connection.executemany(
+                    "DELETE FROM notes WHERE id = ?",
+                    ((note_id,) for note_id in requested),
+                )
+
+                for (note_id, item), vector in zip(selected, normalized, strict=True):
+                    connection.execute(
+                        "INSERT INTO notes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            note_id,
+                            item[0],
+                            item[1],
+                            item[2],
+                            item[3],
+                            json.dumps(item[4]),
+                            _vector_blob(vector),
+                        ),
+                    )
+                    connection.execute(
+                        "INSERT INTO note_projection VALUES (?, ?, ?, ?, ?, ?)",
+                        (
+                            note_id,
+                            item[6],
+                            item[7],
+                            json.dumps(item[8], ensure_ascii=False),
+                            item[9],
+                            item[10],
+                        ),
+                    )
+                    connection.executemany(
+                        "INSERT INTO properties(note_id, field, value, value_type) VALUES (?, ?, ?, ?)",
+                        item[11],
+                    )
+
+                active_paths: dict[str, str] = {}
+                active_basenames: dict[str, set[str]] = {}
+                for note_id, path in connection.execute("SELECT id, path FROM notes"):
+                    stem = path.removesuffix(".md").casefold()
+                    active_paths[stem] = note_id
+                    active_basenames.setdefault(stem.rsplit("/", 1)[-1], set()).add(note_id)
+                links: list[tuple[str, str, str, str, int, str]] = []
+                for source_id, body in connection.execute(
+                    "SELECT note_id, body_text FROM note_projection"
+                ):
+                    occurrences: dict[tuple[str, str, str], int] = {}
+                    for target, label in extract_wikilink_targets(body):
+                        target_key = target.removesuffix(".md").casefold()
+                        target_id = active_paths.get(target_key)
+                        if target_id is None and "/" not in target_key:
+                            matches = active_basenames.get(target_key, set())
+                            target_id = next(iter(matches)) if len(matches) == 1 else None
+                        if target_id is not None:
+                            key = (target_id, target, label)
+                            occurrences[key] = occurrences.get(key, 0) + 1
+                    context = _humanize_wikilinks(body).strip().replace("\n", " ")[:320]
+                    links.extend(
+                        (source_id, target_id, target, label, count, context)
+                        for (target_id, target, label), count in occurrences.items()
+                    )
+                connection.executemany("INSERT INTO note_links VALUES (?, ?, ?, ?, ?, ?)", links)
+        except ContextIndexError:
+            raise
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
+            raise ContextIndexError("Unable to incrementally refresh context index") from error
+        return len(selected)
+
     def refresh_existing_note(
         self,
         repository: VaultRepository,
