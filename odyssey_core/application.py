@@ -986,7 +986,7 @@ def _execute_write(
                         semantic_set_selector=semantic_set_selector,
                     )
                 except RelationalResolutionError as error:
-                    if str(error) != "relational_evidence_unavailable":
+                    if not error.evidence_absent:
                         raise
                     resolved_references[(unit_index, reference_index)] = None
             original_count = len(action.units)
@@ -1373,7 +1373,7 @@ def _execute_single_units(
     results: dict[int, UnitResult] = {}
     for index, target in enumerate(preflight):
         if target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION:
-            if target.reference_only and target.reason == "relational_evidence_unavailable":
+            if target.reference_only and target.reason == "relational_evidence_absent":
                 results[index] = UnitResult(
                     index,
                     UnitStatus.SUCCEEDED,

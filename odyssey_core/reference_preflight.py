@@ -801,7 +801,7 @@ def _decide_reference_only_target(
         except RelationalResolutionError as error:
             return WriteTargetDecision(
                 WriteTargetOutcome.NEEDS_CLARIFICATION,
-                reason=str(error),
+                reason=("relational_evidence_absent" if error.evidence_absent else str(error)),
                 candidate_note_ids=error.candidate_ids,
                 clarification=error.clarification,
             )

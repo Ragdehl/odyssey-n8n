@@ -62,12 +62,15 @@ class RelationalResolutionError(RuntimeError):
         candidate_ids: tuple[str, ...] = (),
         evidence_guard: str | None = None,
         clarification: ClarificationPresentation | None = None,
+        *,
+        evidence_absent: bool = False,
     ) -> None:
-        """Carry only Core-grounded bounded identity options when clarification is safe."""
+        """Carry bounded identity options plus whether canonical relationship evidence is absent."""
         super().__init__(reason)
         self.candidate_ids = candidate_ids
         self.evidence_guard = evidence_guard
         self.clarification = clarification
+        self.evidence_absent = evidence_absent
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +138,9 @@ def resolve_relational_reference(
         )
         if source_resolution.outcome is not ExistingEntityOutcome.RESOLVED:
             if source_resolution.source is ResolutionSource.LOCAL_NO_CANDIDATES:
-                raise RelationalResolutionError("relational_evidence_unavailable")
+                raise RelationalResolutionError(
+                    "relational_evidence_unavailable", evidence_absent=True
+                )
             raise RelationalResolutionError(
                 "relational_source_unresolved",
                 candidate_ids=source_resolution.candidate_ids,
@@ -154,7 +159,7 @@ def resolve_relational_reference(
     )
     candidates: tuple[tuple[CanonicalFact, EvidenceDirection], ...] = (*outgoing, *incoming)
     if not candidates:
-        raise RelationalResolutionError("relational_evidence_unavailable")
+        raise RelationalResolutionError("relational_evidence_unavailable", evidence_absent=True)
     evidence_guard = _candidate_evidence_guard(candidates)
     if (
         refine_singular_with_query

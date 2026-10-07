@@ -2705,6 +2705,83 @@ def test_relational_fact_reference_without_evidence_stays_literal_and_never_esca
     assert reasoner.requests == []
 
 
+def test_relational_fact_reference_with_existing_but_irrelevant_evidence_fails_closed(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Do not literalize when canonical relationship evidence exists but cannot ground the reference."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(
+        vault, "people/edgar.md", "edgar", "Edgar", fact("Mi padre es [[people/juan|Juan]].")
+    )
+    write_note(vault, "people/juan.md", "juan", "Juan", "")
+    before = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    query = "mi hija que vive en Lyon"
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": "Cloe",
+                            "query": "Cloe",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": None,
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Va al parque con {{ref:0}}."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": query,
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "mi hija",
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "companion",
+                                "mention": query,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(
+        vault,
+        schema,
+        plan,
+        selector=StaticFactSelector(SetEvidenceSelection((), ())),
+    )
+
+    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert result.affected_stable_note_ids == ()
+    assert all(path.read_bytes() == content for path, content in before.items())
+    source_result, lookup_result = result.action_results[0].unit_results
+    assert source_result.status is application.UnitStatus.DEFERRED
+    assert source_result.reason == "DEPENDENCY_FAILED"
+    assert lookup_result.status is application.UnitStatus.DEFERRED
+    assert lookup_result.reason == "relational_evidence_unavailable"
+
+
 def test_complete_set_fact_reference_without_evidence_stays_literal(
     tmp_path: Path, schema: dict
 ) -> None:
