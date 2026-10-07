@@ -1,0 +1,69 @@
+{
+  "version": "planner-prompt-regression-v5-new-cases",
+  "fixed_context": {
+    "date": "2026-09-28",
+    "time": "20:30",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "PPRV5-NESTED-PERSON-01",
+      "lineage": "nested_identity",
+      "request": "Voy a jugar a fútbol con unos papás del cole de Cloe.",
+      "expect": {
+        "note_type": "person",
+        "mention": "Cloe",
+        "entity": "Cloe",
+        "forbidden_identity_terms": ["papás", "cole"]
+      }
+    },
+    {
+      "id": "PPRV5-NESTED-PROJECT-01",
+      "lineage": "nested_identity",
+      "request": "He apuntado unas ideas sobre el proyecto Faro.",
+      "expect": {
+        "note_type": "project",
+        "mention": "el proyecto Faro",
+        "entity": "Faro",
+        "forbidden_identity_terms": ["ideas"]
+      }
+    },
+    {
+      "id": "PPRV5-NESTED-DOCUMENT-01",
+      "lineage": "nested_identity",
+      "request": "He hecho un comentario sobre el documento Contrato 2026.",
+      "expect": {
+        "note_type": "document",
+        "mention": "el documento Contrato 2026",
+        "entity": "Contrato 2026",
+        "forbidden_identity_terms": ["comentario"]
+      }
+    },
+    {
+      "id": "PPRV5-NESTED-CONCEPT-01",
+      "lineage": "nested_identity",
+      "request": "He estado hablando sobre el concepto Zero Inbox.",
+      "expect": {
+        "note_type": "concept",
+        "mention": "el concepto Zero Inbox",
+        "entity": "Zero Inbox",
+        "forbidden_identity_terms": []
+      }
+    },
+    {
+      "id": "PPRV5-COORDINATED-SPOUSE-CHILDREN-01",
+      "lineage": "coordinated_relations",
+      "request": "Hoy he merendado con mi mujer e hijos unas galletas muy buenas."
+    },
+    {
+      "id": "PPRV5-COORDINATED-CHILDREN-SPOUSE-01",
+      "lineage": "coordinated_relations",
+      "request": "Hoy he merendado con mis hijos y mi mujer."
+    },
+    {
+      "id": "PPRV5-UNKNOWN-COMPLETE-SET-01",
+      "lineage": "complete_set",
+      "request": "Hoy he cenado con mis primos de Canadá."
+    }
+  ]
+}
