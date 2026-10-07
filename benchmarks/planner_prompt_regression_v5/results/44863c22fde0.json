@@ -1,0 +1,1704 @@
+{
+  "version": 5,
+  "commit": "44863c22fde02d7352e95882925308db1a16e69a",
+  "provider_attempts": 23,
+  "completed_provider_responses": 23,
+  "automatic_retries": 0,
+  "sol_calls": 0,
+  "conservative_cost_ceiling_usd": "0.3093546",
+  "estimated_standard_cost_usd": "0.0560500",
+  "acceptable": true,
+  "failed_case_ids": [],
+  "rows": [
+    {
+      "case_id": "SWR01-self-coworkers",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la persona humana autenticada",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": "self",
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "{{ref:0}} y {{ref:1}} son mis compañeros de trabajo."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "Axel",
+                    "selection": null
+                  },
+                  {
+                    "target_index": 2,
+                    "role": "identity",
+                    "mention": "Denis",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Axel",
+                  "query": "Axel",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Denis",
+                  "query": "Denis",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10393,
+        "output_tokens": 377,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 161
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0c1ce94a1847e203016ac681d8025887d18322b90327698a8e"
+    },
+    {
+      "case_id": "SWR02-rich-daughter-target",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "mi hija a la que le gusta ver detectives de animales",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mi hija",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Adora el chocolate."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10399,
+        "output_tokens": 185,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 37
+      },
+      "provider_status": "completed",
+      "response_id": "resp_03dbb3766fbb2981016ac681de728c87d1935adba91effe926"
+    },
+    {
+      "case_id": "SWR03-described-friend-target",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la amiga con la que cené ayer",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "la amiga con la que cené ayer",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Se muda a París."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10396,
+        "output_tokens": 299,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 148
+      },
+      "provider_status": "completed",
+      "response_id": "resp_011a61165194b7fe016ac681e2561887d1a39d2d1fa32b134e"
+    },
+    {
+      "case_id": "SWR04-target-and-described-reference",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "mi hijo mayor",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mi hijo mayor",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Fue al cine con {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "la amiga que vive en Lyon",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la amiga que vive en Lyon",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10397,
+        "output_tokens": 302,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 105
+      },
+      "provider_status": "completed",
+      "response_id": "resp_064a6e7693599789016ac681e6d30087d190a103ea478e47f8"
+    },
+    {
+      "case_id": "SWR05-unsafe-pronoun",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "expected_escalation"
+      ],
+      "result": {
+        "outcome": "ESCALATE"
+      },
+      "usage": {
+        "input_tokens": 10392,
+        "output_tokens": 75,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 35
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0b360f519af8e5f2016ac681eaf63487d1a7db706dc9ee9967"
+    },
+    {
+      "case_id": "SWR06-existing-source-relational-anchor",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "el amigo de Bruno que vive en Lyon",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "el amigo de Bruno",
+                    "source_kind": "existing",
+                    "source_query": "Bruno",
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Se muda a Toulouse."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10396,
+        "output_tokens": 281,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 128
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0bfe8129ceaf82b0016ac681ede85487d19f1c1f57a6377547"
+    },
+    {
+      "case_id": "SWR09-independent-shared-predicate",
+      "lineage": "frozen_swr",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Denis",
+                  "query": "Denis",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Es zurdo."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Axel",
+                  "query": "Axel",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Es zurdo."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10391,
+        "output_tokens": 235,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 42
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0d37f06fd3e91bbd016ac681f289bc87d19c641158270b8ea5"
+    },
+    {
+      "case_id": "SWF-READ-01",
+      "lineage": "frontend_sentinel",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "plan": {
+              "entity": null,
+              "query": "documents that mention the migration plan",
+              "type": null,
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": "query"
+            },
+            "kind": "retrieve",
+            "result_shape": "collection"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10390,
+        "output_tokens": 93,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 0
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0232c50744c58ea9016ac681f6922887d1ae9d7c73db18789b"
+    },
+    {
+      "case_id": "SWF-DELEGATE-01",
+      "lineage": "frontend_sentinel",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "request": "count the documents that mention the migration plan",
+            "selection": {
+              "entity": null,
+              "query": "documents that mention the migration plan",
+              "type": "document",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "kind": "delegate"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10392,
+        "output_tokens": 99,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 0
+      },
+      "provider_status": "completed",
+      "response_id": "resp_003bdccde973fb60016ac681f9011087d1ac8808f5d50db289"
+    },
+    {
+      "case_id": "SWF-MIXED-ORDER-01",
+      "lineage": "frontend_sentinel",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "plan": {
+              "entity": "Northwind",
+              "query": "what I know about Northwind",
+              "type": null,
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "kind": "retrieve",
+            "result_shape": "single"
+          },
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": "Marta",
+                  "query": "Marta",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Reviewed {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "the brief",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "the brief",
+                  "type": "document",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          },
+          {
+            "request": "count documents mentioning the brief",
+            "selection": {
+              "entity": null,
+              "query": "documents mentioning the brief",
+              "type": "document",
+              "filters": [],
+              "link_scope": null,
+              "self_target": null,
+              "relational_reference": null,
+              "semantic_set": null,
+              "collection_subject": null
+            },
+            "kind": "delegate"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10405,
+        "output_tokens": 345,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 70
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0a399ca0344262f8016ac681fd2dd487d1b16b11a6bafa64aa"
+    },
+    {
+      "case_id": "PPR14-unknown-self-member-write",
+      "lineage": "clarification_entry",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "uno de mis hijos",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mis hijos",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Se ha apuntado a natación."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10395,
+        "output_tokens": 233,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 89
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0ed40855d006d746016ac68203193087d1af79a6012202f022"
+    },
+    {
+      "case_id": "PPR15-unknown-self-member-after-related-turn",
+      "lineage": "clarification_entry",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "uno de mis hijos",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mis hijos",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Se ha apuntado a natación."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10444,
+        "output_tokens": 233,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 89
+      },
+      "provider_status": "completed",
+      "response_id": "resp_04d7a2dee3358337016ac68206885887d19f553c8b44b210fe"
+    },
+    {
+      "case_id": "PPR16-unknown-self-project-member-write",
+      "lineage": "clarification_entry",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "uno de mis proyectos",
+                  "type": "project",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "uno de mis proyectos",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Ha cambiado de prioridad."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10392,
+        "output_tokens": 232,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 89
+      },
+      "provider_status": "completed",
+      "response_id": "resp_054f576a593dad48016ac682096fc487d18988017cfdd2d29e"
+    },
+    {
+      "case_id": "CSWR01-qualified-bounded-source-member",
+      "lineage": "current_successor",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la persona del Directorio Faro que trabaja en Airbus Test",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "la persona del Directorio Faro que trabaja en Airbus Test",
+                    "source_kind": "existing",
+                    "source_query": "el Directorio Faro",
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Se ha comprado un paraguas rojo."
+                ],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10405,
+        "output_tokens": 367,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 199
+      },
+      "provider_status": "completed",
+      "response_id": "resp_033cd31a5182a5bd016ac6820dd62087d1be0b37bf0d0eac30"
+    },
+    {
+      "case_id": "CSWR02-relational-target-one-bounded-reference",
+      "lineage": "current_successor",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "mi hija mayor",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mi hija mayor",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Va a cenar con {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "la persona del Directorio Faro que trabaja en Airbus Test",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la persona del Directorio Faro que trabaja en Airbus Test",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "la persona del Directorio Faro",
+                    "source_kind": "existing",
+                    "source_query": "el Directorio Faro",
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10403,
+        "output_tokens": 593,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 357
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0d0f52ced72974f1016ac68212513c87d1bd7bbf781ed7f0fd"
+    },
+    {
+      "case_id": "CSWR03-relational-target-two-bounded-references",
+      "lineage": "current_successor",
+      "passed": true,
+      "findings": [
+        "all_checks_passed"
+      ],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "mi hija mayor",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mi hija mayor",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Va al parque el sábado con {{ref:0}} y con {{ref:1}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "la persona del Directorio Faro que trabaja en Airbus Test",
+                    "selection": null
+                  },
+                  {
+                    "target_index": 2,
+                    "role": "identity",
+                    "mention": "la persona del Directorio Faro que habla italiano",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la persona del Directorio Faro que trabaja en Airbus Test",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "la persona del Directorio Faro que trabaja en Airbus Test",
+                    "source_kind": "existing",
+                    "source_query": "el Directorio Faro",
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "la persona del Directorio Faro que habla italiano",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "la persona del Directorio Faro que habla italiano",
+                    "source_kind": "existing",
+                    "source_query": "el Directorio Faro",
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10415,
+        "output_tokens": 418,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 81
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0cb2c02bb3ee1ed0016ac6821a40a487d182550ed43635b894"
+    },
+    {
+      "case_id": "PPRV5-NESTED-PERSON-01",
+      "lineage": "nested_identity",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "2026-09-28",
+                  "type": "calendar_day",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Voy a jugar a fútbol con unos papás del cole de {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "Cloe",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Cloe",
+                  "query": "Cloe",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10398,
+        "output_tokens": 386,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 202
+      },
+      "provider_status": "completed",
+      "response_id": "resp_02fe24e7af2d8a3b016ac6821e98a087d1930d4bdec968ded9"
+    },
+    {
+      "case_id": "PPRV5-NESTED-PROJECT-01",
+      "lineage": "nested_identity",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "the authenticated human",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": "self",
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Voy a comer con unos colaboradores del proyecto {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "Faro",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Faro",
+                  "query": "Faro",
+                  "type": "project",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10393,
+        "output_tokens": 405,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 230
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0f1b501e20df266f016ac68224a30887d1a59b267c3a413c11"
+    },
+    {
+      "case_id": "PPRV5-NESTED-DOCUMENT-01",
+      "lineage": "nested_identity",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "2026-09-28",
+                  "type": "calendar_day",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Voy a comer con gente que trabaja sobre el documento {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "Contrato 2026",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Contrato 2026",
+                  "query": "Contrato 2026",
+                  "type": "document",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10399,
+        "output_tokens": 369,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 181
+      },
+      "provider_status": "completed",
+      "response_id": "resp_018aec3c0cc8c279016ac68230c44887d1931cfedb87f3617a"
+    },
+    {
+      "case_id": "PPRV5-NESTED-CONCEPT-01",
+      "lineage": "nested_identity",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "2026-09-28",
+                  "type": "calendar_day",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Voy a comer con gente interesada en el concepto {{ref:0}}."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "Zero Inbox",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": "Zero Inbox",
+                  "query": "el concepto Zero Inbox",
+                  "type": "concept",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10396,
+        "output_tokens": 335,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 151
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0df8cfb2019e18bd016ac682356e7487d1ba315bed8b400898"
+    },
+    {
+      "case_id": "PPRV5-COORDINATED-SPOUSE-CHILDREN-01",
+      "lineage": "coordinated_relations",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "2026-09-28",
+                  "type": "calendar_day",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Hoy he merendado con {{ref:0}} e hijos ({{ref:1}}) unas galletas muy buenas."
+                ],
+                "references": [
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "mi mujer",
+                    "selection": null
+                  },
+                  {
+                    "target_index": null,
+                    "role": "identity",
+                    "mention": "hijos",
+                    "selection": {
+                      "entity": null,
+                      "query": "hijos",
+                      "type": "person",
+                      "filters": [],
+                      "link_scope": null,
+                      "self_target": null,
+                      "relational_reference": {
+                        "reference": "mis hijos",
+                        "source_kind": "self",
+                        "source_query": null,
+                        "members": "complete_set"
+                      },
+                      "semantic_set": null,
+                      "collection_subject": null
+                    }
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "mi mujer",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mi mujer",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10400,
+        "output_tokens": 357,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 93
+      },
+      "provider_status": "completed",
+      "response_id": "resp_089d010f3b04c5bc016ac6823a985487d18564f2dfd76cbf84"
+    },
+    {
+      "case_id": "PPRV5-COORDINATED-CHILDREN-SPOUSE-01",
+      "lineage": "coordinated_relations",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "2026-09-28",
+                  "type": "calendar_day",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Hoy he merendado con mis hijos ({{ref:0}}) y {{ref:1}}."
+                ],
+                "references": [
+                  {
+                    "target_index": null,
+                    "role": "identity",
+                    "mention": "mis hijos",
+                    "selection": {
+                      "entity": null,
+                      "query": "mis hijos",
+                      "type": "person",
+                      "filters": [],
+                      "link_scope": null,
+                      "self_target": null,
+                      "relational_reference": {
+                        "reference": "mis hijos",
+                        "source_kind": "self",
+                        "source_query": null,
+                        "members": "complete_set"
+                      },
+                      "semantic_set": null,
+                      "collection_subject": null
+                    }
+                  },
+                  {
+                    "target_index": 1,
+                    "role": "identity",
+                    "mention": "mi mujer",
+                    "selection": null
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              },
+              {
+                "target": {
+                  "entity": null,
+                  "query": "mi mujer",
+                  "type": "person",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": {
+                    "reference": "mi mujer",
+                    "source_kind": "self",
+                    "source_query": null,
+                    "members": "one"
+                  },
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [],
+                "references": [],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": true,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10395,
+        "output_tokens": 342,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 84
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0400eca071509410016ac6823ed13c87d18e32d86921a5f075"
+    },
+    {
+      "case_id": "PPRV5-UNKNOWN-COMPLETE-SET-01",
+      "lineage": "complete_set",
+      "passed": true,
+      "findings": [],
+      "result": {
+        "actions": [
+          {
+            "units": [
+              {
+                "target": {
+                  "entity": null,
+                  "query": "2026-09-28",
+                  "type": "calendar_day",
+                  "filters": [],
+                  "link_scope": null,
+                  "self_target": null,
+                  "relational_reference": null,
+                  "semantic_set": null,
+                  "collection_subject": null
+                },
+                "intent": "record",
+                "properties": [],
+                "tag_changes": [],
+                "facts": [
+                  "Hoy he cenado con mis primos de Canadá ({{ref:0}})."
+                ],
+                "references": [
+                  {
+                    "target_index": null,
+                    "role": "identity",
+                    "mention": "mis primos de Canadá",
+                    "selection": {
+                      "entity": null,
+                      "query": "mis primos de Canadá",
+                      "type": "person",
+                      "filters": [],
+                      "link_scope": null,
+                      "self_target": null,
+                      "relational_reference": {
+                        "reference": "mis primos de Canadá",
+                        "source_kind": "self",
+                        "source_query": null,
+                        "members": "complete_set"
+                      },
+                      "semantic_set": null,
+                      "collection_subject": null
+                    }
+                  }
+                ],
+                "cardinality": "one",
+                "destination_type": null,
+                "reference_lookup_only": false,
+                "fact_temporal_anchors": [],
+                "force_create": false
+              }
+            ],
+            "kind": "write"
+          }
+        ],
+        "limitations": [],
+        "presentation_intent": "answer"
+      },
+      "usage": {
+        "input_tokens": 10394,
+        "output_tokens": 284,
+        "cached_input_tokens": 10229,
+        "reasoning_tokens": 83
+      },
+      "provider_status": "completed",
+      "response_id": "resp_0f04928ab9d4a371016ac682436d2c87d18ce6509281c6181b"
+    }
+  ],
+  "provider_failures": []
+}
