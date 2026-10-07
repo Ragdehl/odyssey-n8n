@@ -10,7 +10,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from threading import Lock, RLock
+from threading import Condition, Lock, RLock, Thread
 from time import perf_counter
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -182,6 +182,70 @@ class NotesTelemetryError(RuntimeError):
         self.bad_request = bad_request
 
 
+class DerivedIndexRefreshCoordinator:
+    """Run derived-index maintenance off the response path with a strict read barrier.
+
+    Mutations publish only stable note IDs. A single daemon worker coalesces IDs that arrive while
+    one refresh is running. Readers call :meth:`wait_until_clean` before consulting derived state;
+    an unrecoverable refresh failure therefore fails closed instead of exposing stale indexes.
+    """
+
+    def __init__(self, refresh: Callable[[Sequence[str]], None]) -> None:
+        self._refresh = refresh
+        self._condition = Condition()
+        self._pending: set[str] = set()
+        self._requested_generation = 0
+        self._completed_generation = 0
+        self._last_error: Exception | None = None
+        self._worker: Thread | None = None
+
+    def schedule(self, note_ids: Sequence[str]) -> int:
+        """Queue affected stable IDs and return the generation that now needs reconciliation."""
+        bounded = tuple(dict.fromkeys(note_ids))
+        if not bounded or any(not isinstance(note_id, str) or not note_id for note_id in bounded):
+            raise ValueError("index refresh scheduling requires stable note IDs")
+        with self._condition:
+            self._pending.update(bounded)
+            self._requested_generation += 1
+            generation = self._requested_generation
+            if self._worker is None or not self._worker.is_alive():
+                self._worker = Thread(
+                    target=self._run,
+                    name="odyssey-index-refresh",
+                    daemon=True,
+                )
+                self._worker.start()
+            self._condition.notify_all()
+            return generation
+
+    def wait_until_clean(self) -> None:
+        """Block until all refresh work visible at call time has completed successfully."""
+        with self._condition:
+            target = self._requested_generation
+            while self._completed_generation < target:
+                self._condition.wait()
+            if self._last_error is not None:
+                raise RuntimeError("derived index refresh failed") from self._last_error
+
+    def _run(self) -> None:
+        while True:
+            with self._condition:
+                while not self._pending:
+                    self._condition.wait()
+                note_ids = tuple(sorted(self._pending))
+                self._pending.clear()
+                generation = self._requested_generation
+            error: Exception | None = None
+            try:
+                self._refresh(note_ids)
+            except Exception as caught:  # Preserve fail-closed state for the next reader.
+                error = caught
+            with self._condition:
+                self._completed_generation = max(self._completed_generation, generation)
+                self._last_error = error
+                self._condition.notify_all()
+
+
 @dataclass(slots=True)
 class RuntimeComposition:
     """Own one long-lived assembly of providers, repositories, indexes, and Core execution."""
@@ -189,6 +253,8 @@ class RuntimeComposition:
     core_execute: Callable[..., ApplicationResult]
     refresh_indexes: Callable[[], None]
     refresh_affected_indexes: Callable[[Sequence[str]], None] | None = None
+    schedule_index_refresh: Callable[[Sequence[str]], int] | None = None
+    await_index_refresh: Callable[[], None] | None = None
     refresh_task_lifecycle_indexes: Callable[[str, str], None] | None = None
     application_catalog: ApplicationCatalog = field(default_factory=ApplicationCatalog.empty)
     application_router: ApplicationRouter | None = None
@@ -692,6 +758,11 @@ class RuntimeComposition:
         self._resolve_actor(authenticated_actor, external_principal)
         if self.notes_service is None:
             raise ValueError("Notes service is unavailable")
+        if (
+            operation in {"query", "backlinks", "intelligent"}
+            and self.await_index_refresh is not None
+        ):
+            self.await_index_refresh()
         if operation == "capabilities":
             if payload:
                 raise ValueError("Notes capabilities payload is invalid")
@@ -913,6 +984,8 @@ class RuntimeComposition:
         if operation in {"delete_fact", "delete_note", "task_status", "task_subtask_create"}:
             if self.direct_notes_mutations is None or self.notes_mutation_actor is None:
                 raise ValueError("Notes mutation service is unavailable")
+            if self.await_index_refresh is not None:
+                self.await_index_refresh()
             request_id = payload.get("request_id")
             if not isinstance(request_id, str) or not request_id:
                 raise ValueError("Notes mutation request ID is invalid")
@@ -995,18 +1068,19 @@ class RuntimeComposition:
                         )
                 except (DirectNoteMutationError, TaskDirectMutationError, WorkSessionError):
                     raise
-                if operation == "task_status" and self.refresh_task_lifecycle_indexes is not None:
+                if self.schedule_index_refresh is not None:
+                    self.schedule_index_refresh((result.note_id,))
+                elif operation == "task_status" and self.refresh_task_lifecycle_indexes is not None:
                     try:
                         self.refresh_task_lifecycle_indexes(
                             result.path, cast(str, payload["expected_source_hash"])
                         )
                     except (ContextIndexError, SemanticIndexError, ValueError):
                         self.refresh_indexes()
+                elif self.refresh_affected_indexes is not None:
+                    self.refresh_affected_indexes((result.note_id,))
                 else:
-                    if self.refresh_affected_indexes is not None:
-                        self.refresh_affected_indexes((result.note_id,))
-                    else:
-                        self.refresh_indexes()
+                    self.refresh_indexes()
             response = {
                 "kind": "mutation",
                 "operation": result.operation,
@@ -1119,6 +1193,18 @@ class RuntimeComposition:
         elif self.application_router is not None:
             request_id = request_id or allocate_request_id()
         started = self.monotonic()
+        pre_stages: list[OperationalStage] = []
+        if self.await_index_refresh is not None:
+            barrier_started = self.monotonic()
+            self.await_index_refresh()
+            pre_stages.append(
+                OperationalStage(
+                    "index_barrier",
+                    OperationalOutcome.COMPLETED,
+                    max(0.0, (self.monotonic() - barrier_started) * 1000),
+                    start_offset_ms=max(0.0, (barrier_started - started) * 1000),
+                )
+            )
         core_started = self.monotonic()
         if resume_plan is not None:
             if original_request is None or clarification_choice is None:
@@ -1160,27 +1246,37 @@ class RuntimeComposition:
             )
         core_offset_ms = max(0.0, (core_started - started) * 1000)
         stages = [
-            replace(
-                stage,
-                start_offset_ms=(
-                    stage.start_offset_ms + core_offset_ms
-                    if stage.start_offset_ms is not None
-                    else None
-                ),
-            )
-            for stage in result.operational.stages
+            *pre_stages,
+            *[
+                replace(
+                    stage,
+                    start_offset_ms=(
+                        stage.start_offset_ms + core_offset_ms
+                        if stage.start_offset_ms is not None
+                        else None
+                    ),
+                )
+                for stage in result.operational.stages
+            ],
         ]
         if result.affected_stable_note_ids:
             refresh_started = self.monotonic()
             try:
-                if self.refresh_affected_indexes is not None:
-                    self.refresh_affected_indexes(result.affected_stable_note_ids)
+                if self.schedule_index_refresh is not None:
+                    self.schedule_index_refresh(result.affected_stable_note_ids)
+                    stage_name = "index_refresh.schedule"
                 else:
-                    self.refresh_indexes()
+                    if self.refresh_affected_indexes is not None:
+                        self.refresh_affected_indexes(result.affected_stable_note_ids)
+                    else:
+                        self.refresh_indexes()
+                    stage_name = "index_refresh"
             except Exception as error:
                 stages.append(
                     OperationalStage(
-                        "index_refresh",
+                        "index_refresh.schedule"
+                        if self.schedule_index_refresh is not None
+                        else "index_refresh",
                         OperationalOutcome.FAILED,
                         max(0.0, (self.monotonic() - refresh_started) * 1000),
                         error_category=type(error).__name__,
@@ -1201,7 +1297,7 @@ class RuntimeComposition:
                 return self._attach_note_result_snapshot(failed)
             stages.append(
                 OperationalStage(
-                    "index_refresh",
+                    stage_name,
                     OperationalOutcome.COMPLETED,
                     max(0.0, (self.monotonic() - refresh_started) * 1000),
                     start_offset_ms=max(0.0, (refresh_started - started) * 1000),
@@ -1590,6 +1686,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 )
         except (ContextIndexError, SemanticIndexError, ValueError):
             refresh_indexes()
+
+    index_refresh_coordinator = DerivedIndexRefreshCoordinator(refresh_affected_indexes)
 
     def refresh_task_lifecycle_indexes(path: str, expected_source_hash: str) -> None:
         """Incrementally refresh derived rows after a Task metadata-only lifecycle mutation."""
@@ -2210,6 +2308,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
         refresh_affected_indexes=refresh_affected_indexes,
+        schedule_index_refresh=index_refresh_coordinator.schedule,
+        await_index_refresh=index_refresh_coordinator.wait_until_clean,
         refresh_task_lifecycle_indexes=refresh_task_lifecycle_indexes,
         application_catalog=application_catalog,
         application_router=application_router,

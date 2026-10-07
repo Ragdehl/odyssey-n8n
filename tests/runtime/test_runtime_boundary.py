@@ -2133,3 +2133,75 @@ def test_production_composition_stops_unsupported_temporal_shapes_before_core(
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert result.planning_error == expected_error
     assert interpretations == []
+
+
+def test_runtime_schedules_index_refresh_without_waiting_for_refresh_work() -> None:
+    """A completed write returns after enqueueing derived maintenance, not after doing it."""
+    scheduled: list[tuple[str, ...]] = []
+    full_refreshes: list[bool] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda request, request_id: _result(),
+        refresh_indexes=lambda: full_refreshes.append(True),
+        schedule_index_refresh=lambda note_ids: scheduled.append(tuple(note_ids)) or 1,
+    )
+
+    result = runtime.execute("remember this")
+
+    assert scheduled == [("note-test",)]
+    assert full_refreshes == []
+    assert result.operational.stages[-1].name == "index_refresh.schedule"
+    assert result.operational.stages[-1].outcome is OperationalOutcome.COMPLETED
+
+
+def test_index_refresh_coordinator_blocks_readers_until_background_refresh_finishes() -> None:
+    """Readers never observe stale derived state while refresh runs off the response path."""
+    started = threading.Event()
+    release = threading.Event()
+    reader_finished = threading.Event()
+    calls: list[tuple[str, ...]] = []
+
+    def refresh(note_ids: tuple[str, ...]) -> None:
+        calls.append(tuple(note_ids))
+        started.set()
+        assert release.wait(2)
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(refresh)
+    coordinator.schedule(("a", "a"))
+    assert started.wait(1)
+
+    reader = threading.Thread(
+        target=lambda: (coordinator.wait_until_clean(), reader_finished.set()), daemon=True
+    )
+    reader.start()
+    assert not reader_finished.wait(0.05)
+    release.set()
+    assert reader_finished.wait(1)
+    assert calls == [("a",)]
+
+
+def test_index_refresh_coordinator_coalesces_pending_ids_and_fails_closed() -> None:
+    """Pending work is deduplicated and an unrecoverable refresh error reaches the next reader."""
+    started = threading.Event()
+    release = threading.Event()
+    second_started = threading.Event()
+    calls: list[tuple[str, ...]] = []
+
+    def refresh(note_ids: tuple[str, ...]) -> None:
+        calls.append(tuple(note_ids))
+        if len(calls) == 1:
+            started.set()
+            assert release.wait(2)
+            return
+        second_started.set()
+        raise ValueError("broken derived state")
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(refresh)
+    coordinator.schedule(("a",))
+    assert started.wait(1)
+    coordinator.schedule(("b", "c", "b"))
+    release.set()
+    assert second_started.wait(1)
+
+    with pytest.raises(RuntimeError, match="derived index refresh failed"):
+        coordinator.wait_until_clean()
+    assert calls == [("a",), ("b", "c")]
