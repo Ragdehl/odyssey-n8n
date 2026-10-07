@@ -161,7 +161,7 @@ class FakeResponses:
         return self.response
 
 
-def test_fake_provider_uses_exact_luna_medium_strict_schema_and_bounded_context() -> None:
+def test_fake_provider_uses_exact_luna_low_strict_schema_and_bounded_context() -> None:
     """Keep disabled evidence visible but exclude it from executable schema destinations."""
     disabled = catalog(enabled=False)
     fake = FakeResponses(
@@ -180,7 +180,7 @@ def test_fake_provider_uses_exact_luna_medium_strict_schema_and_bounded_context(
     assert len(fake.calls) == 1
     call = fake.calls[0]
     assert call["model"] == "gpt-6-luna"
-    assert call["reasoning"] == {"effort": "medium"}
+    assert call["reasoning"] == {"effort": "low"}
     assert call["store"] is False
     assert call["text"]["format"]["strict"] is True
     schema = call["text"]["format"]["schema"]
