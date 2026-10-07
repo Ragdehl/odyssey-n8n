@@ -418,3 +418,17 @@ def test_static_asset_workflow_forces_revalidation_after_dev_deploy() -> None:
     assert "no-cache, no-store, must-revalidate" in workflow
     assert "Pragma" in workflow
     assert "Expires" in workflow
+
+
+def test_isolated_dev_n8n_serves_browser_modules_without_opaque_origin() -> None:
+    """Guard against n8n's CSP sandbox silently disabling every ES module at page load."""
+    dev_compose = (Path("deploy") / "odyssey-dev-n8n.compose.yaml").read_text(encoding="utf-8")
+    operator = (Path("scripts") / "odyssey-dev").read_text(encoding="utf-8")
+    production_unit = (Path("deploy") / "odyssey-prod-runtime.service").read_text(encoding="utf-8")
+
+    assert "N8N_INSECURE_DISABLE_WEBHOOK_IFRAME_SANDBOX=true" in dev_compose
+    assert "N8N_INSECURE_DISABLE_WEBHOOK_IFRAME_SANDBOX" not in production_unit
+    assert "static_route_readiness_once" in operator
+    assert "content-security-policy:[[:space:]]*sandbox" in operator
+    assert "content-type:[[:space:]]*text/javascript" in operator
+    assert "content-type:[[:space:]]*text/html" in operator

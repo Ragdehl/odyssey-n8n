@@ -17,6 +17,10 @@ services:
       - N8N_ENDPOINT_WEBHOOK=api
       - N8N_PROXY_HOPS=1
       - N8N_SECURE_COOKIE=true
+      # DEV serves its own trusted HTML/ES modules via authenticated webhooks.
+      # n8n's default sandbox makes the document an opaque origin and blocks JS modules.
+      # Never apply this exception to the production or general-purpose n8n instances.
+      - N8N_INSECURE_DISABLE_WEBHOOK_IFRAME_SANDBOX=true
       - N8N_RESTRICT_FILE_ACCESS_TO=/odyssey-web
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
       - N8N_DIAGNOSTICS_ENABLED=false

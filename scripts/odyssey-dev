@@ -485,12 +485,21 @@ if payload.get("kind") != "calendar_month" or payload.get("month") != "2026-10" 
 }
 
 static_route_readiness_once() {
-  # Verify that every browser asset in the current local module graph is served by DEV n8n.
-  local path static_paths=()
+  # Verify all browser modules are served without n8n's opaque-origin CSP sandbox.
+  # A 200 alone is insufficient: sandboxed ES modules cannot initialize Odyssey.
+  local path headers static_paths=()
   mapfile -t static_paths < <(dev_static_paths)
   for path in "${static_paths[@]}"; do
-    curl --fail --silent --show-error --max-time 10 --output /dev/null \
-      "http://$N8N_HOST:$N8N_PORT$path" || return 1
+    headers=$(curl --fail --silent --show-error --max-time 10 \
+      --dump-header - --output /dev/null "http://$N8N_HOST:$N8N_PORT$path") || return 1
+    if grep -Eiq '^content-security-policy:[[:space:]]*sandbox([[:space:]]|$)' <<<"$headers"; then
+      return 1
+    fi
+    case "$path" in
+      /api/odyssey) grep -Eiq '^content-type:[[:space:]]*text/html' <<<"$headers" || return 1 ;;
+      /api/styles.css) grep -Eiq '^content-type:[[:space:]]*text/css' <<<"$headers" || return 1 ;;
+      /api/*.js) grep -Eiq '^content-type:[[:space:]]*text/javascript' <<<"$headers" || return 1 ;;
+    esac
   done
 }
 
