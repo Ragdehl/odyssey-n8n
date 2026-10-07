@@ -34,6 +34,7 @@ from odyssey_core.relationship_evidence import (
 from odyssey_core.request_planning import SelectionCriteria
 from odyssey_core.resolution import (
     ExistingEntityOutcome,
+    ResolutionSource,
     build_provider_evidence,
     resolve_existing_entity,
 )
@@ -133,7 +134,13 @@ def resolve_relational_reference(
             semantic_limit=semantic_limit,
         )
         if source_resolution.outcome is not ExistingEntityOutcome.RESOLVED:
-            raise RelationalResolutionError("relational_source_unresolved")
+            if source_resolution.source is ResolutionSource.LOCAL_NO_CANDIDATES:
+                raise RelationalResolutionError("relational_evidence_unavailable")
+            raise RelationalResolutionError(
+                "relational_source_unresolved",
+                candidate_ids=source_resolution.candidate_ids,
+                clarification=source_resolution.clarification,
+            )
         assert source_resolution.id is not None
         source_id = source_resolution.id
     outgoing = tuple(

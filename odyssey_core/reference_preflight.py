@@ -435,7 +435,7 @@ def prepare_relationship_shared_fact_action(
 
 def prepare_complete_set_reference_action(
     action: WriteAction,
-    resolved_references: Mapping[tuple[int, int], ResolvedRelationalReference],
+    resolved_references: Mapping[tuple[int, int], ResolvedRelationalReference | None],
 ) -> tuple[WriteAction, tuple[CompleteSetReferenceBinding, ...]]:
     """Expand set-valued fact references into exact no-write member units.
 
@@ -454,7 +454,7 @@ def prepare_complete_set_reference_action(
 
     for source_index, unit in enumerate(action.units):
         new_references: list[KnowledgeReference] = []
-        marker_map: dict[int, str] = {}
+        marker_map: dict[int, str | None] = {}
         for reference_index, reference in enumerate(unit.references):
             relation = (
                 reference.selection.relational_reference
@@ -468,10 +468,21 @@ def prepare_complete_set_reference_action(
                 continue
 
             key = (source_index, reference_index)
-            resolved = resolved_references.get(key)
+            if key not in resolved_references:
+                raise RelationshipWritePreflightError(
+                    "Complete-set fact reference has no resolution result"
+                )
+            resolved = resolved_references[key]
+            if resolved is None:
+                if reference.target_index is not None:
+                    raise RelationshipWritePreflightError(
+                        "Literal complete-set fallback has a pre-bound target"
+                    )
+                consumed.add(key)
+                marker_map[reference_index] = None
+                continue
             if (
-                resolved is None
-                or reference.target_index is not None
+                reference.target_index is not None
                 or resolved.direction is not EvidenceDirection.OUTGOING
                 or not resolved.targets
             ):
@@ -509,7 +520,25 @@ def prepare_complete_set_reference_action(
                 )
             )
 
-        def replace_marker(match: re.Match[str], replacements: dict[int, str] = marker_map) -> str:
+        def strip_literal_fallback_markers(
+            fact: str, replacements: dict[int, str | None] = marker_map
+        ) -> str:
+            stripped = fact
+            for index, replacement in replacements.items():
+                if replacement is not None:
+                    continue
+                marker = f"{{{{ref:{index}}}}}"
+                wrapped = f" ({marker})"
+                if marker in stripped and wrapped not in stripped:
+                    raise RelationshipWritePreflightError(
+                        "Literal complete-set fallback marker has an unsafe shape"
+                    )
+                stripped = stripped.replace(wrapped, "")
+            return stripped
+
+        def replace_marker(
+            match: re.Match[str], replacements: dict[int, str | None] = marker_map
+        ) -> str:
             index = int(match.group(1))
             replacement = replacements.get(index)
             if replacement is None:
@@ -518,7 +547,10 @@ def prepare_complete_set_reference_action(
                 )
             return replacement
 
-        facts = tuple(marker_pattern.sub(replace_marker, fact) for fact in unit.facts)
+        facts = tuple(
+            marker_pattern.sub(replace_marker, strip_literal_fallback_markers(fact))
+            for fact in unit.facts
+        )
         transformed_units.append(replace(unit, facts=facts, references=tuple(new_references)))
 
     if consumed != set(resolved_references):
@@ -769,11 +801,7 @@ def _decide_reference_only_target(
         except RelationalResolutionError as error:
             return WriteTargetDecision(
                 WriteTargetOutcome.NEEDS_CLARIFICATION,
-                reason=(
-                    "ambiguous_existing_reference"
-                    if error.candidate_ids
-                    else "unresolved_existing_reference"
-                ),
+                reason=str(error),
                 candidate_note_ids=error.candidate_ids,
                 clarification=error.clarification,
             )

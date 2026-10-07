@@ -187,6 +187,25 @@ class RelevantFactSelector:
         )
 
 
+class ReferenceWordingFactSelector:
+    """Select canonical relationship facts that contain each request's own relation wording."""
+
+    def __init__(self) -> None:
+        self.requests: list[Any] = []
+
+    def select(self, request: Any) -> SetEvidenceSelection:
+        """Keep separate coordinated relationship scopes grounded by their own wording."""
+        self.requests.append(request)
+        wording = request.reference.casefold()
+        selected = tuple(
+            candidate for candidate in request.candidates if wording in candidate.text.casefold()
+        )
+        return SetEvidenceSelection(
+            tuple(candidate.id for candidate in selected),
+            tuple(SetMemberOccurrence(candidate.id, "literal", 0, 1) for candidate in selected),
+        )
+
+
 class AllFactSelector:
     """Select every supplied canonical relationship fact for Core pipeline tests."""
 
@@ -254,6 +273,17 @@ class MatchingFactReasoner(FactReasoner):
         candidate = next(
             item for item in request.candidates if self.wording in item.evidence.casefold()
         )
+        return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
+
+
+class ReferenceWordingReasoner(FactReasoner):
+    """Select the supplied canonical fact whose evidence contains the requested relation wording."""
+
+    def resolve(self, request: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Keep singular and complete coordinated relationship scopes independent."""
+        self.requests.append(request)
+        wording = request.reference.casefold()
+        candidate = next(item for item in request.candidates if wording in item.evidence.casefold())
         return ({"outcome": "RESOLVED", "id": candidate.id, "ambiguous_ids": []}, {})
 
 
@@ -789,6 +819,102 @@ def test_reference_only_singular_relation_collapses_duplicate_facts_with_same_ta
     assert "Cenó con [[people/beatriz|Beatriz Carrero]]." in edgar
 
 
+def test_coordinated_spouse_and_children_fact_references_resolve_independently(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Bind one singular relative and one complete relative set in the same source fact."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    body = (
+        fact("Mi mujer es [[people/beatriz|Beatriz Carrero]].", 0)
+        + "\n\n"
+        + fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]].", 1)
+    )
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", body)
+    write_note(vault, "people/beatriz.md", "beatriz", "Beatriz Carrero", "")
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "yo",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": "self",
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": [
+                            "Cenamos con {{ref:0}} e hijos ({{ref:1}}) una quiche muy buena."
+                        ],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": "mi mujer",
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "mi mujer",
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "one",
+                                    },
+                                },
+                                "role": "identity",
+                                "mention": "mi mujer",
+                            },
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": "hijos",
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "mis hijos",
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "complete_set",
+                                    },
+                                },
+                                "role": "identity",
+                                "mention": "hijos",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(
+        vault,
+        schema,
+        plan,
+        reasoner=ReferenceWordingReasoner(),
+        selector=ReferenceWordingFactSelector(),
+    )
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    content = parse_note((vault / "people/edgar.md").read_text()).content
+    assert (
+        "Cenamos con [[people/beatriz|Beatriz Carrero]] e hijos "
+        "([[people/cloe|Cloe]], [[people/bruno|Bruno]]) una quiche muy buena." in content
+    )
+
+
 def test_reference_only_singular_relation_keeps_distinct_targets_ambiguous(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:
@@ -855,7 +981,7 @@ def test_reference_only_singular_relation_keeps_distinct_targets_ambiguous(
 
     assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
     lookup = result.action_results[0].unit_results[1]
-    assert lookup.reason == "unresolved_existing_reference"
+    assert lookup.reason == "relational_evidence_ambiguous"
     assert (vault / "people/edgar.md").read_bytes() == before
 
 
@@ -2499,10 +2625,10 @@ def test_legacy_journal_source_with_two_relational_fact_references_stays_bounded
     )
 
 
-def test_relational_fact_reference_never_escapes_to_global_semantic_candidate(
+def test_relational_fact_reference_without_evidence_stays_literal_and_never_escapes_global_search(
     tmp_path: Path, schema: dict
 ) -> None:
-    """Fail closed when a bounded reference anchor cannot ground, even if global search could guess."""
+    """Persist exact wording when a bounded fact participant has no relationship evidence."""
     vault = tmp_path / "vault"
     vault.mkdir()
     write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
@@ -2566,15 +2692,81 @@ def test_relational_fact_reference_never_escapes_to_global_semantic_candidate(
 
     result = run(vault, schema, plan, reasoner=reasoner, semantic_index=index)
 
-    assert result.status is application.ApplicationStatus.NEEDS_ATTENTION
-    assert result.affected_stable_note_ids == ()
-    assert all(path.read_bytes() == content for path, content in before.items())
+    assert result.status is application.ApplicationStatus.COMPLETED
+    assert result.affected_stable_note_ids == ("cloe",)
+    content = parse_note((vault / "people/cloe.md").read_text()).content
+    assert f"Va al parque con {query}." in content
+    assert (vault / "people/marta.md").read_bytes() == before[vault / "people/marta.md"]
     source_result, lookup_result = result.action_results[0].unit_results
-    assert source_result.status is application.UnitStatus.DEFERRED
-    assert source_result.reason == "DEPENDENCY_FAILED"
-    assert lookup_result.status is application.UnitStatus.DEFERRED
-    assert lookup_result.reason == "unresolved_existing_reference"
+    assert source_result.status is application.UnitStatus.SUCCEEDED
+    assert lookup_result.status is application.UnitStatus.SUCCEEDED
+    assert lookup_result.operation == "REFERENCE_LITERALIZED"
+    assert lookup_result.materially_affected is False
     assert reasoner.requests == []
+
+
+def test_complete_set_fact_reference_without_evidence_stays_literal(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Remove only Core's internal set marker when the relationship has no canonical evidence."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", "")
+    raw = {
+        "actions": [
+            {
+                "kind": "write",
+                "units": [
+                    {
+                        "target": {
+                            "entity": None,
+                            "query": "yo",
+                            "type": "person",
+                            "filters": [],
+                            "link_scope": None,
+                            "self_target": "self",
+                            "relational_reference": None,
+                        },
+                        "cardinality": "one",
+                        "destination_type": None,
+                        "intent": "record",
+                        "properties": [],
+                        "tag_changes": [],
+                        "facts": ["Cené con mis hijos ({{ref:0}})."],
+                        "references": [
+                            {
+                                "selection": {
+                                    "entity": None,
+                                    "query": "mis hijos",
+                                    "type": "person",
+                                    "filters": [],
+                                    "relational_reference": {
+                                        "reference": "mis hijos",
+                                        "source_kind": "self",
+                                        "source_query": None,
+                                        "members": "complete_set",
+                                    },
+                                },
+                                "role": "identity",
+                                "mention": "mis hijos",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        "limitations": [],
+    }
+    plan = validate_request_plan(raw, schema)
+
+    result = run(vault, schema, plan)
+
+    assert result.status is application.ApplicationStatus.COMPLETED, result.action_results
+    assert result.affected_stable_note_ids == ("edgar",)
+    content = parse_note((vault / "people/edgar.md").read_text()).content
+    assert "Cené con mis hijos." in content
+    assert "{{ref:" not in content
+    assert "mis hijos ()" not in content
 
 
 def test_ambiguous_semantic_reference_defers_source_write_without_guessing(

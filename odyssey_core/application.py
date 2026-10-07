@@ -970,20 +970,25 @@ def _execute_write(
                     raise RelationshipWritePreflightError(
                         "Complete-set fact reference has no semantic selection"
                     )
-                resolved_references[(unit_index, reference_index)] = spans.invoke(
-                    "relational_resolution",
-                    resolve_relational_reference,
-                    reference.selection,
-                    repository=repository,
-                    schema=schema,
-                    semantic_index=semantic_index,
-                    embedder=embedder,
-                    contextual_reasoner=contextual_reasoner,
-                    semantic_limit=semantic_limit,
-                    authenticated_actor=authenticated_actor,
-                    self_binding_repository=self_binding_repository,
-                    semantic_set_selector=semantic_set_selector,
-                )
+                try:
+                    resolved_references[(unit_index, reference_index)] = spans.invoke(
+                        "relational_resolution",
+                        resolve_relational_reference,
+                        reference.selection,
+                        repository=repository,
+                        schema=schema,
+                        semantic_index=semantic_index,
+                        embedder=embedder,
+                        contextual_reasoner=contextual_reasoner,
+                        semantic_limit=semantic_limit,
+                        authenticated_actor=authenticated_actor,
+                        self_binding_repository=self_binding_repository,
+                        semantic_set_selector=semantic_set_selector,
+                    )
+                except RelationalResolutionError as error:
+                    if str(error) != "relational_evidence_unavailable":
+                        raise
+                    resolved_references[(unit_index, reference_index)] = None
             original_count = len(action.units)
             executable, set_bindings = prepare_complete_set_reference_action(
                 action, resolved_references
@@ -992,24 +997,42 @@ def _execute_write(
                 *unit_ordinals,
                 *(((),) * (len(executable.units) - original_count)),
             )
-            preflight = spans.invoke(
-                "preflight",
-                preflight_complete_set_reference_action,
-                executable,
-                set_bindings,
-                relationship_projector=RelationshipEvidenceProjector(repository, schema),
-                repository=repository,
-                schema=schema,
-                semantic_index=semantic_index,
-                embedder=embedder,
-                contextual_reasoner=contextual_reasoner,
-                semantic_limit=semantic_limit,
-                authenticated_actor=authenticated_actor,
-                self_binding_repository=self_binding_repository,
-                span_recorder=spans,
-                semantic_set_selector=semantic_set_selector,
-                **kwargs,
-            )
+            if set_bindings:
+                preflight = spans.invoke(
+                    "preflight",
+                    preflight_complete_set_reference_action,
+                    executable,
+                    set_bindings,
+                    relationship_projector=RelationshipEvidenceProjector(repository, schema),
+                    repository=repository,
+                    schema=schema,
+                    semantic_index=semantic_index,
+                    embedder=embedder,
+                    contextual_reasoner=contextual_reasoner,
+                    semantic_limit=semantic_limit,
+                    authenticated_actor=authenticated_actor,
+                    self_binding_repository=self_binding_repository,
+                    span_recorder=spans,
+                    semantic_set_selector=semantic_set_selector,
+                    **kwargs,
+                )
+            else:
+                preflight = spans.invoke(
+                    "preflight",
+                    preflight_write_action,
+                    executable,
+                    repository=repository,
+                    schema=schema,
+                    semantic_index=semantic_index,
+                    embedder=embedder,
+                    contextual_reasoner=contextual_reasoner,
+                    semantic_limit=semantic_limit,
+                    authenticated_actor=authenticated_actor,
+                    self_binding_repository=self_binding_repository,
+                    span_recorder=spans,
+                    semantic_set_selector=semantic_set_selector,
+                    **kwargs,
+                )
         else:
             preflight = spans.invoke(
                 "preflight",
@@ -1350,6 +1373,14 @@ def _execute_single_units(
     results: dict[int, UnitResult] = {}
     for index, target in enumerate(preflight):
         if target.outcome is WriteTargetOutcome.NEEDS_CLARIFICATION:
+            if target.reference_only and target.reason == "relational_evidence_unavailable":
+                results[index] = UnitResult(
+                    index,
+                    UnitStatus.SUCCEEDED,
+                    operation="REFERENCE_LITERALIZED",
+                    materially_affected=False,
+                )
+                continue
             results[index] = UnitResult(
                 index,
                 UnitStatus.DEFERRED,
