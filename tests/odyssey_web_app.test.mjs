@@ -188,7 +188,7 @@ function createPage() {
   return {document, elements};
 }
 
-async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission}) {
+async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission, progressThrows = false}) {
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
@@ -245,6 +245,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
   globalThis.__odysseyTestProgress = {
     createProcessingIndicator() {
+      if (progressThrows) throw new TypeError("SVG className cannot be set");
       const element = new FakeElement("span");
       element.className = "processing-indicator";
       return {element, update() {}, complete() {}, destroy() {}};
@@ -282,6 +283,26 @@ async function flush() {
   await Promise.resolve();
   await Promise.resolve();
 }
+
+test("broken visual progress never prevents sending a request or rendering its answer", async () => {
+  const submissions = [];
+  const page = await mountApp({
+    turns: [],
+    progressThrows: true,
+    createSubmission: (request) => ({request, requestId: "web-progress-fallback"}),
+    requestProductResult: async ({submission}) => {
+      submissions.push(submission.request);
+      return {request_id: submission.requestId, status: "completed", kind: "acknowledgement", message: "Guardado."};
+    },
+  });
+  page.elements.input.value = "Guarda un hecho";
+  page.elements.form.emit("submit", {preventDefault() {}});
+  await flush();
+  assert.deepEqual(submissions, ["Guarda un hecho"]);
+  assert.equal(conversationMessages(page.elements.conversation).at(-1).textContent.includes("Guardado."), true);
+  assert.equal(page.elements.input.disabled, false);
+  assert.equal(page.persisted.length, 1);
+});
 
 test("reload mounts one recovery control on its unmatched user turn and removes it before recovery result", async () => {
   let resolveResult;

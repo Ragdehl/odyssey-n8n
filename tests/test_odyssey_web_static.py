@@ -75,9 +75,8 @@ def test_static_frontend_has_transcript_and_composer_contract_elements() -> None
     assert "appendRecoveryControl(recoverable, userMessages.get(recoverable.requestId))" in app
     assert "removeRecoveryControl(activeRecoveryControl)" in app
     assert "restoreRecoveryControl(activeRecoveryControl)" in app
-    success_flow = app[
-        app.index("const result = await requestProductResult") : app.index("} catch (error)")
-    ]
+    request_start = app.index("const result = await requestProductResult")
+    success_flow = app[request_start : app.index("} catch (error)", request_start)]
     assert success_flow.index("retrySubmission = null") < success_flow.index(
         "renderProductResultWithContinuity"
     )

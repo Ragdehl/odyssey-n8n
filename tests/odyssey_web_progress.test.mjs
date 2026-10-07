@@ -12,8 +12,13 @@ class Element {
   constructor(tagName, namespaceURI = null) {
     this.tagName = tagName;
     this.namespaceURI = namespaceURI;
-    this.children = [];
     this.className = "";
+    if (namespaceURI === "http://www.w3.org/2000/svg") {
+      Object.defineProperty(this, "className", {
+        get: () => ({baseVal: this.attributes?.get("class") ?? ""}),
+      });
+    }
+    this.children = [];
     this.attributes = new Map();
     this._textContent = "";
   }
@@ -24,7 +29,8 @@ class Element {
   getAttribute(name) { return this.attributes.get(name); }
   querySelector(selector) {
     for (const child of this.children) {
-      if (selector.startsWith(".") && child.className.split(" ").includes(selector.slice(1))) return child;
+      const classes = typeof child.className === "string" ? child.className : child.getAttribute("class") ?? "";
+      if (selector.startsWith(".") && classes.split(" ").includes(selector.slice(1))) return child;
       const nested = child.querySelector?.(selector);
       if (nested) return nested;
     }
@@ -64,6 +70,8 @@ test("donut updates monotonically and completes at 100", () => {
   const svg = donut.children.find((child) => child.tagName === "svg");
   assert.equal(svg.namespaceURI, "http://www.w3.org/2000/svg");
   assert.ok(svg.children.every((child) => child.namespaceURI === svg.namespaceURI));
+  assert.equal(svg.children[0].getAttribute("class"), "processing-donut-track");
+  assert.equal(svg.children[1].getAttribute("class"), "processing-donut-value");
   const dots = indicator.element.querySelector(".processing-dots");
   assert.equal(dots.children.length, 3);
   assert.ok(dots.children.every((child) => child.className === "processing-dot"));

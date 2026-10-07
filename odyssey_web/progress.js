@@ -53,13 +53,13 @@ export function createProcessingIndicator(documentImpl = document) {
   svg.setAttribute("viewBox", "0 0 44 44");
   svg.setAttribute("aria-hidden", "true");
   const track = documentImpl.createElementNS(SVG_NS, "circle");
-  track.className = "processing-donut-track";
+  track.setAttribute("class", "processing-donut-track");
   track.setAttribute("cx", "22");
   track.setAttribute("cy", "22");
   track.setAttribute("r", "17");
   track.setAttribute("pathLength", "100");
   const value = documentImpl.createElementNS(SVG_NS, "circle");
-  value.className = "processing-donut-value";
+  value.setAttribute("class", "processing-donut-value");
   value.setAttribute("cx", "22");
   value.setAttribute("cy", "22");
   value.setAttribute("r", "17");

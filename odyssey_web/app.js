@@ -439,11 +439,17 @@ function formatUsage(usage) {
 }
 
 function appendLoading() {
-  const loading = appendMessage("odyssey", "");
+  // A presentation-only progress indicator must never prevent the real request.
+  const loading = appendMessage("odyssey", "Preparando tu solicitud…");
   loading.classList.add("message-loading");
-  const indicator = createProcessingIndicator(document);
-  loading.querySelector(".message-text")?.replaceChildren(indicator.element);
-  loading.processingIndicator = indicator;
+  try {
+    const indicator = createProcessingIndicator(document);
+    loading.querySelector(".message-text")?.replaceChildren(indicator.element);
+    loading.processingIndicator = indicator;
+  } catch (error) {
+    console.error("Odyssey progress indicator unavailable", error);
+    // Keep the text fallback visible and continue sending normally.
+  }
   return loading;
 }
 
