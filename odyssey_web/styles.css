@@ -208,7 +208,15 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .message-user::after { content: ""; position: absolute; right: -.34rem; bottom: -.02rem; width: .55rem; height: .55rem; background: #2b2a3d; clip-path: polygon(0 0, 100% 100%, 0 100%); }
 .message-odyssey { align-self: flex-start; border-bottom-left-radius: .3rem; background: #342f66; border-color: rgba(112,104,177,.4); color: #fff; }
 .message-odyssey::after { content: ""; position: absolute; left: -.34rem; bottom: -.02rem; width: .55rem; height: .55rem; background: #342f66; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
-.message-loading { color: #ddd9ff; }
+.message-loading { color: #ddd9ff; min-width: min(21rem, 78vw); }
+.processing-indicator { display: grid; grid-template-columns: 2.7rem minmax(0, 1fr); align-items: center; gap: .65rem; min-width: 0; }
+.processing-donut { position: relative; display: grid; width: 2.7rem; height: 2.7rem; place-items: center; flex: 0 0 auto; }
+.processing-donut svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.processing-donut circle { fill: none; stroke-width: 4; }
+.processing-donut-track { stroke: rgba(255,255,255,.16); }
+.processing-donut-value { stroke: #c9c3ff; stroke-linecap: round; transition: stroke-dashoffset .7s cubic-bezier(.22,.61,.36,1); }
+.processing-percent { position: absolute; inset: 0; display: grid; place-items: center; color: #f4f2ff; font-size: .65rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.processing-copy { min-width: 0; color: #f1efff; font-size: .86rem; line-height: 1.3; overflow-wrap: anywhere; }
 .message-error { color: #7d2b2b; border-color: rgba(160, 48, 48, .2); background: #fff8f7; }
 .message-clarification { width: min(100%, 34rem); }
 .clarification-options { display: grid; gap: .55rem; margin-top: .75rem; }

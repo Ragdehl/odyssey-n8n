@@ -243,11 +243,20 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   };
   globalThis.__odysseyTestNotes = {...globalThis.__odysseyTestIcons, mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
   globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
+  globalThis.__odysseyTestProgress = {
+    createProcessingIndicator() {
+      const element = new FakeElement("span");
+      element.className = "processing-indicator";
+      return {element, update() {}, complete() {}, destroy() {}};
+    },
+    startProgressPolling() { return () => {}; },
+  };
   const source = await readFile(new URL("../odyssey_web/app.js", import.meta.url), "utf8");
   const testable = source
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
+    .replace('import {createProcessingIndicator, startProgressPolling} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling} = globalThis.__odysseyTestProgress;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
