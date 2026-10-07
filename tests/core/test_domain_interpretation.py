@@ -459,6 +459,8 @@ def test_semantic_write_prompt_preserves_elided_coordinated_relationship_scopes(
     assert "unos amigos del equipo de Lucía" in prompt
     assert "unos colaboradores del proyecto Atlas" in prompt
     assert "one of my documents needs review" in prompt
+    assert "Runtime current date is authorization, not semantic ownership" in prompt
+    assert "Indefinite collective/group wording" in prompt
     assert (
         "Do not ESCALATE merely because an identity may not exist or may fail to resolve" in prompt
     )
