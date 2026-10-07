@@ -347,7 +347,6 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
         "notes-client.js",
         "calendar.js",
         "calendar-client.js",
-        "progress.js",
     }
 
     workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")

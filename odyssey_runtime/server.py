@@ -100,35 +100,6 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
                     )
                 return
-            if parsed.path == "/conversation/progress":
-                try:
-                    payload = self._read_payload()
-                    allowed = {
-                        "operation",
-                        "request_id",
-                        "authenticated_actor",
-                        "external_principal",
-                    }
-                    if set(payload) - allowed or "request_id" not in payload:
-                        raise ValueError("progress payload is invalid")
-                    request_id = payload["request_id"]
-                    if (
-                        not isinstance(request_id, str)
-                        or _REQUEST_ID_PATTERN.fullmatch(request_id) is None
-                    ):
-                        raise ValueError("progress request_id is invalid")
-                    self._write_json(
-                        HTTPStatus.OK,
-                        runtime.product_progress(
-                            request_id,
-                            *self._identity_from_payload(payload),
-                        ),
-                    )
-                except (IdentityBoundaryError, TypeError, ValueError):
-                    self._write_json(
-                        HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
-                    )
-                return
             if parsed.path == "/conversation/turn":
                 try:
                     payload = self._read_payload()

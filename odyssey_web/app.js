@@ -8,7 +8,6 @@ import {
 } from "./client.js";
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
-import {createProcessingIndicator, startProgressPolling} from "./progress.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -439,11 +438,8 @@ function formatUsage(usage) {
 }
 
 function appendLoading() {
-  const loading = appendMessage("odyssey", "");
+  const loading = appendMessage("odyssey", "Odyssey está trabajando…");
   loading.classList.add("message-loading");
-  const indicator = createProcessingIndicator(document);
-  loading.querySelector(".message-text")?.replaceChildren(indicator.element);
-  loading.processingIndicator = indicator;
   return loading;
 }
 
@@ -582,21 +578,10 @@ function submitClarificationReply(reply) {
 async function sendSubmission(submission, isRetry = false, activeRecoveryControl = null) {
   if (!isRetry) appendMessage("user", submission.request);
   const loading = appendLoading();
-  const stopProgress = startProgressPolling({
-    requestId: submission.requestId,
-    requestProgress: (requestId) => requestConversation({
-      endpoint: conversationEndpoint,
-      operation: "progress",
-      payload: {request_id: requestId},
-    }),
-    onProgress: (snapshot) => loading.processingIndicator?.update(snapshot),
-  });
   setBusy(true);
   try {
     const result = await requestProductResult({endpoint, submission, conversationId});
     retrySubmission = null;
-    stopProgress();
-    loading.processingIndicator?.complete();
     loading.remove();
     removeRecoveryControl(activeRecoveryControl);
     await renderProductResultWithContinuity({
@@ -622,7 +607,6 @@ async function sendSubmission(submission, isRetry = false, activeRecoveryControl
     });
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;
-    stopProgress();
     loading.remove();
     if (activeRecoveryControl) {
       if (retrySubmission) {
@@ -641,8 +625,6 @@ async function sendSubmission(submission, isRetry = false, activeRecoveryControl
     message.classList.add("message-error");
     if (retrySubmission) appendRetryControl(retrySubmission);
   } finally {
-    stopProgress();
-    loading.processingIndicator?.destroy();
     setBusy(false);
     input.focus();
   }

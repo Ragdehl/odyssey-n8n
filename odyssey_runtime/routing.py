@@ -109,7 +109,6 @@ def execute_routed_request(
     temporal_execute: ApplicationExecutor | None = None,
     authenticated_actor: AuthenticatedActorContext | None = None,
     conversation_context: Sequence[Mapping[str, str]] = (),
-    progress_callback: Callable[[str, Mapping[str, object]], None] | None = None,
 ) -> ApplicationResult:
     """Route and execute independent spans sequentially under one outer request identity.
 
@@ -117,8 +116,6 @@ def execute_routed_request(
     and invalid correlations become bounded failed route evidence, allowing later independent
     routes to continue.  No route receives sibling current-message text.
     """
-    if progress_callback is not None:
-        progress_callback("routing.started", {})
     router_started = perf_counter()
     try:
         plan = router.route(user_request, conversation_context)
@@ -129,8 +126,6 @@ def execute_routed_request(
             _router_failure(outer_request_id, "ROUTER_INVALID", error), stage
         )
     stage = _router_stage(router, router_started)
-    if progress_callback is not None:
-        progress_callback("routing.ready", {"route_count": len(plan.routes)})
     if plan.outcome is RouteOutcome.CLARIFY:
         return _prepend_router_stage(_router_outcome(outer_request_id, "ROUTER_CLARIFY"), stage)
     if plan.outcome is RouteOutcome.NEEDS_CAPABILITY:
