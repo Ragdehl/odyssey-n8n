@@ -1,5 +1,6 @@
 const POLL_MS = 350;
 const CREEP_MS = 280;
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 const STAGE_COPY = {
   starting: "Preparando tu solicitud…",
@@ -48,16 +49,16 @@ export function createProcessingIndicator(documentImpl = document) {
   donut.setAttribute("aria-valuemax", "100");
   donut.setAttribute("aria-valuenow", "0");
 
-  const svg = documentImpl.createElement("svg");
+  const svg = documentImpl.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 44 44");
   svg.setAttribute("aria-hidden", "true");
-  const track = documentImpl.createElement("circle");
+  const track = documentImpl.createElementNS(SVG_NS, "circle");
   track.className = "processing-donut-track";
   track.setAttribute("cx", "22");
   track.setAttribute("cy", "22");
   track.setAttribute("r", "17");
   track.setAttribute("pathLength", "100");
-  const value = documentImpl.createElement("circle");
+  const value = documentImpl.createElementNS(SVG_NS, "circle");
   value.className = "processing-donut-value";
   value.setAttribute("cx", "22");
   value.setAttribute("cy", "22");
@@ -74,8 +75,20 @@ export function createProcessingIndicator(documentImpl = document) {
 
   const copy = documentImpl.createElement("span");
   copy.className = "processing-copy";
-  copy.textContent = STAGE_COPY.starting;
-  wrapper.append(donut, copy);
+  const dots = documentImpl.createElement("span");
+  dots.className = "processing-dots";
+  dots.setAttribute("aria-hidden", "true");
+  for (let index = 0; index < 3; index += 1) {
+    const dot = documentImpl.createElement("span");
+    dot.className = "processing-dot";
+    dots.append(dot);
+  }
+  const copyRow = documentImpl.createElement("span");
+  copyRow.className = "processing-copy-row";
+  copyRow.append(copy, dots);
+  const updateCopy = (text) => { copy.textContent = text.replace(/[…\s]+$/u, ""); };
+  updateCopy(STAGE_COPY.starting);
+  wrapper.append(donut, copyRow);
 
   let displayed = 0;
   let stageTarget = 0;
@@ -96,12 +109,12 @@ export function createProcessingIndicator(documentImpl = document) {
     element: wrapper,
     update(snapshot) {
       stageTarget = Math.max(stageTarget, boundedProgress(snapshot?.progress));
-      copy.textContent = formatStage(snapshot);
+      updateCopy(formatStage(snapshot));
       applyProgress(Math.max(displayed, stageTarget));
     },
     complete() {
       stageTarget = 100;
-      copy.textContent = "Listo";
+      updateCopy("Listo");
       applyProgress(100);
     },
     destroy() {

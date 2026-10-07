@@ -1818,6 +1818,50 @@ def test_existing_relation_source_resolution_ignores_target_only_qualifiers(
     assert reasoner.requests[-1].reference == query
 
 
+def test_bare_singular_relation_with_two_literal_facts_offers_choices_for_write(
+    tmp_path: Path, schema: dict
+) -> None:
+    """Differently grounded exact relationship facts reach the existing choice flow."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mi hija es [[people/cloe|Cloe]].", 0)
+        + "\n\n"
+        + fact("Mi hija es [[people/marta|Marta]].", 1),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/marta.md", "marta", "Marta", "")
+    target = relational_selection("mi hija", source_kind="self", source_query=None)
+    plan = RequestPlan(
+        (WriteAction((KnowledgeUnit(target, "record", (), (), ("Se cayó un diente.",), ()),)),),
+        (),
+    )
+    original = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    pending = run(vault, schema, plan)
+    action = pending.action_results[0]
+    assert pending.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert pending.affected_stable_note_ids == ()
+    assert action.reason == "relational_evidence_ambiguous"
+    assert action.candidate_note_ids == ("cloe", "marta")
+    assert [candidate.label for candidate in action.clarification.candidates] == ["Cloe", "Marta"]
+    assert all(path.read_bytes() == data for path, data in original.items())
+
+    choice = ClarificationChoice(
+        "cloe",
+        current_identity_guard(VaultRepository(vault), schema, "cloe"),
+        action.relational_evidence_guard,
+    )
+    resumed = run(vault, schema, plan, clarification_choice=choice)
+    assert resumed.status is application.ApplicationStatus.COMPLETED
+    assert resumed.affected_stable_note_ids == ("cloe",)
+    assert "Se cayó un diente." in parse_note((vault / "people/cloe.md").read_text()).content
+    assert "Se cayó un diente." not in parse_note((vault / "people/marta.md").read_text()).content
+
+
 def test_bare_singular_relational_write_offers_grounded_members_and_resumes_choice(
     tmp_path: Path, schema: dict
 ) -> None:

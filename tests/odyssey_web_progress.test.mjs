@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import test from "node:test";
 
 import {
@@ -8,8 +9,9 @@ import {
 } from "../odyssey_web/progress.js";
 
 class Element {
-  constructor(tagName) {
+  constructor(tagName, namespaceURI = null) {
     this.tagName = tagName;
+    this.namespaceURI = namespaceURI;
     this.children = [];
     this.className = "";
     this.attributes = new Map();
@@ -30,7 +32,10 @@ class Element {
   }
 }
 
-const fakeDocument = {createElement: (tag) => new Element(tag)};
+const fakeDocument = {
+  createElement: (tag) => new Element(tag),
+  createElementNS: (namespace, tag) => new Element(tag, namespace),
+};
 
 test("progress copy keeps only the latest user-facing stage", () => {
   assert.equal(formatStage({stage: "routing.started", details: []}), "Entendiendo tu mensaje…");
@@ -55,7 +60,13 @@ test("donut updates monotonically and completes at 100", () => {
 
   indicator.update({stage: "planner.started", progress: 50, details: []});
   assert.equal(donut.getAttribute("aria-valuenow"), "50");
-  assert.equal(copy.textContent, "Organizando la información…");
+  assert.equal(copy.textContent, "Organizando la información");
+  const svg = donut.children.find((child) => child.tagName === "svg");
+  assert.equal(svg.namespaceURI, "http://www.w3.org/2000/svg");
+  assert.ok(svg.children.every((child) => child.namespaceURI === svg.namespaceURI));
+  const dots = indicator.element.querySelector(".processing-dots");
+  assert.equal(dots.children.length, 3);
+  assert.ok(dots.children.every((child) => child.className === "processing-dot"));
 
   indicator.update({stage: "routing.ready", progress: 18, details: []});
   assert.equal(donut.getAttribute("aria-valuenow"), "50");
@@ -64,6 +75,16 @@ test("donut updates monotonically and completes at 100", () => {
   assert.equal(donut.getAttribute("aria-valuenow"), "100");
   assert.equal(copy.textContent, "Listo");
   indicator.destroy();
+});
+
+test("fact timeline separates facts rather than drawing one continuous border", () => {
+  const css = readFileSync(new URL("../odyssey_web/styles.css", import.meta.url), "utf8");
+  const groupRule = css.split(".note-fact-group {")[1]?.split("}")[0];
+  assert.ok(groupRule);
+  assert.ok(!groupRule.includes("border-left: 2px"));
+  assert.ok(css.includes(".note-fact-list > li::before"));
+  assert.match(css, /@keyframes processing-dot-bounce/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
 });
 
 test("poller tolerates progress failures without affecting delivery", async () => {

@@ -540,6 +540,7 @@ def _relational_write_e2e_fixture(
     *,
     reference: str = "uno de mis hijos",
     relation_fact_text: str = "Mis hijos son [[items/cloe|Cloe]] y [[items/bruno|Bruno]].",
+    relation_fact_texts: tuple[str, ...] | None = None,
     candidate_specs: tuple[tuple[str, str], ...] = (("cloe", "Cloe"), ("bruno", "Bruno")),
     note_type: str = "person",
     new_fact: str = "Se ha apuntado a natación.",
@@ -567,8 +568,9 @@ def _relational_write_e2e_fixture(
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(serialize_note(Note(metadata, body)), encoding="utf-8")
 
+    facts = relation_fact_texts or (relation_fact_text,)
     relation_fact = render_atomic_facts(
-        (relation_fact_text,), "fixture", (0,), "2026-09-30T12:00:00Z"
+        facts, "fixture", tuple(range(len(facts))), "2026-09-30T12:00:00Z"
     )
     write_note("people/self.md", "self", "Self", relation_fact, kind="person")
     candidate_paths: dict[str, Path] = {}
@@ -702,6 +704,29 @@ def test_ambiguous_relational_write_round_trips_through_core_runtime_and_choice(
     assert second["product_outcome"] == "ANSWER"
     assert fixture.new_fact not in fixture.paths["cloe"].read_text()
     assert fixture.new_fact in fixture.paths["bruno"].read_text()
+
+
+def test_two_explicit_daughter_relations_offer_existing_choice_end_to_end(
+    tmp_path: Path,
+) -> None:
+    """A real Core→pending→runtime WRITE offers choices across two matching facts."""
+    fixture = _relational_write_e2e_fixture(
+        tmp_path,
+        reference="mi hija",
+        relation_fact_texts=(
+            "Mi hija es [[items/cloe|Cloe]].",
+            "Mi hija es [[items/marta|Marta]].",
+        ),
+        candidate_specs=(("cloe", "Cloe"), ("marta", "Marta")),
+        new_fact="Se le cayó un diente.",
+    )
+    _assert_initial_relational_clarification(fixture, "Ayer se le cayó un diente a mi hija")
+    outcome = fixture.runtime.execute_product(
+        "He elegido a Cloe.", "delivery-daughter-choice", "main", ACTOR
+    )
+    assert outcome["product_outcome"] == "ANSWER"
+    assert fixture.new_fact in fixture.paths["cloe"].read_text()
+    assert fixture.new_fact not in fixture.paths["marta"].read_text()
 
 
 def test_relational_write_cancel_keeps_every_note_unchanged_end_to_end(tmp_path: Path) -> None:

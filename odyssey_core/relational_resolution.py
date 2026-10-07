@@ -220,6 +220,19 @@ def resolve_relational_reference(
         )
         if equivalent is not None:
             return equivalent
+        if fallback_identity_clarification and relation.members == "one":
+            # A bare singular WRITE can ask the user to choose among the fully grounded
+            # targets of these exact relationship facts; it must never pick one itself.
+            return _resolve_selected_read_facts(
+                selection,
+                source_id,
+                projector,
+                incoming_projection,
+                literal_matches,
+                evidence_guard,
+                chosen_identity_id,
+                ordinary_types,
+            )
         raise RelationalResolutionError(
             "relational_evidence_ambiguous", evidence_guard=evidence_guard
         )

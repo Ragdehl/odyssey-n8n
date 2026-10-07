@@ -80,6 +80,15 @@ def test_routed_application_failures_keep_specific_user_facing_messages() -> Non
     assert "No puedo convertir esa referencia temporal en una fecha exacta sin adivinar" in source
 
 
+def test_relationship_without_safe_options_has_actionable_error() -> None:
+    """When no choice can be persisted, explain the relational failure without guessing."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "unresolvedRelationship = r.product_reason === 'AMBIGUOUS_REFERENCE'" in source
+    assert "['relational_evidence_ambiguous', 'relational_singular_ambiguous']" in source
+    assert "No dispongo de opciones verificadas para mostrarte." in source
+    assert "Repite la frase indicando el nombre de la persona." in source
+
+
 def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> None:
     """Keep the DEV SELF fixture and grounded evidence projection available to the answerer."""
     source = SOURCE.read_text(encoding="utf-8")
