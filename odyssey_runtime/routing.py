@@ -107,6 +107,63 @@ def is_route_execution_id(outer_request_id: str, locator: str) -> bool:
     )
 
 
+def _route_stage_io(source: str, result: ApplicationResult) -> list[dict[str, str]]:
+    """Project actual validated application-stage I/O into bounded, read-only text.
+
+    An absent typed result produces an empty output, not a guessed model response.
+    This never inspects raw provider requests, hidden reasoning or vault contents.
+    """
+    evidence = result.execution_flow or {}
+    temporal = evidence.get("temporal") or ()
+    plan = evidence.get("plan") or ()
+    entities = evidence.get("entities") or ()
+    writes = evidence.get("writes") or ()
+    task = evidence.get("task") or {}
+    date_lines = [f"{item['source']} → {item['value']}" for item in temporal[:8]]
+    plan_lines = [
+        f"{item['operation']} · {item['type']} → {item['target']}"
+        + (f" · {item['fact']}" if item["fact"] else "")
+        for item in plan[:6]
+    ]
+    changes = [f"{item['status']}: {item['operation']} · {item['target']}" for item in writes[:6]]
+    links = [
+        f"{item['mention']} → {item['name'] if item['status'] == 'resolved' else 'No confirmada'}"
+        for item in entities[:6]
+    ]
+    steps: list[dict[str, str]] = []
+    for stage in result.operational.stages[:16]:
+        name = stage.name
+        incoming = source[:512]
+        outgoing = ""
+        if name == "tasks.interpretation":
+            if task:
+                outgoing = f"Operación: {task['operation']}"
+                if task.get("reference"):
+                    outgoing += f" · Tarea: {task['reference']}"
+        elif name == "temporal.interpretation":
+            if date_lines:
+                incoming = "; ".join(item["source"] for item in temporal[:8])[:512]
+                outgoing = "\n".join(date_lines)
+        elif name == "planner":
+            if date_lines:
+                incoming = (source + "\nContexto temporal: " + "; ".join(date_lines))[:512]
+            outgoing = "\n".join(plan_lines)
+        elif name.startswith("action."):
+            incoming = "\n".join(plan_lines)[:512]
+            outgoing = "\n".join([*changes, *links])
+        elif name == "git":
+            incoming = f"{len(result.affected_stable_note_ids)} notas afectadas"
+            outgoing = result.history.status.value
+        elif name == "pending":
+            incoming = "Resultado de Core"
+            outgoing = stage.outcome.value
+        else:
+            # Preserve verified stage status without inventing semantic output.
+            incoming = source[:512]
+        steps.append({"name": name[:80], "input": incoming[:512], "output": outgoing[:768]})
+    return steps
+
+
 def execute_routed_request(
     *,
     user_request: str,
@@ -224,6 +281,7 @@ def execute_routed_request(
                 "plan": list((result.execution_flow or {}).get("plan", []))[:8],
                 "entities": list((result.execution_flow or {}).get("entities", []))[:8],
                 "writes": list((result.execution_flow or {}).get("writes", []))[:8],
+                "steps": _route_stage_io(route.source_text, result),
             }
             for route, result in zip(plan.routes, subresults, strict=True)
         ],

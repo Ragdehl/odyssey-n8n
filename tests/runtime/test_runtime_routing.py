@@ -234,6 +234,7 @@ def test_parallel_interpretations_overlap_while_core_commits_in_route_order() ->
                 "plan": [],
                 "entities": [],
                 "writes": [],
+                "steps": [],
             },
             {
                 "capability": "calendar",
@@ -244,6 +245,7 @@ def test_parallel_interpretations_overlap_while_core_commits_in_route_order() ->
                 "plan": [],
                 "entities": [],
                 "writes": [],
+                "steps": [],
             },
         ],
     }

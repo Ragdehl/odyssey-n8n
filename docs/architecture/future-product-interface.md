@@ -444,3 +444,36 @@ two-branch horizontal graph, SVG nodes and existing operational telemetry.
 Regression: `tests/odyssey_web_request_flow.test.mjs`,
 `tests/odyssey_web_app.test.mjs`, `tests/runtime/test_runtime_routing.py`,
 `tests/odyssey_workflow_partial.test.mjs` and the conversation detail contract.
+
+### 2026-10-08 — validated input/output for each routed stage
+
+The per-message graph now persists an optional bounded `steps[]` for **each
+validated Router route**. Each step is correlated in exact order with the real
+`OperationalStage` and stores three plain-text fields: `name` (actual stage),
+`input` (bounded semantic input), and `output` (bounded **validated** result).
+Router input is the exact captured request and output is the verified route list;
+Tasks input is its own split text and output is the typed lifecycle operation;
+Temporal input is the source date expression and output its exact resolved date;
+Planner input is the routed text plus available validated Temporal evidence,
+output the typed requested operation/target/first fact; Core input is the
+validated plan and output the completed/deferred/failed canonical unit outcomes
+and grounded entity links. Git/pending steps only show their recorded statuses.
+Unknown or failed steps explicitly have **no validated structured output**,
+not a fabricated model response. A previously recorded route trace without
+`steps[]` remains readable using the older display, so this is additive and
+requires no migration of canonical vault data or past conversations.
+
+This **does not** persist provider prompts, raw JSON responses, hidden reasoning,
+private indexes or unbounded diagnostics. Stage strings are capped (input 512,
+output 768), list length matches actual observed stage count (at most 16), and
+the workflow, conversation store and browser validate the same shape. Only the
+actor-owned existing per-message `request_detail` persists this projection; it
+is excluded from all planning context. There is no new service, public route,
+model invocation, change to identity authority, or mutation semantics.
+
+Test sentinels cover parallel route stages and actual Core day writes, exact
+Temporal source-to-ISO display, Tasks interpretation, Router split/no-split,
+workflow round-trip, bounded/mismatched step rejection, durable local
+conversation replay and the legacy fallback. Next: measure the parallel Core
+planner path with this more inspectable evidence, without interpreting summed
+stage durations as actual wall time saved.

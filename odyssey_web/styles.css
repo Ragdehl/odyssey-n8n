@@ -583,3 +583,14 @@ button:disabled { opacity: .55; }
 .flow-paths-inner .flow-arrow.flow-fork { margin-bottom: .35rem; }
 .flow-paths-inner .flow-arrow.flow-join { margin-top: .3rem; }
 @media (max-width: 430px) { .flow-lane .flow-icon svg { width: .98rem; height: .98rem; } .flow-paths-inner .flow-lanes.flow-multiple { grid-auto-columns: minmax(13.5rem, 14.25rem); gap: .6rem; } }
+
+
+/* Per-stage validated semantic I/O; visually primary, provider metrics secondary. */
+.flow-io { display: grid; gap: .42rem; margin: .5rem 0 .25rem; }
+.flow-io-row { padding: .38rem .5rem; background: #201d32; border: 1px solid #514776; border-radius: .55rem; min-width: 0; }
+.flow-io-label { display: block; margin-bottom: .2rem; font-size: .67rem; font-weight: 700; color: #b5a3f8; text-transform: uppercase; letter-spacing: .05em; }
+.flow-io-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #ece8ff; font-size: .75rem; line-height: 1.45; margin: 0; }
+.flow-io-missing { color: #9890b5; font-style: italic; }
+.flow-lane .flow-io-row { padding: .34rem .38rem; }
+.flow-lane .flow-io-value { font-size: .7rem; }
+.flow-lane .flow-io-label { font-size: .6rem; }

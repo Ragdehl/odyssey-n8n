@@ -25,12 +25,19 @@ const flow = {
   routes: [
     {capability: "tasks", text: "Hoy tengo que ir al cine", status: "completed", stage_count: 2, temporal: [],
       plan: [{operation: "record", type: "task", target: "ir al cine", fact: "Tengo que ir al cine."}],
-      entities: [], writes: [{status: "succeeded", operation: "CREATED", target: "ir al cine"}]},
+      entities: [], writes: [{status: "succeeded", operation: "CREATED", target: "ir al cine"}],
+      steps: [{name: "tasks.interpretation", input: "Hoy tengo que ir al cine", output: "Operación: create"},
+        {name: "planner", input: "Hoy tengo que ir al cine", output: "record · task → ir al cine"}]},
     {capability: "temporal", text: "mañana iré al teatro", status: "completed", stage_count: 3,
       temporal: [{source: "mañana", value: "2026-10-09"}],
       plan: [{operation: "record", type: "calendar_day", target: "2026-10-09", fact: "Mi {{ref:0}} fue al teatro."}],
       entities: [{mention: "mi hija", name: "Cloe", status: "resolved", type: "person"}],
-      writes: [{status: "succeeded", operation: "UPDATED", target: "2026-10-09"}]},
+      writes: [{status: "succeeded", operation: "UPDATED", target: "2026-10-09"}],
+      steps: [
+        {name: "temporal.interpretation", input: "mañana", output: "mañana → 2026-10-09"},
+        {name: "planner", input: "mañana iré al teatro\nContexto temporal: mañana → 2026-10-09", output: "record · calendar_day → 2026-10-09 · Mi {{ref:0}} fue al teatro."},
+        {name: "action.write", input: "record · calendar_day → 2026-10-09", output: "succeeded: UPDATED · 2026-10-09\nmi hija → Cloe"},
+      ]},
   ],
 };
 const operational = {
@@ -73,11 +80,16 @@ test("directed execution graph preserves actual route order, source, dates and m
   assert.match(second.textContent, /mi hija → Cloe/);
   assert.equal(second.findAll("flow-entities").length, 1);
   assert.equal(second.findAll("flow-entity-resolved").length, 1);
-  assert.ok(second.findAll("flow-input").length >= 2);
+  assert.equal(second.findAll("flow-io").length, 3);
+  assert.equal(first.findAll("flow-io").length, 2);
+  assert.match(second.textContent, /Entrada/);
+  assert.match(second.textContent, /Salida/);
+  assert.match(second.textContent, /Contexto temporal/);
+  assert.match(second.textContent, /succeeded: UPDATED/);
   assert.match(second.textContent, /record.*calendar_day.*2026-10-09/);
   assert.match(second.textContent, /Mi ↗ referencia fue al teatro/);
   assert.match(second.textContent, /UPDATED.*2026-10-09/);
-  assert.match(first.textContent, /Tengo que ir al cine/);
+  assert.match(first.textContent, /tengo que ir al cine/i);
   assert.match(graph.textContent, /Dividido en 2 fragmentos/);
   assert.equal(graph.findAll("flow-icon").length >= 7, true);
   assert.match(first.textContent, /gpt-5.6-luna/);
@@ -86,6 +98,15 @@ test("directed execution graph preserves actual route order, source, dates and m
   assert.match(graph.textContent, /Preparación simultánea/);
   assert.match(graph.textContent, /Completado/);
   assert.doesNotMatch(second.textContent, /gpt-6-luna · 35 ms/);
+});
+
+test("stage I/O must match actual stage order and remain within strict bounds", () => {
+  const mismatched = {...flow, routes: flow.routes.map((route, i) => i ? {...route,
+    steps: [{...route.steps[0], name: "planner"}, ...route.steps.slice(1)]} : route)};
+  assert.throws(() => validateRequestDetail({request_id: "flow-1", operational, flow: mismatched}, "flow-1"), ProductRequestError);
+  const oversized = {...flow, routes: flow.routes.map((route, i) => i ? {...route,
+    steps: [{...route.steps[0], output: "x".repeat(769)}, ...route.steps.slice(1)]} : route)};
+  assert.throws(() => validateRequestDetail({request_id: "flow-1", operational, flow: oversized}, "flow-1"), ProductRequestError);
 });
 
 test("invalid per-route stage mapping fails closed before graph rendering", () => {
@@ -111,7 +132,7 @@ test("a partial route is not presented as a complete success", () => {
 test("one route explicitly displays no split and ungrounded mention stays unresolved", () => {
   const actual = diagnostic();
   actual.flow.routes = [{...actual.flow.routes[1], text: "mañana iré al teatro", stage_count: 1,
-    entities: [{mention: "mi hija", name: "", status: "unresolved", type: "person"}]}];
+    entities: [{mention: "mi hija", name: "", status: "unresolved", type: "person"}], steps: [{name: "git", input: "0 notas afectadas", output: "disabled"}]}];
   actual.operational.stages = [actual.operational.stages[1], actual.operational.stages[7]];
   const output = renderExecutionFlow(doc, actual);
   assert.match(output.textContent, /Sin división · 1 camino/);

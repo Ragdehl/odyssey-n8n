@@ -2266,6 +2266,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ),
         )
 
+    def _task_flow(interpretation: TaskInterpretation) -> dict[str, object]:
+        """Return bounded Task lifecycle intent, not an alternate Core plan."""
+        return {
+            "task": {
+                "operation": interpretation.operation.value[:48],
+                "reference": (interpretation.task_reference or "")[:160],
+            }
+        }
+
     def _temporal_flow(interpretation: TemporalInterpretation | None) -> dict[str, object]:
         """Project grounded human-time translations without exposing model payloads."""
         if interpretation is None:
@@ -2414,6 +2423,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 (ActionResult(0, "retrieve", ActionStatus.COMPLETED, retrieval=retrieval),),
                 (),
                 operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                execution_flow=_task_flow(task),
             )
 
         temporal = None
@@ -2647,6 +2657,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 (mutation.task_id,),
                 history=mutation.history,
                 operational=OperationalEvidence(total_duration, tuple(stages)),
+                execution_flow=_task_flow(task),
             )
         try:
             domain = compose_task_domain_interpretation(task, temporal, now=clock["timestamp"])
@@ -2675,7 +2686,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 total_duration + (core_result.operational.total_duration_ms or 0.0),
                 (*stages, *core_result.operational.stages),
             ),
-            execution_flow={**(core_result.execution_flow or {}), **_temporal_flow(temporal)},
+            execution_flow={
+                **(core_result.execution_flow or {}),
+                **_temporal_flow(temporal),
+                **_task_flow(task),
+            },
         )
 
     if "tasks" in enabled_application_ids:

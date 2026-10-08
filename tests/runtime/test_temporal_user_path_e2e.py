@@ -152,6 +152,20 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
     assert second_route["plan"][0]["target"] == "2026-10-04"
     assert first_route["writes"][0]["status"] == "succeeded"
     assert second_route["writes"][0]["status"] == "succeeded"
+    # Each validated routed input/plan/output remains available for a future
+    # per-message request graph without re-reading or modifying the vault.
+    assert len(first_route["steps"]) == first_route["stage_count"]
+    assert len(second_route["steps"]) == second_route["stage_count"]
+    assert first_route["steps"][0]["name"] == "planner"
+    assert first_route["steps"][0]["input"] == "Ayer vi a Ana"
+    assert "record · calendar_day → 2026-10-03" in first_route["steps"][0]["output"]
+    assert second_route["steps"][0]["input"] == "y hoy vi a Luis."
+    assert "2026-10-04" in second_route["steps"][0]["output"]
+    assert any(
+        "succeeded: " in step["output"] and "2026-10-03" in step["output"]
+        for step in first_route["steps"]
+        if step["name"] == "action.write"
+    )
     calendar = _calendar(repository, tmp_path)
     assert "Vi a Ana." in _visible_day(calendar, "2026-10-03")
     assert "Vi a Luis." in _visible_day(calendar, "2026-10-04")

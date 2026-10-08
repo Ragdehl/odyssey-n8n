@@ -223,6 +223,13 @@ def test_execution_flow_persists_in_assistant_detail_but_not_planner_context(
                 "stage_count": 1,
                 "status": "completed",
                 "temporal": [{"source": "Hoy", "value": "2026-10-08"}],
+                "steps": [
+                    {
+                        "name": "planner",
+                        "input": "Hoy he visto a Eva.",
+                        "output": "record · calendar_day → 2026-10-08",
+                    }
+                ],
             },
             {
                 "capability": "temporal",
@@ -230,6 +237,13 @@ def test_execution_flow_persists_in_assistant_detail_but_not_planner_context(
                 "stage_count": 1,
                 "status": "completed",
                 "temporal": [{"source": "Mañana", "value": "2026-10-09"}],
+                "steps": [
+                    {
+                        "name": "planner",
+                        "input": "Mañana iré al mercado.",
+                        "output": "record · calendar_day → 2026-10-09",
+                    }
+                ],
             },
         ],
     }
@@ -254,6 +268,19 @@ def test_execution_flow_persists_in_assistant_detail_but_not_planner_context(
     page = store.load_main_page()
     assert page["turns"][0]["request_detail"]["flow"] == flow
     assert store.recent_context() == [{"role": "assistant", "text": "turn 1"}]
+    with pytest.raises(ConversationError, match="execution flow"):
+        invalid = {
+            **flow,
+            "routes": [
+                {
+                    **flow["routes"][0],
+                    "steps": [
+                        {"name": "planner", "input": "x" * 513, "output": "wrong"},
+                    ],
+                }
+            ],
+        }
+        _append(store, 7, detail={**detail, "request_id": "req-7", "flow": invalid})
     with pytest.raises(ConversationError, match="execution flow"):
         _append(
             store,

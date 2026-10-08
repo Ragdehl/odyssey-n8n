@@ -75,7 +75,8 @@ test("workflow carries only validated route provenance and stage cost projection
       status: "completed", temporal: [{source: "mañana", value: "2026-10-09"}],
       plan: [{operation: "record", type: "calendar_day", target: "2026-10-09", fact: "Veo a mi hija"}],
       entities: [{mention: "mi hija", name: "Cloe", status: "resolved", type: "person"}],
-      writes: [{status: "succeeded", operation: "UPDATED", target: "2026-10-09"}]}],
+      writes: [{status: "succeeded", operation: "UPDATED", target: "2026-10-09"}],
+      steps: [{name: "temporal.interpretation", input: "mañana", output: "mañana → 2026-10-09"}]}],
   };
   const result = execute({
     request_id: "synthetic-partial", status: "completed",

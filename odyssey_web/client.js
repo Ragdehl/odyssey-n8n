@@ -298,7 +298,7 @@ export function validateExecutionFlow(value, stages) {
   let totalStages = 0;
   const routes = value.routes.map(route => {
     if (!route || typeof route !== "object" || Array.isArray(route) ||
-        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes"].includes(key)) ||
+        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes", "steps"].includes(key)) ||
         typeof route.capability !== "string" || !route.capability || route.capability.length > 40 ||
         typeof route.text !== "string" || !route.text || route.text.length > 4096 ||
         !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 16 ||
@@ -339,13 +339,42 @@ export function validateExecutionFlow(value, stages) {
       {mention: 120, name: 160, status: 16, type: 40});
     const writes = validatedList("writes", ["status", "operation", "target"],
       {status: 32, operation: 48, target: 160});
+    const steps = route.steps === undefined ? undefined : (() => {
+      if (!Array.isArray(route.steps) || route.steps.length !== route.stage_count) {
+        throw new ProductRequestError("Invalid stage I/O trace.");
+      }
+      return route.steps.map(step => {
+        if (!step || typeof step !== "object" || Array.isArray(step) ||
+          Object.keys(step).length !== 3 ||
+          Object.keys(step).some(key => !["name", "input", "output"].includes(key)) ||
+          typeof step.name !== "string" || !step.name || step.name.length > 80 ||
+          typeof step.input !== "string" || step.input.length > 512 ||
+          typeof step.output !== "string" || step.output.length > 768) {
+          throw new ProductRequestError("Invalid stage I/O trace.");
+        }
+        return {name: step.name, input: step.input, output: step.output};
+      });
+    })();
     totalStages += route.stage_count;
     return {capability: route.capability, text: route.text, stage_count: route.stage_count,
-      status: route.status, temporal, plan, entities, writes};
+      status: route.status, temporal, plan, entities, writes, ...(steps ? {steps} : {})};
   });
   const routerIndex = stages.findIndex(stage => stage.name === "application.router");
   if (routerIndex < 0 || routerIndex + 1 + totalStages > stages.length) {
     throw new ProductRequestError("Execution stages do not match the route graph.");
+  }
+  let index = routerIndex + 1;
+  for (const route of routes) {
+    if (route.steps) {
+      for (const step of route.steps) {
+        if (step.name !== stages[index]?.name) {
+          throw new ProductRequestError("Stage I/O does not match actual execution order.");
+        }
+        index++;
+      }
+    } else {
+      index += route.stage_count;
+    }
   }
   return {version: 1, input: value.input, parallel_preparation: value.parallel_preparation, routes};
 }

@@ -555,11 +555,11 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
     if "estimated_cost" in value:
         _validate_estimated_cost(value["estimated_cost"])
     if "flow" in value:
-        _validate_execution_flow(value["flow"])
+        _validate_execution_flow(value["flow"], operational["stages"])
     return json.loads(encoded)
 
 
-def _validate_execution_flow(value: Any) -> None:
+def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = None) -> None:
     """Validate minimal route provenance, never infer identity or mutation authority."""
     if (
         not isinstance(value, dict)
@@ -586,6 +586,7 @@ def _validate_execution_flow(value: Any) -> None:
                 "plan",
                 "entities",
                 "writes",
+                "steps",
             }
             or not isinstance(route["capability"], str)
             or not 1 <= len(route["capability"]) <= 40
@@ -598,6 +599,22 @@ def _validate_execution_flow(value: Any) -> None:
             or len(route["temporal"]) > 8
         ):
             raise ConversationError("execution flow is invalid")
+        if "steps" in route:
+            steps = route["steps"]
+            if not isinstance(steps, list) or len(steps) != route["stage_count"]:
+                raise ConversationError("execution flow is invalid")
+            for step in steps:
+                if (
+                    not isinstance(step, dict)
+                    or set(step) != {"name", "input", "output"}
+                    or not isinstance(step["name"], str)
+                    or not 1 <= len(step["name"]) <= 80
+                    or not isinstance(step["input"], str)
+                    or len(step["input"]) > 512
+                    or not isinstance(step["output"], str)
+                    or len(step["output"]) > 768
+                ):
+                    raise ConversationError("execution flow is invalid")
         for kind, keys, limits in (
             (
                 "plan",
@@ -643,6 +660,26 @@ def _validate_execution_flow(value: Any) -> None:
                 or mention["source"] not in route["text"]
             ):
                 raise ConversationError("execution flow is invalid")
+
+    if stages is not None:
+        router_index = next(
+            (
+                index
+                for index, stage in enumerate(stages)
+                if stage.get("name") == "application.router"
+            ),
+            -1,
+        )
+        if router_index >= 0:
+            cursor = router_index + 1
+            for route in value["routes"]:
+                if "steps" in route:
+                    for step in route["steps"]:
+                        if cursor >= len(stages) or stages[cursor].get("name") != step["name"]:
+                            raise ConversationError("execution flow is invalid")
+                        cursor += 1
+                else:
+                    cursor += route["stage_count"]
 
 
 def _safe_number(value: Any) -> bool:

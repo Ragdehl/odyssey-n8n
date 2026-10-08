@@ -253,7 +253,23 @@ function detailLine(doc, text, kind = "") {
   return element(doc, "p", `flow-semantics-line ${kind}`, text);
 }
 
-function stageCard(doc, stage, route = null) {
+function ioRow(doc, label, value, missing = "") {
+  const row = element(doc, "div", "flow-io-row");
+  row.append(element(doc, "span", "flow-io-label", label));
+  row.append(element(doc, "p", `flow-io-value ${value ? "" : "flow-io-missing"}`,
+    value || missing));
+  return row;
+}
+
+function ioPanel(doc, input, output) {
+  const wrapper = element(doc, "div", "flow-io");
+  wrapper.append(ioRow(doc, "Entrada", input, "No registrada"));
+  wrapper.append(ioRow(doc, "Salida", output,
+    "No hay salida estructurada validada para esta etapa"));
+  return wrapper;
+}
+
+function stageCard(doc, stage, route = null, observedStep = null) {
   const card = element(doc, "article", `flow-card ${stage.outcome === "failed" ? "flow-card-failed" : ""}`);
   const icon = stage.name === "application.router" ? "router" :
     stage.name === "planner" ? "planner" :
@@ -264,10 +280,13 @@ function stageCard(doc, stage, route = null) {
     stage.name === "pending" ? "pending" :
     stage.name.startsWith("action.") ? "core" : "result";
   card.append(headingWithIcon(doc, stageTitle(stage.name), icon));
-  if (route && ["planner", "tasks.interpretation", "temporal.interpretation"].includes(stage.name)) {
+  if (observedStep) {
+    card.append(ioPanel(doc, observedStep.input,
+      observedStep.output.replace(/\{\{ref:\d+\}\}/gu, "↗ referencia")));
+  } else if (route && ["planner", "tasks.interpretation", "temporal.interpretation"].includes(stage.name)) {
     card.append(textInput(doc, route.text));
   }
-  if (stage.name === "planner" && route?.plan?.length) {
+  if (!observedStep && stage.name === "planner" && route?.plan?.length) {
     const decisions = element(doc, "div", "flow-semantics");
     for (const item of route.plan) {
       decisions.append(detailLine(doc, `${item.operation} · ${item.type || "nota"} → ${item.target}`));
@@ -276,7 +295,7 @@ function stageCard(doc, stage, route = null) {
     }
     card.append(decisions);
   }
-  if (stage.name.startsWith("action.") && route) {
+  if (!observedStep && stage.name.startsWith("action.") && route) {
     const steps = element(doc, "div", "flow-semantics");
     for (const item of route.writes || []) {
       steps.append(detailLine(doc, `${item.operation} · ${item.target} (${item.status})`));
@@ -365,6 +384,11 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
         ? `Dividido en ${flow.routes.length} fragmentos`
         : "Sin división · 1 camino", "flow-split-result"));
     }
+    if (flow?.routes?.length) {
+      const routeOutput = flow.routes.map((route, index) =>
+        `${index + 1}. ${route.capability} → ${route.text}`).join("\n");
+      router.append(ioPanel(doc, flow.input, routeOutput));
+    }
     root.append(router);
     if (!flow?.routes?.length) root.append(arrow(doc));
   }
@@ -381,6 +405,10 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
     if (flow.parallel_preparation) {
       root.append(element(doc, "p", "flow-lane-caption", "Preparación simultánea · aplicación en orden"));
     }
+    if (flow.routes.some(route => !route.steps)) {
+      root.append(element(doc, "p", "flow-legacy",
+        "Esta solicitud conserva sus rutas, pero es anterior al registro de entrada y salida por etapa."));
+    }
     for (const [index, route] of flow.routes.entries()) {
       const lane = element(doc, "section", "flow-lane");
       lane.setAttribute("aria-label", `Camino ${index + 1}: ${route.capability}`);
@@ -389,7 +417,7 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
       const routeStages = stages.slice(consumed, consumed + route.stage_count);
       consumed += route.stage_count;
       let entitiesDisplayed = false;
-      for (const stage of routeStages) {
+      for (const [stageIndex, stage] of routeStages.entries()) {
         if (stage.name === "pending" && stage.outcome === "skipped") continue;
         if (!entitiesDisplayed && stage.name.startsWith("action.") && route.entities?.length) {
           lane.append(arrow(doc));
@@ -397,7 +425,8 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
           entitiesDisplayed = true;
         }
         lane.append(arrow(doc));
-        lane.append(stageCard(doc, stage, route));
+        lane.append(stageCard(doc, stage, route,
+          route.steps ? route.steps[stageIndex] : null));
       }
       if (routeStages.length === 0) {
         lane.append(arrow(doc));
