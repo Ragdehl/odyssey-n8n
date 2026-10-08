@@ -98,6 +98,33 @@ test("workflow carries only validated route provenance and stage cost projection
   assert.equal(result.request_detail.operational.stages[1].estimated_cost.status, "unavailable");
 });
 
+test("workflow preserves a bounded dependent route for the browser contract", () => {
+  const flow = {
+    version: 1, input: "Ayer hablé con Eric. Mañana iré con él. Hoy compré pan.",
+    parallel_preparation: true,
+    routes: [
+      {capability: "temporal", text: "Ayer hablé con Eric.", stage_count: 1, status: "completed", temporal: []},
+      {capability: "temporal", text: "Mañana iré con él.", stage_count: 1, status: "needs_attention", temporal: [],
+        depends_on: 0, reason: "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"},
+      {capability: "temporal", text: "Hoy compré pan.", stage_count: 1, status: "completed", temporal: []},
+    ],
+  };
+  const result = execute({
+    request_id: "synthetic-partial", status: "partial", product_outcome: "ANSWER",
+    affected_stable_note_ids: [], actions: [], execution_flow: flow,
+    operational: {total_duration_ms: 3, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 0, model: null, provider_calls: []},
+      {name: "planner", outcome: "completed", duration_ms: 1, model: null, provider_calls: []},
+      {name: "planner", outcome: "deferred", duration_ms: 1, model: null, provider_calls: []},
+      {name: "planner", outcome: "completed", duration_ms: 1, model: null, provider_calls: []},
+    ]},
+  });
+
+  assert.equal(result.request_detail.flow.routes[1].depends_on, 0);
+  assert.equal(validateProductResponse(result).request_detail.flow.routes[1].reason,
+    "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE");
+});
+
 
 test("four routed day writes keep all stage evidence and a valid product answer", () => {
   const names = ["temporal.interpretation", "planner", "action.write", "git", "pending"];

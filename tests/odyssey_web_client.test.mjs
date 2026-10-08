@@ -10,6 +10,7 @@ import {
   renderProductResultWithContinuity,
   requestConversation,
   requestProductResult,
+  validateExecutionFlow,
   validateProductResponse,
 } from "../odyssey_web/client.js";
 import {
@@ -40,6 +41,43 @@ test("new submissions trim text and receive a safe web request id", () => {
 
 test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
+});
+
+test("browser accepts bounded backward route dependencies and rejects tampering", () => {
+  const flow = {
+    version: 1,
+    input: "Ayer hablé con Eric de Prueba. Mañana iré al cine con él. Hoy compré pan.",
+    parallel_preparation: true,
+    routes: [
+      {capability: "temporal", text: "Ayer hablé con Eric de Prueba.", stage_count: 1, status: "completed", temporal: []},
+      {capability: "temporal", text: "Mañana iré al cine con él.", stage_count: 1, status: "completed", temporal: [], depends_on: 0, reason: null},
+      {capability: "temporal", text: "Hoy compré pan.", stage_count: 1, status: "completed", temporal: []},
+    ],
+  };
+  const stages = [
+    {name: "application.router"}, {name: "planner"}, {name: "planner"}, {name: "planner"},
+  ];
+  const validated = validateExecutionFlow(flow, stages).routes[1];
+  assert.equal(validated.depends_on, 0);
+  assert.equal(validated.reason, null);
+
+  const blocked = structuredClone(flow);
+  blocked.routes[1].status = "needs_attention";
+  blocked.routes[1].reason = "ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED";
+  assert.equal(validateExecutionFlow(blocked, stages).routes[1].reason,
+    "ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED");
+
+  for (const route of [
+    {...flow.routes[1], depends_on: 1},
+    {capability: "temporal", text: flow.routes[1].text, stage_count: 1, status: "completed", temporal: [], depends_on: 0},
+    {...flow.routes[1], depends_on: true},
+    {...flow.routes[1], reason: " "},
+    {...flow.routes[1], reason: "x".repeat(121)},
+  ]) {
+    const tampered = structuredClone(flow);
+    tampered.routes[1] = route;
+    assert.throws(() => validateExecutionFlow(tampered, stages), ProductRequestError);
+  }
 });
 
 test("reload offers the newest unmatched logical delivery without resending it", () => {

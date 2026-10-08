@@ -311,15 +311,21 @@ export function validateExecutionFlow(value, stages) {
     throw new ProductRequestError("Odyssey returned invalid execution flow.");
   }
   let totalStages = 0;
-  const routes = value.routes.map(route => {
+  const routes = value.routes.map((route, index) => {
     if (!route || typeof route !== "object" || Array.isArray(route) ||
-        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes", "steps"].includes(key)) ||
+        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes", "steps", "depends_on", "reason"].includes(key)) ||
         typeof route.capability !== "string" || !route.capability || route.capability.length > 40 ||
         typeof route.text !== "string" || !route.text || route.text.length > 4096 ||
         !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 16 ||
         !["completed", "failed", "partial", "needs_attention"].includes(route.status) ||
         !Array.isArray(route.temporal) || route.temporal.length > 8) {
       throw new ProductRequestError("Odyssey returned invalid execution route.");
+    }
+    const hasDependency = Object.hasOwn(route, "depends_on") || Object.hasOwn(route, "reason");
+    if (hasDependency && (!Object.hasOwn(route, "depends_on") || !Object.hasOwn(route, "reason") ||
+        !Number.isInteger(route.depends_on) || route.depends_on < 0 || route.depends_on >= index ||
+        (route.reason !== null && (typeof route.reason !== "string" || !route.reason.trim() || route.reason.length > 120)))) {
+      throw new ProductRequestError("Odyssey returned invalid route dependency.");
     }
     const temporal = route.temporal.map(item => {
       if (!item || typeof item !== "object" || Array.isArray(item) ||
@@ -372,7 +378,8 @@ export function validateExecutionFlow(value, stages) {
     })();
     totalStages += route.stage_count;
     return {capability: route.capability, text: route.text, stage_count: route.stage_count,
-      status: route.status, temporal, plan, entities, writes, ...(steps ? {steps} : {})};
+      status: route.status, temporal, plan, entities, writes, ...(steps ? {steps} : {}),
+      ...(hasDependency ? {depends_on: route.depends_on, reason: route.reason} : {})};
   });
   const routerIndex = stages.findIndex(stage => stage.name === "application.router");
   if (routerIndex < 0 || routerIndex + 1 + totalStages > stages.length) {

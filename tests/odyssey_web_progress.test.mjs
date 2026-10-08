@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   createProcessingIndicator,
   formatStage,
+  renderExecutionFlow,
   startProgressPolling,
 } from "../odyssey_web/progress.js";
 
@@ -21,6 +22,9 @@ class Element {
     this.children = [];
     this.attributes = new Map();
     this._textContent = "";
+    this.classList = {add: (...names) => {
+      this.className = [this.className, ...names].filter(Boolean).join(" ");
+    }};
   }
   append(...nodes) { this.children.push(...nodes); }
   set textContent(value) { this._textContent = String(value); this.children = []; }
@@ -93,6 +97,27 @@ test("fact timeline separates facts rather than drawing one continuous border", 
   assert.ok(css.includes(".note-fact-list > li::before"));
   assert.match(css, /@keyframes processing-dot-bounce/);
   assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
+test("execution graph makes a validated dependency and its blocked reason visible", () => {
+  const graph = renderExecutionFlow(fakeDocument, {
+    operational: {total_duration_ms: 3, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 0, provider_calls: []},
+      {name: "planner", outcome: "completed", duration_ms: 1, provider_calls: []},
+      {name: "planner", outcome: "deferred", duration_ms: 1, provider_calls: []},
+      {name: "planner", outcome: "completed", duration_ms: 1, provider_calls: []},
+    ]},
+    flow: {version: 1, input: "Primero. Después. Independiente.", parallel_preparation: true,
+      routes: [
+        {capability: "core", text: "Primero.", stage_count: 1, status: "completed", temporal: []},
+        {capability: "core", text: "Después.", stage_count: 1, status: "needs_attention", temporal: [],
+          depends_on: 0, reason: "ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED"},
+        {capability: "core", text: "Independiente.", stage_count: 1, status: "completed", temporal: []},
+      ]},
+  });
+
+  assert.match(graph.textContent, /Depende del camino 1/);
+  assert.match(graph.textContent, /ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED/);
 });
 
 test("poller tolerates progress failures without affecting delivery", async () => {

@@ -55,6 +55,30 @@ Important existing safety boundaries remain in force. Product observability must
 
 `request_id` remains the normal correlation key unless later evidence demonstrates a concrete need for another identifier.
 
+### Dependent-route graph contract regression (October 2026)
+
+A DEV request containing three routed facts (talking to Eric, going to the cinema with “él”,
+and buying bread) completed, but the browser displayed `EVIDENCE_REJECTED` instead of the
+execution graph. The Router/runtime correctly emitted `depends_on` and nullable `reason`
+for the dependent route; the durable Python conversation validator and browser JavaScript
+validator still rejected these newly emitted route keys. The product workflow forwarded the
+bounded flow and the browser intentionally hid untrusted technical evidence without hiding
+the successfully completed result. This was a **diagnostic contract drift**, not evidence
+of a failed Core mutation.
+
+Both validators now accept these keys only as a pair: the dependency must be an integer index
+of a strictly earlier route, and `reason` must be null or a bounded non-empty string. The
+execution graph displays the predecessor route and any safe reason without treating either
+as authority to resolve identities or write notes. Preserve this contract across runtime,
+workflow product projection, conversation persistence, and browser validation. The shortest
+future check is a real three-route dependent result, persisted as bounded request detail and
+rendered by the browser, plus blocked/tampered dependency regressions; these are covered by
+`tests/runtime/test_temporal_user_path_e2e.py`, `tests/core/test_local_conversations.py`,
+`tests/odyssey_workflow_partial.test.mjs`, `tests/odyssey_web_client.test.mjs` and
+`tests/odyssey_web_progress.test.mjs`. As with other UI changes, an authenticated DEV
+browser recheck remains necessary after deployment; local tests alone cannot prove that
+mobile clients have loaded the new assets.
+
 ## Simple default user view
 
 For ordinary users, the UI should favor comprehension over exhaustiveness.

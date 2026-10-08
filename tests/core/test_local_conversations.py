@@ -236,6 +236,8 @@ def test_execution_flow_persists_in_assistant_detail_but_not_planner_context(
                 "text": "Mañana iré al mercado.",
                 "stage_count": 1,
                 "status": "completed",
+                "depends_on": 0,
+                "reason": None,
                 "temporal": [{"source": "Mañana", "value": "2026-10-09"}],
                 "steps": [
                     {
@@ -294,6 +296,32 @@ def test_execution_flow_persists_in_assistant_detail_but_not_planner_context(
                 },
             },
         )
+    for dependency in (
+        {"depends_on": 1, "reason": None},
+        {"depends_on": 0},
+        {"depends_on": True, "reason": None},
+        {"depends_on": 0, "reason": " "},
+        {"depends_on": 0, "reason": "x" * 121},
+    ):
+        route = {
+            key: value
+            for key, value in flow["routes"][1].items()
+            if key not in {"depends_on", "reason"}
+        }
+        route.update(dependency)
+        with pytest.raises(ConversationError, match="execution flow"):
+            _append(
+                store,
+                9,
+                detail={
+                    **detail,
+                    "request_id": "req-9",
+                    "flow": {
+                        **flow,
+                        "routes": [flow["routes"][0], route],
+                    },
+                },
+            )
     with pytest.raises(ConversationError, match="execution flow"):
         _append(
             store,

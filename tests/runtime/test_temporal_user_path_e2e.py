@@ -16,6 +16,7 @@ from odyssey_core.application import (
     execute_request,
 )
 from odyssey_core.context import ContextIndex
+from odyssey_core.local_conversations import LocalConversationStore
 from odyssey_core.note_queries import NotesQueryService
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.request_planning import (
@@ -28,6 +29,7 @@ from odyssey_core.request_planning import (
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import TemporalAnchor
 from odyssey_runtime.routing import execute_routed_request
+from odyssey_runtime.serialization import application_result_to_response
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
@@ -307,6 +309,63 @@ def test_dependent_eric_route_hands_one_current_core_identity_to_the_normal_writ
     assert result.status is ApplicationStatus.COMPLETED
     dependent = result.execution_flow["routes"][1]
     assert dependent["status"] == "completed"
+    assert dependent["depends_on"] == 0
+    assert dependent["reason"] is None
+    response = application_result_to_response(result)
+
+    # The product projection replaces runtime-only cost fields before durable UI state.
+    def product_stage(stage: dict[str, object]) -> dict[str, object]:
+        allowed = {
+            "name",
+            "outcome",
+            "duration_ms",
+            "model",
+            "reasoning_effort",
+            "error_category",
+            "usage",
+            "provider_calls",
+            "start_offset_ms",
+            "substeps",
+            "coverage",
+            "input_sizes",
+            "validation_stage",
+            "validation_code",
+            "provider_status",
+            "incomplete_reason",
+            "parse_status",
+            "result_kind",
+            "ordinal",
+            "attempt_count",
+            "output_text_chars",
+            "output_text_bytes",
+        }
+        return {
+            key: ([product_stage(call) for call in value] if key == "provider_calls" else value)
+            for key, value in stage.items()
+            if key in allowed
+        }
+
+    operational = {
+        **response["operational"],
+        "stages": [product_stage(stage) for stage in response["operational"]["stages"]],
+    }
+    store = LocalConversationStore(tmp_path / "conversation")
+    store.load_or_create_main(now=NOW)
+    store.append_turn(
+        request_id="erik-dependency-e2e",
+        role="assistant",
+        text="La información se ha guardado.",
+        created_at=NOW,
+        status="completed",
+        request_detail={
+            "request_id": "erik-dependency-e2e",
+            "operational": operational,
+            "flow": response["execution_flow"],
+        },
+    )
+    persisted = store.load_main_page()["turns"][0]["request_detail"]["flow"]
+    assert persisted["routes"][1]["depends_on"] == 0
+    assert persisted["routes"][1]["reason"] is None
     assert "Hablé con Eric." in _visible_day(_calendar(repository, tmp_path), "2026-10-03")
     assert "Iré al cine con Eric." in _visible_day(_calendar(repository, tmp_path), "2026-10-05")
     stored = "\n".join(path.read_text(encoding="utf-8") for path in vault.rglob("*.md"))

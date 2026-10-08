@@ -414,6 +414,10 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
       const lane = element(doc, "section", "flow-lane");
       lane.setAttribute("aria-label", `Camino ${index + 1}: ${route.capability}`);
       const fragment = plainCard(doc, `${index + 1} · ${route.capability}`, route.text, "fragment");
+      if (route.depends_on !== undefined) {
+        fragment.append(detailLine(doc, `Depende del camino ${route.depends_on + 1}`, "flow-dependency"));
+        if (route.reason) fragment.append(detailLine(doc, route.reason, "flow-error"));
+      }
       lane.append(fragment);
       const routeStages = stages.slice(consumed, consumed + route.stage_count);
       consumed += route.stage_count;

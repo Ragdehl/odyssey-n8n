@@ -579,7 +579,7 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
         or not 1 <= len(value["routes"]) <= 8
     ):
         raise ConversationError("execution flow is invalid")
-    for route in value["routes"]:
+    for index, route in enumerate(value["routes"]):
         if (
             not isinstance(route, dict)
             or not {"capability", "text", "stage_count", "status", "temporal"} <= set(route)
@@ -594,6 +594,8 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
                 "entities",
                 "writes",
                 "steps",
+                "depends_on",
+                "reason",
             }
             or not isinstance(route["capability"], str)
             or not 1 <= len(route["capability"]) <= 40
@@ -604,6 +606,21 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
             or not 0 <= route["stage_count"] <= 16
             or not isinstance(route["temporal"], list)
             or len(route["temporal"]) > 8
+        ):
+            raise ConversationError("execution flow is invalid")
+        has_dependency = "depends_on" in route or "reason" in route
+        if has_dependency and (
+            set(("depends_on", "reason")) - set(route)
+            or type(route["depends_on"]) is not int
+            or not 0 <= route["depends_on"] < index
+            or (
+                route["reason"] is not None
+                and (
+                    not isinstance(route["reason"], str)
+                    or not route["reason"].strip()
+                    or not 1 <= len(route["reason"]) <= 120
+                )
+            )
         ):
             raise ConversationError("execution flow is invalid")
         if "steps" in route:
