@@ -530,6 +530,14 @@ function renderProductResult(result) {
   appendNoteSetAffordance(message, result.note_result_snapshot);
   appendClarificationCard(message, result.clarification);
   if (clarificationStatus) clarificationStatus.hidden = result.kind !== "clarification";
+  const confirmedWrite = ["completed", "partial"].includes(result.status)
+    && (result.note_result_snapshot?.kind === "affected_notes"
+      && result.note_result_snapshot.total > 0
+      || (result.request_detail?.changes?.affected_stable_note_ids?.length ?? 0) > 0);
+  if (confirmedWrite) {
+    // Calendar projections are cached while its surface is mounted but hidden.
+    document.dispatchEvent(new CustomEvent("odyssey:knowledge-changed"));
+  }
 }
 
 function appendClarificationCard(article, clarification) {

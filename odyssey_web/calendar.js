@@ -50,16 +50,18 @@ export function mountCalendar(root, {
     monthDetail: null,
   };
   let dayRequestGeneration = 0;
+  let monthRequestGeneration = 0;
   let scheduleRequestGeneration = 0;
   let swipeStart = null;
   const inFlightDays = new Map();
 
   async function loadMonth(value = state.month) {
-    if (state.loading) return;
+    const generation = ++monthRequestGeneration;
     state.loading = true;
     status.textContent = "Cargando…";
     try {
       const month = await requestCalendar({endpoint, operation: "month", payload: {month: value}});
+      if (generation !== monthRequestGeneration) return;
       if (state.monthValue?.month !== month.month) {
         state.monthDetailDate = null;
         state.monthDetail = null;
@@ -69,12 +71,28 @@ export function mountCalendar(root, {
       renderMonth();
       status.textContent = "";
     } catch (error) {
+      if (generation !== monthRequestGeneration) return;
       status.textContent = error instanceof CalendarRequestError
         ? "No se ha podido cargar el calendario."
         : "El calendario no está disponible.";
     } finally {
-      state.loading = false;
+      if (generation === monthRequestGeneration) state.loading = false;
     }
+  }
+
+  function invalidateKnowledge() {
+    // A confirmed external write invalidates every cached Calendar projection.
+    // Older requests must not repopulate the cache after the new write.
+    monthRequestGeneration += 1;
+    dayRequestGeneration += 1;
+    scheduleRequestGeneration += 1;
+    state.loading = false;
+    state.monthValue = null;
+    state.scheduleValue = null;
+    state.dayValue = null;
+    state.monthDetail = null;
+    state.monthDetailDate = null;
+    inFlightDays.clear();
   }
 
   async function loadSchedule(value = state.scheduleStart) {
@@ -690,6 +708,7 @@ export function mountCalendar(root, {
     if (Math.abs(dx) < 55 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
     navigateSchedule(dx < 0 ? 1 : -1);
   }, {passive: true});
+  document.addEventListener("odyssey:knowledge-changed", invalidateKnowledge);
   document.addEventListener("odyssey:open-calendar-day", (event) => {
     const value = event.detail?.date;
     if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) void openDay(value);

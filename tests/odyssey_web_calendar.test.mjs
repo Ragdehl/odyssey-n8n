@@ -672,6 +672,68 @@ test("only the newest Day request may update the visible state", async () => {
 });
 
 
+test("confirmed chat write invalidates the mounted month, refreshing it without a page reload", async () => {
+  let writes = 0;
+  const calls = [];
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    calls.push({operation, payload});
+    assert.equal(operation, "month");
+    return {
+      kind: "calendar_month", month: payload.month,
+      days: [{date: `${payload.month}-07`, materialized: writes > 0, has_content: writes > 0,
+        journal_count: 0, captured_fact_count: writes, reference_count: 0,
+        task_count: 0, preview_total: writes,
+        previews: writes ? [{kind: "day_content", source_type: "calendar_day",
+          label: "7 octubre", text: "Bruno fue al museo."}] : []}],
+    };
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(mounted.elements.grid.textContent.includes("Bruno fue al museo."), false);
+  mounted.controller.showMonth();
+  await flush();
+  assert.equal(calls.length, 1, "switching tabs without writes should reuse the month");
+  writes = 1;
+  mounted.document.dispatchEvent({type: "odyssey:knowledge-changed"});
+  assert.equal(mounted.controller.state.monthValue, null);
+  mounted.controller.showMonth();
+  await flush();
+  assert.equal(calls.length, 2, "opening Calendar after a write fetches updated month");
+  assert.equal(mounted.elements.grid.textContent.includes("Bruno fue al museo."), true);
+  mounted.controller.showMonth();
+  await flush();
+  assert.equal(calls.length, 2, "fresh cache should be reused again");
+});
+
+test("an in-flight month response before a chat write cannot restore stale Calendar content", async () => {
+  const stale = deferred();
+  let calls = 0;
+  const mounted = await mountCalendar(async ({operation, payload}) => {
+    assert.equal(operation, "month");
+    calls += 1;
+    if (calls === 1) return stale.promise;
+    return {kind: "calendar_month", month: payload.month, days: [{
+      date: `${payload.month}-07`, materialized: true, has_content: true,
+      journal_count: 0, captured_fact_count: 1, reference_count: 0,
+      task_count: 0, preview_total: 1,
+      previews: [{kind: "day_content", source_type: "calendar_day",
+        label: "7 octubre", text: "Bruno fue al museo."}],
+    }]};
+  });
+  mounted.document.dispatchEvent({type: "odyssey:knowledge-changed"});
+  mounted.controller.showMonth();
+  await flush();
+  assert.equal(calls, 2);
+  assert.equal(mounted.elements.grid.textContent.includes("Bruno fue al museo."), true);
+  stale.resolve({kind: "calendar_month", month: mounted.controller.state.month, days: [{
+    date: `${mounted.controller.state.month}-07`, materialized: false, has_content: false,
+    journal_count: 0, captured_fact_count: 0, reference_count: 0,
+    task_count: 0, preview_total: 0, previews: [],
+  }]});
+  await flush();
+  assert.equal(mounted.elements.grid.textContent.includes("Bruno fue al museo."), true);
+  assert.equal(mounted.controller.state.monthValue.days[0].captured_fact_count, 1);
+});
+
 test("Calendar Task checkbox uses the bounded Notes lifecycle mutation and updates in place", async () => {
   const noteCalls = [];
   const task = {

@@ -47,6 +47,25 @@ entries from that deterministic sequence.
 One source/category contributes at most one preview row for a date. The preview total therefore means
 the number of available preview entries, not the number of underlying atomic facts.
 
+## DEV cache coherence after chat writes (October 2026)
+
+Observed failure: after the chat saved a fact on a Calendar Day, switching to the
+already-mounted Calendar displayed the previously loaded month until a full browser
+refresh. The canonical Markdown and Calendar service were correct; the browser's
+`showMonth()` reused its cached month projection with no write-invalidation signal.
+
+When a product response confirms affected canonical notes, Chat emits the UI-only
+`odyssey:knowledge-changed` event. Calendar invalidates cached Month, Day, schedule
+and expanded Day details; it fetches the month once on the next visit rather than
+reloading the page or querying all Days. In-flight pre-write responses are discarded
+through request generations so stale network responses cannot restore the old view.
+Clarifications, failed/no-write responses and ordinary tab navigation do not invalidate
+Calendar. This event never bypasses Core or modifies canonical notes.
+
+Regression sentinels: `tests/odyssey_web_app.test.mjs` covers confirmed-write
+signaling versus non-writes; `tests/odyssey_web_calendar.test.mjs` covers cached
+month reuse, refresh after a write, and stale in-flight response rejection.
+
 ## Responsibility boundary
 
 The browser must not issue a Day request for every visible date and must not parse Markdown. One

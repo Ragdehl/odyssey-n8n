@@ -361,6 +361,36 @@ test("retryable recovery failure restores its bounded action without a global er
   assert.equal(conversationMessages(page.elements.conversation).length, 1);
 });
 
+test("chat notifies Calendar only after a confirmed canonical note write", async () => {
+  let response = {
+    status: "completed", kind: "acknowledgement", message: "Guardado.",
+    note_result_snapshot: {version: 2, kind: "affected_notes",
+      executed_at: "2026-10-08T08:18:00+02:00",
+      note_ids: ["date:2026-10-07"], total: 1, truncated: false},
+  };
+  const page = await mountApp({
+    turns: [],
+    createSubmission: (request) => ({request, requestId: `write-${request.length}`}),
+    requestProductResult: async ({submission}) => ({request_id: submission.requestId, ...response}),
+  });
+  async function send(request) {
+    page.elements.input.value = request;
+    page.elements.form.emit("submit", {preventDefault() {}});
+    await flush();
+  }
+  await send("Ayer mi hijo fue al museo");
+  assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 1);
+  response = {status: "needs_attention", kind: "clarification", message: "Elige una persona."};
+  await send("mi hijo");
+  assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 1);
+  response = {status: "failed", kind: "cannot_answer", message: "No he guardado nada."};
+  await send("error");
+  assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 1);
+  response = {status: "completed", kind: "answer", message: "He encontrado la respuesta."};
+  await send("consulta");
+  assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 1);
+});
+
 test("clarification renders grounded controls while leaving the composer usable", async () => {
   let resolveResult;
   const submissions = [];
