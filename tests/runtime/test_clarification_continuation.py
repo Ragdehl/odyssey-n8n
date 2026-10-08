@@ -31,6 +31,7 @@ from odyssey_core.local_conversations import ConversationRootResolver, LocalConv
 from odyssey_core.notes import Note, serialize_note
 from odyssey_core.pending_work import PendingWorkRepository
 from odyssey_core.request_planning import (
+    KnowledgeReference,
     KnowledgeUnit,
     RelationalReference,
     RequestPlan,
@@ -544,6 +545,7 @@ def _relational_write_e2e_fixture(
     candidate_specs: tuple[tuple[str, str], ...] = (("cloe", "Cloe"), ("bruno", "Bruno")),
     note_type: str = "person",
     new_fact: str = "Se ha apuntado a natación.",
+    dependent_day: bool = False,
 ):
     """Build the real Core→pending→runtime path for one bounded relational WRITE."""
     vault = tmp_path / "vault"
@@ -588,10 +590,22 @@ def _relational_write_e2e_fixture(
         None,
         relational_reference=RelationalReference(reference, "self", None, "one"),
     )
-    plan = RequestPlan(
-        (WriteAction((KnowledgeUnit(selection, "record", (), (), (new_fact,), ()),)),),
-        (),
-    )
+    if dependent_day:
+        helper = KnowledgeUnit(selection, "record", (), (), (), (), reference_lookup_only=True)
+        day = KnowledgeUnit(
+            SelectionCriteria(None, "2026-10-07", "calendar_day", (), None),
+            "record",
+            (),
+            (),
+            (new_fact,),
+            (KnowledgeReference(target_index=1, role="identity", mention="hijo"),),
+        )
+        plan = RequestPlan((WriteAction((day, helper)),), ())
+    else:
+        plan = RequestPlan(
+            (WriteAction((KnowledgeUnit(selection, "record", (), (), (new_fact,), ()),)),),
+            (),
+        )
 
     class EmptyIndex:
         def find_candidates(self, *_args, **_kwargs):
@@ -727,6 +741,74 @@ def test_two_explicit_daughter_relations_offer_existing_choice_end_to_end(
     assert outcome["product_outcome"] == "ANSWER"
     assert fixture.new_fact in fixture.paths["cloe"].read_text()
     assert fixture.new_fact not in fixture.paths["marta"].read_text()
+
+
+def test_dependent_calendar_day_reference_choice_round_trip(
+    tmp_path: Path,
+) -> None:
+    """Reproduce 07:32: day fact + ambiguous helper, choose Bruno, write Day only."""
+    fixture = _relational_write_e2e_fixture(
+        tmp_path,
+        reference="mi hijo",
+        dependent_day=True,
+        new_fact="Mi {{ref:0}} fue al museo.",
+    )
+    original = _assert_initial_relational_clarification(fixture, "Ayer mi hijo fue al museo")
+    assert original["pending_work"]["persisted"]
+    assert len(original["actions"][0]["units"]) == 2
+    second = fixture.runtime.execute_product(
+        "He elegido a Bruno.", "delivery-07-32-bruno", "main", ACTOR
+    )
+    assert second["product_outcome"] == "ANSWER", (
+        second.get("actions"),
+        second.get("planning_error"),
+    )
+    assert second["affected_stable_note_ids"]
+    day_path = fixture.vault / "calendar/days/2026-10-07.md"
+    assert day_path.is_file()
+    day_text = day_path.read_text()
+    assert "[[items/bruno|Bruno]] fue al museo." in day_text
+    assert "[[items/cloe|" not in day_text
+    assert all(path.read_bytes() == content for path, content in fixture.before.items())
+
+    # Replay with the same delivery identity must not duplicate the saved fact.
+    replay = fixture.runtime.execute_product(
+        "He elegido a Bruno.", "delivery-07-32-bruno", "main", ACTOR
+    )
+    assert replay["product_outcome"] == "ANSWER"
+    assert day_path.read_text() == day_text
+
+
+def test_dependent_calendar_day_choice_rejects_changed_relationship(
+    tmp_path: Path,
+) -> None:
+    """A source relationship revision change must forbid a resumed Day write."""
+    fixture = _relational_write_e2e_fixture(
+        tmp_path,
+        reference="mi hijo",
+        dependent_day=True,
+        new_fact="Mi {{ref:0}} fue al museo.",
+    )
+    _assert_initial_relational_clarification(fixture, "Ayer mi hijo fue al museo")
+    fixture.write_note(
+        "people/self.md",
+        "self",
+        "Self",
+        render_atomic_facts(
+            ("Mis hijos son [[items/cloe|Cloe]].",), "fixture-changed", (0,), "2026-10-08T09:00:00Z"
+        ),
+        kind="person",
+    )
+    response = fixture.runtime.execute_product(
+        "He elegido a Bruno.", "delivery-stale-relational-source", "main", ACTOR
+    )
+    assert response["product_outcome"] == "CANNOT_ANSWER"
+    assert not (fixture.vault / "calendar/days/2026-10-07.md").exists()
+    assert all(
+        path.read_bytes() == data
+        for path, data in fixture.before.items()
+        if path != fixture.source_path
+    )
 
 
 def test_temporal_day_link_survives_routed_relational_choice(

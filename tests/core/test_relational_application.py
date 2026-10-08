@@ -1915,6 +1915,80 @@ def test_bare_singular_relational_write_offers_grounded_members_and_resumes_choi
     )
 
 
+def test_dependent_day_fact_relational_helper_offers_and_resumes_choice(
+    tmp_path: Path, schema: dict
+) -> None:
+    """The actual day-fact + reference-only helper shape retains grounded choices."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    helper = KnowledgeUnit(
+        relational_selection("mi hijo", source_kind="self", source_query=None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    day = KnowledgeUnit(
+        SelectionCriteria(None, "2026-10-07", "calendar_day", (), None),
+        "record",
+        (),
+        (),
+        ("Mi {{ref:0}} fue al museo.",),
+        (KnowledgeReference(target_index=1, role="identity", mention="hijo"),),
+    )
+    plan = RequestPlan((WriteAction((day, helper)),), ())
+    original = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    initial = run(
+        vault,
+        schema,
+        plan,
+        reasoner=FactReasoner("UNRESOLVED"),
+        selector=RelevantFactSelector("Mis hijos"),
+    )
+    action = initial.action_results[0]
+    assert initial.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.reason in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+    assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.relational_evidence_guard is not None
+    assert action.clarification is not None
+    assert [(u.unit_index, u.reason) for u in action.unit_results][:1] == [(0, "DEPENDENCY_FAILED")]
+    assert action.unit_results[1].reason in {
+        "relational_evidence_ambiguous",
+        "relational_singular_ambiguous",
+    }
+    assert all(p.read_bytes() == data for p, data in original.items())
+    choice = ClarificationChoice(
+        "bruno",
+        current_identity_guard(VaultRepository(vault), schema, "bruno"),
+        action.relational_evidence_guard,
+    )
+    resumed = run(
+        vault,
+        schema,
+        plan,
+        reasoner=FactReasoner("UNRESOLVED"),
+        selector=StaticFactSelector(RuntimeError("must not re-select a human choice")),
+        clarification_choice=choice,
+    )
+    assert resumed.status is application.ApplicationStatus.COMPLETED, resumed.action_results
+    day_note = parse_note((vault / "calendar/days/2026-10-07.md").read_text())
+    assert "Bruno" in day_note.content
+    assert "Cloe" not in day_note.content
+    assert (vault / "people/bruno.md").read_bytes() == original[vault / "people/bruno.md"]
+    assert (vault / "people/cloe.md").read_bytes() == original[vault / "people/cloe.md"]
+
+
 def test_relational_choice_continues_without_reselecting_unchanged_evidence(
     tmp_path: Path, schema: dict
 ) -> None:

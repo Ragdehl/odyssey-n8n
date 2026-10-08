@@ -132,6 +132,49 @@ from .routing import (
 )
 from .serialization import application_result_to_response, operational_to_response
 
+
+def _dependent_relational_helper_index(action: Mapping[str, Any]) -> int | None:
+    """Identify one bounded, reference-only relation with one dependent fact write.
+
+    A scalar choice cannot resume unrelated units or other unresolved references.
+    Only already validated Core actions pass this narrower continuation boundary.
+    """
+    if action.get("kind") != "write":
+        return None
+    units = action.get("units")
+    if not isinstance(units, list) or len(units) != 2:
+        return None
+    helpers = [
+        i
+        for i, unit in enumerate(units)
+        if isinstance(unit, dict)
+        and isinstance(unit.get("target"), dict)
+        and isinstance(unit["target"].get("relational_reference"), dict)
+        and unit["target"]["relational_reference"].get("members") == "one"
+        and unit.get("intent") == "record"
+        and not unit.get("facts")
+        and not unit.get("properties")
+        and not unit.get("tag_changes")
+        and not unit.get("references")
+        and unit.get("destination_type") is None
+        and unit.get("cardinality", "one") == "one"
+    ]
+    if len(helpers) != 1:
+        return None
+    helper = helpers[0]
+    consumer = units[1 - helper]
+    references = consumer.get("references") if isinstance(consumer, dict) else None
+    if (
+        not isinstance(references, list)
+        or not references
+        or not consumer.get("facts")
+        or consumer.get("target", {}).get("relational_reference") is not None
+        or any(not isinstance(ref, dict) or ref.get("target_index") != helper for ref in references)
+    ):
+        return None
+    return helper
+
+
 ProgressReporter = Callable[[str, Mapping[str, object]], None]
 _PROGRESS_REPORTER: ContextVar[ProgressReporter | None] = ContextVar(
     "odyssey_progress_reporter", default=None
@@ -573,11 +616,29 @@ class RuntimeComposition:
             source_guard: str | None = None
             relational = False
             if action["kind"] == "write":
-                relational = action["units"][0]["target"].get("relational_reference") is not None
-                action_level = relational and execution["reason"] in {
-                    "relational_evidence_ambiguous",
-                    "relational_singular_ambiguous",
-                }
+                helper_index = _dependent_relational_helper_index(action)
+                relational = (
+                    len(action["units"]) == 1
+                    and action["units"][0]["target"].get("relational_reference") is not None
+                ) or helper_index is not None
+                helper_results = execution.get("unit_results", [])
+                safe_helper = (
+                    helper_index is None
+                    or len(helper_results) == 2
+                    and helper_results[helper_index].get("status") == "deferred"
+                    and helper_results[helper_index].get("reason")
+                    in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+                    and helper_results[1 - helper_index].get("reason") == "DEPENDENCY_FAILED"
+                )
+                action_level = (
+                    relational
+                    and safe_helper
+                    and execution["reason"]
+                    in {
+                        "relational_evidence_ambiguous",
+                        "relational_singular_ambiguous",
+                    }
+                )
                 if action_level:
                     candidates = execution["candidate_note_ids"]
                     source_guard = execution.get("relational_evidence_guard")
@@ -670,12 +731,23 @@ class RuntimeComposition:
         evidence = record["incomplete_actions"][0]["execution_result"]
         candidate_ids = tuple(option.id for option in pending.options)
         if action.get("kind") == "write":
+            helper_index = _dependent_relational_helper_index(action)
             relational = (
                 len(action.get("units", ())) == 1
                 and action["units"][0].get("target", {}).get("relational_reference") is not None
+            ) or helper_index is not None
+            unit_results = evidence.get("unit_results", [])
+            safe_helper = (
+                helper_index is None
+                or len(unit_results) == 2
+                and unit_results[helper_index].get("status") == "deferred"
+                and unit_results[helper_index].get("reason")
+                in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+                and unit_results[1 - helper_index].get("reason") == "DEPENDENCY_FAILED"
             )
             safe = (
                 relational
+                and safe_helper
                 and evidence.get("reason")
                 in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
                 and tuple(evidence.get("candidate_note_ids", ())) == candidate_ids
@@ -716,18 +788,34 @@ class RuntimeComposition:
         # may have added canonical Calendar Day links to its facts afterwards.
         # Revalidate that narrow internal form without admitting ordinary wikilinks.
         linked_dates: list[str] = []
+        authorized_dates: list[str] = []
         if action["kind"] == "write":
             for unit in action["units"]:
+                target = unit["target"]
+                if target.get("type") == "calendar_day":
+                    authorized_dates.append(target["query"])
                 for fact in unit["facts"]:
                     linked_dates.extend(calendar_day_link_dates(fact))
+            authorized_dates.extend(linked_dates)
         plan = validate_request_plan(
             {"actions": [action], "limitations": record["planner_limitations"]},
             self.canonical_schema,
             allow_temporal_reference_links=bool(linked_dates),
-            authorized_calendar_dates=tuple(dict.fromkeys(linked_dates)),
+            authorized_calendar_dates=tuple(dict.fromkeys(authorized_dates)),
         )
         if len(plan.actions) != 1 or not isinstance(plan.actions[0], WriteAction | RetrieveAction):
             raise ValueError("pending continuation is unsupported")
+        if action["kind"] == "write":
+            helper_index = _dependent_relational_helper_index(action)
+            if helper_index is not None:
+                # Internal reference-only helpers are derived by Core lowering. The
+                # pending JSON stores their stable structure, not the private flag.
+                # Restore it only for the previously verified two-unit dependency.
+                original_write = plan.actions[0]
+                assert isinstance(original_write, WriteAction)
+                units = list(original_write.units)
+                units[helper_index] = replace(units[helper_index], reference_lookup_only=True)
+                plan = replace(plan, actions=(replace(original_write, units=tuple(units)),))
         return plan
 
     def _append_clarification_reply(

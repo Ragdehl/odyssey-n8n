@@ -46,7 +46,10 @@ from .reference_binding import (
 from .reference_preflight import (
     RelationshipWritePreflightError,
     UnitTargetPreflight,
+    _preflight_write_action,
+    allocate_stable_id,
     current_identity_guard,
+    is_reference_only_unit,
     preflight_complete_set_reference_action,
     preflight_relational_target_write_action,
     preflight_relationship_write_action,
@@ -894,6 +897,35 @@ def _execute_retrieve(
     return ActionResult(action_index, action.kind, ActionStatus.COMPLETED, retrieval=context)
 
 
+def _single_relational_reference_helper_index(action: WriteAction) -> int | None:
+    """Allow one fact-bearing consumer and its sole, factless relational identity helper.
+
+    This is a general dependency shape, not a special case for a family relationship
+    or a Calendar Day. Independent writes cannot be replayed by a scalar choice.
+    """
+    if len(action.units) != 2:
+        return None
+    helpers = [
+        index
+        for index, unit in enumerate(action.units)
+        if is_reference_only_unit(unit)
+        and unit.target.relational_reference is not None
+        and unit.target.relational_reference.members == "one"
+    ]
+    if len(helpers) != 1:
+        return None
+    helper = helpers[0]
+    consumer = action.units[1 - helper]
+    if (
+        not consumer.facts
+        or consumer.target.relational_reference is not None
+        or not consumer.references
+        or any(reference.target_index != helper for reference in consumer.references)
+    ):
+        return None
+    return helper
+
+
 def _execute_write(
     action_index: int,
     action: WriteAction,
@@ -960,6 +992,41 @@ def _execute_write(
             spans,
             clarification_choice,
         )
+    relational_helper = _single_relational_reference_helper_index(action)
+    chosen_helper_id: str | None = None
+    if clarification_choice is not None and relational_helper is not None:
+        # Re-ground only the selected, previously offered dependency. No provider
+        # may reinterpret the user's choice or silently change the evidence set.
+        try:
+            resolved_helper = spans.invoke(
+                "relational_resolution",
+                resolve_relational_reference,
+                action.units[relational_helper].target,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                semantic_set_selector=semantic_set_selector,
+                chosen_identity_id=clarification_choice.stable_id,
+                expected_evidence_guard=clarification_choice.source_evidence_guard,
+            )
+            if not _relational_clarification_still_valid(
+                resolved_helper, clarification_choice, repository, schema
+            ):
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    reason="clarification_evidence_changed",
+                )
+            chosen_helper_id = clarification_choice.stable_id
+        except RelationalResolutionError as error:
+            return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=str(error))
+
     cardinalities = {unit.cardinality for unit in action.units}
     if len(cardinalities) != 1:
         return ActionResult(
@@ -988,7 +1055,7 @@ def _execute_write(
         kwargs: dict[str, Any] = {}
         if id_allocator is not None:
             kwargs["id_allocator"] = id_allocator
-        if clarification_choice is not None:
+        if clarification_choice is not None and chosen_helper_id is None:
             kwargs["clarification_choice"] = clarification_choice
         executable = action
         executable_ordinals = unit_ordinals
@@ -1063,9 +1130,14 @@ def _execute_write(
                     **kwargs,
                 )
         else:
+            if chosen_helper_id is not None and relational_helper is not None:
+                # Private preflight override only after both canonical relation
+                # and chosen identity guards were checked above.
+                kwargs["id_allocator"] = id_allocator or allocate_stable_id
+                kwargs["_validated_reference_targets"] = {relational_helper: chosen_helper_id}
             preflight = spans.invoke(
                 "preflight",
-                preflight_write_action,
+                _preflight_write_action if chosen_helper_id is not None else preflight_write_action,
                 executable,
                 repository=repository,
                 schema=schema,
@@ -1123,6 +1195,48 @@ def _execute_write(
         fact_selector,
         spans,
     )
+    if (
+        relational_helper is not None
+        and clarification_choice is None
+        and all(result.status is UnitStatus.DEFERRED for result in results)
+        and results[relational_helper].reason
+        in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+    ):
+        # A factless reference helper can be the only ambiguous dependency.
+        # Promote its verified options to the action's existing clarification
+        # contract without flattening or moving the consumer's original facts.
+        try:
+            spans.invoke(
+                "relational_resolution",
+                resolve_relational_reference,
+                action.units[relational_helper].target,
+                repository=repository,
+                schema=schema,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                semantic_limit=semantic_limit,
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                semantic_set_selector=semantic_set_selector,
+                allow_identity_clarification=True,
+            )
+        except RelationalResolutionError as error:
+            if (
+                str(error) in {"relational_evidence_ambiguous", "relational_singular_ambiguous"}
+                and 1 < len(error.candidate_ids) <= 4
+                and error.clarification is not None
+            ):
+                return ActionResult(
+                    action_index,
+                    action.kind,
+                    ActionStatus.DEFERRED,
+                    unit_results=tuple(results),
+                    reason=str(error),
+                    candidate_note_ids=error.candidate_ids,
+                    relational_evidence_guard=error.evidence_guard,
+                    clarification=error.clarification,
+                )
     return ActionResult(
         action_index, action.kind, _action_status(results), unit_results=tuple(results)
     )
