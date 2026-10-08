@@ -20,6 +20,31 @@ Canonical Markdown remains the source of truth. Git, request traces, usage evide
 
 Detailed usage/token/cost semantics are owned by [Future Odyssey product usage observability](future-product-usage-observability.md). Conversation-context/history semantics are owned by [Future Odyssey help and conversation context](future-help-and-conversation-context.md). User-to-self-note identity is owned by [Future user self-identity binding](future-user-self-identity.md). Events/calendar semantics are owned by [Future Events / Calendar capability](future-events-calendar.md). This document owns the product/navigation direction that combines persistent chat, notes, changes, applications, and advanced surfaces.
 
+## Approved visual interaction contract — icon-first Odyssey controls (October 2026)
+
+Action buttons across Odyssey should use the product's existing, visually consistent
+line icons rather than visible words such as `Elegir`, `Cancelar` or `Guardar`.
+Preserve descriptive `aria-label` and `title` text for accessibility, tooltips and
+discoverability. Icons must communicate distinct actions without relying on color alone;
+focus and touch targets must remain usable on mobile. Information-bearing content
+(names, note-type distinctions, grounded evidence and written chat replies) **is not**
+an icon button and must remain readable. Do not strip meaningful written form labels,
+option names or explanatory status messages under this rule.
+
+Identity clarification options belong in compact rows, not large nested cards.
+Display the candidate name and a concise, readable evidence preview; if
+multiple options share the same evidence, show it only once instead of repeating
+it under every candidate. Keep the full evidence available through the linked note. Offer the existing icon-only
+choose/check, open-note and cancel controls with explicit accessible names.
+An icon action must not bypass the guarded clarification and human choice flow.
+Apply the same icon-first design when adding or revising other action controls;
+audit legacy text-only action buttons incrementally rather than silently changing
+unrelated workflows in a small UX fix.
+
+The chat flow's compact clarification regression is covered by
+`tests/odyssey_web_app.test.mjs`; all action visuals must continue using the
+shared `actionButton`/`setActionIcon` primitives in `odyssey_web/notes.js`.
+
 ## Proposed product shape
 
 A useful mobile-first navigation target is:

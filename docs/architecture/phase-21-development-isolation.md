@@ -42,6 +42,13 @@ The deployed DEV front end, runtime/backend code, and checked-in n8n workflow so
 come from the same Git commit whenever those layers are under test together. Deployment
 and status evidence should expose that commit so drift is visible.
 
+**October 2026 integration update:** after repeated feature and UX iterations, the
+user requested a stable `dev` integration branch. DEV's active worktree should track
+that branch and push tested, committed checkpoints to `origin/dev` so they are not
+stranded only on the Raspberry Pi. This remains entirely separate from `main` and
+does not authorize production releases. Old feature branches retain their history;
+development deployment still uses the exact checked-out commit.
+
 Normal development should look like:
 
 ```text

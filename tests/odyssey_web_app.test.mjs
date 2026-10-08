@@ -388,19 +388,61 @@ test("clarification renders grounded controls while leaving the composer usable"
   await flush();
 
   const card = page.elements.conversation.querySelector(".message-clarification");
-  assert.equal(card.querySelector(".clarification-options").children.length, 2);
+  const options = card.querySelector(".clarification-options");
+  assert.equal(options.children.length, 2);
+  assert.equal(card.querySelector(".message-text").textContent, "¿A quién te refieres con «mi hijo mayor»?");
+  assert.equal(card.querySelector(".clarification-shared-evidence").textContent, "Mis hijos son Cloe y Bruno.");
+  assert.equal(options.children[0].querySelector(".clarification-evidence"), null);
+  assert.equal(options.children[1].querySelector(".clarification-evidence"), null);
+  for (const candidate of options.children) {
+    const controls = candidate.querySelector(".clarification-controls");
+    assert.equal(controls.children.length, 2);
+    assert.equal(controls.children[0].querySelector("svg").tagName, "svg");
+    assert.equal(controls.children[1].querySelector("svg").tagName, "svg");
+    assert.equal(controls.children[0].textContent, "");
+    assert.equal(controls.children[1].textContent, "");
+    assert.match(controls.children[0]["aria-label"], /^Elegir a (Cloe|Bruno)$/);
+    assert.match(controls.children[1]["aria-label"], /^Ver nota de (Cloe|Bruno)$/);
+  }
+  const cancelButton = card.querySelector(".clarification-cancel");
+  assert.equal(cancelButton.textContent, "");
+  assert.equal(cancelButton["aria-label"], "Cancelar selección");
+  assert.equal(cancelButton.querySelector("svg").tagName, "svg");
   assert.equal(page.elements.clarificationStatus.hidden, false);
   assert.equal(page.elements.input.disabled, false);
-  card.querySelector(".clarification-option").querySelector("button").click();
+  const firstChoice = card.querySelector(".clarification-option");
+  const firstChoose = firstChoice.querySelector("button");
+  assert.equal(firstChoose.className.includes("clarification-choose"), true);
+  assert.equal(firstChoose["aria-label"], "Elegir a Cloe");
+  assert.equal(firstChoose.title, "Elegir a Cloe");
+  assert.equal(firstChoose.textContent, "");
+  assert.equal(firstChoose.children[0].tagName, "svg");
+  assert.equal(firstChoice.querySelector(".clarification-evidence"), null);
+  firstChoose.click();
   assert.deepEqual(submissions, ["Guarda esto", "He elegido a Cloe."]);
   const visibleChoice = page.elements.conversation.children.at(-2);
   assert.equal(visibleChoice.querySelector(".message-text").textContent, "He elegido a Cloe.");
   const inspect = card.querySelector(".clarification-option").querySelector(".clarification-controls").children[1];
+  assert.equal(inspect.textContent, "");
+  assert.equal(inspect["aria-label"], "Ver nota de Cloe");
   inspect.click();
   assert.equal(page.elements.notes.hidden, false);
   assert.equal(page.document.events.at(-1).detail.note_id, "cloe");
-  card.querySelector(".clarification-cancel").click();
+  const cancel = card.querySelector(".clarification-cancel");
+  assert.equal(cancel.textContent, "");
+  assert.equal(cancel["aria-label"], "Cancelar selección");
+  assert.equal(cancel.children[0].tagName, "svg");
+  cancel.click();
   assert.deepEqual(submissions, ["Guarda esto", "He elegido a Cloe.", "cancel"]);
+});
+
+test("clarification options stay compact and use accessible icon-only actions", async () => {
+  const css = await readFile(new URL("../odyssey_web/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.clarification-option \{ display: flex; align-items: center;/);
+  assert.match(css, /\.clarification-details \{ flex: 1 1 auto; min-width: 0;/);
+  assert.match(css, /\.clarification-evidence \{[^}]*-webkit-line-clamp: 2;/);
+  assert.match(css, /\.clarification-controls \.icon-action \{[^}]*min-height: 2\.35rem;/);
+  assert.match(css, /\.clarification-cancel \{[^}]*place-items: center;/);
 });
 
 test("conversation reload renders the exact durable affected-note affordance", async () => {

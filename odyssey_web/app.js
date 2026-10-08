@@ -536,45 +536,66 @@ function appendClarificationCard(article, clarification) {
   if (!clarification?.options?.length) return;
   article.classList.add("message-clarification");
   if (clarification.explanation) {
-    article.querySelector(".message-text").textContent = clarification.explanation;
+    // Present one short question; the candidate list already supplies the next step.
+    article.querySelector(".message-text").textContent =
+      clarification.requested_reference
+      && clarification.explanation.startsWith("No puedo identificar con seguridad a")
+        ? `¿A quién te refieres con «${clarification.requested_reference}»?`
+        : clarification.explanation;
   }
+  const sharedEvidence = clarification.options.length > 1
+    && clarification.options.every((option) => option.evidence
+      && option.evidence === clarification.options[0].evidence);
+  const sameType = clarification.options.every((option) =>
+    option.note_type === clarification.options[0].note_type);
   const list = document.createElement("div");
   list.className = "clarification-options";
   clarification.options.forEach((option) => {
     const row = document.createElement("article");
     row.className = "clarification-option";
+    const details = document.createElement("div");
+    details.className = "clarification-details";
     const heading = document.createElement("h3");
     heading.textContent = option.label;
+    details.append(heading);
+    if (option.note_type && !sameType) {
+      const type = document.createElement("span");
+      type.className = "clarification-type";
+      type.textContent = option.note_type.replaceAll("_", " ");
+      details.append(type);
+    }
+    if (option.evidence && !sharedEvidence) {
+      const evidence = document.createElement("p");
+      evidence.className = "clarification-evidence";
+      evidence.textContent = option.evidence;
+      evidence.title = option.evidence;
+      details.append(evidence);
+    }
     const controls = document.createElement("div");
     controls.className = "clarification-controls";
-    const choose = document.createElement("button");
-    choose.type = "button";
-    choose.textContent = "Elegir";
-    choose.addEventListener("click", () => submitClarificationReply(`He elegido a ${option.label}.`));
-    const inspect = actionButton("openNote", "Ver nota", () => {
+    const choose = actionButton("check", `Elegir a ${option.label}`, () => {
+      submitClarificationReply(`He elegido a ${option.label}.`);
+    }, "clarification-choose");
+    const inspect = actionButton("openNote", `Ver nota de ${option.label}`, () => {
       selectSurface("notes");
       document.dispatchEvent(new CustomEvent("odyssey:open-note", {detail: {note_id: option.id}}));
     }, "clarification-inspect action-open-note");
     controls.append(choose, inspect);
-    row.append(heading);
-    if (option.note_type && option.evidence) {
-      const type = document.createElement("p");
-      type.className = "clarification-type";
-      type.textContent = option.note_type;
-      const evidence = document.createElement("p");
-      evidence.className = "clarification-evidence";
-      evidence.textContent = option.evidence;
-      row.append(type, evidence);
-    }
-    row.append(controls);
+    row.append(details, controls);
     list.append(row);
   });
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "clarification-cancel";
-  cancel.textContent = "Cancelar";
-  cancel.addEventListener("click", () => submitClarificationReply("cancel"));
-  article.append(list, cancel);
+  article.append(list);
+  if (sharedEvidence) {
+    const evidence = document.createElement("p");
+    evidence.className = "clarification-shared-evidence";
+    evidence.textContent = clarification.options[0].evidence;
+    evidence.title = clarification.options[0].evidence;
+    article.append(evidence);
+  }
+  const cancel = actionButton("close", "Cancelar selección", () => {
+    submitClarificationReply("cancel");
+  }, "clarification-cancel");
+  article.append(cancel);
 }
 
 function submitClarificationReply(reply) {
