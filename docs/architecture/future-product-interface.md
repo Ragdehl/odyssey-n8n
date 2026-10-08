@@ -425,6 +425,22 @@ identity authority, extra model invocation, mutation, or change to route selecti
 If the bounded projection fails, Core must complete unchanged and simply omit it.
 Past messages without trace metadata cannot be reconstructed retroactively.
 
+The October 8 mobile follow-up found a presentation gap, not a Router failure: the
+user opened a stored pre-trace response whose actual Router stage took 5802 ms.
+That historical `request_detail` contained no `flow`, so a linear fallback was
+correct but omitted the original user message and looked like the new feature
+had failed. The chat now associates the original user turn to its assistant
+response by the durable request ID (including paginated history) and shows this
+source text even for historical replies. It never fabricates the original
+splitting, Temporal normalization or entity decisions if none were recorded.
+For traced requests, the fork, route columns and join share one horizontally
+scrollable viewport on narrow screens so branches remain distinct and readable
+instead of being squashed or stacked. All diagnostic icons use real stroked SVGs
+in the Odyssey style rather than platform-dependent emoji glyphs. This is a
+presentation-only change requiring no extra route, network permission or AI call.
+Regression checks cover legacy original-text recovery, history pagination, a
+two-branch horizontal graph, SVG nodes and existing operational telemetry.
+
 Regression: `tests/odyssey_web_request_flow.test.mjs`,
 `tests/odyssey_web_app.test.mjs`, `tests/runtime/test_runtime_routing.py`,
 `tests/odyssey_workflow_partial.test.mjs` and the conversation detail contract.

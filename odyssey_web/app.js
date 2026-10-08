@@ -53,6 +53,7 @@ let olderCursor = null;
 let hasOlder = false;
 let loadingOlder = false;
 let recoveryControl = null;
+const userTextByRequestId = new Map();
 
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
@@ -121,6 +122,12 @@ async function loadMainConversation() {
   hasOlder = data.has_older === true;
   conversation.replaceChildren();
   recoveryControl = null;
+  userTextByRequestId.clear();
+  for (const turn of data.turns ?? []) {
+    if (turn.role === "user" && typeof turn.request_id === "string" && typeof turn.text === "string") {
+      userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
+    }
+  }
   const userMessages = new Map();
   let visibleDay = null;
   for (const turn of data.turns ?? []) {
@@ -288,6 +295,11 @@ async function loadOlderConversation() {
     const data = await requestConversation({endpoint: conversationEndpoint, operation: "main", payload: {limit: 40, before: cursor}});
     if (cursor !== olderCursor) return;
     const olderNodes = [];
+    for (const turn of data.turns ?? []) {
+      if (turn.role === "user" && typeof turn.request_id === "string" && typeof turn.text === "string") {
+        userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
+      }
+    }
     let olderDay = null;
     for (const turn of data.turns ?? []) {
       const createdAt = validTurnTime(turn.created_at);
@@ -339,7 +351,8 @@ function appendDetailButton(article, detail) {
   button.className = "detail-button";
   button.setAttribute("aria-label", "Ver detalles de esta solicitud");
   button.textContent = "ⓘ";
-  button.addEventListener("click", () => openRequestDetail(detail));
+  button.addEventListener("click", () => openRequestDetail(detail,
+    userTextByRequestId.get(detail.request_id) || ""));
   article.querySelector(".message-actions")?.append(button);
 }
 
@@ -378,10 +391,10 @@ function appendDetailLine(parent, label, value) {
   parent.append(line);
 }
 
-function openRequestDetail(detail) {
+function openRequestDetail(detail, sourceText = "") {
   requestDetailContent.replaceChildren();
   requestDetailTitle.textContent = "Detalles de la solicitud";
-  requestDetailContent.append(renderExecutionFlow(document, detail));
+  requestDetailContent.append(renderExecutionFlow(document, detail, {sourceText}));
   const technical = document.createElement("details");
   technical.className = "flow-technical flow-technical-raw";
   const summary = document.createElement("summary");
@@ -608,6 +621,9 @@ function submitClarificationReply(reply) {
 
 async function sendSubmission(submission, isRetry = false, activeRecoveryControl = null) {
   if (!isRetry) appendMessage("user", submission.request);
+  if (typeof submission.requestId === "string" && typeof submission.request === "string") {
+    userTextByRequestId.set(submission.requestId, submission.request.slice(0, 4096));
+  }
   const loading = appendLoading();
   const stopProgress = startProgressPolling({
     requestId: submission.requestId,

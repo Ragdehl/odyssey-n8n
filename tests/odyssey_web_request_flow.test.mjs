@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {renderExecutionFlow} from "../odyssey_web/progress.js";
+import {readFileSync} from "node:fs";
 import {validateRequestDetail, ProductRequestError} from "../odyssey_web/client.js";
 
 class TestNode {
@@ -10,8 +11,9 @@ class TestNode {
   setAttribute(key, value) { this.attrs[key] = value; }
   append(...children) { this.children.push(...children); }
   findAll(className) {return [...(this.className.split(" ").includes(className) ? [this] : []), ...this.children.flatMap(node => node.findAll(className))];}
+  findTag(tag) {return [...(this.tagName === tag ? [this] : []), ...this.children.flatMap(node => node.findTag(tag))];}
 }
-const doc = {createElement(tag) {return new TestNode(tag);}};
+const doc = {createElement(tag) {return new TestNode(tag);}, createElementNS(_namespace, tag) {return new TestNode(tag);}};
 const stage = (name, duration_ms, extras = {}) => ({
   name, outcome: "completed", duration_ms, model: null, reasoning_effort: null,
   provider_calls: [], ...extras,
@@ -55,6 +57,12 @@ function diagnostic() {
 test("directed execution graph preserves actual route order, source, dates and metadata", () => {
   const graph = renderExecutionFlow(doc, diagnostic());
   assert.equal(graph.findAll("flow-lane").length, 2);
+  assert.equal(graph.findAll("flow-paths-viewport").length, 1);
+  assert.equal(graph.findAll("flow-fork").length, 1);
+  assert.equal(graph.findAll("flow-join").length, 1);
+  assert.equal(graph.findAll("flow-icon").length, graph.findTag("svg").length);
+  assert.ok(graph.findTag("path").length > 15, "Odyssey icons must be vectors, not emoji");
+  assert.match(graph.textContent, /Desliza horizontalmente/);
   assert.equal(graph.findAll("flow-arrow").length >= 7, true);
   assert.match(graph.textContent, /Hoy tengo que ir al cine/);
   assert.match(graph.textContent, /mañana iré al teatro/);
@@ -88,7 +96,7 @@ test("invalid per-route stage mapping fails closed before graph rendering", () =
 test("the legacy detail renders actual recorded stages without fabricating routes", () => {
   const graph = renderExecutionFlow(doc, {request_id: "old", operational:{total_duration_ms: 45, stages: [stage("planner", 45)]}});
   assert.equal(graph.findAll("flow-lane").length, 0);
-  assert.match(graph.textContent, /anterior a la traza/);
+  assert.match(graph.textContent, /no conserva la división de Router/);
   assert.match(graph.textContent, /Planner/);
 });
 
@@ -116,4 +124,22 @@ test("graph validation rejects ungrounded output injected as an entity name", ()
   const invalid = {...flow, routes: flow.routes.map((route, i) => i ? {...route,
     entities: [{mention: "mi hija", name: "Cloe", status: "invented", type: "person"}]} : route)};
   assert.throws(() => validateRequestDetail({request_id:"flow-1", operational, flow: invalid}, "flow-1"), ProductRequestError);
+});
+
+test("legacy graph still shows a separately matched original user message", () => {
+  const graph = renderExecutionFlow(doc, {
+    request_id: "old", operational: {total_duration_ms: 42, stages: [stage("planner", 42)]},
+  }, {sourceText: "Mi hijo fue al museo ayer"});
+  assert.match(graph.textContent, /Mi hijo fue al museo ayer/);
+  assert.equal(graph.findAll("flow-lane").length, 0);
+  assert.match(graph.textContent, /no conserva la división/);
+});
+
+test("mobile route diagram keeps horizontal scroll and never uses emoji icon glyphs", () => {
+  const css = readFileSync(new URL("../odyssey_web/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.flow-paths-viewport\s*\{[^}]*overflow-x:\s*auto/);
+  assert.match(css, /\.flow-lanes\.flow-multiple\s*\{[^}]*grid-auto-flow:\s*column/);
+  const renderer = readFileSync(new URL("../odyssey_web/progress.js", import.meta.url), "utf8");
+  assert.match(renderer, /createElementNS\(SVG_NS, "svg"\)/);
+  assert.doesNotMatch(renderer, /[💬🧠🗓📁📋🗃✅🔗🔀✍]/u);
 });

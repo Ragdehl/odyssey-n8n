@@ -209,16 +209,36 @@ function cost(value) {
     ? `~$${value.amount_usd.toFixed(6)}` : "";
 }
 
-const FLOW_ICONS = {
-  source: "💬", fragment: "💬", router: "🔀", tasks: "📋",
-  temporal: "🗓️", planner: "🧠", core: "🗃️", git: "📁",
-  index: "🔎", pending: "📌", result: "✅", entities: "🔗",
-};
+// Reuse Odyssey's thin, rounded SVG stroke language; no platform emoji glyphs.
+const FLOW_ICONS = Object.freeze({
+  source: ["M21 12a8 8 0 0 1-8 8H7l-4 2 1.3-4.2A8 8 0 1 1 21 12Z"],
+  fragment: ["M21 12a8 8 0 0 1-8 8H7l-4 2 1.3-4.2A8 8 0 1 1 21 12Z"],
+  router: ["M12 3v6", "M12 9 5 16", "M12 9l7 7", "M3 16h4v4H3z", "M17 16h4v4h-4z", "M10 1h4v4h-4z"],
+  tasks: ["M5 4h14v16H5z", "m8 12 2.5 2.5L16 9"],
+  temporal: ["M5 5h14v14H5z", "M8 3v4M16 3v4M5 9h14", "M9 13h2v2H9z"],
+  planner: ["M12 4a4 4 0 0 0-7 3 4 4 0 0 0-.5 7 4 4 0 0 0 4.5 6 4 4 0 0 0 3-2", "M12 4a4 4 0 0 1 7 3 4 4 0 0 1 .5 7 4 4 0 0 1-4.5 6 4 4 0 0 1-3-2", "M12 4v16", "M8 9l4 3 4-3", "M8 16l4-3 4 3"],
+  core: ["M12 4c4.5 0 8 1.4 8 3s-3.5 3-8 3-8-1.4-8-3 3.5-3 8-3Z", "M4 7v10c0 1.7 3.5 3 8 3s8-1.3 8-3V7", "M4 12c0 1.7 3.5 3 8 3s8-1.3 8-3"],
+  git: ["M3 7h7l2 2h9v11H3z", "M3 7V5h7l2 2"],
+  index: ["M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z", "m16 16 5 5"],
+  pending: ["M6 3h12v18H6z", "M9 9h6M9 13h6M9 17h4"],
+  result: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z", "m7 12 3 3 7-7"],
+  entities: ["M10 13a5 5 0 0 0 7 .4l2-2a5 5 0 0 0-7-7l-1.2 1.2", "M14 11a5 5 0 0 0-7-.4l-2 2a5 5 0 0 0 7 7l1.2-1.2"],
+});
 
 function headingWithIcon(doc, label, icon) {
   const heading = element(doc, "h4", "flow-node-heading");
-  const emblem = element(doc, "span", "flow-icon", FLOW_ICONS[icon] || "◈");
+  const emblem = element(doc, "span", "flow-icon");
   emblem.setAttribute("aria-hidden", "true");
+  const svg = doc.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  for (const pathData of (FLOW_ICONS[icon] || FLOW_ICONS.result)) {
+    const path = doc.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", pathData);
+    svg.append(path);
+  }
+  emblem.append(svg);
   heading.append(emblem, element(doc, "span", "", label));
   return heading;
 }
@@ -259,7 +279,7 @@ function stageCard(doc, stage, route = null) {
   if (stage.name.startsWith("action.") && route) {
     const steps = element(doc, "div", "flow-semantics");
     for (const item of route.writes || []) {
-      steps.append(detailLine(doc, `✍️ ${item.operation} · ${item.target} (${item.status})`));
+      steps.append(detailLine(doc, `${item.operation} · ${item.target} (${item.status})`));
     }
     if (steps.children.length) card.append(steps);
   }
@@ -318,16 +338,17 @@ function plainCard(doc, heading, body, kind = "") {
 }
 
 /** Render a responsive directed graph driven by validated per-route stage counts. */
-export function renderExecutionFlow(doc, detail) {
+export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
   const root = element(doc, "section", "flow-graph");
   root.setAttribute("aria-label", "Diagrama de ejecución de la solicitud");
   const stages = detail.operational.stages;
   const flow = detail.flow;
-  if (flow?.input) {
-    root.append(plainCard(doc, "Mensaje del usuario", flow.input, "source"));
+  if (flow?.input || sourceText) {
+    root.append(plainCard(doc, "Mensaje del usuario", flow?.input || sourceText, "source"));
     root.append(arrow(doc));
-  } else {
-    root.append(element(doc, "p", "flow-legacy", "Esta solicitud es anterior a la traza de rutas; se muestran únicamente las etapas registradas."));
+  }
+  if (!flow?.routes?.length) {
+    root.append(element(doc, "p", "flow-legacy", "Esta solicitud no conserva la división de Router ni las transformaciones por etapa. El mensaje original y las métricas registradas sí están disponibles."));
   }
   const routerIndex = stages.findIndex(stage => stage.name === "application.router");
   const prefix = routerIndex < 0 ? [] : stages.slice(0, routerIndex);
@@ -341,16 +362,22 @@ export function renderExecutionFlow(doc, detail) {
     const router = stageCard(doc, stages[routerIndex]);
     if (flow?.routes?.length) {
       router.append(detailLine(doc, flow.routes.length > 1
-        ? `🔀 Dividido en ${flow.routes.length} fragmentos`
-        : "➡️ Sin división · 1 camino", "flow-split-result"));
+        ? `Dividido en ${flow.routes.length} fragmentos`
+        : "Sin división · 1 camino", "flow-split-result"));
     }
     root.append(router);
-    root.append(arrow(doc, flow?.routes?.length > 1 ? "flow-fork" : ""));
+    if (!flow?.routes?.length) root.append(arrow(doc));
   }
   let consumed = routerIndex + 1;
   if (flow?.routes?.length) {
+    const paths = element(doc, "div", "flow-paths-viewport");
+    const inner = element(doc, "div", "flow-paths-inner");
+    inner.append(arrow(doc, flow.routes.length > 1 ? "flow-fork" : "flow-single"));
     const lanes = element(doc, "div", "flow-lanes");
-    if (flow.routes.length > 1) lanes.classList.add("flow-multiple");
+    if (flow.routes.length > 1) {
+      lanes.classList.add("flow-multiple");
+      root.append(element(doc, "p", "flow-lane-caption", "Desliza horizontalmente para ver cada camino"));
+    }
     if (flow.parallel_preparation) {
       root.append(element(doc, "p", "flow-lane-caption", "Preparación simultánea · aplicación en orden"));
     }
@@ -378,7 +405,10 @@ export function renderExecutionFlow(doc, detail) {
       }
       lanes.append(lane);
     }
-    root.append(lanes);
+    inner.append(lanes);
+    inner.append(arrow(doc, flow.routes.length > 1 ? "flow-join" : "flow-single"));
+    paths.append(inner);
+    root.append(paths);
   } else {
     const linear = element(doc, "div", "flow-linear");
     for (const stage of stages.slice(Math.max(0, consumed))) {
@@ -395,7 +425,7 @@ export function renderExecutionFlow(doc, detail) {
     for (const stage of tail) more.append(stageCard(doc, stage));
     root.append(more);
   }
-  root.append(arrow(doc, flow?.routes?.length > 1 ? "flow-join" : "flow-single"));
+  if (!flow?.routes?.length) root.append(arrow(doc, "flow-single"));
   const outcomes = flow?.routes?.map(route => route.status) || [];
   const result = outcomes.length && outcomes.every(s => s === "completed") ? "Completado"
     : outcomes.some(s => s === "completed") ? "Resultado parcial"

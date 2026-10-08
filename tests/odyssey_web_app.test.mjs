@@ -111,6 +111,10 @@ class FakeDocument {
     return new FakeElement(tagName);
   }
 
+  createElementNS(_namespace, tagName) {
+    return new FakeElement(tagName);
+  }
+
   querySelector(selector) {
     return this._elements.get(selector) ?? null;
   }
@@ -427,6 +431,39 @@ test("request info opens the real graph and preserves its technical inspection",
   assert.match(page.elements.detailContent.textContent, /Planner/);
   assert.match(page.elements.detailContent.textContent, /Ver datos técnicos/);
   assert.equal(page.elements.detailContent.querySelector(".flow-graph") !== null, true);
+});
+
+test("legacy request info recovers only the paired human message, never invents a Router split", async () => {
+  const requestId = "older-5802";
+  const page = await mountApp({turns: [
+    {request_id: requestId, role: "user", text: "Ayer hablé con Vera y hoy la he visto."},
+    {request_id: requestId, role: "assistant", text: "He guardado la información.",
+      request_detail: {request_id: requestId, operational: {total_duration_ms: 8700,
+        stages: [{name: "application.router", outcome: "completed", duration_ms: 5802, provider_calls: []},
+          {name: "temporal.interpretation", outcome: "completed", duration_ms: 1500, provider_calls: []}]} }},
+  ]});
+  page.elements.conversation.querySelector(".detail-button").click();
+  const graph = page.elements.detailContent.querySelector(".flow-graph");
+  assert.match(graph.textContent, /Mensaje del usuario/);
+  assert.match(graph.textContent, /Ayer hablé con Vera y hoy la he visto/);
+  assert.match(graph.textContent, /no conserva la división de Router/);
+  assert.doesNotMatch(graph.textContent, /Dividido en 2 fragmentos/);
+  assert.equal(graph.querySelector(".flow-lane"), null);
+  assert.ok(graph.querySelector("svg"), "the legacy graph must still use Odyssey SVG icons");
+});
+
+test("old paginated user messages remain paired with their matching request details", async () => {
+  const older = [
+    {request_id: "page-1", role: "user", text: "Hace tres días vi a Elsa"},
+    {request_id: "page-1", role: "assistant", text: "Anotado", request_detail: {
+      request_id: "page-1", operational: {total_duration_ms: 20, stages: []}}},
+  ];
+  const page = await mountApp({turns: [{request_id: "newer", role: "user", text: "Ahora"}], olderTurns: older});
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+  page.elements.conversation.querySelector(".detail-button").click();
+  assert.match(page.elements.detailContent.textContent, /Hace tres días vi a Elsa/);
 });
 
 test("clarification renders grounded controls while leaving the composer usable", async () => {
