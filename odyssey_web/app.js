@@ -8,8 +8,7 @@ import {
 } from "./client.js";
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
-import {createProcessingIndicator, startProgressPolling} from "./progress.js";
-import {renderExecutionFlow} from "./request-flow.js";
+import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");

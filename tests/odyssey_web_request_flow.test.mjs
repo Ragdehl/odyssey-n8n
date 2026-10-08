@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {renderExecutionFlow} from "../odyssey_web/request-flow.js";
+import {renderExecutionFlow} from "../odyssey_web/progress.js";
 import {validateRequestDetail, ProductRequestError} from "../odyssey_web/client.js";
 
 class TestNode {

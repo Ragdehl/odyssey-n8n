@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
-import {renderExecutionFlow} from "../odyssey_web/request-flow.js";
+import {renderExecutionFlow} from "../odyssey_web/progress.js";
 
 import {
   ProductRequestError,
@@ -244,8 +244,8 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   };
   globalThis.__odysseyTestNotes = {...globalThis.__odysseyTestIcons, mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
   globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
-  globalThis.__odysseyTestFlow = {renderExecutionFlow};
   globalThis.__odysseyTestProgress = {
+    renderExecutionFlow,
     createProcessingIndicator() {
       if (progressThrows) throw new TypeError("SVG className cannot be set");
       const element = new FakeElement("span");
@@ -259,8 +259,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
-    .replace('import {createProcessingIndicator, startProgressPolling} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling} = globalThis.__odysseyTestProgress;")
-    .replace('import {renderExecutionFlow} from "./request-flow.js";', "const {renderExecutionFlow} = globalThis.__odysseyTestFlow;")
+    .replace('import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling, renderExecutionFlow} = globalThis.__odysseyTestProgress;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
