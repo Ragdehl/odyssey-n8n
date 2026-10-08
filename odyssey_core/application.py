@@ -227,6 +227,8 @@ class ApplicationResult:
     presentation_intent: str = "answer"
     note_set_selection: SelectionCriteria | None = None
     note_result_snapshot: Mapping[str, Any] | None = None
+    # Presentation-only bounded execution provenance, never Core mutation authority.
+    execution_flow: Mapping[str, Any] | None = None
 
 
 def allocate_request_id() -> str:

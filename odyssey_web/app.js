@@ -9,6 +9,7 @@ import {
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
 import {createProcessingIndicator, startProgressPolling} from "./progress.js";
+import {renderExecutionFlow} from "./request-flow.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -381,15 +382,16 @@ function appendDetailLine(parent, label, value) {
 function openRequestDetail(detail) {
   requestDetailContent.replaceChildren();
   requestDetailTitle.textContent = "Detalles de la solicitud";
-  appendDetailLine(requestDetailContent, "Solicitud", detail.request_id);
-  appendDetailLine(requestDetailContent, "Latencia total", formatDuration(detail.operational.total_duration_ms));
-  appendDetailLine(requestDetailContent, "Coste estimado", formatEstimatedCost(detail.estimated_cost));
-  appendDetailLine(requestDetailContent, "Base de precios", detail.estimated_cost?.pricing_basis);
-  const stages = document.createElement("section");
-  stages.className = "detail-section";
-  const heading = document.createElement("h3");
-  heading.textContent = "Etapas";
-  stages.append(heading);
+  requestDetailContent.append(renderExecutionFlow(document, detail));
+  const technical = document.createElement("details");
+  technical.className = "flow-technical flow-technical-raw";
+  const summary = document.createElement("summary");
+  summary.textContent = "Ver datos técnicos";
+  technical.append(summary);
+  appendDetailLine(technical, "Solicitud", detail.request_id);
+  appendDetailLine(technical, "Latencia total", formatDuration(detail.operational.total_duration_ms));
+  appendDetailLine(technical, "Coste estimado", formatEstimatedCost(detail.estimated_cost));
+  appendDetailLine(technical, "Base de precios", detail.estimated_cost?.pricing_basis);
   for (const stage of detail.operational.stages) {
     const row = document.createElement("article");
     row.className = "detail-stage";
@@ -399,28 +401,19 @@ function openRequestDetail(detail) {
     appendDetailLine(row, "Modelo", stage.model);
     appendDetailLine(row, "Razonamiento", stage.reasoning_effort);
     appendDetailLine(row, "Error", stage.error_category);
-    appendDetailLine(row, "Llamadas de proveedor", stage.provider_calls.length || null);
     if (stage.usage) appendDetailLine(row, "Tokens", formatUsage(stage.usage));
+    if (stage.estimated_cost) appendDetailLine(row, "Coste", formatEstimatedCost(stage.estimated_cost));
     for (const call of stage.provider_calls) {
-      appendDetailLine(row, call.name || "Proveedor", `${call.model || "No disponible"} · ${formatDuration(call.duration_ms)}`);
-      appendDetailLine(row, "Resultado de proveedor", call.outcome);
-      if (call.usage) appendDetailLine(row, "Tokens de proveedor", formatUsage(call.usage));
+      appendDetailLine(row, call.name, `${call.model || "Sin modelo"} · ${formatDuration(call.duration_ms)}`);
+      if (call.usage) appendDetailLine(row, "Tokens del proveedor", formatUsage(call.usage));
     }
-    stages.append(row);
+    technical.append(row);
   }
-  requestDetailContent.append(stages);
   if (detail.changes) {
-    const changes = document.createElement("section");
-    changes.className = "detail-section";
-    const heading = document.createElement("h3");
-    heading.textContent = "Cambios";
-    changes.append(heading);
-    appendDetailLine(changes, "Notas afectadas", detail.changes.affected_stable_note_ids.length || null);
-    for (const unit of detail.changes.units) {
-      appendDetailLine(changes, unit.operation || "Unidad", unit.status);
-    }
-    requestDetailContent.append(changes);
+    appendDetailLine(technical, "Notas afectadas", detail.changes.affected_stable_note_ids.length || null);
+    for (const unit of detail.changes.units) appendDetailLine(technical, unit.operation || "Unidad", unit.status);
   }
+  requestDetailContent.append(technical);
   requestDetailSheet.showModal();
 }
 

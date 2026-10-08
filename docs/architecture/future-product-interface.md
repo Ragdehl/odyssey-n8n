@@ -387,3 +387,30 @@ Decide with real Odyssey usage:
     canonical schema semantics or stored knowledge;
 12. the exact note-type authoring UX: structured form first, conversational assistant first, or a
     hybrid, and which schema changes remain admin/advanced-only.
+
+### DEV request execution graph — October 2026
+
+The existing per-message information affordance now opens a dark, accessible,
+mobile-first directed execution graph: original user message → Router → exact
+validated routed spans → actual per-route Temporal / Tasks / Planner / Core stages
+→ status and affected-note count. Two or more independent preparation branches
+are visually forked; the legend explicitly says that model preparation may overlap
+but canonical Core application remains ordered. Each recorded stage shows only
+available model, reasoning setting, provider-call count, duration, input/output/
+cached/reasoning tokens and **priced stage estimate** derived from a dated runtime
+pricing snapshot. A non-LLM Core/Git stage has no invented model, tokens or cost.
+
+Runtime attaches bounded, actor-local `execution_flow` provenance only after
+Router's exact-span validation. It contains no prompts, provider payloads, hidden
+reasoning or new knowledge authority. Grounded Temporal source→ISO mappings are
+emitted only when Temporal actually resolved them. The workflow projects a strict
+allowlist onto the existing `request_detail`, while the conversation store and
+browser revalidate it. Older turns without a trace show a clearly labeled linear
+fallback based solely on their recorded stages. The prior technical details are
+retained collapsed under a disclosure control. Stage estimates can legitimately be
+unavailable. This work changes diagnostics/presentation only and does not modify
+Router, Temporal or Core semantics or execution scheduling.
+
+Regression: `tests/odyssey_web_request_flow.test.mjs`,
+`tests/odyssey_web_app.test.mjs`, `tests/runtime/test_runtime_routing.py`,
+`tests/odyssey_workflow_partial.test.mjs` and the conversation detail contract.

@@ -2266,6 +2266,17 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ),
         )
 
+    def _temporal_flow(interpretation: TemporalInterpretation | None) -> dict[str, object]:
+        """Project grounded human-time translations without exposing model payloads."""
+        if interpretation is None:
+            return {"temporal": []}
+        items = []
+        for mention in interpretation.mentions[:8]:
+            value = mention.resolution.exact_datetime or mention.resolution.exact_date
+            if value is not None:
+                items.append({"source": mention.temporal_text[:120], "value": value[:80]})
+        return {"temporal": items}
+
     def execute_temporal_core(
         source_text: str,
         request_id: str,
@@ -2339,6 +2350,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 (core_result.operational.total_duration_ms or 0.0) + duration_ms,
                 (stage, *core_result.operational.stages),
             ),
+            execution_flow=_temporal_flow(temporal),
         )
 
     def execute_tasks(
@@ -2663,6 +2675,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 total_duration + (core_result.operational.total_duration_ms or 0.0),
                 (*stages, *core_result.operational.stages),
             ),
+            execution_flow=_temporal_flow(temporal),
         )
 
     if "tasks" in enabled_application_ids:

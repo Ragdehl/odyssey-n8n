@@ -521,6 +521,7 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
         "operational",
         "changes",
         "estimated_cost",
+        "flow",
     }:
         raise ConversationError("request detail is invalid")
     operational = value.get("operational")
@@ -553,7 +554,49 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
         _validate_detail_changes(value["changes"])
     if "estimated_cost" in value:
         _validate_estimated_cost(value["estimated_cost"])
+    if "flow" in value:
+        _validate_execution_flow(value["flow"])
     return json.loads(encoded)
+
+
+def _validate_execution_flow(value: Any) -> None:
+    """Validate minimal route provenance, never infer identity or mutation authority."""
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"version", "input", "parallel_preparation", "routes"}
+        or value["version"] != 1
+        or not isinstance(value["input"], str)
+        or len(value["input"]) > 4096
+        or type(value["parallel_preparation"]) is not bool
+        or not isinstance(value["routes"], list)
+        or not 1 <= len(value["routes"]) <= 8
+    ):
+        raise ConversationError("execution flow is invalid")
+    for route in value["routes"]:
+        if (
+            not isinstance(route, dict)
+            or set(route) != {"capability", "text", "stage_count", "status", "temporal"}
+            or not isinstance(route["capability"], str)
+            or not 1 <= len(route["capability"]) <= 40
+            or not isinstance(route["text"], str)
+            or not 1 <= len(route["text"]) <= 4096
+            or route["status"] not in ("completed", "failed", "partial", "needs_attention")
+            or type(route["stage_count"]) is not int
+            or not 0 <= route["stage_count"] <= 16
+            or not isinstance(route["temporal"], list)
+            or len(route["temporal"]) > 8
+        ):
+            raise ConversationError("execution flow is invalid")
+        for mention in route["temporal"]:
+            if (
+                not isinstance(mention, dict)
+                or set(mention) != {"source", "value"}
+                or any(not isinstance(mention.get(k), str) for k in ("source", "value"))
+                or not 1 <= len(mention["source"]) <= 120
+                or not 1 <= len(mention["value"]) <= 80
+                or mention["source"] not in route["text"]
+            ):
+                raise ConversationError("execution flow is invalid")
 
 
 def _safe_number(value: Any) -> bool:
@@ -625,6 +668,7 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         "attempt_count",
         "output_text_chars",
         "output_text_bytes",
+        "estimated_cost",
     }
     if (
         not isinstance(value, dict)
@@ -646,6 +690,8 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         raise ConversationError("request detail is invalid")
     if "coverage" in value:
         _validate_coverage(value["coverage"])
+    if "estimated_cost" in value:
+        _validate_estimated_cost(value["estimated_cost"])
     if "substeps" in value:
         _validate_detail_spans(value["substeps"])
     if "input_sizes" in value:

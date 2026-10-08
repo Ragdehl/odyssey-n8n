@@ -282,7 +282,49 @@ export function validateRequestDetail(value, requestId) {
   const operational = validateOperational(value.operational);
   const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
   const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
-  return {request_id: requestId, operational, changes, estimated_cost};
+  const flow = value.flow === undefined ? undefined : validateExecutionFlow(value.flow, operational.stages);
+  return {request_id: requestId, operational, changes, estimated_cost, flow};
+}
+
+/** Preserve only exact, bounded route provenance for the diagnostic graph. */
+export function validateExecutionFlow(value, stages) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1 ||
+      typeof value.input !== "string" || value.input.length > 4096 ||
+      typeof value.parallel_preparation !== "boolean" || !Array.isArray(value.routes) ||
+      value.routes.length < 1 || value.routes.length > 8 ||
+      Object.keys(value).some(key => !["version", "input", "parallel_preparation", "routes"].includes(key))) {
+    throw new ProductRequestError("Odyssey returned invalid execution flow.");
+  }
+  let totalStages = 0;
+  const routes = value.routes.map(route => {
+    if (!route || typeof route !== "object" || Array.isArray(route) ||
+        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal"].includes(key)) ||
+        typeof route.capability !== "string" || !route.capability || route.capability.length > 40 ||
+        typeof route.text !== "string" || !route.text || route.text.length > 4096 ||
+        !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 16 ||
+        !["completed", "failed", "partial", "needs_attention"].includes(route.status) ||
+        !Array.isArray(route.temporal) || route.temporal.length > 8) {
+      throw new ProductRequestError("Odyssey returned invalid execution route.");
+    }
+    const temporal = route.temporal.map(item => {
+      if (!item || typeof item !== "object" || Array.isArray(item) ||
+          Object.keys(item).some(key => !["source", "value"].includes(key)) ||
+          typeof item.source !== "string" || !item.source || item.source.length > 120 ||
+          typeof item.value !== "string" || !item.value || item.value.length > 80 ||
+          !route.text.includes(item.source)) {
+        throw new ProductRequestError("Odyssey returned invalid temporal provenance.");
+      }
+      return {source: item.source, value: item.value};
+    });
+    totalStages += route.stage_count;
+    return {capability: route.capability, text: route.text, stage_count: route.stage_count,
+      status: route.status, temporal};
+  });
+  const routerIndex = stages.findIndex(stage => stage.name === "application.router");
+  if (routerIndex < 0 || routerIndex + 1 + totalStages > stages.length) {
+    throw new ProductRequestError("Execution stages do not match the route graph.");
+  }
+  return {version: 1, input: value.input, parallel_preparation: value.parallel_preparation, routes};
 }
 
 /** Validate the same bounded operational hierarchy for Chat and intelligent Notes. */
@@ -381,6 +423,7 @@ function validateDetailStage(value) {
   const substeps = value.substeps === undefined ? undefined : validateSpans(value.substeps);
   const coverage = value.coverage === undefined ? undefined : validateCoverage(value.coverage);
   const input_sizes = value.input_sizes === undefined ? undefined : validateInputSizes(value.input_sizes);
+  const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
   const diagnostics = {};
   for (const key of ["validation_stage", "validation_code", "provider_status", "incomplete_reason", "parse_status", "result_kind"]) {
     if (value[key] == null) continue;
@@ -395,7 +438,8 @@ function validateDetailStage(value) {
   return {name: value.name, outcome: value.outcome, duration_ms: value.duration_ms, model: value.model,
     reasoning_effort: value.reasoning_effort, usage, error_category: value.error_category, provider_calls: providerCalls,
     ...(value.start_offset_ms !== undefined ? {start_offset_ms: value.start_offset_ms} : {}),
-    ...(substeps ? {substeps} : {}), ...(coverage ? {coverage} : {}), ...(input_sizes ? {input_sizes} : {}), ...diagnostics};
+    ...(substeps ? {substeps} : {}), ...(coverage ? {coverage} : {}), ...(input_sizes ? {input_sizes} : {}),
+    ...(estimated_cost ? {estimated_cost} : {}), ...diagnostics};
 }
 
 function validateUsage(value) {

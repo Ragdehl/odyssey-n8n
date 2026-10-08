@@ -207,6 +207,81 @@ def test_completed_migration_stage_is_published_without_rewriting_it(tmp_path: P
     assert not stage.exists()
 
 
+def test_execution_flow_persists_in_assistant_detail_but_not_planner_context(
+    tmp_path: Path,
+) -> None:
+    """Persist exact route provenance for the UI without making it a knowledge source."""
+    store = _store(tmp_path)
+    flow = {
+        "version": 1,
+        "input": "Hoy he visto a Eva. Mañana iré al mercado.",
+        "parallel_preparation": True,
+        "routes": [
+            {
+                "capability": "temporal",
+                "text": "Hoy he visto a Eva.",
+                "stage_count": 1,
+                "status": "completed",
+                "temporal": [{"source": "Hoy", "value": "2026-10-08"}],
+            },
+            {
+                "capability": "temporal",
+                "text": "Mañana iré al mercado.",
+                "stage_count": 1,
+                "status": "completed",
+                "temporal": [{"source": "Mañana", "value": "2026-10-09"}],
+            },
+        ],
+    }
+    stage = {
+        "name": "planner",
+        "outcome": "completed",
+        "duration_ms": 15,
+        "model": "luna-first",
+        "provider_calls": [],
+        "estimated_cost": {
+            "status": "unavailable",
+            "amount_usd": None,
+            "pricing_basis": "2026-10-08",
+        },
+    }
+    detail = {
+        "request_id": "req-1",
+        "flow": flow,
+        "operational": {"total_duration_ms": 50, "stages": [stage]},
+    }
+    _append(store, 1, detail=detail)
+    page = store.load_main_page()
+    assert page["turns"][0]["request_detail"]["flow"] == flow
+    assert store.recent_context() == [{"role": "assistant", "text": "turn 1"}]
+    with pytest.raises(ConversationError, match="execution flow"):
+        _append(
+            store,
+            3,
+            detail={
+                **detail,
+                "request_id": "req-3",
+                "flow": {
+                    **flow,
+                    "routes": [{**flow["routes"][0], "text": "Alterado"}],
+                },
+            },
+        )
+    with pytest.raises(ConversationError, match="execution flow"):
+        _append(
+            store,
+            5,
+            detail={
+                **detail,
+                "request_id": "req-5",
+                "flow": {
+                    **flow,
+                    "routes": [{**flow["routes"][0], "prompt": "No permitido"}],
+                },
+            },
+        )
+
+
 def test_request_detail_is_bounded_safe_and_excluded_from_context(tmp_path: Path) -> None:
     """Only allowlisted operational detail persists and it never enters planner context."""
     store = _store(tmp_path)

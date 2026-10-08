@@ -66,3 +66,22 @@ test("unconfirmed writes cannot be promoted into partial success", () => {
   assert.equal(result.status, "failed");
   assert.doesNotMatch(result.message, /He guardado parte/);
 });
+
+
+test("workflow carries only validated route provenance and stage cost projections", () => {
+  const actualFlow = {
+    version: 1, input: "Hoy hice una cosa y mañana otra", parallel_preparation: true,
+    routes: [{capability: "temporal", text: "mañana otra", stage_count: 1,
+      status: "completed", temporal: [{source: "mañana", value: "2026-10-09"}]}],
+  };
+  const result = execute({
+    request_id: "synthetic-partial", status: "completed",
+    product_outcome: "ANSWER", affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "completed", stable_note_id: "date:2026-10-09"}]}],
+    execution_flow: actualFlow,
+    operational: {total_duration_ms: 123, stages: [{name: "temporal.interpretation", duration_ms: 123,
+      outcome: "completed", model: "gpt-6-luna", provider_calls: []}]},
+  });
+  assert.deepEqual(result.request_detail.flow, actualFlow);
+  assert.equal(result.request_detail.operational.stages[0].estimated_cost.status, "unavailable");
+});

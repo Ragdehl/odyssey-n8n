@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
+import {renderExecutionFlow} from "../odyssey_web/request-flow.js";
 
 import {
   ProductRequestError,
@@ -243,6 +244,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
   };
   globalThis.__odysseyTestNotes = {...globalThis.__odysseyTestIcons, mountNotes() { return {showList() { notesHomeCalls += 1; }}; }};
   globalThis.__odysseyTestCalendar = {mountCalendar() { return {showMonth() { calendarHomeCalls += 1; }}; }};
+  globalThis.__odysseyTestFlow = {renderExecutionFlow};
   globalThis.__odysseyTestProgress = {
     createProcessingIndicator() {
       if (progressThrows) throw new TypeError("SVG className cannot be set");
@@ -258,6 +260,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace('import {createProcessingIndicator, startProgressPolling} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling} = globalThis.__odysseyTestProgress;")
+    .replace('import {renderExecutionFlow} from "./request-flow.js";', "const {renderExecutionFlow} = globalThis.__odysseyTestFlow;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
@@ -402,6 +405,29 @@ test("chat notifies Calendar only after a confirmed canonical note write", async
   assert.match(finalMessage.querySelector(".message-text").textContent, /He guardado parte/);
   assert.doesNotMatch(finalMessage.querySelector(".message-text").textContent, /^Guardado$/);
   assert.ok(finalMessage.querySelector(".partial-notice"));
+});
+
+test("request info opens the real graph and preserves its technical inspection", async () => {
+  const page = await mountApp({turns: [{request_id: "synthetic-flow", role: "assistant", text: "Hecho.",
+    request_detail: {
+      request_id: "synthetic-flow", operational: {total_duration_ms: 120, stages: [
+        {name: "application.router", outcome: "completed", duration_ms: 25, model: "gpt-6-luna",
+          reasoning_effort: "low", provider_calls: []},
+        {name: "planner", outcome: "completed", duration_ms: 95, model: "luna-first",
+          reasoning_effort: "low", provider_calls: []},
+      ]},
+      flow: {version: 1, input: "Guarda el museo", parallel_preparation: false,
+        routes: [{capability: "core", text: "Guarda el museo", stage_count: 1,
+          status: "completed", temporal: []}]},
+    },
+  }]});
+  page.elements.conversation.querySelector(".detail-button").click();
+  assert.match(page.elements.detailContent.textContent, /Mensaje del usuario/);
+  assert.match(page.elements.detailContent.textContent, /Guarda el museo/);
+  assert.match(page.elements.detailContent.textContent, /Router/);
+  assert.match(page.elements.detailContent.textContent, /Planner/);
+  assert.match(page.elements.detailContent.textContent, /Ver datos técnicos/);
+  assert.equal(page.elements.detailContent.querySelector(".flow-graph") !== null, true);
 });
 
 test("clarification renders grounded controls while leaving the composer usable", async () => {

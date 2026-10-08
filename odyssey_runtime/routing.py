@@ -157,6 +157,7 @@ def execute_routed_request(
     if max_parallel_preparations < 1 or max_parallel_preparations > 2:
         raise ValueError("route interpretation concurrency must be one or two")
     subresults: list[ApplicationResult] = []
+    scheduled_routes = False
     # For a single route or unsupported destinations preserve the original path.
     preparers = route_preparers or {}
     if len(plan.routes) < 2 or not any(route.capability_id in preparers for route in plan.routes):
@@ -173,6 +174,7 @@ def execute_routed_request(
                 )
             )
     else:
+        scheduled_routes = True
         # Only pure domain interpreters run in workers. No Core execution or Git
         # mutation is submitted to the pool. Consume callbacks serially in route order.
         with ThreadPoolExecutor(max_workers=max_parallel_preparations) as workers:
@@ -206,7 +208,26 @@ def execute_routed_request(
                         prepared_executor=callback,
                     )
                 )
-    return _prepend_router_stage(_aggregate(outer_request_id, subresults), stage)
+    # Group flattened stage telemetry using the true per-route result boundaries.
+    # Preparing route models may overlap; canonical execution remains serial.
+    route_flow = {
+        "version": 1,
+        "input": user_request[:4096],
+        "parallel_preparation": bool(len(plan.routes) > 1 and scheduled_routes),
+        "routes": [
+            {
+                "capability": route.capability_id,
+                "text": route.source_text[:4096],
+                "stage_count": len(result.operational.stages),
+                "status": result.status.value,
+                "temporal": list((result.execution_flow or {}).get("temporal", []))[:8],
+            }
+            for route, result in zip(plan.routes, subresults, strict=True)
+        ],
+    }
+    return _prepend_router_stage(
+        replace(_aggregate(outer_request_id, subresults), execution_flow=route_flow), stage
+    )
 
 
 def _router_stage(

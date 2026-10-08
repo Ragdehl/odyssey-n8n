@@ -219,6 +219,28 @@ def test_parallel_interpretations_overlap_while_core_commits_in_route_order() ->
     assert result.status is ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("note-1", "note-2")
     assert [action.action_index for action in result.action_results] == [0, 1]
+    flow = application_result_to_response(result)["execution_flow"]
+    assert flow == {
+        "version": 1,
+        "input": original,
+        "parallel_preparation": True,
+        "routes": [
+            {
+                "capability": "calendar",
+                "text": spans[0],
+                "stage_count": 0,
+                "status": "completed",
+                "temporal": [],
+            },
+            {
+                "capability": "calendar",
+                "text": spans[1],
+                "stage_count": 0,
+                "status": "completed",
+                "temporal": [],
+            },
+        ],
+    }
 
 
 def test_parallel_preparation_failure_is_bounded_and_serial_route_continues() -> None:
@@ -287,6 +309,7 @@ def test_preparation_is_disabled_for_single_route_or_invalid_route_plan() -> Non
         route_preparers={"calendar": prepare},
     )
     assert single.status is ApplicationStatus.COMPLETED
+    assert application_result_to_response(single)["execution_flow"]["parallel_preparation"] is False
     invalid = execute_routed_request(
         user_request="First. Second.",
         outer_request_id="bad",

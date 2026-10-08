@@ -498,3 +498,57 @@ button:disabled { opacity: .55; }
 .note-subtask-create-form { display: flex; align-items: center; gap: .45rem; margin-top: .25rem; }
 .note-subtask-create-form input { min-width: 0; flex: 1 1 auto; }
 .note-subtask-create-form button { flex: 0 0 auto; }
+
+/* DEV request graph — route provenance, stage telemetry and explicit concurrency. */
+.request-detail-sheet { width: min(calc(100% - .75rem), 58rem); max-height: min(94dvh, 60rem); margin: auto; border: 1px solid #554b95; border-radius: 1.1rem; color: #eeedfd; background: #13121c; box-shadow: 0 1rem 3rem rgba(0,0,0,.6); }
+.request-detail-sheet::backdrop { background: rgba(8,8,22,.75); }
+.request-detail-header { position: sticky; top: 0; z-index: 2; padding: .8rem 1rem; border-bottom: 1px solid #343047; background: #13121c; }
+.request-detail-header h2 { font-size: 1.02rem; color: #f8f6ff; }
+.request-detail-sheet .detail-close { background: #282535; color: #f4f0ff; }
+.request-detail-content { max-height: calc(min(94dvh, 60rem) - 4rem); padding: 1rem .7rem 1.5rem; overflow-x: hidden; }
+.flow-graph { display: grid; justify-items: stretch; gap: 0; min-width: 0; font-size: .8rem; }
+.flow-card { min-width: 0; padding: .65rem .7rem; border: 1px solid #6555b3; border-radius: .88rem; background: linear-gradient(135deg,#222038,#191824); box-shadow: 0 .16rem .7rem rgba(0,0,0,.11); overflow-wrap: anywhere; }
+.flow-node-heading { margin: 0 0 .32rem; font-size: .86rem; font-weight: 750; color: #f7f5ff; line-height: 1.25; }
+.flow-node-text { color: #d8d3f6; font-size: .78rem; line-height: 1.35; overflow-wrap: anywhere; }
+.flow-source { background: linear-gradient(130deg,#343064,#222035); border-color: #8c74ed; }
+.flow-fragment { background: #2b264c; padding: .55rem .58rem; }
+.flow-fragment .flow-node-heading { color: #a99aff; font-size: .75rem; }
+.flow-fragment .flow-node-text { font-size: .76rem; }
+.flow-card-failed { border-color: #bb636f; }
+.flow-error { color: #ffb2b3; font-size: .74rem; }
+.flow-arrow { position: relative; height: 1.35rem; width: 2px; background: #8d78ee; justify-self: center; margin: 0 auto .15rem; }
+.flow-arrow::after { content: ""; position: absolute; bottom: 0; left: -4px; width: 9px; height: 9px; border-right: 2px solid #ac99fc; border-bottom: 2px solid #ac99fc; transform: rotate(45deg); }
+.flow-fork { height: 1.8rem; }
+.flow-lanes { display: grid; grid-template-columns: minmax(0, 1fr); gap: .7rem; }
+.flow-lanes.flow-multiple { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.flow-lanes.flow-multiple:has(> :nth-child(3)) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+.flow-lane { display: grid; align-content: start; grid-auto-rows: max-content; gap: 0; min-width: 0; }
+.flow-lane .flow-card { padding: .52rem .48rem; border-radius: .76rem; }
+.flow-lane .flow-node-heading { font-size: .77rem; }
+.flow-lane-caption { color: #b8a7fa; font-size: .69rem; text-align: center; padding: 0 0 .55rem; }
+.flow-stats { display: flex; flex-wrap: wrap; gap: .27rem; margin-top: .4rem; }
+.flow-chip { display: inline-flex; align-items: center; max-width: 100%; padding: .18rem .32rem; border: 1px solid #3c3859; border-radius: .4rem; background: #302c49; color: #dad5fd; font-size: .63rem; line-height: 1.3; overflow-wrap: anywhere; }
+.flow-chip-tokens { color: #b8b2d5; background: #29273a; }
+.flow-temporal { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; padding: .36rem; border: 1px dashed #8974e6; border-radius: .55rem; background: #2c264f; color: #ece8ff; font-size: .71rem; overflow-wrap: anywhere; }
+.flow-normalized-time { padding: .15rem .3rem; border-radius: .3rem; background: #5543a8; color: white; font-weight: 700; }
+.flow-provider-details { margin-top: .35rem; font-size: .69rem; color: #bdb7dd; }
+.flow-provider-details summary { cursor: pointer; }
+.flow-provider-line { padding: .15rem 0; }
+.flow-legacy { color: #aaa3ce; font-size: .75rem; line-height: 1.4; margin-bottom: .65rem; }
+.flow-success { border-color: #298e85; background: linear-gradient(135deg,#183937,#172828); }
+.flow-outcome { border-color: #b69a5c; }
+.flow-technical { display: block; width: 100%; margin: .55rem 0; padding: .55rem .65rem; border: 1px solid #3b3753; border-radius: .75rem; background: #1b1a29; color: #c2bcdf; font-size: .72rem; }
+.flow-technical summary { cursor: pointer; color: #b9acf1; font-weight: 650; }
+.flow-technical .detail-stage { border-color: #3c3755; background: #232132; color: #e5e1f7; }
+.flow-technical .detail-line { gap: .5rem; font-size: .71rem; overflow-wrap: anywhere; }
+.flow-technical .detail-label { color: #aaa2cc; }
+.flow-technical-raw { margin-top: 1rem; }
+@media (max-width: 370px) { .request-detail-content { padding: .7rem .45rem 1.25rem; } .flow-lanes { gap: .42rem; } .flow-lane .flow-card { padding: .43rem .38rem; } .flow-chip { font-size: .59rem; } }
+
+/* A real fork/merge: the two branches remain distinct while Core applies writes in order. */
+.flow-arrow.flow-fork { width: 56%; height: 2rem; background: linear-gradient(#9982ed,#9982ed) center 0 / 2px 45% no-repeat, linear-gradient(#9982ed,#9982ed) center 45% / 100% 2px no-repeat, linear-gradient(#9982ed,#9982ed) left 45% / 2px 55% no-repeat, linear-gradient(#9982ed,#9982ed) right 45% / 2px 55% no-repeat; }
+.flow-arrow.flow-fork::before, .flow-arrow.flow-fork::after { position: absolute; content: ""; bottom: 0; width: 7px; height: 7px; border-right: 2px solid #b49bff; border-bottom: 2px solid #b49bff; transform: rotate(45deg); }
+.flow-arrow.flow-fork::before { left: -3px; }
+.flow-arrow.flow-fork::after { left: auto; right: -3px; }
+.flow-arrow.flow-join { width: 56%; height: 2rem; background: linear-gradient(#9982ed,#9982ed) left 0 / 2px 55% no-repeat, linear-gradient(#9982ed,#9982ed) right 0 / 2px 55% no-repeat, linear-gradient(#9982ed,#9982ed) center 55% / 100% 2px no-repeat, linear-gradient(#9982ed,#9982ed) center 55% / 2px 45% no-repeat; }
+.flow-arrow.flow-single { width: 2px; background: #9982ed; }

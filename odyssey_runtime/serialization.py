@@ -175,6 +175,7 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
             "reason": result.history.reason,
         },
         "operational": operational_to_response(result.operational),
+        **({"execution_flow": dict(result.execution_flow)} if result.execution_flow else {}),
     }
 
 
