@@ -39,14 +39,15 @@ class RouteOutcome(StrEnum):
 class Route:
     """Assign one exact contiguous current-request span to one capability.
 
-    ``depends_on`` is an internal, zero-based ordinal for one earlier route.  It is
-    deliberately absent from the provider contract until a Core-owned canonical
-    reference handoff is available.
+    ``depends_on`` and ``dependent_mention`` are internal-only continuity metadata.
+    They are deliberately absent from the provider contract.  The router names only
+    the exact pronoun/mention; it never selects an identity.
     """
 
     capability_id: str
     source_text: str
     depends_on: int | None = None
+    dependent_mention: str | None = None
 
     def __post_init__(self) -> None:
         """Reject malformed route fields before local source validation."""
@@ -60,6 +61,10 @@ class Route:
             or self.depends_on < 0
         ):
             raise RouterError("Route depends_on must be a non-negative integer or None")
+        if self.dependent_mention is not None and (
+            not isinstance(self.dependent_mention, str) or not self.dependent_mention.strip()
+        ):
+            raise RouterError("Route dependent_mention must be non-empty text or None")
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,8 +110,10 @@ def route_plan_json_schema(catalog: ApplicationCatalog) -> dict[str, Any]:
                     "properties": {
                         "capability_id": {"type": "string", "enum": executable_ids},
                         "source_text": {"type": "string"},
+                        "depends_on": {"type": ["integer", "null"], "minimum": 0},
+                        "dependent_mention": {"type": ["string", "null"]},
                     },
-                    "required": ["capability_id", "source_text"],
+                    "required": ["capability_id", "source_text", "depends_on", "dependent_mention"],
                     "additionalProperties": False,
                 },
             },
@@ -129,9 +136,19 @@ def parse_route_plan(payload: Mapping[str, Any]) -> RoutePlan:
         raise RouterError("RoutePlan routes must be an array")
     routes: list[Route] = []
     for raw_route in raw_routes:
-        if not isinstance(raw_route, Mapping) or set(raw_route) != {"capability_id", "source_text"}:
-            raise RouterError("Route payload must contain only capability_id and source_text")
-        routes.append(Route(raw_route["capability_id"], raw_route["source_text"]))
+        if not isinstance(raw_route, Mapping) or set(raw_route) not in (
+            {"capability_id", "source_text"},
+            {"capability_id", "source_text", "depends_on", "dependent_mention"},
+        ):
+            raise RouterError("Route payload must contain only closed routing fields")
+        routes.append(
+            Route(
+                raw_route["capability_id"],
+                raw_route["source_text"],
+                raw_route.get("depends_on"),
+                raw_route.get("dependent_mention"),
+            )
+        )
     return RoutePlan(outcome, tuple(routes))
 
 
@@ -160,6 +177,13 @@ def validate_route_plan(
             raise RouterError("Route destination is unknown or disabled")
         if route.depends_on is not None and route.depends_on >= ordinal:
             raise RouterError("Route depends_on must reference one existing earlier route")
+        if (route.depends_on is None) != (route.dependent_mention is None):
+            raise RouterError("Dependent route requires both predecessor and exact mention")
+        if route.dependent_mention is not None:
+            if route.dependent_mention not in route.source_text:
+                raise RouterError("Route dependent_mention must be an exact route substring")
+            if len(route.dependent_mention) > 120:
+                raise RouterError("Route dependent_mention is too long")
         start = original_request.find(route.source_text, cursor)
         if start < 0:
             raise RouterError("Route source_text is not an ordered exact request substring")
@@ -223,7 +247,7 @@ def render_router_prompt(
         "Route only the original current user request. Return ROUTE only when its ordered "
         "source_text values are exact contiguous spans that cover every non-whitespace character "
         "exactly once. Do not paraphrase, drop punctuation, conjunctions, negation, or qualifiers. "
-        "Split the request into the smallest material intentions that are independently interpretable without borrowing omitted meaning from another span, even when adjacent intentions route to the same capability. Same destination is never by itself a reason to keep independent intentions joined. A proposed span is independent only when its exact text standing alone preserves the same user meaning, including every operator, predicate, argument, and scoped modifier it needs. Before splitting, check dependencies in both directions: if isolating a span would lose or change its temporal scope, negation, modality, quantification, predicate or argument structure, anaphora, ellipsis, or coordination meaning, keep the dependent material in one route. A span that would acquire a different default time, polarity, action, subject, object, or relation when isolated is not independent. Before returning ROUTE, inspect each proposed route again: if one route still contains two independently interpretable material intentions, split it further until every route is irreducible under this rule. Never rewrite, copy, or synthesize missing words merely to make a span independent. Choose the "
+        "Split the request into the smallest material intentions that are independently interpretable without borrowing omitted meaning from another span, even when adjacent intentions route to the same capability. Same destination is never by itself a reason to keep independent intentions joined. A proposed span is independent only when its exact text standing alone preserves the same user meaning, including every operator, predicate, argument, and scoped modifier it needs. Before splitting, check dependencies in both directions: preserve shared temporal scope, negation, modality, predicate or argument structure and coordination. When a separate actionable phrase depends on a person in an earlier route through an explicit source pronoun (e.g., él, ella, him) or referring expression, split into exact original spans. On that dependent route set depends_on to the zero-based index of the earlier route and dependent_mention to the exact referring expression as it appears in this route. Only Core can identify that person later from a single canonical reference actually saved by the earlier route. Do not guess a name or resolve identities in Router. For independent routes set BOTH depends_on:null and dependent_mention:null. For dependent routes BOTH fields are required. If an omitted subject has no exact referring expression in the fragment or the relationship is not clear, keep the clauses together or return CLARIFY: never fabricate text. Before returning ROUTE, inspect each proposed route again: if one route still contains two independently interpretable material intentions, split it further until every route is irreducible under this rule. Never rewrite, copy, or synthesize missing words merely to make a span independent. Choose the "
         "routing owner by the domain interpretation required for the whole dependent intent, not by "
         "the canonical knowledge owner that may ultimately be written. Route an otherwise ordinary "
         "Core-owned dependent statement to temporal when resolving its date/time wording is material. "

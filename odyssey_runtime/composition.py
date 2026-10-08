@@ -49,6 +49,7 @@ from odyssey_core.application import (
     ActionStatus,
     ApplicationResult,
     ApplicationStatus,
+    DependentReferenceGuard,
     UnitResult,
     UnitStatus,
     WritePreflightGuard,
@@ -73,7 +74,7 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationError,
     DirectNoteMutationService,
 )
-from odyssey_core.domain_interpretation import DomainInterpretation
+from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
@@ -129,12 +130,29 @@ from .progress import ProductProgressStore
 from .routing import (
     ApplicationExecutor,
     ApplicationRouter,
+    DependentRouteHandoff,
     PreparedExecution,
     RoutePreparer,
     execute_routed_request,
     is_route_execution_id,
 )
 from .serialization import application_result_to_response, operational_to_response
+
+
+def _combined_write_preflight_guard(
+    first: WritePreflightGuard | None, second: WritePreflightGuard | None
+) -> WritePreflightGuard | None:
+    """Preserve every app/Core guard when a dependent route adds its integrity guard."""
+    if first is None:
+        return second
+    if second is None:
+        return first
+
+    def combined(action, preflight, repository, schema):  # type: ignore[no-untyped-def]
+        first(action, preflight, repository, schema)
+        second(action, preflight, repository, schema)
+
+    return combined
 
 
 def _dependent_relational_helper_index(action: Mapping[str, Any]) -> int | None:
@@ -1880,6 +1898,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         planner_decorator: Callable[[Any], Any] | None = None,
         write_preflight_guard: WritePreflightGuard | None = None,
         prepared_core: _PrecomputedCorePlan | None = None,
+        dependent_handoff: DependentRouteHandoff | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
         if prepared_core is not None:
@@ -1887,10 +1906,28 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 raise ValueError("prepared Core source or continuation mismatch")
             if prepared_core.domain != domain_interpretation:
                 raise ValueError("prepared Core domain mismatch")
+            if dependent_handoff is not None:
+                raise ValueError("dependent route cannot reuse an independent Core plan")
             if prepared_core.clock["date"] != _current_time()["date"]:
                 raise ValueError("prepared Core clock is stale")
         clock = prepared_core.clock if prepared_core is not None else _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
+        if dependent_handoff is not None:
+            reference = dependent_handoff.evidence
+            evidence = DomainEvidence(
+                "canonical_reference",
+                dependent_handoff.mention,
+                f"{reference.note_type}:{reference.canonical_name}",
+            )
+            if domain_interpretation is None:
+                domain_interpretation = DomainInterpretation(
+                    "core", user_request, "CANONICAL_REFERENCE", (evidence,)
+                )
+            else:
+                domain_interpretation = replace(
+                    domain_interpretation,
+                    evidence=(*domain_interpretation.evidence, evidence),
+                )
         capability_id = (
             domain_interpretation.capability_id if domain_interpretation is not None else None
         )
@@ -1955,7 +1992,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 else ()
             ),
             clarification_choice=clarification_choice,
-            write_preflight_guard=write_preflight_guard,
+            write_preflight_guard=_combined_write_preflight_guard(
+                write_preflight_guard,
+                DependentReferenceGuard(dependent_handoff.mention, dependent_handoff.evidence)
+                if dependent_handoff is not None
+                else None,
+            ),
             progress_callback=_emit_progress,
         )
         calls = getattr(planner, "last_provider_calls", ())
@@ -2295,6 +2337,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         *,
         prepared: _PreparedInterpretation | None = None,
         prepared_core: _PrecomputedCorePlan | None = None,
+        dependent_handoff: DependentRouteHandoff | None = None,
     ) -> ApplicationResult:
         """Resolve only time semantics, then return the unchanged source to ordinary Core."""
         if authenticated_actor is not None and not isinstance(
@@ -2352,7 +2395,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
             authenticated_actor,
             conversation_context_override=conversation_context,
             domain_interpretation=temporal.core_domain_interpretation(),
-            prepared_core=prepared_core,
+            prepared_core=prepared_core if dependent_handoff is None else None,
+            dependent_handoff=dependent_handoff,
         )
         return replace(
             core_result,

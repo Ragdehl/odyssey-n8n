@@ -1,0 +1,130 @@
+{
+  "model": "gpt-6-luna",
+  "effort": "low",
+  "contract_hashes": [
+    "3be2fb5e4dfeb87e793c4f7dd033ade0d0907fe314c2b5156a879686fbd8ad52",
+    "d894f62d7a4161bea1ad62a6cadb1fb3c87d46cd1ee72edfe53b95d4322a2b87"
+  ],
+  "calls": 6,
+  "passed": true,
+  "cases": [
+    {
+      "id": "dependent-person",
+      "pass": true,
+      "routes": [
+        [
+          "temporal",
+          "Ayer hablé con Eric.",
+          null,
+          null
+        ],
+        [
+          "temporal",
+          "Mañana iré al cine con él.",
+          0,
+          "él"
+        ],
+        [
+          "temporal",
+          "Hoy compré pan.",
+          null,
+          null
+        ]
+      ],
+      "error": null,
+      "input_tokens": 834,
+      "output_tokens": 333
+    },
+    {
+      "id": "independent-core",
+      "pass": true,
+      "routes": [
+        [
+          "core",
+          "Marta vive en Lyon.",
+          null,
+          null
+        ],
+        [
+          "core",
+          "Luis vive en París.",
+          null,
+          null
+        ]
+      ],
+      "error": null,
+      "input_tokens": 823,
+      "output_tokens": 128
+    },
+    {
+      "id": "single-temporal",
+      "pass": true,
+      "routes": [
+        [
+          "temporal",
+          "Mañana viene el fontanero.",
+          null,
+          null
+        ]
+      ],
+      "error": null,
+      "input_tokens": 821,
+      "output_tokens": 117
+    },
+    {
+      "id": "implicit-subject",
+      "pass": true,
+      "routes": [
+        [
+          "temporal",
+          "Hoy conocí a Eric. Mañana vendrá conmigo al teatro.",
+          null,
+          null
+        ]
+      ],
+      "error": null,
+      "input_tokens": 827,
+      "output_tokens": 211
+    },
+    {
+      "id": "independent-temporal",
+      "pass": true,
+      "routes": [
+        [
+          "temporal",
+          "Ayer vi a Ana",
+          null,
+          null
+        ],
+        [
+          "temporal",
+          "y hoy vi a Luis.",
+          null,
+          null
+        ]
+      ],
+      "error": null,
+      "input_tokens": 823,
+      "output_tokens": 369
+    },
+    {
+      "id": "shared-participants",
+      "pass": true,
+      "routes": [
+        [
+          "temporal",
+          "El martes iré al parque con Ana y Luis.",
+          null,
+          null
+        ]
+      ],
+      "error": null,
+      "input_tokens": 823,
+      "output_tokens": 130
+    }
+  ],
+  "version": 1,
+  "retries": 0,
+  "evidence_type": "one-shot-production-model-synthetic-no-vault",
+  "estimated_usd_with_10pct_margin": 0.001253
+}

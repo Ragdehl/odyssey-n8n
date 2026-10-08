@@ -218,6 +218,45 @@ class CanonicalReferenceEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class DependentReferenceGuard:
+    """Authorize one dependent marker only while its predecessor evidence remains current."""
+
+    mention: str
+    evidence: CanonicalReferenceEvidence
+
+    def __call__(
+        self,
+        action: WriteAction,
+        preflight: tuple[UnitTargetPreflight, ...],
+        repository: VaultRepository,
+        schema: dict[str, Any],
+    ) -> None:
+        """Recheck predecessor guards and require a fact-bearing marker bound to its exact ID."""
+        if not _dependent_evidence_is_current(self.evidence, repository, schema):
+            raise WritePreflightGuardError("ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_STALE")
+        for unit in action.units:
+            if unit.reference_lookup_only:
+                continue
+            for reference_index, reference in enumerate(unit.references):
+                if (
+                    reference.mention != self.mention
+                    or reference.target_index is None
+                    or not any(f"{{{{ref:{reference_index}}}}}" in fact for fact in unit.facts)
+                ):
+                    continue
+                target = next(
+                    (item for item in preflight if item.unit_index == reference.target_index), None
+                )
+                if (
+                    target is not None
+                    and target.stable_id == self.evidence.stable_note_id
+                    and target.canonical_name == self.evidence.canonical_name
+                ):
+                    return
+        raise WritePreflightGuardError("ROUTE_DEPENDENCY_REFERENCE_MARKER_REQUIRED")
+
+
+@dataclass(frozen=True, slots=True)
 class ActionResult:
     """Preserve typed evidence for one action in original planner order."""
 
@@ -1891,6 +1930,24 @@ def _current_canonical_reference(
     except (NoteFormatError, OSError, ValueError, RuntimeError, AttributeError):
         return None
     return note_type, canonical_name, evidence_digest(markdown)
+
+
+def _dependent_evidence_is_current(
+    evidence: CanonicalReferenceEvidence, repository: VaultRepository, schema: dict[str, Any]
+) -> bool:
+    """Verify the original source and canonical target guards before a dependent mutation."""
+    try:
+        source_guard = current_identity_guard(repository, schema, evidence.source_note_id)
+    except Exception:
+        return False
+    if source_guard != evidence.source_content_guard:
+        return False
+    current = _current_canonical_reference(repository, schema, evidence.stable_note_id)
+    return current == (
+        evidence.note_type,
+        evidence.canonical_name,
+        evidence.canonical_content_guard,
+    )
 
 
 def _execute_single_units(

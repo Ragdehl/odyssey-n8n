@@ -28,6 +28,7 @@ from odyssey_core.application import (
     ActionStatus,
     ApplicationResult,
     ApplicationStatus,
+    CanonicalReferenceEvidence,
     PendingWorkStatus,
 )
 from odyssey_core.git_history import GitHistoryResult, HistoryStatus
@@ -98,6 +99,14 @@ class PreparedExecution:
     ) -> ApplicationResult:
         """Execute the original validated callback without extra preparation or mutation."""
         return self.executor(source_text, request_id, authenticated_actor, conversation_context)
+
+
+@dataclass(frozen=True, slots=True)
+class DependentRouteHandoff:
+    """Carry one private Core-proven antecedent to a dependent route executor."""
+
+    mention: str
+    evidence: CanonicalReferenceEvidence
 
 
 def _temporal_cohort_issue(
@@ -323,10 +332,21 @@ def execute_routed_request(
     if len(plan.routes) < 2 or not independent_preparers:
         for ordinal, route in enumerate(plan.routes):
             if route.depends_on is not None:
+                handoff = _dependent_handoff(route, subresults[route.depends_on])
                 subresults.append(
                     _dependency_blocked_result(
+                        route_execution_id(outer_request_id, ordinal), subresults[route.depends_on]
+                    )
+                    if handoff is None
+                    else _execute_route(
+                        route,
                         route_execution_id(outer_request_id, ordinal),
-                        subresults[route.depends_on],
+                        core_execute,
+                        application_executors,
+                        temporal_execute,
+                        authenticated_actor,
+                        conversation_context,
+                        dependent_handoff=handoff,
                     )
                 )
                 continue
@@ -380,8 +400,20 @@ def execute_routed_request(
                 locator = route_execution_id(outer_request_id, ordinal)
                 callback: ApplicationExecutor | None = None
                 if route.depends_on is not None:
+                    handoff = _dependent_handoff(route, subresults[route.depends_on])
                     subresults.append(
                         _dependency_blocked_result(locator, subresults[route.depends_on])
+                        if handoff is None
+                        else _execute_route(
+                            route,
+                            locator,
+                            core_execute,
+                            application_executors,
+                            temporal_execute,
+                            authenticated_actor,
+                            conversation_context,
+                            dependent_handoff=handoff,
+                        )
                     )
                     continue
                 if ordinal in failed_preparations:
@@ -424,6 +456,18 @@ def _dependency_blocked_result(locator: str, predecessor: ApplicationResult) -> 
         (),
         planning_error=reason,
     )
+
+
+def _dependent_handoff(
+    route: Route, predecessor: ApplicationResult
+) -> DependentRouteHandoff | None:
+    """Select one predecessor carrier without treating sibling text as authority."""
+    if predecessor.status is not ApplicationStatus.COMPLETED or route.dependent_mention is None:
+        return None
+    evidence = predecessor.canonical_reference_evidence
+    if len(evidence) != 1:
+        return None
+    return DependentRouteHandoff(route.dependent_mention, evidence[0])
 
 
 def _routed_result(
@@ -530,6 +574,7 @@ def _execute_route(
     authenticated_actor: AuthenticatedActorContext | None,
     conversation_context: Sequence[Mapping[str, str]],
     prepared_executor: ApplicationExecutor | None = None,
+    dependent_handoff: DependentRouteHandoff | None = None,
 ) -> ApplicationResult:
     """Contain one route executor failure and reject substituted route correlation."""
     try:
@@ -544,18 +589,31 @@ def _execute_route(
                 locator,
                 authenticated_actor,
                 conversation_context,
+                dependent_handoff,
             )
         elif route.capability_id == TEMPORAL_CAPABILITY_ID:
             if temporal_execute is None:
                 return _route_failure(locator, "TEMPORAL_EXECUTOR_UNAVAILABLE")
-            result = temporal_execute(
-                route.source_text, locator, authenticated_actor, conversation_context
+            result = _invoke_dependent_executor(
+                temporal_execute,
+                route.source_text,
+                locator,
+                authenticated_actor,
+                conversation_context,
+                dependent_handoff,
             )
         else:
             executor = application_executors.get(route.capability_id)
             if executor is None:
                 return _route_failure(locator, "APPLICATION_EXECUTOR_UNAVAILABLE")
-            result = executor(route.source_text, locator, authenticated_actor, conversation_context)
+            result = _invoke_dependent_executor(
+                executor,
+                route.source_text,
+                locator,
+                authenticated_actor,
+                conversation_context,
+                dependent_handoff,
+            )
         if not isinstance(result, ApplicationResult):
             return _route_failure(locator, "APPLICATION_RESULT_INVALID")
         if result.request_id != locator:
@@ -571,14 +629,34 @@ def _invoke_core(
     locator: str,
     authenticated_actor: AuthenticatedActorContext | None,
     conversation_context: Sequence[Mapping[str, str]],
+    dependent_handoff: DependentRouteHandoff | None = None,
 ) -> ApplicationResult:
     """Call Core with one exact source and the outer request's captured prior context."""
+    kwargs: dict[str, object] = {
+        "conversation_context_override": conversation_context,
+    }
+    if dependent_handoff is not None:
+        kwargs["dependent_handoff"] = dependent_handoff
     return core_execute(
         source_text,
         locator,
         authenticated_actor,
-        conversation_context_override=conversation_context,
+        **kwargs,
     )
+
+
+def _invoke_dependent_executor(
+    executor: ApplicationExecutor,
+    source: str,
+    locator: str,
+    actor: AuthenticatedActorContext | None,
+    context: Sequence[Mapping[str, str]],
+    handoff: DependentRouteHandoff | None,
+) -> ApplicationResult:
+    """Call a route executor, supplying private continuity only when declared."""
+    if handoff is None:
+        return executor(source, locator, actor, context)
+    return executor(source, locator, actor, context, dependent_handoff=handoff)  # type: ignore[call-arg]
 
 
 def _router_outcome(outer_request_id: str, code: str) -> ApplicationResult:

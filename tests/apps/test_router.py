@@ -133,31 +133,106 @@ def test_overlap_whitespace_gaps_and_repeated_text_are_mapped_sequentially() -> 
     assert validate_route_plan(repeated, "same same", catalog()) == repeated
 
 
-def test_internal_backward_dependency_is_validated_without_expanding_provider_contract() -> None:
+def test_backward_dependency_is_validated_with_closed_provider_contract() -> None:
     """Allow only a typed route edge to an already validated predecessor."""
     valid = RoutePlan(
         RouteOutcome.ROUTE,
-        (Route("core", "First."), Route("core", "Second.", depends_on=0)),
+        (
+            Route("core", "First."),
+            Route("core", "Second.", depends_on=0, dependent_mention="Second"),
+        ),
     )
     assert validate_route_plan(valid, "First. Second.", catalog()) == valid
     for dependency in (1, 2):
         invalid = RoutePlan(
             RouteOutcome.ROUTE,
-            (Route("core", "First."), Route("core", "Second.", depends_on=dependency)),
+            (
+                Route("core", "First."),
+                Route("core", "Second.", depends_on=dependency, dependent_mention="Second"),
+            ),
         )
         with pytest.raises(RouterError, match="existing earlier"):
             validate_route_plan(invalid, "First. Second.", catalog())
     for dependency in ("0", True, -1):
         with pytest.raises(RouterError, match="non-negative integer"):
-            Route("core", "Second.", depends_on=dependency)  # type: ignore[arg-type]
+            Route("core", "Second.", depends_on=dependency, dependent_mention="Second")  # type: ignore[arg-type]
 
-    with pytest.raises(RouterError, match="only capability_id and source_text"):
+    with pytest.raises(RouterError, match="closed routing fields"):
         parse_route_plan(
             plan(
                 "ROUTE",
                 [{"capability_id": "core", "source_text": "First.", "depends_on": 0}],
             )
         )
+
+
+def test_internal_dependent_mention_is_exact_and_requires_a_predecessor() -> None:
+    """Keep pronoun metadata private, bounded, and tied to its own exact route source."""
+    valid = RoutePlan(
+        RouteOutcome.ROUTE,
+        (Route("core", "Hablé con Eric."), Route("core", "Iré con él.", 0, "él")),
+    )
+    assert validate_route_plan(valid, "Hablé con Eric. Iré con él.", catalog()) == valid
+    with pytest.raises(RouterError, match="requires both predecessor"):
+        validate_route_plan(
+            RoutePlan(RouteOutcome.ROUTE, (Route("core", "Iré con él.", dependent_mention="él"),)),
+            "Iré con él.",
+            catalog(),
+        )
+    with pytest.raises(RouterError, match="exact route substring"):
+        validate_route_plan(
+            RoutePlan(
+                RouteOutcome.ROUTE,
+                (Route("core", "Eric."), Route("core", "Iré con él.", 0, "Eric")),
+            ),
+            "Eric. Iré con él.",
+            catalog(),
+        )
+
+
+def test_router_provider_accepts_strict_grounded_dependency_triplet() -> None:
+    """A model cannot identify a person, only route a grounded exact mention backward."""
+    source = "Ayer hablé con Eric. Mañana iré al cine con él. Hoy compré pan."
+    spans = [
+        {
+            "capability_id": "temporal",
+            "source_text": "Ayer hablé con Eric.",
+            "depends_on": None,
+            "dependent_mention": None,
+        },
+        {
+            "capability_id": "temporal",
+            "source_text": "Mañana iré al cine con él.",
+            "depends_on": 0,
+            "dependent_mention": "él",
+        },
+        {
+            "capability_id": "temporal",
+            "source_text": "Hoy compré pan.",
+            "depends_on": None,
+            "dependent_mention": None,
+        },
+    ]
+    decoded = validate_route_plan(parse_route_plan(plan("ROUTE", spans)), source, catalog())
+    assert decoded.routes[1].depends_on == 0
+    assert decoded.routes[1].dependent_mention == "él"
+    schema = route_plan_json_schema(catalog())
+    fields = schema["properties"]["routes"]["items"]
+    assert set(fields["required"]) == {
+        "capability_id",
+        "source_text",
+        "depends_on",
+        "dependent_mention",
+    }
+    assert fields["properties"]["depends_on"]["type"] == ["integer", "null"]
+    for invalid in [
+        {**spans[1], "depends_on": 2},
+        {**spans[1], "dependent_mention": "Eric"},
+        {**spans[1], "dependent_mention": None},
+    ]:
+        broken = [spans[0], invalid, spans[2]]
+        with pytest.raises(RouterError):
+            validate_route_plan(parse_route_plan(plan("ROUTE", broken)), source, catalog())
 
 
 def test_parser_is_closed_and_checks_outcome_route_cardinality() -> None:

@@ -246,3 +246,61 @@ def test_calendar_day_emits_grounded_reference_for_prior_route_handoff(tmp_path:
     day = (vault / "calendar/days/2026-10-07.md").read_text()
     assert "[[" in day and "Eric" in day
     assert evidence.source_content_guard and evidence.canonical_content_guard
+
+
+def test_dependent_guard_rejects_stale_or_marker_free_reference(tmp_path: Path) -> None:
+    """Never authorize a stale predecessor, wrong ID, or a dependent unlinked fact."""
+    import pytest
+
+    from odyssey_core.application import DependentReferenceGuard, WritePreflightGuardError
+
+    source = _unit(
+        "Laura", ("Hoy hablé con {{ref:0}}.",), (KnowledgeReference(1, "person", "Eric"),)
+    )
+    result = _run(tmp_path, source, _unit("Eric", reference_lookup_only=True))
+    assert len(result.canonical_reference_evidence) == 1
+    evidence = result.canonical_reference_evidence[0]
+    guard = DependentReferenceGuard("él", evidence)
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    repo = VaultRepository(tmp_path / "vault")
+    action = WriteAction(
+        (
+            _unit(
+                "Otra", ("Iré al cine con {{ref:0}}.",), (KnowledgeReference(1, "person", "él"),)
+            ),
+            _unit("Eric", reference_lookup_only=True),
+        )
+    )
+    correct = (
+        UnitTargetPreflight(0, WriteTargetOutcome.CREATE, "otra-id", "Otra", "Otra.md"),
+        UnitTargetPreflight(
+            1, WriteTargetOutcome.UPDATE, "eric-id", "Eric", "Eric.md", reference_only=True
+        ),
+    )
+    guard(action, correct, repo, schema)
+    with pytest.raises(WritePreflightGuardError, match="REFERENCE_MARKER_REQUIRED"):
+        guard(
+            WriteAction(
+                (
+                    _unit(
+                        "Otra", ("Iré al cine con él.",), (KnowledgeReference(1, "person", "él"),)
+                    ),
+                    _unit("Eric", reference_lookup_only=True),
+                )
+            ),
+            correct,
+            repo,
+            schema,
+        )
+    wrong = (
+        correct[0],
+        UnitTargetPreflight(1, WriteTargetOutcome.UPDATE, "other-id", "Eric", "Other.md"),
+    )
+    with pytest.raises(WritePreflightGuardError, match="REFERENCE_MARKER_REQUIRED"):
+        guard(action, wrong, repo, schema)
+
+    source_note = next((tmp_path / "vault").glob("Laura*.md"))
+    original = source_note.read_text()
+    source_note.write_text(original + "\n", encoding="utf-8")
+    with pytest.raises(WritePreflightGuardError, match="CANONICAL_EVIDENCE_STALE"):
+        guard(action, correct, repo, schema)

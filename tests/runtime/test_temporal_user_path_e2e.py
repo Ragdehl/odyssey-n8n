@@ -10,10 +10,21 @@ from types import SimpleNamespace
 
 from odyssey_apps import ApplicationCatalog, Route, RouteOutcome, RoutePlan
 from odyssey_apps.calendar import CalendarQueryService
-from odyssey_core.application import ApplicationStatus, execute_request
+from odyssey_core.application import (
+    ApplicationStatus,
+    DependentReferenceGuard,
+    execute_request,
+)
 from odyssey_core.context import ContextIndex
 from odyssey_core.note_queries import NotesQueryService
-from odyssey_core.request_planning import KnowledgeUnit, RequestPlan, SelectionCriteria, WriteAction
+from odyssey_core.notes import Note, serialize_note
+from odyssey_core.request_planning import (
+    KnowledgeReference,
+    KnowledgeUnit,
+    RequestPlan,
+    SelectionCriteria,
+    WriteAction,
+)
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import TemporalAnchor
 from odyssey_runtime.routing import execute_routed_request
@@ -61,6 +72,38 @@ def _day_plan(date: str, fact: str, temporal: str) -> RequestPlan:
     return RequestPlan((WriteAction((unit,)),), ())
 
 
+def _linked_day_plan(
+    date: str,
+    fact: str,
+    mention: str,
+    temporal: str,
+    *,
+    target_name: str | None = None,
+    create_person: bool = False,
+) -> RequestPlan:
+    """Build a real Calendar Day fact plus Core-owned person reference lookup helper."""
+    anchor = TemporalAnchor.from_value(temporal)
+    day = KnowledgeUnit(
+        SelectionCriteria(None, date, "calendar_day", (), None),
+        "record",
+        (),
+        (),
+        (fact,),
+        (KnowledgeReference(1, "person", mention),),
+        fact_temporal_anchors=((anchor,),),
+    )
+    person = KnowledgeUnit(
+        SelectionCriteria(target_name or mention, target_name or mention, "person", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=not create_person,
+    )
+    return RequestPlan((WriteAction((day, person)),), ())
+
+
 def _core_with_plan(
     repository: VaultRepository,
     source: str,
@@ -96,6 +139,26 @@ def _visible_day(calendar: CalendarQueryService, date: str) -> list[str]:
     ]
 
 
+def _write_existing_eric(vault: Path) -> None:
+    """Seed one schema-valid canonical person for the existing-identity handoff sentinel."""
+    note = Note(
+        {
+            "id": "eric-id",
+            "name": "Eric",
+            "type": "person",
+            "aliases": [],
+            "created_at": NOW,
+            "updated_at": NOW,
+            "created_by": {"human": None, "app": "test"},
+            "updated_by": {"human": None, "app": "test"},
+            "revision": 1,
+            "schema_version": 3,
+        },
+        "",
+    )
+    (vault / "Eric.md").write_text(serialize_note(note), encoding="utf-8")
+
+
 def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_path: Path) -> None:
     """Keep independently routed date facts separate through real Core persistence."""
     vault = tmp_path / "vault"
@@ -117,7 +180,10 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
             plan = _day_plan("2026-10-04", "Vi a Luis.", "2026-10-04")
         else:  # pragma: no cover - closed frozen route set
             raise AssertionError(text)
-        return _core_with_plan(repository, text, locator, plan)
+        result = _core_with_plan(repository, text, locator, plan)
+        if text == "Ayer hablé con Eric.":
+            assert result.canonical_reference_evidence
+        return result
 
     prepared = Barrier(2, timeout=3)
 
@@ -171,33 +237,59 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
     assert "Vi a Luis." in _visible_day(calendar, "2026-10-04")
 
 
-def test_dependent_erik_like_route_cannot_write_without_canonical_reference_handoff(
+def test_dependent_eric_route_hands_one_current_core_identity_to_the_normal_writer(
     tmp_path: Path,
 ) -> None:
-    """Block an omitted-subject route while preserving real Core writes from unrelated spans."""
+    """Persist an exact pronoun link only through predecessor carrier and Core guard."""
     vault = tmp_path / "vault"
     vault.mkdir()
+    _write_existing_eric(vault)
     repository = VaultRepository(vault)
-    source = "Ayer hablé con Erik. Mañana iré al cine con él. Hoy compré pan."
+    source = "Ayer hablé con Eric. Mañana iré al cine con él. Hoy compré pan."
     router = FixedRouter(
         (
-            Route("temporal", "Ayer hablé con Erik."),
-            Route("temporal", "Mañana iré al cine con él.", depends_on=0),
+            Route("temporal", "Ayer hablé con Eric."),
+            Route("temporal", "Mañana iré al cine con él.", depends_on=0, dependent_mention="él"),
             Route("temporal", "Hoy compré pan."),
         )
     )
     calls: list[str] = []
 
-    def temporal(text, locator, actor, conversation_context):
+    def temporal(text, locator, actor, conversation_context, *, dependent_handoff=None):
         del actor, conversation_context
         calls.append(text)
-        if text == "Ayer hablé con Erik.":
-            plan = _day_plan("2026-10-03", "Hablé con Erik.", "2026-10-03")
+        if text == "Ayer hablé con Eric.":
+            plan = _linked_day_plan("2026-10-03", "Hablé con {{ref:0}}.", "Eric", "2026-10-03")
+        elif text == "Mañana iré al cine con él.":
+            assert dependent_handoff is not None
+            assert dependent_handoff.mention == "él"
+            assert dependent_handoff.evidence.canonical_name == "Eric"
+            plan = _linked_day_plan(
+                "2026-10-05", "Iré al cine con {{ref:0}}.", "él", "2026-10-05", target_name="Eric"
+            )
+            return execute_request(
+                text,
+                planner=SimpleNamespace(plan=lambda request: plan),
+                repository=repository,
+                schema=SCHEMA,
+                context_index=object(),
+                semantic_index=object(),
+                embedder=object(),
+                contextual_reasoner=object(),
+                actor="user-path-e2e",
+                now=NOW,
+                context_limit=5,
+                request_id_factory=lambda: locator,
+                write_preflight_guard=DependentReferenceGuard(
+                    dependent_handoff.mention, dependent_handoff.evidence
+                ),
+            )
         elif text == "Hoy compré pan.":
             plan = _day_plan("2026-10-04", "Compré pan.", "2026-10-04")
-        else:  # The dependent text must never reach planning or Core persistence.
+        else:  # pragma: no cover - closed frozen route set
             raise AssertionError(text)
-        return _core_with_plan(repository, text, locator, plan)
+        result = _core_with_plan(repository, text, locator, plan)
+        return result
 
     result = execute_routed_request(
         user_request=source,
@@ -211,15 +303,14 @@ def test_dependent_erik_like_route_cannot_write_without_canonical_reference_hand
         temporal_execute=temporal,
     )
 
-    assert calls == ["Ayer hablé con Erik.", "Hoy compré pan."]
-    assert result.status is ApplicationStatus.PARTIAL
+    assert calls == ["Ayer hablé con Eric.", "Mañana iré al cine con él.", "Hoy compré pan."]
+    assert result.status is ApplicationStatus.COMPLETED
     dependent = result.execution_flow["routes"][1]
-    assert dependent["status"] == "needs_attention"
-    assert dependent["reason"] == "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"
-    assert "Hablé con Erik." in _visible_day(_calendar(repository, tmp_path), "2026-10-03")
+    assert dependent["status"] == "completed"
+    assert "Hablé con Eric." in _visible_day(_calendar(repository, tmp_path), "2026-10-03")
+    assert "Iré al cine con Eric." in _visible_day(_calendar(repository, tmp_path), "2026-10-05")
     stored = "\n".join(path.read_text(encoding="utf-8") for path in vault.rglob("*.md"))
-    assert "Mañana iré al cine con él." not in stored
-    assert "[[Erik]]" not in stored
+    assert stored.count("[[Eric|Eric]]") == 2
 
 
 def test_parallel_planned_facts_same_calendar_day_apply_in_order(tmp_path: Path) -> None:

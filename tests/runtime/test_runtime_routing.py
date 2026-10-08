@@ -303,7 +303,7 @@ def test_dependency_blocks_without_sibling_text_and_independent_preparation_cont
             RouteOutcome.ROUTE,
             (
                 Route("calendar", "Erik arrived."),
-                Route("calendar", "He left.", depends_on=0),
+                Route("calendar", "He left.", depends_on=0, dependent_mention="He"),
                 Route("calendar", "Independent."),
             ),
         )
@@ -352,7 +352,7 @@ def test_dependency_does_not_retry_or_run_after_failed_predecessor() -> None:
             RouteOutcome.ROUTE,
             (
                 Route("core", "First."),
-                Route("core", "Dependent.", depends_on=0),
+                Route("core", "Dependent.", depends_on=0, dependent_mention="Dependent"),
                 Route("core", "Independent."),
             ),
         )

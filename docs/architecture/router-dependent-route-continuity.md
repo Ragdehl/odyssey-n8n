@@ -118,6 +118,23 @@ scheduling, change a Router provider schema/prompt, or activate any production b
 future handoff still needs its own Core plan-boundary contract, vertical dependent-route tests,
 and the separately authorized focused Luna gate before activation.
 
+## Milestone C — internal dependent-route Core handoff (implemented in DEV source)
+
+`Route.dependent_mention` is internal FixedRouter-only metadata paired with one backward
+`depends_on` edge. It must be an exact substring of the successor source and is not accepted by
+the Router provider schema or prompt. After a completed predecessor, runtime admits a successor
+only when that predecessor has exactly one private `CanonicalReferenceEvidence` item. It passes
+the mention and carrier to the normal Core/Temporal executor; no sibling source text or raw ID is
+given to planning.
+
+Core exposes only bounded `mention → canonical name/type` evidence to ordinary planning. Before a
+dependent write, its added preflight guard re-reads both predecessor source and canonical target,
+checks their ID/content guards, and requires a fact-bearing reference marker for the dependent
+mention whose resolved target is exactly the carrier ID/name. Missing, ambiguous, changed, or
+marker-free plans defer before mutation. Independent preparation remains parallel and routed
+writes remain serial/idempotent. This is provider-free FixedRouter activation only; Router
+provider prompt/schema remain unchanged and no provider gate was run.
+
 ## Architecture challenge
 
 **PROCEED, with activation guard.** A simple 'merge adjacent dependent routes'
@@ -153,3 +170,19 @@ only activate new model output after there is a validated narrow Core handoff.
 `node --test tests/odyssey_web_*.test.mjs tests/odyssey_workflow_partial.test.mjs`:
 123 passed; changed-file Ruff lint/format and `git diff --check` passed.
 No runtime deployment or user-data rewrite is implied by this milestone.
+
+## Provider gate: Router with canonical dependency output
+
+The production Router contract (GPT-6 Luna, low) was validated on 2026-10-08
+using the dedicated six-case synthetic, non-mutating, single-attempt-per-case
+gate. All six passed: the Eric pronoun dependency and unrelated independent
+branch, independent Core facts, single Temporal assertion, implicit/omitted
+subject (kept together), independent Temporal splits, and shared participants.
+Measured estimated API usage was around $0.0013 under the gate's conservative
+10% regional allowance. The immutable result is
+`benchmarks/router_dependency_live_v1/results/20261008-one-shot.json`;
+accepted hash pins were updated only **after** inspecting that successful live
+evidence, retaining historical old-contract hashes. This gate proves Router's
+output contract, not downstream provider behavior on all natural-language inputs
+or every possible canonical write. Do not use it to claim that all pronouns
+are automatically linked.
