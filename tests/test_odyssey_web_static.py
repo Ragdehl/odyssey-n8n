@@ -351,9 +351,11 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
     }
 
     workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")
+    inventory = (Path("deploy") / "odyssey-dev-product-routes.tsv").read_text(encoding="utf-8")
     for route in routes:
         assert f"path: '{route}'" in workflow
         assert f"/odyssey-web/{route}" in workflow
+        assert f"GET\t/api/{route}\tstatic" in inventory
         assert "text/javascript; charset=utf-8" in workflow
 
     operator = Path("scripts/odyssey-dev").read_text(encoding="utf-8")

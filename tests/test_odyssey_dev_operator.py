@@ -305,6 +305,7 @@ def valid_publication_rows() -> list[dict[str, object]]:
                 ("GET", "calendar.js"),
                 ("GET", "calendar-client.js"),
                 ("GET", "progress.js"),
+                ("GET", "request-flow.js"),
             ),
         },
     ]
@@ -383,6 +384,7 @@ def test_dev_route_inventory_lists_every_browser_and_workflow_product_path() -> 
         "/api/calendar.js",
         "/api/calendar-client.js",
         "/api/progress.js",
+        "/api/request-flow.js",
         "/api/environment.js",
         "/api/request",
         "/api/conversation",
