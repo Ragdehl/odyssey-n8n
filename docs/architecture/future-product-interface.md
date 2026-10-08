@@ -504,3 +504,39 @@ not mock implementations: 22 stages/four routes, 65-stage overflow fallback,
 real browser product validation, persisted 22-stage conversation detail, and
 both client-only failure states. No prompts, credentials, canonical notes,
 mutation scheduling, or Cloudflare settings are modified.
+
+### 2026-10-08 — split Temporal cohort preflight before Git
+
+Real DEV tests with three and four routed date statements yielded partial writes
+and an incompatible cross-route calendar year (an October day saved as 2025,
+while another October route saved in 2026). The root cause is that independent
+Temporal interpretation had no request-wide validation before serial Core
+writes. A successful single fragment is insufficient evidence that a split
+calendar batch is consistent.
+
+During the already configured parallel *pure* preparation, Temporal now exposes
+its typed, grounded exact date anchors and its measured interpreter stage in a
+small trusted `PreparedExecution` adapter. The router coordinator checks **all**
+Temporal routes before executing **any** Core/Git route: reject the cohort when
+one prepared date is unresolved/failed, or when year interpretations conflict
+without explicit source years supporting the change. Missing built-in sibling
+preparations also stop the batch. Explicit 2025-to-2026 references are allowed.
+The original source spans and Core's existing decision authority remain intact;
+no extra LLM or date guessing is introduced. A rejected cohort preserves the
+route graph and per-branch `temporal.coherence` failure evidence and returns a
+specific explanatory message. Users can state the years explicitly and send a
+new message if needed.
+
+Separately, the shared Temporal payload validator rejects an exact date/datetime
+that contradicts an explicit four-digit year in its own grounded mention.
+This is an additional safety gate, not an alternate temporal interpreter.
+
+The provider-free regressions replay the real Alpha/Beta/Gamma and
+Delta/Epsilon/Zeta/Eta shapes through Router → parallel interpretation →
+Core's real disposable VaultRepository: no partial Markdown may appear after a
+conflict. Cases for a failed sibling preparation, an explicitly qualified
+cross-year batch, and explicit-year mismatch are also covered. No historical
+user-owned Markdown has been edited; the already incorrect live 2025 note was
+left untouched for deliberate review. The next separate change is generic
+intra-request referential continuity (Spanish implicit subjects and explicit
+anaphora) without creating a library of name-specific or verb-specific rules.

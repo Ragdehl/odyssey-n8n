@@ -142,3 +142,31 @@ test("overflowing optional stage telemetry cannot turn a saved write into a red 
   assert.equal(response.request_detail.flow, undefined);
   assert.equal(validateProductResponse(response).status, "completed");
 });
+
+
+test("inconsistent split Temporal returns actionable safe message and retains blocked route graph", () => {
+  const names = ["temporal.interpretation", "temporal.coherence"];
+  const stages = ["application.router", ...names, ...names].map(name => ({
+    name, outcome: name === "temporal.coherence" ? "failed" : "completed",
+    duration_ms: name === "temporal.coherence" ? 0 : 3, model: null,
+    reasoning_effort: null, error_category: name === "temporal.coherence" ? "TEMPORAL_COHORT_YEAR_CONFLICT" : null,
+    provider_calls: [],
+  }));
+  const routes = ["El 20 de octubre", "El 22 de octubre"].map((text, index) => ({
+    capability: "temporal", text, stage_count: 2, status: "needs_attention",
+    temporal: [{source: text, value: index ? "2026-10-22" : "2025-10-20"}],
+    plan: [], entities: [], writes: [], steps: names.map(name => ({name, input: text, output: ""})),
+  }));
+  const result = execute({
+    request_id: "synthetic-partial", status: "needs_attention",
+    product_outcome: "CANNOT_ANSWER", product_reason: "TEMPORAL_COHORT_YEAR_CONFLICT",
+    affected_stable_note_ids: [], actions: [], operational: {stages, total_duration_ms: 8},
+    execution_flow: {version: 1, input: "El 20 de octubreEl 22 de octubre", parallel_preparation: true, routes},
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.kind, "cannot_answer");
+  assert.match(result.message, /años incompatibles/);
+  assert.match(result.message, /No he guardado nada/);
+  assert.equal(result.request_detail.flow.routes.length, 2);
+  assert.equal(result.request_detail.changes.affected_stable_note_ids.length, 0);
+});

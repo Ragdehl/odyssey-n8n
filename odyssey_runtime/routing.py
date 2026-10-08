@@ -10,7 +10,7 @@ import hashlib
 import re
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Protocol
 
@@ -73,6 +73,104 @@ RoutePreparer = Callable[
     [str, Sequence[Mapping[str, str]]],
     ApplicationExecutor,
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedExecution:
+    """Carry trusted preflight facts from a pure application interpretation.
+
+    Dates come from typed validated Temporal output. They never grant Core mutation authority.
+    ``None`` means that an application has no temporal preflight metadata.
+    """
+
+    executor: ApplicationExecutor
+    temporal_dates: tuple[str, ...] | None = None
+    temporal_resolved: bool | None = None
+    temporal_stage: OperationalStage | None = None
+    temporal_evidence: tuple[tuple[str, str], ...] = ()
+
+    def __call__(
+        self,
+        source_text: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+    ) -> ApplicationResult:
+        """Execute the original validated callback without extra preparation or mutation."""
+        return self.executor(source_text, request_id, authenticated_actor, conversation_context)
+
+
+def _temporal_cohort_issue(
+    routes: Sequence[Route], prepared: Mapping[int, ApplicationExecutor]
+) -> str | None:
+    """Reject contradictory split date evidence before any canonical route write.
+
+    A connected batch of two or more standalone Temporal routes cannot commit partially
+    when any part lacks an exact date, or when unqualified routes disagree about years.
+    Explicit year-qualified references may legitimately span multiple calendar years.
+    Unknown third-party preparers provide no semantic evidence and remain unchanged.
+    """
+    temporal = [
+        (i, route)
+        for i, route in enumerate(routes)
+        if route.capability_id == TEMPORAL_CAPABILITY_ID
+    ]
+    if len(temporal) < 2:
+        return None
+    if not all(isinstance(prepared.get(i), PreparedExecution) for i, _ in temporal):
+        # Existing third-party adapters remain unchanged. If at least one
+        # built-in Temporal route is present, a missing sibling preparation
+        # must never permit earlier writes before the failure is discovered.
+        return (
+            "TEMPORAL_COHORT_UNRESOLVED"
+            if any(isinstance(prepared.get(i), PreparedExecution) for i, _ in temporal)
+            else None
+        )
+    snapshots = [prepared[i] for i, _ in temporal]
+    if any(item.temporal_resolved is None for item in snapshots):
+        return None
+    if any(not item.temporal_resolved or not item.temporal_dates for item in snapshots):
+        return "TEMPORAL_COHORT_UNRESOLVED"
+    years = {date[:4] for item in snapshots for date in item.temporal_dates or ()}
+    if len(years) > 1:
+        explicit = {
+            year
+            for _, route in temporal
+            for year in re.findall(r"(?<!\d)(?:19|20)\d{2}(?!\d)", route.source_text)
+        }
+        if not years.issubset(explicit):
+            return "TEMPORAL_COHORT_YEAR_CONFLICT"
+    return None
+
+
+def _cohort_blocked_result(
+    locator: str, prepared: ApplicationExecutor | None, issue: str
+) -> ApplicationResult:
+    """Retain real Temporal preparation evidence without executing any blocked mutation."""
+    observed = prepared if isinstance(prepared, PreparedExecution) else None
+    stages: tuple[OperationalStage, ...] = (
+        (observed.temporal_stage,) if observed and observed.temporal_stage is not None else ()
+    )
+    stage = OperationalStage(
+        "temporal.coherence", OperationalOutcome.FAILED, 0.0, error_category=issue
+    )
+    references = (
+        [
+            {"source": source[:120], "value": date[:80]}
+            for source, date in observed.temporal_evidence[:8]
+        ]
+        if observed is not None
+        else []
+    )
+    return ApplicationResult(
+        locator,
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        planning_error=issue,
+        operational=OperationalEvidence(stages=(*stages, stage)),
+        execution_flow={"temporal": references},
+    )
 
 
 def route_execution_id(outer_request_id: str, ordinal: int) -> str:
@@ -242,17 +340,39 @@ def execute_routed_request(
                 for ordinal, route in enumerate(plan.routes)
                 if route.capability_id in preparers
             }
+            # Resolve all pure interpretations before any Core/Git mutation.
+            # This check cannot run after the first route has already written.
+            prepared_callbacks: dict[int, ApplicationExecutor] = {}
+            failed_preparations: set[int] = set()
+            for ordinal, future in scheduled.items():
+                try:
+                    callback = future.result()
+                    if not callable(callback):
+                        raise TypeError("route preparer returned no executor")
+                    prepared_callbacks[ordinal] = callback
+                except Exception:
+                    failed_preparations.add(ordinal)
+            issue = _temporal_cohort_issue(plan.routes, prepared_callbacks)
+            if issue is not None:
+                subresults.extend(
+                    _cohort_blocked_result(
+                        route_execution_id(outer_request_id, ordinal),
+                        prepared_callbacks.get(ordinal),
+                        issue,
+                    )
+                    for ordinal, route in enumerate(plan.routes)
+                )
+                return _routed_result(
+                    outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
+                )
             for ordinal, route in enumerate(plan.routes):
                 locator = route_execution_id(outer_request_id, ordinal)
                 callback: ApplicationExecutor | None = None
+                if ordinal in failed_preparations:
+                    subresults.append(_route_failure(locator, "APPLICATION_PREPARATION_FAILED"))
+                    continue
                 if ordinal in scheduled:
-                    try:
-                        callback = scheduled[ordinal].result()
-                        if not callable(callback):
-                            raise TypeError("route preparer returned no executor")
-                    except Exception:
-                        subresults.append(_route_failure(locator, "APPLICATION_PREPARATION_FAILED"))
-                        continue
+                    callback = prepared_callbacks[ordinal]
                 subresults.append(
                     _execute_route(
                         route,
@@ -265,12 +385,26 @@ def execute_routed_request(
                         prepared_executor=callback,
                     )
                 )
+    return _routed_result(
+        outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
+    )
+
+
+def _routed_result(
+    outer_request_id: str,
+    user_request: str,
+    routes: Sequence[Route],
+    subresults: Sequence[ApplicationResult],
+    scheduled_routes: bool,
+    stage: OperationalStage,
+) -> ApplicationResult:
+    """Attach real route-local steps, including blocked preflight branches, in source order."""
     # Group flattened stage telemetry using the true per-route result boundaries.
     # Preparing route models may overlap; canonical execution remains serial.
     route_flow = {
         "version": 1,
         "input": user_request[:4096],
-        "parallel_preparation": bool(len(plan.routes) > 1 and scheduled_routes),
+        "parallel_preparation": bool(len(routes) > 1 and scheduled_routes),
         "routes": [
             {
                 "capability": route.capability_id,
@@ -283,7 +417,7 @@ def execute_routed_request(
                 "writes": list((result.execution_flow or {}).get("writes", []))[:8],
                 "steps": _route_stage_io(route.source_text, result),
             }
-            for route, result in zip(plan.routes, subresults, strict=True)
+            for route, result in zip(routes, subresults, strict=True)
         ],
     }
     return _prepend_router_stage(

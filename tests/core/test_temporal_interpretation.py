@@ -286,3 +286,19 @@ def test_repeated_same_temporal_wording_preserves_occurrence_multiplicity() -> N
         ("hoy", "2026-10-04"),
         ("hoy", "2026-10-04"),
     ]
+
+
+def test_exact_temporal_explicit_year_cannot_be_reinterpreted_by_luna() -> None:
+    """A 2026 date in source must never become a plausible but wrong 2025 note."""
+    with pytest.raises(TemporalInterpreterError, match="Explicit year"):
+        parse_temporal_interpretation(
+            {"mentions": [mention("el 20 de octubre de 2026", exact_date="2025-10-20")]},
+            "Vi a Ana el 20 de octubre de 2026.",
+            timezone="Europe/Paris",
+        )
+    resolved = parse_temporal_interpretation(
+        {"mentions": [mention("el 20 de octubre de 2026", exact_date="2026-10-20")]},
+        "Vi a Ana el 20 de octubre de 2026.",
+        timezone="Europe/Paris",
+    )
+    assert resolved.mentions[0].resolution.exact_date == "2026-10-20"

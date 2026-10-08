@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -160,6 +161,12 @@ def parse_temporal_interpretation(
             )
         except TemporalValueError as error:
             raise TemporalInterpreterError("Temporal resolution is invalid") from error
+        # A provider cannot silently reinterpret an explicit calendar year.
+        # This is exact-source validation, not a language-specific date parser.
+        years = set(re.findall(r"(?<!\d)(?:19|20)\d{2}(?!\d)", temporal_text))
+        resolved = resolution.exact_date or resolution.exact_datetime
+        if len(years) == 1 and resolved is not None and resolved[:4] not in years:
+            raise TemporalInterpreterError("Explicit year conflicts with resolved date")
         mentions.append(TemporalMention(temporal_text, resolution))
     return TemporalInterpretation(source_text, tuple(mentions))
 

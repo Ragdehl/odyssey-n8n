@@ -260,3 +260,176 @@ def test_exact_datetime_user_path_renders_canonical_clock_in_calendar(tmp_path: 
     markdown = repository.read_text("calendar/days/2026-10-05.md")
     assert "recorded_at=2026-10-04T17:35:00+02:00" in markdown
     assert "temporal=2026-10-05T15:35:00+02:00" in markdown
+
+
+def test_split_october_dates_mixed_years_abort_before_any_day_write(tmp_path: Path) -> None:
+    """Real Delta/Epsilon/Zeta/Eta failure must not save a sibling in the wrong year."""
+    from odyssey_runtime.routing import PreparedExecution
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    spans = (
+        "El 19 de octubre hice la prueba gráfica Delta.",
+        " El 20 de octubre hice la prueba gráfica Épsilon.",
+        " El 21 de octubre hice la prueba gráfica Zeta.",
+        " El 22 de octubre hice la prueba gráfica Eta.",
+    )
+    source = "".join(spans)
+    normalized = ("2026-10-19", "2025-10-20", "2026-10-21", "2026-10-22")
+    router = FixedRouter(tuple(Route("temporal", item) for item in spans))
+    prepared_count = []
+    committed = []
+
+    def prepare(text, context):
+        assert not context
+        date = normalized[spans.index(text)]
+        prepared_count.append(date)
+
+        def write(route, locator, actor, prior):
+            del actor, prior
+            committed.append(date)
+            return _core_with_plan(repository, route, locator, _day_plan(date, "Test.", date))
+
+        return PreparedExecution(write, temporal_dates=(date,), temporal_resolved=True)
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="october-mixed-year-e2e",
+        router=router,
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("no Core bypass")
+        ),
+        application_executors={},
+        route_preparers={"temporal": prepare},
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.planning_error == "TEMPORAL_COHORT_YEAR_CONFLICT"
+    assert sorted(prepared_count) == sorted(normalized)
+    assert committed == []
+    assert list(vault.rglob("*.md")) == []
+    assert result.execution_flow is not None
+    assert len(result.execution_flow["routes"]) == 4
+    assert all(route["status"] == "needs_attention" for route in result.execution_flow["routes"])
+    assert all(
+        route["steps"][-1]["name"] == "temporal.coherence"
+        for route in result.execution_flow["routes"]
+    )
+
+
+def test_split_temporal_unknown_aborts_whole_batch_before_write(tmp_path: Path) -> None:
+    """Alpha UNSPECIFIED must stop Beta/Gamma from leaving a partial calendar."""
+    from odyssey_runtime.routing import PreparedExecution
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    spans = (
+        "El lunes 12 de octubre hice la prueba técnica Alfa.",
+        " El martes 13 de octubre hice la prueba técnica Beta.",
+        " El miércoles 14 de octubre hice la prueba técnica Gamma.",
+    )
+    normalized = (None, "2026-10-13", "2026-10-14")
+    committed = []
+
+    def prepare(text, context):
+        del context
+        date = normalized[spans.index(text)]
+
+        def execute(route, locator, actor, prior):
+            del actor, prior
+            committed.append(route)
+            assert date is not None
+            return _core_with_plan(repository, route, locator, _day_plan(date, "Test.", date))
+
+        return PreparedExecution(
+            execute, temporal_dates=(date,) if date else (), temporal_resolved=date is not None
+        )
+
+    result = execute_routed_request(
+        user_request="".join(spans),
+        outer_request_id="october-unspecified-e2e",
+        router=FixedRouter(tuple(Route("temporal", item) for item in spans)),
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("no bypass")),
+        application_executors={},
+        route_preparers={"temporal": prepare},
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.planning_error == "TEMPORAL_COHORT_UNRESOLVED"
+    assert committed == []
+    assert list(vault.rglob("*.md")) == []
+
+
+def test_year_qualified_split_routes_can_commit_both_calendar_years(tmp_path: Path) -> None:
+    """A deliberately stated year change is not confused with mixed model guesses."""
+    from odyssey_runtime.routing import PreparedExecution
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    spans = ("El 31 de diciembre de 2025 vi a Ana.", " El 1 de enero de 2026 vi a Luis.")
+    dates = ("2025-12-31", "2026-01-01")
+
+    def prepare(text, context):
+        del context
+        date = dates[spans.index(text)]
+
+        def execute(route, locator, actor, prior):
+            del actor, prior
+            return _core_with_plan(repository, route, locator, _day_plan(date, "Test.", date))
+
+        return PreparedExecution(execute, temporal_dates=(date,), temporal_resolved=True)
+
+    result = execute_routed_request(
+        user_request="".join(spans),
+        outer_request_id="explicit-year-boundary-e2e",
+        router=FixedRouter(tuple(Route("temporal", item) for item in spans)),
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("no bypass")),
+        application_executors={},
+        route_preparers={"temporal": prepare},
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.affected_stable_note_ids == ("date:2025-12-31", "date:2026-01-01")
+    assert (vault / "calendar/days/2025-12-31.md").exists()
+    assert (vault / "calendar/days/2026-01-01.md").exists()
+
+
+def test_failed_sibling_preparation_blocks_validated_temporal_write(tmp_path: Path) -> None:
+    """Provider preparation failure must not allow a sibling Core write before detection."""
+    from odyssey_runtime.routing import PreparedExecution
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    spans = ("El 19 de octubre haré A.", " El 20 de octubre haré B.")
+    executed = []
+
+    def prepare(text, prior):
+        assert not prior
+        if text == spans[1]:
+            raise RuntimeError("Synthetic Temporal preparation failed")
+        date = "2026-10-19"
+
+        def execute(route, locator, actor, context):
+            del actor, context
+            executed.append(route)
+            return _core_with_plan(repository, route, locator, _day_plan(date, "Test.", date))
+
+        return PreparedExecution(execute, temporal_dates=(date,), temporal_resolved=True)
+
+    result = execute_routed_request(
+        user_request="".join(spans),
+        outer_request_id="temporal-prep-error-e2e",
+        router=FixedRouter(tuple(Route("temporal", item) for item in spans)),
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *a, **kw: (_ for _ in ()).throw(AssertionError("no bypass")),
+        application_executors={},
+        route_preparers={"temporal": prepare},
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.planning_error == "TEMPORAL_COHORT_UNRESOLVED"
+    assert executed == []
+    assert list(vault.rglob("*.md")) == []

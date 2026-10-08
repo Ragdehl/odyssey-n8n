@@ -180,6 +180,7 @@ function stageTitle(name) {
   if (name === "application.router") return "Router";
   if (name === "planner") return "Planner";
   if (name === "temporal.interpretation") return "Temporal";
+  if (name === "temporal.coherence") return "Coherencia de fechas";
   if (name === "tasks.interpretation") return "Tasks";
   if (name === "git") return "Git";
   if (name === "index_barrier") return "Índices";

@@ -129,6 +129,7 @@ from .progress import ProductProgressStore
 from .routing import (
     ApplicationExecutor,
     ApplicationRouter,
+    PreparedExecution,
     RoutePreparer,
     execute_routed_request,
     is_route_execution_id,
@@ -2765,7 +2766,41 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     prepared_core=core_plan,
                 )
 
-            return execute
+            # Expose only validated semantic date anchors to the pre-write cohort guard.
+            exact = isinstance(temporal, TemporalInterpretation) and all(
+                kind in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
+                for kind in temporal.kinds()
+            )
+            return PreparedExecution(
+                execute,
+                temporal_dates=(
+                    tuple(
+                        (mention.resolution.exact_date or mention.resolution.exact_datetime or "")[
+                            :10
+                        ]
+                        for mention in temporal.mentions
+                    )
+                    if exact
+                    else ()
+                ),
+                temporal_resolved=bool(exact),
+                temporal_stage=prepared.stage,
+                temporal_evidence=(
+                    tuple(
+                        (
+                            mention.temporal_text,
+                            (
+                                mention.resolution.exact_date
+                                or mention.resolution.exact_datetime
+                                or ""
+                            )[:10],
+                        )
+                        for mention in temporal.mentions
+                    )
+                    if exact
+                    else ()
+                ),
+            )
 
         def prepare_tasks_route(
             text: str, context: Sequence[Mapping[str, str]]
