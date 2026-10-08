@@ -522,6 +522,7 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
         "changes",
         "estimated_cost",
         "flow",
+        "diagnostic_issue",
     }:
         raise ConversationError("request detail is invalid")
     operational = value.get("operational")
@@ -536,7 +537,7 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
             "stages",
         }
         or not isinstance(operational.get("stages"), list)
-        or len(operational["stages"]) > 16
+        or len(operational["stages"]) > 64
     ):
         raise ConversationError("request detail is invalid")
     if operational.get("total_duration_ms") is not None and not _safe_number(
@@ -556,6 +557,12 @@ def _validate_request_detail(value: Any, request_id: str, role: str) -> dict[str
         _validate_estimated_cost(value["estimated_cost"])
     if "flow" in value:
         _validate_execution_flow(value["flow"], operational["stages"])
+    if "diagnostic_issue" in value and value["diagnostic_issue"] not in {
+        "EVIDENCE_REJECTED",
+        "DELIVERY_UNKNOWN",
+        "CLIENT_FAILURE",
+    }:
+        raise ConversationError("request detail is invalid")
     return json.loads(encoded)
 
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import {validateProductResponse} from "../odyssey_web/client.js";
 
 // Execute the actual generated routing code with synthetic transport objects,
 // not a rewritten copy of its conditions. No n8n API, runtime or vault access.
@@ -10,9 +11,14 @@ const start = source.indexOf(marker);
 assert.notEqual(start, -1);
 const end = source.indexOf("`;\n\nconst finishCode =", start + marker.length);
 assert.notEqual(end, -1);
+const helpersMarker = "const costHelpers = String.raw`";
+const helpersStart = source.indexOf(helpersMarker);
+const helpersEnd = source.indexOf("`;\n\nconst routeCode", helpersStart + helpersMarker.length);
+assert.ok(helpersStart >= 0 && helpersEnd > helpersStart);
+const actualHelpers = source.slice(helpersStart + helpersMarker.length, helpersEnd);
 const body = source.slice(start + marker.length, end)
   .replace("${pricingSnapshotLiteral}", JSON.stringify({as_of: "2026-10-08", models: {}}))
-  .replace("${costHelpers}", "function safeOperational(x){return x}; function requestCost(){return {status:'unavailable', amount_usd:null}};");
+  .replace("${costHelpers}", actualHelpers);
 const route = new Function("$input", "$", body);
 const snapshot = {
   version: 2, kind: "affected_notes", executed_at: "2026-10-08T13:00:00+02:00",
@@ -83,9 +89,56 @@ test("workflow carries only validated route provenance and stage cost projection
     product_outcome: "ANSWER", affected_stable_note_ids: ["date:2026-10-09"],
     actions: [{units: [{status: "completed", stable_note_id: "date:2026-10-09"}]}],
     execution_flow: actualFlow,
-    operational: {total_duration_ms: 123, stages: [{name: "temporal.interpretation", duration_ms: 123,
-      outcome: "completed", model: "gpt-6-luna", provider_calls: []}]},
+    operational: {total_duration_ms: 123, stages: [
+      {name: "application.router", duration_ms: 1, outcome: "completed", model: "gpt-6-luna", provider_calls: []},
+      {name: "temporal.interpretation", duration_ms: 122, outcome: "completed", model: "gpt-6-luna", provider_calls: []},
+    ]},
   });
   assert.deepEqual(result.request_detail.flow, actualFlow);
-  assert.equal(result.request_detail.operational.stages[0].estimated_cost.status, "unavailable");
+  assert.equal(result.request_detail.operational.stages[1].estimated_cost.status, "unavailable");
+});
+
+
+test("four routed day writes keep all stage evidence and a valid product answer", () => {
+  const names = ["temporal.interpretation", "planner", "action.write", "git", "pending"];
+  const stages = ["index_barrier", "application.router",
+    ...Array.from({length: 4}, () => names).flat()].map(name => ({
+    name, outcome: "completed", duration_ms: 4, model: null,
+    reasoning_effort: null, error_category: null, provider_calls: [],
+  }));
+  const routes = Array.from({length: 4}, (_, i) => ({
+    capability: "temporal", text: `Frase ${i + 1} mañana`, stage_count: 5,
+    status: "completed", temporal: [{source: "mañana", value: "2026-10-09"}],
+    plan: [], entities: [], writes: [], steps: names.map(name => ({
+      name, input: `Frase ${i + 1} mañana`, output: "Resultado validado",
+    })),
+  }));
+  const response = execute({request_id: "synthetic-partial", status: "completed",
+    product_outcome: "ANSWER", affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "succeeded", operation: "UPDATED", stable_note_id: "date:2026-10-09"}]}],
+    operational: {total_duration_ms: 77, stages},
+    execution_flow: {version: 1, input: "Cuatro hechos con fechas", parallel_preparation: true, routes},
+  });
+  assert.equal(response.status, "completed");
+  assert.equal(response.request_detail.operational.stages.length, 22);
+  assert.equal(response.request_detail.flow.routes.length, 4);
+  assert.equal(validateProductResponse(response).request_detail.flow.routes.length, 4);
+});
+
+test("overflowing optional stage telemetry cannot turn a saved write into a red client failure", () => {
+  const stage = {name: "planner", outcome: "completed", duration_ms: 1, model: null,
+    reasoning_effort: null, error_category: null, provider_calls: []};
+  const response = execute({request_id: "synthetic-partial", status: "completed",
+    product_outcome: "ANSWER", affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-09"}]}],
+    operational: {total_duration_ms: 77, stages: Array.from({length: 65}, () => stage)},
+    execution_flow: {version: 1, input: "Registro truncado", parallel_preparation: false,
+      routes: [{capability: "core", text: "Registro truncado", status: "completed",
+        stage_count: 1, temporal: [], plan: [], entities: [], writes: [],
+        steps: [{name: "planner", input: "Registro truncado", output: ""}]}]},
+  });
+  assert.equal(response.status, "completed");
+  assert.equal(response.request_detail.operational.stages.length, 0);
+  assert.equal(response.request_detail.flow, undefined);
+  assert.equal(validateProductResponse(response).status, "completed");
 });

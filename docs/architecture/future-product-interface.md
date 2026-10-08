@@ -477,3 +477,30 @@ workflow round-trip, bounded/mismatched step rejection, durable local
 conversation replay and the legacy fallback. Next: measure the parallel Core
 planner path with this more inspectable evidence, without interpreting summed
 stage durations as actual wall time saved.
+
+### 2026-10-08 — multi-route diagnostic overflow and lost browser acknowledgement
+
+A real DEV incident exposed a cross-boundary mismatch: three- and four-route
+calendar writes committed their canonical Git changes, while the browser showed
+a generic red failure and no info button. The existing n8n `safeOperational`
+replaced the **entire** operational stage list when it exceeded 16 entries, but
+still attached the independently allowed route graph. The browser correctly
+refused this structurally inconsistent optional diagnostic, inadvertently
+suppressing the already completed response and its conversation persistence.
+This was not a reason to repeat the writes.
+
+The per-request bound is now 64 stage records (with the original per-route bound
+of 16 and max 8 routes). n8n correlates every validated route's stages with
+its bounded operational list and omits the graph if it cannot be trusted. The
+canonical product response is never downgraded merely because optional
+observability is unavailable. The browser validates optional telemetry
+strictly, but on rejection substitutes an empty **explicitly invalid** trace
+marker rather than hiding a valid write result. Client/network errors also
+expose a diagnostic `(i)` explaining uncertainty; they never claim that no
+notes were written or automatically replay the request.
+
+Regression tests execute the **actual** workflow stage-serialization helpers,
+not mock implementations: 22 stages/four routes, 65-stage overflow fallback,
+real browser product validation, persisted 22-stage conversation detail, and
+both client-only failure states. No prompts, credentials, canonical notes,
+mutation scheduling, or Cloudflare settings are modified.

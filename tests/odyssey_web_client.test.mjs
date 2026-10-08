@@ -240,7 +240,7 @@ test("request detail accepts estimated cost with a dated pricing basis", () => {
     },
   });
   assert.equal(result.request_detail.estimated_cost.amount_usd, 0.000123);
-  assert.throws(() => validateProductResponse({
+  const invalid = validateProductResponse({
     request_id: "web-cost",
     status: "completed",
     kind: "answer",
@@ -250,7 +250,9 @@ test("request detail accepts estimated cost with a dated pricing basis", () => {
       operational: {total_duration_ms: 10, stages: []},
       estimated_cost: {status: "estimated", amount_usd: 0, pricing_basis: "unknown"},
     },
-  }), ProductRequestError);
+  });
+  assert.equal(invalid.status, "completed");
+  assert.equal(invalid.request_detail.diagnostic_issue, "EVIDENCE_REJECTED");
 });
 
 test("intelligent Notes preserves bounded planner attempts through its transport", () => {
@@ -834,4 +836,23 @@ test("Task status mutation transport is explicit and bounded", async () => {
   assert.throws(() => validateNotesResponse({
     kind: "mutation", operation: "task_completed", note_id: "", history: {status: "COMMITTED"},
   }), NotesRequestError);
+});
+
+
+test("malformed optional graph does not hide a validated successful write", () => {
+  const reply = validateProductResponse({
+    request_id: "web-many-routes", status: "completed", kind: "acknowledgement",
+    message: "La información se ha guardado.",
+    request_detail: {
+      request_id: "web-many-routes", operational: {total_duration_ms: null, stages: []},
+      flow: {version: 1, input: "Tres hechos", parallel_preparation: true,
+        routes: [{capability: "temporal", text: "Tres hechos", stage_count: 1,
+          status: "completed", temporal: [], plan: [], entities: [], writes: [],
+          steps: [{name: "planner", input: "Tres hechos", output: ""}]}]},
+    },
+  });
+  assert.equal(reply.status, "completed");
+  assert.match(reply.message, /guardado/);
+  assert.equal(reply.request_detail.diagnostic_issue, "EVIDENCE_REJECTED");
+  assert.equal(reply.request_detail.operational.stages.length, 0);
 });

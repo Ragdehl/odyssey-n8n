@@ -594,3 +594,6 @@ button:disabled { opacity: .55; }
 .flow-lane .flow-io-row { padding: .34rem .38rem; }
 .flow-lane .flow-io-value { font-size: .7rem; }
 .flow-lane .flow-io-label { font-size: .6rem; }
+
+/* Uncertain delivery and invalid optional telemetry remain inspectable from (i). */
+.flow-diagnostic-warning { margin: .45rem 0 .75rem; padding: .65rem .75rem; color: #f1c6be; background: #35262d; border: 1px solid #95626a; border-radius: .6rem; font-size: .78rem; line-height: 1.45; }

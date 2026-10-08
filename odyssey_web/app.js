@@ -394,6 +394,16 @@ function appendDetailLine(parent, label, value) {
 function openRequestDetail(detail, sourceText = "") {
   requestDetailContent.replaceChildren();
   requestDetailTitle.textContent = "Detalles de la solicitud";
+  if (detail.diagnostic_issue) {
+    const warning = document.createElement("p");
+    warning.className = "flow-diagnostic-warning";
+    warning.textContent = detail.diagnostic_issue === "EVIDENCE_REJECTED"
+      ? "La respuesta pudo completarse, pero el navegador rechazó sus datos técnicos. No se puede mostrar una traza fiable."
+      : detail.diagnostic_issue === "DELIVERY_UNKNOWN"
+        ? "No se pudo confirmar la entrega al navegador. La solicitud podría haber modificado notas: revisa el calendario antes de reenviarla."
+        : "El navegador no pudo completar la presentación de esta respuesta. El resultado de Core no está confirmado aquí.";
+    requestDetailContent.append(warning);
+  }
   requestDetailContent.append(renderExecutionFlow(document, detail, {sourceText}));
   const technical = document.createElement("details");
   technical.className = "flow-technical flow-technical-raw";
@@ -682,6 +692,12 @@ async function sendSubmission(submission, isRetry = false, activeRecoveryControl
         : "Odyssey no ha podido procesar esta solicitud.",
     );
     message.classList.add("message-error");
+    appendDetailButton(message, {
+      request_id: submission.requestId,
+      operational: {total_duration_ms: null, stages: []},
+      diagnostic_issue: error instanceof ProductRequestError && error.retryable
+        ? "DELIVERY_UNKNOWN" : "CLIENT_FAILURE",
+    });
     if (retrySubmission) appendRetryControl(retrySubmission);
   } finally {
     stopProgress();

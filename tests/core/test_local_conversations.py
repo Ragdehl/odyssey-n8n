@@ -505,3 +505,49 @@ def test_affected_note_snapshot_is_durable_and_excluded_from_recent_context(tmp_
     assert store.recent_context() == [
         {"role": "assistant", "text": "La información se ha guardado."}
     ]
+
+
+def test_many_parallel_route_stages_persist_as_optional_diagnostics(tmp_path: Path) -> None:
+    """Four routed writes cannot lose their completed response to a 16-stage ceiling."""
+    store = _store(tmp_path)
+    names = ["temporal.interpretation", "planner", "action.write", "git", "pending"]
+    stage_names = ["index_barrier", "application.router", *names, *names, *names, *names]
+    stages = [
+        {
+            "name": name,
+            "outcome": "completed",
+            "duration_ms": 1,
+            "model": None,
+            "reasoning_effort": None,
+            "error_category": None,
+            "provider_calls": [],
+        }
+        for name in stage_names
+    ]
+    routes = [
+        {
+            "capability": "temporal",
+            "text": f"Mañana caso {index}",
+            "stage_count": 5,
+            "status": "completed",
+            "temporal": [],
+            "plan": [],
+            "entities": [],
+            "writes": [],
+            "steps": [{"name": name, "input": "Mañana", "output": "2026-10-09"} for name in names],
+        }
+        for index in range(4)
+    ]
+    detail = {
+        "request_id": "req-1",
+        "operational": {"total_duration_ms": 22, "stages": stages},
+        "flow": {
+            "version": 1,
+            "input": "Cuatro fechas",
+            "parallel_preparation": True,
+            "routes": routes,
+        },
+    }
+    _append(store, 1, detail=detail)
+    assert store.load_main_page()["turns"][0]["request_detail"]["flow"]["routes"] == routes
+    assert store.recent_context() == [{"role": "assistant", "text": "turn 1"}]

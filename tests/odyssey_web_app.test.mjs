@@ -310,6 +310,35 @@ test("broken visual progress never prevents sending a request or rendering its a
   assert.equal(page.persisted.length, 1);
 });
 
+test("red client failure exposes inspectable uncertainty instead of hiding (i)", async () => {
+  const page = await mountApp({turns: [],
+    createSubmission: (request) => ({request, requestId: "web-red-3-routes"}),
+    requestProductResult: async () => {throw new ProductRequestError("Malformed optional telemetry.");},
+  });
+  page.elements.input.value = "Tres acontecimientos con fechas";
+  page.elements.form.emit("submit", {preventDefault() {}});
+  await flush();
+  const message = conversationMessages(page.elements.conversation).at(-1);
+  assert.ok(message.className.includes("message-error"));
+  assert.ok(message.querySelector(".detail-button"), "errors must expose a diagnostic button");
+  message.querySelector(".detail-button").click();
+  assert.match(page.elements.detailContent.textContent, /El navegador no pudo completar/);
+  assert.equal(page.persisted.length, 0, "unconfirmed response must not be written as assistant success");
+});
+
+test("unconfirmed network delivery shows a warning that writes may already exist", async () => {
+  const page = await mountApp({turns: [],
+    createSubmission: (request) => ({request, requestId: "web-red-unconfirmed"}),
+    requestProductResult: async () => {throw new ProductRequestError("Network response lost", true);},
+  });
+  page.elements.input.value = "Mañana un evento";
+  page.elements.form.emit("submit", {preventDefault() {}});
+  await flush();
+  const message = conversationMessages(page.elements.conversation).at(-1);
+  message.querySelector(".detail-button").click();
+  assert.match(page.elements.detailContent.textContent, /podría haber modificado notas/);
+});
+
 test("reload mounts one recovery control on its unmatched user turn and removes it before recovery result", async () => {
   let resolveResult;
   let requests = 0;

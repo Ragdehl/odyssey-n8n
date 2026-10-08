@@ -147,7 +147,17 @@ export function validateProductResponse(value) {
 
   const result = {request_id, status, kind, message};
   if (value.request_detail !== undefined) {
-    result.request_detail = validateRequestDetail(value.request_detail, request_id);
+    try {
+      result.request_detail = validateRequestDetail(value.request_detail, request_id);
+    } catch (error) {
+      if (!(error instanceof ProductRequestError)) throw error;
+      // Diagnostic evidence has no semantic authority. Refuse invalid evidence,
+      // but never hide a validated canonical result (which may have committed).
+      result.request_detail = {
+        request_id, operational: {total_duration_ms: null, stages: []},
+        diagnostic_issue: "EVIDENCE_REJECTED",
+      };
+    }
   }
   if (value.note_result_snapshot !== undefined) {
     result.note_result_snapshot = validateNoteResultSnapshot(value.note_result_snapshot);
@@ -283,7 +293,12 @@ export function validateRequestDetail(value, requestId) {
   const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
   const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
   const flow = value.flow === undefined ? undefined : validateExecutionFlow(value.flow, operational.stages);
-  return {request_id: requestId, operational, changes, estimated_cost, flow};
+  const diagnostic_issue = value.diagnostic_issue;
+  if (diagnostic_issue !== undefined && !["EVIDENCE_REJECTED", "DELIVERY_UNKNOWN", "CLIENT_FAILURE"].includes(diagnostic_issue)) {
+    throw new ProductRequestError("Invalid client diagnostic category.");
+  }
+  return {request_id: requestId, operational, changes, estimated_cost, flow,
+    ...(diagnostic_issue ? {diagnostic_issue} : {})};
 }
 
 /** Preserve only exact, bounded route provenance for the diagnostic graph. */
