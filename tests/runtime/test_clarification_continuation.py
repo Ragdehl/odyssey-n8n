@@ -729,6 +729,42 @@ def test_two_explicit_daughter_relations_offer_existing_choice_end_to_end(
     assert fixture.new_fact not in fixture.paths["marta"].read_text()
 
 
+def test_temporal_day_link_survives_routed_relational_choice(
+    tmp_path: Path,
+) -> None:
+    """A persisted Core-validated Day link remains resumable after identity choice."""
+    expected = "[[calendar/days/2026-10-07|07-10-2026]] fue al colegio."
+    fixture = _relational_write_e2e_fixture(
+        tmp_path,
+        reference="mi hijo",
+        new_fact=expected,
+    )
+    _assert_initial_relational_clarification(fixture, "Ayer mi hijo fue al colegio")
+    response = fixture.runtime.execute_product(
+        "He elegido a Bruno.", "delivery-temporal-choice", "main", ACTOR
+    )
+    assert response["product_outcome"] == "ANSWER"
+    assert expected in fixture.paths["bruno"].read_text()
+    assert expected not in fixture.paths["cloe"].read_text()
+
+
+def test_pending_relational_choice_still_rejects_untrusted_note_wikilinks(
+    tmp_path: Path,
+) -> None:
+    """Resumable calendar dates must not open the door to arbitrary Markdown targets."""
+    fixture = _relational_write_e2e_fixture(
+        tmp_path,
+        reference="mi hijo",
+        new_fact="[[people/another|Another]] fue al colegio.",
+    )
+    _assert_initial_relational_clarification(fixture, "Mi hijo fue al colegio")
+    response = fixture.runtime.execute_product(
+        "He elegido a Bruno.", "delivery-invalid-wikilink", "main", ACTOR
+    )
+    assert response["product_outcome"] == "CANNOT_ANSWER"
+    assert all(path.read_bytes() == before for path, before in fixture.before.items())
+
+
 def test_relational_write_cancel_keeps_every_note_unchanged_end_to_end(tmp_path: Path) -> None:
     """Cancel one real Core-produced clarification without resuming or mutating the write."""
     fixture = _relational_write_e2e_fixture(tmp_path)

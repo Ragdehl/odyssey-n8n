@@ -100,6 +100,7 @@ def resolve_relational_reference(
     allow_identity_clarification: bool = False,
     fallback_identity_clarification: bool = False,
     chosen_identity_id: str | None = None,
+    expected_evidence_guard: str | None = None,
     refine_singular_with_query: bool = False,
 ) -> ResolvedRelationalReference:
     """Resolve one source and every semantically relevant current fact through Core grounding.
@@ -161,6 +162,48 @@ def resolve_relational_reference(
     if not candidates:
         raise RelationalResolutionError("relational_evidence_unavailable", evidence_absent=True)
     evidence_guard = _candidate_evidence_guard(candidates)
+    if chosen_identity_id is not None and expected_evidence_guard is not None:
+        # Continue an existing, guarded human choice deterministically. Re-running a
+        # nondeterministic model could select a different fact without any Markdown
+        # changing, falsely reporting stale evidence after the user picked an option.
+        if evidence_guard != expected_evidence_guard:
+            raise RelationalResolutionError(
+                "clarification_evidence_changed", evidence_guard=evidence_guard
+            )
+        for fact, direction in candidates:
+            projection = projector.project_targets(fact.source.id, fact.locator)
+            if projection.status is not TargetProjectionStatus.COMPLETE:
+                continue
+            if direction is EvidenceDirection.INCOMING:
+                targets = (
+                    (projection.source,)
+                    if projection.source is not None
+                    and any(target.id == source_id for target in projection.targets)
+                    else ()
+                )
+            else:
+                targets = projection.targets
+            for target in targets:
+                if (
+                    target is not None
+                    and target.id == chosen_identity_id
+                    and target.type in ordinary_types
+                    and (selection.type is None or target.type == selection.type)
+                ):
+                    return ResolvedRelationalReference(
+                        incoming_projection.entity
+                        if direction is EvidenceDirection.INCOMING
+                        and incoming_projection is not None
+                        else projection.source,
+                        projection.source,
+                        fact.locator,
+                        direction,
+                        (target,),
+                        evidence_guard,
+                    )
+        raise RelationalResolutionError(
+            "clarification_scope_changed", evidence_guard=evidence_guard
+        )
     if (
         refine_singular_with_query
         and relation.members == "one"

@@ -799,6 +799,11 @@ def _execute_retrieve(
                 chosen_identity_id=(
                     clarification_choice.stable_id if clarification_choice is not None else None
                 ),
+                expected_evidence_guard=(
+                    clarification_choice.source_evidence_guard
+                    if clarification_choice is not None
+                    else None
+                ),
             )
         except RelationalResolutionError as error:
             return ActionResult(
@@ -1264,6 +1269,11 @@ def _execute_relational_write(
             refine_singular_with_query=True,
             chosen_identity_id=(
                 clarification_choice.stable_id if clarification_choice is not None else None
+            ),
+            expected_evidence_guard=(
+                clarification_choice.source_evidence_guard
+                if clarification_choice is not None
+                else None
             ),
         )
         if clarification_choice is not None and not _relational_clarification_still_valid(

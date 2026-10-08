@@ -219,11 +219,11 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .processing-percent { position: absolute; inset: 0; display: grid; place-items: center; color: #f4f2ff; font-size: .65rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .processing-copy-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .18rem; min-width: 0; }
 .processing-copy { min-width: 0; color: #f1efff; font-size: .86rem; line-height: 1.3; overflow-wrap: anywhere; }
-.processing-dots { display: inline-flex; align-items: baseline; gap: .13rem; flex: 0 0 auto; }
-.processing-dot { display: block; width: .24rem; height: .24rem; border-radius: 50%; background: #eeeaff; animation: processing-dot-bounce 1.05s ease-in-out infinite; }
+.processing-dots { display: inline-flex; align-items: baseline; gap: .2rem; flex: 0 0 auto; }
+.processing-dot { display: block; width: .32rem; height: .32rem; border-radius: 50%; background: #fff; animation: processing-dot-bounce 1.05s ease-in-out infinite; }
 .processing-dot:nth-child(2) { animation-delay: .14s; }
 .processing-dot:nth-child(3) { animation-delay: .28s; }
-@keyframes processing-dot-bounce { 0%, 65%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-.24rem); opacity: 1; } }
+@keyframes processing-dot-bounce { 0%, 65%, 100% { transform: translateY(0); opacity: .8; } 30% { transform: translateY(-.27rem); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .processing-dot { animation: none; opacity: 1; } .processing-donut-value { transition: none; } }
 .message-error { color: #7d2b2b; border-color: rgba(160, 48, 48, .2); background: #fff8f7; }
 .message-clarification { width: min(100%, 34rem); }

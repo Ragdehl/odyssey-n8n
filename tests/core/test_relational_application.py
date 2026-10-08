@@ -1915,6 +1915,60 @@ def test_bare_singular_relational_write_offers_grounded_members_and_resumes_choi
     )
 
 
+def test_relational_choice_continues_without_reselecting_unchanged_evidence(
+    tmp_path: Path, schema: dict
+) -> None:
+    """A human choice is not invalidated by a second, drifting provider decision."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact("Mis hijos son [[people/cloe|Cloe]] y [[people/bruno|Bruno]]."),
+    )
+    write_note(vault, "people/cloe.md", "cloe", "Cloe", "")
+    write_note(vault, "people/bruno.md", "bruno", "Bruno", "")
+    selection = relational_selection("mi hijo", source_kind="self", source_query=None)
+    plan = RequestPlan(
+        (WriteAction((KnowledgeUnit(selection, "record", (), (), ("Fue al colegio.",), ()),)),),
+        (),
+    )
+    initial = run(
+        vault,
+        schema,
+        plan,
+        reasoner=FactReasoner("UNRESOLVED"),
+        selector=RelevantFactSelector("Mis hijos"),
+    )
+    action = initial.action_results[0]
+    assert initial.status is application.ApplicationStatus.NEEDS_ATTENTION
+    assert action.candidate_note_ids == ("cloe", "bruno")
+    assert action.relational_evidence_guard is not None
+    choice = ClarificationChoice(
+        "bruno",
+        current_identity_guard(VaultRepository(vault), schema, "bruno"),
+        action.relational_evidence_guard,
+    )
+    # On the previous code path a second model pass could change which fact was
+    # selected, or fail altogether, even though the user chose a grounded option.
+    selector = StaticFactSelector(RuntimeError("provider unavailable on continuation"))
+    reasoner = FactReasoner("UNRESOLVED")
+    resumed = run(
+        vault,
+        schema,
+        plan,
+        reasoner=reasoner,
+        selector=selector,
+        clarification_choice=choice,
+    )
+    assert resumed.status is application.ApplicationStatus.COMPLETED, resumed.action_results
+    assert reasoner.requests == []
+    assert "Fue al colegio." in parse_note((vault / "people/bruno.md").read_text()).content
+    assert "Fue al colegio." not in parse_note((vault / "people/cloe.md").read_text()).content
+
+
 def test_bare_singular_relational_write_rejects_choice_after_source_evidence_changes(
     tmp_path: Path, schema: dict
 ) -> None:

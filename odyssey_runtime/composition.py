@@ -115,6 +115,7 @@ from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex, SemanticIndexError
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.storage import VaultRepository
+from odyssey_core.temporal import calendar_day_link_dates
 from odyssey_core.temporal_interpretation import (
     OpenAITemporalInterpreter,
     TemporalInterpreterError,
@@ -711,9 +712,19 @@ class RuntimeComposition:
             safe = False
         if evidence.get("status") != "deferred" or not safe:
             raise ValueError("pending continuation is not one supported decision")
+        # This was already a Core-validated action when it was persisted. Temporal
+        # may have added canonical Calendar Day links to its facts afterwards.
+        # Revalidate that narrow internal form without admitting ordinary wikilinks.
+        linked_dates: list[str] = []
+        if action["kind"] == "write":
+            for unit in action["units"]:
+                for fact in unit["facts"]:
+                    linked_dates.extend(calendar_day_link_dates(fact))
         plan = validate_request_plan(
             {"actions": [action], "limitations": record["planner_limitations"]},
             self.canonical_schema,
+            allow_temporal_reference_links=bool(linked_dates),
+            authorized_calendar_dates=tuple(dict.fromkeys(linked_dates)),
         )
         if len(plan.actions) != 1 or not isinstance(plan.actions[0], WriteAction | RetrieveAction):
             raise ValueError("pending continuation is unsupported")
