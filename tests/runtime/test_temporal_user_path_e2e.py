@@ -171,6 +171,57 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
     assert "Vi a Luis." in _visible_day(calendar, "2026-10-04")
 
 
+def test_dependent_erik_like_route_cannot_write_without_canonical_reference_handoff(
+    tmp_path: Path,
+) -> None:
+    """Block an omitted-subject route while preserving real Core writes from unrelated spans."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    source = "Ayer hablé con Erik. Mañana iré al cine con él. Hoy compré pan."
+    router = FixedRouter(
+        (
+            Route("temporal", "Ayer hablé con Erik."),
+            Route("temporal", "Mañana iré al cine con él.", depends_on=0),
+            Route("temporal", "Hoy compré pan."),
+        )
+    )
+    calls: list[str] = []
+
+    def temporal(text, locator, actor, conversation_context):
+        del actor, conversation_context
+        calls.append(text)
+        if text == "Ayer hablé con Erik.":
+            plan = _day_plan("2026-10-03", "Hablé con Erik.", "2026-10-03")
+        elif text == "Hoy compré pan.":
+            plan = _day_plan("2026-10-04", "Compré pan.", "2026-10-04")
+        else:  # The dependent text must never reach planning or Core persistence.
+            raise AssertionError(text)
+        return _core_with_plan(repository, text, locator, plan)
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="erik-dependency-e2e",
+        router=router,
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("split temporal routes must not bypass Temporal")
+        ),
+        application_executors={},
+        temporal_execute=temporal,
+    )
+
+    assert calls == ["Ayer hablé con Erik.", "Hoy compré pan."]
+    assert result.status is ApplicationStatus.PARTIAL
+    dependent = result.execution_flow["routes"][1]
+    assert dependent["status"] == "needs_attention"
+    assert dependent["reason"] == "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"
+    assert "Hablé con Erik." in _visible_day(_calendar(repository, tmp_path), "2026-10-03")
+    stored = "\n".join(path.read_text(encoding="utf-8") for path in vault.rglob("*.md"))
+    assert "Mañana iré al cine con él." not in stored
+    assert "[[Erik]]" not in stored
+
+
 def test_parallel_planned_facts_same_calendar_day_apply_in_order(tmp_path: Path) -> None:
     """Two concurrent planner decisions must never write the same canonical note concurrently."""
     vault = tmp_path / "vault"

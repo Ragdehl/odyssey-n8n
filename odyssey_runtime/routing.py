@@ -113,7 +113,7 @@ def _temporal_cohort_issue(
     temporal = [
         (i, route)
         for i, route in enumerate(routes)
-        if route.capability_id == TEMPORAL_CAPABILITY_ID
+        if route.capability_id == TEMPORAL_CAPABILITY_ID and route.depends_on is None
     ]
     if len(temporal) < 2:
         return None
@@ -315,8 +315,21 @@ def execute_routed_request(
     scheduled_routes = False
     # For a single route or unsupported destinations preserve the original path.
     preparers = route_preparers or {}
-    if len(plan.routes) < 2 or not any(route.capability_id in preparers for route in plan.routes):
+    independent_preparers = {
+        ordinal: preparers[route.capability_id]
+        for ordinal, route in enumerate(plan.routes)
+        if route.depends_on is None and route.capability_id in preparers
+    }
+    if len(plan.routes) < 2 or not independent_preparers:
         for ordinal, route in enumerate(plan.routes):
+            if route.depends_on is not None:
+                subresults.append(
+                    _dependency_blocked_result(
+                        route_execution_id(outer_request_id, ordinal),
+                        subresults[route.depends_on],
+                    )
+                )
+                continue
             subresults.append(
                 _execute_route(
                     route,
@@ -334,11 +347,9 @@ def execute_routed_request(
         # mutation is submitted to the pool. Consume callbacks serially in route order.
         with ThreadPoolExecutor(max_workers=max_parallel_preparations) as workers:
             scheduled = {
-                ordinal: workers.submit(
-                    preparers[route.capability_id], route.source_text, tuple(conversation_context)
-                )
-                for ordinal, route in enumerate(plan.routes)
-                if route.capability_id in preparers
+                ordinal: workers.submit(preparer, route.source_text, tuple(conversation_context))
+                for ordinal, preparer in independent_preparers.items()
+                for route in (plan.routes[ordinal],)
             }
             # Resolve all pure interpretations before any Core/Git mutation.
             # This check cannot run after the first route has already written.
@@ -368,6 +379,11 @@ def execute_routed_request(
             for ordinal, route in enumerate(plan.routes):
                 locator = route_execution_id(outer_request_id, ordinal)
                 callback: ApplicationExecutor | None = None
+                if route.depends_on is not None:
+                    subresults.append(
+                        _dependency_blocked_result(locator, subresults[route.depends_on])
+                    )
+                    continue
                 if ordinal in failed_preparations:
                     subresults.append(_route_failure(locator, "APPLICATION_PREPARATION_FAILED"))
                     continue
@@ -387,6 +403,26 @@ def execute_routed_request(
                 )
     return _routed_result(
         outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
+    )
+
+
+def _dependency_blocked_result(locator: str, predecessor: ApplicationResult) -> ApplicationResult:
+    """Block a dependent route until a Core-verified canonical handoff exists.
+
+    A completed predecessor only establishes execution order.  It does not expose
+    its raw source or make a canonical identity authoritative for a sibling.
+    """
+    reason = (
+        "ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED"
+        if predecessor.status is not ApplicationStatus.COMPLETED
+        else "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"
+    )
+    return ApplicationResult(
+        locator,
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        planning_error=reason,
     )
 
 
@@ -416,6 +452,14 @@ def _routed_result(
                 "entities": list((result.execution_flow or {}).get("entities", []))[:8],
                 "writes": list((result.execution_flow or {}).get("writes", []))[:8],
                 "steps": _route_stage_io(route.source_text, result),
+                **(
+                    {
+                        "depends_on": route.depends_on,
+                        "reason": result.planning_error or result.clarification_code,
+                    }
+                    if route.depends_on is not None
+                    else {}
+                ),
             }
             for route, result in zip(routes, subresults, strict=True)
         ],

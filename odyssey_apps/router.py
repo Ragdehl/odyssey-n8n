@@ -37,10 +37,16 @@ class RouteOutcome(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Route:
-    """Assign one exact contiguous current-request span to one capability."""
+    """Assign one exact contiguous current-request span to one capability.
+
+    ``depends_on`` is an internal, zero-based ordinal for one earlier route.  It is
+    deliberately absent from the provider contract until a Core-owned canonical
+    reference handoff is available.
+    """
 
     capability_id: str
     source_text: str
+    depends_on: int | None = None
 
     def __post_init__(self) -> None:
         """Reject malformed route fields before local source validation."""
@@ -48,6 +54,12 @@ class Route:
             raise RouterError("Route capability_id must be a non-empty string")
         if not isinstance(self.source_text, str) or not self.source_text.strip():
             raise RouterError("Route source_text must contain non-whitespace text")
+        if self.depends_on is not None and (
+            not isinstance(self.depends_on, int)
+            or isinstance(self.depends_on, bool)
+            or self.depends_on < 0
+        ):
+            raise RouterError("Route depends_on must be a non-negative integer or None")
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,12 +152,14 @@ def validate_route_plan(
         return plan
 
     cursor = 0
-    for route in plan.routes:
+    for ordinal, route in enumerate(plan.routes):
         if (
             route.capability_id not in {CORE_CAPABILITY_ID, TEMPORAL_CAPABILITY_ID}
             and catalog.executable(route.capability_id) is None
         ):
             raise RouterError("Route destination is unknown or disabled")
+        if route.depends_on is not None and route.depends_on >= ordinal:
+            raise RouterError("Route depends_on must reference one existing earlier route")
         start = original_request.find(route.source_text, cursor)
         if start < 0:
             raise RouterError("Route source_text is not an ordered exact request substring")

@@ -295,6 +295,93 @@ def test_parallel_preparation_failure_is_bounded_and_serial_route_continues() ->
     assert result.affected_stable_note_ids == ("second",)
 
 
+def test_dependency_blocks_without_sibling_text_and_independent_preparation_continues() -> None:
+    """Prepare independent spans concurrently but never execute an ungrounded dependent span."""
+    source = "Erik arrived. He left. Independent."
+    router = FixedRouter(
+        RoutePlan(
+            RouteOutcome.ROUTE,
+            (
+                Route("calendar", "Erik arrived."),
+                Route("calendar", "He left.", depends_on=0),
+                Route("calendar", "Independent."),
+            ),
+        )
+    )
+    prepared = Barrier(2, timeout=3)
+    prepared_sources: list[str] = []
+    committed: list[str] = []
+
+    def prepare(text, prior):
+        assert prior == ()
+        prepared_sources.append(text)
+        prepared.wait()
+
+        def execute(route_source, locator, actor, context):
+            assert route_source == text
+            assert context == ()
+            committed.append(route_source)
+            return _result(locator, actions=1)
+
+        return execute
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="dependency-gate",
+        router=router,
+        catalog=_catalog(),
+        core_execute=lambda *args, **kwargs: pytest.fail("no Core reroute"),
+        application_executors={},
+        route_preparers={"calendar": prepare},
+    )
+
+    assert sorted(prepared_sources) == ["Erik arrived.", "Independent."]
+    assert committed == ["Erik arrived.", "Independent."]
+    assert result.status is ApplicationStatus.PARTIAL
+    dependent = result.execution_flow["routes"][1]
+    assert dependent["status"] == "needs_attention"
+    assert dependent["depends_on"] == 0
+    assert dependent["reason"] == "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"
+
+
+def test_dependency_does_not_retry_or_run_after_failed_predecessor() -> None:
+    """Keep a failed predecessor isolated and expose its dependent's blocked reason."""
+    source = "First. Dependent. Independent."
+    router = FixedRouter(
+        RoutePlan(
+            RouteOutcome.ROUTE,
+            (
+                Route("core", "First."),
+                Route("core", "Dependent.", depends_on=0),
+                Route("core", "Independent."),
+            ),
+        )
+    )
+    calls: list[str] = []
+
+    def core(text, locator, actor, *, conversation_context_override):
+        del locator, actor, conversation_context_override
+        calls.append(text)
+        if text == "First.":
+            raise RuntimeError("failed once")
+        return _result(route_execution_id("dependency-failure", 2), actions=1)
+
+    result = execute_routed_request(
+        user_request=source,
+        outer_request_id="dependency-failure",
+        router=router,
+        catalog=_catalog(),
+        core_execute=core,
+        application_executors={},
+    )
+
+    assert calls == ["First.", "Independent."]
+    assert result.status is ApplicationStatus.PARTIAL
+    assert result.execution_flow["routes"][1]["reason"] == (
+        "ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED"
+    )
+
+
 def test_preparation_is_disabled_for_single_route_or_invalid_route_plan() -> None:
     """Never pre-interpret before validation, and don't spawn workers for one route."""
     called: list[str] = []

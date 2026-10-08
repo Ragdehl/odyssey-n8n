@@ -133,6 +133,33 @@ def test_overlap_whitespace_gaps_and_repeated_text_are_mapped_sequentially() -> 
     assert validate_route_plan(repeated, "same same", catalog()) == repeated
 
 
+def test_internal_backward_dependency_is_validated_without_expanding_provider_contract() -> None:
+    """Allow only a typed route edge to an already validated predecessor."""
+    valid = RoutePlan(
+        RouteOutcome.ROUTE,
+        (Route("core", "First."), Route("core", "Second.", depends_on=0)),
+    )
+    assert validate_route_plan(valid, "First. Second.", catalog()) == valid
+    for dependency in (1, 2):
+        invalid = RoutePlan(
+            RouteOutcome.ROUTE,
+            (Route("core", "First."), Route("core", "Second.", depends_on=dependency)),
+        )
+        with pytest.raises(RouterError, match="existing earlier"):
+            validate_route_plan(invalid, "First. Second.", catalog())
+    for dependency in ("0", True, -1):
+        with pytest.raises(RouterError, match="non-negative integer"):
+            Route("core", "Second.", depends_on=dependency)  # type: ignore[arg-type]
+
+    with pytest.raises(RouterError, match="only capability_id and source_text"):
+        parse_route_plan(
+            plan(
+                "ROUTE",
+                [{"capability_id": "core", "source_text": "First.", "depends_on": 0}],
+            )
+        )
+
+
 def test_parser_is_closed_and_checks_outcome_route_cardinality() -> None:
     """Reject provider additions, malformed fields, and non-executable route outcomes."""
     assert parse_route_plan(plan("NEEDS_CAPABILITY", [])) == RoutePlan(
