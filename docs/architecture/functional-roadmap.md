@@ -26,15 +26,15 @@ Canonical/historical detail remains in the phase documents under this directory 
 
 ## Router parallel preparation (DEV optimization)
 
-The bounded first slice of [Router parallel interpretation](router-parallel-preparation.md)
-solves unnecessary sequential execution of independent app interpreters. The router
-continues to split exact independent spans; Tasks and Temporal interpretation may
-run concurrently (two workers maximum), while Core planning, writes, Git and
-pending-work persistence remain serialized. Production defaults to sequential
-and isolated DEV explicitly opts in. The later Core planner-parallelism phase is
-deferred pending measured evidence and a separate prepare/apply Core contract.
-Do not infer a complete parallelized Core pipeline or claim measured latency savings
-from deterministic concurrency tests alone.
+[Router parallel preparation, Slices 1–2](router-parallel-preparation.md) allows
+independent validated Router spans (Core, Tasks, Temporal) to run their
+app-specific interpretation when needed **and shared Core model planning**
+concurrently (up to two workers). The existing Core
+execution boundary alone handles identity resolution, preflight, pending work,
+Git and canonical writes **sequentially in route order**. Production still defaults
+to sequential, with the preparation enabled only in isolated DEV. Do not confuse
+concurrent Core *model planning* with parallel Core *execution*, and do not claim
+measured latency savings from deterministic concurrence tests alone.
 
 ## Current functional work — explainable clarification
 

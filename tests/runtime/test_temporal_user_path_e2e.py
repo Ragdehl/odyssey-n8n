@@ -147,6 +147,56 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
     assert "Vi a Luis." in _visible_day(calendar, "2026-10-04")
 
 
+def test_parallel_planned_facts_same_calendar_day_apply_in_order(tmp_path: Path) -> None:
+    """Two concurrent planner decisions must never write the same canonical note concurrently."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    text = "Hoy he desayunado y hoy he paseado."
+    spans = ("Hoy he desayunado", "y hoy he paseado.")
+    router = FixedRouter(tuple(Route("temporal", span) for span in spans))
+    planner_barrier = Barrier(2, timeout=3)
+    planned: list[str] = []
+    committed: list[str] = []
+
+    def prepare(source: str, prior: Sequence[object]):
+        """Emulate normal validated Core model planning, never persistence."""
+        assert not prior
+        planner_barrier.wait()
+        planned.append(source)
+        plan = _day_plan(
+            "2026-10-04",
+            "He desayunado." if "desayunado" in source else "He paseado.",
+            "2026-10-04",
+        )
+
+        def serial_core(route: str, locator: str, actor: object, context: Sequence[object]):
+            assert route == source and not context
+            committed.append(source)
+            return _core_with_plan(repository, route, locator, plan)
+
+        return serial_core
+
+    result = execute_routed_request(
+        user_request=text,
+        outer_request_id="same-day-parallel-plans",
+        router=router,
+        catalog=ApplicationCatalog.empty(),
+        core_execute=lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("all routes must use serial preplanned Core")
+        ),
+        application_executors={},
+        route_preparers={"temporal": prepare},
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert sorted(planned) == sorted(spans)
+    assert committed == list(spans)
+    assert result.affected_stable_note_ids == ("date:2026-10-04",)
+    lines = _visible_day(_calendar(repository, tmp_path), "2026-10-04")
+    assert "He desayunado." in lines
+    assert "He paseado." in lines
+
+
 def test_exact_datetime_user_path_renders_canonical_clock_in_calendar(tmp_path: Path) -> None:
     """Show one exact clock consistently after routed Temporal/Core persistence."""
     vault = tmp_path / "vault"

@@ -1511,10 +1511,52 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
         def rebuild(self, repository, schema, embedder):
             self.rebuild_calls += 1
 
+    planner_gate: threading.Barrier | None = None
+    fail_task_plan = False
+    planner_threads: list[str] = []
+    planner_calls: list[str] = []
+
     class FakePlanner:
+        def __init__(self, domain_interpretation=None):
+            self.domain = domain_interpretation
+            self.model = "fake-core-planner"
+            self.reasoning_effort = "low"
+            self.last_provider_calls = ()
+            self.last_spans = ()
+            self.last_usage = None
+
         @classmethod
         def from_environment(cls, schema, context, *, domain_interpretation=None):
-            return cls()
+            return cls(domain_interpretation)
+
+        def plan(self, text, prior=()):
+            assert not prior
+            assert planner_gate is not None
+            planner_threads.append(threading.current_thread().name)
+            planner_calls.append(text)
+            planner_gate.wait()
+            self.last_provider_calls = (
+                ProviderCallEvidence("planner.luna", OperationalOutcome.COMPLETED, 50.0),
+            )
+            if fail_task_plan and self.domain.capability_id == "tasks":
+                raise RuntimeError("synthetic planner provider failure")
+            from odyssey_core.request_planning import (
+                KnowledgeUnit,
+                RequestPlan,
+                SelectionCriteria,
+                WriteAction,
+            )
+
+            if self.domain is None:
+                selection = SelectionCriteria(None, "Texto sin fecha", "person", (), None)
+            elif self.domain.capability_id == "tasks":
+                selection = SelectionCriteria("ir al cine", "ir al cine", "task", (), None)
+            else:
+                selection = SelectionCriteria(None, "2026-09-03", "calendar_day", (), None)
+            return RequestPlan(
+                (WriteAction((KnowledgeUnit(selection, "record", (), (), ("Un hecho.",), ()),)),),
+                (),
+            )
 
     monkeypatch.setattr(composition, "VaultRepository", lambda root: ("repository", root))
     monkeypatch.setattr(composition, "FastEmbedTextEmbedder", lambda **kwargs: kwargs)
@@ -1571,7 +1613,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     )
     assert tasks_capability.enabled is True
     assert "tasks" in runtime.application_executors
-    assert set(runtime.route_preparers) == {"tasks", "temporal"}
+    assert set(runtime.route_preparers) == {"core", "tasks", "temporal"}
     routed = runtime.execute("hello")
     assert routed.status is ApplicationStatus.COMPLETED
     assert routed.request_id != "request-test"  # Router owns the outer delivery correlation.
@@ -1580,6 +1622,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     # from the user example, using no network, no vault writes and no model tokens.
     from odyssey_apps import Route, RouteOutcome, RoutePlan
     from odyssey_apps.tasks import TaskInterpretation, TaskOperation
+    from odyssey_core.request_planning import RequestPlan
     from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 
     source = "Hoy tengo que ir al cine y mañana ire al teatro"
@@ -1588,6 +1631,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
         RouteOutcome.ROUTE, (Route("tasks", first), Route("temporal", second))
     )
     synchronized = threading.Barrier(2, timeout=3)
+    planner_gate = threading.Barrier(2, timeout=3)
     executed: list[str] = []
 
     class FakeTaskInterpreter:
@@ -1610,7 +1654,8 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
 
         def interpret(self, text, prior=()):
             assert text == second and not prior
-            synchronized.wait()
+            if synchronized is not None:
+                synchronized.wait()
             return parse_temporal_interpretation(
                 {
                     "mentions": [
@@ -1644,8 +1689,27 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     def observed_core(request, **kwargs):
         executed.append(request)
         assert threading.current_thread().name == "MainThread"
+        prepared_planner = kwargs["planner"]
+        assert getattr(prepared_planner, "is_local_replay", False)
+        assert prepared_planner.last_provider_calls[0].name == "planner.luna"
+        try:
+            assert isinstance(prepared_planner.plan(request), RequestPlan)
+        except RuntimeError:
+            return ApplicationResult(
+                kwargs["request_id_factory"](),
+                ApplicationStatus.FAILED,
+                (),
+                (),
+                planning_error="SYNTHETIC_PLANNER_FAILED",
+            )
         return ApplicationResult(
-            kwargs["request_id_factory"](), ApplicationStatus.COMPLETED, (), ()
+            kwargs["request_id_factory"](),
+            ApplicationStatus.COMPLETED,
+            (),
+            (),
+            operational=OperationalEvidence(
+                stages=(OperationalStage("planner", OperationalOutcome.COMPLETED, 0.0),)
+            ),
         )
 
     monkeypatch.setattr(composition, "execute_request", observed_core)
@@ -1653,9 +1717,44 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     assert completed.status is ApplicationStatus.COMPLETED
     assert completed.request_id == "compound-example"
     assert executed == [first, second]
+    assert len(planner_calls) == 2 and set(planner_calls) == {first, second}
+    assert len(set(planner_threads)) == 2
+    assert all(thread != "MainThread" for thread in planner_threads)
     stages = [step.name for step in completed.operational.stages]
     assert stages.count("tasks.interpretation") == 1
     assert stages.count("temporal.interpretation") == 1
+    planner_stages = [stage for stage in completed.operational.stages if stage.name == "planner"]
+    assert len(planner_stages) == 2
+    assert all(stage.provider_calls[0].name == "planner.luna" for stage in planner_stages)
+    assert all(stage.duration_ms >= 0 for stage in planner_stages)
+
+    # A parallel planner failure stays confined to its route; it is never
+    # retried in the serial phase and cannot prevent a sibling route succeeding.
+    fail_task_plan = True
+    planner_gate = threading.Barrier(2, timeout=3)
+    before = len(planner_calls)
+    executed.clear()
+    partly = runtime.execute(source, "compound-failing-task-planner")
+    assert partly.status is ApplicationStatus.PARTIAL
+    assert partly.request_id == "compound-failing-task-planner"
+    assert len(planner_calls) == before + 2
+    assert executed == [first, second]
+    assert partly.action_results[0].status is ActionStatus.FAILED
+
+    # A bare Core route also plans in a worker alongside a Temporal route.
+    fail_task_plan = False
+    synchronized = None
+    planner_gate = threading.Barrier(2, timeout=3)
+    executed.clear()
+    before = len(planner_calls)
+    runtime.application_router.route = lambda text, context=(): RoutePlan(
+        RouteOutcome.ROUTE, (Route("core", first), Route("temporal", second))
+    )
+    core_and_temporal = runtime.execute(source, "compound-core-plus-temporal")
+    assert core_and_temporal.status is ApplicationStatus.COMPLETED
+    assert executed == [first, second]
+    assert len(planner_calls) == before + 2
+    assert all(thread != "MainThread" for thread in planner_threads[-2:])
 
 
 def test_composition_replaces_only_planner_provider_evidence() -> None:

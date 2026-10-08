@@ -1786,6 +1786,86 @@ def build_runtime_from_environment() -> RuntimeComposition:
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
 
+    @dataclass(frozen=True)
+    class _PrecomputedCorePlan:
+        """Validated model output bound to one source, domain and explicit clock."""
+
+        source: str
+        clock: dict[str, str]
+        domain: DomainInterpretation | None
+        planner: Any
+
+    class _PreparedPlanner:
+        """Replay exactly one prior model decision through ordinary serial Core authority.
+
+        This local wrapper does not authorize writes; execute_request remains the
+        only executor, using its normal fresh identity, preflight and Git guards.
+        """
+
+        is_local_replay = True
+
+        def __init__(
+            self,
+            source: str,
+            result: Any,
+            error: Exception | None,
+            original: Any,
+            duration_ms: float,
+        ) -> None:
+            self.source = source
+            self.result = result
+            self.error = error
+            self.prepared_duration_ms = duration_ms
+            for name in (
+                "last_provider_calls",
+                "last_spans",
+                "last_usage",
+                "model",
+                "reasoning_effort",
+            ):
+                setattr(self, name, getattr(original, name, None))
+
+        def plan(self, source: str) -> Any:
+            """Replay only a model-validated result for its exact requested span."""
+            if source != self.source:
+                raise ValueError("precomputed Core plan source changed")
+            if self.error is not None:
+                raise self.error
+            return self.result
+
+    def prepare_core_plan(
+        source: str,
+        clock: dict[str, str],
+        prior: Sequence[Mapping[str, str]],
+        domain: DomainInterpretation | None = None,
+        decorator: Callable[[Any], Any] | None = None,
+    ) -> _PrecomputedCorePlan:
+        """Invoke only the shared Core model planner in a worker, never repositories."""
+        context = {key: clock[key] for key in ("date", "time", "timezone")}
+        planner = (
+            OpenAIRequestPlanner.from_environment(schema, context)
+            if domain is None
+            else OpenAIRequestPlanner.from_environment(
+                schema, context, domain_interpretation=domain
+            )
+        )
+        if decorator is not None:
+            planner = decorator(planner)
+        start = perf_counter()
+        output = None
+        error: Exception | None = None
+        try:
+            output = planner.plan(source, prior) if prior else planner.plan(source)
+        except Exception as exc:
+            error = exc
+        duration_ms = max(0.0, (perf_counter() - start) * 1000)
+        return _PrecomputedCorePlan(
+            source,
+            clock,
+            domain,
+            _PreparedPlanner(source, output, error, planner, duration_ms),
+        )
+
     def core_execute(
         user_request: str,
         request_id: str | None = None,
@@ -1798,9 +1878,17 @@ def build_runtime_from_environment() -> RuntimeComposition:
         domain_interpretation: DomainInterpretation | None = None,
         planner_decorator: Callable[[Any], Any] | None = None,
         write_preflight_guard: WritePreflightGuard | None = None,
+        prepared_core: _PrecomputedCorePlan | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
-        clock = _current_time()
+        if prepared_core is not None:
+            if resume_plan is not None or prepared_core.source != user_request:
+                raise ValueError("prepared Core source or continuation mismatch")
+            if prepared_core.domain != domain_interpretation:
+                raise ValueError("prepared Core domain mismatch")
+            if prepared_core.clock["date"] != _current_time()["date"]:
+                raise ValueError("prepared Core clock is stale")
+        clock = prepared_core.clock if prepared_core is not None else _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         capability_id = (
             domain_interpretation.capability_id if domain_interpretation is not None else None
@@ -1809,6 +1897,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
         execution_semantic_index = application_semantic_indexes.get(capability_id, semantic_index)
         if resume_plan is not None:
             planner = _FixedRequestPlanner(resume_plan)
+        elif prepared_core is not None:
+            planner = prepared_core.planner
         elif domain_interpretation is None:
             planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
         else:
@@ -1818,7 +1908,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
         if planner_decorator is not None:
             if resume_plan is not None:
                 raise ValueError("resume plan cannot use a planner decorator")
-            planner = planner_decorator(planner)
+            if prepared_core is None:
+                planner = planner_decorator(planner)
         if resume_plan is not None and domain_interpretation is not None:
             raise ValueError("resume plan cannot carry fresh domain interpretation")
         if domain_interpretation is not None and domain_interpretation.source_text != user_request:
@@ -1867,7 +1958,22 @@ def build_runtime_from_environment() -> RuntimeComposition:
             progress_callback=_emit_progress,
         )
         calls = getattr(planner, "last_provider_calls", ())
-        return _replace_planner_provider_calls(result, calls)
+        result = _replace_planner_provider_calls(result, calls)
+        if prepared_core is not None:
+            # Keep model provider duration/cost evidence after the already-finished
+            # parallel call; serial Core's wall clock contains only the apply step.
+            duration = planner.prepared_duration_ms
+            stages = tuple(
+                replace(stage, duration_ms=duration, start_offset_ms=None)
+                if stage.name == "planner"
+                else stage
+                for stage in result.operational.stages
+            )
+            result = replace(
+                result,
+                operational=replace(result.operational, stages=stages),
+            )
+        return result
 
     def refresh_indexes() -> None:
         """Rebuild both derived indexes from authoritative Markdown after a mutation."""
@@ -2167,6 +2273,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         conversation_context: Sequence[Mapping[str, str]] = (),
         *,
         prepared: _PreparedInterpretation | None = None,
+        prepared_core: _PrecomputedCorePlan | None = None,
     ) -> ApplicationResult:
         """Resolve only time semantics, then return the unchanged source to ordinary Core."""
         if authenticated_actor is not None and not isinstance(
@@ -2224,6 +2331,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             authenticated_actor,
             conversation_context_override=conversation_context,
             domain_interpretation=temporal.core_domain_interpretation(),
+            prepared_core=prepared_core,
         )
         return replace(
             core_result,
@@ -2240,6 +2348,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
         conversation_context: Sequence[Mapping[str, str]] = (),
         *,
         prepared: _PreparedInterpretation | None = None,
+        prepared_task_temporal: _PreparedInterpretation | None = None,
+        prepared_core: _PrecomputedCorePlan | None = None,
     ) -> ApplicationResult:
         """Interpret Tasks lifecycle, consume Temporal when needed, then delegate mutation to Core."""
         interpretation = prepared or prepare_task_interpretation(source_text, conversation_context)
@@ -2296,34 +2406,30 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
         temporal = None
         if task.requires_temporal():
-            temporal_interpreter = OpenAITemporalInterpreter.from_environment(
-                {key: clock[key] for key in ("date", "time", "timezone")}
+            temporal_evidence = prepared_task_temporal or prepare_temporal_interpretation(
+                source_text, conversation_context
             )
-            temporal_started = perf_counter()
-            try:
-                temporal = temporal_interpreter.interpret(source_text, conversation_context)
-                if any(
+            duration = temporal_evidence.stage.duration_ms or 0.0
+            if (
+                temporal_evidence.value is None
+                or not isinstance(temporal_evidence.value, TemporalInterpretation)
+                or any(
                     kind
                     not in {
                         TemporalResolutionKind.EXACT_DATE,
                         TemporalResolutionKind.EXACT_DATETIME,
                     }
-                    for kind in temporal.kinds()
-                ):
-                    raise TemporalInterpreterError("Tasks requires exact temporal values")
-            except TemporalInterpreterError as error:
-                duration = max(0.0, (perf_counter() - temporal_started) * 1000)
-                stages.append(
-                    OperationalStage(
-                        "temporal.interpretation",
-                        OperationalOutcome.FAILED,
-                        duration,
-                        model=temporal_interpreter.model,
-                        reasoning_effort=temporal_interpreter.reasoning_effort,
-                        usage=normalize_provider_usage(temporal_interpreter.last_usage),
-                        error_category=type(error).__name__,
-                    )
+                    for kind in temporal_evidence.value.kinds()
                 )
+            ):
+                failed = replace(
+                    temporal_evidence.stage,
+                    outcome=OperationalOutcome.FAILED,
+                    error_category=(
+                        temporal_evidence.stage.error_category or "TaskRequiresExactTemporalValue"
+                    ),
+                )
+                stages.append(failed)
                 return ApplicationResult(
                     request_id,
                     ApplicationStatus.NEEDS_ATTENTION,
@@ -2332,18 +2438,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     planning_error="TASK_TEMPORAL_UNRESOLVED",
                     operational=OperationalEvidence(total_duration + duration, tuple(stages)),
                 )
-            duration = max(0.0, (perf_counter() - temporal_started) * 1000)
+            temporal = temporal_evidence.value
             total_duration += duration
-            stages.append(
-                OperationalStage(
-                    "temporal.interpretation",
-                    OperationalOutcome.COMPLETED,
-                    duration,
-                    model=temporal_interpreter.model,
-                    reasoning_effort=temporal_interpreter.reasoning_effort,
-                    usage=normalize_provider_usage(temporal_interpreter.last_usage),
-                )
-            )
+            stages.append(temporal_evidence.stage)
         if task.operation in {
             TaskOperation.START_WORK_SESSION,
             TaskOperation.STOP_WORK_SESSION,
@@ -2558,6 +2655,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             domain_interpretation=domain,
             planner_decorator=lambda planner: TaskCorePlanner(planner, task),
             write_preflight_guard=TaskLifecycleGuard(task.operation),
+            prepared_core=prepared_core,
         )
         return replace(
             core_result,
@@ -2570,16 +2668,54 @@ def build_runtime_from_environment() -> RuntimeComposition:
     if "tasks" in enabled_application_ids:
         application_executors["tasks"] = execute_tasks
 
-    # Only DEV opts in: each interpreter receives the exact validated span and
-    # immutable prior context. Prepared callbacks always execute on the caller's
-    # single serial write path, never inside the interpretation pool.
+    # In DEV workers now finish domain interpretation AND validated Core planning.
+    # Only the returned execution callbacks use repositories, preflight and Git,
+    # sequentially under the request's existing single-write authority.
     route_preparers: dict[str, RoutePreparer] = {}
     if os.environ.get("ODYSSEY_PARALLEL_ROUTE_PREPARATION", "0") == "1":
+
+        def prepare_core_route(
+            text: str, context: Sequence[Mapping[str, str]]
+        ) -> ApplicationExecutor:
+            """Compute the ordinary Core planner output without touching note state."""
+            prepared = prepare_core_plan(text, _current_time(), context)
+
+            def execute(
+                source: str,
+                locator: str,
+                actor: AuthenticatedActorContext | None,
+                prior: Sequence[Mapping[str, str]],
+            ) -> ApplicationResult:
+                if source != text:
+                    raise ValueError("prepared Core route source changed")
+                if _current_time()["date"] != prepared.clock["date"]:
+                    return core_execute(source, locator, actor, conversation_context_override=prior)
+                return core_execute(
+                    source,
+                    locator,
+                    actor,
+                    conversation_context_override=prior,
+                    prepared_core=prepared,
+                )
+
+            return execute
 
         def prepare_temporal_route(
             text: str, context: Sequence[Mapping[str, str]]
         ) -> ApplicationExecutor:
             prepared = prepare_temporal_interpretation(text, context)
+            core_plan = None
+            temporal = prepared.value
+            if isinstance(temporal, TemporalInterpretation) and all(
+                kind in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
+                for kind in temporal.kinds()
+            ):
+                core_plan = prepare_core_plan(
+                    text,
+                    prepared.clock,
+                    context,
+                    temporal.core_domain_interpretation(),
+                )
 
             def execute(
                 source: str,
@@ -2592,7 +2728,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 if _current_time()["date"] != prepared.clock["date"]:
                     # Across midnight the old interpretation is no longer authoritative.
                     return execute_temporal_core(source, locator, actor, prior)
-                return execute_temporal_core(source, locator, actor, prior, prepared=prepared)
+                return execute_temporal_core(
+                    source,
+                    locator,
+                    actor,
+                    prior,
+                    prepared=prepared,
+                    prepared_core=core_plan,
+                )
 
             return execute
 
@@ -2600,6 +2743,50 @@ def build_runtime_from_environment() -> RuntimeComposition:
             text: str, context: Sequence[Mapping[str, str]]
         ) -> ApplicationExecutor:
             prepared = prepare_task_interpretation(text, context)
+            task = prepared.value
+            task_temporal = None
+            core_plan = None
+            if isinstance(task, TaskInterpretation):
+                if task.requires_temporal() and task.operation is not TaskOperation.QUERY:
+                    task_temporal = prepare_temporal_interpretation(text, context)
+                resolved_temporal = task_temporal.value if task_temporal is not None else None
+                valid_temporal = (
+                    not task.requires_temporal()
+                    or isinstance(resolved_temporal, TemporalInterpretation)
+                    and all(
+                        kind
+                        in {
+                            TemporalResolutionKind.EXACT_DATE,
+                            TemporalResolutionKind.EXACT_DATETIME,
+                        }
+                        for kind in resolved_temporal.kinds()
+                    )
+                )
+                if (
+                    task.operation
+                    not in {
+                        TaskOperation.QUERY,
+                        TaskOperation.START_WORK_SESSION,
+                        TaskOperation.STOP_WORK_SESSION,
+                        TaskOperation.EDIT_WORK_SESSION,
+                        TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+                    }
+                    and valid_temporal
+                ):
+                    try:
+                        domain = compose_task_domain_interpretation(
+                            task, resolved_temporal, now=prepared.clock["timestamp"]
+                        )
+                    except TaskInterpretationError:
+                        pass  # Ordinary serial Tasks error response remains authoritative.
+                    else:
+                        core_plan = prepare_core_plan(
+                            text,
+                            prepared.clock,
+                            context,
+                            domain,
+                            lambda planner: TaskCorePlanner(planner, task),
+                        )
 
             def execute(
                 source: str,
@@ -2611,10 +2798,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     raise ValueError("prepared Tasks source changed")
                 if _current_time()["date"] != prepared.clock["date"]:
                     return execute_tasks(source, locator, actor, prior)
-                return execute_tasks(source, locator, actor, prior, prepared=prepared)
+                return execute_tasks(
+                    source,
+                    locator,
+                    actor,
+                    prior,
+                    prepared=prepared,
+                    prepared_task_temporal=task_temporal,
+                    prepared_core=core_plan,
+                )
 
             return execute
 
+        route_preparers["core"] = prepare_core_route
         route_preparers["temporal"] = prepare_temporal_route
         if "tasks" in enabled_application_ids:
             route_preparers["tasks"] = prepare_tasks_route
