@@ -389,6 +389,19 @@ test("chat notifies Calendar only after a confirmed canonical note write", async
   response = {status: "completed", kind: "answer", message: "He encontrado la respuesta."};
   await send("consulta");
   assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 1);
+  // Partial writes must refresh Calendar and retain their incomplete-success
+  // explanation, not be cosmetically rewritten into an unconditional "Guardado".
+  response = {status: "partial", kind: "acknowledgement",
+    message: "He guardado parte de la información, pero no he podido completar el resto.",
+    note_result_snapshot: {version: 2, kind: "affected_notes",
+      executed_at: "2026-10-08T13:05:00+02:00",
+      note_ids: ["date:2026-10-08"], total: 1, truncated: false}};
+  await send("solo parte");
+  assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 2);
+  const finalMessage = conversationMessages(page.elements.conversation).at(-1);
+  assert.match(finalMessage.querySelector(".message-text").textContent, /He guardado parte/);
+  assert.doesNotMatch(finalMessage.querySelector(".message-text").textContent, /^Guardado$/);
+  assert.ok(finalMessage.querySelector(".partial-notice"));
 });
 
 test("clarification renders grounded controls while leaving the composer usable", async () => {

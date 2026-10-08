@@ -293,9 +293,20 @@ class OpenAIApplicationRouter:
         self.last_response_id = getattr(response, "id", None)
         self.last_provider_status = getattr(response, "status", None)
         if self.last_provider_status != "completed":
+            self.last_error_category = "IncompleteProviderResponse"
             raise RouterError("Application router provider response was not completed")
         try:
             payload = json.loads(response.output_text)
         except (AttributeError, TypeError, json.JSONDecodeError) as error:
+            self.last_error_category = "MalformedRouterJSON"
             raise RouterError("Application router returned malformed output") from error
-        return validate_route_plan(parse_route_plan(payload), original_request, self._catalog)
+        try:
+            plan = parse_route_plan(payload)
+        except RouterError:
+            self.last_error_category = "InvalidRouterPayload"
+            raise
+        try:
+            return validate_route_plan(plan, original_request, self._catalog)
+        except RouterError:
+            self.last_error_category = "InvalidRoutePlan"
+            raise

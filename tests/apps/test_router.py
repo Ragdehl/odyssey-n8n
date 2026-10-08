@@ -295,6 +295,47 @@ def test_provider_and_local_output_failures_make_one_call_then_fail_closed(
     assert len(fake.calls) == 1 and router.last_call is True
 
 
+@pytest.mark.parametrize(
+    ("response", "category"),
+    [
+        (SimpleNamespace(status="incomplete", output_text=""), "IncompleteProviderResponse"),
+        (SimpleNamespace(status="completed", output_text="not json"), "MalformedRouterJSON"),
+        (
+            SimpleNamespace(
+                status="completed",
+                output_text=json.dumps(
+                    plan("ROUTE", [{"capability_id": "core", "source_text": "wrong text"}])
+                ),
+            ),
+            "InvalidRoutePlan",
+        ),
+        (
+            SimpleNamespace(
+                status="completed",
+                output_text=json.dumps(
+                    {
+                        "outcome": "ROUTE",
+                        "routes": [{"capability_id": "core", "source_text": "Original."}],
+                        "other": "not accepted",
+                    }
+                ),
+            ),
+            "InvalidRouterPayload",
+        ),
+    ],
+)
+def test_router_failure_records_bounded_diagnostic_category_without_exposing_source(
+    response: object, category: str
+) -> None:
+    """Differentiate invalid local routing from provider failures without leaking payloads."""
+    fake = FakeResponses(response)
+    router = OpenAIApplicationRouter(SimpleNamespace(responses=fake), catalog())
+    with pytest.raises(RouterError):
+        router.route("Original.")
+    assert router.last_error_category == category
+    assert len(fake.calls) == 1
+
+
 def test_schema_allows_only_enabled_destination_ids() -> None:
     """Expose Core and enabled apps, never disabled routing evidence, in route enums."""
     schema = route_plan_json_schema(catalog())

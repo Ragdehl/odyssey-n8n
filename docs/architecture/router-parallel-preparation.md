@@ -89,3 +89,47 @@ Existing clarification/idempotence and Core identity guards remain the authority
 **Rollback:** remove the optional preparation injection or turn off the DEV flag;
 existing synchronous routing remains authoritative. Keep the change on `dev` only
 until verified. Never touch real vault files or production to benchmark.
+
+## 2026-10-08 investigation: dependent current-message intents (still open)
+
+The DEV user tested two current-message clauses mentioning one newly introduced
+person, another pair with an omitted later subject, and a Tasks create→complete
+pair. All observations are from existing user-generated traces, and supplementary
+provider calls used synthetic names with no runtime, vault or writes.
+
+- Repeated explicit person mention: two independent Temporal routes both succeeded;
+  first created the person plus a Day fact, while the second updated the person's
+  note. This is valid under existing write-target rules but does **not** establish
+  that a transient appointment belongs in the person's enduring profile.
+- Omitted second subject: Router split the clauses; the first Temporal/Core route
+  wrote its dated fact, the second Planner rejected output locally on both Luna and
+  Sol fallback (`LocalPlannerValidationError`). The UI previously returned a
+  generic failure despite one canonical mutation. Browser result routing now
+  distinguishes this partial success without claiming the full request succeeded.
+- Tasks create→complete: the existing ordered serial apply correctly created then
+  updated the same task; no architectural change needed.
+- Another omitted-subject example: the Router provider returned `completed`, but
+  local RoutePlan validation rejected its output, so no Core writes took place.
+  The historical result did not preserve the exact local rejection subtype; new
+  diagnostics distinguish provider JSON, payload and exact-span validation safely.
+
+Two isolated, read-only live Router probes with synthetic names confirmed the
+current prompt can split a dependency. A trial **general** dependency instruction
+made the Router keep both clauses together, but a read-only Temporal→Core planning
+probe for that combined utterance produced `RequestPlanningError` on a fact
+reference marker out of range. **The instruction trial was reverted**, since
+merely suppressing the split would trade one failure for a different one. Do not
+claim that this branch supports dependent-intent scheduling yet.
+
+The structural next step, subject to separate approval and regression gates, is a
+bounded dependency contract: Router identifies which exact spans depend on earlier
+spans, local validation forbids cyclic/forward/external dependencies, only
+independent route preparations are parallel, and the dependent planner prepares
+after its predecessors commit, receiving a narrow, verified reference to their
+canonical outputs. This must not supply sibling text as unsupported authoritative
+identity, retry prior successful writes, or invent inferred owners. A separate
+general-purpose fact-ownership rule should distinguish enduring person attributes
+from dated activities and calendar-day facts; **do not** hard-code people, travel,
+appointments or syntactic names as special cases. Add tests for deferred
+references, exact/new identities, aliases, no-subject clauses, duplicate names,
+failed predecessors, partial writes and idempotent replay before implementing.

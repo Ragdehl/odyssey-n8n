@@ -522,7 +522,7 @@ function appendContinuityWarning() {
 
 function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
-  if (result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
+  if (result.status === "completed" && result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
     message.querySelector(".message-text").textContent = "Guardado";
     message.classList.add("message-acknowledgement");
   }
