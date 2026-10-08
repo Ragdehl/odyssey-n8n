@@ -1501,6 +1501,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     monkeypatch.setenv("ODYSSEY_CONTEXT_LIMIT", "4")
     monkeypatch.setenv("ODYSSEY_ACTOR", "test-runtime")
     monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks")
+    monkeypatch.setenv("ODYSSEY_PARALLEL_ROUTE_PREPARATION", "1")
 
     class FakeIndex:
         def __init__(self, path):
@@ -1512,7 +1513,7 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
 
     class FakePlanner:
         @classmethod
-        def from_environment(cls, schema, context):
+        def from_environment(cls, schema, context, *, domain_interpretation=None):
             return cls()
 
     monkeypatch.setattr(composition, "VaultRepository", lambda root: ("repository", root))
@@ -1570,9 +1571,91 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
     )
     assert tasks_capability.enabled is True
     assert "tasks" in runtime.application_executors
+    assert set(runtime.route_preparers) == {"tasks", "temporal"}
     routed = runtime.execute("hello")
     assert routed.status is ApplicationStatus.COMPLETED
     assert routed.request_id != "request-test"  # Router owns the outer delivery correlation.
+
+    # End-to-end production assembly: exactly the real Tasks + Temporal destinations
+    # from the user example, using no network, no vault writes and no model tokens.
+    from odyssey_apps import Route, RouteOutcome, RoutePlan
+    from odyssey_apps.tasks import TaskInterpretation, TaskOperation
+    from odyssey_core.temporal_interpretation import parse_temporal_interpretation
+
+    source = "Hoy tengo que ir al cine y mañana ire al teatro"
+    first, second = "Hoy tengo que ir al cine", "y mañana ire al teatro"
+    runtime.application_router.route = lambda text, context=(): RoutePlan(
+        RouteOutcome.ROUTE, (Route("tasks", first), Route("temporal", second))
+    )
+    synchronized = threading.Barrier(2, timeout=3)
+    executed: list[str] = []
+
+    class FakeTaskInterpreter:
+        model = "fake-task"
+        reasoning_effort = "low"
+        last_usage = None
+
+        def interpret(self, text, prior=()):
+            assert text == first and not prior
+            synchronized.wait()
+            return TaskInterpretation(text, TaskOperation.CREATE)
+
+    class FakeTemporalInterpreter:
+        model = "fake-temporal"
+        reasoning_effort = "low"
+        last_usage = None
+        last_call = False
+        last_response_id = None
+        last_provider_status = None
+
+        def interpret(self, text, prior=()):
+            assert text == second and not prior
+            synchronized.wait()
+            return parse_temporal_interpretation(
+                {
+                    "mentions": [
+                        {
+                            "temporal_text": "mañana",
+                            "temporal": {
+                                "kind": "EXACT_DATE",
+                                "exact_date": "2026-09-03",
+                                "exact_datetime": None,
+                                "range_start": None,
+                                "range_end_exclusive": None,
+                            },
+                        }
+                    ]
+                },
+                text,
+                timezone="Europe/Paris",
+            )
+
+    monkeypatch.setattr(
+        composition.OpenAITaskInterpreter,
+        "from_environment",
+        classmethod(lambda cls: FakeTaskInterpreter()),
+    )
+    monkeypatch.setattr(
+        composition.OpenAITemporalInterpreter,
+        "from_environment",
+        classmethod(lambda cls, clock: FakeTemporalInterpreter()),
+    )
+
+    def observed_core(request, **kwargs):
+        executed.append(request)
+        assert threading.current_thread().name == "MainThread"
+        return ApplicationResult(
+            kwargs["request_id_factory"](), ApplicationStatus.COMPLETED, (), ()
+        )
+
+    monkeypatch.setattr(composition, "execute_request", observed_core)
+    completed = runtime.execute(source, "compound-example")
+    assert completed.status is ApplicationStatus.COMPLETED
+    assert completed.request_id == "compound-example"
+    assert executed == [first, second]
+    stages = [step.name for step in completed.operational.stages]
+    assert stages.count("tasks.interpretation") == 1
+    assert stages.count("temporal.interpretation") == 1
 
 
 def test_composition_replaces_only_planner_provider_evidence() -> None:

@@ -24,6 +24,18 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
+## Router parallel preparation (DEV optimization)
+
+The bounded first slice of [Router parallel interpretation](router-parallel-preparation.md)
+solves unnecessary sequential execution of independent app interpreters. The router
+continues to split exact independent spans; Tasks and Temporal interpretation may
+run concurrently (two workers maximum), while Core planning, writes, Git and
+pending-work persistence remain serialized. Production defaults to sequential
+and isolated DEV explicitly opts in. The later Core planner-parallelism phase is
+deferred pending measured evidence and a separate prepare/apply Core contract.
+Do not infer a complete parallelized Core pipeline or claim measured latency savings
+from deterministic concurrency tests alone.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the

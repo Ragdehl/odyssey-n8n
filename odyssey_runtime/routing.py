@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from time import perf_counter
 from typing import Protocol
@@ -65,6 +66,14 @@ class ApplicationExecutor(Protocol):
 _ROUTE_LOCATOR = re.compile(r"route-([1-9][0-9]*)-([0-9a-f]{64})\Z")
 _MAX_ROUTE_ORDINAL = 999_999_999
 
+# A preparer may interpret one independently validated exact span but may not
+# retrieve canonical state or execute its write. Its returned callback executes
+# synchronously in the original route order through the normal result boundary.
+RoutePreparer = Callable[
+    [str, Sequence[Mapping[str, str]]],
+    ApplicationExecutor,
+]
+
 
 def route_execution_id(outer_request_id: str, ordinal: int) -> str:
     """Derive a safe deterministic internal locator without creating a delivery identity.
@@ -110,8 +119,10 @@ def execute_routed_request(
     authenticated_actor: AuthenticatedActorContext | None = None,
     conversation_context: Sequence[Mapping[str, str]] = (),
     progress_callback: Callable[[str, Mapping[str, object]], None] | None = None,
+    route_preparers: Mapping[str, RoutePreparer] | None = None,
+    max_parallel_preparations: int = 2,
 ) -> ApplicationResult:
-    """Route and execute independent spans sequentially under one outer request identity.
+    """Interpret independent spans concurrently and execute Core writes in original order.
 
     The whole plan is revalidated before execution.  Route-local exceptions, unavailable apps,
     and invalid correlations become bounded failed route evidence, allowing later independent
@@ -143,20 +154,58 @@ def execute_routed_request(
             stage,
         )
 
+    if max_parallel_preparations < 1 or max_parallel_preparations > 2:
+        raise ValueError("route interpretation concurrency must be one or two")
     subresults: list[ApplicationResult] = []
-    for ordinal, route in enumerate(plan.routes):
-        locator = route_execution_id(outer_request_id, ordinal)
-        subresults.append(
-            _execute_route(
-                route,
-                locator,
-                core_execute,
-                application_executors,
-                temporal_execute,
-                authenticated_actor,
-                conversation_context,
+    # For a single route or unsupported destinations preserve the original path.
+    preparers = route_preparers or {}
+    if len(plan.routes) < 2 or not any(route.capability_id in preparers for route in plan.routes):
+        for ordinal, route in enumerate(plan.routes):
+            subresults.append(
+                _execute_route(
+                    route,
+                    route_execution_id(outer_request_id, ordinal),
+                    core_execute,
+                    application_executors,
+                    temporal_execute,
+                    authenticated_actor,
+                    conversation_context,
+                )
             )
-        )
+    else:
+        # Only pure domain interpreters run in workers. No Core execution or Git
+        # mutation is submitted to the pool. Consume callbacks serially in route order.
+        with ThreadPoolExecutor(max_workers=max_parallel_preparations) as workers:
+            scheduled = {
+                ordinal: workers.submit(
+                    preparers[route.capability_id], route.source_text, tuple(conversation_context)
+                )
+                for ordinal, route in enumerate(plan.routes)
+                if route.capability_id in preparers
+            }
+            for ordinal, route in enumerate(plan.routes):
+                locator = route_execution_id(outer_request_id, ordinal)
+                callback: ApplicationExecutor | None = None
+                if ordinal in scheduled:
+                    try:
+                        callback = scheduled[ordinal].result()
+                        if not callable(callback):
+                            raise TypeError("route preparer returned no executor")
+                    except Exception:
+                        subresults.append(_route_failure(locator, "APPLICATION_PREPARATION_FAILED"))
+                        continue
+                subresults.append(
+                    _execute_route(
+                        route,
+                        locator,
+                        core_execute,
+                        application_executors,
+                        temporal_execute,
+                        authenticated_actor,
+                        conversation_context,
+                        prepared_executor=callback,
+                    )
+                )
     return _prepend_router_stage(_aggregate(outer_request_id, subresults), stage)
 
 
@@ -220,10 +269,15 @@ def _execute_route(
     temporal_execute: ApplicationExecutor | None,
     authenticated_actor: AuthenticatedActorContext | None,
     conversation_context: Sequence[Mapping[str, str]],
+    prepared_executor: ApplicationExecutor | None = None,
 ) -> ApplicationResult:
     """Contain one route executor failure and reject substituted route correlation."""
     try:
-        if route.capability_id == CORE_CAPABILITY_ID:
+        if prepared_executor is not None:
+            result = prepared_executor(
+                route.source_text, locator, authenticated_actor, conversation_context
+            )
+        elif route.capability_id == CORE_CAPABILITY_ID:
             result = _invoke_core(
                 core_execute,
                 route.source_text,

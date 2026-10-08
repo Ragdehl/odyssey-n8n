@@ -31,6 +31,7 @@ from odyssey_apps.tasks import (
     TaskCorePlanner,
     TaskDirectMutationError,
     TaskDirectMutationService,
+    TaskInterpretation,
     TaskInterpretationError,
     TaskLifecycleGuard,
     TaskOperation,
@@ -118,6 +119,7 @@ from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import calendar_day_link_dates
 from odyssey_core.temporal_interpretation import (
     OpenAITemporalInterpreter,
+    TemporalInterpretation,
     TemporalInterpreterError,
 )
 from odyssey_core.temporal_resolution import TemporalResolutionKind
@@ -127,6 +129,7 @@ from .progress import ProductProgressStore
 from .routing import (
     ApplicationExecutor,
     ApplicationRouter,
+    RoutePreparer,
     execute_routed_request,
     is_route_execution_id,
 )
@@ -318,6 +321,7 @@ class RuntimeComposition:
     application_router: ApplicationRouter | None = None
     application_executors: Mapping[str, ApplicationExecutor] = field(default_factory=dict)
     temporal_executor: ApplicationExecutor | None = None
+    route_preparers: Mapping[str, RoutePreparer] = field(default_factory=dict)
     identity_mapping_repository: IdentityMappingRepository | None = None
     conversation_root_resolver: ConversationRootResolver | None = None
     notes_service: NotesQueryService | None = None
@@ -1433,6 +1437,7 @@ class RuntimeComposition:
                 core_execute=self.core_execute,
                 application_executors=self.application_executors,
                 temporal_execute=self.temporal_executor,
+                route_preparers=self.route_preparers,
                 authenticated_actor=authenticated_actor,
                 conversation_context=self._routing_conversation_context(
                     authenticated_actor, conversation_id, request_id
@@ -2058,52 +2063,45 @@ def build_runtime_from_environment() -> RuntimeComposition:
         else None
     )
 
-    def execute_temporal_core(
-        source_text: str,
-        request_id: str,
-        authenticated_actor: AuthenticatedActorContext | None = None,
-        conversation_context: Sequence[Mapping[str, str]] = (),
-    ) -> ApplicationResult:
-        """Resolve only time semantics, then return the unchanged source to ordinary Core."""
-        if authenticated_actor is not None and not isinstance(
-            authenticated_actor, AuthenticatedActorContext
-        ):
-            raise ValueError("authenticated actor context is invalid")
+    @dataclass(frozen=True)
+    class _PreparedInterpretation:
+        """One request-local, read-free provider interpretation and its measured evidence."""
+
+        clock: dict[str, str]
+        value: TemporalInterpretation | TaskInterpretation | None
+        stage: OperationalStage
+
+    def prepare_temporal_interpretation(
+        source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> _PreparedInterpretation:
+        """Interpret only exact date/time wording, without touching canonical knowledge."""
         clock = _current_time()
         interpreter = OpenAITemporalInterpreter.from_environment(
             {key: clock[key] for key in ("date", "time", "timezone")}
         )
-        _emit_progress("temporal.started")
         started = perf_counter()
         try:
             temporal = interpreter.interpret(source_text, conversation_context)
         except TemporalInterpreterError as error:
-            duration_ms = max(0.0, (perf_counter() - started) * 1000)
+            duration = max(0.0, (perf_counter() - started) * 1000)
             stage = OperationalStage(
                 "temporal.interpretation",
                 OperationalOutcome.FAILED,
-                duration_ms,
+                duration,
                 model=interpreter.model,
                 reasoning_effort=interpreter.reasoning_effort,
                 usage=normalize_provider_usage(interpreter.last_usage),
                 error_category=type(error).__name__,
             )
-            return ApplicationResult(
-                request_id,
-                ApplicationStatus.FAILED,
-                (),
-                (),
-                planning_error="TEMPORAL_INTERPRETATION_FAILED",
-                operational=OperationalEvidence(duration_ms, (stage,)),
-            )
-        duration_ms = max(0.0, (perf_counter() - started) * 1000)
-        provider_calls: tuple[ProviderCallEvidence, ...] = ()
+            return _PreparedInterpretation(clock, None, stage)
+        duration = max(0.0, (perf_counter() - started) * 1000)
+        calls = ()
         if interpreter.last_call:
-            provider_calls = (
+            calls = (
                 ProviderCallEvidence(
                     name="temporal.interpretation",
                     outcome=OperationalOutcome.COMPLETED,
-                    duration_ms=duration_ms,
+                    duration_ms=duration,
                     model=interpreter.model,
                     reasoning_effort=interpreter.reasoning_effort,
                     usage=normalize_provider_usage(interpreter.last_usage),
@@ -2116,12 +2114,82 @@ def build_runtime_from_environment() -> RuntimeComposition:
         stage = OperationalStage(
             "temporal.interpretation",
             OperationalOutcome.COMPLETED,
-            duration_ms,
+            duration,
             model=interpreter.model,
             reasoning_effort=interpreter.reasoning_effort,
             usage=normalize_provider_usage(interpreter.last_usage),
-            provider_calls=provider_calls,
+            provider_calls=calls,
         )
+        return _PreparedInterpretation(clock, temporal, stage)
+
+    def prepare_task_interpretation(
+        source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()
+    ) -> _PreparedInterpretation:
+        """Interpret only Tasks lifecycle intent; queries and writes remain serial."""
+        clock = _current_time()
+        interpreter = OpenAITaskInterpreter.from_environment()
+        started = perf_counter()
+        try:
+            task = interpreter.interpret(source_text, conversation_context)
+        except TaskInterpretationError as error:
+            duration = max(0.0, (perf_counter() - started) * 1000)
+            return _PreparedInterpretation(
+                clock,
+                None,
+                OperationalStage(
+                    "tasks.interpretation",
+                    OperationalOutcome.FAILED,
+                    duration,
+                    model=interpreter.model,
+                    reasoning_effort=interpreter.reasoning_effort,
+                    usage=normalize_provider_usage(interpreter.last_usage),
+                    error_category=type(error).__name__,
+                ),
+            )
+        duration = max(0.0, (perf_counter() - started) * 1000)
+        return _PreparedInterpretation(
+            clock,
+            task,
+            OperationalStage(
+                "tasks.interpretation",
+                OperationalOutcome.COMPLETED,
+                duration,
+                model=interpreter.model,
+                reasoning_effort=interpreter.reasoning_effort,
+                usage=normalize_provider_usage(interpreter.last_usage),
+            ),
+        )
+
+    def execute_temporal_core(
+        source_text: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+        *,
+        prepared: _PreparedInterpretation | None = None,
+    ) -> ApplicationResult:
+        """Resolve only time semantics, then return the unchanged source to ordinary Core."""
+        if authenticated_actor is not None and not isinstance(
+            authenticated_actor, AuthenticatedActorContext
+        ):
+            raise ValueError("authenticated actor context is invalid")
+        _emit_progress("temporal.started")
+        interpretation = prepared or prepare_temporal_interpretation(
+            source_text, conversation_context
+        )
+        stage = interpretation.stage
+        duration_ms = stage.duration_ms or 0.0
+        temporal = interpretation.value
+        if temporal is None:
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.FAILED,
+                (),
+                (),
+                planning_error="TEMPORAL_INTERPRETATION_FAILED",
+                operational=OperationalEvidence(duration_ms, (stage,)),
+            )
+        assert isinstance(temporal, TemporalInterpretation)
         temporal_values = []
         for mention in temporal.mentions:
             value = mention.resolution.exact_datetime or mention.resolution.exact_date
@@ -2170,41 +2238,25 @@ def build_runtime_from_environment() -> RuntimeComposition:
         request_id: str,
         authenticated_actor: AuthenticatedActorContext | None = None,
         conversation_context: Sequence[Mapping[str, str]] = (),
+        *,
+        prepared: _PreparedInterpretation | None = None,
     ) -> ApplicationResult:
         """Interpret Tasks lifecycle, consume Temporal when needed, then delegate mutation to Core."""
-        clock = _current_time()
-        task_interpreter = OpenAITaskInterpreter.from_environment()
-        task_started = perf_counter()
-        try:
-            task = task_interpreter.interpret(source_text, conversation_context)
-        except TaskInterpretationError as error:
-            duration = max(0.0, (perf_counter() - task_started) * 1000)
-            stage = OperationalStage(
-                "tasks.interpretation",
-                OperationalOutcome.FAILED,
-                duration,
-                model=task_interpreter.model,
-                reasoning_effort=task_interpreter.reasoning_effort,
-                usage=normalize_provider_usage(task_interpreter.last_usage),
-                error_category=type(error).__name__,
-            )
+        interpretation = prepared or prepare_task_interpretation(source_text, conversation_context)
+        clock = interpretation.clock
+        task_stage = interpretation.stage
+        task_duration = task_stage.duration_ms or 0.0
+        task = interpretation.value
+        if task is None:
             return ApplicationResult(
                 request_id,
                 ApplicationStatus.FAILED,
                 (),
                 (),
                 planning_error="TASK_INTERPRETATION_FAILED",
-                operational=OperationalEvidence(duration, (stage,)),
+                operational=OperationalEvidence(task_duration, (task_stage,)),
             )
-        task_duration = max(0.0, (perf_counter() - task_started) * 1000)
-        task_stage = OperationalStage(
-            "tasks.interpretation",
-            OperationalOutcome.COMPLETED,
-            task_duration,
-            model=task_interpreter.model,
-            reasoning_effort=task_interpreter.reasoning_effort,
-            usage=normalize_provider_usage(task_interpreter.last_usage),
-        )
+        assert isinstance(task, TaskInterpretation)
         stages: list[OperationalStage] = [task_stage]
         total_duration = task_duration
         if task.operation is TaskOperation.QUERY:
@@ -2518,6 +2570,55 @@ def build_runtime_from_environment() -> RuntimeComposition:
     if "tasks" in enabled_application_ids:
         application_executors["tasks"] = execute_tasks
 
+    # Only DEV opts in: each interpreter receives the exact validated span and
+    # immutable prior context. Prepared callbacks always execute on the caller's
+    # single serial write path, never inside the interpretation pool.
+    route_preparers: dict[str, RoutePreparer] = {}
+    if os.environ.get("ODYSSEY_PARALLEL_ROUTE_PREPARATION", "0") == "1":
+
+        def prepare_temporal_route(
+            text: str, context: Sequence[Mapping[str, str]]
+        ) -> ApplicationExecutor:
+            prepared = prepare_temporal_interpretation(text, context)
+
+            def execute(
+                source: str,
+                locator: str,
+                actor: AuthenticatedActorContext | None,
+                prior: Sequence[Mapping[str, str]],
+            ) -> ApplicationResult:
+                if source != text:
+                    raise ValueError("prepared Temporal source changed")
+                if _current_time()["date"] != prepared.clock["date"]:
+                    # Across midnight the old interpretation is no longer authoritative.
+                    return execute_temporal_core(source, locator, actor, prior)
+                return execute_temporal_core(source, locator, actor, prior, prepared=prepared)
+
+            return execute
+
+        def prepare_tasks_route(
+            text: str, context: Sequence[Mapping[str, str]]
+        ) -> ApplicationExecutor:
+            prepared = prepare_task_interpretation(text, context)
+
+            def execute(
+                source: str,
+                locator: str,
+                actor: AuthenticatedActorContext | None,
+                prior: Sequence[Mapping[str, str]],
+            ) -> ApplicationResult:
+                if source != text:
+                    raise ValueError("prepared Tasks source changed")
+                if _current_time()["date"] != prepared.clock["date"]:
+                    return execute_tasks(source, locator, actor, prior)
+                return execute_tasks(source, locator, actor, prior, prepared=prepared)
+
+            return execute
+
+        route_preparers["temporal"] = prepare_temporal_route
+        if "tasks" in enabled_application_ids:
+            route_preparers["tasks"] = prepare_tasks_route
+
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
@@ -2529,6 +2630,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         application_router=application_router,
         application_executors=application_executors,
         temporal_executor=execute_temporal_core,
+        route_preparers=route_preparers,
         identity_mapping_repository=identity_mapping_repository,
         conversation_root_resolver=conversation_root_resolver,
         notes_service=notes_service,

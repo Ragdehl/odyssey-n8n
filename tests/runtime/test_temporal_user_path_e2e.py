@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 
 from odyssey_apps import ApplicationCatalog, Route, RouteOutcome, RoutePlan
@@ -118,6 +119,14 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
             raise AssertionError(text)
         return _core_with_plan(repository, text, locator, plan)
 
+    prepared = Barrier(2, timeout=3)
+
+    def prepare_temporal(text, prior):
+        """Prepare only immutable planning evidence before any vault write begins."""
+        assert prior == ()
+        prepared.wait()
+        return temporal
+
     result = execute_routed_request(
         user_request=source,
         outer_request_id="temporal-user-split",
@@ -128,6 +137,7 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
         ),
         application_executors={},
         temporal_execute=temporal,
+        route_preparers={"temporal": prepare_temporal},
     )
 
     assert result.status is ApplicationStatus.COMPLETED

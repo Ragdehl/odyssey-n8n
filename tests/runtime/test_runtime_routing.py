@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from threading import Barrier, Lock, current_thread
 from types import SimpleNamespace
 
 import pytest
@@ -172,6 +173,131 @@ def test_ordered_routes_share_only_prior_context_and_reindex_actions() -> None:
     assert router.calls == [(text, prior)]
     assert result.request_id == "outer"
     assert [action.action_index for action in result.action_results] == [0, 1, 2, 3, 4]
+
+
+def test_parallel_interpretations_overlap_while_core_commits_in_route_order() -> None:
+    """Two validated spans may interpret simultaneously, never mutate concurrently."""
+    original = "Hoy tengo que ir al cine y mañana iré al teatro"
+    spans = ("Hoy tengo que ir al cine", "y mañana iré al teatro")
+    router = FixedRouter(RoutePlan(RouteOutcome.ROUTE, tuple(Route("calendar", t) for t in spans)))
+    barrier = Barrier(2, timeout=3)
+    lock = Lock()
+    prepared_threads: list[str] = []
+    commits: list[str] = []
+    prior = ({"role": "assistant", "text": "Previous turn."},)
+
+    def prepare(source, context):
+        assert tuple(context) == prior
+        with lock:
+            prepared_threads.append(current_thread().name)
+        barrier.wait()
+
+        def commit(route_source, locator, actor, previous):
+            assert current_thread().name == "MainThread"
+            assert route_source == source
+            assert tuple(previous) == prior
+            assert actor is ACTOR
+            commits.append(source)
+            return _result(locator, actions=1, affected=(f"note-{len(commits)}",))
+
+        return commit
+
+    result = execute_routed_request(
+        user_request=original,
+        outer_request_id="parallel-route",
+        router=router,
+        catalog=_catalog(),
+        core_execute=lambda *a, **kw: pytest.fail("no Core reroute"),
+        application_executors={},
+        route_preparers={"calendar": prepare},
+        authenticated_actor=ACTOR,
+        conversation_context=prior,
+    )
+    assert len(set(prepared_threads)) == 2
+    assert commits == list(spans)
+    assert result.request_id == "parallel-route"
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.affected_stable_note_ids == ("note-1", "note-2")
+    assert [action.action_index for action in result.action_results] == [0, 1]
+
+
+def test_parallel_preparation_failure_is_bounded_and_serial_route_continues() -> None:
+    """No retry of a failed interpreter and no lost independent Core route."""
+    original = "First. Second. Third."
+    router = FixedRouter(
+        RoutePlan(
+            RouteOutcome.ROUTE,
+            (
+                Route("calendar", "First."),
+                Route("core", "Second."),
+                Route("calendar", "Third."),
+            ),
+        )
+    )
+    commits: list[str] = []
+
+    def prepare(source, context):
+        if source == "First.":
+            raise RuntimeError("do not replay this provider call")
+
+        def commit(text, locator, actor, prior):
+            commits.append(text)
+            return _result(locator, actions=1)
+
+        return commit
+
+    def core(text, locator, actor, *, conversation_context_override):
+        commits.append(text)
+        return _result(locator, actions=1, affected=("second",))
+
+    result = execute_routed_request(
+        user_request=original,
+        outer_request_id="parallel-partial",
+        router=router,
+        catalog=_catalog(),
+        core_execute=core,
+        application_executors={},
+        route_preparers={"calendar": prepare},
+    )
+    assert result.status is ApplicationStatus.PARTIAL
+    assert result.action_results[0].reason == "APPLICATION_PREPARATION_FAILED"
+    assert commits == ["Second.", "Third."]
+    assert result.affected_stable_note_ids == ("second",)
+
+
+def test_preparation_is_disabled_for_single_route_or_invalid_route_plan() -> None:
+    """Never pre-interpret before validation, and don't spawn workers for one route."""
+    called: list[str] = []
+
+    def prepare(source, context):
+        called.append("prepare")
+        raise AssertionError("single/invalid route must not pre-interpret")
+
+    def regular(source, locator, actor, context):
+        called.append("regular")
+        return _result(locator, actions=1)
+
+    single = execute_routed_request(
+        user_request="Tomorrow.",
+        outer_request_id="one",
+        router=FixedRouter(RoutePlan(RouteOutcome.ROUTE, (Route("calendar", "Tomorrow."),))),
+        catalog=_catalog(),
+        core_execute=lambda *a, **k: None,
+        application_executors={"calendar": regular},
+        route_preparers={"calendar": prepare},
+    )
+    assert single.status is ApplicationStatus.COMPLETED
+    invalid = execute_routed_request(
+        user_request="First. Second.",
+        outer_request_id="bad",
+        router=FixedRouter(RoutePlan(RouteOutcome.ROUTE, (Route("calendar", "First."),))),
+        catalog=_catalog(),
+        core_execute=lambda *a, **k: None,
+        application_executors={"calendar": regular},
+        route_preparers={"calendar": prepare},
+    )
+    assert invalid.planning_error == "ROUTER_INVALID"
+    assert called == ["regular"]
 
 
 def test_runtime_captures_prior_context_once_and_appends_only_outer_turn(tmp_path: Path) -> None:
