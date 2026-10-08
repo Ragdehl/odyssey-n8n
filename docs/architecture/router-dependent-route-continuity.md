@@ -76,6 +76,48 @@ Follow-up activation requires a narrow Core-owned, typed canonical-reference
 handoff that is verified at dependent execution time, plus the authorized focused
 production Luna gate before any provider output contract is changed.
 
+## Milestone B — Core-private persisted-reference carrier (implemented in DEV source)
+
+Core now retains `CanonicalReferenceEvidence` only on the in-process typed
+`ApplicationResult` / `ActionResult` result objects. It is not part of runtime
+serialization, web delivery, pending-work records, presentation projections, Router
+schemas, or prompts. It is a candidate input for a later Core-to-Core dependent-route
+handoff, not a public continuity feature.
+
+For one `WriteAction`, Core considers an item only when all of the following are true:
+
+- the exact source `KnowledgeReference` has a resolved trusted preflight UUID and its
+  source fact was rendered through the validated reference renderer;
+- the corresponding fact-bearing `UnitResult` succeeded materially, and the post-write
+  authoritative source Markdown contains that exact rendered fact at this request's
+  deterministic atomic-fact ordinal;
+- both the persisted source Note and the referenced canonical Note can be uniquely
+  re-read and schema-validated after the write; Core retains their current content guards,
+  plus the target UUID, type, canonical name, exact source mention, and source coordinates;
+- the source wording is the canonical name, not an alias; the fact-bearing source
+  may not be a `reference_lookup_only` helper, but an actual Core-bound reference-only
+  **target is permitted** when its link appears in the persisted fact (as required for
+  Calendar Day facts that reference an existing person without modifying that person).
+
+Duplicate target UUIDs are rejected rather than selecting an occurrence. Failed, deferred,
+pending, bulk, synthetic complete-set/relation helper, duplicate/no-op, alias, malformed,
+missing, deleted, or stale cases yield no carrier item. The source-fact check makes result
+membership depend on actual persistence, not affected-note IDs, planner text, a display
+projection, or a preflight decision alone.
+
+### Exact next-step contract and limitations
+
+A later **Core-owned** dependent executor may accept at most one such carrier item only after
+it re-reads both Notes, verifies the two guards, UUID/type/canonical-name identity, and the
+persisted source fact. It must then pass bounded typed evidence—not sibling text or a raw ID—to
+ordinary Core planning/reference binding. Absence, duplicates, guard mismatch, alias wording,
+or any stale/missing Note must block the dependent branch with visible uncertainty.
+
+This milestone does **not** bind `él`, invoke a dependent planner, change `Route.depends_on`
+scheduling, change a Router provider schema/prompt, or activate any production behavior. The
+future handoff still needs its own Core plan-boundary contract, vertical dependent-route tests,
+and the separately authorized focused Luna gate before activation.
+
 ## Architecture challenge
 
 **PROCEED, with activation guard.** A simple 'merge adjacent dependent routes'

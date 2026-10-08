@@ -13,8 +13,9 @@ from time import perf_counter
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
+from .atomic_facts import AtomicFactError, parse_atomic_facts
 from .bulk_update import BulkUpdateResult, execute_bulk_update
-from .clarification import ClarificationChoice
+from .clarification import ClarificationChoice, evidence_digest
 from .clarification_presentation import ClarificationPresentation
 from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
@@ -29,6 +30,7 @@ from .materialization import (
     materialize_update,
     rollback_created_reference,
 )
+from .notes import NoteFormatError, parse_note, validate_note
 from .observability import (
     OperationalEvidence,
     OperationalOutcome,
@@ -46,6 +48,7 @@ from .reference_binding import (
 from .reference_preflight import (
     RelationshipWritePreflightError,
     UnitTargetPreflight,
+    _find_existing_identity,
     _preflight_write_action,
     allocate_stable_id,
     current_identity_guard,
@@ -193,6 +196,28 @@ class UnitResult:
 
 
 @dataclass(frozen=True, slots=True)
+class CanonicalReferenceEvidence:
+    """Keep one private, post-persistence canonical reference handoff candidate.
+
+    This is Core-internal evidence for a later dependent-route handoff.  It is deliberately not
+    presentation evidence: the stable IDs and content guards are never serialized by the runtime.
+    ``source_content_guard`` proves the exact fact-bearing source Note still has the persisted
+    reference; ``canonical_content_guard`` separately protects the referenced Note identity.
+    """
+
+    action_index: int
+    source_unit_index: int
+    source_reference_index: int
+    source_mention: str
+    stable_note_id: str
+    note_type: str
+    canonical_name: str
+    source_note_id: str
+    source_content_guard: str
+    canonical_content_guard: str
+
+
+@dataclass(frozen=True, slots=True)
 class ActionResult:
     """Preserve typed evidence for one action in original planner order."""
 
@@ -209,6 +234,8 @@ class ActionResult:
     candidate_note_ids: tuple[str, ...] = ()
     relational_evidence_guard: str | None = None
     clarification: ClarificationPresentation | None = None
+    # Internal-only; runtime serializers intentionally do not project this field.
+    canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +256,8 @@ class ApplicationResult:
     note_result_snapshot: Mapping[str, Any] | None = None
     # Presentation-only bounded execution provenance, never Core mutation authority.
     execution_flow: Mapping[str, Any] | None = None
+    # Core-private dependent-route input. Never add this to public delivery/presentation payloads.
+    canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
 
 
 def allocate_request_id() -> str:
@@ -562,6 +591,7 @@ def execute_request(
             if plan.presentation_intent != "answer" and isinstance(plan.actions[0], RetrieveAction)
             else None
         ),
+        canonical_reference_evidence=_unique_canonical_reference_evidence(actions),
     )
     if history_recorder is not None and history_error is None and history_snapshot is not None:
         history_started = monotonic()
@@ -645,6 +675,17 @@ def execute_request(
         started,
         monotonic,
     )
+
+
+def _unique_canonical_reference_evidence(
+    actions: list[ActionResult],
+) -> tuple[CanonicalReferenceEvidence, ...]:
+    """Reject all duplicate canonical targets across a request rather than choosing one occurrence."""
+    candidates = tuple(item for action in actions for item in action.canonical_reference_evidence)
+    counts: dict[str, int] = {}
+    for item in candidates:
+        counts[item.stable_note_id] = counts.get(item.stable_note_id, 0) + 1
+    return tuple(item for item in candidates if counts[item.stable_note_id] == 1)
 
 
 def _project_execution_flow(
@@ -1297,6 +1338,7 @@ def _execute_write(
                 repository,
                 schema,
             )
+        evidence_action = executable
         executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
     except WritePreflightGuardError as error:
@@ -1331,6 +1373,17 @@ def _execute_write(
         executable_ordinals,
         fact_selector,
         spans,
+    )
+    reference_evidence = _collect_persisted_reference_evidence(
+        action_index,
+        evidence_action,
+        preflight,
+        rendering.rendered_facts,
+        results,
+        executable_ordinals,
+        request_id,
+        repository,
+        schema,
     )
     if (
         relational_helper is not None
@@ -1375,7 +1428,11 @@ def _execute_write(
                     clarification=error.clarification,
                 )
     return ActionResult(
-        action_index, action.kind, _action_status(results), unit_results=tuple(results)
+        action_index,
+        action.kind,
+        _action_status(results),
+        unit_results=tuple(results),
+        canonical_reference_evidence=reference_evidence,
     )
 
 
@@ -1554,6 +1611,7 @@ def _execute_relational_write(
             self_binding_repository=self_binding_repository,
             spans=spans,
         )
+        evidence_action = executable
         executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
         if rendering.pending_references:
@@ -1624,11 +1682,27 @@ def _execute_relational_write(
     )
     if relation.members == "complete_set":
         results = results[:1]
+        # Complete-set expansion creates Core-private reference-only member helpers.  Their
+        # generated references cannot become a cross-route antecedent.
+        reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
+    else:
+        reference_evidence = _collect_persisted_reference_evidence(
+            action_index,
+            evidence_action,
+            preflight,
+            rendering.rendered_facts,
+            results,
+            ordinals,
+            request_id,
+            repository,
+            schema,
+        )
     return ActionResult(
         action_index,
         action.kind,
         _action_status(results),
         unit_results=tuple(results),
+        canonical_reference_evidence=reference_evidence,
     )
 
 
@@ -1669,6 +1743,154 @@ def _execute_bulk(
         else (ActionStatus.FAILED if result.status == "FAILURE" else ActionStatus.DEFERRED)
     )
     return ActionResult(action_index, action.kind, status, bulk_result=result)
+
+
+def _collect_persisted_reference_evidence(
+    action_index: int,
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+    rendered_facts: tuple[tuple[str, ...], ...],
+    results: list[UnitResult],
+    unit_ordinals: tuple[tuple[int, ...], ...],
+    request_id: str,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> tuple[CanonicalReferenceEvidence, ...]:
+    """Return only uniquely grounded references proven in a newly persisted source fact.
+
+    The result is intentionally empty on any malformed, stale, duplicate, alias, helper, or
+    partial mapping.  It is a fail-closed bridge between the write executor and a future
+    dependent-route handoff, not a second identity resolver or a presentation projection.
+    """
+    if (
+        len(preflight) != len(action.units)
+        or len(rendered_facts) != len(action.units)
+        or len(results) != len(action.units)
+        or len(unit_ordinals) != len(action.units)
+        or len({result.unit_index for result in results}) != len(results)
+        or any(result.unit_index != index for index, result in enumerate(results))
+    ):
+        return ()
+    evidence: list[CanonicalReferenceEvidence] = []
+    for source_index, (unit, source_result, source_facts, ordinals) in enumerate(
+        zip(action.units, results, rendered_facts, unit_ordinals, strict=True)
+    ):
+        if (
+            source_result.status is not UnitStatus.SUCCEEDED
+            or not source_result.materially_affected
+            or not source_result.stable_note_id
+            or unit.reference_lookup_only
+            or len(source_facts) != len(unit.facts)
+            or len(ordinals) != len(source_facts)
+        ):
+            continue
+        source = _persisted_source_note(
+            repository, schema, source_result.stable_note_id, source_facts, request_id, ordinals
+        )
+        if source is None:
+            continue
+        source_note_id, source_guard = source
+        for reference_index, reference in enumerate(unit.references):
+            target_index = reference.target_index
+            if target_index is None or not 0 <= target_index < len(preflight):
+                continue
+            target = preflight[target_index]
+            if (
+                target.outcome not in {WriteTargetOutcome.UPDATE, WriteTargetOutcome.CREATE}
+                or target.stable_id is None
+                or not target.canonical_name
+                # Alias-derived links are not a stable antecedent contract in this slice.
+                or reference.mention != target.canonical_name
+                or not _reference_is_materially_rendered(
+                    unit.facts, source_facts, reference_index, target.canonical_name
+                )
+            ):
+                continue
+            canonical = _current_canonical_reference(repository, schema, target.stable_id)
+            if canonical is None:
+                continue
+            note_type, canonical_name, canonical_guard = canonical
+            if canonical_name != target.canonical_name:
+                continue
+            evidence.append(
+                CanonicalReferenceEvidence(
+                    action_index=action_index,
+                    source_unit_index=source_index,
+                    source_reference_index=reference_index,
+                    source_mention=reference.mention,
+                    stable_note_id=target.stable_id,
+                    note_type=note_type,
+                    canonical_name=canonical_name,
+                    source_note_id=source_note_id,
+                    source_content_guard=source_guard,
+                    canonical_content_guard=canonical_guard,
+                )
+            )
+    counts: dict[str, int] = {}
+    for item in evidence:
+        counts[item.stable_note_id] = counts.get(item.stable_note_id, 0) + 1
+    return tuple(item for item in evidence if counts[item.stable_note_id] == 1)
+
+
+def _persisted_source_note(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    stable_note_id: str,
+    rendered_facts: tuple[str, ...],
+    request_id: str,
+    ordinals: tuple[int, ...],
+) -> tuple[str, str] | None:
+    """Verify the source Note still contains every request-addressed rendered fact."""
+    try:
+        path, _name = _find_existing_identity(repository, schema, stable_note_id)
+        markdown = repository.read_text(path)
+        note = parse_note(markdown)
+        validate_note(note, schema)
+        persisted = parse_atomic_facts(note.content)
+    except (AtomicFactError, NoteFormatError, OSError, ValueError, RuntimeError, AttributeError):
+        return None
+    expected = set(zip(rendered_facts, ordinals, strict=True))
+    actual = {(fact.text, fact.ordinal) for fact in persisted if fact.request_id == request_id}
+    if not expected.issubset(actual):
+        return None
+    return stable_note_id, evidence_digest(markdown)
+
+
+def _reference_is_materially_rendered(
+    source_facts: tuple[str, ...],
+    rendered_facts: tuple[str, ...],
+    reference_index: int,
+    canonical_name: str,
+) -> bool:
+    """Require the exact reference marker to have produced a durable wikilink in a source fact."""
+    marker = f"{{{{ref:{reference_index}}}}}"
+    expected_display = f"|{canonical_name}]]"
+    return any(
+        marker in source and marker not in rendered and expected_display in rendered
+        for source, rendered in zip(source_facts, rendered_facts, strict=True)
+    )
+
+
+def _current_canonical_reference(
+    repository: VaultRepository, schema: dict[str, Any], stable_note_id: str
+) -> tuple[str, str, str] | None:
+    """Load one unique active canonical identity and its current full-content guard."""
+    try:
+        path, canonical_name = _find_existing_identity(repository, schema, stable_note_id)
+        markdown = repository.read_text(path)
+        note = parse_note(markdown)
+        validate_note(note, schema)
+        note_type = note.metadata.get("type")
+        if (
+            note.metadata.get("id") != stable_note_id
+            or note.metadata.get("deleted") is True
+            or not isinstance(note_type, str)
+            or not note_type
+        ):
+            return None
+    except (NoteFormatError, OSError, ValueError, RuntimeError, AttributeError):
+        return None
+    return note_type, canonical_name, evidence_digest(markdown)
 
 
 def _execute_single_units(
