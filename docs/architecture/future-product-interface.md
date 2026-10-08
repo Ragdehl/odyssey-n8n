@@ -411,6 +411,20 @@ retained collapsed under a disclosure control. Stage estimates can legitimately 
 unavailable. This work changes diagnostics/presentation only and does not modify
 Router, Temporal or Core semantics or execution scheduling.
 
+The October 8 enriched trace adds typed, bounded **semantic execution evidence**
+from the same validated Core plan and its actual write results: each route displays
+the exact text its Planner received, the requested operation and target, the first
+planned fact, read-only resolved identity mappings (e.g. a relational mention
+`mi hija → Cloe` only when the stable ID is grounded against current canonical
+Markdown), and applied-unit outcomes. The resolver never guesses a display name
+from planner prose or opaque IDs. A missing mapping is labeled unavailable. Each
+branch keeps its original text, Temporal date normalization, planning and execution
+nodes; Router explicitly identifies no-split versus split, and icons make the
+stages easier to scan on mobile. This is **presentation-only**: no independent
+identity authority, extra model invocation, mutation, or change to route selection.
+If the bounded projection fails, Core must complete unchanged and simply omit it.
+Past messages without trace metadata cannot be reconstructed retroactively.
+
 Regression: `tests/odyssey_web_request_flow.test.mjs`,
 `tests/odyssey_web_app.test.mjs`, `tests/runtime/test_runtime_routing.py`,
 `tests/odyssey_workflow_partial.test.mjs` and the conversation detail contract.

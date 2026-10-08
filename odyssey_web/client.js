@@ -298,7 +298,7 @@ export function validateExecutionFlow(value, stages) {
   let totalStages = 0;
   const routes = value.routes.map(route => {
     if (!route || typeof route !== "object" || Array.isArray(route) ||
-        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal"].includes(key)) ||
+        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes"].includes(key)) ||
         typeof route.capability !== "string" || !route.capability || route.capability.length > 40 ||
         typeof route.text !== "string" || !route.text || route.text.length > 4096 ||
         !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 16 ||
@@ -316,9 +316,32 @@ export function validateExecutionFlow(value, stages) {
       }
       return {source: item.source, value: item.value};
     });
+    const validatedList = (name, keys, limits) => {
+      const values = route[name] ?? [];
+      if (!Array.isArray(values) || values.length > 8) throw new ProductRequestError("Invalid execution evidence.");
+      return values.map(item => {
+        if (!item || typeof item !== "object" || Array.isArray(item) ||
+            Object.keys(item).length !== keys.length ||
+            Object.keys(item).some(key => !keys.includes(key)) ||
+            keys.some(key => typeof item[key] !== "string" || item[key].length > limits[key])) {
+          throw new ProductRequestError("Invalid execution evidence.");
+        }
+        if (name === "entities" && (!["resolved", "unresolved"].includes(item.status) ||
+            Boolean(item.name) !== (item.status === "resolved"))) {
+          throw new ProductRequestError("Invalid execution identity.");
+        }
+        return Object.fromEntries(keys.map(key => [key, item[key]]));
+      });
+    };
+    const plan = validatedList("plan", ["operation", "type", "target", "fact"],
+      {operation: 32, type: 40, target: 160, fact: 240});
+    const entities = validatedList("entities", ["mention", "name", "status", "type"],
+      {mention: 120, name: 160, status: 16, type: 40});
+    const writes = validatedList("writes", ["status", "operation", "target"],
+      {status: 32, operation: 48, target: 160});
     totalStages += route.stage_count;
     return {capability: route.capability, text: route.text, stage_count: route.stage_count,
-      status: route.status, temporal};
+      status: route.status, temporal, plan, entities, writes};
   });
   const routerIndex = stages.findIndex(stage => stage.name === "application.router");
   if (routerIndex < 0 || routerIndex + 1 + totalStages > stages.length) {

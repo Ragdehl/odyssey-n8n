@@ -21,9 +21,14 @@ const flow = {
   version: 1, input: "Hoy tengo que ir al cine y mañana iré al teatro",
   parallel_preparation: true,
   routes: [
-    {capability: "tasks", text: "Hoy tengo que ir al cine", status: "completed", stage_count: 2, temporal: []},
+    {capability: "tasks", text: "Hoy tengo que ir al cine", status: "completed", stage_count: 2, temporal: [],
+      plan: [{operation: "record", type: "task", target: "ir al cine", fact: "Tengo que ir al cine."}],
+      entities: [], writes: [{status: "succeeded", operation: "CREATED", target: "ir al cine"}]},
     {capability: "temporal", text: "mañana iré al teatro", status: "completed", stage_count: 3,
-      temporal: [{source: "mañana", value: "2026-10-09"}]},
+      temporal: [{source: "mañana", value: "2026-10-09"}],
+      plan: [{operation: "record", type: "calendar_day", target: "2026-10-09", fact: "Mi {{ref:0}} fue al teatro."}],
+      entities: [{mention: "mi hija", name: "Cloe", status: "resolved", type: "person"}],
+      writes: [{status: "succeeded", operation: "UPDATED", target: "2026-10-09"}]},
   ],
 };
 const operational = {
@@ -57,6 +62,16 @@ test("directed execution graph preserves actual route order, source, dates and m
   assert.match(first.textContent, /Tasks/);
   assert.doesNotMatch(first.textContent, /2026-10-09/);
   assert.match(second.textContent, /mañana.*2026-10-09/);
+  assert.match(second.textContent, /mi hija → Cloe/);
+  assert.equal(second.findAll("flow-entities").length, 1);
+  assert.equal(second.findAll("flow-entity-resolved").length, 1);
+  assert.ok(second.findAll("flow-input").length >= 2);
+  assert.match(second.textContent, /record.*calendar_day.*2026-10-09/);
+  assert.match(second.textContent, /Mi ↗ referencia fue al teatro/);
+  assert.match(second.textContent, /UPDATED.*2026-10-09/);
+  assert.match(first.textContent, /Tengo que ir al cine/);
+  assert.match(graph.textContent, /Dividido en 2 fragmentos/);
+  assert.equal(graph.findAll("flow-icon").length >= 7, true);
   assert.match(first.textContent, /gpt-5.6-luna/);
   assert.match(first.textContent, /11.000 caché/);
   assert.match(first.textContent, /\$0\.001400/);
@@ -83,4 +98,22 @@ test("a partial route is not presented as a complete success", () => {
   const graph = renderExecutionFlow(doc, partial);
   assert.match(graph.textContent, /Resultado parcial/);
   assert.doesNotMatch(graph.textContent, /Completado/);
+});
+
+test("one route explicitly displays no split and ungrounded mention stays unresolved", () => {
+  const actual = diagnostic();
+  actual.flow.routes = [{...actual.flow.routes[1], text: "mañana iré al teatro", stage_count: 1,
+    entities: [{mention: "mi hija", name: "", status: "unresolved", type: "person"}]}];
+  actual.operational.stages = [actual.operational.stages[1], actual.operational.stages[7]];
+  const output = renderExecutionFlow(doc, actual);
+  assert.match(output.textContent, /Sin división · 1 camino/);
+  assert.doesNotMatch(output.textContent, /mi hija → Cloe/);
+  // A stage without entity-binding evidence must never synthesize an identity card.
+  assert.equal(output.findAll("flow-entity-resolved").length, 0);
+});
+
+test("graph validation rejects ungrounded output injected as an entity name", () => {
+  const invalid = {...flow, routes: flow.routes.map((route, i) => i ? {...route,
+    entities: [{mention: "mi hija", name: "Cloe", status: "invented", type: "person"}]} : route)};
+  assert.throws(() => validateRequestDetail({request_id:"flow-1", operational, flow: invalid}, "flow-1"), ProductRequestError);
 });

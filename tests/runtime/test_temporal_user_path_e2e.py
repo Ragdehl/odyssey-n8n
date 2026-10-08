@@ -142,6 +142,16 @@ def test_independent_temporal_routes_materialize_separate_days_end_to_end(tmp_pa
 
     assert result.status is ApplicationStatus.COMPLETED
     assert result.affected_stable_note_ids == ("date:2026-10-03", "date:2026-10-04")
+    assert result.execution_flow is not None
+    assert result.execution_flow["input"] == source
+    assert result.execution_flow["parallel_preparation"] is True
+    first_route, second_route = result.execution_flow["routes"]
+    assert first_route["text"] == "Ayer vi a Ana"
+    assert second_route["text"] == "y hoy vi a Luis."
+    assert first_route["plan"][0]["target"] == "2026-10-03"
+    assert second_route["plan"][0]["target"] == "2026-10-04"
+    assert first_route["writes"][0]["status"] == "succeeded"
+    assert second_route["writes"][0]["status"] == "succeeded"
     calendar = _calendar(repository, tmp_path)
     assert "Vi a Ana." in _visible_day(calendar, "2026-10-03")
     assert "Vi a Luis." in _visible_day(calendar, "2026-10-04")

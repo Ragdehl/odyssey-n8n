@@ -1982,6 +1982,12 @@ def test_dependent_day_fact_relational_helper_offers_and_resumes_choice(
         clarification_choice=choice,
     )
     assert resumed.status is application.ApplicationStatus.COMPLETED, resumed.action_results
+    assert resumed.execution_flow is not None
+    assert resumed.execution_flow["entities"] == [
+        {"mention": "hijo", "name": "Bruno", "status": "resolved", "type": "person"}
+    ]
+    assert resumed.execution_flow["plan"][0]["target"] == "2026-10-07"
+    assert resumed.execution_flow["writes"][0]["status"] == "succeeded"
     day_note = parse_note((vault / "calendar/days/2026-10-07.md").read_text())
     assert "Bruno" in day_note.content
     assert "Cloe" not in day_note.content

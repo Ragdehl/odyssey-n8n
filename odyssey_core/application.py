@@ -539,6 +539,12 @@ def execute_request(
         substeps=getattr(planner, "last_spans", ()),
     )
     stages.insert(0, planner_stage)
+    try:
+        semantic_flow = _project_execution_flow(plan, actions, repository, schema)
+    except Exception:
+        # Diagnostics are strictly optional and must never block canonical
+        # writes, partial completion, Git history or pending-work durability.
+        semantic_flow = None
     result = ApplicationResult(
         request_id,
         _overall_status(actions),
@@ -550,6 +556,7 @@ def execute_request(
             else GitHistoryResult.disabled()
         ),
         presentation_intent=plan.presentation_intent,
+        execution_flow=semantic_flow,
         note_set_selection=(
             plan.actions[0].plan
             if plan.presentation_intent != "answer" and isinstance(plan.actions[0], RetrieveAction)
@@ -638,6 +645,134 @@ def execute_request(
         started,
         monotonic,
     )
+
+
+def _project_execution_flow(
+    plan: RequestPlan,
+    results: Sequence[ActionResult],
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    """Describe validated intentions and actually resolved canonical links for DEV inspection.
+
+    This is a read-only observational projection. It cannot affect write authority,
+    and a failed name lookup never changes the mutation or fabricates an identity.
+    """
+    planned: list[dict[str, str]] = []
+    writes: list[dict[str, str]] = []
+    entities_by_key: dict[tuple[str, str], dict[str, str]] = {}
+    link_ids: set[str] = set()
+    candidates: list[tuple[str, str, str | None]] = []
+    for action, outcome in zip(plan.actions[:8], results[:8], strict=False):
+        if isinstance(action, WriteAction):
+            unit_results = {unit.unit_index: unit for unit in outcome.unit_results}
+            for unit_index, unit in enumerate(action.units[:8]):
+                selection = unit.target
+                target = selection.entity or selection.query
+                if unit.reference_lookup_only:
+                    continue
+                planned.append(
+                    {
+                        "operation": unit.intent[:32],
+                        "type": (selection.type or "nota")[:40],
+                        "target": target[:160],
+                        "fact": (unit.facts[0] if unit.facts else "")[:240],
+                    }
+                )
+                observed = unit_results.get(unit_index)
+                if observed is not None:
+                    writes.append(
+                        {
+                            "status": observed.status.value,
+                            "operation": (observed.operation or unit.intent)[:48],
+                            "target": target[:160],
+                        }
+                    )
+                if (
+                    observed is not None
+                    and observed.status is UnitStatus.SUCCEEDED
+                    and observed.stable_note_id
+                    and selection.type not in {None, "calendar_day"}
+                    and target.strip()
+                ):
+                    link_ids.add(observed.stable_note_id)
+                    candidates.append(
+                        (target.strip()[:120], (selection.type or "")[:40], observed.stable_note_id)
+                    )
+                for reference in unit.references[:8]:
+                    mention = reference.mention.strip()[:120]
+                    if not mention:
+                        continue
+                    target_index = reference.target_index
+                    linked = unit_results.get(target_index) if target_index is not None else None
+                    stable_id = (
+                        linked.stable_note_id
+                        if linked and linked.status is UnitStatus.SUCCEEDED
+                        else None
+                    )
+                    if stable_id:
+                        link_ids.add(stable_id)
+                    reference_type = (
+                        action.units[target_index].target.type
+                        if target_index is not None and 0 <= target_index < len(action.units)
+                        else (reference.selection.type if reference.selection else None)
+                    )
+                    candidates.append((mention, (reference_type or "")[:40], stable_id))
+        elif isinstance(action, RetrieveAction):
+            planned.append(
+                {
+                    "operation": "retrieve",
+                    "type": (action.plan.type or "nota")[:40],
+                    "target": action.plan.query[:160],
+                    "fact": "",
+                }
+            )
+        elif isinstance(action, DelegateAction):
+            planned.append(
+                {"operation": "delegate", "type": "", "target": action.request[:160], "fact": ""}
+            )
+    names: dict[str, str] = {}
+    if link_ids:
+        # Scan once for at most eight Core-confirmed stable IDs; do not use stale
+        # search indexes or derive a name from an ID, filename or model output.
+        from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+        from .storage import NoteUnavailableError, VaultAccessError
+
+        try:
+            for path in repository.list_markdown_paths():
+                try:
+                    note = parse_note(repository.read_text(path))
+                    validate_note(note, schema)
+                except (NoteFormatError, NoteValidationError, NoteUnavailableError):
+                    continue
+                stable_id = note.metadata.get("id")
+                if stable_id not in link_ids:
+                    continue
+                name = note.metadata.get("name")
+                if isinstance(name, str) and 0 < len(name) <= 160:
+                    if stable_id in names:
+                        # Duplicate IDs do not authorize a canonical display name.
+                        names[stable_id] = ""
+                    else:
+                        names[stable_id] = name
+        except (VaultAccessError, OSError):
+            pass
+    for mention, kind, stable_id in candidates[:8]:
+        key = (mention, stable_id or "")
+        if key in entities_by_key:
+            continue
+        mapped = names.get(stable_id, "") if stable_id else ""
+        entities_by_key[key] = {
+            "mention": mention,
+            "name": mapped,
+            "status": "resolved" if mapped else "unresolved",
+            "type": kind,
+        }
+    return {
+        "plan": planned[:8],
+        "entities": list(entities_by_key.values())[:8],
+        "writes": writes[:8],
+    }
 
 
 def _execute_retrieve(

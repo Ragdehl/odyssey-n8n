@@ -552,3 +552,16 @@ button:disabled { opacity: .55; }
 .flow-arrow.flow-fork::after { left: auto; right: -3px; }
 .flow-arrow.flow-join { width: 56%; height: 2rem; background: linear-gradient(#9982ed,#9982ed) left 0 / 2px 55% no-repeat, linear-gradient(#9982ed,#9982ed) right 0 / 2px 55% no-repeat, linear-gradient(#9982ed,#9982ed) center 55% / 100% 2px no-repeat, linear-gradient(#9982ed,#9982ed) center 55% / 2px 45% no-repeat; }
 .flow-arrow.flow-single { width: 2px; background: #9982ed; }
+
+/* Human-readable provenance is primary; timing/token chips remain secondary. */
+.flow-node-heading { display: flex; align-items: center; gap: .44rem; }
+.flow-icon { display: inline-grid; flex: none; place-items: center; width: 1.65rem; height: 1.65rem; border: 1px solid #57458e; border-radius: .5rem; background: #37265e; font-size: 1rem; line-height: 1; }
+.flow-input { margin: .38rem 0; padding: .4rem .48rem; border-radius: .45rem; border: 1px solid #494063; background: #211e35; color: #e1dafa; line-height: 1.42; font-size: .74rem; overflow-wrap: anywhere; }
+.flow-input::before { content: "💬 "; }
+.flow-semantics { display: grid; gap: .25rem; margin: .4rem 0 .15rem; }
+.flow-semantics-line { padding: .36rem .4rem; border-left: 2px solid #9570f4; border-radius: .22rem; color: #e8e4ff; background: #2b2549; line-height: 1.35; font-size: .73rem; overflow-wrap: anywhere; }
+.flow-semantic-fact { color: #c8c2dd; font-style: italic; }
+.flow-entity-resolved { border-color: #46a38e; background: #1e3439; }
+.flow-entity-unresolved { border-color: #b88162; background: #33282c; }
+.flow-split-result { margin-top: .48rem; border-left-color: #9880ef; font-weight: 600; }
+@media (max-width: 430px) { .flow-lane .flow-node-heading { gap: .3rem; } .flow-lane .flow-icon { width: 1.4rem; height: 1.4rem; font-size: .84rem; } .flow-lane .flow-input, .flow-lane .flow-semantics-line { font-size: .67rem; } }

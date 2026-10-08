@@ -231,6 +231,9 @@ def test_parallel_interpretations_overlap_while_core_commits_in_route_order() ->
                 "stage_count": 0,
                 "status": "completed",
                 "temporal": [],
+                "plan": [],
+                "entities": [],
+                "writes": [],
             },
             {
                 "capability": "calendar",
@@ -238,6 +241,9 @@ def test_parallel_interpretations_overlap_while_core_commits_in_route_order() ->
                 "stage_count": 0,
                 "status": "completed",
                 "temporal": [],
+                "plan": [],
+                "entities": [],
+                "writes": [],
             },
         ],
     }

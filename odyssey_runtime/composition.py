@@ -2350,7 +2350,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 (core_result.operational.total_duration_ms or 0.0) + duration_ms,
                 (stage, *core_result.operational.stages),
             ),
-            execution_flow=_temporal_flow(temporal),
+            execution_flow={**(core_result.execution_flow or {}), **_temporal_flow(temporal)},
         )
 
     def execute_tasks(
@@ -2675,7 +2675,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 total_duration + (core_result.operational.total_duration_ms or 0.0),
                 (*stages, *core_result.operational.stages),
             ),
-            execution_flow=_temporal_flow(temporal),
+            execution_flow={**(core_result.execution_flow or {}), **_temporal_flow(temporal)},
         )
 
     if "tasks" in enabled_application_ids:

@@ -221,6 +221,9 @@ def execute_routed_request(
                 "stage_count": len(result.operational.stages),
                 "status": result.status.value,
                 "temporal": list((result.execution_flow or {}).get("temporal", []))[:8],
+                "plan": list((result.execution_flow or {}).get("plan", []))[:8],
+                "entities": list((result.execution_flow or {}).get("entities", []))[:8],
+                "writes": list((result.execution_flow or {}).get("writes", []))[:8],
             }
             for route, result in zip(plan.routes, subresults, strict=True)
         ],

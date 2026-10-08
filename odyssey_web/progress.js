@@ -209,10 +209,60 @@ function cost(value) {
     ? `~$${value.amount_usd.toFixed(6)}` : "";
 }
 
+const FLOW_ICONS = {
+  source: "💬", fragment: "💬", router: "🔀", tasks: "📋",
+  temporal: "🗓️", planner: "🧠", core: "🗃️", git: "📁",
+  index: "🔎", pending: "📌", result: "✅", entities: "🔗",
+};
+
+function headingWithIcon(doc, label, icon) {
+  const heading = element(doc, "h4", "flow-node-heading");
+  const emblem = element(doc, "span", "flow-icon", FLOW_ICONS[icon] || "◈");
+  emblem.setAttribute("aria-hidden", "true");
+  heading.append(emblem, element(doc, "span", "", label));
+  return heading;
+}
+
+function textInput(doc, source) {
+  const preview = element(doc, "p", "flow-input", source);
+  preview.setAttribute("aria-label", "Texto analizado");
+  return preview;
+}
+
+function detailLine(doc, text, kind = "") {
+  return element(doc, "p", `flow-semantics-line ${kind}`, text);
+}
+
 function stageCard(doc, stage, route = null) {
   const card = element(doc, "article", `flow-card ${stage.outcome === "failed" ? "flow-card-failed" : ""}`);
-  const heading = element(doc, "h4", "flow-node-heading", stageTitle(stage.name));
-  card.append(heading);
+  const icon = stage.name === "application.router" ? "router" :
+    stage.name === "planner" ? "planner" :
+    stage.name === "temporal.interpretation" ? "temporal" :
+    stage.name === "tasks.interpretation" ? "tasks" :
+    stage.name === "git" ? "git" :
+    stage.name === "index_barrier" ? "index" :
+    stage.name === "pending" ? "pending" :
+    stage.name.startsWith("action.") ? "core" : "result";
+  card.append(headingWithIcon(doc, stageTitle(stage.name), icon));
+  if (route && ["planner", "tasks.interpretation", "temporal.interpretation"].includes(stage.name)) {
+    card.append(textInput(doc, route.text));
+  }
+  if (stage.name === "planner" && route?.plan?.length) {
+    const decisions = element(doc, "div", "flow-semantics");
+    for (const item of route.plan) {
+      decisions.append(detailLine(doc, `${item.operation} · ${item.type || "nota"} → ${item.target}`));
+      if (item.fact) decisions.append(detailLine(doc,
+        item.fact.replace(/\{\{ref:\d+\}\}/gu, "↗ referencia"), "flow-semantic-fact"));
+    }
+    card.append(decisions);
+  }
+  if (stage.name.startsWith("action.") && route) {
+    const steps = element(doc, "div", "flow-semantics");
+    for (const item of route.writes || []) {
+      steps.append(detailLine(doc, `✍️ ${item.operation} · ${item.target} (${item.status})`));
+    }
+    if (steps.children.length) card.append(steps);
+  }
   if (stage.outcome === "failed" || stage.outcome === "deferred") {
     card.append(element(doc, "p", "flow-error", stage.error_category || stage.outcome));
   }
@@ -247,9 +297,22 @@ function stageCard(doc, stage, route = null) {
   return card;
 }
 
+function entitiesCard(doc, entities) {
+  const node = element(doc, "article", "flow-card flow-entities");
+  node.append(headingWithIcon(doc, "Entidades · Core", "entities"));
+  const output = element(doc, "div", "flow-semantics");
+  for (const item of entities) {
+    const target = item.status === "resolved" ? item.name : "Resolución no disponible";
+    output.append(detailLine(doc, `${item.mention} → ${target}`,
+      item.status === "resolved" ? "flow-entity-resolved" : "flow-entity-unresolved"));
+  }
+  node.append(output);
+  return node;
+}
+
 function plainCard(doc, heading, body, kind = "") {
   const node = element(doc, "article", `flow-card flow-${kind}`);
-  node.append(element(doc, "h4", "flow-node-heading", heading));
+  node.append(headingWithIcon(doc, heading, kind === "source" ? "source" : kind === "fragment" ? "fragment" : kind === "success" ? "result" : "result"));
   if (body) node.append(element(doc, "p", "flow-node-text", body));
   return node;
 }
@@ -275,7 +338,13 @@ export function renderExecutionFlow(doc, detail) {
     root.append(prelim);
   }
   if (routerIndex >= 0) {
-    root.append(stageCard(doc, stages[routerIndex]));
+    const router = stageCard(doc, stages[routerIndex]);
+    if (flow?.routes?.length) {
+      router.append(detailLine(doc, flow.routes.length > 1
+        ? `🔀 Dividido en ${flow.routes.length} fragmentos`
+        : "➡️ Sin división · 1 camino", "flow-split-result"));
+    }
+    root.append(router);
     root.append(arrow(doc, flow?.routes?.length > 1 ? "flow-fork" : ""));
   }
   let consumed = routerIndex + 1;
@@ -292,7 +361,14 @@ export function renderExecutionFlow(doc, detail) {
       lane.append(fragment);
       const routeStages = stages.slice(consumed, consumed + route.stage_count);
       consumed += route.stage_count;
+      let entitiesDisplayed = false;
       for (const stage of routeStages) {
+        if (stage.name === "pending" && stage.outcome === "skipped") continue;
+        if (!entitiesDisplayed && stage.name.startsWith("action.") && route.entities?.length) {
+          lane.append(arrow(doc));
+          lane.append(entitiesCard(doc, route.entities));
+          entitiesDisplayed = true;
+        }
         lane.append(arrow(doc));
         lane.append(stageCard(doc, stage, route));
       }

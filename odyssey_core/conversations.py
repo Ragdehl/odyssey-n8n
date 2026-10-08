@@ -575,7 +575,18 @@ def _validate_execution_flow(value: Any) -> None:
     for route in value["routes"]:
         if (
             not isinstance(route, dict)
-            or set(route) != {"capability", "text", "stage_count", "status", "temporal"}
+            or not {"capability", "text", "stage_count", "status", "temporal"} <= set(route)
+            or set(route)
+            - {
+                "capability",
+                "text",
+                "stage_count",
+                "status",
+                "temporal",
+                "plan",
+                "entities",
+                "writes",
+            }
             or not isinstance(route["capability"], str)
             or not 1 <= len(route["capability"]) <= 40
             or not isinstance(route["text"], str)
@@ -587,6 +598,41 @@ def _validate_execution_flow(value: Any) -> None:
             or len(route["temporal"]) > 8
         ):
             raise ConversationError("execution flow is invalid")
+        for kind, keys, limits in (
+            (
+                "plan",
+                {"operation", "type", "target", "fact"},
+                {"operation": 32, "type": 40, "target": 160, "fact": 240},
+            ),
+            (
+                "entities",
+                {"mention", "name", "status", "type"},
+                {"mention": 120, "name": 160, "status": 16, "type": 40},
+            ),
+            (
+                "writes",
+                {"status", "operation", "target"},
+                {"status": 32, "operation": 48, "target": 160},
+            ),
+        ):
+            values = route.get(kind, [])
+            if not isinstance(values, list) or len(values) > 8:
+                raise ConversationError("execution flow is invalid")
+            for item in values:
+                if (
+                    not isinstance(item, dict)
+                    or set(item) != keys
+                    or any(
+                        not isinstance(item[k], str) or len(item[k]) > bound
+                        for k, bound in limits.items()
+                    )
+                ):
+                    raise ConversationError("execution flow is invalid")
+                if kind == "entities" and (
+                    item["status"] not in ("resolved", "unresolved")
+                    or bool(item["name"]) != (item["status"] == "resolved")
+                ):
+                    raise ConversationError("execution flow is invalid")
         for mention in route["temporal"]:
             if (
                 not isinstance(mention, dict)
