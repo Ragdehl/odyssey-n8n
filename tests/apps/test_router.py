@@ -526,3 +526,17 @@ def test_current_router_v6_matrix_uses_builtin_temporal_and_semantic_intent_spli
         validate_route_plan(
             RoutePlan(RouteOutcome(expected["outcome"]), routes), case["source"], current_catalog
         )
+
+
+def test_shared_implicit_companions_stay_in_one_exact_route() -> None:
+    """Do not split three dated outings when later clauses omit shared companions."""
+    from odyssey_apps.router import ROUTER_MAX_OUTPUT_TOKENS
+
+    text = (
+        "Esta tarde iremos al cine con mis hijos. Mañana iremos de paseo por el centro "
+        "y el domingo iremos a un vide grenier en Avignonet de Lauragais"
+    )
+    whole = RoutePlan(RouteOutcome.ROUTE, (Route("temporal", text),))
+    assert validate_route_plan(whole, text, catalog()) == whole
+    assert ROUTER_MAX_OUTPUT_TOKENS >= 1024
+    assert "keep the clauses together" in render_router_prompt(catalog(), ())
