@@ -33,6 +33,10 @@ for (const rates of Object.values(pricingSnapshot.models)) {
         .some((key) => typeof rates[key] !== 'number' || rates[key] < 0)) {
     throw new Error('ODYSSEY_PRICING_SNAPSHOT has invalid model rates');
   }
+  if (rates.cache_write_per_million !== undefined &&
+      (typeof rates.cache_write_per_million !== 'number' || rates.cache_write_per_million < 0)) {
+    throw new Error('ODYSSEY_PRICING_SNAPSHOT has invalid cache-write rates');
+  }
 }
 const pricingSnapshotLiteral = JSON.stringify(pricingSnapshot);
 
@@ -55,10 +59,11 @@ function providerCost(usage, model, pricing) {
   const required = ['input_tokens', 'cached_input_tokens', 'output_tokens'];
   if (required.some((key) => !Number.isInteger(usage[key]) || usage[key] < 0)) return undefined;
   const cacheWrite = usage.cache_write_tokens === undefined ? 0 : usage.cache_write_tokens;
-  if (!Number.isInteger(cacheWrite) || cacheWrite < 0 || cacheWrite > 0) return undefined;
-  if (usage.cached_input_tokens > usage.input_tokens) return undefined;
+  if (!Number.isInteger(cacheWrite) || cacheWrite < 0) return undefined;
+  if (usage.cached_input_tokens + cacheWrite > usage.input_tokens) return undefined;
+  if (cacheWrite > 0 && (typeof rates.cache_write_per_million !== 'number' || rates.cache_write_per_million < 0)) return undefined;
   const ordinary = usage.input_tokens - usage.cached_input_tokens - cacheWrite;
-  return (ordinary * rates.input_per_million + usage.cached_input_tokens * rates.cached_input_per_million + usage.output_tokens * rates.output_per_million) / 1000000;
+  return (ordinary * rates.input_per_million + usage.cached_input_tokens * rates.cached_input_per_million + cacheWrite * (rates.cache_write_per_million ?? 0) + usage.output_tokens * rates.output_per_million) / 1000000;
 }
 
 function requestCost(operational, pricing) {
@@ -172,7 +177,7 @@ const flowMatchesStages = (flow, stages) => {
 if (!id || !r || r.request_id !== id) return [{ json: error }]; const hasOperationalEvidence = r.operational && typeof r.operational === 'object'; const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions); const request_detail_base = hasOperationalEvidence || hasChangeEvidence ? { request_id: id, operational: hasOperationalEvidence ? safeOperational(r.operational) : { total_duration_ms: null, stages: [] }, changes: { affected_stable_note_ids: Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter((item) => typeof item === 'string' && item.length <= 128).slice(0, 64) : [], units: Array.isArray(r.actions) ? r.actions.flatMap(a => Array.isArray(a.units) ? a.units.map(u => ({ stable_note_id: typeof u.stable_note_id === 'string' && u.stable_note_id.length <= 128 ? u.stable_note_id : null, operation: typeof u.operation === 'string' && u.operation.length <= 80 ? u.operation : null, status: typeof u.status === 'string' && u.status.length <= 80 ? u.status : 'unknown' })) : []).slice(0, 64) : [] } } : undefined; const routeFlow = safeFlow(r.execution_flow);
 const routedOperational = request_detail_base?.operational;
 const validatedFlow = routeFlow && flowMatchesStages(routeFlow, routedOperational?.stages) ? routeFlow : undefined;
-const request_detail = request_detail_base ? { ...request_detail_base, operational: { ...request_detail_base.operational, stages: request_detail_base.operational.stages.map(stage => ({ ...stage, estimated_cost: requestCost({ stages: [stage] }, pricing) })) }, estimated_cost: requestCost(request_detail_base.operational, pricing), ...(validatedFlow ? { flow: validatedFlow } : {}) } : undefined;
+const request_detail = request_detail_base ? { ...request_detail_base, operational: { ...request_detail_base.operational, stages: request_detail_base.operational.stages.map(stage => ({ ...stage, provider_calls: stage.provider_calls.map(call => ({ ...call, estimated_cost: requestCost({ stages: [{ model: call.model, usage: call.usage }] }, pricing) })), estimated_cost: requestCost({ stages: [stage] }, pricing) })) }, estimated_cost: requestCost(request_detail_base.operational, pricing), ...(validatedFlow ? { flow: validatedFlow } : {}) } : undefined;
 const reasons = { TEMPORAL_COHORT_UNRESOLVED: 'No he podido determinar todas las fechas con seguridad. No he guardado ningún hecho de esta solicitud. Indica el año y la fecha de cada uno para continuar.', TEMPORAL_COHORT_YEAR_CONFLICT: 'He detectado fechas de años incompatibles entre las partes de tu mensaje. No he guardado nada. Indica expresamente los años para continuar.', NO_RELEVANT_EVIDENCE: 'No encuentro información pertinente en tus notas.', AMBIGUOUS_REFERENCE: 'No he podido resolver con seguridad una referencia a una persona o nota. Indica a quién te refieres o reformula esa parte. No he guardado nada.', INCOMPLETE_EVIDENCE: 'La evidencia disponible no permite una respuesta completa y segura.', STALE_EVIDENCE: 'La información cambió durante la consulta; vuelve a intentarlo.', UNREPRESENTABLE_REQUEST: 'He entendido la solicitud, pero no puedo prepararla o completarla con seguridad todavía.', OPERATIONAL_FAILURE: 'No he podido completar la consulta por un problema operativo.', ROUTER_NEEDS_CAPABILITY: 'He entendido la solicitud, pero necesita una capacidad que todavía no está habilitada en DEV. No he guardado nada.', ROUTER_INVALID: 'No he podido decidir de forma segura qué aplicación debe gestionar la solicitud. No he guardado nada.', RANGE_REQUIRES_RANGE_AWARE_OPERATION: 'He entendido la referencia temporal como un intervalo, pero Calendar todavía no puede guardarla sin elegir una fecha concreta. No he guardado nada.', OUT_OF_SCOPE: 'Calendar ha recibido una solicitud que no pertenece a su ámbito. No he guardado nada.', CALENDAR_PLANNER_INVALID: 'Calendar no ha podido interpretar la solicitud de forma segura. No he guardado nada.', CALENDAR_EXECUTION_FAILED: 'Calendar ha entendido la solicitud, pero no ha podido convertirla en una escritura segura. No he guardado nada.', CALENDAR_PLAN_INVALID: 'Calendar ha producido un plan que no se puede ejecutar con seguridad. No he guardado nada.', WORK_SESSION_TASK_UNRESOLVED: 'No encuentro una única tarea para esa sesión de trabajo. Indica el nombre de la tarea con más precisión. No he guardado nada.', WORK_SESSION_TASK_AMBIGUOUS: 'Hay varias tareas que podrían ser esa. Indica con más precisión cuál quieres usar. No he guardado nada.', WORK_SESSION_ALREADY_ACTIVE: 'Ya hay una sesión de trabajo activa. Termínala antes de empezar otra. No he guardado otra sesión.', WORK_SESSION_NOT_ACTIVE: 'Esa tarea no tiene una sesión de trabajo activa.', WORK_SESSION_AMBIGUOUS: 'Hay varias sesiones de esa tarea en esa fecha. Indica una hora más concreta o edítala desde la propia tarea.', WORK_SESSION_END_BEFORE_START: 'La hora de fin no puede ser anterior a la hora de inicio.', WORK_SESSION_TASK_CLOSED: 'La tarea está completada o cancelada; no puedo iniciar una sesión de trabajo sobre ella.', WORK_SESSION_TEMPORAL_INVALID: 'No he podido interpretar con seguridad la hora de esa sesión de trabajo. No he guardado nada.', WORK_SESSION_RESOLUTION_FAILED: 'No he podido resolver la tarea de esa sesión de trabajo de forma segura. No he guardado nada.', WORK_SESSION_UNAVAILABLE: 'La sesión de trabajo ya no está disponible o ha cambiado. Vuelve a abrir la tarea antes de modificarla.', WORK_SESSION_ACTIVITY_INVALID: 'No he podido guardar esa actividad porque el texto no es válido.', WORK_SESSION_ACTIVITY_UNAVAILABLE: 'Esa actividad ya no está disponible o ha cambiado. Vuelve a abrir la sesión antes de modificarla.' };
 const outcome = ['ANSWER', 'CLARIFY', 'CANNOT_ANSWER'].includes(r.product_outcome) ? r.product_outcome : 'CANNOT_ANSWER';
 if (r.product_control === 'CANCEL') return [{ json: { route: 'direct', request_id: id, status: 'completed', kind: 'acknowledgement', message: 'De acuerdo, he cancelado la aclaración pendiente.', request_detail } }];
@@ -191,8 +196,10 @@ const duration = elapsed !== null && elapsed >= 0 ? elapsed : null;
 function withAnswerer(detail, outcome, errorCategory, parseStatus) {
   if (!detail) return undefined;
   const usage = providerUsage(answerResponse);
-  const answererCall = { name: 'answerer', outcome, duration_ms: duration, model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, error_category: errorCategory, parse_status: parseStatus };
-  const answererStage = { name: 'answerer', outcome, duration_ms: duration, model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, error_category: errorCategory, provider_calls: [answererCall] };
+  const answererCallBase = { name: 'answerer', outcome, duration_ms: duration, model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, error_category: errorCategory, parse_status: parseStatus };
+  const answererCall = { ...answererCallBase, estimated_cost: requestCost({ stages: [{ model: answererCallBase.model, usage }] }, pricing) };
+  const answererStageBase = { name: 'answerer', outcome, duration_ms: duration, model: 'gpt-5.6-luna', reasoning_effort: 'none', usage, error_category: errorCategory, provider_calls: [answererCall] };
+  const answererStage = { ...answererStageBase, estimated_cost: requestCost({ stages: [answererStageBase] }, pricing) };
   const enriched = { ...detail, operational: { ...detail.operational, stages: [...detail.operational.stages, answererStage] } };
   return { ...enriched, estimated_cost: requestCost(enriched.operational, pricing) };
 }

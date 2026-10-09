@@ -182,7 +182,21 @@ def normalize_provider_usage(value: Any) -> dict[str, int] | None:
     """
     usage: Any = value
     if not isinstance(usage, Mapping):
-        usage = getattr(value, "usage", None)
+        # Responses SDK exposes ``response.usage`` as an object, while callers
+        # such as Router retain that object directly.  Treat a direct object
+        # with allowlisted counters as usage; otherwise it may be a complete
+        # response envelope and its nested usage is the only source.
+        direct_counter_names = (
+            "input_tokens",
+            "cached_input_tokens",
+            "cache_write_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "input_tokens_details",
+            "output_tokens_details",
+        )
+        if not any(hasattr(usage, name) for name in direct_counter_names):
+            usage = getattr(value, "usage", None)
     if isinstance(usage, Mapping) and "usage" in usage:
         usage = usage.get("usage")
     if usage is None:
@@ -202,14 +216,17 @@ def normalize_provider_usage(value: Any) -> dict[str, int] | None:
         "reasoning_tokens",
     ):
         raw = field(usage, name)
-        if isinstance(raw, int) and raw >= 0:
+        if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
             counters[name] = raw
     input_details = field(usage, "input_tokens_details")
     cached = field(input_details, "cached_tokens")
-    if isinstance(cached, int) and cached >= 0:
+    if isinstance(cached, int) and not isinstance(cached, bool) and cached >= 0:
         counters["cached_input_tokens"] = cached
+    cache_writes = field(input_details, "cache_write_tokens")
+    if isinstance(cache_writes, int) and not isinstance(cache_writes, bool) and cache_writes >= 0:
+        counters["cache_write_tokens"] = cache_writes
     output_details = field(usage, "output_tokens_details")
     reasoning = field(output_details, "reasoning_tokens")
-    if isinstance(reasoning, int) and reasoning >= 0:
+    if isinstance(reasoning, int) and not isinstance(reasoning, bool) and reasoning >= 0:
         counters["reasoning_tokens"] = reasoning
     return counters or None

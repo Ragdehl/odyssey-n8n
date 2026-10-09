@@ -40,16 +40,18 @@ def test_request_cost_uses_one_bounded_call_record_per_provider_call() -> None:
     assert "if (Array.isArray(stage.provider_calls) && stage.provider_calls.length)" in source
     assert "else if (stage.model && stage.usage)" in source
     assert "provider_calls: [answererCall]" in source
+    assert "answererCallBase, estimated_cost: requestCost" in source
+    assert "answererStageBase, estimated_cost: requestCost" in source
     assert "estimated_cost: requestCost(enriched.operational, pricing)" in source
 
 
 def test_request_cost_handles_cached_input_and_fails_closed() -> None:
-    """Keep cached pricing explicit and never represent missing evidence as zero."""
+    """Keep cached/cache-write pricing explicit and never represent missing evidence as zero."""
     source = SOURCE.read_text(encoding="utf-8")
-    assert "usage.cached_input_tokens > usage.input_tokens" in source
+    assert "usage.cached_input_tokens + cacheWrite > usage.input_tokens" in source
     assert "rates.cached_input_per_million" in source
     assert "status: 'unavailable', amount_usd: null" in source
-    assert "cacheWrite > 0" in source
+    assert "cache_write_per_million" in source
 
 
 def test_request_cost_supports_luna_and_bounded_sol_calls() -> None:

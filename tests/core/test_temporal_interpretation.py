@@ -205,7 +205,7 @@ def test_provider_contract_makes_one_low_reasoning_call_without_retries() -> Non
             return SimpleNamespace(
                 status="completed",
                 output_text=json.dumps({"mentions": [mention("hoy")]}),
-                usage=None,
+                usage=SimpleNamespace(input_tokens=90, output_tokens=20),
                 id="resp-temporal",
             )
 
@@ -218,6 +218,7 @@ def test_provider_contract_makes_one_low_reasoning_call_without_retries() -> Non
     assert calls[0]["reasoning"] == {"effort": "low"}
     assert calls[0]["store"] is False
     assert calls[0]["text"]["format"]["strict"] is True
+    assert interpreter.last_usage.input_tokens == 90
 
 
 def test_from_environment_disables_sdk_retries_and_sets_timeout(monkeypatch) -> None:

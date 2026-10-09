@@ -23,6 +23,7 @@ from odyssey_apps import (
     validate_route_plan,
 )
 from odyssey_apps.router import ROUTER_PROVIDER_TIMEOUT_SECONDS, render_router_prompt
+from odyssey_core.observability import normalize_provider_usage
 
 TEST_APP_DESCRIPTOR = ApplicationDescriptor(
     "tasks", "task lifecycle, due dates, completion and obligations", ("temporal",)
@@ -300,12 +301,12 @@ def test_fake_provider_uses_exact_luna_low_strict_schema_and_bounded_context() -
 
 def test_router_retains_bounded_provider_usage_for_runtime_telemetry() -> None:
     """Expose safe router call metadata without retaining prompt or response content."""
-    usage = {
-        "input_tokens": 90,
-        "output_tokens": 20,
-        "input_tokens_details": {"cached_tokens": 10},
-        "output_tokens_details": {"reasoning_tokens": 5},
-    }
+    usage = SimpleNamespace(
+        input_tokens=90,
+        output_tokens=20,
+        input_tokens_details=SimpleNamespace(cached_tokens=10),
+        output_tokens_details=SimpleNamespace(reasoning_tokens=5),
+    )
     fake = FakeResponses(
         SimpleNamespace(
             id="resp-router",
@@ -325,6 +326,12 @@ def test_router_retains_bounded_provider_usage_for_runtime_telemetry() -> None:
     assert router.last_response_id == "resp-router"
     assert router.last_provider_status == "completed"
     assert router.last_error_category is None
+    assert normalize_provider_usage(router.last_usage) == {
+        "input_tokens": 90,
+        "cached_input_tokens": 10,
+        "output_tokens": 20,
+        "reasoning_tokens": 5,
+    }
 
 
 def test_prompt_allows_temporal_routing_without_date_normalization_or_context_authority() -> None:

@@ -30,3 +30,20 @@ def test_provider_usage_normalization_keeps_only_supplied_counters() -> None:
 def test_provider_usage_without_usage_is_unavailable_not_zero() -> None:
     """Do not fabricate zero counters when a provider did not return usage."""
     assert normalize_provider_usage({"id": "response-without-usage"}) is None
+
+
+def test_direct_provider_usage_preserves_cache_write_tokens_from_nested_sdk_details() -> None:
+    """A cache write is input usage, not a separate output charge or an invented zero."""
+    usage = SimpleNamespace(
+        input_tokens=400,
+        input_tokens_details=SimpleNamespace(cached_tokens=40, cache_write_tokens=260),
+        output_tokens=20,
+        output_tokens_details=SimpleNamespace(reasoning_tokens=5),
+    )
+    assert normalize_provider_usage(usage) == {
+        "input_tokens": 400,
+        "cached_input_tokens": 40,
+        "cache_write_tokens": 260,
+        "output_tokens": 20,
+        "reasoning_tokens": 5,
+    }

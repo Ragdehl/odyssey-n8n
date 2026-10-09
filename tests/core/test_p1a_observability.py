@@ -16,6 +16,7 @@ from odyssey_core.observability import (
     OperationalOutcome,
     OperationalSpan,
     OperationalStage,
+    normalize_provider_usage,
     reconcile_duration,
 )
 from odyssey_core.request_planning import PlannerClarification, RequestPlan
@@ -23,6 +24,27 @@ from odyssey_runtime.serialization import operational_to_response
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTEXT = {"date": "2026-09-22", "time": "20:00", "timezone": "Europe/Paris"}
+
+
+def test_normalize_provider_usage_accepts_direct_sdk_usage_without_inventing_missing_counts() -> (
+    None
+):
+    """Preserve direct SDK usage retained by Router, Temporal, and Tasks diagnostics."""
+    usage = SimpleNamespace(
+        input_tokens=1800,
+        input_tokens_details=SimpleNamespace(cached_tokens=960),
+        output_tokens=200,
+        output_tokens_details=SimpleNamespace(reasoning_tokens=157),
+    )
+
+    assert normalize_provider_usage(usage) == {
+        "input_tokens": 1800,
+        "cached_input_tokens": 960,
+        "output_tokens": 200,
+        "reasoning_tokens": 157,
+    }
+    assert normalize_provider_usage(SimpleNamespace(input_tokens=True, output_tokens=-1)) is None
+    assert normalize_provider_usage(SimpleNamespace(unrelated="not usage")) is None
 
 
 class ManualClock:

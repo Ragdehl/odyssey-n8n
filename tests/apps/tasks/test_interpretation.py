@@ -452,7 +452,7 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
                         "activity_target": "NONE",
                     }
                 ),
-                usage=None,
+                usage=SimpleNamespace(input_tokens=90, output_tokens=20),
                 id="task-test",
             )
 
@@ -469,6 +469,7 @@ def test_task_interpreter_call_is_bounded_and_returns_only_domain_semantics() ->
     assert responses.kwargs["model"] == "gpt-6-luna"
     assert responses.kwargs["reasoning"] == {"effort": "low"}
     assert responses.kwargs["store"] is False
+    assert interpreter.last_usage.input_tokens == 90
 
 
 def test_core_domain_validation_requires_exact_task_property_evidence() -> None:

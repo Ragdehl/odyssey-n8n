@@ -172,8 +172,10 @@ function arrow(doc, name = "") {
   return line;
 }
 
-function chip(doc, text, type = "") {
-  return element(doc, "span", `flow-chip ${type}`, text);
+function chip(doc, text, type = "", title = "") {
+  const value = element(doc, "span", `flow-chip ${type}`, text);
+  if (title) value.title = title;
+  return value;
 }
 
 function stageTitle(name) {
@@ -198,16 +200,21 @@ function duration(ms) {
 function tokens(usage) {
   if (!usage || typeof usage !== "object") return [];
   const results = [];
-  if (Number.isInteger(usage.input_tokens)) results.push(`↓ ${usage.input_tokens.toLocaleString("es-ES")}`);
-  if (Number.isInteger(usage.cached_input_tokens)) results.push(`↳ ${usage.cached_input_tokens.toLocaleString("es-ES")} caché`);
-  if (Number.isInteger(usage.output_tokens)) results.push(`↑ ${usage.output_tokens.toLocaleString("es-ES")}`);
-  if (Number.isInteger(usage.reasoning_tokens)) results.push(`◈ ${usage.reasoning_tokens.toLocaleString("es-ES")}`);
+  if (Number.isInteger(usage.input_tokens)) results.push([`Entrada ${usage.input_tokens.toLocaleString("es-ES")}`, "Tokens de entrada enviados al modelo."]);
+  if (Number.isInteger(usage.cached_input_tokens)) results.push([`Caché ${usage.cached_input_tokens.toLocaleString("es-ES")}`, "Parte de la entrada que el proveedor informó como caché."]);
+  if (Number.isInteger(usage.cache_write_tokens)) results.push([`Escritura caché ${usage.cache_write_tokens.toLocaleString("es-ES")}`, "Tokens de entrada informados como escritura de caché por el proveedor."]);
+  if (Number.isInteger(usage.output_tokens)) results.push([`Salida ${usage.output_tokens.toLocaleString("es-ES")}`, "Tokens de salida devueltos por el modelo."]);
+  if (Number.isInteger(usage.reasoning_tokens)) results.push([`Razonamiento ${usage.reasoning_tokens.toLocaleString("es-ES")}`, "El razonamiento es un subconjunto de los tokens de salida; no se suma otra vez."]);
   return results;
 }
 
 function cost(value) {
   return value?.status === "estimated" && typeof value.amount_usd === "number"
-    ? `~$${value.amount_usd.toFixed(6)}` : "";
+    ? `Coste estimado ~$${value.amount_usd.toFixed(6)}` : "";
+}
+
+function costOrUnavailable(value, hasProviderCall) {
+  return cost(value) || (hasProviderCall ? "Coste no disponible" : "");
 }
 
 // Reuse Odyssey's thin, rounded SVG stroke language; no platform emoji glyphs.
@@ -319,18 +326,21 @@ function stageCard(doc, stage, route = null, observedStep = null) {
   const calls = stage.provider_calls ?? [];
   const model = calls.length === 1 ? calls[0].model || stage.model : stage.model;
   const info = [model, stage.reasoning_effort, duration(stage.duration_ms),
-    calls.length ? `${calls.length} llamada${calls.length === 1 ? "" : "s"}` : "", cost(stage.estimated_cost)];
+    calls.length ? `${calls.length} llamada${calls.length === 1 ? "" : "s"}` : "", costOrUnavailable(stage.estimated_cost, Boolean(calls.length || model))];
   for (const value of info.filter(Boolean)) stats.append(chip(doc, String(value)));
   const usage = stage.usage || (calls.length === 1 ? calls[0].usage : null);
-  for (const value of tokens(usage)) stats.append(chip(doc, value, "flow-chip-tokens"));
+  for (const [label, title] of tokens(usage)) stats.append(chip(doc, label, "flow-chip-tokens", title));
   if (stats.children.length) card.append(stats);
   // Provider fallbacks must remain inspectable, not collapsed into a fictional model.
   if (calls.length > 1) {
     const attempts = element(doc, "details", "flow-provider-details");
     attempts.append(element(doc, "summary", "", `${calls.length} llamadas de proveedor`));
     for (const call of calls) {
-      const label = [call.model || call.name, duration(call.duration_ms), call.outcome].filter(Boolean).join(" · ");
-      attempts.append(element(doc, "p", "flow-provider-line", label));
+      const attempt = element(doc, "div", "flow-provider-line");
+      attempt.append(element(doc, "p", "", [call.model || call.name, duration(call.duration_ms), call.outcome,
+        costOrUnavailable(call.estimated_cost, Boolean(call.model))].filter(Boolean).join(" · ")));
+      for (const [label, title] of tokens(call.usage)) attempt.append(chip(doc, label, "flow-chip-tokens", title));
+      attempts.append(attempt);
     }
     card.append(attempts);
   }
@@ -481,7 +491,10 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
     : outcomes.includes("failed") ? "No completado" : "Resultado de Odyssey";
   const end = plainCard(doc, result, "", result === "Rutas completadas" ? "success" : "outcome");
   const stats = element(doc, "div", "flow-stats");
-  for (const text of [duration(detail.operational.total_duration_ms), cost(detail.estimated_cost),
+  const finalCost = cost(detail.estimated_cost);
+  const totalLabel = finalCost ? finalCost.replace("Coste estimado", "Coste total estimado")
+    : "Coste total no disponible";
+  for (const text of [duration(detail.operational.total_duration_ms), totalLabel,
     detail.changes?.affected_stable_note_ids?.length ? `${detail.changes.affected_stable_note_ids.length} notas` : ""].filter(Boolean)) {
     stats.append(chip(doc, text));
   }

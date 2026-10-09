@@ -99,8 +99,8 @@ test("directed execution graph preserves actual route order, source, dates and m
   assert.match(graph.textContent, /Dividido en 2 fragmentos/);
   assert.equal(graph.findAll("flow-icon").length >= 7, true);
   assert.match(first.textContent, /gpt-5.6-luna/);
-  assert.match(first.textContent, /11.000 caché/);
-  assert.match(first.textContent, /\$0\.001400/);
+  assert.match(first.textContent, /Caché 11.000/);
+  assert.match(first.textContent, /Coste estimado ~\$0\.001400/);
   assert.match(graph.textContent, /Preparación simultánea/);
   assert.match(graph.textContent, /Rutas completadas/);
   assert.match(first.textContent, /Estado de ruta: completed/);
@@ -171,6 +171,27 @@ test("mobile route diagram keeps horizontal scroll and never uses emoji icon gly
   const renderer = readFileSync(new URL("../odyssey_web/progress.js", import.meta.url), "utf8");
   assert.match(renderer, /createElementNS\(SVG_NS, "svg"\)/);
   assert.doesNotMatch(renderer, /[💬🧠🗓📁📋🗃✅🔗🔀✍]/u);
+});
+
+test("usage and costs have self-explanatory Spanish labels without double-counting reasoning", () => {
+  const actual = diagnostic();
+  actual.operational.stages[1].estimated_cost = {status: "estimated", amount_usd: .0014, pricing_basis: "2026-10-09"};
+  actual.operational.stages[1].provider_calls[0].estimated_cost = {status: "estimated", amount_usd: .0014, pricing_basis: "2026-10-09"};
+  actual.operational.stages[1].provider_calls[0].usage.reasoning_tokens = 120;
+  const output = renderExecutionFlow(doc, actual);
+  assert.match(output.textContent, /Entrada 12\.000/);
+  assert.match(output.textContent, /Caché 11\.000/);
+  assert.match(output.textContent, /Salida 150/);
+  assert.match(output.textContent, /Razonamiento 120/);
+  assert.match(output.textContent, /Coste estimado/);
+  assert.doesNotMatch(output.textContent, /↓|↑|◈|↳/u);
+});
+
+test("provider calls with missing counters disclose unavailable cost", () => {
+  const actual = diagnostic();
+  actual.operational.stages[0].estimated_cost = {status: "unavailable", amount_usd: null, pricing_basis: "2026-10-09"};
+  const output = renderExecutionFlow(doc, actual);
+  assert.match(output.textContent, /Coste no disponible/);
 });
 
 const checkpoint = {
