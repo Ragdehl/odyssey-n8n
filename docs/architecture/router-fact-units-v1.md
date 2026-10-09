@@ -127,9 +127,25 @@ all source assertions were split: those require frozen model oracles and Core
 preflight. The current same-role preview intentionally omits evidence it cannot
 ground rather than making up inherited wording.
 
+**Block 4B1 source-scope/Temporal bridge (same isolated branch, read-only):**
+`odyssey_apps/fact_temporal.py` joins a validated original-message
+`FactCandidateProposal` to an independently validated `TemporalInterpretation`
+from that **same immutable full source**. It checks exact original mention
+positions and preserves per-unit explicit and earlier-inherited source roles;
+new explicit date/time wording overrides the inherited role while leaving
+other roles untouched. A shared later time may refer to two earlier semantic
+candidates without moving text or requiring either write to succeed. The
+bridge distinguishes matched, unsupported/unspecified and missing Temporal
+results; it does not promote approximate `sobre ...`, `time_relation` or date
+range evidence into an exact Core instant. The returned evidence is provisional
+and is **not** inserted into `DomainInterpretation` or any Core write. Tests
+cover F01/F02/F08/F21/F26, overridden dates, absent Temporal, and source
+mismatch, with only injected synthetic Temporal interpretations and no API.
+The existing Temporal interpreter and its model-facing contract are unchanged.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
-source-context preflight/dispatch adapter into existing Temporal and Core
-boundaries; independent/ambiguous partial outcomes and replay semantics; source
+source-context preflight/dispatch adapter that uses the existing Temporal
+interpretation and Core planning/write boundaries; independent/ambiguous partial outcomes and replay semantics; source
 coverage and condition/polarity/correction ownership checks; generic shared
 transaction semantics; request-detail diagnostics within approved budgets; and
 provider-free vertical Router→Temporal→Core→disposable Markdown tests. Do not

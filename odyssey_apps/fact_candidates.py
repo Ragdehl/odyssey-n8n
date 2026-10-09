@@ -360,8 +360,9 @@ def as_candidate_preview(proposal: FactCandidateProposal) -> dict[str, Any]:
             for scope in item.scopes
             if scope.role in allowed and len(scope.anchor.text) <= 160
         ]
+        explicit_roles = {scope.role for scope in item.scopes}
         for edge in item.inheritance:
-            if edge.role not in allowed:
+            if edge.role not in allowed or edge.role in explicit_roles:
                 continue
             original = _inherited_source_anchor(proposal, edge)
             if original is not None and len(original.text) <= 160:

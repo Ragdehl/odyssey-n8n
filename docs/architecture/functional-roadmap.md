@@ -44,7 +44,7 @@ measured latency savings from deterministic concurrence tests alone.
 source-anchored parser and injected one-call proposal adapter are implemented for
 the 26 design cases / 56 candidates. Roles and inheritance remain unverified
 linguistic evidence with no Note type, Core write, runtime dispatch or new
-frontend transport. Full Block 4B integration and a focused GPT-6 Luna live gate
+frontend transport. A read-only candidate/Temporal source-scope bridge is now also in the feature branch. Full Block 4B integration and a focused GPT-6 Luna live gate
 are required before an isolated DEV deployment; Router v0 remains operational.
 
 ## Current functional work — explainable clarification
