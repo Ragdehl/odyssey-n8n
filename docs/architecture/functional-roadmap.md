@@ -40,6 +40,13 @@ measured latency savings from deterministic concurrence tests alone.
 
 [Router fact-candidate units v1](router-fact-units-v1.md) records the user-reviewed direction for independent atomic candidate assertions, typed source-context inheritance, and separation from Core-owned persistence. Its 22 user-agreed plus four additional generic-subject future oracles are not a live Router contract, and the current `dev` Router v0 remains unchanged. Frontend Block 3 preparation now makes existing validated v1 route evidence legible, provides an optional read-only renderer for the inactive bounded checkpoint shape, and supplies a local test-only candidate preview; none crosses a product transport or grants write/identity authority. The approved partial-write direction retains validated independent facts while ambiguity remains pending with targeted clarification, not blanket abort. Diagnostic checkpoints/graph come before any v1 provider/runtime activation; product choices about partial writes and conditional/negative persistence remain open.
 
+**Router candidates Block 4A (feature branch, not activated):** the closed
+source-anchored parser and injected one-call proposal adapter are implemented for
+the 26 design cases / 56 candidates. Roles and inheritance remain unverified
+linguistic evidence with no Note type, Core write, runtime dispatch or new
+frontend transport. Full Block 4B integration and a focused GPT-6 Luna live gate
+are required before an isolated DEV deployment; Router v0 remains operational.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the

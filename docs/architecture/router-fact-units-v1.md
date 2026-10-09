@@ -97,6 +97,48 @@ Block 3: graph shows route-by-route observed stage I/O, Core-verified entity evi
 
 Block 4: implement + version the candidate segmentation/dispatch with a contract adapter; keep protected v0/Temporal/Core guards and test rollback in isolated DEV. No production or real-vault deployment until separate authorization.
 
+**Block 4A implementation checkpoint (isolated feature branch; NOT active):**
+`odyssey_apps/fact_candidates.py` now offers a closed version-1 candidate proposal
+schema, local validation of exact original Unicode substrings with zero-based
+occurrence discriminators, locally calculated character offsets, request-local
+candidate IDs, generic source roles and earlier-unit source-context inheritance.
+It also exposes a single-call **injected-provider adapter** with `store=false`,
+a bounded input/output contract and no credentials, resolver, persistence, or
+execution method. It is **not connected to runtime routing**: the existing Router
+v0 schema, prompt, Core/Temporal route contract, model behavior and canonical
+Markdown remain unchanged. The 26 historical *design* examples (56 candidates)
+validate structurally through this implementation with no provider calls. These
+checks prove source correspondence and field safety, **not** that Luna actually
+recognizes the right 56 semantic units. Adversarial local checks reject invented
+source, invalid Unicode occurrences, extra canonical/write fields, unsupported
+roles and incorrect source-context predecessors. An optional local-only preview
+projection has passed the existing browser validator for 26/26 examples with 56
+cards; inherited labels cite the actual earlier role source when it exists and
+never claim Core `verified` evidence. No new product request-detail data crosses
+n8n/browser allowlists.
+
+The initial representation uses the source literal plus occurrence discriminator;
+providers never supply trusted character offsets. Later-occurring dates/times can
+be scoped to earlier candidate units without a write dependency. All accepted
+candidate anchors and scopes are checked against the original source, which is
+retained in full even when a correction supersedes a proposed fact. The validator
+**cannot prove grammatical correctness**, unique real-world identity or whether
+all source assertions were split: those require frozen model oracles and Core
+preflight. The current same-role preview intentionally omits evidence it cannot
+ground rather than making up inherited wording.
+
+**Remaining Block 4B before any DEV activation:** an explicit, reviewed
+source-context preflight/dispatch adapter into existing Temporal and Core
+boundaries; independent/ambiguous partial outcomes and replay semantics; source
+coverage and condition/polarity/correction ownership checks; generic shared
+transaction semantics; request-detail diagnostics within approved budgets; and
+provider-free vertical Router→Temporal→Core→disposable Markdown tests. Do not
+map candidates to existing disjoint v0 `Route` objects or turn lexical inheritance
+into `depends_on` (which is canonical-write dependency). Version and review the
+new GPT-6 Luna model-facing contract, obtain an allowed, separately budgeted
+focused live semantic gate, and only then activate in isolated DEV with rollback.
+No Sol/cache changes or real-vault deployment are part of 4A.
+
 ## Open decisions before implementation (do not silently settle)
 
 1. **Multi-unit outcomes — USER APPROVED:** persist validated independent facts even if another candidate remains ambiguous; block/defer the ambiguous/dependent fact and seek targeted clarification, as in existing clarification UX. Any interdependent candidate with uncertain grounding stays fail-closed. This is product direction, **not yet implemented**; exact concurrency/replay/write preflight remains an implementation proof obligation.
