@@ -32,6 +32,8 @@ def test_checkpoint_store_is_latest_only_atomic_bounded_and_recoverable(tmp_path
 
     assert first["sequence"] == 1
     assert second["sequence"] == 2
+    assert [entry["stage"] for entry in second["events"]] == ["starting", "planner.ready"]
+    assert second["truncated"] is False
     assert (
         LocalExecutionCheckpointStore(tmp_path / "checkpoints", max_records=1).load("request-1")
         == second
@@ -153,3 +155,79 @@ def test_checkpoint_failure_never_interrupts_write_and_execution_failure_is_unkn
     assert checkpoint is not None
     assert checkpoint["stage"] == "failed_or_unknown"
     assert checkpoint["outcome"] == "failed_or_unknown"
+
+
+def test_checkpoint_preserves_a_bounded_trace_and_marks_truncation(tmp_path: Path) -> None:
+    """After a long trace, preserve the last 64 stages without hiding that earlier ones were lost."""
+    store = LocalExecutionCheckpointStore(tmp_path / "checkpoint")
+    for _ in range(69):
+        store.record("trace-69", "planner.started", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
+    recovered = LocalExecutionCheckpointStore(tmp_path / "checkpoint").load("trace-69")
+    assert recovered is not None
+    assert recovered["sequence"] == 69
+    assert recovered["truncated"] is True
+    assert len(recovered["events"]) == 64
+    assert [entry["sequence"] for entry in recovered["events"]] == list(range(6, 70))
+
+
+def test_checkpoint_rejects_mismatched_record_identity_and_false_delivery_claim(
+    tmp_path: Path,
+) -> None:
+    """A corrupt path binding or invented persisted status never becomes evidence."""
+    import json
+
+    store = LocalExecutionCheckpointStore(tmp_path / "checkpoint")
+    store.record("trace-1", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
+    path = next((tmp_path / "checkpoint").iterdir())
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["request_id"] = "another-valid-id"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ExecutionCheckpointError):
+        store.load("trace-1")
+    with pytest.raises(ExecutionCheckpointError, match="disagree"):
+        store.record(
+            "trace-2", "delivery.result_persisted", CheckpointOutcome.MILESTONE_OBSERVED, NOW
+        )
+    assert store.load("trace-2") is None
+
+
+def test_runtime_trace_contains_handoffs_but_never_claims_a_write_from_a_milestone(
+    tmp_path: Path,
+) -> None:
+    """The sequence exposes observed stages without persisting any model reference text."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+
+    def execute(_request, request_id, *_args, **_kwargs):
+        composition._emit_progress("routing.started")
+        composition._emit_progress("routing.ready", {"route_count": 3})
+        composition._emit_progress("temporal.ready", {"values": ("tomorrow",)})
+        return ApplicationResult(
+            request_id=request_id,
+            status=ApplicationStatus.NEEDS_ATTENTION,
+            action_results=(),
+            affected_stable_note_ids=(),
+            history=GitHistoryResult.disabled(),
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=execute,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
+    )
+    response = runtime.execute_product("synthetic", "trace-ambiguous", "main", ACTOR_A)
+    checkpoint = LocalExecutionCheckpointStore(
+        resolver.resolve(ACTOR_A.stable_user_id) / "execution-checkpoints"
+    ).load("trace-ambiguous")
+    assert checkpoint is not None
+    assert [event["stage"] for event in checkpoint["events"]] == [
+        "starting",
+        "routing.started",
+        "routing.ready",
+        "temporal.ready",
+        "finalizing",
+        "processing.returned",
+    ]
+    assert checkpoint["outcome"] == "processing_returned"
+    assert "tomorrow" not in str(checkpoint)
+    assert response["affected_stable_note_ids"] == []

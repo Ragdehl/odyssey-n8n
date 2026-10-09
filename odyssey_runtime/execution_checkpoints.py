@@ -12,7 +12,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-_MAX_RECORD_BYTES = 4 * 1024
+_MAX_RECORD_BYTES = 16 * 1024
+_MAX_EVENTS = 64
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
 _STAGES = frozenset(
     {
@@ -28,7 +29,7 @@ _STAGES = frozenset(
         "action.write.started",
         "finalizing",
         "delivery.result_persisted",
-        "completed",
+        "processing.returned",
         "failed_or_unknown",
     }
 )
@@ -39,16 +40,16 @@ class ExecutionCheckpointError(RuntimeError):
 
 
 class CheckpointOutcome(StrEnum):
-    """Describe what the latest checkpoint can safely claim."""
+    """Describe what one checkpoint milestone can safely claim."""
 
     MILESTONE_OBSERVED = "milestone_observed"
     RESULT_PERSISTED = "result_persisted"
-    COMPLETED = "completed"
+    PROCESSING_RETURNED = "processing_returned"
     FAILED_OR_UNKNOWN = "failed_or_unknown"
 
 
 class LocalExecutionCheckpointStore:
-    """Persist one bounded latest-stage diagnostic record per request under one actor root.
+    """Persist bounded source-free diagnostic milestones per request under one actor root.
 
     The store is intentionally non-authoritative: it never resumes work, proves a mutation, or
     substitutes for ``LocalDeliveryResultStore``. A full store fails closed for new request IDs;
@@ -71,7 +72,7 @@ class LocalExecutionCheckpointStore:
         outcome: CheckpointOutcome,
         observed_at: str,
     ) -> dict[str, Any]:
-        """Atomically replace one request's latest safe diagnostic milestone.
+        """Atomically append one safe milestone to a bounded rolling diagnostic history.
 
         Raises:
             ExecutionCheckpointError: If input, prior state, capacity, or storage is invalid.
@@ -82,12 +83,21 @@ class LocalExecutionCheckpointStore:
             raise ExecutionCheckpointError("checkpoint outcome is invalid")
         self._validate_time(observed_at)
         path = self._path(request_id)
-        previous = self._read(path) if path.exists() else None
+        previous = self._read(path, request_id) if path.exists() else None
         if previous is None:
             self._ensure_capacity()
             sequence = 1
         else:
             sequence = previous["sequence"] + 1
+        self._validate_stage_outcome(stage, outcome)
+        event = {
+            "sequence": sequence,
+            "stage": stage,
+            "outcome": outcome.value,
+            "observed_at": observed_at,
+        }
+        history = ([] if previous is None else previous["events"]) + [event]
+        truncated = bool(previous and previous["truncated"]) or len(history) > _MAX_EVENTS
         record = {
             "version": 1,
             "request_id": request_id,
@@ -95,15 +105,17 @@ class LocalExecutionCheckpointStore:
             "outcome": outcome.value,
             "sequence": sequence,
             "observed_at": observed_at,
+            "events": history[-_MAX_EVENTS:],
+            "truncated": truncated,
         }
         self._atomic_write(path, record)
         return dict(record)
 
     def load(self, request_id: str) -> dict[str, Any] | None:
-        """Return a validated latest checkpoint, or ``None`` when no record exists."""
+        """Return the bounded validated milestone history, or ``None`` if absent."""
         self._validate_request_id(request_id)
         path = self._path(request_id)
-        return self._read(path) if path.exists() else None
+        return self._read(path, request_id) if path.exists() else None
 
     def _ensure_capacity(self) -> None:
         """Refuse a new record once the no-retention capacity bound is reached."""
@@ -118,7 +130,7 @@ class LocalExecutionCheckpointStore:
         if count >= self._max_records:
             raise ExecutionCheckpointError("checkpoint store capacity is exhausted")
 
-    def _read(self, path: Path) -> dict[str, Any]:
+    def _read(self, path: Path, request_id: str) -> dict[str, Any]:
         try:
             raw = path.read_bytes()
             if len(raw) > _MAX_RECORD_BYTES:
@@ -133,15 +145,47 @@ class LocalExecutionCheckpointStore:
             "outcome",
             "sequence",
             "observed_at",
+            "events",
+            "truncated",
         }:
             raise ExecutionCheckpointError("checkpoint is invalid")
         try:
             self._validate_request_id(value["request_id"])
             self._validate_stage(value["stage"])
             CheckpointOutcome(value["outcome"])
-            if not isinstance(value["sequence"], int) or value["sequence"] < 1:
+            if type(value["sequence"]) is not int or not 1 <= value["sequence"] <= 2**31 - 1:
                 raise ExecutionCheckpointError("checkpoint is invalid")
             self._validate_time(value["observed_at"])
+            self._validate_stage_outcome(value["stage"], CheckpointOutcome(value["outcome"]))
+            if value["request_id"] != request_id or type(value["truncated"]) is not bool:
+                raise ExecutionCheckpointError("checkpoint is invalid")
+            events = value["events"]
+            if not isinstance(events, list) or not 1 <= len(events) <= _MAX_EVENTS:
+                raise ExecutionCheckpointError("checkpoint is invalid")
+            for ordinal, event in enumerate(events):
+                if not isinstance(event, dict) or set(event) != {
+                    "sequence",
+                    "stage",
+                    "outcome",
+                    "observed_at",
+                }:
+                    raise ExecutionCheckpointError("checkpoint is invalid")
+                if type(event["sequence"]) is not int or event["sequence"] != (
+                    value["sequence"] - len(events) + ordinal + 1
+                ):
+                    raise ExecutionCheckpointError("checkpoint is invalid")
+                self._validate_stage(event["stage"])
+                self._validate_stage_outcome(event["stage"], CheckpointOutcome(event["outcome"]))
+                self._validate_time(event["observed_at"])
+            if events[-1] != {
+                "sequence": value["sequence"],
+                "stage": value["stage"],
+                "outcome": value["outcome"],
+                "observed_at": value["observed_at"],
+            }:
+                raise ExecutionCheckpointError("checkpoint is invalid")
+            if value["truncated"] != (value["sequence"] > len(events)):
+                raise ExecutionCheckpointError("checkpoint is invalid")
         except (KeyError, TypeError, ValueError) as error:
             raise ExecutionCheckpointError("checkpoint is invalid") from error
         if value["version"] != 1:
@@ -191,3 +235,15 @@ class LocalExecutionCheckpointStore:
                 raise ValueError
         except ValueError as error:
             raise ExecutionCheckpointError("checkpoint time is invalid") from error
+
+    @staticmethod
+    def _validate_stage_outcome(stage: str, outcome: CheckpointOutcome) -> None:
+        """Prevent diagnostic status labels from claiming unsupported completion."""
+        claimed = {
+            "delivery.result_persisted": CheckpointOutcome.RESULT_PERSISTED,
+            "processing.returned": CheckpointOutcome.PROCESSING_RETURNED,
+            "failed_or_unknown": CheckpointOutcome.FAILED_OR_UNKNOWN,
+        }
+        required = claimed.get(stage, CheckpointOutcome.MILESTONE_OBSERVED)
+        if outcome != required:
+            raise ExecutionCheckpointError("checkpoint stage and outcome disagree")

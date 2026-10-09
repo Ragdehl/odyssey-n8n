@@ -435,6 +435,14 @@ class RuntimeComposition:
                     response = self._pending_clarification_response(request_id, pending)
                     if store is not None and fingerprint is not None:
                         store.save(request_id, fingerprint, response, _current_time()["timestamp"])
+                    self._record_terminal_checkpoint(
+                        checkpoint_store,
+                        request_id,
+                        response,
+                        store,
+                        fingerprint,
+                        force_replay=True,
+                    )
                     return response
                 clarification_store.clear()
                 if decision == "CANCEL":
@@ -444,6 +452,14 @@ class RuntimeComposition:
                     response = self._control_response(request_id, "CANCEL")
                     if store is not None and fingerprint is not None:
                         store.save(request_id, fingerprint, response, _current_time()["timestamp"])
+                    self._record_terminal_checkpoint(
+                        checkpoint_store,
+                        request_id,
+                        response,
+                        store,
+                        fingerprint,
+                        force_replay=True,
+                    )
                     return response
                 if decision != "NEW_REQUEST":
                     option_index = next(
@@ -462,6 +478,14 @@ class RuntimeComposition:
                             store.save(
                                 request_id, fingerprint, response, _current_time()["timestamp"]
                             )
+                        self._record_terminal_checkpoint(
+                            checkpoint_store,
+                            request_id,
+                            response,
+                            store,
+                            fingerprint,
+                            force_replay=True,
+                        )
                         return response
                     choice = ClarificationChoice(
                         decision,
@@ -610,8 +634,10 @@ class RuntimeComposition:
         self._record_checkpoint(
             checkpoint_store,
             request_id,
-            "delivery.result_persisted" if persisted else "completed",
-            CheckpointOutcome.RESULT_PERSISTED if persisted else CheckpointOutcome.COMPLETED,
+            "delivery.result_persisted" if persisted else "processing.returned",
+            CheckpointOutcome.RESULT_PERSISTED
+            if persisted
+            else CheckpointOutcome.PROCESSING_RETURNED,
         )
 
     def _record_progress_event(
