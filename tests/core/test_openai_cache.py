@@ -47,6 +47,7 @@ def test_short_or_unproven_prefixes_remain_implicit_without_content_diagnostics(
     assert transport is None
     assert short.outcome == "implicit_prefix_too_short"
     assert unproven.outcome == "implicit_unproven_stability"
+    assert unproven.prefix_sha256 is None
     assert "x" * 20 not in str(short.as_safe_mapping())
 
 

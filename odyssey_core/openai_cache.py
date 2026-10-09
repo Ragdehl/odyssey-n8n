@@ -78,7 +78,7 @@ def explicit_cache_transport(
             model=model,
             outcome="implicit_unproven_stability",
             stable_prefix_bytes=prefix_bytes,
-            prefix_sha256=prefix_hash,
+            prefix_sha256=None,
             evidence="caller did not prove a reusable stable prefix",
         )
     if prefix_bytes < CONSERVATIVE_EXPLICIT_PREFIX_BYTES:

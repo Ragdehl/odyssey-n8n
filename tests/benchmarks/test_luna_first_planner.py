@@ -798,6 +798,51 @@ def test_luna_provider_uses_explicit_cache_boundary_with_dynamic_suffix(
     assert first.last_cache_diagnostics["prefix_sha256"] is not None
 
 
+def test_luna_cache_eligibility_failure_falls_back_to_implicit_without_blocking_core(
+    schema: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cache optimization cannot fail a previously valid semantic planning call."""
+    from odyssey_core.openai_cache import CacheBoundaryDiagnostics
+
+    def unsupported_transport(**kwargs: Any) -> tuple[None, CacheBoundaryDiagnostics]:
+        return None, CacheBoundaryDiagnostics(
+            model=kwargs["model"],
+            outcome="implicit_prefix_too_short",
+            stable_prefix_bytes=12,
+            prefix_sha256=None,
+            evidence="synthetic ineligible prefix",
+        )
+
+    monkeypatch.setattr(luna_module, "explicit_cache_transport", unsupported_transport)
+    response = SimpleNamespace(
+        status="completed",
+        id="resp_no_cache",
+        output_text=json.dumps(
+            {
+                "result": {
+                    "outcome": "ESCALATE",
+                    "actions": None,
+                    "limitations": None,
+                    "clarification_code": None,
+                }
+            }
+        ),
+        usage=None,
+    )
+    calls: list[dict[str, Any]] = []
+    client = SimpleNamespace(
+        responses=SimpleNamespace(create=lambda **kwargs: calls.append(kwargs) or response)
+    )
+    planner = OpenAILunaExperimentalPlanner(client, schema, CONTEXT)
+    assert isinstance(planner.plan("Handle this safely"), PlannerEscalation)
+    assert len(calls) == 1
+    assert "prompt_cache_options" not in calls[0]
+    assert "prompt_cache_key" not in calls[0]
+    assert calls[0]["input"][0]["content"] == render_luna_experimental_prompt(schema, CONTEXT)
+    assert planner.last_cache_diagnostics is not None
+    assert planner.last_cache_diagnostics["outcome"] == "implicit_prefix_too_short"
+
+
 def test_luna_and_sol_semantic_frontends_send_identical_contract_except_model(
     schema: dict[str, Any],
 ) -> None:

@@ -581,10 +581,14 @@ class OpenAILunaExperimentalPlanner:
             stable_prefix=stable_prompt,
             proven_reusable=True,
         )
-        if cache_transport is None:
-            raise RuntimeError(
-                "Luna prompt cache boundary lacks the documented conservative eligible prefix"
-            )
+        # Cache eligibility must never become a new failure mode for Core planning.
+        # If a future prompt/model is no longer eligible, keep the exact original
+        # system text and let OpenAI use its ordinary implicit cache behavior.
+        system_content = (
+            explicit_system_content(stable_prompt, LUNA_DYNAMIC_CONTEXT_MARKER + dynamic_prompt)
+            if cache_transport is not None
+            else prompt
+        )
         self.last_cache_diagnostics = cache_diagnostics.as_safe_mapping()
         provider_started = self._monotonic()
         try:
@@ -593,13 +597,11 @@ class OpenAILunaExperimentalPlanner:
                 reasoning={"effort": self.reasoning_effort},
                 store=False,
                 max_output_tokens=self.max_output_tokens,
-                **cache_transport,
+                **(cache_transport or {}),
                 input=[
                     {
                         "role": "system",
-                        "content": explicit_system_content(
-                            stable_prompt, LUNA_DYNAMIC_CONTEXT_MARKER + dynamic_prompt
-                        ),
+                        "content": system_content,
                     },
                     {"role": "user", "content": request},
                 ],

@@ -117,7 +117,7 @@ provider cache setting is unrelated to Odyssey's 30-day diagnostic retention pol
 
 This is a transport and prompt-shape change, not a claim of cache reuse. Cold parallel calls cannot
 reuse a prefix before a cache write completes, and cache writes may cost more than uncached input.
-The required focused live provider semantic gate has **not** run: it needs separate explicit bounded
+Ineligible prompts fall back to normal implicit mode without blocking a valid Core planning operation; unproven prefixes do not expose a fingerprint in diagnostics. The required focused live provider semantic gate has **not** run: it needs separate explicit bounded
 cost approval and must confirm returned cache usage for the eligible repeated paths before this work
 can be considered ready to merge.
 
