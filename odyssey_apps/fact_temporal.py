@@ -38,7 +38,7 @@ class CandidateTemporalEvidence:
     status: Literal["matched", "missing"]
     resolution: TemporalResolution | None
     temporal_text: str | None
-    exact_core_eligible: bool
+    has_exact_source_shape: bool
 
 
 def _original_scope(
@@ -131,14 +131,16 @@ def bind_temporal_to_fact_candidates(
                 # choosing arbitrarily between distinct temporal claims.
                 raise RouterError("Temporal evidence overlaps one scope ambiguously")
             text, resolution = matching[0] if matching else (None, None)
-            exact = (
-                role in {"date", "time"}
-                and resolution is not None
-                and resolution.kind
-                in {
-                    TemporalResolutionKind.EXACT_DATE,
-                    TemporalResolutionKind.EXACT_DATETIME,
-                }
+            exact = resolution is not None and (
+                (
+                    role == "date"
+                    and resolution.kind
+                    in {
+                        TemporalResolutionKind.EXACT_DATE,
+                        TemporalResolutionKind.EXACT_DATETIME,
+                    }
+                )
+                or (role == "time" and resolution.kind is TemporalResolutionKind.EXACT_DATETIME)
             )
             results.append(
                 CandidateTemporalEvidence(
