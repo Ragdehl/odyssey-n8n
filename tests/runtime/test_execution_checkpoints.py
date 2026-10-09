@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -23,8 +26,13 @@ ACTOR_B = AuthenticatedActorContext("22222222-2222-4222-8222-222222222222")
 NOW = "2026-10-09T12:00:00+02:00"
 
 
+def _clock(value: datetime):
+    """Return a deterministic trusted clock for retention boundary tests."""
+    return lambda: value
+
+
 def test_checkpoint_store_is_latest_only_atomic_bounded_and_recoverable(tmp_path: Path) -> None:
-    """A recreated root-bound store sees only validated latest evidence after replacement."""
+    """A recreated root-bound store retains latest evidence and evicts at bounded capacity."""
     store = LocalExecutionCheckpointStore(tmp_path / "checkpoints", max_records=1)
 
     first = store.record("request-1", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
@@ -38,8 +46,96 @@ def test_checkpoint_store_is_latest_only_atomic_bounded_and_recoverable(tmp_path
         LocalExecutionCheckpointStore(tmp_path / "checkpoints", max_records=1).load("request-1")
         == second
     )
-    with pytest.raises(ExecutionCheckpointError, match="capacity"):
-        store.record("request-2", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
+    store.record("request-2", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
+    assert store.load("request-1") is None
+    assert store.load("request-2") is not None
+
+
+def test_checkpoint_retention_keeps_exact_30_day_boundary_and_expires_after_it(
+    tmp_path: Path,
+) -> None:
+    """Retention compares aware timestamps in UTC and retains the exact 30-day boundary."""
+    now = datetime(2026, 11, 8, 10, tzinfo=UTC)
+    store = LocalExecutionCheckpointStore(tmp_path, now=_clock(now))
+    exact = (now - timedelta(days=30)).astimezone().isoformat()
+    expired = (now - timedelta(days=30, microseconds=1)).astimezone().isoformat()
+
+    store.record("exact-boundary", "starting", CheckpointOutcome.MILESTONE_OBSERVED, exact)
+    store.record("expired-boundary", "starting", CheckpointOutcome.MILESTONE_OBSERVED, expired)
+
+    assert store.load("exact-boundary") is not None
+    assert store.load("expired-boundary") is None
+
+
+def test_checkpoint_capacity_prefers_old_terminal_before_unknown_or_incomplete(
+    tmp_path: Path,
+) -> None:
+    """Capacity pressure evicts oldest returned histories before newer unknown diagnostics."""
+    now = datetime(2026, 11, 8, 10, tzinfo=UTC)
+    store = LocalExecutionCheckpointStore(tmp_path, max_records=2, now=_clock(now))
+    old = (now - timedelta(days=2)).isoformat()
+    recent = (now - timedelta(days=1)).isoformat()
+    store.record("terminal", "processing.returned", CheckpointOutcome.PROCESSING_RETURNED, old)
+    store.record("unknown", "failed_or_unknown", CheckpointOutcome.FAILED_OR_UNKNOWN, recent)
+
+    store.record("incoming", "starting", CheckpointOutcome.MILESTONE_OBSERVED, now.isoformat())
+
+    assert store.load("terminal") is None
+    assert store.load("unknown") is not None
+    assert store.load("incoming") is not None
+
+
+def test_checkpoint_retention_never_unlinks_symlink_malformed_or_unrecognized_files(
+    tmp_path: Path,
+) -> None:
+    """Pruning only removes fully validated hash-named records inside its actor root."""
+    root = tmp_path / "checkpoints"
+    outside = tmp_path / "outside.json"
+    outside.write_text("keep", encoding="utf-8")
+    root.mkdir()
+    (root / "not-a-checkpoint.json").write_text("keep", encoding="utf-8")
+    malformed = root / ("0" * 64 + ".json")
+    malformed.write_text("{", encoding="utf-8")
+    symlink = root / ("1" * 64 + ".json")
+    symlink.symlink_to(outside)
+    now = datetime(2026, 11, 8, 10, tzinfo=UTC)
+    store = LocalExecutionCheckpointStore(root, max_records=1, now=_clock(now))
+
+    store.record(
+        "old",
+        "processing.returned",
+        CheckpointOutcome.PROCESSING_RETURNED,
+        (now - timedelta(days=31)).isoformat(),
+    )
+    store.record("new", "starting", CheckpointOutcome.MILESTONE_OBSERVED, now.isoformat())
+
+    assert outside.read_text(encoding="utf-8") == "keep"
+    assert malformed.read_text(encoding="utf-8") == "{"
+    assert symlink.is_symlink()
+    assert (root / "not-a-checkpoint.json").read_text(encoding="utf-8") == "keep"
+    assert store.load("old") is None
+    assert store.load("new") is not None
+
+
+def test_checkpoint_concurrent_writers_preserve_valid_bounded_records(tmp_path: Path) -> None:
+    """A root-local lock prevents concurrent writers from exceeding the retention cap."""
+    root = tmp_path / "checkpoints"
+    now = datetime(2026, 11, 8, 10, tzinfo=UTC)
+
+    def record(request_id: str) -> None:
+        LocalExecutionCheckpointStore(root, max_records=2, now=_clock(now)).record(
+            request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED, now.isoformat()
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(record, ("request-1", "request-2", "request-3", "request-4")))
+
+    records = list(root.glob("*.json"))
+    assert len(records) == 2
+    for path in records:
+        assert not path.is_symlink()
+        request_id = json.loads(path.read_text(encoding="utf-8"))["request_id"]
+        assert LocalExecutionCheckpointStore(root, now=_clock(now)).load(request_id) is not None
 
 
 @pytest.mark.parametrize(
@@ -117,6 +213,28 @@ def test_opt_in_checkpoint_tracks_existing_progress_and_delivery_replay_per_acto
         ).load("delivery-1")
         is None
     )
+
+
+def test_runtime_composition_prunes_only_its_actor_checkpoint_history(tmp_path: Path) -> None:
+    """Synthetic runtime deliveries exercise opt-in retention without a provider or real state."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    runtime = RuntimeComposition(
+        core_execute=lambda _request, request_id, *_args: _mutation_result(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        execution_checkpoint_store_factory=lambda root: LocalExecutionCheckpointStore(
+            root, max_records=1
+        ),
+    )
+
+    runtime.execute_product("first", "delivery-1", "main", ACTOR_A)
+    runtime.execute_product("second", "delivery-2", "main", ACTOR_A)
+
+    root_a = resolver.resolve(ACTOR_A.stable_user_id) / "execution-checkpoints"
+    root_b = resolver.resolve(ACTOR_B.stable_user_id) / "execution-checkpoints"
+    assert LocalExecutionCheckpointStore(root_a).load("delivery-1") is None
+    assert LocalExecutionCheckpointStore(root_a).load("delivery-2") is not None
+    assert not root_b.exists()
 
 
 def test_checkpoint_failure_never_interrupts_write_and_execution_failure_is_unknown(
