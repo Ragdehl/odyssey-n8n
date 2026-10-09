@@ -110,7 +110,10 @@ class LocalExecutionCheckpointStore:
         with self._locked_root():
             path = self._path(request_id)
             previous = self._read(path, request_id) if self._exists(path) else None
-            self._prune(exclude=path, need_slot=previous is None)
+            # One request emits many milestones; a full scan at each stage scales
+            # poorly as retained diagnostic requests accumulate.
+            if previous is None:
+                self._prune(exclude=path, need_slot=True)
             if previous is None:
                 sequence = 1
             else:
@@ -163,7 +166,9 @@ class LocalExecutionCheckpointStore:
             if self._root.is_symlink() or not self._root.is_dir():
                 raise ExecutionCheckpointError("checkpoint root is unsafe")
             lock_path = self._root / ".retention.lock"
-            descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+            descriptor = os.open(
+                lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
+            )
         except OSError as error:
             raise ExecutionCheckpointError("checkpoint store is unavailable") from error
         try:
@@ -176,11 +181,15 @@ class LocalExecutionCheckpointStore:
 
     def _prune(self, *, exclude: Path, need_slot: bool) -> None:
         """Remove only expired or lowest-priority validated checkpoint records in this root."""
-        records = list(self._validated_records())
-        for path, record in records:
-            if path != exclude and self._expired(record):
+        # Scan once per new request, reusing validated records for eviction.
+        records = []
+        for path, record in self._validated_records():
+            if path == exclude:
+                continue
+            if self._expired(record):
                 self._unlink_validated(path, record)
-        records = [(path, record) for path, record in self._validated_records() if path != exclude]
+            else:
+                records.append((path, record))
         allowed = self._max_records - (1 if need_slot else 0)
         if allowed < 0:
             raise ExecutionCheckpointError("checkpoint store capacity is exhausted")

@@ -138,6 +138,41 @@ def test_checkpoint_concurrent_writers_preserve_valid_bounded_records(tmp_path: 
         assert LocalExecutionCheckpointStore(root, now=_clock(now)).load(request_id) is not None
 
 
+def test_checkpoint_stage_updates_do_not_rescan_retained_requests(tmp_path: Path) -> None:
+    """Record-level retention runs per new request rather than per progress milestone."""
+    now = datetime(2026, 11, 8, 10, tzinfo=UTC)
+
+    class ScanCountingStore(LocalExecutionCheckpointStore):
+        scan_count = 0
+
+        def _validated_records(self):
+            self.scan_count += 1
+            yield from super()._validated_records()
+
+    store = ScanCountingStore(tmp_path / "checkpoint", now=_clock(now))
+    stamp = now.isoformat()
+    store.record("trace", "starting", CheckpointOutcome.MILESTONE_OBSERVED, stamp)
+    assert store.scan_count == 1
+    for _ in range(12):
+        store.record("trace", "planner.started", CheckpointOutcome.MILESTONE_OBSERVED, stamp)
+    assert store.scan_count == 1
+    store.record("next-request", "starting", CheckpointOutcome.MILESTONE_OBSERVED, stamp)
+    assert store.scan_count == 2
+
+
+def test_checkpoint_rejects_symlinked_retention_lock(tmp_path: Path) -> None:
+    """A lock symlink cannot be followed into unrelated files."""
+    root = tmp_path / "checkpoint"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.write_text("keep", encoding="utf-8")
+    (root / ".retention.lock").symlink_to(outside)
+    store = LocalExecutionCheckpointStore(root)
+    with pytest.raises(ExecutionCheckpointError):
+        store.record("trace", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
+    assert outside.read_text(encoding="utf-8") == "keep"
+
+
 @pytest.mark.parametrize(
     ("request_id", "stage", "outcome", "observed_at"),
     [
