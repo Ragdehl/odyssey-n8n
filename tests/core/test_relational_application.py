@@ -913,6 +913,17 @@ def test_coordinated_spouse_and_children_fact_references_resolve_independently(
         "Cenamos con [[people/beatriz|Beatriz Carrero]] e hijos "
         "([[people/cloe|Cloe]], [[people/bruno|Bruno]]) una quiche muy buena." in content
     )
+    assert result.execution_flow is not None
+    assert [
+        entity["name"]
+        for entity in result.execution_flow["entities"]
+        if entity["mention"] == "hijos"
+    ] == ["Cloe", "Bruno"]
+    assert all(
+        entity["status"] == "resolved"
+        for entity in result.execution_flow["entities"]
+        if entity["mention"] == "hijos"
+    )
 
 
 def test_reference_only_singular_relation_keeps_distinct_targets_ambiguous(

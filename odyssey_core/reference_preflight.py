@@ -67,6 +67,7 @@ class CompleteSetReferenceBinding:
     """Bind one set-valued fact reference to an exact, re-groundable member set."""
 
     source_unit_index: int
+    source_reference_index: int
     evidence_source_id: str
     evidence_source_hash: str
     fact_locator: str
@@ -513,6 +514,7 @@ def prepare_complete_set_reference_action(
             bindings.append(
                 CompleteSetReferenceBinding(
                     source_index,
+                    reference_index,
                     resolved.evidence_source.id,
                     resolved.evidence_source.source_hash,
                     resolved.fact_locator,

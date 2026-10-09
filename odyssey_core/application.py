@@ -275,6 +275,8 @@ class ActionResult:
     clarification: ClarificationPresentation | None = None
     # Internal-only; runtime serializers intentionally do not project this field.
     canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
+    # Read-only evidence for a set mention expanded into multiple proven member links.
+    observed_set_members: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -746,6 +748,15 @@ def _project_execution_flow(
     for action, outcome in zip(plan.actions[:8], results[:8], strict=False):
         if isinstance(action, WriteAction):
             unit_results = {unit.unit_index: unit for unit in outcome.unit_results}
+            set_members: dict[str, list[str]] = {}
+            for mention, stable_id in outcome.observed_set_members:
+                set_members.setdefault(mention, []).append(stable_id)
+            for mention, member_ids in set_members.items():
+                if len(member_ids) != len(set(member_ids)):
+                    continue
+                for stable_id in member_ids:
+                    link_ids.add(stable_id)
+                    candidates.append((mention[:120], "person", stable_id))
             for unit_index, unit in enumerate(action.units[:8]):
                 selection = unit.target
                 target = selection.entity or selection.query
@@ -797,7 +808,8 @@ def _project_execution_flow(
                         if target_index is not None and 0 <= target_index < len(action.units)
                         else (reference.selection.type if reference.selection else None)
                     )
-                    candidates.append((mention, (reference_type or "")[:40], stable_id))
+                    if mention not in set_members:
+                        candidates.append((mention, (reference_type or "")[:40], stable_id))
         elif isinstance(action, RetrieveAction):
             planned.append(
                 {
@@ -1275,6 +1287,7 @@ def _execute_write(
         if clarification_choice is not None and chosen_helper_id is None:
             kwargs["clarification_choice"] = clarification_choice
         executable = action
+        set_bindings = ()
         executable_ordinals = unit_ordinals
         if complete_set_references:
             resolved_references = {}
@@ -1472,6 +1485,22 @@ def _execute_write(
         _action_status(results),
         unit_results=tuple(results),
         canonical_reference_evidence=reference_evidence,
+        observed_set_members=tuple(
+            (
+                action.units[binding.source_unit_index]
+                .references[binding.source_reference_index]
+                .mention,
+                member.stable_id,
+            )
+            for binding in set_bindings
+            if results[binding.source_unit_index].status is UnitStatus.SUCCEEDED
+            and all(
+                results[item.unit_index].status is UnitStatus.SUCCEEDED
+                and results[item.unit_index].stable_note_id == item.stable_id
+                for item in binding.members
+            )
+            for member in binding.members
+        ),
     )
 
 
