@@ -594,6 +594,26 @@ button:disabled { opacity: .55; }
 .flow-lane .flow-io-row { padding: .34rem .38rem; }
 .flow-lane .flow-io-value { font-size: .7rem; }
 .flow-lane .flow-io-label { font-size: .6rem; }
+.flow-route-evidence { display: grid; gap: .25rem; margin-top: .42rem; }
+.flow-route-status { border-left-color: #8d78ee; }
+.flow-route-status-failed, .flow-route-status-needs_attention { border-left-color: #bb636f; background: #35262d; }
+.flow-route-status-partial { border-left-color: #b69a5c; }
+.flow-write-evidence { border-left-color: #46a38e; background: #1e3439; }
+.flow-no-write { color: #bdb7dd; border-left-color: #77708f; background: #26233a; }
+.flow-checkpoint-history, .flow-candidate-preview { display: grid; gap: .5rem; margin-top: .85rem; padding: .7rem; border: 1px solid #4d446e; border-radius: .78rem; background: #1d1b2b; min-width: 0; }
+.flow-checkpoint-heading, .flow-candidate-heading { margin: 0; color: #d9d2fb; font-size: .8rem; }
+.flow-checkpoint-list { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.flow-checkpoint-event { display: grid; gap: .12rem; padding: .42rem .5rem; border-left: 2px solid #7c6bc1; border-radius: .32rem; background: #28243b; color: #ded9f6; font-size: .71rem; overflow-wrap: anywhere; }
+.flow-checkpoint-failed_or_unknown { border-left-color: #bb636f; background: #35262d; }
+.flow-checkpoint-result_persisted, .flow-checkpoint-processing_returned { border-left-color: #b69a5c; }
+.flow-candidate-card { display: grid; gap: .18rem; }
+.flow-candidate-source { border-left-color: #8d78ee; }
+.flow-candidate-role { margin: 0; }
+.flow-candidate-explicit { border-left-color: #46a38e; }
+.flow-candidate-inherited { border-left-color: #7b8fd4; }
+.flow-candidate-overridden { border-left-color: #c39b61; }
+.flow-candidate-unresolved { border-left-color: #bb636f; }
+.flow-candidate-verified { border-left-color: #54a78e; background: #1e3439; }
 
 /* Uncertain delivery and invalid optional telemetry remain inspectable from (i). */
 .flow-diagnostic-warning { margin: .45rem 0 .75rem; padding: .65rem .75rem; color: #f1c6be; background: #35262d; border: 1px solid #95626a; border-radius: .6rem; font-size: .78rem; line-height: 1.45; }

@@ -339,7 +339,7 @@ function stageCard(doc, stage, route = null, observedStep = null) {
 
 function entitiesCard(doc, entities) {
   const node = element(doc, "article", "flow-card flow-entities");
-  node.append(headingWithIcon(doc, "Entidades · Core", "entities"));
+  node.append(headingWithIcon(doc, "Entidades verificadas · Core", "entities"));
   const output = element(doc, "div", "flow-semantics");
   for (const item of entities) {
     const target = item.status === "resolved" ? item.name : "Resolución no disponible";
@@ -350,6 +350,19 @@ function entitiesCard(doc, entities) {
   return node;
 }
 
+function routeEvidence(doc, route) {
+  const evidence = element(doc, "div", "flow-route-evidence");
+  evidence.append(detailLine(doc, `Estado de ruta: ${route.status}`, `flow-route-status flow-route-status-${route.status}`));
+  if (route.writes?.length) {
+    for (const write of route.writes) {
+      evidence.append(detailLine(doc, `Resultado de escritura Core registrado: ${write.operation} · ${write.target} (${write.status})`, "flow-write-evidence"));
+    }
+  } else {
+    evidence.append(detailLine(doc, "No hay resultado de escritura Core registrado para esta ruta.", "flow-no-write"));
+  }
+  return evidence;
+}
+
 function plainCard(doc, heading, body, kind = "") {
   const node = element(doc, "article", `flow-card flow-${kind}`);
   node.append(headingWithIcon(doc, heading, kind === "source" ? "source" : kind === "fragment" ? "fragment" : kind === "success" ? "result" : "result"));
@@ -358,7 +371,7 @@ function plainCard(doc, heading, body, kind = "") {
 }
 
 /** Render a responsive directed graph driven by validated per-route stage counts. */
-export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
+export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} = {}) {
   const root = element(doc, "section", "flow-graph");
   root.setAttribute("aria-label", "Diagrama de ejecución de la solicitud");
   const stages = detail.operational.stages;
@@ -419,6 +432,7 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
         if (route.reason) fragment.append(detailLine(doc, route.reason, "flow-error"));
       }
       lane.append(fragment);
+      lane.append(routeEvidence(doc, route));
       const routeStages = stages.slice(consumed, consumed + route.stage_count);
       consumed += route.stage_count;
       let entitiesDisplayed = false;
@@ -461,11 +475,11 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
   }
   if (!flow?.routes?.length) root.append(arrow(doc, "flow-single"));
   const outcomes = flow?.routes?.map(route => route.status) || [];
-  const result = outcomes.length && outcomes.every(s => s === "completed") ? "Completado"
+  const result = outcomes.length && outcomes.every(s => s === "completed") ? "Rutas completadas"
     : outcomes.some(s => s === "completed") ? "Resultado parcial"
     : outcomes.includes("needs_attention") ? "Necesita aclaración"
     : outcomes.includes("failed") ? "No completado" : "Resultado de Odyssey";
-  const end = plainCard(doc, result, "", result === "Completado" ? "success" : "outcome");
+  const end = plainCard(doc, result, "", result === "Rutas completadas" ? "success" : "outcome");
   const stats = element(doc, "div", "flow-stats");
   for (const text of [duration(detail.operational.total_duration_ms), cost(detail.estimated_cost),
     detail.changes?.affected_stable_note_ids?.length ? `${detail.changes.affected_stable_note_ids.length} notas` : ""].filter(Boolean)) {
@@ -473,5 +487,183 @@ export function renderExecutionFlow(doc, detail, {sourceText = ""} = {}) {
   }
   end.append(stats);
   root.append(end);
+  if (checkpoint !== undefined) root.append(renderCheckpointHistory(doc, checkpoint));
   return root;
+}
+
+const CHECKPOINT_STAGES = new Set([
+  "starting", "routing.started", "routing.ready", "temporal.started", "temporal.ready",
+  "planner.started", "planner.ready", "action.retrieve.started", "action.delegate.started",
+  "action.write.started", "finalizing", "delivery.result_persisted", "processing.returned",
+  "failed_or_unknown",
+]);
+const CHECKPOINT_OUTCOMES = new Set([
+  "milestone_observed", "result_persisted", "processing_returned", "failed_or_unknown",
+]);
+const CHECKPOINT_TERMINALS = new Map([
+  ["delivery.result_persisted", "result_persisted"],
+  ["processing.returned", "processing_returned"],
+  ["failed_or_unknown", "failed_or_unknown"],
+]);
+
+export class DiagnosticPreviewError extends Error {}
+
+function exactKeys(value, keys) {
+  return Object.keys(value).length === keys.length && Object.keys(value).every(key => keys.includes(key));
+}
+
+function validTimestamp(value) {
+  return typeof value === "string" && value.length <= 40 &&
+    /^\d{4}-\d{2}-\d{2}T/u.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function validateCheckpointEvent(event, expectedSequence) {
+  if (!event || typeof event !== "object" || Array.isArray(event) ||
+      !exactKeys(event, ["sequence", "stage", "outcome", "observed_at"]) ||
+      !Number.isInteger(event.sequence) || event.sequence !== expectedSequence ||
+      !CHECKPOINT_STAGES.has(event.stage) || !CHECKPOINT_OUTCOMES.has(event.outcome) ||
+      !validTimestamp(event.observed_at)) {
+    throw new DiagnosticPreviewError("Invalid execution checkpoint event.");
+  }
+  const required = CHECKPOINT_TERMINALS.get(event.stage) || "milestone_observed";
+  if (event.outcome !== required) throw new DiagnosticPreviewError("Invalid checkpoint outcome.");
+  return {sequence: event.sequence, stage: event.stage, outcome: event.outcome, observed_at: event.observed_at};
+}
+
+/** Validate the source-free, optional runtime checkpoint record before read-only display. */
+export function validateExecutionCheckpoint(value) {
+  const keys = ["version", "request_id", "stage", "outcome", "sequence", "observed_at", "events", "truncated"];
+  if (!value || typeof value !== "object" || Array.isArray(value) || !exactKeys(value, keys) ||
+      value.version !== 1 || typeof value.request_id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u.test(value.request_id) ||
+      !Number.isInteger(value.sequence) || value.sequence < 1 || value.sequence > 2 ** 31 - 1 ||
+      typeof value.truncated !== "boolean" || !Array.isArray(value.events) ||
+      value.events.length < 1 || value.events.length > 64) {
+    throw new DiagnosticPreviewError("Invalid execution checkpoint.");
+  }
+  const events = value.events.map((event, index) => validateCheckpointEvent(
+    event, value.sequence - value.events.length + index + 1,
+  ));
+  const latest = events.at(-1);
+  if (value.truncated !== (value.sequence > events.length) ||
+      !latest || value.stage !== latest.stage || value.outcome !== latest.outcome ||
+      value.observed_at !== latest.observed_at) {
+    throw new DiagnosticPreviewError("Inconsistent execution checkpoint.");
+  }
+  return {version: 1, request_id: value.request_id, stage: latest.stage, outcome: latest.outcome,
+    sequence: value.sequence, observed_at: latest.observed_at, events, truncated: value.truncated};
+}
+
+function checkpointLabel(event) {
+  if (event.outcome === "failed_or_unknown") return "Interrumpido o desconocido";
+  if (event.outcome === "result_persisted") return "Resultado de entrega persistido (no confirma una nota)";
+  if (event.outcome === "processing_returned") return "Procesamiento devuelto (no confirma una nota)";
+  return "Hito observado";
+}
+
+/** Render only an already validated bounded checkpoint snapshot; it has no write authority. */
+export function renderCheckpointHistory(doc, checkpoint) {
+  const section = element(doc, "section", "flow-checkpoint-history");
+  section.append(element(doc, "h3", "flow-checkpoint-heading", "Historial de ejecución (solo diagnóstico)"));
+  let safe;
+  try {
+    safe = validateExecutionCheckpoint(checkpoint);
+  } catch {
+    section.append(element(doc, "p", "flow-diagnostic-warning", "El historial de ejecución no es válido o pertenece a un formato anterior; no se muestra."));
+    return section;
+  }
+  if (safe.truncated) section.append(element(doc, "p", "flow-diagnostic-warning", "El historial está truncado: los hitos iniciales no están disponibles."));
+  const list = element(doc, "ol", "flow-checkpoint-list");
+  for (const event of safe.events) {
+    const item = element(doc, "li", `flow-checkpoint-event flow-checkpoint-${event.outcome}`);
+    item.append(element(doc, "strong", "", `${event.sequence} · ${stageTitle(event.stage)}`));
+    item.append(element(doc, "span", "", checkpointLabel(event)));
+    item.append(element(doc, "span", "", event.observed_at));
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+}
+
+const CANDIDATE_ROLES = new Set(["subject", "participants", "object", "location", "time", "date", "predicate", "condition"]);
+const CANDIDATE_PROVENANCE = new Set(["explicit", "inherited", "overridden", "unresolved", "verified"]);
+
+function occurrenceAt(message, source, occurrence) {
+  let start = -1;
+  for (let index = 0; index <= occurrence; index += 1) {
+    start = message.indexOf(source, start + 1);
+    if (start < 0) return false;
+  }
+  return true;
+}
+
+/** Validate a local-only v1 candidate fixture; it is not a Router or persistence contract. */
+export function validateFactCandidatePreview(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      !exactKeys(value, ["version", "user_message", "candidates"]) || value.version !== 1 ||
+      typeof value.user_message !== "string" || !value.user_message || value.user_message.length > 4096 ||
+      !Array.isArray(value.candidates) || value.candidates.length < 1 || value.candidates.length > 26) {
+    throw new DiagnosticPreviewError("Invalid fact-candidate preview.");
+  }
+  const ids = new Set();
+  const candidates = value.candidates.map(candidate => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
+        !exactKeys(candidate, ["id", "source", "occurrence", "roles", "dependency_target"]) ||
+        typeof candidate.id !== "string" || !/^candidate-[A-Za-z0-9_-]{1,48}$/u.test(candidate.id) || ids.has(candidate.id) ||
+        typeof candidate.source !== "string" || !candidate.source || candidate.source.length > 240 ||
+        !Number.isInteger(candidate.occurrence) || candidate.occurrence < 0 || !occurrenceAt(value.user_message, candidate.source, candidate.occurrence) ||
+        !Array.isArray(candidate.roles) || candidate.roles.length < 1 || candidate.roles.length > 8 ||
+        (candidate.dependency_target !== null && (typeof candidate.dependency_target !== "string" || !/^candidate-[A-Za-z0-9_-]{1,48}$/u.test(candidate.dependency_target)))) {
+      throw new DiagnosticPreviewError("Invalid fact candidate.");
+    }
+    ids.add(candidate.id);
+    const roles = candidate.roles.map(role => {
+      if (!role || typeof role !== "object" || Array.isArray(role) ||
+          !exactKeys(role, ["role", "source", "occurrence", "provenance", "authority"]) ||
+          !CANDIDATE_ROLES.has(role.role) || typeof role.source !== "string" || !role.source || role.source.length > 160 ||
+          !Number.isInteger(role.occurrence) || role.occurrence < 0 || !occurrenceAt(value.user_message, role.source, role.occurrence) ||
+          !CANDIDATE_PROVENANCE.has(role.provenance) ||
+          (role.authority !== null && role.authority !== "core") ||
+          (role.provenance === "verified" && role.authority !== "core") ||
+          (role.provenance !== "verified" && role.authority !== null)) {
+        throw new DiagnosticPreviewError("Invalid candidate role.");
+      }
+      return {...role};
+    });
+    return {id: candidate.id, source: candidate.source, occurrence: candidate.occurrence, roles,
+      dependency_target: candidate.dependency_target};
+  });
+  if (candidates.some(candidate => candidate.dependency_target === candidate.id ||
+      (candidate.dependency_target !== null && !ids.has(candidate.dependency_target)))) {
+    throw new DiagnosticPreviewError("Invalid candidate dependency.");
+  }
+  return {version: 1, user_message: value.user_message, candidates};
+}
+
+/** Render an explicitly supplied design fixture, never a production request detail. */
+export function renderFactCandidatePreview(doc, preview) {
+  const section = element(doc, "section", "flow-candidate-preview");
+  section.append(element(doc, "h3", "flow-candidate-heading", "Vista previa de diseño · candidatos v1"));
+  section.append(element(doc, "p", "flow-diagnostic-warning", "No es una ejecución de Router ni un registro de notas; no autoriza ni demuestra una escritura."));
+  let safe;
+  try {
+    safe = validateFactCandidatePreview(preview);
+  } catch {
+    section.append(element(doc, "p", "flow-diagnostic-warning", "La vista previa de candidatos no es válida y no se muestra."));
+    return section;
+  }
+  section.append(textInput(doc, safe.user_message));
+  for (const candidate of safe.candidates) {
+    const card = element(doc, "article", "flow-card flow-candidate-card");
+    card.append(headingWithIcon(doc, candidate.id, "fragment"));
+    card.append(detailLine(doc, `Fuente: ${candidate.source}`, "flow-candidate-source"));
+    if (candidate.dependency_target) card.append(detailLine(doc, `Dependencia propuesta: ${candidate.dependency_target}`, "flow-dependency"));
+    for (const role of candidate.roles) {
+      const label = role.provenance === "verified"
+        ? `${role.role}: ${role.source} · verificado por Core indicado en la prueba`
+        : `${role.role}: ${role.source} · ${role.provenance}`;
+      card.append(detailLine(doc, label, `flow-candidate-role flow-candidate-${role.provenance}`));
+    }
+    section.append(card);
+  }
+  return section;
 }

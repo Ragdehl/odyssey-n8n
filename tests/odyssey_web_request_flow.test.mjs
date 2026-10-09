@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {renderExecutionFlow} from "../odyssey_web/progress.js";
+import {
+  DiagnosticPreviewError,
+  renderExecutionFlow,
+  renderFactCandidatePreview,
+  validateExecutionCheckpoint,
+  validateFactCandidatePreview,
+} from "../odyssey_web/progress.js";
 import {readFileSync} from "node:fs";
 import {validateRequestDetail, ProductRequestError} from "../odyssey_web/client.js";
 
@@ -96,7 +102,9 @@ test("directed execution graph preserves actual route order, source, dates and m
   assert.match(first.textContent, /11.000 caché/);
   assert.match(first.textContent, /\$0\.001400/);
   assert.match(graph.textContent, /Preparación simultánea/);
-  assert.match(graph.textContent, /Completado/);
+  assert.match(graph.textContent, /Rutas completadas/);
+  assert.match(first.textContent, /Estado de ruta: completed/);
+  assert.match(second.textContent, /Resultado de escritura Core registrado: UPDATED/);
   assert.doesNotMatch(second.textContent, /gpt-6-luna · 35 ms/);
 });
 
@@ -163,4 +171,68 @@ test("mobile route diagram keeps horizontal scroll and never uses emoji icon gly
   const renderer = readFileSync(new URL("../odyssey_web/progress.js", import.meta.url), "utf8");
   assert.match(renderer, /createElementNS\(SVG_NS, "svg"\)/);
   assert.doesNotMatch(renderer, /[💬🧠🗓📁📋🗃✅🔗🔀✍]/u);
+});
+
+const checkpoint = {
+  version: 1, request_id: "flow-1", stage: "failed_or_unknown", outcome: "failed_or_unknown",
+  sequence: 3, observed_at: "2026-10-09T10:02:00+02:00", truncated: false,
+  events: [
+    {sequence: 1, stage: "routing.started", outcome: "milestone_observed", observed_at: "2026-10-09T10:00:00+02:00"},
+    {sequence: 2, stage: "delivery.result_persisted", outcome: "result_persisted", observed_at: "2026-10-09T10:01:00+02:00"},
+    {sequence: 3, stage: "failed_or_unknown", outcome: "failed_or_unknown", observed_at: "2026-10-09T10:02:00+02:00"},
+  ],
+};
+
+test("validated route graph and checkpoint history render without claiming a canonical write", () => {
+  const detail = diagnostic();
+  detail.flow.routes[0].writes = [];
+  const graph = renderExecutionFlow(doc, detail, {checkpoint});
+  assert.match(graph.textContent, /Historial de ejecución/);
+  assert.match(graph.textContent, /No hay resultado de escritura Core registrado/);
+  assert.match(graph.textContent, /Resultado de entrega persistido \(no confirma una nota\)/);
+  assert.match(graph.textContent, /Interrumpido o desconocido/);
+  assert.doesNotMatch(graph.textContent, /nota escrita/);
+});
+
+test("checkpoint validation rejects corrupt and old snapshots while renderer keeps the graph legible", () => {
+  const corrupt = {...checkpoint, events: [{...checkpoint.events[0], sequence: 2}]};
+  assert.throws(() => validateExecutionCheckpoint(corrupt), DiagnosticPreviewError);
+  assert.throws(() => validateExecutionCheckpoint({...checkpoint, unexpected: true}), DiagnosticPreviewError);
+  const truncated = structuredClone(checkpoint);
+  truncated.sequence = 65;
+  truncated.truncated = true;
+  truncated.events = checkpoint.events.map((event, index) => ({...event, sequence: 63 + index}));
+  truncated.stage = "failed_or_unknown";
+  assert.equal(validateExecutionCheckpoint(truncated).truncated, true);
+  const graph = renderExecutionFlow(doc, diagnostic(), {checkpoint: corrupt});
+  assert.match(graph.textContent, /no es válido o pertenece a un formato anterior/);
+  assert.match(graph.textContent, /Rutas completadas/);
+});
+
+test("local candidate preview grounds every role in the message and never interpolates HTML", () => {
+  const preview = {
+    version: 1,
+    user_message: "Proyecto <img src=x onerror=alert(1)> tiene un fallo y depende de mañana.",
+    candidates: [{
+      id: "candidate-project-failure", source: "tiene un fallo", occurrence: 0, dependency_target: null,
+      roles: [
+        {role: "subject", source: "Proyecto <img src=x onerror=alert(1)>", occurrence: 0, provenance: "explicit", authority: null},
+        {role: "predicate", source: "tiene un fallo", occurrence: 0, provenance: "verified", authority: "core"},
+        {role: "date", source: "mañana", occurrence: 0, provenance: "inherited", authority: null},
+      ],
+    }],
+  };
+  const safe = validateFactCandidatePreview(preview);
+  const output = renderFactCandidatePreview(doc, safe);
+  assert.match(output.textContent, /Vista previa de diseño/);
+  assert.match(output.textContent, /verificado por Core indicado en la prueba/);
+  assert.match(output.textContent, /no autoriza ni demuestra una escritura/);
+  assert.match(output.textContent, /<img src=x/);
+  assert.equal(output.findTag("img").length, 0);
+  assert.throws(() => validateFactCandidatePreview({...preview, candidates: [{...preview.candidates[0], roles: [
+    {...preview.candidates[0].roles[1], authority: null},
+  ]}]}), DiagnosticPreviewError);
+  assert.throws(() => validateFactCandidatePreview({...preview, candidates: [{...preview.candidates[0], roles: [
+    {...preview.candidates[0].roles[0], source: "invented"},
+  ]}]}), DiagnosticPreviewError);
 });

@@ -1,6 +1,6 @@
 # Router fact-candidate units v1 — design contract (not active)
 
-Status: **BLOCK 1 / PROPOSED SEMANTIC CONTRACT — awaiting human design review.** No prompt, runtime, note schema, provider call, deployment, or canonical data change is authorized by this document. Historical Router v0 behavior and its frozen evidence are unchanged.
+Status: **BLOCK 1 / PROPOSED SEMANTIC CONTRACT — awaiting human design review.** Block 2 checkpoint storage remains optional and inactive. Block 3 has a frontend-only diagnostic preparation: it can render already-validated v1 route evidence, an explicitly supplied source-free checkpoint snapshot, and a local test-only candidate preview. It adds no prompt, runtime, note schema, provider call, n8n/browser transport, deployment, or canonical data change. Historical Router v0 behavior and its frozen evidence are unchanged.
 
 ## User outcome and objective
 
@@ -91,7 +91,7 @@ Block 2: extend existing actor-local `request_detail` and checkpoint semantics o
 
 **Still open:** owner policy must decide retention, deletion/recovery visibility, and production capacity before activation. A later read-only graph may consume these bounded checkpoints together with final assistant-turn `request_detail`, but must show an interrupted/failed checkpoint as unknown rather than completed and must never infer a write from it.
 
-Block 3: graph shows candidate IDs and source-bound `explicit`, `inherited`, `overridden`, `unresolved`, `verified` role states per step. Read-only, honest legacy fallback, pagination/mobile scrolling, no fabricated stage outputs. Only validated diagnostic data may cross n8n/browser/conversation allowlists.
+Block 3: graph shows route-by-route observed stage I/O, Core-verified entity evidence, temporal evidence, route status, and actual validated write outcomes without treating a completed route as proof of a note write. It retains legacy fallback and mobile horizontal route navigation. The prepared checkpoint renderer accepts only the existing bounded, source-free checkpoint record and explicitly says delivery/processing milestones do not confirm a note. A separate local test-only candidate preview validates candidate IDs, exact message-grounded spans, generic roles, provenance, and proposed candidate dependencies; it is visibly design-only and is not part of `request_detail`, n8n, browser transport, or persistence. `verified` in that preview requires the supplied test projection to carry `authority: "core"`, but remains a display label rather than new authority. No candidate semantics are activated until Block 4's reviewed adapter and allowlist work.
 
 Block 4: implement + version the candidate segmentation/dispatch with a contract adapter; keep protected v0/Temporal/Core guards and test rollback in isolated DEV. No production or real-vault deployment until separate authorization.
 
