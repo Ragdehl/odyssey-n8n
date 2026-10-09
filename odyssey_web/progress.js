@@ -339,7 +339,7 @@ function stageCard(doc, stage, route = null, observedStep = null) {
 
 function entitiesCard(doc, entities) {
   const node = element(doc, "article", "flow-card flow-entities");
-  node.append(headingWithIcon(doc, "Entidades verificadas · Core", "entities"));
+  node.append(headingWithIcon(doc, "Referencias · Core", "entities"));
   const output = element(doc, "div", "flow-semantics");
   for (const item of entities) {
     const target = item.status === "resolved" ? item.name : "Resolución no disponible";
@@ -487,7 +487,7 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
   }
   end.append(stats);
   root.append(end);
-  if (checkpoint !== undefined) root.append(renderCheckpointHistory(doc, checkpoint));
+  if (checkpoint !== undefined) root.append(renderCheckpointHistory(doc, checkpoint, detail.request_id));
   return root;
 }
 
@@ -514,7 +514,8 @@ function exactKeys(value, keys) {
 
 function validTimestamp(value) {
   return typeof value === "string" && value.length <= 40 &&
-    /^\d{4}-\d{2}-\d{2}T/u.test(value) && Number.isFinite(Date.parse(value));
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(value) &&
+    Number.isFinite(Date.parse(value));
 }
 
 function validateCheckpointEvent(event, expectedSequence) {
@@ -561,12 +562,15 @@ function checkpointLabel(event) {
 }
 
 /** Render only an already validated bounded checkpoint snapshot; it has no write authority. */
-export function renderCheckpointHistory(doc, checkpoint) {
+export function renderCheckpointHistory(doc, checkpoint, expectedRequestId = null) {
   const section = element(doc, "section", "flow-checkpoint-history");
   section.append(element(doc, "h3", "flow-checkpoint-heading", "Historial de ejecución (solo diagnóstico)"));
   let safe;
   try {
     safe = validateExecutionCheckpoint(checkpoint);
+    if (expectedRequestId !== null && safe.request_id !== expectedRequestId) {
+      throw new DiagnosticPreviewError("Checkpoint request does not match detail.");
+    }
   } catch {
     section.append(element(doc, "p", "flow-diagnostic-warning", "El historial de ejecución no es válido o pertenece a un formato anterior; no se muestra."));
     return section;

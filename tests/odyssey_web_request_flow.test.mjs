@@ -209,6 +209,15 @@ test("checkpoint validation rejects corrupt and old snapshots while renderer kee
   assert.match(graph.textContent, /Rutas completadas/);
 });
 
+test("checkpoint with another request ID never attaches to a valid graph", () => {
+  const mismatched = {...checkpoint, request_id: "another-actor-request"};
+  const graph = renderExecutionFlow(doc, diagnostic(), {checkpoint: mismatched});
+  assert.match(graph.textContent, /El historial de ejecución no es válido/);
+  assert.match(graph.textContent, /Rutas completadas/);
+  assert.equal(graph.findAll("flow-checkpoint-event").length, 0);
+  assert.throws(() => validateExecutionCheckpoint({...checkpoint, observed_at: "2026-10-09T12:00:00"}), DiagnosticPreviewError);
+});
+
 test("local candidate preview grounds every role in the message and never interpolates HTML", () => {
   const preview = {
     version: 1,
