@@ -188,7 +188,7 @@ def build_openai_payload(
     }
     if examples and prompt_cache_key is not None:
         payload["prompt_cache_key"] = prompt_cache_key
-        payload["prompt_cache_options"] = {"mode": "explicit"}
+        payload["prompt_cache_options"] = {"mode": "explicit", "ttl": "30m"}
     if max_output_tokens is not None:
         if not isinstance(max_output_tokens, int) or not 1 <= max_output_tokens <= 4096:
             raise ValueError("Contextual max output tokens must be between 1 and 4096")

@@ -6,7 +6,6 @@ retrieval, mutation, delegation, fallback, or action-execution capability.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from collections import Counter
@@ -24,6 +23,7 @@ from odyssey_core.observability import (
     SpanRecorder,
     normalize_provider_usage,
 )
+from odyssey_core.openai_cache import explicit_cache_transport, explicit_system_content
 from odyssey_core.request_planning import (
     LUNA_DYNAMIC_CONTEXT_MARKER,
     PlannerClarification,
@@ -484,6 +484,7 @@ class OpenAILunaExperimentalPlanner:
         self.last_provider_status: str | None = None
         self.last_spans: tuple[OperationalSpan, ...] = ()
         self.last_input_sizes: dict[str, int] | None = None
+        self.last_cache_diagnostics: dict[str, str | int | None] | None = None
         self.last_error_category: str | None = None
         self.last_error_chain: tuple[str, ...] | None = None
         self.last_parse_status: str | None = None
@@ -570,12 +571,21 @@ class OpenAILunaExperimentalPlanner:
             raise
         recorder.add("input_build", input_started)
         self.last_input_sizes = sizes
+        self.last_cache_diagnostics = None
         if prompt.count(LUNA_DYNAMIC_CONTEXT_MARKER) != 1:
             raise RuntimeError("Luna prompt cache boundary is invalid")
         stable_prompt, dynamic_prompt = prompt.split(LUNA_DYNAMIC_CONTEXT_MARKER, 1)
-        cache_key = (
-            "odyssey-luna-first-" + hashlib.sha256(stable_prompt.encode("utf-8")).hexdigest()[:32]
+        cache_transport, cache_diagnostics = explicit_cache_transport(
+            model=self.model,
+            capability="luna-first",
+            stable_prefix=stable_prompt,
+            proven_reusable=True,
         )
+        if cache_transport is None:
+            raise RuntimeError(
+                "Luna prompt cache boundary lacks the documented conservative eligible prefix"
+            )
+        self.last_cache_diagnostics = cache_diagnostics.as_safe_mapping()
         provider_started = self._monotonic()
         try:
             response = self._client.responses.create(
@@ -583,22 +593,13 @@ class OpenAILunaExperimentalPlanner:
                 reasoning={"effort": self.reasoning_effort},
                 store=False,
                 max_output_tokens=self.max_output_tokens,
-                prompt_cache_key=cache_key,
-                prompt_cache_options={"mode": "explicit"},
+                **cache_transport,
                 input=[
                     {
                         "role": "system",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": stable_prompt,
-                                "prompt_cache_breakpoint": {"mode": "explicit"},
-                            },
-                            {
-                                "type": "input_text",
-                                "text": LUNA_DYNAMIC_CONTEXT_MARKER + dynamic_prompt,
-                            },
-                        ],
+                        "content": explicit_system_content(
+                            stable_prompt, LUNA_DYNAMIC_CONTEXT_MARKER + dynamic_prompt
+                        ),
                     },
                     {"role": "user", "content": request},
                 ],

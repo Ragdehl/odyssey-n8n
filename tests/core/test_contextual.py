@@ -119,7 +119,7 @@ def test_frozen_prefix_breakpoint_marks_final_calibration_user_turn() -> None:
     ]
 
     assert payload["prompt_cache_key"] == SOL_FEW_SHOT_PROMPT_CACHE_KEY
-    assert payload["prompt_cache_options"] == {"mode": "explicit"}
+    assert payload["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
     assert len(breakpoints) == 1
     assert breakpoints[0][0] == len(turns) - 3
     assert turns[breakpoints[0][0]]["role"] == "user"

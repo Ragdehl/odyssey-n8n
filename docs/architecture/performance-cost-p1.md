@@ -95,6 +95,32 @@ The audit found automatic provider caching remains available on supported models
 
 Potential future work is deliberately deferred: after an explicitly authorized live provider gate, measure whether any repeated path has a stable prefix of at least the provider's documented visible-token threshold (currently 1,024 for GPT-5.6+), then consider one explicit cache key/breakpoint at a stable boundary. Do not move dynamic request, retrieved evidence, or user content into a purportedly stable prefix merely to increase cache hits. Such a prompt/cache-configuration change is model-facing and needs the required live gate. Cache-write billing is also distinct from cache-read billing: the snapshot records it only for the currently validated GPT-5.6/GPT-6 models; unsupported models remain unavailable.
 
+### Explicit-boundary preparation — 2026-10-09 (feature branch; not live validated)
+
+The feature branch adds a provider-transport-only helper. It retains a SHA-256 prefix fingerprint,
+model, conservative stable-prefix byte count, cache-mode outcome, and bounded eligibility reason; it
+never retains prompt text, user content, credentials, or provider output. Byte count is deliberately
+not presented as a token count. A prefix can enter explicit-only mode only when its producing stage
+proves the prefix request-invariant and it passes an 8,192 UTF-8-byte conservative gate in the
+absence of a tokenizer. The generated transport uses one breakpoint, a deterministic
+capability/version-plus-prefix-hash key with no user content, and `ttl: "30m"`. The 30-minute
+provider cache setting is unrelated to Odyssey's 30-day diagnostic retention policy.
+
+| Stage / transport | Outcome on this branch | Stable-prefix evidence / next constraint |
+| --- | --- | --- |
+| Luna-first semantic planner (SDK) | explicit | Existing dynamic-context marker leaves the accepted fixed prefix intact; deterministic payload tests prove exact flattened system text, dynamic context after the breakpoint, distinct dynamic prompts sharing one prefix/key, and unchanged schema. Live semantic/provider evidence remains required. |
+| Contextual resolver (raw Responses JSON) | existing conditional explicit mechanism retained | Only a caller-supplied frozen calibration prefix opts in. Its existing breakpoint/key are preserved and now request the supported 30-minute TTL. Production resolver calls without that calibration key remain implicit. |
+| Router, Temporal, Tasks, Calendar (SDK) | implicit / not eligible | Router has no safe boundary; Temporal (1,091 bytes), Tasks (2,855), and Calendar (3,114 including dynamic clock/context) are below the 8,192-byte conservative gate. Do not separate text without byte-preservation tests. |
+| Core Sol fallback planner (SDK) | implicit / deferred | No valid stable boundary: its rendered prompt contains runtime capabilities/context without the Luna marker. Separating it safely needs its own byte-preservation and live semantic gate. |
+| Writer, fact selector, semantic-set selector, clarification (raw Responses JSON) | implicit / not eligible | Writer static instructions are 998 bytes; selector/classifier instructions are 165/470/273 bytes. Variable canonical/user evidence remains in the suffix. |
+| n8n grounded answerer | implicit / not eligible | No extracted stable boundary; its request/evidence body is dynamic and its system instruction is intentionally not padded or rewritten. |
+
+This is a transport and prompt-shape change, not a claim of cache reuse. Cold parallel calls cannot
+reuse a prefix before a cache write completes, and cache writes may cost more than uncached input.
+The required focused live provider semantic gate has **not** run: it needs separate explicit bounded
+cost approval and must confirm returned cache usage for the eligible repeated paths before this work
+can be considered ready to merge.
+
 The Core writer remains a narrow executor, not a semantic planner: Core has already selected the authorized semantic write intent, identities, and facts before the writer renders bounded Markdown. Writer output is validated and persisted through Core's mutation boundary, while diagnostics record only bounded provider metadata. This preserves an explainable Core-owned write role without treating a writer call as an alternate knowledge authority.
 
 ## Frozen representative baseline, before execution

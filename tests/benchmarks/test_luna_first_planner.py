@@ -771,7 +771,7 @@ def test_luna_provider_uses_explicit_cache_boundary_with_dynamic_suffix(
 
     assert len(calls) == 2
     for call in calls:
-        assert call["prompt_cache_options"] == {"mode": "explicit"}
+        assert call["prompt_cache_options"] == {"mode": "explicit", "ttl": "30m"}
         assert call["prompt_cache_key"].startswith("odyssey-luna-first-")
         system_content = call["input"][0]["content"]
         assert isinstance(system_content, list) and len(system_content) == 2
@@ -780,6 +780,12 @@ def test_luna_provider_uses_explicit_cache_boundary_with_dynamic_suffix(
 
     first_content = calls[0]["input"][0]["content"]
     second_content = calls[1]["input"][0]["content"]
+    old_first_prompt = render_luna_experimental_prompt(
+        schema,
+        CONTEXT,
+        conversation_context=({"role": "user", "text": "Context A"},),
+    )
+    assert "".join(block["text"] for block in first_content) == old_first_prompt
     assert calls[0]["prompt_cache_key"] == calls[1]["prompt_cache_key"]
     assert first_content[0]["text"] == second_content[0]["text"]
     assert first_content[1]["text"] != second_content[1]["text"]
@@ -787,6 +793,9 @@ def test_luna_provider_uses_explicit_cache_boundary_with_dynamic_suffix(
     assert "Context A" in first_content[1]["text"]
     assert '"current_context":{"date":"2026-09-09"' not in first_content[0]["text"]
     assert '"current_context":{"date":"2026-09-09"' in first_content[1]["text"]
+    assert first.last_cache_diagnostics is not None
+    assert first.last_cache_diagnostics["outcome"] == "explicit"
+    assert first.last_cache_diagnostics["prefix_sha256"] is not None
 
 
 def test_luna_and_sol_semantic_frontends_send_identical_contract_except_model(
