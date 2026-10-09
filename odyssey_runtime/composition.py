@@ -126,6 +126,7 @@ from odyssey_core.temporal_interpretation import (
 from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .delivery_results import LocalDeliveryResultStore
+from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
 from .progress import ProductProgressStore
 from .routing import (
     ApplicationExecutor,
@@ -357,6 +358,9 @@ class RuntimeComposition:
     direct_task_mutations: TaskDirectMutationService | None = None
     work_session_service: TaskWorkSessionService | None = None
     product_progress_store: ProductProgressStore | None = None
+    execution_checkpoint_store_factory: Callable[[Path], LocalExecutionCheckpointStore] | None = (
+        None
+    )
     notes_mutation_actor: (
         Callable[[AuthenticatedActorContext | None, ExternalPrincipal | None], object] | None
     ) = None
@@ -381,6 +385,10 @@ class RuntimeComposition:
         another planner or mutation pass.
         """
         actor = self._resolve_actor(authenticated_actor, external_principal)
+        checkpoint_store = self._checkpoint_store(actor)
+        self._record_checkpoint(
+            checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED
+        )
         if request_id is not None and self.product_progress_store is not None:
             self.product_progress_store.begin(actor, request_id)
         store: LocalDeliveryResultStore | None = None
@@ -405,6 +413,12 @@ class RuntimeComposition:
                 replay = store.load(request_id, fingerprint)
                 if replay is not None:
                     replay["delivery_replayed"] = True
+                    self._record_checkpoint(
+                        checkpoint_store,
+                        request_id,
+                        "delivery.result_persisted",
+                        CheckpointOutcome.RESULT_PERSISTED,
+                    )
                     return replay
             pending = clarification_store.read() if clarification_store is not None else None
             if pending is not None:
@@ -466,9 +480,18 @@ class RuntimeComposition:
                         clarification_choice=choice,
                         original_request=pending.original_request,
                     )
-                    return self._finish_product_result(
+                    response = self._finish_product_result(
                         result, store, fingerprint, clarification_store, force_replay=True
                     )
+                    self._record_terminal_checkpoint(
+                        checkpoint_store,
+                        request_id,
+                        response,
+                        store,
+                        fingerprint,
+                        force_replay=True,
+                    )
+                    return response
             result = self._execute_with_progress(
                 actor,
                 request_id,
@@ -480,7 +503,11 @@ class RuntimeComposition:
                 else None,
                 None,
             )
-            return self._finish_product_result(result, store, fingerprint, clarification_store)
+            response = self._finish_product_result(result, store, fingerprint, clarification_store)
+            self._record_terminal_checkpoint(
+                checkpoint_store, request_id, response, store, fingerprint
+            )
+            return response
 
     def _execute_with_progress(
         self,
@@ -490,17 +517,102 @@ class RuntimeComposition:
         **kwargs: object,
     ) -> ApplicationResult:
         """Run one product execution with a transient user-safe progress reporter bound to it."""
-        if request_id is None or self.product_progress_store is None:
+        checkpoint_store = self._checkpoint_store(actor)
+        if request_id is None or (self.product_progress_store is None and checkpoint_store is None):
             return self.execute(*args, **kwargs)
         token = _PROGRESS_REPORTER.set(
-            lambda stage, payload: self._record_progress_event(actor, request_id, stage, payload)
+            lambda stage, payload: self._record_execution_progress(
+                actor, request_id, stage, payload, checkpoint_store
+            )
         )
         try:
             result = self.execute(*args, **kwargs)
-            self.product_progress_store.update(actor, request_id, "finalizing", 94)
+            if self.product_progress_store is not None:
+                self.product_progress_store.update(actor, request_id, "finalizing", 94)
+            self._record_checkpoint(
+                checkpoint_store, request_id, "finalizing", CheckpointOutcome.MILESTONE_OBSERVED
+            )
             return result
+        except Exception:
+            self._record_checkpoint(
+                checkpoint_store,
+                request_id,
+                "failed_or_unknown",
+                CheckpointOutcome.FAILED_OR_UNKNOWN,
+            )
+            raise
         finally:
             _PROGRESS_REPORTER.reset(token)
+
+    def _record_execution_progress(
+        self,
+        actor: str,
+        request_id: str,
+        stage: str,
+        payload: Mapping[str, object],
+        checkpoint_store: LocalExecutionCheckpointStore | None,
+    ) -> None:
+        """Fan out one existing milestone to transient progress and optional diagnostics."""
+        self._record_progress_event(actor, request_id, stage, payload)
+        self._record_checkpoint(
+            checkpoint_store, request_id, stage, CheckpointOutcome.MILESTONE_OBSERVED
+        )
+
+    def _checkpoint_store(self, actor: str) -> LocalExecutionCheckpointStore | None:
+        """Construct the optional root-bound diagnostic store without affecting delivery."""
+        if (
+            self.execution_checkpoint_store_factory is None
+            or self.conversation_root_resolver is None
+        ):
+            return None
+        try:
+            return self.execution_checkpoint_store_factory(
+                self.conversation_root_resolver.resolve(actor) / "execution-checkpoints"
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _record_checkpoint(
+        store: LocalExecutionCheckpointStore | None,
+        request_id: str | None,
+        stage: str,
+        outcome: CheckpointOutcome,
+    ) -> None:
+        """Best-effort diagnostics only; failures never alter application execution."""
+        if store is None or request_id is None:
+            return
+        try:
+            store.record(request_id, stage, outcome, _current_time()["timestamp"])
+        except Exception:
+            return
+
+    def _record_terminal_checkpoint(
+        self,
+        checkpoint_store: LocalExecutionCheckpointStore | None,
+        request_id: str | None,
+        response: Mapping[str, object],
+        store: LocalDeliveryResultStore | None,
+        fingerprint: str | None,
+        *,
+        force_replay: bool = False,
+    ) -> None:
+        """State completion honestly after the authoritative delivery save has returned."""
+        persisted = (
+            store is not None
+            and fingerprint is not None
+            and (
+                force_replay
+                or response.get("product_outcome") == "CLARIFY"
+                or bool(response.get("affected_stable_note_ids"))
+            )
+        )
+        self._record_checkpoint(
+            checkpoint_store,
+            request_id,
+            "delivery.result_persisted" if persisted else "completed",
+            CheckpointOutcome.RESULT_PERSISTED if persisted else CheckpointOutcome.COMPLETED,
+        )
 
     def _record_progress_event(
         self,
