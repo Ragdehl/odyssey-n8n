@@ -1,0 +1,1148 @@
+{
+  "version": 1,
+  "status": "non_executable_design_oracle",
+  "cases": [
+    {
+      "id": "F01",
+      "source": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine y hoy vamos a ir a un concierto.",
+      "expected_units": [
+        {
+          "reading": "Fuimos al parque con mi mujer y mis hijos ayer a las 15:00",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "time",
+              "text": "a las tres por la tarde"
+            },
+            {
+              "role": "participants",
+              "text": "mi mujer y mis hijos"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Después fuimos al cine el mismo día sin hora explícita",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y después fuimos al cine"
+          ],
+          "inheritance": [
+            {
+              "role": "participants",
+              "from_unit": 1
+            },
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "order",
+              "text": "después"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Hoy vamos a ir a un concierto con participantes contextualizados",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y hoy vamos a ir a un concierto"
+          ],
+          "inheritance": [
+            {
+              "role": "participants",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "hoy"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "La tercera continuidad de grupo es una propuesta lingüística, NO un conjunto de identidades confirmado. La hora 15:00 no se hereda por el cine ni el concierto."
+    },
+    {
+      "id": "F02",
+      "source": "Esta tarde mis hijos, mi mujer y yo iremos a merendar sobre las 16h, mañana iremos al parque y el domingo a las 11h a un vide-grenier.",
+      "expected_units": [
+        {
+          "reading": "Merienda hoy sobre las 16h",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Esta tarde mis hijos, mi mujer y yo iremos a merendar sobre las 16h"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Esta tarde"
+            },
+            {
+              "role": "time_approx",
+              "text": "sobre las 16h"
+            },
+            {
+              "role": "participants",
+              "text": "mis hijos, mi mujer y yo"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Mañana iremos al parque",
+          "kind": "occurrence",
+          "source_anchors": [
+            "mañana iremos al parque"
+          ],
+          "inheritance": [
+            {
+              "role": "participants",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "mañana"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Domingo a las 11 iremos a un vide-grenier",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y el domingo a las 11h a un vide-grenier"
+          ],
+          "inheritance": [
+            {
+              "role": "participants",
+              "from_unit": 1
+            },
+            {
+              "role": "predicate",
+              "from_unit": 2
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "el domingo"
+            },
+            {
+              "role": "time",
+              "text": "a las 11h"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "El predicado de U3 es el concepto de ir indicado en el contexto, sin fabricar texto fuente. Las dos expresiones temporales de U1 aluden a un solo evento aproximado."
+    },
+    {
+      "id": "F03",
+      "source": "Mañana vamos con mis hijos de paseo al parque y luego iremos al cine.",
+      "expected_units": [
+        {
+          "reading": "Paseo al parque mañana con mis hijos",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Mañana vamos con mis hijos de paseo al parque"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Mañana"
+            },
+            {
+              "role": "participants",
+              "text": "mis hijos"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Luego iremos al cine con el grupo el mismo día",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y luego iremos al cine"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            },
+            {
+              "role": "participants",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "order",
+              "text": "luego"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Luego no significa una hora concreta."
+    },
+    {
+      "id": "F04",
+      "source": "Mañana iremos al parque a las 12 y luego a las 18 iremos al cine.",
+      "expected_units": [
+        {
+          "reading": "Parque mañana a las 12",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Mañana iremos al parque a las 12"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Mañana"
+            },
+            {
+              "role": "time",
+              "text": "a las 12"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Cine mañana a las 18",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y luego a las 18 iremos al cine"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "time",
+              "text": "a las 18"
+            },
+            {
+              "role": "order",
+              "text": "luego"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "No heredar la hora 12:00 al segundo evento."
+    },
+    {
+      "id": "F05",
+      "source": "El viernes cenaremos con Ana en Toulouse y el sábado a las 10 con Luis en Albi.",
+      "expected_units": [
+        {
+          "reading": "Cena con Ana el viernes en Toulouse",
+          "kind": "occurrence",
+          "source_anchors": [
+            "El viernes cenaremos con Ana en Toulouse"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "El viernes"
+            },
+            {
+              "role": "participants",
+              "text": "Ana"
+            },
+            {
+              "role": "location",
+              "text": "Toulouse"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Cena con Luis el sábado a las 10 en Albi",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y el sábado a las 10 con Luis en Albi"
+          ],
+          "inheritance": [
+            {
+              "role": "predicate",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "el sábado"
+            },
+            {
+              "role": "time",
+              "text": "a las 10"
+            },
+            {
+              "role": "participants",
+              "text": "Luis"
+            },
+            {
+              "role": "location",
+              "text": "Albi"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Fecha, hora, ciudad y acompañante de U2 son nuevos; solo se hereda cenar."
+    },
+    {
+      "id": "F06",
+      "source": "Hoy vi a Ana y compré pan.",
+      "expected_units": [
+        {
+          "reading": "Hoy vi a Ana",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Hoy vi a Ana"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Hoy"
+            },
+            {
+              "role": "object",
+              "text": "Ana"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Hoy compré pan",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y compré pan"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Ana no se propaga como participante de comprar pan."
+    },
+    {
+      "id": "F07",
+      "source": "Hoy a las 15h veo a Bea y a las 17h a Luis.",
+      "expected_units": [
+        {
+          "reading": "Ver a Bea hoy a las 15h",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Hoy a las 15h veo a Bea"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Hoy"
+            },
+            {
+              "role": "time",
+              "text": "a las 15h"
+            },
+            {
+              "role": "object",
+              "text": "Bea"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Ver a Luis hoy a las 17h",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y a las 17h a Luis"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            },
+            {
+              "role": "predicate",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "time",
+              "text": "a las 17h"
+            },
+            {
+              "role": "object",
+              "text": "Luis"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Solo comparte día y verbo; no la primera hora ni a Bea."
+    },
+    {
+      "id": "F08",
+      "source": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+      "expected_units": [
+        {
+          "reading": "Marta al médico mañana a las 10",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Mañana Marta irá al médico a las 10"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Mañana"
+            },
+            {
+              "role": "subject",
+              "text": "Marta"
+            },
+            {
+              "role": "time",
+              "text": "a las 10"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Luis al dentista mañana a la misma hora",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y Luis al dentista a la misma hora"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            },
+            {
+              "role": "time",
+              "from_unit": 1
+            },
+            {
+              "role": "predicate",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "Luis"
+            },
+            {
+              "role": "time_relation",
+              "text": "a la misma hora"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "La hora se comparte explícitamente, pero sujeto y destino cambian."
+    },
+    {
+      "id": "F09",
+      "source": "Marta y Luis viven en Lyon.",
+      "expected_units": [
+        {
+          "reading": "Marta vive en Lyon",
+          "kind": "property",
+          "source_anchors": [
+            "Marta"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "predicate",
+              "text": "viven en Lyon"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Luis vive en Lyon",
+          "kind": "property",
+          "source_anchors": [
+            "Luis"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "predicate",
+              "text": "viven en Lyon"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Dos afirmaciones de residencia independientes, mismo predicado original compartido; Core elige representación canónica."
+    },
+    {
+      "id": "F10",
+      "source": "Marta y Luis se conocieron en Lyon.",
+      "expected_units": [
+        {
+          "reading": "Encuentro mutuo de Marta y Luis en Lyon",
+          "kind": "relationship",
+          "source_anchors": [
+            "Marta y Luis se conocieron en Lyon"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "participants",
+              "text": "Marta y Luis"
+            },
+            {
+              "role": "location",
+              "text": "Lyon"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Una sola relación simétrica; no duplicar el encuentro por persona."
+    },
+    {
+      "id": "F11",
+      "source": "Hoy compré pan y leche.",
+      "expected_units": [
+        {
+          "reading": "Compré pan hoy",
+          "kind": "purchase_item",
+          "source_anchors": [
+            "pan"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Hoy"
+            },
+            {
+              "role": "predicate",
+              "text": "compré"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Compré leche hoy",
+          "kind": "purchase_item",
+          "source_anchors": [
+            "leche"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Hoy"
+            },
+            {
+              "role": "predicate",
+              "text": "compré"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Dos datos de artículos dentro de UNA transacción; no afirmar dos viajes ni dos compras separadas."
+    },
+    {
+      "id": "F12",
+      "source": "Bea y mis hijos limpiaron el garaje y después montaron los muebles.",
+      "expected_units": [
+        {
+          "reading": "Bea y mis hijos limpiaron el garaje",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Bea y mis hijos limpiaron el garaje"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "participants",
+              "text": "Bea y mis hijos"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "El mismo grupo montó los muebles después",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y después montaron los muebles"
+          ],
+          "inheritance": [
+            {
+              "role": "participants",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "order",
+              "text": "después"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Dos actividades colectivas; no multiplicarlas por número de participantes."
+    },
+    {
+      "id": "F13",
+      "source": "Ayer hablé con Eric. Mañana iré al cine con él. Hoy compré pan.",
+      "expected_units": [
+        {
+          "reading": "Ayer hablé con Eric",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Ayer hablé con Eric"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "object",
+              "text": "Eric"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Mañana iré al cine con él",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Mañana iré al cine con él"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Mañana"
+            },
+            {
+              "role": "reference",
+              "text": "él"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Hoy compré pan",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Hoy compré pan"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Hoy"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "U2 contiene pronombre visible y exige vinculación Core post-persistencia verificada, no mera herencia léxica; U3 es independiente."
+    },
+    {
+      "id": "F14",
+      "source": "Ayer hablé con Eric y Luis. Mañana iré al cine con él.",
+      "expected_units": [
+        {
+          "reading": "Ayer hablé con Eric",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Eric"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "predicate",
+              "text": "hablé con"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Ayer hablé con Luis",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Luis"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "predicate",
+              "text": "hablé con"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Mañana iré al cine con él",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Mañana iré al cine con él"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Mañana"
+            },
+            {
+              "role": "reference",
+              "text": "él"
+            }
+          ],
+          "state": "ambiguous_identity"
+        }
+      ],
+      "safety_oracle": "U3 no puede atribuir él a Eric o Luis sin aclaración; la política de escrituras parciales queda abierta."
+    },
+    {
+      "id": "F15",
+      "source": "Ayer mis hijos fueron al parque y Bea se quedó en casa; después yo preparé la cena.",
+      "expected_units": [
+        {
+          "reading": "Mis hijos fueron al parque ayer",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Ayer mis hijos fueron al parque"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "subject",
+              "text": "mis hijos"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Bea se quedó en casa ayer",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y Bea se quedó en casa"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "Bea"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Yo preparé la cena después ayer",
+          "kind": "occurrence",
+          "source_anchors": [
+            "después yo preparé la cena"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "yo"
+            },
+            {
+              "role": "order",
+              "text": "después"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Sujeto reemplazado en cada oración; compartir ayer no significa compartir persona."
+    },
+    {
+      "id": "F16",
+      "source": "Ana compró entradas para el concierto y Luis también.",
+      "expected_units": [
+        {
+          "reading": "Ana compró entradas para el concierto",
+          "kind": "occurrence",
+          "source_anchors": [
+            "Ana compró entradas para el concierto"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "Ana"
+            },
+            {
+              "role": "object",
+              "text": "entradas para el concierto"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Luis también compró entradas para el concierto",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y Luis también"
+          ],
+          "inheritance": [
+            {
+              "role": "predicate",
+              "from_unit": 1
+            },
+            {
+              "role": "object",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "Luis"
+            },
+            {
+              "role": "predicate_relation",
+              "text": "también"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "No interpretar también como compra conjunta; pueden ser acciones distintas."
+    },
+    {
+      "id": "F17",
+      "source": "Ayer no vi ni a Ana ni a Luis.",
+      "expected_units": [
+        {
+          "reading": "Ayer no vi a Ana",
+          "kind": "negative",
+          "source_anchors": [
+            "Ana"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "polarity",
+              "text": "no vi ni a Ana ni a Luis"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Ayer no vi a Luis",
+          "kind": "negative",
+          "source_anchors": [
+            "Luis"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "polarity",
+              "text": "no vi ni a Ana ni a Luis"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "La negación afecta a ambos; la persistencia final de hechos negativos es política de Core."
+    },
+    {
+      "id": "F18",
+      "source": "Ayer no vi a Ana, pero sí hablé con Luis.",
+      "expected_units": [
+        {
+          "reading": "Ayer no vi a Ana",
+          "kind": "negative",
+          "source_anchors": [
+            "Ayer no vi a Ana"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Ayer"
+            },
+            {
+              "role": "polarity",
+              "text": "no"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Ayer sí hablé con Luis",
+          "kind": "occurrence",
+          "source_anchors": [
+            "pero sí hablé con Luis"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "polarity",
+              "text": "sí"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "La segunda acción no hereda la negación de la primera."
+    },
+    {
+      "id": "F19",
+      "source": "Mañana iremos al parque a las 11... no, mejor al cine a las 12.",
+      "expected_units": [
+        {
+          "reading": "Mañana iremos al cine a las 12",
+          "kind": "plan",
+          "source_anchors": [
+            "mejor al cine a las 12"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Mañana"
+            },
+            {
+              "role": "replacement",
+              "text": "no, mejor"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "No persistir el plan supersedido del parque a las 11; retener su texto como corrección/proveniencia."
+    },
+    {
+      "id": "F20",
+      "source": "El sábado iremos al cine si no llueve, y si llueve nos quedaremos en casa.",
+      "expected_units": [
+        {
+          "reading": "Ir al cine el sábado si no llueve",
+          "kind": "conditional",
+          "source_anchors": [
+            "El sábado iremos al cine si no llueve"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "El sábado"
+            },
+            {
+              "role": "condition",
+              "text": "si no llueve"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Quedarnos en casa el sábado si llueve",
+          "kind": "conditional",
+          "source_anchors": [
+            "y si llueve nos quedaremos en casa"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "condition",
+              "text": "si llueve"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Dos opciones condicionadas, no dos eventos confirmados; operación/lifecycle la decide Core o Tasks/Events."
+    },
+    {
+      "id": "F21",
+      "source": "La semana que viene tengo clase el lunes y el miércoles a las 18h.",
+      "expected_units": [
+        {
+          "reading": "Clase lunes de la semana que viene a las 18h",
+          "kind": "occurrence",
+          "source_anchors": [
+            "tengo clase el lunes"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date_scope",
+              "text": "La semana que viene"
+            },
+            {
+              "role": "time",
+              "text": "a las 18h"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Clase miércoles de la semana que viene a las 18h",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y el miércoles a las 18h"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date_scope",
+              "text": "La semana que viene"
+            },
+            {
+              "role": "time",
+              "text": "a las 18h"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "La expresión horaria final puede abarcar ambas clases: permitir una fuente posterior sin ciclo semántico."
+    },
+    {
+      "id": "F22",
+      "source": "Hoy tengo que llamar a Ana y escribir a Luis; mañana preparar la factura.",
+      "expected_units": [
+        {
+          "reading": "Llamar a Ana hoy",
+          "kind": "task",
+          "source_anchors": [
+            "Hoy tengo que llamar a Ana"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "Hoy"
+            },
+            {
+              "role": "object",
+              "text": "Ana"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Escribir a Luis hoy",
+          "kind": "task",
+          "source_anchors": [
+            "y escribir a Luis"
+          ],
+          "inheritance": [
+            {
+              "role": "date",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "object",
+              "text": "Luis"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Preparar la factura mañana",
+          "kind": "task",
+          "source_anchors": [
+            "mañana preparar la factura"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "mañana"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "Tres intenciones de tarea, no simples sucesos ocurridos; usar Tasks cuando esté habilitada."
+    }
+  ]
+}

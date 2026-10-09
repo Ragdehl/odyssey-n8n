@@ -36,6 +36,10 @@ to sequential, with the preparation enabled only in isolated DEV. Do not confuse
 concurrent Core *model planning* with parallel Core *execution*, and do not claim
 measured latency savings from deterministic concurrence tests alone.
 
+## Planned Router fact-candidate segmentation — design review
+
+[Router fact-candidate units v1](router-fact-units-v1.md) records the user-reviewed direction for independent atomic candidate assertions, typed source-context inheritance, and separation from Core-owned persistence. Block 1 is design-only: its 22-case future oracle is not a live Router contract, and the current `dev` Router v0 remains unchanged. Diagnostic checkpoints/graph come before any v1 provider/runtime activation; product choices about partial writes and conditional/negative persistence remain open.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
