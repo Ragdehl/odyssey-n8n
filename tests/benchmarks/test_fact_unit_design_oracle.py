@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MATRIX = ROOT / "benchmarks/application_router/fact_units_v1.design.json"
-EXPECTED_COUNTS = (3, 3, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 3, 3, 3, 2, 2, 2, 1, 2, 2, 3)
+EXPECTED_COUNTS = (3, 3, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 3, 3, 3, 2, 2, 2, 1, 2, 2, 3, 2, 2, 2, 2)
 ROLES = {
     "participants",
     "subject",
@@ -51,9 +51,9 @@ def test_accepted_fact_candidate_design_examples_are_frozen_and_source_grounded(
     assert data["version"] == 1
     assert data["status"] == "non_executable_design_oracle"
     cases = data["cases"]
-    assert [case["id"] for case in cases] == [f"F{i:02d}" for i in range(1, 23)]
+    assert [case["id"] for case in cases] == [f"F{i:02d}" for i in range(1, 27)]
     assert tuple(len(case["expected_units"]) for case in cases) == EXPECTED_COUNTS
-    assert sum(EXPECTED_COUNTS) == 48
+    assert sum(EXPECTED_COUNTS) == 56
 
     for case in cases:
         assert set(case) == {"id", "source", "expected_units", "safety_oracle"}
@@ -110,3 +110,20 @@ def test_design_oracles_keep_non_equivalent_fact_sharing_cases_distinct() -> Non
         any(scope["text"] == "a las 18h" for scope in unit["scoped_source"])
         for unit in cases["F21"]["expected_units"]
     )
+
+
+def test_subject_role_is_note_type_agnostic_and_not_sticky_across_actions() -> None:
+    """Prove design examples include non-person subjects and role transitions."""
+    cases = {case["id"]: case for case in json.loads(MATRIX.read_text(encoding="utf-8"))["cases"]}
+    for case_id in ("F23", "F24", "F25"):
+        units = cases[case_id]["expected_units"]
+        assert len(units) == 2
+        assert any(scope["role"] == "subject" for scope in units[0]["scoped_source"])
+        assert {edge["role"] for edge in units[1]["inheritance"]} >= {"subject"}
+        assert all("note_type" not in unit and "canonical_id" not in unit for unit in units)
+    report, sent = cases["F26"]["expected_units"]
+    assert any(
+        scope == {"role": "subject", "text": "El informe"} for scope in report["scoped_source"]
+    )
+    assert {edge["role"] for edge in sent["inheritance"]} == {"object"}
+    assert not any(edge["role"] == "subject" for edge in sent["inheritance"])

@@ -38,7 +38,7 @@ measured latency savings from deterministic concurrence tests alone.
 
 ## Planned Router fact-candidate segmentation — design review
 
-[Router fact-candidate units v1](router-fact-units-v1.md) records the user-reviewed direction for independent atomic candidate assertions, typed source-context inheritance, and separation from Core-owned persistence. Block 1 is design-only: its 22-case future oracle is not a live Router contract, and the current `dev` Router v0 remains unchanged. Diagnostic checkpoints/graph come before any v1 provider/runtime activation; product choices about partial writes and conditional/negative persistence remain open.
+[Router fact-candidate units v1](router-fact-units-v1.md) records the user-reviewed direction for independent atomic candidate assertions, typed source-context inheritance, and separation from Core-owned persistence. Block 1 is design-only: its 22 user-agreed plus four additional generic-subject future oracles are not a live Router contract, and the current `dev` Router v0 remains unchanged. The approved partial-write direction retains validated independent facts while ambiguity remains pending with targeted clarification, not blanket abort. Diagnostic checkpoints/graph come before any v1 provider/runtime activation; product choices about partial writes and conditional/negative persistence remain open.
 
 ## Current functional work — explainable clarification
 

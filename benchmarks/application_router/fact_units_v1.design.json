@@ -1143,6 +1143,202 @@
         }
       ],
       "safety_oracle": "Tres intenciones de tarea, no simples sucesos ocurridos; usar Tasks cuando esté habilitada."
+    },
+    {
+      "id": "F23",
+      "source": "El proyecto Odyssey tiene un fallo en Router y otro en Temporal.",
+      "expected_units": [
+        {
+          "reading": "El proyecto Odyssey tiene un fallo en Router",
+          "kind": "property",
+          "source_anchors": [
+            "un fallo en Router"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "El proyecto Odyssey"
+            },
+            {
+              "role": "predicate",
+              "text": "tiene un fallo"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "El proyecto Odyssey tiene otro fallo en Temporal",
+          "kind": "property",
+          "source_anchors": [
+            "otro en Temporal"
+          ],
+          "inheritance": [
+            {
+              "role": "subject",
+              "from_unit": 1
+            },
+            {
+              "role": "predicate",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "object",
+              "text": "Temporal"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "El sujeto es un proyecto, no una Person Note; ambas incidencias son separables. La clasificación de Note pertenece a Core."
+    },
+    {
+      "id": "F24",
+      "source": "El coche está en el taller y mañana pasará la revisión.",
+      "expected_units": [
+        {
+          "reading": "El coche está en el taller",
+          "kind": "property",
+          "source_anchors": [
+            "El coche está en el taller"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "El coche"
+            },
+            {
+              "role": "location",
+              "text": "en el taller"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "El coche pasará la revisión mañana",
+          "kind": "property",
+          "source_anchors": [
+            "y mañana pasará la revisión"
+          ],
+          "inheritance": [
+            {
+              "role": "subject",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "mañana"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "No heredar la fecha de la segunda afirmación hacia el estado actual del coche; la entidad puede ser un vehículo u otro NoteSchema reconocido."
+    },
+    {
+      "id": "F25",
+      "source": "La casa de Toulouse tiene humedad en el sótano y necesita reparar el tejado.",
+      "expected_units": [
+        {
+          "reading": "La casa de Toulouse tiene humedad en el sótano",
+          "kind": "property",
+          "source_anchors": [
+            "La casa de Toulouse tiene humedad en el sótano"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "La casa de Toulouse"
+            },
+            {
+              "role": "location",
+              "text": "en el sótano"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "La casa de Toulouse necesita reparar el tejado",
+          "kind": "property",
+          "source_anchors": [
+            "y necesita reparar el tejado"
+          ],
+          "inheritance": [
+            {
+              "role": "subject",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "object",
+              "text": "el tejado"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "La casa es el sujeto de ambos hechos; Toulouse puede distinguir su identidad, el sótano es una ubicación interior contextual, no un nuevo sujeto."
+    },
+    {
+      "id": "F26",
+      "source": "El informe llegó ayer y hoy lo envié a Ana.",
+      "expected_units": [
+        {
+          "reading": "El informe llegó ayer",
+          "kind": "occurrence",
+          "source_anchors": [
+            "El informe llegó ayer"
+          ],
+          "inheritance": [],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "text": "El informe"
+            },
+            {
+              "role": "date",
+              "text": "ayer"
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Yo envié el informe a Ana hoy",
+          "kind": "occurrence",
+          "source_anchors": [
+            "y hoy lo envié a Ana"
+          ],
+          "inheritance": [
+            {
+              "role": "object",
+              "from_unit": 1
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "date",
+              "text": "hoy"
+            },
+            {
+              "role": "reference",
+              "text": "lo"
+            },
+            {
+              "role": "participants",
+              "text": "Ana"
+            }
+          ],
+          "state": "candidate"
+        }
+      ],
+      "safety_oracle": "El informe es sujeto solo en la primera afirmación; en la segunda es objeto anafórico, mientras que el agente de envié es el hablante. Nunca heredar ciegamente el sujeto."
     }
   ]
 }

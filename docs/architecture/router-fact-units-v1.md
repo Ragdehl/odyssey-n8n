@@ -16,7 +16,7 @@ A compound user message should be split into the smallest **independently manage
 
 **Trade-offs:** More structured output, validation, source-anchoring complexity, and potentially more Core plans/routes or diagnostic entries. Gains include lossless context across independent units, easier correction and failure diagnosis, and simpler per-unit interpretation. One LLM call for initial segmentation is the target; any cost/latency benefit must be measured, not assumed.
 
-**Recommendation:** PROCEED with this **design-only** block. New runtime schema, write policy, and diagnostic durability need subsequent approval and separate tests/live Luna gate. `Human decision required: YES` for the open product/atomicity decisions at the end of this document.
+**Recommendation:** PROCEED with this **design-only** block. New runtime schema, write policy, and diagnostic durability need subsequent approval and separate tests/live Luna gate. `Human decision required: YES` for the remaining open product/diagnostic decisions at the end of this document.
 
 ## Canonical responsibility boundary
 
@@ -30,6 +30,7 @@ Original immutable user message
 ```
 
 - A candidate unit is a proposition or action that could be corrected/deleted on its own *without changing the truth of another*. One mutual encounter (`Marta y Luis se conocieron`) is one relational unit; two residences (`Marta y Luis viven en Lyon`) are two property assertions; pan and milk are two item-level assertions **of the same purchase**, not two independent shopping trips.
+- **Subject and participants are semantic roles, never fixed entity types.** A subject may refer to an appliance, house, vehicle, document, project, city, task, person, group, an otherwise unknown entity, or a literal without a canonical Note. A participant/object/location can likewise refer to any Core-recognized type. Router does **not** emit NoteSchema types (`Person`, `Project`, etc.), decide whether to create a Note, or assume that a grammatical subject is the final canonical knowledge owner. Core validates note type, identity, linking, group/literal policy and final semantic ownership against the schema and source. The source-bound role labels `subject`, `participants`, `object`, etc. are generic and remain independent of ontology. A clause's actor may change while a previous entity becomes its object (e.g. `El informe llegó ayer y hoy lo envié a Ana`).
 - Shared context is typed by role: `participants`, `subject`, `predicate`, `object`, `date`, `time`, `location`, `polarity`, `condition`, `modality`, `ordering`, or `transaction`. A link can cite source **before or after** its unit, and links may apply only to some roles. A new explicitly scoped value overrides an inherited value of that role without stripping other roles. Do not infer that `después` means an exact clock time; `sobre las 16h` is approximate, not an exact 16:00 instant.
 - Scope must be semantically grounded, not mechanically propagated to every following clause. For example, `Ana compró pan y Luis también` changes the actor; `no vi a Ana, pero sí hablé con Luis` does not propagate negation. A singular/plural verb is evidence but not proof of a particular canonical participant list. An uncertain referent is visibly unresolved, never silently bound.
 - Router records **references to existing original source**, not duplicated/reconstructed source sentences, computed ISO dates, person UUIDs, Note targets, property writes, or Markdown. A unit can reference the same token spans as another unit. Preserve unselected/overridden/corrected source as provenance, even if it yields no active fact candidate. Exact source coverage must still be locally checked; the old disjoint partition alone is no longer the appropriate unit-level invariant.
@@ -38,7 +39,7 @@ Original immutable user message
 
 ## Non-executable fixture and acceptance oracles
 
-The 22 **agreed design examples** live in [`../../benchmarks/application_router/fact_units_v1.design.json`](../../benchmarks/application_router/fact_units_v1.design.json). They are **future expected semantic decompositions**, not predictions of current Router v0 or passing production model tests. Each case defines the source, expected number and meaning of candidate units, context edges, and a safety caveat. Do **not** weaken historical frozen Router v0 regressions to match this unimplemented v1 direction. When implementing, version and test a new model contract, replay the 22 examples with a production-equivalent Luna/low live gate, and add permutations/adversarial probes without overfitting to literal phrases.
+The 22 **human-agreed design examples**, plus four additional generic-subject regression examples (F23-F26, proposed for review), live in [`../../benchmarks/application_router/fact_units_v1.design.json`](../../benchmarks/application_router/fact_units_v1.design.json). They are **future expected semantic decompositions**, not predictions of current Router v0 or passing production model tests. Each case defines the source, expected number and meaning of candidate units, context edges, and a safety caveat. Do **not** weaken historical frozen Router v0 regressions to match this unimplemented v1 direction. When implementing, version and test a new model contract, replay the 22 examples with a production-equivalent Luna/low live gate, and add permutations/adversarial probes without overfitting to literal phrases.
 
 | ID | Core challenge | Expected candidates | Distinction that must survive |
 | --- | --- | ---: | --- |
@@ -64,6 +65,10 @@ The 22 **agreed design examples** live in [`../../benchmarks/application_router/
 | F20 | weather-dependent alternatives | 2 | conditional branches, not two confirmed events |
 | F21 | Monday and Wednesday recurring class | 2 | same later-mentioned time scoped backwards |
 | F22 | call Ana, write Luis, prepare invoice | 3 | task ownership, shared/changed dates |
+| F23 | Project Odyssey has Router/Temporal bugs | 2 | one non-person subject, independently manageable problems |
+| F24 | vehicle in repair shop and passing inspection | 2 | same vehicle subject, date only on second claim |
+| F25 | house has damp and needs a roof repair | 2 | house subject, interior location not another subject |
+| F26 | report arrived yesterday and I sent it today | 2 | report changes from subject to object; speaker becomes actor |
 
 ### Design proof obligations for implementation
 
@@ -71,7 +76,7 @@ The 22 **agreed design examples** live in [`../../benchmarks/application_router/
 2. All context edges must point to exact source-grounded evidence with an explicit role and scope. Validate source-text correspondence/occurrence, avoid ambiguous repeated occurrences, cycles and ungrounded dependencies. A forward source-scope reference is not the same as a forward canonical-write dependency.
 3. Same shared source evidence may be consumed by multiple units while each unit has a distinct request-local candidate ID. Nothing in v1 yet changes durable Core fact identity or note schema. Locators are allocated only for **persisted** facts by Core.
 4. Resolve all applicable temporal and source-scope consistency preflight before irreversible Core writes; preserve `unspecified`, `approximate`, `unknown`, and `failed` distinctions and the original wording.
-5. Preserve the existing Core-proof-only identity model, stale guard and fail-closed behavior; surface unknown source-identity choices as unresolved. The Router never names a unique canonical person on its own.
+5. Preserve the existing Core-proof-only **type-agnostic** identity model, stale guard and fail-closed behavior; surface unknown source-identity choices as unresolved. Router never binds a unique canonical Note ID or guesses its NoteSchema type, whether the subject is a person, object, location, project, task, or literal.
 6. A candidate's source-to-Core journey must be separately observable, including split/attach, scope inheritance, Temporal normalized evidence, Core plan, validated entity binding, and actual mutation outcome; do not label proposed context as Core-verified context. Old request-detail shape must remain displayable.
 7. Verify bounded production Structured Outputs, cost/tokens, performance with 1/3/8/12+ units, existing v0 cases, synthetic adversaries, and vertical provider-free Router -> Temporal -> Core -> disposable Markdown and replay; protected model prompt/schema changes require a separately reviewed Luna/low live gate.
 8. Multiple candidates in a single request must retain existing request-level deduplication, per-fact correction/removal support, and safe status reporting. Do not claim transaction-level atomicity unless implemented and proved.
@@ -88,7 +93,7 @@ Block 4: implement + version the candidate segmentation/dispatch with a contract
 
 ## Open decisions before implementation (do not silently settle)
 
-1. **Multi-unit outcomes:** for three independent units where the third is ambiguous, may F1/F2 commit while F3 remains pending, or must all writes await whole-message resolution? Preflight can detect risks, but the current runtime is not an all-or-nothing cross-note transaction. Recommend rejecting linked unsafe dependents and permitting clearly unrelated proven units, with explicit partial status; requires product approval.
+1. **Multi-unit outcomes — USER APPROVED:** persist validated independent facts even if another candidate remains ambiguous; block/defer the ambiguous/dependent fact and seek targeted clarification, as in existing clarification UX. Any interdependent candidate with uncertain grounding stays fail-closed. This is product direction, **not yet implemented**; exact concurrency/replay/write preflight remains an implementation proof obligation.
 2. **Future plans and negative/conditional assertions:** which of F17/F19/F20 are persistable facts versus proposals/intentions needing confirmation, or task/event lifecycle ownership? Candidate splitting can be agreed without deciding storage semantics. Recommend leaving final assertion/target choice to Core and capability policy rather than Router.
 3. **Source anchor representation:** exact substring + occurrence discriminator resolved locally, or a provider-generated offset rejected unless independently checked? Unicode/duplicate wording and backward/forward scopes require a reliable, small closed contract. Recommend provider emits literal source evidence plus disambiguation, local validator calculates offsets; defer exact schema choice to block 4.
 4. **Retention/size for diagnostics:** choose checkpoint retention, failure recovery and unit caps in blocks 2–3, without weakening validated stage/flow budgets or creating a new authority.
