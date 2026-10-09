@@ -143,12 +143,46 @@ cover F01/F02/F08/F21/F26, overridden dates, absent Temporal, and source
 mismatch, with only injected synthetic Temporal interpretations and no API.
 The existing Temporal interpreter and its model-facing contract are unchanged.
 
+**Block 4B2 (isolated read-only Core planner seam; no runtime activation):**
+`odyssey_core/candidate_context.py` now independently validates a sealed,
+request-local version-1 `CoreCandidateContext` built by the narrow
+`odyssey_apps/fact_candidate_core.py` projection. It verifies exact original
+source character offsets again at the Core boundary, acyclic inherited
+source-role references, kind/state/role allowlists, 26-candidate/16-role and
+16 KiB context bounds, and forbids Note type, UUID, mutation intent and
+persistence instructions in the packet. The *existing* `OpenAILunaExperimentalPlanner`
+accepts it solely through a new **optional** `candidate_context` parameter;
+request mismatch fails before provider I/O, and the evidence is appended only
+**after** the established Luna dynamic-context/cache breakpoint with explicit
+"unverified" instructions. With no candidate context, the production Luna
+prompt and strict result JSON schema remain **byte-for-byte unchanged** from
+checked-out DEV `6ae8695` (tested SHA-256 for fixed context, including static
+prefix). No normal composition path supplies the argument; it is inactive in
+DEV and production, and Sol, Temporal, Router v0 and existing Core execution
+are untouched. Candidate context is not `DomainInterpretation`: exact normalized
+date/time authority still flows exclusively through the existing Temporal
+`DomainInterpretation`, not through lexical source edges.
+
+One provider-free vertical test injects fixed Router v1, existing Temporal and
+real Luna planner Responses results for F13 and confirms three source candidates,
+three independent Temporal readings, full original user request, and a safe
+Core escalation result with **zero writes**. F14 checks that the ambiguous
+pronoun remains unverified. Together with 26 Core-side design-fixture checks,
+these are contract/injection tests, **not real model semantic proof, validated
+per-candidate write correlation, or runtime persistence tests**. The new opt-in
+Luna prompt is model-facing and must undergo its own narrowly scoped frozen
+GPT-5.6 Luna/low live gate (Router's new GPT-6 Luna/low prompt needs a separate
+gate) before any active deployment. A failing/blocked provider gate must not
+be bypassed or described as an acceptance pass.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
-source-context preflight/dispatch adapter that uses the existing Temporal
-interpretation and Core planning/write boundaries; independent/ambiguous partial outcomes and replay semantics; source
+source-context execution adapter that safely correlates independent candidates
+with Core plans and canonical fact/write outcomes; independent/ambiguous partial outcomes and replay semantics; source
 coverage and condition/polarity/correction ownership checks; generic shared
 transaction semantics; request-detail diagnostics within approved budgets; and
-provider-free vertical Router→Temporal→Core→disposable Markdown tests. Do not
+provider-free vertical Router→Temporal→Core→disposable Markdown tests. The existing
+read-only vertical planner simulation is not a substitute for a persisted-fact
+end-to-end gate. Do not
 map candidates to existing disjoint v0 `Route` objects or turn lexical inheritance
 into `depends_on` (which is canonical-write dependency). Version and review the
 new GPT-6 Luna model-facing contract, obtain an allowed, separately budgeted

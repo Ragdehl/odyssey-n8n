@@ -16,6 +16,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol
 
+from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -300,6 +301,7 @@ def render_luna_experimental_prompt(
     conversation_context: Sequence[Mapping[str, str]] = (),
     size_components: dict[str, int] | None = None,
     domain_interpretation: DomainInterpretation | None = None,
+    candidate_context: CoreCandidateContext | None = None,
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -343,6 +345,14 @@ def render_luna_experimental_prompt(
     if semantic_prompt.count(LUNA_DYNAMIC_CONTEXT_MARKER) != 1:
         raise RuntimeError("Luna semantic prompt dynamic boundary is invalid")
     semantic_static, semantic_dynamic = semantic_prompt.split(LUNA_DYNAMIC_CONTEXT_MARKER, 1)
+    # Keep request-specific candidate evidence out of Luna's shared cache prefix.
+    if candidate_context is not None:
+        if not isinstance(candidate_context, CoreCandidateContext):
+            raise RequestPlanningError("Core candidate context must be Core-owned")
+        candidate_section = candidate_context.prompt_suffix()
+        semantic_dynamic += candidate_section
+        if size_components is not None:
+            size_components["candidate_context_bytes"] = len(candidate_section.encode("utf-8"))
     luna_static = f"""{semantic_static}
 
 Choose the outcome before drafting fields:
@@ -449,6 +459,7 @@ class OpenAILunaExperimentalPlanner:
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        candidate_context: CoreCandidateContext | None = None,
         model: str = LUNA_EXPERIMENT_MODEL,
         reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
         max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -460,6 +471,7 @@ class OpenAILunaExperimentalPlanner:
             tuple(teaching_examples) if teaching_examples is not None else None
         )
         self._domain_interpretation = domain_interpretation
+        self._candidate_context = candidate_context
         self._planning_schema = planning_schema_for_capability(
             schema,
             domain_interpretation.capability_id if domain_interpretation is not None else None,
@@ -500,6 +512,7 @@ class OpenAILunaExperimentalPlanner:
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        candidate_context: CoreCandidateContext | None = None,
         model: str = LUNA_EXPERIMENT_MODEL,
         reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
         max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -519,6 +532,7 @@ class OpenAILunaExperimentalPlanner:
             current_context,
             teaching_examples=teaching_examples,
             domain_interpretation=domain_interpretation,
+            candidate_context=candidate_context,
             model=model,
             reasoning_effort=reasoning_effort,
             max_output_tokens=max_output_tokens,
@@ -530,6 +544,15 @@ class OpenAILunaExperimentalPlanner:
         """Make exactly one bounded Luna attempt and validate without executing its result."""
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
+        if self._candidate_context is not None:
+            if not isinstance(self._candidate_context, CoreCandidateContext):
+                raise RequestPlanningError("Core candidate context must be Core-owned")
+            try:
+                self._candidate_context.validate(request)
+            except ValueError as error:
+                raise RequestPlanningError(
+                    "Core candidate context is not grounded in request"
+                ) from error
         self.last_usage = None
         self.last_response_id = None
         self.last_provider_status = None
@@ -552,6 +575,7 @@ class OpenAILunaExperimentalPlanner:
                 conversation_context=conversation_context,
                 size_components=sizes,
                 domain_interpretation=self._domain_interpretation,
+                candidate_context=self._candidate_context,
             )
             authorized_calendar_dates = planner_authorized_calendar_dates(
                 self._current_context, self._domain_interpretation
