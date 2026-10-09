@@ -175,14 +175,46 @@ GPT-5.6 Luna/low live gate (Router's new GPT-6 Luna/low prompt needs a separate
 gate) before any active deployment. A failing/blocked provider gate must not
 be bypassed or described as an acceptance pass.
 
+**Block 4B3 disposable real-Core-write experiments (isolated; NOT activated):**
+`tests/runtime/test_fact_candidate_writes_e2e.py` now passes manually frozen,
+Core-compatible `RequestPlan`s to the **actual** `execute_request` / canonical
+`VaultRepository` writing pipeline, but *only* under pytest's disposable
+`tmp_path` Markdown vault with synthetic data, inert retrieval/context
+providers and no OpenAI calls. It verifies F01's three activities produce
+three persisted facts across two Day notes (without copying the first clock
+time to the other day), F11's bread and milk remain two item facts in **one**
+Day note rather than duplicated purchases/notes, same-request replay does not
+duplicate their facts, and F14's two resolved source clauses may be written
+without turning the ambiguous final `él` into a canonical link. These are
+**hand-authored Core plan** scenarios; they do not prove Luna produced such
+plans or that group links/semantic ownership are accepted in production.
+
+The adjacent `odyssey_core/candidate_write_observation.py` creates a bounded,
+read-only receipt from **actual Core** `ActionResult`/`UnitResult` statuses and
+Core's real write fact ordinals, rejecting mismatched action indices, duplicate
+unit outcomes and a different original user source. It intentionally marks
+**every** source candidate `unattributed`: neither candidate ordering nor
+Core unit/fact counts prove a source candidate was durably persisted. In F14,
+although the old Core engine reports `completed` for a manually selected safe
+subset, the diagnostic still exposes `candidate-3` as ambiguous and does NOT
+assert that the full message was handled. This is evidence of a **real remaining
+safety/product gap**: before Router v1 is activated, a Core-owned, verified
+candidate→plan/fact attribution and pending-clarification mechanism must ensure
+independent validated writes can complete while unresolved/dependent candidates
+remain correctly reported as pending, with idempotence/replay and source
+coverage. Do not silently infer those associations or claim request completion
+from a subset. This observational seam must not become a new write authority,
+source-of-truth database, or product-visible verified graph before that proof.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
-source-context execution adapter that safely correlates independent candidates
-with Core plans and canonical fact/write outcomes; independent/ambiguous partial outcomes and replay semantics; source
+Core-owned verified candidate→plan/fact attribution and pending clarification that
+preserves independent/ambiguous partial outcomes and replay semantics; source
 coverage and condition/polarity/correction ownership checks; generic shared
 transaction semantics; request-detail diagnostics within approved budgets; and
-provider-free vertical Router→Temporal→Core→disposable Markdown tests. The existing
-read-only vertical planner simulation is not a substitute for a persisted-fact
-end-to-end gate. Do not
+additional provider-free Router→Temporal→Core→disposable Markdown tests with
+Core-verified candidate attribution. The new disposable persistence tests prove
+existing Core mechanics with **frozen handwritten plans**, not the actual Router
+v1 provider/planner handoff through to those writes. Do not
 map candidates to existing disjoint v0 `Route` objects or turn lexical inheritance
 into `depends_on` (which is canonical-write dependency). Version and review the
 new GPT-6 Luna model-facing contract, obtain an allowed, separately budgeted

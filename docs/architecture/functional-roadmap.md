@@ -48,10 +48,18 @@ frontend transport. Read-only Router→Temporal source-scope and Core-owned
 candidate evidence/prompt opt-in are also prepared on the feature branch,
 including one fully injected provider-free F13 vertical planner test. No
 runtime branch uses these new contracts and none executes candidate writes.
-Per-candidate Core write correlation, ambiguity/partial-success policy, replay
-and source-coverage guards, request-detail projections, disposable Markdown
-end-to-end evidence and separate final live GPT-6 Router / GPT-5.6 Luna gates
-remain necessary before isolated DEV activation; Router v0 remains operational.
+Disposable Markdown tests now exercise existing Core persistence for three
+activities across two dates, one shared two-item purchase, exact-request replay
+and an ambiguous pronoun held out of synthetic writes. A Core-owned read-only
+receipt observer exposes genuine unit statuses but deliberately leaves **all**
+source candidates `unattributed`, since ordinals alone cannot prove a semantic
+candidate was persisted. The existing Core result may say `completed` despite
+an unresolved candidate deliberately omitted by a handwritten test plan; this
+shows why per-candidate Core-verified attribution, pending clarification and
+partial-success/idempotence guards still need implementation before activation.
+New request-detail projections and a true provider→verified attribution→Core
+write vertical path, plus separate final live GPT-6 Router / GPT-5.6 Luna
+semantic gates, remain required. Router v0 remains operational.
 
 ## Current functional work — explainable clarification
 
