@@ -387,6 +387,40 @@ proof or more than one plausible source candidate remains pending. Do not
 activate this optional bridge, the experimental coverage write path or a
 `candidate → canonical identity` graph label based only on these tests.
 
+**Block 4B9 in-memory pending-source projection (isolated; NOT deployed):**
+`odyssey_core/candidate_pending_projection.py` now projects candidate-level
+pending items **only from the original validated Core source, validated
+candidate coverage manifest, actual opt-in partial `ApplicationResult`, and
+canonical Markdown fact readback**. It contains a read-only pending original
+source anchor (e.g. F14 `Mañana iré al cine con él`), closed pending reason,
+request ID, physical fact count, and explicit
+`persisted=false`, `resumable=false`, `candidate_semantics_verified=false`.
+It refuses mismatched request IDs, altered sources, unsupported source shapes,
+or an attempt to reinterpret a plan/fact verification failure as a missing user
+clarification. Tests cover real disposable Markdown from two independent
+written facts and one ambiguous third source candidate, inconsistent evidence,
+no pending candidate, and no accidental durable pending/knowledge writes.
+
+**Unresolved architecture/product decision (stop before activation):** Phase
+17B's **approved** `state/pending/<request_id>.json` v1 format intentionally
+stores validated incomplete planned actions; a Router-v1 candidate blocked
+**before** Core builds an action cannot safely be injected into that schema
+or replayed as a plan. Do not silently add an alternative authority or
+interpret `"con Luis"` as permission to rewrite successful earlier facts.
+Recommend extending the existing **request-ID-scoped nonknowledge pending state**
+with a clearly versioned, bounded *unplanned candidate* section under the same
+storage/ownership root, preserving exact original text and source offsets,
+completed-fact provenance by original request ID/ordinal, candidate reason,
+verified-entity choice evidence and preflight guards, plus explicit continuation
+lifecycle and replay/expiry rules. Human review is required for whether a
+follow-up answer targets the most recent pending clarification or must carry
+an explicit pending request identifier when other turns intervene, the
+acceptable lifecycle/retention for such unplanned candidate states, and how
+to handle cancellation, irrelevant replies, stale canonical evidence and
+multiple simultaneous pending clarifications. Before approval the preview
+remains in memory and **cannot resume**. No production/DEV vault, pending
+file or user conversation is changed.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source
