@@ -24,6 +24,20 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
+## Deferred model consolidation — user decision (2026-10-10)
+
+**Do not change models during the current Router fact-candidate / Temporal / Core work.**
+The user explicitly prefers finishing and validating this functional block
+first, keeping its existing configured models and historical live-gate evidence
+stable. **After this block is closed**, schedule a separate reviewed effort to
+migrate remaining Odyssey components to **GPT-6 Luna** (including Core Planner,
+Core Attribution, Writer, Fact Selector, clarification and contextual reasoning,
+where still on GPT-5.6 Luna). Inventory actual runtime overrides as well as
+code defaults; preserve prompt/contract and cost benchmarks, run focused live
+model-quality gates under separately agreed budgets, then request approval
+for DEV/PROD promotion. This is **deferred work**, not an authorization to
+silently switch models, merge or deploy now.
+
 ## Router parallel preparation (DEV optimization)
 
 [Router parallel preparation, Slices 1–2](router-parallel-preparation.md) allows
