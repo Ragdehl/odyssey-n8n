@@ -87,7 +87,8 @@ def test_temporal_source_shape_cannot_fake_exact_clock_with_date_only():
     assert all(not e.has_exact_source_shape for e in scopes if e.role == "time")
 
 
-def test_bound_budget_and_provider_flag(monkeypatch):
+def test_bound_budget_and_provider_flag(monkeypatch, tmp_path):
+    monkeypatch.setattr(gate, "RECEIPT", tmp_path / "not-yet-run.json")
     monkeypatch.delenv(gate.FLAG, raising=False)
     dry = gate.run()
     assert dry["mode"] == "DRY_RUN_NO_PROVIDER"

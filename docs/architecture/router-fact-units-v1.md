@@ -1230,3 +1230,49 @@ model can semantically resolve F23's "otro" or F26's "lo". Next gate:
 test independently generated per-unit Core GPT-5.6 plans and source
 coverage for those two dependency patterns and explicit ambiguity
 before ever granting write authority.
+
+
+**Block 4B29 supplemental real Temporal F08 result (2026-10-11):**
+One approved no-retry original GPT-6 Temporal request, with the
+fixed synthetic 2026-10-09 clock, finished successfully (366 input
++ 354 output tokens, `store=false`). Actual response is pinned in
+`benchmarks/fact_candidate_v2_live/observed_f08_temporal.json`;
+using the unchanged Temporal parser plus original real Router v3
+candidate binder, the explicit "a las 10" and the referring
+"a la misma hora" both normalize to
+`2026-10-10T10:00:00+02:00` on the same resolved day. The result
+shows this **one F08 example works with current Temporal**, without
+needing special-case phrase handling or new date inheritance.
+This is not a claim all relative-hour constructions are proven.
+
+The real F13 Router result had a second concrete mismatch: it
+provided the exact source role `reference=él`, but left that role
+outside the selected event anchors; Core's original strict
+canonical-reference handoff therefore incorrectly abstained. The
+updated Core *clause-ownership verifier* can prove a referring role
+from the original bounded clause containing the selected candidate's
+anchors, with no competing candidate anchors in that clause.
+This is a general source-bound safety check, **not** a new sentence
+splitter, resolver or a Router instruction. Canonical identity proof,
+source/canonical content freshness, uniqueness, original note writes,
+and the existing Core dependent write preflight remain unchanged.
+Frozen real GPT-6 F13 evidence plus previously persisted Eric
+canonical source now succeeds through an entirely isolated
+Core guarded future-day write. Cross-clause and competing-anchor
+negative tests still reject without writes.
+
+For F23, the generic role-origin trace proves that the second
+`property` inherits source `subject=El proyecto Odyssey` and
+`predicate=tiene` but its literal object "otro" does not
+independently prove the repeated noun "fallo"; it still needs Core
+semantic validation, not automatic invented `object` inheritance.
+For F26, Core's trace retains `reference=lo` but no authenticated
+canonical target for `El informe` has been established. This is
+a *type-generic* document coreference gate, not a reason to associate
+arbitrary antecedents. No production write, deployment, model
+migration, or change to the existing Router v3 prompt occurred.
+
+New live Temporal cost estimated USD **0.0002136** at pinned standard
+rates; cumulative all focused GPT-6 Router + GPT-5.6 Core estimated
+USD **0.0339488** (not invoice) against prior explicit USD 0.07 cap.
+No new Core paid call was made.
