@@ -69,6 +69,39 @@ def test_duplicate_router_proposal_fails_at_model_adapter_boundary() -> None:
     assert adapter.last_error_category == "InvalidSourceEvidence"
 
 
+def test_repeated_temporal_source_aborts_before_core_planning() -> None:
+    """Router/Temporal fake outputs cannot misattribute a repeated 'Mañana'."""
+    source = "Mañana veré a Ana. Mañana veré a Luis."
+    router_raw = {
+        "version": 1,
+        "units": [
+            {
+                "kind": "occurrence",
+                "anchors": [{"text": f"veré a {name}", "occurrence": 0}],
+                "scoped_source": [
+                    {"role": "date", "anchor": {"text": "Mañana", "occurrence": index}},
+                    {"role": "participants", "anchor": {"text": name, "occurrence": 0}},
+                ],
+                "inheritance": [],
+                "state": "candidate",
+            }
+            for index, name in enumerate(("Ana", "Luis"))
+        ],
+    }
+    router_fake, router_calls = _sdk_fake(router_raw)
+    proposal = OpenAIFactCandidateRouter(router_fake).propose(source)
+    temporal_fake, temporal_calls = _sdk_fake({"mentions": [_exact_date("Mañana", "2026-10-10")]})
+    temporal = OpenAITemporalInterpreter(temporal_fake, CLOCK).interpret(source)
+
+    # The ambiguity must be reported at the source-alignment boundary;
+    # no Core planner or persistence object is needed or constructed.
+    with pytest.raises(RouterError, match="occurrence is ambiguous"):
+        bind_temporal_to_fact_candidates(proposal, temporal)
+    assert len(router_calls) == len(temporal_calls) == 1
+    assert router_calls[0]["store"] is False
+    assert temporal_calls[0]["store"] is False
+
+
 def test_full_source_scoped_fact_flow_to_luna_is_read_only_and_preflighted() -> None:
     """Three events get the right lexical dates, but only Core chooses actions."""
     case = next(item for item in CASES if item["id"] == "F13")

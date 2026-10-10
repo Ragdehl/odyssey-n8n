@@ -27,6 +27,92 @@ def _unknown(text: str) -> TemporalMention:
     return TemporalMention(text, TemporalResolution(TemporalResolutionKind.UNSPECIFIED))
 
 
+def _repeated_date_source():
+    """Two independently anchored activities use the same lexical date twice."""
+    source = "Mañana veré a Ana. Mañana veré a Luis."
+    raw = {
+        "version": 1,
+        "units": [
+            {
+                "kind": "occurrence",
+                "anchors": [{"text": f"veré a {name}", "occurrence": 0}],
+                "scoped_source": [
+                    {"role": "date", "anchor": {"text": "Mañana", "occurrence": index}},
+                    {"role": "participants", "anchor": {"text": name, "occurrence": 0}},
+                ],
+                "inheritance": [],
+                "state": "candidate",
+            }
+            for index, name in enumerate(("Ana", "Luis"))
+        ],
+    }
+    return validate_fact_candidate_proposal(source, raw)
+
+
+def test_one_temporal_mention_cannot_choose_between_two_identical_dates() -> None:
+    """A missing occurrence index in Temporal is not permission to pick the first."""
+    proposal = _repeated_date_source()
+    temporal = TemporalInterpretation(proposal.source, (_date("Mañana", "2026-10-10"),))
+    with pytest.raises(RouterError, match="occurrence is ambiguous"):
+        bind_temporal_to_fact_candidates(proposal, temporal)
+
+
+def test_two_ordered_temporal_mentions_bind_two_distinct_source_occurrences() -> None:
+    """Repeated same words are safe when Temporal explicitly covers both."""
+    proposal = _repeated_date_source()
+    temporal = TemporalInterpretation(
+        proposal.source,
+        (_date("Mañana", "2026-10-10"), _date("Mañana", "2026-10-10")),
+    )
+    bindings = bind_temporal_to_fact_candidates(proposal, temporal)
+    assert [(edge.candidate_id, edge.status) for edge in bindings] == [
+        ("candidate-1", "matched"),
+        ("candidate-2", "matched"),
+    ]
+    assert bindings[0].source.start != bindings[1].source.start
+    assert all(edge.has_exact_source_shape for edge in bindings)
+
+
+def test_partial_temporal_list_cannot_claim_one_of_three_repeated_dates() -> None:
+    """Even ordered date tokens can be ambiguous when later repeats are omitted."""
+    source = "Ayer vi a Ana. Mañana a Luis. Mañana a Bea."
+    raw = {
+        "version": 1,
+        "units": [
+            {
+                "kind": "occurrence",
+                "anchors": [{"text": "a Luis", "occurrence": 0}],
+                "scoped_source": [
+                    {"role": "date", "anchor": {"text": "Mañana", "occurrence": 0}},
+                ],
+                "inheritance": [],
+                "state": "candidate",
+            }
+        ],
+    }
+    proposal = validate_fact_candidate_proposal(source, raw)
+    temporal = TemporalInterpretation(
+        source,
+        (_date("Ayer", "2026-10-08"), _date("Mañana", "2026-10-10")),
+    )
+    with pytest.raises(RouterError, match="occurrence is ambiguous"):
+        bind_temporal_to_fact_candidates(proposal, temporal)
+
+
+def test_temporal_without_repeated_lexical_mentions_keeps_existing_matching() -> None:
+    """Two distinct date expressions remain unambiguous and independently scoped."""
+    proposal = _case("F26")
+    temporal = TemporalInterpretation(
+        proposal.source, (_date("ayer", "2026-10-08"), _date("hoy", "2026-10-09"))
+    )
+    assert [
+        edge.resolution.exact_date for edge in bind_temporal_to_fact_candidates(proposal, temporal)
+    ] == [
+        "2026-10-08",
+        "2026-10-09",
+    ]
+
+
 def test_three_activities_inherit_participants_but_not_the_first_clock_time() -> None:
     """A later candidate inherits date source only; time stays on the park event."""
     proposal = _case("F01")

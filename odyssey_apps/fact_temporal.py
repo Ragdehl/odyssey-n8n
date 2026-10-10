@@ -58,19 +58,41 @@ def _original_scope(
 def _ordered_temporal_spans(
     source: str, interpretation: TemporalInterpretation
 ) -> list[tuple[int, int, str, TemporalResolution]]:
-    """Resolve Temporal's ordered literal mention strings to unambiguous offsets."""
+    """Resolve literal Temporal mentions only when their ordered offsets are unique.
+
+    Temporal currently supplies text, not occurrence indices. Choosing the first
+    occurrence is unsafe if fewer repeated mentions are reported than appear
+    in the original source. Compare earliest and latest non-overlapping ordered
+    alignments; different positions mean the source mapping is unproven.
+    """
     if interpretation.source_text != source:
         raise RouterError("Temporal interpretation does not match original fact source")
-    matches = []
+    mentions = interpretation.mentions
+    earliest: list[int] = []
     cursor = 0
-    for mention in interpretation.mentions:
-        position = source.find(mention.temporal_text, cursor)
+    for mention in mentions:
+        text = mention.temporal_text
+        position = source.find(text, cursor)
         if position < 0:
             raise RouterError("Temporal source mention is not grounded in the current source")
-        end = position + len(mention.temporal_text)
-        matches.append((position, end, mention.temporal_text, mention.resolution))
-        cursor = end
-    return matches
+        earliest.append(position)
+        cursor = position + len(text)
+    latest: list[int] = []
+    cursor = len(source)
+    for mention in reversed(mentions):
+        text = mention.temporal_text
+        position = source.rfind(text, 0, cursor)
+        if position < 0:
+            raise RouterError("Temporal source mention is not grounded in the current source")
+        latest.append(position)
+        cursor = position
+    latest.reverse()
+    if earliest != latest:
+        raise RouterError("Temporal source mention occurrence is ambiguous")
+    return [
+        (position, position + len(mention.temporal_text), mention.temporal_text, mention.resolution)
+        for position, mention in zip(earliest, mentions, strict=True)
+    ]
 
 
 def bind_temporal_to_fact_candidates(

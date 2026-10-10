@@ -743,6 +743,25 @@ and no local rule has proven complete semantic coverage of arbitrary messages.
 Prompt/schema, identity policy, canonical writes, and live-model configuration
 remain unchanged; tests use fake provider outputs only.
 
+**Block 4B18 source-occurrence-safe Temporal alignment (2026-10-10,
+feature branch ONLY, provider-free):** Temporal's existing interpretation
+emits ordered text mentions without occurrence indices. The first-match-only
+Router→Temporal bridge could silently attach one returned `Mañana` to the
+first of two distinct literal occurrences, even when the provider did not
+specify which event it meant. The bridge now compares the earliest and latest
+**non-overlapping ordered** alignments against the unchanged original text.
+If either alignment differs, the requested occurrence is not uniquely
+identifiable and source binding raises a closed `RouterError` before Core
+planning or any write. Two explicit identical mentions still map to their
+respective first/second source positions, including multi-event day scopes,
+and distinct unique date expressions remain unchanged. An absent Temporal
+interpretation still preserves missing/unknown states. This check does not
+normalize time or grant semantic authority: textual uniqueness is necessary
+but is not evidence that the model's date resolution is semantically right.
+Deterministic adapter and Router→Temporal fake-provider tests cover repeated,
+partial and fully disambiguated cases. No model-facing prompt/schema change,
+live provider calls, DEV/PROD activation or vault access.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source
