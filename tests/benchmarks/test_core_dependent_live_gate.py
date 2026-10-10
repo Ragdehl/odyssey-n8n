@@ -43,7 +43,7 @@ def test_offline_first_stage_reserves_without_credentials(monkeypatch, tmp_path)
     assert not result["may_write_notes"]
     assert not result["semantically_authorized"]
     assert result["previous_estimated_usd"] == 0.0339488
-    assert 0.03 < result["maximum_reserved_usd"] < 0.035
+    assert 0.015 < result["maximum_reserved_usd"] < 0.02
     assert sum((result["previous_estimated_usd"], result["maximum_reserved_usd"])) < 0.07
 
 
@@ -75,7 +75,7 @@ def test_modifying_any_core_prompt_byte_refuses_authority(monkeypatch, tmp_path)
 
 def test_expensive_call_has_no_cost_authority(monkeypatch, tmp_path):
     monkeypatch.setattr(gate, "RECEIPTS", tmp_path)
-    monkeypatch.setattr(gate, "PREVIOUS_FOCUSED_USD", 0.05)
+    monkeypatch.setattr(gate, "PREVIOUS_FOCUSED_USD", 0.06)
     with pytest.raises(ValueError, match="limit"):
         gate.preflight("F23", "candidate-1")
 

@@ -190,10 +190,17 @@ def preflight(case_id, unit_id):
     """Conservatively reserve an entire Core call inside the cumulative cap."""
     unit, request, temporal, wire = reviewed(case_id, unit_id)
     previous, price = _prior((case_id, unit_id))
-    request_bytes = len(json.dumps(wire, ensure_ascii=False, default=str).encode())
+    # The request is a fixed, hashed JSON envelope. A byte-level tokenizer
+    # consumes >=1 serialized UTF-8 byte per token, so serialized escaped
+    # request bytes are an upper bound on source token count. Add another
+    # 4,096 tokens for provider-side framing/schema transport not represented
+    # in the SDK request. This remains far above the actually observed
+    # 10,204–10,598 input tokens on the same unchanged Core prompt/schema.
+    # The previous 2x byte estimate was unnecessarily loose, stopping a
+    # fourth 10k-token test even though the approved 0.07 cap had ample space.
+    max_input_tokens = len(json.dumps(wire, ensure_ascii=True, default=str).encode("utf-8")) + 4096
     maximum = (
-        (request_bytes * 2 + 200)
-        * max(price["input_per_million"], price.get("cache_write_per_million", 0))
+        max_input_tokens * max(price["input_per_million"], price.get("cache_write_per_million", 0))
         + wire["max_output_tokens"] * price["output_per_million"]
     ) / 1_000_000
     if previous + maximum > APPROVED_CAP:
