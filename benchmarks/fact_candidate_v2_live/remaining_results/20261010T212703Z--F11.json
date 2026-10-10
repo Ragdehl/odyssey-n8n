@@ -1,0 +1,26 @@
+{
+  "case": "F11",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00365575,
+  "estimated_prior_usd": 0.0287984,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1052,
+    "output_tokens": 336
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"pan\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}},{\"role\":\"transaction\",\"anchor\":{\"text\":\"compré\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"leche\",\"occurrence\":0}],\"scoped_source\":[],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"transaction\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "purchase_item",
+    "purchase_item"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

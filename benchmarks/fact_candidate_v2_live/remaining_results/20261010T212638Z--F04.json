@@ -1,0 +1,26 @@
+{
+  "case": "F04",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00366625,
+  "estimated_prior_usd": 0.027157,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1065,
+    "output_tokens": 408
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 12\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"time\",\"anchor\":{\"text\":\"a las 18\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"luego\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":1}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

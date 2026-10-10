@@ -1,0 +1,26 @@
+{
+  "case": "F12",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00366675,
+  "estimated_prior_usd": 0.0290716,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1062,
+    "output_tokens": 453
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"limpiaron\",\"occurrence\":0},{\"text\":\"el garaje\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"limpiaron\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el garaje\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"montaron\",\"occurrence\":0},{\"text\":\"los muebles\",\"occurrence\":0},{\"text\":\"después\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"montaron\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"los muebles\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

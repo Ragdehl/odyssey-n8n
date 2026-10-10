@@ -1,0 +1,26 @@
+{
+  "case": "F05",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00366975,
+  "estimated_prior_usd": 0.0274675,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1066,
+    "output_tokens": 558
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"cenaremos\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"cenaremos\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"El viernes\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Toulouse\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"el sábado\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"el sábado\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Albi\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

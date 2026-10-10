@@ -1,0 +1,26 @@
+{
+  "case": "F24",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036645,
+  "estimated_prior_usd": 0.0328849,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1058,
+    "output_tokens": 387
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"El coche\",\"occurrence\":0},{\"text\":\"está\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El coche\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"está\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en el taller\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"pasará la revisión\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"pasará la revisión\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"la revisión\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"subject\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "property",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

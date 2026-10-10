@@ -1,0 +1,26 @@
+{
+  "case": "F20",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036685,
+  "estimated_prior_usd": 0.0315628,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1065,
+    "output_tokens": 352
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos al cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"El sábado\",\"occurrence\":0}},{\"role\":\"condition\",\"anchor\":{\"text\":\"si no llueve\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"nos quedaremos en casa\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"nos quedaremos en casa\",\"occurrence\":0}},{\"role\":\"condition\",\"anchor\":{\"text\":\"si llueve\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

@@ -1,0 +1,2364 @@
+{
+  "mode": "FROZEN_REAL_OUTPUTS_OFFLINE_ONLY",
+  "model": "gpt-6-luna",
+  "prompt_revision": "v3",
+  "total": 23,
+  "completed": 23,
+  "classification_counts": {
+    "role_or_quote_review": 16,
+    "material_structure_mismatch": 7
+  },
+  "estimated_new_usd": 0.00777,
+  "estimated_cumulative_usd": 0.0337352,
+  "authorized_total_usd": 0.07,
+  "semantic_human_review_required": true,
+  "core_plans_verified": false,
+  "items": [
+    {
+      "id": "F01",
+      "source": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine y hoy vamos a ir a un concierto.",
+      "expected_count": 3,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1078,
+        "output_tokens": 667
+      },
+      "count": 3,
+      "kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "fuimos",
+            "al parque"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "fuimos"
+            ],
+            [
+              "object",
+              "al parque"
+            ],
+            [
+              "participants",
+              "mi mujer"
+            ],
+            [
+              "participants",
+              "mis hijos"
+            ],
+            [
+              "date",
+              "Ayer"
+            ],
+            [
+              "time",
+              "a las tres por la tarde"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "fuimos",
+            "al cine"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "fuimos"
+            ],
+            [
+              "object",
+              "al cine"
+            ],
+            [
+              "order",
+              "después"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ],
+            [
+              "participants",
+              1
+            ]
+          ]
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "vamos a ir",
+            "a un concierto"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "vamos a ir"
+            ],
+            [
+              "object",
+              "a un concierto"
+            ],
+            [
+              "date",
+              "hoy"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:missing_participants",
+        "1:extra_object",
+        "1:extra_participants",
+        "1:extra_participants",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation",
+        "3:extra_object",
+        "3:extra_predicate",
+        "3:inheritance",
+        "3:quote_variation"
+      ]
+    },
+    {
+      "id": "F02",
+      "source": "Esta tarde mis hijos, mi mujer y yo iremos a merendar sobre las 16h, mañana iremos al parque y el domingo a las 11h a un vide-grenier.",
+      "expected_count": 3,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1083,
+        "output_tokens": 643
+      },
+      "count": 3,
+      "kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "mis hijos, mi mujer y yo",
+            "a merendar"
+          ],
+          "roles": [
+            [
+              "participants",
+              "mis hijos"
+            ],
+            [
+              "participants",
+              "mi mujer"
+            ],
+            [
+              "participants",
+              "yo"
+            ],
+            [
+              "predicate",
+              "merendar"
+            ],
+            [
+              "time",
+              "Esta tarde"
+            ],
+            [
+              "time_approx",
+              "sobre las 16h"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "al parque"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "iremos"
+            ],
+            [
+              "object",
+              "al parque"
+            ],
+            [
+              "date",
+              "mañana"
+            ]
+          ],
+          "inherits": [
+            [
+              "participants",
+              1
+            ]
+          ]
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "a un vide-grenier"
+          ],
+          "roles": [
+            [
+              "object",
+              "a un vide-grenier"
+            ],
+            [
+              "date",
+              "el domingo"
+            ],
+            [
+              "time",
+              "a las 11h"
+            ]
+          ],
+          "inherits": [
+            [
+              "predicate",
+              2
+            ],
+            [
+              "participants",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:missing_date",
+        "1:missing_participants",
+        "1:extra_participants",
+        "1:extra_participants",
+        "1:extra_participants",
+        "1:extra_predicate",
+        "1:extra_time",
+        "1:quote_variation",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation",
+        "3:extra_object",
+        "3:quote_variation"
+      ]
+    },
+    {
+      "id": "F03",
+      "source": "Mañana vamos con mis hijos de paseo al parque y luego iremos al cine.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1062,
+        "output_tokens": 429
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "vamos",
+            "de paseo",
+            "al parque"
+          ],
+          "roles": [
+            [
+              "date",
+              "Mañana"
+            ],
+            [
+              "subject",
+              "vamos"
+            ],
+            [
+              "predicate",
+              "vamos"
+            ],
+            [
+              "participants",
+              "mis hijos"
+            ],
+            [
+              "object",
+              "al parque"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "iremos",
+            "al cine"
+          ],
+          "roles": [
+            [
+              "subject",
+              "iremos"
+            ],
+            [
+              "predicate",
+              "iremos"
+            ],
+            [
+              "object",
+              "al cine"
+            ],
+            [
+              "order",
+              "luego"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ],
+            [
+              "participants",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_object",
+        "1:extra_predicate",
+        "1:extra_subject",
+        "1:quote_variation",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:extra_subject",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F04",
+      "source": "Mañana iremos al parque a las 12 y luego a las 18 iremos al cine.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1065,
+        "output_tokens": 408
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "iremos al parque"
+          ],
+          "roles": [
+            [
+              "date",
+              "Mañana"
+            ],
+            [
+              "time",
+              "a las 12"
+            ],
+            [
+              "predicate",
+              "iremos"
+            ],
+            [
+              "object",
+              "al parque"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "iremos al cine"
+          ],
+          "roles": [
+            [
+              "time",
+              "a las 18"
+            ],
+            [
+              "order",
+              "luego"
+            ],
+            [
+              "predicate",
+              "iremos"
+            ],
+            [
+              "object",
+              "al cine"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_object",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F05",
+      "source": "El viernes cenaremos con Ana en Toulouse y el sábado a las 10 con Luis en Albi.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1066,
+        "output_tokens": 558
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "cenaremos",
+            "Ana"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "cenaremos"
+            ],
+            [
+              "date",
+              "El viernes"
+            ],
+            [
+              "participants",
+              "Ana"
+            ],
+            [
+              "location",
+              "Toulouse"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "el sábado",
+            "Luis"
+          ],
+          "roles": [
+            [
+              "date",
+              "el sábado"
+            ],
+            [
+              "time",
+              "a las 10"
+            ],
+            [
+              "participants",
+              "Luis"
+            ],
+            [
+              "location",
+              "Albi"
+            ]
+          ],
+          "inherits": [
+            [
+              "predicate",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F06",
+      "source": "Hoy vi a Ana y compré pan.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1054,
+        "output_tokens": 340
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "purchase_item"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "vi",
+            "Ana"
+          ],
+          "roles": [
+            [
+              "date",
+              "Hoy"
+            ],
+            [
+              "predicate",
+              "vi"
+            ],
+            [
+              "object",
+              "Ana"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "purchase_item",
+          "state": "candidate",
+          "anchors": [
+            "compré",
+            "pan"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "compré"
+            ],
+            [
+              "object",
+              "pan"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:kind",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F07",
+      "source": "Hoy a las 15h veo a Bea y a las 17h a Luis.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1063,
+        "output_tokens": 421
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "Hoy",
+            "veo a Bea"
+          ],
+          "roles": [
+            [
+              "date",
+              "Hoy"
+            ],
+            [
+              "predicate",
+              "veo"
+            ],
+            [
+              "participants",
+              "Bea"
+            ],
+            [
+              "time",
+              "a las 15h"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "a Luis"
+          ],
+          "roles": [
+            [
+              "participants",
+              "Luis"
+            ],
+            [
+              "time",
+              "a las 17h"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ],
+            [
+              "predicate",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:missing_object",
+        "1:extra_participants",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:missing_object",
+        "2:extra_participants",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F08",
+      "source": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1066,
+        "output_tokens": 493
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "Marta",
+            "irá al médico"
+          ],
+          "roles": [
+            [
+              "subject",
+              "Marta"
+            ],
+            [
+              "predicate",
+              "irá"
+            ],
+            [
+              "object",
+              "al médico"
+            ],
+            [
+              "date",
+              "Mañana"
+            ],
+            [
+              "time",
+              "a las 10"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "Luis",
+            "al dentista"
+          ],
+          "roles": [
+            [
+              "subject",
+              "Luis"
+            ],
+            [
+              "object",
+              "al dentista"
+            ],
+            [
+              "date",
+              "Mañana"
+            ],
+            [
+              "time",
+              "a la misma hora"
+            ]
+          ],
+          "inherits": [
+            [
+              "predicate",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_object",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:missing_time_relation",
+        "2:extra_date",
+        "2:extra_object",
+        "2:extra_time",
+        "2:inheritance",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F11",
+      "source": "Hoy compré pan y leche.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "purchase_item",
+        "purchase_item"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1052,
+        "output_tokens": 336
+      },
+      "count": 2,
+      "kinds": [
+        "purchase_item",
+        "purchase_item"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "purchase_item",
+          "state": "candidate",
+          "anchors": [
+            "pan"
+          ],
+          "roles": [
+            [
+              "date",
+              "Hoy"
+            ],
+            [
+              "transaction",
+              "compré"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "purchase_item",
+          "state": "candidate",
+          "anchors": [
+            "leche"
+          ],
+          "roles": [],
+          "inherits": [
+            [
+              "date",
+              1
+            ],
+            [
+              "transaction",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:missing_predicate",
+        "1:extra_transaction",
+        "2:missing_date",
+        "2:missing_predicate",
+        "2:inheritance"
+      ]
+    },
+    {
+      "id": "F12",
+      "source": "Bea y mis hijos limpiaron el garaje y después montaron los muebles.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1062,
+        "output_tokens": 453
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "Bea",
+            "mis hijos",
+            "limpiaron",
+            "el garaje"
+          ],
+          "roles": [
+            [
+              "participants",
+              "Bea"
+            ],
+            [
+              "participants",
+              "mis hijos"
+            ],
+            [
+              "predicate",
+              "limpiaron"
+            ],
+            [
+              "object",
+              "el garaje"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "montaron",
+            "los muebles",
+            "después"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "montaron"
+            ],
+            [
+              "object",
+              "los muebles"
+            ],
+            [
+              "order",
+              "después"
+            ]
+          ],
+          "inherits": [
+            [
+              "participants",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:missing_participants",
+        "1:extra_object",
+        "1:extra_participants",
+        "1:extra_participants",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F13",
+      "source": "Ayer hablé con Eric. Mañana iré al cine con él. Hoy compré pan.",
+      "expected_count": 3,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1067,
+        "output_tokens": 537
+      },
+      "count": 3,
+      "kinds": [
+        "occurrence",
+        "occurrence",
+        "purchase_item"
+      ],
+      "states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "hablé",
+            "Eric"
+          ],
+          "roles": [
+            [
+              "date",
+              "Ayer"
+            ],
+            [
+              "predicate",
+              "hablé"
+            ],
+            [
+              "participants",
+              "Eric"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "iré",
+            "cine"
+          ],
+          "roles": [
+            [
+              "date",
+              "Mañana"
+            ],
+            [
+              "predicate",
+              "iré"
+            ],
+            [
+              "object",
+              "cine"
+            ],
+            [
+              "reference",
+              "él"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "purchase_item",
+          "state": "candidate",
+          "anchors": [
+            "compré",
+            "pan"
+          ],
+          "roles": [
+            [
+              "date",
+              "Hoy"
+            ],
+            [
+              "transaction",
+              "compré"
+            ],
+            [
+              "object",
+              "pan"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:missing_object",
+        "1:extra_participants",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation",
+        "3:kind",
+        "3:extra_object",
+        "3:extra_transaction",
+        "3:quote_variation"
+      ]
+    },
+    {
+      "id": "F15",
+      "source": "Ayer mis hijos fueron al parque y Bea se quedó en casa; después yo preparé la cena.",
+      "expected_count": 3,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1066,
+        "output_tokens": 606
+      },
+      "count": 3,
+      "kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "mis hijos",
+            "fueron",
+            "al parque"
+          ],
+          "roles": [
+            [
+              "subject",
+              "mis hijos"
+            ],
+            [
+              "predicate",
+              "fueron"
+            ],
+            [
+              "location",
+              "al parque"
+            ],
+            [
+              "date",
+              "Ayer"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "Bea",
+            "se quedó",
+            "en casa"
+          ],
+          "roles": [
+            [
+              "subject",
+              "Bea"
+            ],
+            [
+              "predicate",
+              "se quedó"
+            ],
+            [
+              "location",
+              "en casa"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ]
+          ]
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "yo",
+            "preparé",
+            "la cena"
+          ],
+          "roles": [
+            [
+              "subject",
+              "yo"
+            ],
+            [
+              "predicate",
+              "preparé"
+            ],
+            [
+              "object",
+              "la cena"
+            ],
+            [
+              "time_relation",
+              "después"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_location",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_location",
+        "2:extra_predicate",
+        "2:quote_variation",
+        "3:missing_order",
+        "3:extra_object",
+        "3:extra_predicate",
+        "3:extra_time_relation",
+        "3:quote_variation"
+      ]
+    },
+    {
+      "id": "F16",
+      "source": "Ana compró entradas para el concierto y Luis también.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1056,
+        "output_tokens": 409
+      },
+      "count": 2,
+      "kinds": [
+        "purchase_item",
+        "purchase_item"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "purchase_item",
+          "state": "candidate",
+          "anchors": [
+            "Ana",
+            "entradas"
+          ],
+          "roles": [
+            [
+              "subject",
+              "Ana"
+            ],
+            [
+              "predicate",
+              "compró"
+            ],
+            [
+              "object",
+              "entradas"
+            ],
+            [
+              "transaction",
+              "para el concierto"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "purchase_item",
+          "state": "candidate",
+          "anchors": [
+            "Luis",
+            "también"
+          ],
+          "roles": [
+            [
+              "subject",
+              "Luis"
+            ]
+          ],
+          "inherits": [
+            [
+              "predicate",
+              1
+            ],
+            [
+              "object",
+              1
+            ],
+            [
+              "transaction",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:kind",
+        "1:missing_object",
+        "1:extra_object",
+        "1:extra_predicate",
+        "1:extra_transaction",
+        "1:quote_variation",
+        "2:kind",
+        "2:missing_predicate_relation",
+        "2:inheritance",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F17",
+      "source": "Ayer no vi ni a Ana ni a Luis.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "negative",
+        "negative"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1056,
+        "output_tokens": 441
+      },
+      "count": 2,
+      "kinds": [
+        "negative",
+        "negative"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "negative",
+          "state": "candidate",
+          "anchors": [
+            "a Ana"
+          ],
+          "roles": [
+            [
+              "date",
+              "Ayer"
+            ],
+            [
+              "polarity",
+              "no"
+            ],
+            [
+              "predicate",
+              "vi"
+            ],
+            [
+              "object",
+              "a Ana"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "negative",
+          "state": "candidate",
+          "anchors": [
+            "a Luis"
+          ],
+          "roles": [
+            [
+              "date",
+              "Ayer"
+            ],
+            [
+              "polarity",
+              "no"
+            ],
+            [
+              "predicate",
+              "vi"
+            ],
+            [
+              "object",
+              "a Luis"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:missing_polarity",
+        "1:extra_object",
+        "1:extra_polarity",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:missing_polarity",
+        "2:extra_object",
+        "2:extra_polarity",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F18",
+      "source": "Ayer no vi a Ana, pero sí hablé con Luis.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "negative",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1059,
+        "output_tokens": 365
+      },
+      "count": 2,
+      "kinds": [
+        "negative",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "negative",
+          "state": "candidate",
+          "anchors": [
+            "vi a Ana"
+          ],
+          "roles": [
+            [
+              "date",
+              "Ayer"
+            ],
+            [
+              "polarity",
+              "no"
+            ],
+            [
+              "predicate",
+              "vi"
+            ],
+            [
+              "participants",
+              "Ana"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "hablé con Luis"
+          ],
+          "roles": [
+            [
+              "date",
+              "Ayer"
+            ],
+            [
+              "predicate",
+              "hablé"
+            ],
+            [
+              "participants",
+              "Luis"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:extra_participants",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:missing_polarity",
+        "2:extra_date",
+        "2:extra_participants",
+        "2:extra_predicate",
+        "2:inheritance",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F19",
+      "source": "Mañana iremos al parque a las 11... no, mejor al cine a las 12.",
+      "expected_count": 1,
+      "expected_kinds": [
+        "plan"
+      ],
+      "expected_states": [
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1066,
+        "output_tokens": 685
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "iremos",
+            "al parque"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "iremos"
+            ],
+            [
+              "object",
+              "al parque"
+            ],
+            [
+              "date",
+              "Mañana"
+            ],
+            [
+              "time",
+              "a las 11"
+            ],
+            [
+              "polarity",
+              "no"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "al cine"
+          ],
+          "roles": [
+            [
+              "object",
+              "al cine"
+            ],
+            [
+              "time",
+              "a las 12"
+            ],
+            [
+              "replacement",
+              "al parque"
+            ]
+          ],
+          "inherits": [
+            [
+              "predicate",
+              1
+            ],
+            [
+              "date",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "count",
+        "1:kind",
+        "1:missing_replacement",
+        "1:extra_object",
+        "1:extra_polarity",
+        "1:extra_predicate",
+        "1:extra_time",
+        "1:quote_variation"
+      ]
+    },
+    {
+      "id": "F20",
+      "source": "El sábado iremos al cine si no llueve, y si llueve nos quedaremos en casa.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "conditional",
+        "conditional"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1065,
+        "output_tokens": 352
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "iremos al cine"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "iremos al cine"
+            ],
+            [
+              "date",
+              "El sábado"
+            ],
+            [
+              "condition",
+              "si no llueve"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "nos quedaremos en casa"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "nos quedaremos en casa"
+            ],
+            [
+              "condition",
+              "si llueve"
+            ]
+          ],
+          "inherits": [
+            [
+              "date",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:kind",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:kind",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F21",
+      "source": "La semana que viene tengo clase el lunes y el miércoles a las 18h.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1062,
+        "output_tokens": 385
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "lunes"
+          ],
+          "roles": [
+            [
+              "date",
+              "lunes"
+            ],
+            [
+              "date_scope",
+              "La semana que viene"
+            ],
+            [
+              "time",
+              "a las 18h"
+            ],
+            [
+              "predicate",
+              "tengo clase"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "miércoles"
+          ],
+          "roles": [
+            [
+              "date",
+              "miércoles"
+            ],
+            [
+              "date_scope",
+              "La semana que viene"
+            ],
+            [
+              "time",
+              "a las 18h"
+            ],
+            [
+              "predicate",
+              "tengo clase"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:extra_date",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_date",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F22",
+      "source": "Hoy tengo que llamar a Ana y escribir a Luis; mañana preparar la factura.",
+      "expected_count": 3,
+      "expected_kinds": [
+        "task",
+        "task",
+        "task"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1061,
+        "output_tokens": 596
+      },
+      "count": 3,
+      "kinds": [
+        "task",
+        "task",
+        "task"
+      ],
+      "states": [
+        "candidate",
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "task",
+          "state": "candidate",
+          "anchors": [
+            "llamar a Ana"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "llamar"
+            ],
+            [
+              "object",
+              "Ana"
+            ],
+            [
+              "modality",
+              "tengo que"
+            ],
+            [
+              "date",
+              "Hoy"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "task",
+          "state": "candidate",
+          "anchors": [
+            "escribir a Luis"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "escribir"
+            ],
+            [
+              "object",
+              "Luis"
+            ],
+            [
+              "modality",
+              "tengo que"
+            ],
+            [
+              "date",
+              "Hoy"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "task",
+          "state": "candidate",
+          "anchors": [
+            "preparar la factura"
+          ],
+          "roles": [
+            [
+              "predicate",
+              "preparar"
+            ],
+            [
+              "object",
+              "la factura"
+            ],
+            [
+              "date",
+              "mañana"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:extra_modality",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_date",
+        "2:extra_modality",
+        "2:extra_predicate",
+        "2:inheritance",
+        "2:quote_variation",
+        "3:extra_object",
+        "3:extra_predicate",
+        "3:quote_variation"
+      ]
+    },
+    {
+      "id": "F23",
+      "source": "El proyecto Odyssey tiene un fallo en Router y otro en Temporal.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "property",
+        "property"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1058,
+        "output_tokens": 462
+      },
+      "count": 2,
+      "kinds": [
+        "property",
+        "property"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "property",
+          "state": "candidate",
+          "anchors": [
+            "El proyecto Odyssey",
+            "un fallo",
+            "Router"
+          ],
+          "roles": [
+            [
+              "subject",
+              "El proyecto Odyssey"
+            ],
+            [
+              "predicate",
+              "tiene"
+            ],
+            [
+              "object",
+              "un fallo"
+            ],
+            [
+              "location",
+              "Router"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "property",
+          "state": "candidate",
+          "anchors": [
+            "otro",
+            "Temporal"
+          ],
+          "roles": [
+            [
+              "object",
+              "otro"
+            ],
+            [
+              "location",
+              "Temporal"
+            ]
+          ],
+          "inherits": [
+            [
+              "subject",
+              1
+            ],
+            [
+              "predicate",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:missing_predicate",
+        "1:extra_location",
+        "1:extra_object",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:missing_object",
+        "2:extra_location",
+        "2:extra_object",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F24",
+      "source": "El coche está en el taller y mañana pasará la revisión.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "property",
+        "property"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1058,
+        "output_tokens": 387
+      },
+      "count": 2,
+      "kinds": [
+        "property",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "property",
+          "state": "candidate",
+          "anchors": [
+            "El coche",
+            "está"
+          ],
+          "roles": [
+            [
+              "subject",
+              "El coche"
+            ],
+            [
+              "predicate",
+              "está"
+            ],
+            [
+              "location",
+              "en el taller"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "pasará la revisión"
+          ],
+          "roles": [
+            [
+              "date",
+              "mañana"
+            ],
+            [
+              "predicate",
+              "pasará la revisión"
+            ],
+            [
+              "object",
+              "la revisión"
+            ]
+          ],
+          "inherits": [
+            [
+              "subject",
+              1
+            ]
+          ]
+        }
+      ],
+      "differences": [
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:kind",
+        "2:extra_object",
+        "2:extra_predicate",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F25",
+      "source": "La casa de Toulouse tiene humedad en el sótano y necesita reparar el tejado.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "property",
+        "property"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "material_structure_mismatch",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1063,
+        "output_tokens": 359
+      },
+      "count": 2,
+      "kinds": [
+        "property",
+        "task"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "property",
+          "state": "candidate",
+          "anchors": [
+            "La casa de Toulouse",
+            "humedad"
+          ],
+          "roles": [
+            [
+              "subject",
+              "La casa de Toulouse"
+            ],
+            [
+              "predicate",
+              "tiene"
+            ],
+            [
+              "object",
+              "humedad"
+            ],
+            [
+              "location",
+              "en el sótano"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "task",
+          "state": "candidate",
+          "anchors": [
+            "La casa de Toulouse",
+            "reparar el tejado"
+          ],
+          "roles": [
+            [
+              "subject",
+              "La casa de Toulouse"
+            ],
+            [
+              "predicate",
+              "necesita reparar"
+            ],
+            [
+              "object",
+              "el tejado"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:extra_object",
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:kind",
+        "2:extra_predicate",
+        "2:extra_subject",
+        "2:inheritance",
+        "2:quote_variation"
+      ]
+    },
+    {
+      "id": "F26",
+      "source": "El informe llegó ayer y hoy lo envié a Ana.",
+      "expected_count": 2,
+      "expected_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "expected_states": [
+        "candidate",
+        "candidate"
+      ],
+      "result": "role_or_quote_review",
+      "provider_status": "completed",
+      "source_validation": "source_valid",
+      "usage": {
+        "input_tokens": 1057,
+        "output_tokens": 319
+      },
+      "count": 2,
+      "kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "states": [
+        "candidate",
+        "candidate"
+      ],
+      "candidates": [
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "El informe llegó"
+          ],
+          "roles": [
+            [
+              "subject",
+              "El informe"
+            ],
+            [
+              "predicate",
+              "llegó"
+            ],
+            [
+              "date",
+              "ayer"
+            ]
+          ],
+          "inherits": []
+        },
+        {
+          "kind": "occurrence",
+          "state": "candidate",
+          "anchors": [
+            "lo envié a Ana"
+          ],
+          "roles": [
+            [
+              "reference",
+              "lo"
+            ],
+            [
+              "predicate",
+              "envié"
+            ],
+            [
+              "participants",
+              "Ana"
+            ],
+            [
+              "date",
+              "hoy"
+            ]
+          ],
+          "inherits": []
+        }
+      ],
+      "differences": [
+        "1:extra_predicate",
+        "1:quote_variation",
+        "2:extra_predicate",
+        "2:inheritance",
+        "2:quote_variation"
+      ]
+    }
+  ]
+}

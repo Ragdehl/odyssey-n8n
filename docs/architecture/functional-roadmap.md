@@ -790,3 +790,30 @@ is **USD 0.0259652**, under the user's existing USD 0.07
 authorization (not an invoice). **The opt-in path has not been
 connected to production/DEV runtime; the other 23 Router cases,
 general cross-clause dependencies and broader release gate remain.**
+
+
+**Remaining 23 real GPT-6 Router design cases evaluated (2026-10-10):**
+The untouched Router v3 prompt was run once each against all 23
+additional original synthetic source scenarios. Every response completed
+and passed source-evidence JSON validation; 22 of 23 returned the
+expected number of separate candidate facts. However, **F19**
+(self-correction) wrongly emits both the cancelled park plan and its
+replacement, **F20** (rain conditions) wrongly uses unconditional
+`occurrence` kinds, and **F25** (house needs roof repair) wrongly
+creates a `task` interpretation from a descriptive maintenance need.
+These are unsafe to promote to Core writes. Confirm inherited same
+time in F08, pronoun bindings in F13 and F26, and incomplete object
+inheritance in F23 before enabling the generic Core flow. F06, F16,
+F24 and F13's `purchase_item` / `occurrence` differences may be
+valid alternative classifications; do not equate every fixture
+difference with a failure. The complete reviewed table and original
+real responses are under
+`benchmarks/fact_candidate_v2_live/README.md`,
+`review_remaining_20261010.json` and `remaining_results/`.
+23 added Router calls cost ~USD **0.00777** estimated at pinned
+standard rates; total focused testing cost ~USD **0.0337352**
+estimated (not billed) against the explicit USD **0.07** ceiling.
+No Core live calls, DEV/PROD activation, canonical Markdown writes or
+model migration occurred in this gate. Keep PR #152 draft; fix
+F19/F20/F25 in general source-only prompt/contract, then separately
+validate Core/Temporal relationships for the reviewed concerns.

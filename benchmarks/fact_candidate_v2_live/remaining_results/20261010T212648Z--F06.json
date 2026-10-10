@@ -1,0 +1,26 @@
+{
+  "case": "F06",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036565,
+  "estimated_prior_usd": 0.0278531,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1054,
+    "output_tokens": 340
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vi\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"compré\",\"occurrence\":0},{\"text\":\"pan\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"compré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"pan\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "purchase_item"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

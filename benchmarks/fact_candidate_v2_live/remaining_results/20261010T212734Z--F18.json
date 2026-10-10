@@ -1,0 +1,26 @@
+{
+  "case": "F18",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036605,
+  "estimated_prior_usd": 0.0308253,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1059,
+    "output_tokens": 365
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"negative\",\"anchors\":[{\"text\":\"vi a Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"polarity\",\"anchor\":{\"text\":\"no\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé con Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "negative",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

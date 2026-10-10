@@ -154,3 +154,81 @@ offline contracts and publish the reviewed code BEFORE any live run.
 Save the real provider output verbatim only for these 23 synthetic,
 nonpersonal examples; no DEV/PROD deployment. A model result that
 passes JSON validation still needs separate semantic comparison.
+
+
+## Completed real GPT-6 run of the other 23 cases (2026-10-10)
+
+**All 23 previously untested source inputs** (F01–F08,
+F11–F13 and F15–F26) were each executed exactly ONCE against the real
+GPT-6 Luna/low Router v3 model in the existing authorized transient Pi
+user service. No provider errors, source-JSON validation errors,
+retries, other models, Core calls, Notes writes or DEV/PROD activation.
+
+Immutable 23 per-case synthetic real model replies are recorded in
+`remaining_results/YYYYMMDDTHHMMSSZ--Fxx.json`, with a separate
+provider-free detailed comparison at
+`review_remaining_20261010.json`. Re-run the comparison with
+`python -m benchmarks.fact_candidate_v2_live.analyze_remaining`.
+Offline CI `tests/benchmarks/test_fact_candidate_remaining_observed_live.py`
+preserves real semantic failures as failures; it does NOT fabricate an
+expected model reply or replace it with fixture data.
+
+**Observed:** 23/23 completed and structurally source-valid; **22/23
+preserved the oracle number of independent units**. In seven cases
+(F06, F13, F16, F19, F20, F24, F25) the kind or cardinality
+differs from the original reference; **do not interpret this as seven
+equivalent errors**. Other role/quote differences are also NOT yet
+independently semantically accepted. Full local comparison reports 16
+with only role/quote/inheritance deviations and 7 with structural
+deviations, but *no automatic PASS is declared by these labels*.
+
+### Human semantic triage by case
+
+| Case | Original source meaning and current finding | Gate |
+| --- | --- | --- |
+| F01 | Three activities separated; last plural group participants not explicitly inherited | subject check |
+| F02 | Three activities; approximate 16h and family participants individually preserved; 'Esta tarde' role differs | date check |
+| F03 | Park walk then cinema; two events with inherited date/participants | plausible |
+| F04 | Park 12:00 then cinema 18:00, same day | plausible |
+| F05 | Friday Ana/Toulouse and Saturday Luis/Albi remain separate | plausible |
+| F06 | Visit Ana and buy bread remain separate; bread is `purchase_item` instead of `occurrence` | compatible classification candidate |
+| F07 | Bea at 15h and Luis at 17h remain separate with predicate inherited | plausible |
+| F08 | Marta doctor at 10h; Luis dentist 'same hour' quoted as a time but no explicit `time_relation` source role | **temporal inheritance check** |
+| F11 | Bread and milk are two purchase items with transaction/date inherited | plausible |
+| F12 | Bea and children cleaning then building furniture, both events preserved | plausible |
+| F13 | Yesterday Eric, tomorrow cinema with 'él', today bread preserved as three; bread classified purchase item; Core must resolve pronoun independently | pronoun/anaphora check |
+| F15 | Three distinct subjects/actions including 'después' | plausible |
+| F16 | Ana and Luis each buy concert tickets; both `purchase_item`, despite oracle `occurrence` | compatible classification candidate |
+| F17 | Two negative claims preserved with original 'no' evidence | plausible |
+| F18 | Negative Ana and positive Luis separated | plausible |
+| F19 | **FAIL:** self-correction park 11h → cinema 12h emitted as TWO `occurrence` candidates, rather than ONE corrected `plan`; previous cancelled alternative risks write | **BLOCK** |
+| F20 | **FAIL:** both conditional branches carry literal condition roles, but are emitted as unconditional `occurrence` rather than `conditional`; wrong downstream execution type | **BLOCK** |
+| F21 | Monday and Wednesday classes 18h, correct count and shared week scope | plausible |
+| F22 | Three separately dated tasks | plausible |
+| F23 | Two defects (Router, Temporal) separately attached to Odyssey project; 'otro' may need source object inheritance | object binding check |
+| F24 | Car at workshop then future service; `occurrence` for service instead of oracle `property` is semantically plausible | compatible classification candidate |
+| F25 | **FAIL / high risk:** house needs roof repair becomes a `task` rather than an attribute/requirement; must not silently create a task assigned to user | **BLOCK** |
+| F26 | Report arrival and later sending separated; 'lo' explicitly marked reference but lacks direct inherited object binding to 'El informe' | **coreference check** |
+
+**Risk assessment:** F19 and F20 are clear real Router semantics blockers,
+F25 is a task-vs-property side-effect blocker. F08/F13/F23/F26 and
+possibly F01/F02 need independent Core/Temporal provenance review,
+not automatic approval. The remaining fixture differences may be
+valid equivalent interpretations; do not change acceptable behavior
+just to satisfy an exact literal quote oracle.
+
+**Cost:** Real GPT-6 Router 23-call model usage totals about
+**USD 0.0077700**, estimated using pinned *standard noncached* prices.
+Combined estimated prior focused GPT-6 Router and GPT-5.6 Core
+testing, the cumulative focused estimate is **USD 0.0337352**,
+beneath the explicitly authorized **USD 0.07** (not a provider invoice).
+The historical F09/F10/F14/F27 model results are unchanged, and
+Core remains on GPT-5.6.
+
+**Next scoped work:** Improve the *generic* source kind contract and
+closed prompt for correction/conditional/implicit repair tasks,
+introducing source-only negative/conditional semantic sentinels;
+then independently verify temporal inheritance and references before
+adding per-unit Core planning for these more diverse shapes.
+Do NOT turn Router into a task/note writer or bypass Core identity
+and semantic coverage. No current production runtime changes.

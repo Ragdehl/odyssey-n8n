@@ -1,0 +1,26 @@
+{
+  "case": "F17",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00365725,
+  "estimated_prior_usd": 0.0304992,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1056,
+    "output_tokens": 441
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"negative\",\"anchors\":[{\"text\":\"a Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"polarity\",\"anchor\":{\"text\":\"no\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"negative\",\"anchors\":[{\"text\":\"a Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"polarity\",\"anchor\":{\"text\":\"no\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a Luis\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "negative",
+    "negative"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "case": "F22",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00366825,
+  "estimated_prior_usd": 0.032144,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1061,
+    "output_tokens": 596
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"task\",\"anchors\":[{\"text\":\"llamar a Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"llamar\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"modality\",\"anchor\":{\"text\":\"tengo que\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"task\",\"anchors\":[{\"text\":\"escribir a Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"escribir\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"modality\",\"anchor\":{\"text\":\"tengo que\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"task\",\"anchors\":[{\"text\":\"preparar la factura\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"preparar\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"la factura\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 3,
+  "kinds": [
+    "task",
+    "task",
+    "task"
+  ],
+  "states": [
+    "candidate",
+    "candidate",
+    "candidate"
+  ]
+}

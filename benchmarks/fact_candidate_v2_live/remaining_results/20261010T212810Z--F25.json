@@ -1,0 +1,26 @@
+{
+  "case": "F25",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.003669,
+  "estimated_prior_usd": 0.0331842,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1063,
+    "output_tokens": 359
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"humedad\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"humedad\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en el sótano\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"task\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"reparar el tejado\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"necesita reparar\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el tejado\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "property",
+    "task"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "case": "F02",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036835,
+  "estimated_prior_usd": 0.0264065,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1083,
+    "output_tokens": 643
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"mis hijos, mi mujer y yo\",\"occurrence\":0},{\"text\":\"a merendar\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"merendar\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"Esta tarde\",\"occurrence\":0}},{\"role\":\"time_approx\",\"anchor\":{\"text\":\"sobre las 16h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a un vide-grenier\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"object\",\"anchor\":{\"text\":\"a un vide-grenier\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"el domingo\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 11h\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":2},{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 3,
+  "kinds": [
+    "occurrence",
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate",
+    "candidate"
+  ]
+}

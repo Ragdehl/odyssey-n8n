@@ -1,0 +1,26 @@
+{
+  "case": "F16",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036635,
+  "estimated_prior_usd": 0.0301891,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1056,
+    "output_tokens": 409
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"Ana\",\"occurrence\":0},{\"text\":\"entradas\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"compró\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"entradas\",\"occurrence\":0}},{\"role\":\"transaction\",\"anchor\":{\"text\":\"para el concierto\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"también\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"object\",\"from_unit\":1},{\"role\":\"transaction\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "purchase_item",
+    "purchase_item"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

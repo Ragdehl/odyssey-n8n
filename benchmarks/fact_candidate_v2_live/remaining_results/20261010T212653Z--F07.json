@@ -1,0 +1,26 @@
+{
+  "case": "F07",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036605,
+  "estimated_prior_usd": 0.0281285,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1063,
+    "output_tokens": 421
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Hoy\",\"occurrence\":0},{\"text\":\"veo a Bea\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"veo\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 15h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 17h\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "case": "F15",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00367125,
+  "estimated_prior_usd": 0.0297795,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1066,
+    "output_tokens": 606
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"fueron\",\"occurrence\":0},{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"fueron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"se quedó\",\"occurrence\":0},{\"text\":\"en casa\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se quedó\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en casa\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"yo\",\"occurrence\":0},{\"text\":\"preparé\",\"occurrence\":0},{\"text\":\"la cena\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"preparé\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"la cena\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 3,
+  "kinds": [
+    "occurrence",
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate",
+    "candidate"
+  ]
+}

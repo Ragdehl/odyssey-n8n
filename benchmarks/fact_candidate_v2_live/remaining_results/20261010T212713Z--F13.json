@@ -1,0 +1,28 @@
+{
+  "case": "F13",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.00366675,
+  "estimated_prior_usd": 0.0294043,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1067,
+    "output_tokens": 537
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Eric\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"cine\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"compré\",\"occurrence\":0},{\"text\":\"pan\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}},{\"role\":\"transaction\",\"anchor\":{\"text\":\"compré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"pan\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 3,
+  "kinds": [
+    "occurrence",
+    "occurrence",
+    "purchase_item"
+  ],
+  "states": [
+    "candidate",
+    "candidate",
+    "candidate"
+  ]
+}

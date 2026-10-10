@@ -1,0 +1,26 @@
+{
+  "case": "F21",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.0036665,
+  "estimated_prior_usd": 0.0318453,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1062,
+    "output_tokens": 385
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"lunes\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"lunes\",\"occurrence\":0}},{\"role\":\"date_scope\",\"anchor\":{\"text\":\"La semana que viene\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 18h\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tengo clase\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"miércoles\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"miércoles\",\"occurrence\":0}},{\"role\":\"date_scope\",\"anchor\":{\"text\":\"La semana que viene\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 18h\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tengo clase\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}

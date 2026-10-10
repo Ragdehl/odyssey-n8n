@@ -1,0 +1,26 @@
+{
+  "case": "F26",
+  "model": "gpt-6-luna",
+  "mode": "SYNTHETIC_ROUTER_V3_REMAINING",
+  "maximum_reserved_usd": 0.003661,
+  "estimated_prior_usd": 0.03347,
+  "budget_ceiling_usd": 0.07,
+  "may_write_notes": false,
+  "core_acceptance_verified": false,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 1057,
+    "output_tokens": 319
+  },
+  "raw_model_response": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"El informe llegó\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El informe\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"llegó\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"lo envié a Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"reference\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"envié\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+  "validation": "source_valid",
+  "candidate_count": 2,
+  "kinds": [
+    "occurrence",
+    "occurrence"
+  ],
+  "states": [
+    "candidate",
+    "candidate"
+  ]
+}
