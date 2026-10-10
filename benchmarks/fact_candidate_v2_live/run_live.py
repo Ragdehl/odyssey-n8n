@@ -37,17 +37,17 @@ def reviewed_calls(
     if prompt_revision == "v1":
         rows = [(case_id, req) for case_id, stage, req in captured_requests() if stage == "router"]
         snapshot = ROOT / "benchmarks/fact_candidate_v2_preflight/playground_router_requests.json"
-    elif prompt_revision == "v2":
+    elif prompt_revision in {"v2", "v3"}:
         rows = []
         cases = {case["id"]: case for case in CASES}
         for case_id in CASE_IDS:
             case = cases[case_id]
             fake, calls = _sdk_fake(_from_design(case))
-            OpenAIFactCandidateRouter(fake, prompt_revision="v2").propose(case["source"])
+            OpenAIFactCandidateRouter(fake, prompt_revision=prompt_revision).propose(case["source"])
             if len(calls) != 1:
                 raise ValueError("Revised Router must emit exactly one request per case")
             rows.append((case_id, calls[0]))
-        snapshot = HERE / "prompt_v2_requests.json"
+        snapshot = HERE / f"prompt_{prompt_revision}_requests.json"
     else:
         raise ValueError("Unknown Router prompt revision")
     if tuple(case_id for case_id, _req in rows) != CASE_IDS:
@@ -86,24 +86,29 @@ def reviewed_calls(
     total = round(total, 8)
     if total > MAX_SPEND_USD or (prompt_revision == "v1" and total > 0.011819):
         raise ValueError("Conservative Router cost ceiling exceeded")
-    if prompt_revision == "v2":
-        # Prior synthetic v1 request usage is observed; use the pinned standard
-        # rates conservatively before reserving the entire new v2 envelope.
-        prior_file = HERE / "results/20261010T185618Z.json"
-        prior = json.loads(prior_file.read_text(encoding="utf-8"))
-        if prior.get("mode") != "LIVE_SYNTHETIC_ROUTER" or len(prior["results"]) != 4:
-            raise ValueError("Prior Router gate cost evidence is missing")
+    if prompt_revision in {"v2", "v3"}:
+        # Reserve all new requests before any API call. Historical successful
+        # gates use their observed token usage at the pinned standard rates;
+        # never assume the next model bill will equal that estimate.
+        prior_names = ["20261010T185618Z.json"]
+        if prompt_revision == "v3":
+            prior_names.append("20261010T191859Z.json")
         rate = rates["gpt-6-luna"]
-        previously_observed_usd = sum(
-            (
-                row["usage"]["input_tokens"] * rate["input_per_million"]
-                + row["usage"]["output_tokens"] * rate["output_per_million"]
+        previously_observed_usd = 0.0
+        for name in prior_names:
+            prior = json.loads((HERE / "results" / name).read_text(encoding="utf-8"))
+            if prior.get("mode") != "LIVE_SYNTHETIC_ROUTER" or len(prior["results"]) != 4:
+                raise ValueError("Prior Router gate cost evidence is missing")
+            previously_observed_usd += sum(
+                (
+                    row["usage"]["input_tokens"] * rate["input_per_million"]
+                    + row["usage"]["output_tokens"] * rate["output_per_million"]
+                )
+                / 1_000_000
+                for row in prior["results"]
             )
-            / 1_000_000
-            for row in prior["results"]
-        )
         if previously_observed_usd + total > MAX_SPEND_USD:
-            raise ValueError("Cumulative Router v1/v2 budget envelope exceeds authorization")
+            raise ValueError("Cumulative Router test budget envelope exceeds authorization")
     return rows, total
 
 
@@ -173,9 +178,12 @@ def run_once(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bounded v2 synthetic Router gate")
     parser.add_argument("--live", action="store_true", help="Run exactly four approved calls")
-    parser.add_argument("--prompt-v2", action="store_true", help="Select reviewed revised prompt")
+    version = parser.add_mutually_exclusive_group()
+    version.add_argument("--prompt-v2", action="store_true", help="Select frozen v2 teaching")
+    version.add_argument("--prompt-v3", action="store_true", help="Select frozen v3 teaching")
     args = parser.parse_args()
-    result = run_once(live=args.live, prompt_revision="v2" if args.prompt_v2 else "v1")
+    revision = "v3" if args.prompt_v3 else "v2" if args.prompt_v2 else "v1"
+    result = run_once(live=args.live, prompt_revision=revision)
     if args.live:
         folder = HERE / "results"
         folder.mkdir(exist_ok=True)

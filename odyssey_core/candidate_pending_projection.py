@@ -101,27 +101,63 @@ def project_unresolved_candidate_preview(
             if claim.disposition == "pending":
                 if progress.status != "pending":
                     raise CandidatePendingProjectionError("Candidate pending status mismatched")
-                if len(candidate.anchors) != 1:
-                    raise CandidatePendingProjectionError(
-                        "Multiple-anchor candidate needs a different clarification UI"
-                    )
-                anchor = candidate.anchors[0]
                 references = [role.span for role in candidate.roles if role.role == "reference"]
-                if (
-                    len(references) > 1
-                    or references
-                    and (references[0].start < anchor.start or references[0].end > anchor.end)
-                ):
+                if len(references) > 1:
                     raise CandidatePendingProjectionError(
                         "Pending reference is not locally sourced"
                     )
                 reference = references[0] if references else None
+                # A single enclosing anchor already has complete source evidence.
+                # For a model's shorter/disjoint quotes, reconstruct only a
+                # single original clause whose exact source roles include the
+                # unresolved pronoun. Never combine unrelated sentences or
+                # carry a model-invented rewrite into durable pending state.
+                if len(candidate.anchors) == 1 and (
+                    reference is None
+                    or candidate.anchors[0].start <= reference.start
+                    and reference.end <= candidate.anchors[0].end
+                ):
+                    start, end = candidate.anchors[0].start, candidate.anchors[0].end
+                else:
+                    if reference is None or candidate.state != "ambiguous_identity":
+                        raise CandidatePendingProjectionError(
+                            "Disjoint pending source needs independently anchored reference"
+                        )
+                    spans = [
+                        *candidate.anchors,
+                        *(
+                            role.span
+                            for role in candidate.roles
+                            if role.role
+                            in {"date", "date_scope", "time", "predicate", "object", "reference"}
+                        ),
+                    ]
+                    start = min(span.start for span in spans)
+                    end = max(span.end for span in spans)
+                    if (
+                        end - start > 400
+                        or any(char in source[start:end] for char in ".;!?\n\r")
+                        or not start <= reference.start < reference.end <= end
+                        or any(
+                            anchor.start < end and anchor.end > start
+                            for other in context.candidates
+                            if other is not candidate
+                            for anchor in other.anchors
+                        )
+                    ):
+                        raise CandidatePendingProjectionError(
+                            "Disjoint source spans do not prove one pending clause"
+                        )
+                if reference and not (start <= reference.start and reference.end <= end):
+                    raise CandidatePendingProjectionError(
+                        "Pending reference is not locally sourced"
+                    )
                 pending.append(
                     CandidatePendingItem(
                         candidate.candidate_id,
-                        anchor.text,
-                        anchor.start,
-                        anchor.end,
+                        source[start:end],
+                        start,
+                        end,
                         claim.pending_reason,
                         reference.text if reference else None,
                         reference.start if reference else None,

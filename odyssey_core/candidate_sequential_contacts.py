@@ -35,11 +35,13 @@ def validate_two_sequential_contacts(
         raise SequentialContactEvidenceError("One future ambiguous candidate must stay pending")
     first, second = context.candidates[:2]
     future = context.candidates[2]
-    if len(future.anchors) != 1 or not any(
+    if not any(
         role.role == "reference"
         and role.span.text == "él"
-        and future.anchors[0].start <= role.span.start
-        and role.span.end <= future.anchors[0].end
+        and any(
+            anchor.start <= role.span.start and role.span.end <= anchor.end
+            for anchor in future.anchors
+        )
         for role in future.roles
     ):
         raise SequentialContactEvidenceError("Future reference ambiguity needs source evidence")
@@ -48,11 +50,56 @@ def validate_two_sequential_contacts(
         or second.state != "candidate"
         or first.kind != "occurrence"
         or second.kind != "occurrence"
-        or len(first.anchors) != 1
-        or len(second.anchors) != 1
     ):
         raise SequentialContactEvidenceError("Two source events are required")
-    a, b = first.anchors[0], second.anchors[0]
+    # Preserve the previously approved single-name-anchor pilot unchanged.
+    legacy = (
+        len(first.anchors) == len(second.anchors) == 1
+        and first.anchors[0].text != "hablé"
+        and all(
+            any(
+                role.role == "predicate" and role.span.text == "hablé con"
+                for role in candidate.roles
+            )
+            and any(role.role == "date" for role in candidate.roles)
+            for candidate in (first, second)
+        )
+    )
+    if legacy:
+        a, b = first.anchors[0], second.anchors[0]
+    else:
+        # Model-proposed split spans do not gain authority by themselves.
+        # Reconstruct both names solely from exact source participant roles,
+        # and verify their ordered contact words in the unchanged source.
+        first_people = [role.span for role in first.roles if role.role == "participants"]
+        second_people = [role.span for role in second.roles if role.role == "participants"]
+        if len(first_people) != 1 or len(second_people) != 1:
+            raise SequentialContactEvidenceError("Two separately evidenced contact names required")
+        a, b = first_people[0], second_people[0]
+        if (
+            not all(
+                any(
+                    anchor.start <= span.start and span.end <= anchor.end
+                    for anchor in candidate.anchors
+                )
+                for candidate, span in ((first, a), (second, b))
+            )
+            or not any(
+                role.role == "predicate"
+                and role.span.text in {"hablé", "hablé con"}
+                and any(
+                    anchor.start <= role.span.start and role.span.end <= anchor.end
+                    for anchor in first.anchors
+                )
+                for role in first.roles
+            )
+            or not any(edge.role == "predicate" and edge.from_unit == 1 for edge in second.inherits)
+            or not any(
+                role.role == "order" and role.span.text == "después" and b.start > role.span.end
+                for role in second.roles
+            )
+        ):
+            raise SequentialContactEvidenceError("Sequential contact roles lack source proof")
     if (
         a.text == b.text
         or len(a.text) > 100
@@ -66,13 +113,32 @@ def validate_two_sequential_contacts(
         raise SequentialContactEvidenceError(
             "Explicit distinct ordered contacts are not source-grounded"
         )
-    for candidate in (first, second):
-        if not any(
-            role.role == "predicate" and role.span.text == "hablé con" for role in candidate.roles
-        ):
-            raise SequentialContactEvidenceError("Each event needs the original contact predicate")
-        if not any(role.role == "date" for role in candidate.roles):
-            raise SequentialContactEvidenceError("Each event needs the original date scope")
+    first_dates = [role.span for role in first.roles if role.role == "date"]
+    future_dates = [role.span for role in future.roles if role.role == "date"]
+    if (
+        len(first_dates) != 1
+        or len(future_dates) != 1
+        or first_dates[0].end > a.start
+        or future_dates[0].start <= b.end
+        or any(mark in context.source[first_dates[0].end : a.start] for mark in ".;!?\n\r")
+    ):
+        raise SequentialContactEvidenceError("Sequential contacts need source-grounded dates")
+    if not legacy:
+        # The source literally says one dated speech event followed by another
+        # in the same clause. No other date or independent clause intervenes.
+        if context.source[first_dates[0].end : a.start] != " hablé con ":
+            raise SequentialContactEvidenceError("Second contact cannot inherit unrelated date")
+    else:
+        for candidate in (first, second):
+            if not any(
+                role.role == "predicate" and role.span.text == "hablé con"
+                for role in candidate.roles
+            ):
+                raise SequentialContactEvidenceError(
+                    "Each event needs the original contact predicate"
+                )
+            if not any(role.role == "date" for role in candidate.roles):
+                raise SequentialContactEvidenceError("Each event needs the original date scope")
     if (
         unit.intent != "record"
         or unit.force_create

@@ -73,3 +73,28 @@ estimated from saved token counts and pinned rates, giving a combined estimated
 prior spend + *fully reserved new upper envelope* of about `$0.01480`,
 below the previously approved `$0.02` total. This is not an invoice and
 the final comparison must still include an independent semantic review.
+
+## Opt-in prompt revision v3 (F10 mutual relation kind)
+
+Revision v3 inherits the **entire v2 prompt**, adds one generic distinction
+between a mutual/reciprocal relationship and an occurrence with several
+participants, and leaves the JSON schema, models and Router v0 unchanged.
+Its exact four synthetic requests are frozen in `prompt_v3_requests.json`.
+Use `python -m benchmarks.fact_candidate_v2_live.run_live --prompt-v3` for
+offline review. The conservative four-call new reservation is **USD
+0.01464675**. The cumulative pre-call guard checks the previously observed
+estimated standard-rate costs for both prior synthetic gates plus the full
+new reservation stay below the original **USD 0.02** authorization. No
+automatic retries or additional cases are possible. Even a structurally
+matching result does not promote candidate semantic write authority.
+
+In parallel, Core's *inactive opt-in* grouped/sequential source-evidence
+pilots now accept alternate independently grounded exact text spans: the
+two participants can be separately quoted when source offsets prove one
+coherent linked clause; for two explicit contacts, literal ordered source
+syntax and a same-clause date prove inheritance, while separate original
+pending reference spans can form a single original-source clause. This
+does not infer identity, authorize a write from Router, or activate any
+normal DEV/PROD path. Isolated vertical replay tests assert that protected
+Core still rejects tampered names, predicates, date scopes, order and
+unverified pronouns before any Markdown write.

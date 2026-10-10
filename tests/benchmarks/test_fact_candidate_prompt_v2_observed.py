@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from odyssey_apps.fact_candidate_core import to_core_candidate_context
 from odyssey_apps.fact_candidates import validate_fact_candidate_proposal
 from odyssey_core.candidate_coverage import (
@@ -58,7 +56,7 @@ def test_v2_kept_one_mutual_meeting_but_regressed_kind() -> None:
     assert result["units"][0]["kind"] == "occurrence"  # Approved kind is relationship.
 
 
-def test_v2_f14_temporal_and_pronoun_correct_but_group_pilot_blocks() -> None:
+def test_v2_f14_real_router_roles_are_verified_by_core_without_writes() -> None:
     source, context = _context("F14")
     assert [c.kind for c in context.candidates] == ["occurrence", "occurrence"]
     assert any(r.role == "reference" and r.span.text == "él" for r in context.candidates[1].roles)
@@ -69,15 +67,15 @@ def test_v2_f14_temporal_and_pronoun_correct_but_group_pilot_blocks() -> None:
         CoreCandidateCoverageClaim("candidate-1", "planned_fact", 0),
         CoreCandidateCoverageClaim("candidate-2", "pending", pending_reason="ambiguous_identity"),
     )
-    with pytest.raises(ValueError, match="Explicit two-name participant evidence"):
-        build_candidate_coverage_manifest(source, context, plan, claims)
+    manifest = build_candidate_coverage_manifest(source, context, plan, claims)
+    assert len(manifest.claims) == 2
 
 
-def test_v2_f27_temporal_and_pronoun_correct_but_source_pilot_blocks() -> None:
+def test_v2_f27_real_router_roles_are_verified_by_core_without_writes() -> None:
     source, context = _context("F27")
     assert [c.kind for c in context.candidates] == ["occurrence"] * 3
     assert [c.state for c in context.candidates] == ["candidate", "candidate", "ambiguous_identity"]
     assert any(r.role == "reference" and r.span.text == "él" for r in context.candidates[2].roles)
     _case, _baseline_context, plan = f27_pipeline()
-    with pytest.raises(ValueError, match="Future reference ambiguity"):
-        build_candidate_coverage_manifest(source, context, plan, f27_claims())
+    manifest = build_candidate_coverage_manifest(source, context, plan, f27_claims())
+    assert len(manifest.claims) == 3

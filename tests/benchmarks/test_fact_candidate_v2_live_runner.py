@@ -115,3 +115,31 @@ def test_v2_dry_run_cannot_call_provider(monkeypatch) -> None:
     assert result["mode"] == "DRY_RUN_NO_PROVIDER"
     assert result["call_limit"] == 4
     assert result["conservative_reservation_usd"] < MAX_SPEND_USD
+
+
+def test_v3_prompt_only_extends_v2_and_reserves_cumulative_budget() -> None:
+    """An opt-in kind clarification cannot silently change the accepted v2 schema."""
+    v2, old_upper = reviewed_calls(prompt_revision="v2")
+    v3, new_upper = reviewed_calls(prompt_revision="v3")
+    assert old_upper < new_upper < MAX_SPEND_USD
+    assert [case for case, _ in v2] == [case for case, _ in v3]
+    for (_, old), (_, updated) in zip(v2, v3, strict=True):
+        old_system = old["input"][0]["content"]
+        new_system = updated["input"][0]["content"]
+        assert new_system.startswith(old_system)
+        assert "kind='relationship'" in new_system[len(old_system) :]
+        assert "kind='occurrence'" in new_system[len(old_system) :]
+        assert {k: v for k, v in old.items() if k != "input"} == {
+            k: v for k, v in updated.items() if k != "input"
+        }
+
+
+def test_v3_fake_provider_still_checks_source_before_any_core_action(monkeypatch) -> None:
+    """Four responses are strictly source-grounded with no write instructions."""
+    monkeypatch.setenv(RUN_ENV, "1")
+    responses = _FakeResponses()
+    result = run_once(live=True, client=SimpleNamespace(responses=responses), prompt_revision="v3")
+    assert len(responses.calls) == 4
+    assert result["prompt_revision"] == "v3"
+    assert result["oracle_comparison"]["all_fixture_matches"] is True
+    assert result["live_model_quality_verified"] is False

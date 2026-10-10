@@ -223,7 +223,7 @@ def validate_candidate_coverage_manifest(
         if unit.references:
             if len(unit.facts) == 1:
                 validate_two_named_participant_fact(
-                    context.candidates[index], plan, action_index, unit_index
+                    source, context.candidates[index], plan, action_index, unit_index
                 )
                 if fact_index != 0:
                     raise ValueError("Grouped source claim has wrong Core fact")

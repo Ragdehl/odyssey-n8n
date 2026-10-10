@@ -119,7 +119,7 @@ def _facts(
                     for candidate in context.candidates:
                         try:
                             validate_two_named_participant_fact(
-                                candidate, plan, action_index, unit_index
+                                context.source, candidate, plan, action_index, unit_index
                             )
                         except MultiParticipantEvidenceError:
                             continue

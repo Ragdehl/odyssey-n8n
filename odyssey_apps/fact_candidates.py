@@ -443,6 +443,23 @@ FACT_CANDIDATE_PROMPT_V2_EXTENSION = (
 )
 
 
+FACT_CANDIDATE_PROMPT_V3_EXTENSION = (
+    " Additional kind decision rule: The JSON kind 'relationship' is for "
+    "one mutual or reciprocal relationship fact between two parties, "
+    "including one-time mutual encounters expressed as reciprocal verbs. "
+    "For example 'Julia y Pedro se conocieron en Sevilla' is exactly ONE "
+    "candidate with kind='relationship', NOT kind='occurrence'. "
+    "By contrast 'Julia habló con Pedro y Ana' describes ONE speech "
+    "occurrence with two conversation participants, NOT a relationship "
+    "between those two participants. 'Julia y Pedro viven en Sevilla' "
+    "describes TWO independent property candidates, not a relationship. "
+    "Semantic kind depends on whether the statement asserts a link "
+    "between the people, independently of the verb's tense or duration. "
+    "All source roles, ambiguity and exact original quoting rules remain "
+    "unchanged; never create canonical identities, plans, or writes."
+)
+
+
 class OpenAIFactCandidateRouter:
     """Opt-in, non-executing Router v1 proposal adapter with an injected provider.
 
@@ -452,7 +469,7 @@ class OpenAIFactCandidateRouter:
 
     def __init__(self, client: Any, *, prompt_revision: str = "v1") -> None:
         """Select a reviewed source-only teaching revision without changing Router v0."""
-        if prompt_revision not in {"v1", "v2"}:
+        if prompt_revision not in {"v1", "v2", "v3"}:
             raise ValueError("Unknown fact-candidate prompt revision")
         self._client = client
         self._prompt_revision = prompt_revision
@@ -510,7 +527,12 @@ class OpenAIFactCandidateRouter:
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V2_EXTENSION
-                            if self._prompt_revision == "v2"
+                            if self._prompt_revision in {"v2", "v3"}
+                            else ""
+                        )
+                        + (
+                            FACT_CANDIDATE_PROMPT_V3_EXTENSION
+                            if self._prompt_revision == "v3"
                             else ""
                         ),
                     },

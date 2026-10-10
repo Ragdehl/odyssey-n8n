@@ -17,6 +17,7 @@ class MultiParticipantEvidenceError(ValueError):
 
 
 def validate_two_named_participant_fact(
+    source: str,
     candidate: CoreCandidate,
     plan: RequestPlan,
     action_index: int,
@@ -32,15 +33,52 @@ def validate_two_named_participant_fact(
     if not isinstance(action, WriteAction) or not 0 <= unit_index < len(action.units):
         raise MultiParticipantEvidenceError("Grouped event needs a Core write action")
     unit = action.units[unit_index]
-    group_roles = [role.span.text for role in candidate.roles if role.role == "participants"]
-    if len(group_roles) != 1 or group_roles[0].count(" y ") != 1:
+    participants = [role.span for role in candidate.roles if role.role == "participants"]
+    if len(participants) == 1 and participants[0].text.count(" y ") == 1:
+        group = participants[0]
+        names = tuple(value.strip() for value in group.text.split(" y "))
+        anchored_group = any(
+            anchor.start <= group.start and group.end <= anchor.end for anchor in candidate.anchors
+        )
+    elif len(participants) == 2:
+        # Two exact name roles are equivalent source evidence only when their
+        # offsets prove the original source literally joins them in one clause.
+        first, second = sorted(participants, key=lambda span: span.start)
+        names = (first.text, second.text)
+        predicate_spans = [role.span for role in candidate.roles if role.role == "predicate"]
+        anchored_group = (
+            source[first.end : second.start] == " y "
+            and all(
+                any(
+                    anchor.start <= name.start and name.end <= anchor.end
+                    for anchor in candidate.anchors
+                )
+                or any(
+                    predicate.end <= name.start
+                    and not any(mark in source[predicate.end : name.start] for mark in ".;!?\n\r")
+                    for predicate in predicate_spans
+                )
+                for name in (first, second)
+            )
+            and any(
+                any(
+                    anchor.start <= predicate.start and predicate.end <= anchor.end
+                    for anchor in candidate.anchors
+                )
+                and predicate.end < first.start
+                and not any(mark in source[predicate.end : first.start] for mark in ".;!?\n\r")
+                for predicate in predicate_spans
+            )
+        )
+    else:
         raise MultiParticipantEvidenceError("Explicit two-name participant evidence required")
-    names = tuple(value.strip() for value in group_roles[0].split(" y "))
     if (
         len(names) != 2
-        or any(not name or len(name) > 100 or "[[" in name or "{{" in name for name in names)
+        or any(
+            not name.strip() or len(name) > 100 or "[[" in name or "{{" in name for name in names
+        )
         or len(set(names)) != 2
-        or not any(group_roles[0] in anchor.text for anchor in candidate.anchors)
+        or not anchored_group
     ):
         raise MultiParticipantEvidenceError("Participant names not uniquely anchored in the event")
     if (
