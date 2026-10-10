@@ -353,6 +353,40 @@ The new guard is implemented only in the default-disabled experimental
 Core coverage arguments; ordinary Router v0, the existing Core planner prompt,
 canonical schema, DEV, production and all user notes are unchanged.
 
+**Block 4B8 narrow Core canonical-reference handoff (isolated/inactive):**
+`odyssey_core/candidate_reference_handoff.py` reuses the existing
+`CanonicalReferenceEvidence` produced **only after an actual successful Core
+write and persisted canonical wikilink** and the existing
+`_dependent_evidence_is_current` dual-guard validation. It does not resolve
+an entity, allocate IDs, create another model prompt or modify runtime. For
+one simple source layout (candidate 1 with one exact named subject/object/
+participant role, followed immediately by candidate 2 with one original
+`reference` role), it can return a **Core-private** freshness-checked carrier.
+It requires one actual Core predecessor action and one unique canonical
+reference proof, an exact original antecedent named-role occurrence and a
+reference word inside the second candidate's own original source span. The
+carrier can furnish the **existing** `DependentReferenceGuard`, which rechecks
+both the persisted source fact and target Note before any later write. It
+never exposes canonical IDs/guards through UI request details or accepts
+natural-language source candidate evidence as a substitute for persisted
+Core identity. The case F13 `Eric → él` succeeds with a **human-reviewed**
+second plan on a disposable vault and a real Core canonical link; F14's
+`Eric y Luis → él` stays unresolved even if only Eric's earlier note happened
+to be persisted. Corrupted source/target Markdown, multiple named roles,
+unscoped reference words and changed identities abstain; the existing
+preflight guard independently rejects a once-valid carrier after staleness.
+
+**Important boundary:** this is proof of **one Core canonical target identity**,
+NOT proof that an unverified candidate's `él` linguistically refers to that
+target. Tests deliberately inject a reviewed antecedent and dependent plan;
+no real Luna semantic coreference gate has passed. The first simple candidate
+has to have actually persisted a Core reference, so this does NOT impose
+persistence ordering on ordinary shared dates, group continuity or subjects;
+those stay request-local interpretations. An antecedent without persisted
+proof or more than one plausible source candidate remains pending. Do not
+activate this optional bridge, the experimental coverage write path or a
+`candidate → canonical identity` graph label based only on these tests.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source
