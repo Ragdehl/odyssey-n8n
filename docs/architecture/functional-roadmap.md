@@ -57,6 +57,12 @@ candidate was persisted. The existing Core result may say `completed` despite
 an unresolved candidate deliberately omitted by a handwritten test plan; this
 shows why per-candidate Core-verified attribution, pending clarification and
 partial-success/idempotence guards still need implementation before activation.
+Additional bounded readback now checks Core's actual canonical Markdown
+fact markers by request ID, fact ordinal, stable Note ID and exact plan text.
+It distinguishes confirmed physical writes from cross-request duplicate
+suppression, `unproven` source candidates, ambiguous candidates and unknown
+source coverage, and explicitly
+forbids reporting the whole request as complete on Core fact markers alone.
 New request-detail projections and a true provider→verified attribution→Core
 write vertical path, plus separate final live GPT-6 Router / GPT-5.6 Luna
 semantic gates, remain required. Router v0 remains operational.

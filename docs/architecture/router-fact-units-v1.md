@@ -206,6 +206,36 @@ coverage. Do not silently infer those associations or claim request completion
 from a subset. This observational seam must not become a new write authority,
 source-of-truth database, or product-visible verified graph before that proof.
 
+**Block 4B4 Core physical readback (isolated; NOT activated):**
+`odyssey_core/candidate_fact_readback.py` adds an optional, bounded read-only
+check of **actual canonical Markdown** after existing Core execution. For up to
+128 planned write facts and a bounded 5,000-note scan, it requires that one
+valid Note with the exact successful Core unit's stable ID contains a *unique*
+`odyssey:fact` marker with the same actual `ApplicationResult.request_id`,
+Core-computed fact ordinal and exactly normalized Core plan fact text.
+Successful plan/unit status alone never proves physical persistence. For a
+replayed identical logical request, the same stable marker is accepted; when
+a second request's identical fact text is silently deduplicated by Core,
+that other request has **no matching marker**, so it is correctly **not
+verified**. Corrupt markers, duplicate canonical Note IDs and incorrect action
+receipts also fail closed. Tests cover three facts on two Calendar Day notes,
+a two-item shared transaction, replay, cross-request deduplication, stale
+source, copied canonical Note IDs and the ambiguous `él` withheld from writes.
+
+Crucially this is **Core fact existence proof, NOT Router candidate semantic
+attribution**. The readback contract explicitly returns
+`candidate_coverage="unverified"` and
+`safe_to_report_all_candidates_complete=false` even when every persisted Core
+fact is proven. It separately exposes a source-candidate progress ledger: `unproven` for
+every ordinary candidate and `ambiguous_identity` for unresolved pronouns;
+neither is ever auto-promoted by physical Core markers. It also exposes the
+original Core request status, including the known problem where a manually reduced
+Core plan returns `completed` while an unrelated user clause remains pending.
+Only a separately reviewed Core-owned mapping, validated complete source
+coverage and existing pending-work/clarification machinery can resolve that
+contract. No frontend, runtime, NoteSchema, marker metadata, cache or active
+model prompt changed in this block.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source
