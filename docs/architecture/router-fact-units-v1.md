@@ -1074,3 +1074,37 @@ No Sol/cache changes or real-vault deployment are part of 4A.
 4. **Retention/size for diagnostics:** the 30-day / 500-record actor-local checkpoint policy is approved and implemented on the feature branch; production capacity and any future activation remain open, without weakening validated stage/flow budgets or creating a new authority.
 
 **Next gate:** human review of the above open decisions and fixture, then explicit approval before implementation; do not merge/designate the v1 behavior active based on design-only checks.
+
+
+**Block 4B27 Core-owned per-unit handoff preview (2026-10-10,
+feature branch only, provider-free):** After the F14/F27 GPT-5.6
+whole-request ESCALATE results, the first offline implementation slice
+is `odyssey_core/candidate_scoped_handoff.py`. It consumes the frozen
+real GPT-6 v3 candidate evidence through the independently validated
+`CoreCandidateContext` and creates **one explicit Core-owned work item
+per verified safe candidate**, with literal original past-clause text,
+source candidate ID, distinct selected roles, grammatical first-person
+predicate evidence, original date source span, and narrowly verified
+predicate/date inheritance. The unresolved future is recorded
+separately as `pending_candidate_ids`, and is absent from all planning
+item source/payloads. Thus F14 yields one independent item and F27
+yields two separately identified items (sharing the full original
+past-clause quote as context, *not* conflating their selected facts).
+No text is rewritten into invented grammatical source material.
+
+This is strictly a **read-only preview, not a connected planner**:
+`can_auto_execute=False`, and `write_authorized=False` on every
+item. No Core provider call, production route, canonical write,
+metadata schema change or model switch has occurred. It currently
+accepts only the reviewed small two-clause F14/F27 shapes and fails
+closed on unsupported structures, cross-clause correction cues,
+condition/polarity/replacement, missing future reference/date,
+missing original date/subject, or missing order/precisely demonstrated
+sequential inheritance. Unit tests replay the saved provider evidence
+and tampered variants. Next implementation gate is to connect each
+reviewed payload to the **existing** GPT-5.6 Core planner as an
+individual planning call, then bind its plan fact to its selected
+original source candidate and retain full-source coverage plus
+durable pending, before any isolated write can be authorized.
+Do not represent this first slice as completion of that runtime
+handoff or as successful real-model scoped planning.
