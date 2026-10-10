@@ -1,4 +1,4 @@
-# Two-case GPT-5.6 Core planning gate — prepared, not authorized or run
+# Two-case GPT-5.6 Core planning gate — executed once after approval
 
 The current experimental Router v3 has passed **four** synthetic GPT-6 source
 semantics checks. This is a **separate** diagnostic for the Core planner's own
@@ -62,3 +62,54 @@ and counts the provider proposes, check it against frozen F09/F10 meaning,
 and validate any proposed write plan with independent Core coverage and
 disposable Markdown tests. The other 23 Router cases and normal DEV/PROD
 activation remain out of scope.
+
+## Executed focused gate — 2026-10-10 (after separate approval)
+
+The operator **explicitly approved the USD 0.07 cumulative cap**. The
+reviewed, pinned F09/F10 gate then executed once in the authorized transient
+Pi user service. Both real GPT-5.6 Luna/low responses completed and passed
+the unchanged production-shaped Core semantic planner schema:
+
+- **F09**: one real Core `WriteAction` with **two** Person writes,
+  `target=Marta, fact="Vive en Lyon."` and
+  `target=Luis, fact="Vive en Lyon."`.
+- **F10**: one real Core `WriteAction` with **one** fact
+  `Se conoció con {{ref:0}} en Lyon.` on Marta, plus a
+  lookup-only `Luis` helper. This is a single reciprocal relationship
+  (not two independent events). The Spanish wording is awkward and will
+  need a later language-quality assessment.
+
+Raw **synthetic-only** Responses JSON, local validation, compiled plan and
+usage are frozen in `results/20261010T200525Z.json`. Observed:
+**21,004 input / 651 output tokens**. At pinned standard rates, estimated
+new Core cost **USD 0.004982**; with previous focused Router calls,
+estimated cumulative **USD 0.0082176** (not invoice).
+
+The first offline replay of these exact real plans revealed two separate
+narrow Core coverage false negatives: implicit person subjects in the
+original Note-targeted F09 facts, and F10's single canonical fact with one
+other-person helper rather than F14's unrelated two-person group event.
+Core now owns separate, conservative provenance guards:
+`candidate_property_evidence.py` verifies source subject ↔ exact Core
+typed target, non-subject location/object content and absence of a
+different candidate's subject in the fact; `candidate_mutual_relation.py`
+verifies one explicit original reciprocal clause, both named participants,
+one Person target, exactly one non-mutating other-person helper, consistent
+predicate and location, and no added dates. They retain the existing
+negative/denial checks; the Router has **no write authority**.
+
+Offline replay of the **real saved provider-generated plans** through Core
+on isolated Markdown vaults now physically proves:
+- F09 two correct independent existing Person facts, as well as creating
+  **two new canonical Person Notes** from the same approved singular
+  identity selection lifecycle when both people are absent and conflict-free
+- F10 one factual Markdown entry on Marta, a genuine Luis wikilink, and
+  the backlinks that make the single fact visible from Luis
+- negative source/target swaps, wrong cities/predicate, extra negation,
+  unsupported date, duplicate relationship and mutating helper all rejected
+  before writing
+
+These are narrowly proven **four focus cases** under seeded/resolvable
+test conditions, **not a new production runtime**, a global relationship
+ontology, the other 23 source cases, or an end-to-end real chat path. No
+new live Core calls or personal vault writes are planned here.

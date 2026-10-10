@@ -932,6 +932,68 @@ actual model responses and independently verify target/cardinality,
 canonical Note representation and any refusal/escalation. Do not claim
 Core production-model acceptance or enable Router v1 before that evidence.
 
+**Block 4B24 live GPT-5.6 Core F09/F10 model evidence and real write replay
+(2026-10-10, feature branch ONLY):** Under explicit user approval of a
+**USD 0.07 cumulative test ceiling**, the previously reviewed and
+SHA-256-pinned two-call `benchmarks/fact_candidate_core_live/run_live.py`
+executed via the Pi's standard approved transient user-service process.
+Both `gpt-5.6-luna`/low model replies completed, returned a locally
+validated `PLAN` with `store=false`, and made **NO vault writes**. Frozen
+synthetic real-provider outputs at
+`benchmarks/fact_candidate_core_live/results/20261010T200525Z.json`
+are reusable by offline CI. Observed usage: **21,004 input + 651 output
+tokens**. At the project's pinned standard non-cached rates, Core cost is
+estimated **USD 0.0049820**; combined with all prior focused Router
+calls **USD 0.0082176** (estimates, NOT a provider invoice), below the
+new authorized USD 0.07 ceiling. There were exactly two Core calls;
+no model, prompt, schema, SDK retry or production runtime change.
+
+- **F09 real Core PLAN:** two independent `person` targets "Marta"
+  and "Luis", each assigned `Vive en Lyon.`. The original subject
+  occurs in Core's target, rather than being repeated inside the fact
+  sentence. The previous source-veto falsely rejected this valid
+  representation because it only searched fact text for the source
+  subject; a Core-owned **source-person target property guard** now
+  verifies the candidate's individually anchored original subject,
+  exact named target, matching original location/content, absence of
+  another candidate's subject in that fact, and the usual unsupported
+  negation protections. Both model-generated writes succeed and are
+  physically read back from two separate seeded fake Person Markdown
+  notes; swaps, duplicates, changed locations and negation are rejected
+  before any write.
+- **F10 real Core PLAN:** exactly **one** fact `Se conoció con
+  {{ref:0}} en Lyon.` on target Marta, and a **non-mutating identity
+  helper** resolving Luis. This represents one mutual meeting with an
+  ordinary backlink to Marta visible from Luis; it does not duplicate
+  the fact on Luis's Note or invent a historic date. The phrase is
+  somewhat awkward Spanish and is *not* language-quality certification.
+  The old two-person grouped-event guard expected two referenced
+  people and was inappropriate for a canonical fact stored on one
+  person. A separate **Core-only reciprocal source relation guard**
+  checks the two original named parties, exact shared `se ...`
+  predicate and source location, directed target's membership in the
+  pair, exactly one reference helper for the other person, only one
+  fact and no unintended helper mutations. It rejects wrong targets,
+  references, invented locations/dates, unrelated predicates and
+  accidental duplication. F10's actual saved Core `PLAN` now
+  executes successfully against seeded disposable Person Markdown,
+  physically verifies the one fact and its canonical Luis wikilink,
+  and confirms a backlink from Luis to the Marta fact. Reverse
+  storage (Luis with a Marta link) remains source-valid.
+- **Scope/limits:** These are **fixed F09/F10 synthetic utterances** and
+  **existing, unambiguous seeded Person identities**. The relation
+  guard is deliberately narrow for explicit two-name reciprocal
+  constructions; it is not a universal relationship parser and has
+  not exercised the normal singular-person CREATE lifecycle. The
+  source/lexical tests are negative guards, not general truth
+  certification. All physical Markdown writes are **disposable
+  offline-test vaults only**, never the real user vault. Actual
+  model calls returned plans but never executed them. Four-case
+  Router semantic evidence still stands; normal Router v0 and
+  GPT-5.6 Core production configurations remain unchanged. The
+  **other 23 Router cases, full runtime activation and independent
+  broader semantic Core gate** are not completed.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

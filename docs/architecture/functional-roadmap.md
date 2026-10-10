@@ -253,6 +253,34 @@ evaluate its actual two Core plans/clarifications without assuming an
 undated event belongs to today's Calendar Day. Leave F14/F27 and the
 23 other Router design cases untouched for this distinct Core gate.
 
+**F09/F10 real-model Core acceptance after explicit new budget approval
+(2026-10-10):** The pinned, unchanged experimental **GPT-5.6 Luna/low**
+Core planner returned two locally valid real `PLAN` outcomes for the
+saved GPT-6 v3 Router sources: F09 chose two different existing
+`person` targets and one `Vive en Lyon.` fact each; F10 chose
+**one linked fact** on Marta's Person Note and one canonical
+reference-only lookup to Luis. No invented historical date and no
+duplicate reciprocal fact. The user explicitly expanded the cumulative
+focused-testing authorization to **USD 0.07**. Core calls used
+**21,004 input / 651 output tokens**, estimated **USD 0.0049820**
+at pinned standard rates; including previous three Router gates, the
+estimated focused-testing total is **USD 0.0082176** (not an
+invoice). Core's narrow source evidence guards initially rejected
+the valid implicit-subject F09 and one-reference mutual F10 plans;
+they now require an exact source subject-to-target link plus original
+location proof for independent properties, or exact two-party reciprocal
+source evidence, one directed Person write and one immutable-reference
+helper for F10. Full **offline replay of real provider-generated**
+F09/F10 plans now physically writes the correct facts to two isolated
+seeded Person Markdown Notes / one isolated Marta Note with a Luis
+wikilink, verifies physical fact readback and the **backlink visible
+from Luis**, and rejects wrong targets, other subjects, negation,
+invented location/date, duplicate relationship facts and helper
+mutations. This validates only **these four already-agreed
+synthetic Router cases**, not the remaining 23 or a live request
+pipeline; no normal Router activation, real vault write, model
+migration or consent to additional spending is implied.
+
 **F27 exact sequential-source Core pilot (2026-10-10):** The two separate
 conversation facts for `hablé con Eric y después con Luis` now also pass a
 real (fake-model) semantic Core compilation, source-before-write candidate

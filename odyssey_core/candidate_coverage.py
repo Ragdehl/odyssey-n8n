@@ -16,6 +16,8 @@ from typing import Literal
 from .candidate_context import CoreCandidateContext
 from .candidate_fact_readback import CandidateFactReadback
 from .candidate_multi_participant import validate_two_named_participant_fact
+from .candidate_mutual_relation import validate_one_mutual_relationship_fact
+from .candidate_property_evidence import validate_subject_property_fact
 from .candidate_semantic_veto import veto_unsafe_literal_match
 from .candidate_sequential_contacts import validate_two_sequential_contacts
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
@@ -219,12 +221,32 @@ def validate_candidate_coverage_manifest(
         lexical = original
         for ref_index, ref in enumerate(unit.references):
             lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+        if context.candidates[index].kind == "property":
+            other_subjects = tuple(
+                role.span.text
+                for other_index, other in enumerate(context.candidates)
+                if other_index != index and other.kind == "property"
+                for role in other.roles
+                if role.role == "subject"
+            )
+            lexical = validate_subject_property_fact(
+                source,
+                context.candidates[index],
+                unit,
+                lexical,
+                other_source_subjects=other_subjects,
+            )
         veto_unsafe_literal_match(source, context, index, lexical)
         if unit.references:
             if len(unit.facts) == 1:
-                validate_two_named_participant_fact(
-                    source, context.candidates[index], plan, action_index, unit_index
-                )
+                if context.candidates[index].kind == "relationship":
+                    validate_one_mutual_relationship_fact(
+                        source, context.candidates[index], plan, action_index, unit_index
+                    )
+                else:
+                    validate_two_named_participant_fact(
+                        source, context.candidates[index], plan, action_index, unit_index
+                    )
                 if fact_index != 0:
                     raise ValueError("Grouped source claim has wrong Core fact")
             elif len(unit.facts) == 2:

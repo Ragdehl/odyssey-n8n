@@ -1,0 +1,43 @@
+{
+  "mode": "LIVE_CORE_PLAN_ONLY",
+  "cases": [
+    "F09",
+    "F10"
+  ],
+  "model": "gpt-5.6-luna",
+  "effort": "low",
+  "max_calls": 2,
+  "new_conservative_reservation_usd": 0.0634402,
+  "previous_router_estimated_spend_usd": 0.0032356,
+  "proposed_cumulative_cap_usd": 0.07,
+  "may_authorize_writes": false,
+  "core_semantics_verified": false,
+  "results": [
+    {
+      "case": "F09",
+      "raw_model_response": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vive en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vive en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "usage": {
+        "input_tokens": 10526,
+        "output_tokens": 263
+      },
+      "provider_status": "completed",
+      "outcome": "PLAN",
+      "action_count": 1,
+      "compiled_plan_repr": "RequestPlan(actions=(WriteAction(units=(KnowledgeUnit(target=SelectionCriteria(entity='Marta', query='Marta', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=('Vive en Lyon.',), references=(), cardinality='one', destination_type=None, reference_lookup_only=False, fact_temporal_anchors=(), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity='Luis', query='Luis', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=('Vive en Lyon.',), references=(), cardinality='one', destination_type=None, reference_lookup_only=False, fact_temporal_anchors=(), force_create=False)), kind='write'),), limitations=(), presentation_intent='answer')",
+      "validation": "source_and_local_plan_valid"
+    },
+    {
+      "case": "F10",
+      "raw_model_response": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Se conoció con \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "usage": {
+        "input_tokens": 10478,
+        "output_tokens": 388
+      },
+      "provider_status": "completed",
+      "outcome": "PLAN",
+      "action_count": 1,
+      "compiled_plan_repr": "RequestPlan(actions=(WriteAction(units=(KnowledgeUnit(target=SelectionCriteria(entity='Marta', query='Marta', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=('Se conoció con {{ref:0}} en Lyon.',), references=(KnowledgeReference(target_index=1, role='identity', mention='Luis', selection=None),), cardinality='one', destination_type=None, reference_lookup_only=False, fact_temporal_anchors=(), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity='Luis', query='Luis', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=(), references=(), cardinality='one', destination_type=None, reference_lookup_only=True, fact_temporal_anchors=(), force_create=False)), kind='write'),), limitations=(), presentation_intent='answer')",
+      "validation": "source_and_local_plan_valid"
+    }
+  ]
+}
