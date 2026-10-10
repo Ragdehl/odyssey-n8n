@@ -170,3 +170,84 @@ def test_f26_document_create_then_followup_reuses_same_created_id(tmp_path):
         parse_note(repo.read_text(path)).metadata.get("id") != "report-id"
         for path in repo.list_markdown_paths()
     )
+
+
+@pytest.mark.parametrize("case_id,existing_report", [("F23", False), ("F26", True), ("F26", False)])
+def test_real_dependency_attestation_checks_actual_stable_ids_after_core_writes(
+    tmp_path, case_id, existing_report
+):
+    """Core's actual model and physical canonical ID satisfy a separate audit."""
+    from odyssey_core.candidate_dependency_attestation import (
+        attest_two_dependent_core_plans,
+        review_persisted_dependency,
+    )
+
+    source, context, entries = _plans(case_id)
+    plans = tuple(p for _request, p in entries)
+    proof = attest_two_dependent_core_plans(source, context, plans)
+    assert not proof.canonical_reuse_verified
+    assert not proof.may_write_notes
+
+    repo, index = _vault(tmp_path, existing_report=existing_report)
+    results = tuple(
+        _replay(
+            repo,
+            index,
+            case_id,
+            entries,
+            discover_missing=(case_id == "F26" and not existing_report),
+        )
+    )
+    certified = review_persisted_dependency(source, context, plans, proof, results, repo)
+    assert certified.canonical_reuse_verified
+    assert not certified.may_write_notes
+    assert certified.source_digest == proof.source_digest
+    assert certified.candidate_ids == proof.candidate_ids
+
+
+def test_document_reference_cannot_be_certified_from_similar_names_alone(tmp_path):
+    """The exact linked Markdown note must match the first Core stable ID."""
+    from odyssey_core.candidate_dependency_attestation import (
+        DependentFactAttestationError,
+        attest_two_dependent_core_plans,
+        review_persisted_dependency,
+    )
+
+    source, context, entries = _plans("F26")
+    plans = tuple(plan for _, plan in entries)
+    proof = attest_two_dependent_core_plans(source, context, plans)
+    repo, index = _vault(tmp_path, existing_report=True)
+    results = tuple(_replay(repo, index, "F26", entries))
+
+    day = tmp_path / "vault" / "calendar/days/2026-10-04.md"
+    original = day.read_text(encoding="utf-8")
+    assert "[[El informe|El informe]]" in original
+    day.write_text(
+        original.replace("[[El informe|El informe]]", "[[Ana|El informe]]"),
+        encoding="utf-8",
+    )
+    with pytest.raises(DependentFactAttestationError, match="same canonical"):
+        review_persisted_dependency(source, context, plans, proof, results, repo)
+
+
+def test_missing_or_forged_original_fact_marker_blocks_persisted_proof(tmp_path):
+    from odyssey_core.candidate_dependency_attestation import (
+        DependentFactAttestationError,
+        attest_two_dependent_core_plans,
+        review_persisted_dependency,
+    )
+
+    source, context, entries = _plans("F23")
+    plans = tuple(plan for _, plan in entries)
+    proof = attest_two_dependent_core_plans(source, context, plans)
+    repo, index = _vault(tmp_path, existing_report=False)
+    results = tuple(_replay(repo, index, "F23", entries))
+    note = tmp_path / "vault" / "Odyssey.md"
+    saved = note.read_text(encoding="utf-8")
+    assert "request=F23-real-model-1" in saved
+    note.write_text(
+        saved.replace("request=F23-real-model-1", "request=unrelated"),
+        encoding="utf-8",
+    )
+    with pytest.raises(DependentFactAttestationError, match="marker"):
+        review_persisted_dependency(source, context, plans, proof, results, repo)

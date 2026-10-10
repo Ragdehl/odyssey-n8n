@@ -1323,3 +1323,62 @@ provider input/output tokens; cumulative focused Router+Core+Temporal
 estimated standard-rate total **USD 0.0438566** (not billed amount),
 under the explicit USD 0.07 cumulative test ceiling. No DEV/PROD
 activation, real Notes access, credential changes or model switch.
+
+
+**Block 4B30 — bounded, generic original-source dependency attestation
+(2026-10-11, not runtime-enabled):** The reusable
+`odyssey_core/candidate_dependency_attestation.py` now checks the
+*full original source* against **two independently compiled, saved-real
+GPT-5.6 Core plans**. It reuses Core's existing source-validated
+candidate dependency/coordination evidence rather than reinterpreting
+language in Router or producing another planner.
+
+For **shared-subject properties**, it demands one uniquely original
+subject, one explicit inherited subject/predicate origin, both Core
+targets selecting the same typed note, independent source-grounded
+objects/locations, consistent original predicate and source content,
+and a uniquely source-signaled other-instance relation. Changes of
+project, component, property noun, or fabricated additional subject
+fail closed. It checks both F23's real model output and the previously
+unseen Nébula/API/interfaz vocabulary.
+
+For **a preceding typed identity plus anaphoric later fact**, it
+demands one explicit original antecedent, one source reference in the
+dependent fact, the exact same typed source identity in the first
+Core target and the second plan's canonical reference helper, a
+separately source-grounded recipient, and distinct correctly ordered
+Core temporal anchors. Wrong document, wrong person, wrong target
+type/day or unsatisfied references fail closed. It checks F26's
+real model output plus the unseen contrato/Marta vocabulary.
+The first target may be any singular, non-Day canonical Note type
+instead of hardcoding the word "informe". These rules are
+source-role/type based, not case-ID special handling; they
+deliberately reject unsupported, ambiguous or negated clauses.
+
+Attestations carry a full-source SHA-256 digest, hashes of both Core
+plans and the exact original source candidate IDs. The initial
+`attest_two_dependent_core_plans` proof **never authorizes a write or
+claims canonical reuse**. After the ordinary Core machinery has
+already written in a **disposable test vault**, its read-only
+`review_persisted_dependency` additionally verifies that the
+same exact Core request markers physically exist on the canonical
+Notes, that shared-subject facts changed the same stable-ID Note,
+or that the second document-anaphora fact contains a wikilink to
+the exact physical path whose stable ID was written by the first.
+An altered link with the original display text or a forged fact
+marker fails; both existing-document reuse and ordinary typed
+document creation are exercised. Even a successful postwrite
+certificate has `may_write_notes=False`.
+
+**Release gate still open:** Original experimental
+`build_candidate_coverage_manifest` deliberately has not
+been relaxed. It does not yet consume this new independently
+validated dependency certificate; the runtime chat does not
+automatically route through the dependent two-fact planner.
+A write-capable integration still needs reviewed association of
+candidate ordinals, pre-write canonical target freshness,
+transactional sequencing of new identities, and postwrite
+original-source completeness. Do not use post-write evidence as
+a pre-write permission. F19/F20 conditions/corrections are not
+authorized by this work. No new provider calls, production prompt
+or schema changes, DEV/PROD deployments, or personal-vault access.
