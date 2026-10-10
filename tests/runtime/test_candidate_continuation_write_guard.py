@@ -10,9 +10,12 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from odyssey_core.application import ApplicationStatus, execute_request
 from odyssey_core.candidate_continuation_guard import build_selected_candidate_guard
 from odyssey_core.request_planning import RequestPlan, WriteAction
+from odyssey_core.temporal import TemporalAnchor
 from tests.runtime.test_candidate_pending_state import NOW, _ready, _reply
 from tests.runtime.test_temporal_user_path_e2e import (
     SCHEMA,
@@ -156,3 +159,100 @@ def test_unexpected_extra_write_unit_is_rejected_by_core_guard(tmp_path: Path) -
     result = _attempt(repo, vault, guard, excessive)
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert not (vault.root / "calendar" / "days" / "2026-10-05.md").exists()
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    (
+        "extra_second_write_action",
+        "extra_second_retrieve_action",
+        "wrong_day",
+        "wrong_fact_date",
+        "wrong_activity",
+        "extra_fact",
+        "extra_limitation",
+        "invented_day_filter",
+        "malformed_selected_source",
+        "wrong_capture_time",
+    ),
+)
+def test_selected_continuation_plan_is_rejected_before_any_write(
+    tmp_path: Path, unsafe: str
+) -> None:
+    """One answer cannot grant authority to an extra action or wrong future fact."""
+    preview, repo, vault, _ = _ready(tmp_path)
+    assert _reply(repo, vault, "Con Luis").outcome == "choice_recorded"
+    guard = build_selected_candidate_guard(
+        repo,
+        conversation_id="chat-1",
+        request_id=preview.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    assert guard is not None
+    plan = _linked_day_plan(
+        "2026-10-05", "Iré al cine con {{ref:0}}.", "él", "2026-10-05", target_name="Luis"
+    )
+    action = plan.actions[0]
+    day, helper = action.units
+    if unsafe == "extra_second_write_action":
+        plan = replace(plan, actions=(action, action))
+    elif unsafe == "extra_second_retrieve_action":
+        # A later unrelated action must not bypass the first safe write.
+        from odyssey_core.request_planning import RetrieveAction
+
+        plan = replace(plan, actions=(action, RetrieveAction(day.target)))
+    elif unsafe == "wrong_day":
+        day = replace(day, target=replace(day.target, query="2026-10-06"))
+    elif unsafe == "wrong_fact_date":
+        day = replace(day, fact_temporal_anchors=((TemporalAnchor("2026-10-06"),),))
+    elif unsafe == "wrong_activity":
+        day = replace(day, facts=("Iré al teatro con {{ref:0}}.",))
+    elif unsafe == "extra_fact":
+        day = replace(day, facts=(*day.facts, "Además compraré pan."))
+    elif unsafe == "extra_limitation":
+        plan = replace(plan, limitations=("some semantic uncertainty",))
+    elif unsafe == "invented_day_filter":
+        day = replace(day, target=replace(day.target, entity="Luis"))
+    elif unsafe == "malformed_selected_source":
+        guard = replace(guard, pending_source_text="Mañana iré al teatro con él")
+    elif unsafe == "wrong_capture_time":
+        guard = replace(guard, original_captured_at="2026-10-06T17:35:00+02:00")
+    if unsafe in {
+        "wrong_day",
+        "wrong_fact_date",
+        "wrong_activity",
+        "extra_fact",
+        "invented_day_filter",
+    }:
+        plan = replace(plan, actions=(WriteAction((day, helper)),))
+    before = {str(path): vault.read_text(path) for path in vault.list_markdown_paths()}
+    result = _attempt(repo, vault, guard, plan)
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "CANDIDATE_CONTINUATION_UNSAFE_PLAN"
+    assert result.action_results == ()
+    assert result.affected_stable_note_ids == ()
+    assert not (vault.root / "calendar" / "days" / "2026-10-05.md").exists()
+    assert {str(path): vault.read_text(path) for path in vault.list_markdown_paths()} == before
+    assert repo.read(preview.request_id)["status"] == "selected"
+
+
+def test_late_reply_still_uses_original_capture_date_not_late_clock(tmp_path: Path) -> None:
+    """The original 'mañana' date stays pinned even when answered much later."""
+    preview, repo, vault, _ = _ready(tmp_path)
+    assert _reply(repo, vault, "Con Luis").outcome == "choice_recorded"
+    guard = build_selected_candidate_guard(
+        repo,
+        conversation_id="chat-1",
+        request_id=preview.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    assert guard is not None
+    original = _linked_day_plan(
+        "2026-10-05", "Iré al cine con {{ref:0}}.", "él", "2026-10-05", target_name="Luis"
+    )
+    completed = _attempt(repo, vault, guard, original, request_id="late-reply")
+    assert completed.status is ApplicationStatus.COMPLETED
+    assert "date:2026-10-05" in completed.affected_stable_note_ids
+    assert "date:2026-10-11" not in completed.affected_stable_note_ids

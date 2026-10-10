@@ -9,12 +9,13 @@ activation must wait for a separate semantic gate and pending completion flow.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from .application import WritePreflightGuardError
 from .candidate_pending_state import CandidatePendingRepository
 from .reference_preflight import UnitTargetPreflight
-from .request_planning import WriteAction
+from .request_planning import RequestPlan, WriteAction
 from .storage import VaultRepository
 from .write_target import WriteTargetOutcome
 
@@ -30,6 +31,74 @@ class SelectedCandidateWriteGuard:
     selected_guard: str
     pending_reference_text: str
     original_captured_at: str
+    pending_source_text: str
+
+    def validate_request_plan(self, plan: RequestPlan) -> None:
+        """Reject extra actions or wrong event/date before any Core write begins.
+
+        This opt-in pilot handles only the exact frozen F14/F27 pending cinema
+        phrase. A broader source grammar will require independent semantic
+        evidence; an arbitrary model paraphrase must not acquire write access.
+        """
+        if (
+            not isinstance(plan, RequestPlan)
+            or len(plan.actions) != 1
+            or not isinstance(plan.actions[0], WriteAction)
+            or plan.limitations
+            or plan.presentation_intent != "answer"
+            or self.pending_source_text != "Mañana iré al cine con él"
+            or self.pending_reference_text != "él"
+        ):
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_UNSUPPORTED_PLAN")
+        try:
+            expected_date = (
+                datetime.fromisoformat(self.original_captured_at).date() + timedelta(days=1)
+            ).isoformat()
+        except (TypeError, ValueError, OverflowError) as error:
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_INVALID_CLOCK") from error
+        action = plan.actions[0]
+        if len(action.units) != 2:
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_UNSUPPORTED_WRITE_SHAPE")
+        consumers = [item for item in action.units if item.facts]
+        helpers = [item for item in action.units if item.reference_lookup_only]
+        if len(consumers) != 1 or len(helpers) != 1 or consumers[0] == helpers[0]:
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_UNSUPPORTED_WRITE_SHAPE")
+        fact, helper = consumers[0], helpers[0]
+        target = fact.target
+        if (
+            fact.intent != "record"
+            or fact.force_create
+            or fact.reference_lookup_only
+            or fact.cardinality != "one"
+            or fact.properties
+            or fact.tag_changes
+            or fact.destination_type is not None
+            or fact.facts != ("Iré al cine con {{ref:0}}.",)
+            or len(fact.references) != 1
+            or fact.references[0].mention != self.pending_reference_text
+            or len(fact.fact_temporal_anchors) != 1
+            or len(fact.fact_temporal_anchors[0]) != 1
+            or fact.fact_temporal_anchors[0][0].value != expected_date
+            or target.type != "calendar_day"
+            or target.query != expected_date
+            or target.entity is not None
+            or target.filters
+            or target.link_scope is not None
+            or target.self_target is not None
+            or target.relational_reference is not None
+            or target.semantic_set is not None
+            or target.collection_subject is not None
+            or helper.force_create
+            or not helper.reference_lookup_only
+            or helper.intent != "record"
+            or helper.facts
+            or helper.references
+            or helper.properties
+            or helper.tag_changes
+            or helper.destination_type is not None
+            or helper.cardinality != "one"
+        ):
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SOURCE_OR_DATE_MISMATCH")
 
     def __call__(
         self,
@@ -125,4 +194,5 @@ def build_selected_candidate_guard(
         decision.selected_guard,
         ref,
         decision.captured_at,
+        record["pending"][0]["text"],
     )

@@ -556,6 +556,55 @@ def execute_request(
                 started,
             )
         )
+    # Some opt-in write guards (notably source-pending continuation) need to
+    # reject an entire multi-action plan *before* its first action can write.
+    # Ordinary app/task/reference guards without this method are unchanged;
+    # their resolved-target checks still occur inside each WriteAction.
+    request_plan_guard = getattr(write_preflight_guard, "validate_request_plan", None)
+    if callable(request_plan_guard):
+        guard_started = monotonic()
+        try:
+            request_plan_guard(plan)
+        except Exception as error:
+            stages.append(
+                _stage(
+                    "request_plan_guard",
+                    OperationalOutcome.FAILED,
+                    guard_started,
+                    monotonic,
+                    error,
+                    started,
+                )
+            )
+            return _with_operational(
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    clarification_code="CANDIDATE_CONTINUATION_UNSAFE_PLAN",
+                    history=(
+                        GitHistoryResult(
+                            HistoryStatus.NOT_ATTEMPTED, reason="request plan guard rejected plan"
+                        )
+                        if history_recorder is not None
+                        else GitHistoryResult.disabled()
+                    ),
+                ),
+                stages,
+                started,
+                monotonic,
+            )
+        stages.append(
+            _stage(
+                "request_plan_guard",
+                OperationalOutcome.COMPLETED,
+                guard_started,
+                monotonic,
+                None,
+                started,
+            )
+        )
     references: list[str] = []
     for planned_action in plan.actions:
         for unit in getattr(planned_action, "units", ()):

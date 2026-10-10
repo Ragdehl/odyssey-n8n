@@ -184,6 +184,14 @@ contract. Incorrect order/name/helper/time and invented pending pronoun scope
 fail closed. This is a narrow regression with injected frozen model responses;
 no provider-quality proof or DEV activation is claimed.
 
+**Request-wide F14/F27 continuation safety (2026-10-10):** Added an
+opt-in before-any-action Core guard for the selected `Con Luis` continuation.
+A single source-anchored cinema fact, the original `mañana` date and one
+existing canonical helper are required; extra RequestPlan actions and
+mismatched event/date are rejected without writing. Last-moment identity
+checks remain intact. This is a narrow disposable-vault pilot with synthetic
+planner outputs, not general semantic certification or live activation.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the

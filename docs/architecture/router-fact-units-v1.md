@@ -698,6 +698,32 @@ outputs in this test are explicitly frozen deterministic fakes, NOT real
 GPT-5.6 Luna model acceptance. No new provider calls, DEV/PROD wiring,
 model-facing prompt/schema change or user-vault writes occurred.
 
+**Block 4B16 selected-continuation whole-plan preflight (2026-10-10,
+feature-branch-only):** The former `SelectedCandidateWriteGuard` checked one
+Core write action's resolved identity immediately before that action, but
+another `RequestPlan` action could write before/after it, and the guard had
+not established that the saved future event/date was preserved. A narrow
+request-level check now runs **before the action loop or history snapshot**,
+only for injected guards exposing `validate_request_plan`; normal app/Task
+Core guards keep their previous contract. Rejection returns an empty
+`NEEDS_ATTENTION` result and no writes; later identity/source-note checks
+remain active at resolved-target preflight. The opt-in v2 selected guard
+requires exactly one `WriteAction` with one dependent cinema fact and one
+canonical lookup-only helper, the exact reviewed `Mañana iré al cine con él`
+source candidate, no unsupported additional actions/limitations, and a
+`calendar_day` target + one date-only Temporal anchor equal to the **day after
+original offset-aware capture time**, even if the human answers much later.
+The exact `Iré al cine con {{ref:0}}.` pattern is purposely limited to this
+F14/F27 proof, not a general source-semantic equivalence engine. Existing
+canonical choice proof still verifies Luis at the last moment. Regression
+sentinels reject extra writes and reads, wrong activity, lost/shifted date,
+changed targets/source evidence and inserted facts **before any mutation**,
+while the permitted continuation still produces exactly one disposable Day
+fact without replaying previous events. Core note/event semantics remain
+unverified for broader natural language; durable `selected` state is still
+NOT marked completed automatically. No provider calls, model switch, DEV or
+PROD deployment.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source
