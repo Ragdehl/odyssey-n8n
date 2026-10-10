@@ -1,0 +1,32 @@
+{
+  "stages": [
+    [
+      "F23",
+      "candidate-1"
+    ],
+    [
+      "F23",
+      "candidate-2"
+    ],
+    [
+      "F26",
+      "candidate-1"
+    ],
+    [
+      "F26",
+      "candidate-2"
+    ]
+  ],
+  "sha256": {
+    "F23/candidate-1": "0acf0bdb7af1faecd515d0cf125554e112d35e282ff8173bd66805f15921bc4a",
+    "F23/candidate-2": "ec654788dbe4af0b775493fc0e47bee674b42147ace9626cbd88bccacbb8524f",
+    "F26/candidate-1": "ad982ba3716b7338ec8dd874de45196983a6c8360d8e191ae5d9758c01f64e80",
+    "F26/candidate-2": "8590034199655ad091a677977be7f1f009c0ddc379fc9745e0191ed912073a8e"
+  },
+  "bytes": {
+    "F23/candidate-1": 55610,
+    "F23/candidate-2": 55844,
+    "F26/candidate-1": 57816,
+    "F26/candidate-2": 58164
+  }
+}
