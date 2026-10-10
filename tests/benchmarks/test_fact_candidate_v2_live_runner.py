@@ -68,3 +68,50 @@ def test_four_fake_responses_are_locally_reviewed_and_not_executed(monkeypatch) 
     assert result["oracle_comparison"]["live_model_quality_verified"] is False
     assert result["live_model_quality_verified"] is False
     assert all(call["store"] is False for call in responses.calls)
+
+
+def test_v2_prompt_retains_entire_v1_teaching_and_only_adds_semantic_clarity() -> None:
+    """Review exact prompt inheritance, unchanged model/schema, and bounded calls."""
+    old, _old_budget = reviewed_calls()
+    revised, new_budget = reviewed_calls(prompt_revision="v2")
+    assert 0 < new_budget <= MAX_SPEND_USD
+    assert [id for id, _ in old] == [id for id, _ in revised]
+    for (_case, prior), (_case2, current) in zip(old, revised, strict=True):
+        prior_prompt = prior["input"][0]["content"]
+        revised_prompt = current["input"][0]["content"]
+        assert revised_prompt.startswith(prior_prompt)
+        assert len(revised_prompt) > len(prior_prompt)
+        for fragment in (
+            "Split independent properties",
+            "ONE mutual relationship",
+            "date",
+            "reference",
+            "explicit sequencing",
+        ):
+            assert fragment in revised_prompt
+        assert {k: v for k, v in prior.items() if k != "input"} == {
+            k: v for k, v in current.items() if k != "input"
+        }
+
+
+def test_v2_fake_provider_outcomes_remain_source_only(monkeypatch) -> None:
+    """New prompt still feeds the same local untrusted source validator."""
+    monkeypatch.setenv(RUN_ENV, "1")
+    responses = _FakeResponses()
+    result = run_once(
+        live=True,
+        client=SimpleNamespace(responses=responses),
+        prompt_revision="v2",
+    )
+    assert result["prompt_revision"] == "v2"
+    assert len(responses.calls) == 4
+    assert result["oracle_comparison"]["all_fixture_matches"] is True
+    assert result["live_model_quality_verified"] is False
+
+
+def test_v2_dry_run_cannot_call_provider(monkeypatch) -> None:
+    monkeypatch.delenv(RUN_ENV, raising=False)
+    result = run_once(live=False, client=object(), prompt_revision="v2")
+    assert result["mode"] == "DRY_RUN_NO_PROVIDER"
+    assert result["call_limit"] == 4
+    assert result["conservative_reservation_usd"] < MAX_SPEND_USD

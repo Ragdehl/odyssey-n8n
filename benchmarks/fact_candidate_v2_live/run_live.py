@@ -19,8 +19,9 @@ from benchmarks.fact_candidate_v2_preflight.check import audit, captured_request
 from benchmarks.fact_candidate_v2_preflight.compare_saved_outputs import (
     compare_saved_proposals,
 )
-from odyssey_apps.fact_candidates import validate_fact_candidate_proposal
-from tests.apps.test_fact_candidates import CASES
+from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter, validate_fact_candidate_proposal
+from tests.apps.test_fact_candidates import CASES, _from_design
+from tests.runtime.test_fact_candidate_planning_vertical import _sdk_fake
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -29,22 +30,36 @@ CASE_IDS = ("F14", "F27", "F09", "F10")
 RUN_ENV = "ODYSSEY_ROUTER_V2_LIVE_APPROVED"
 
 
-def reviewed_calls() -> tuple[list[tuple[str, dict[str, Any]]], float]:
-    """Use exact production-shaped requests; fail if pricing/configuration drifts."""
-    rows = [(case_id, req) for case_id, stage, req in captured_requests() if stage == "router"]
+def reviewed_calls(
+    *, prompt_revision: str = "v1"
+) -> tuple[list[tuple[str, dict[str, Any]]], float]:
+    """Verify exact reviewed production-shaped requests and reserve worst-case costs."""
+    if prompt_revision == "v1":
+        rows = [(case_id, req) for case_id, stage, req in captured_requests() if stage == "router"]
+        snapshot = ROOT / "benchmarks/fact_candidate_v2_preflight/playground_router_requests.json"
+    elif prompt_revision == "v2":
+        rows = []
+        cases = {case["id"]: case for case in CASES}
+        for case_id in CASE_IDS:
+            case = cases[case_id]
+            fake, calls = _sdk_fake(_from_design(case))
+            OpenAIFactCandidateRouter(fake, prompt_revision="v2").propose(case["source"])
+            if len(calls) != 1:
+                raise ValueError("Revised Router must emit exactly one request per case")
+            rows.append((case_id, calls[0]))
+        snapshot = HERE / "prompt_v2_requests.json"
+    else:
+        raise ValueError("Unknown Router prompt revision")
     if tuple(case_id for case_id, _req in rows) != CASE_IDS:
         raise ValueError("Unexpected Router test cases")
-    reference = json.loads(
-        (ROOT / "benchmarks/fact_candidate_v2_preflight/playground_router_requests.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    reference = json.loads(snapshot.read_text(encoding="utf-8"))
     snapshots = reference["calls"]
     snapshot_by_id = {item["id"]: item["request"] for item in snapshots}
     if len(snapshots) != 4 or any(snapshot_by_id.get(case_id) != req for case_id, req in rows):
         raise ValueError("Router request changed since independently reviewed snapshot")
     costs = audit()["calls"]
     limits = {(row["case"], row["stage"]): row for row in costs}
+    rates = json.loads((ROOT / "config/runtime-pricing-snapshot.json").read_text())["models"]
     total = 0.0
     for case_id, req in rows:
         if (
@@ -58,20 +73,50 @@ def reviewed_calls() -> tuple[list[tuple[str, dict[str, Any]]], float]:
             or req["input"][1]["content"] != next(c["source"] for c in CASES if c["id"] == case_id)
         ):
             raise ValueError("Router request violates reviewed execution contract")
-        total += limits[(case_id, "router")]["cost_upper_usd"]
+        if prompt_revision == "v1":
+            total += limits[(case_id, "router")]["cost_upper_usd"]
+        else:
+            price = rates[req["model"]]
+            request_bytes = len(json.dumps(req, ensure_ascii=False, default=str).encode())
+            total += (
+                (2 * request_bytes + 200)
+                * max(price["input_per_million"], price.get("cache_write_per_million", 0))
+                + req["max_output_tokens"] * price["output_per_million"]
+            ) / 1_000_000
     total = round(total, 8)
-    if total > MAX_SPEND_USD or total > 0.011819:
+    if total > MAX_SPEND_USD or (prompt_revision == "v1" and total > 0.011819):
         raise ValueError("Conservative Router cost ceiling exceeded")
+    if prompt_revision == "v2":
+        # Prior synthetic v1 request usage is observed; use the pinned standard
+        # rates conservatively before reserving the entire new v2 envelope.
+        prior_file = HERE / "results/20261010T185618Z.json"
+        prior = json.loads(prior_file.read_text(encoding="utf-8"))
+        if prior.get("mode") != "LIVE_SYNTHETIC_ROUTER" or len(prior["results"]) != 4:
+            raise ValueError("Prior Router gate cost evidence is missing")
+        rate = rates["gpt-6-luna"]
+        previously_observed_usd = sum(
+            (
+                row["usage"]["input_tokens"] * rate["input_per_million"]
+                + row["usage"]["output_tokens"] * rate["output_per_million"]
+            )
+            / 1_000_000
+            for row in prior["results"]
+        )
+        if previously_observed_usd + total > MAX_SPEND_USD:
+            raise ValueError("Cumulative Router v1/v2 budget envelope exceeds authorization")
     return rows, total
 
 
-def run_once(*, live: bool, client: Any | None = None) -> dict[str, Any]:
-    """Only live=True with explicit permission may construct a network client."""
-    calls, reserved = reviewed_calls()
+def run_once(
+    *, live: bool, client: Any | None = None, prompt_revision: str = "v1"
+) -> dict[str, Any]:
+    """Only explicitly approved live requests may construct a network client."""
+    calls, reserved = reviewed_calls(prompt_revision=prompt_revision)
     summary: dict[str, Any] = {
         "mode": "LIVE_SYNTHETIC_ROUTER" if live else "DRY_RUN_NO_PROVIDER",
         "model": "gpt-6-luna",
         "reasoning": "low",
+        "prompt_revision": prompt_revision,
         "cases": list(CASE_IDS),
         "call_limit": len(calls),
         "conservative_reservation_usd": reserved,
@@ -128,8 +173,9 @@ def run_once(*, live: bool, client: Any | None = None) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bounded v2 synthetic Router gate")
     parser.add_argument("--live", action="store_true", help="Run exactly four approved calls")
+    parser.add_argument("--prompt-v2", action="store_true", help="Select reviewed revised prompt")
     args = parser.parse_args()
-    result = run_once(live=args.live)
+    result = run_once(live=args.live, prompt_revision="v2" if args.prompt_v2 else "v1")
     if args.live:
         folder = HERE / "results"
         folder.mkdir(exist_ok=True)

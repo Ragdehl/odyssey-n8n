@@ -407,6 +407,42 @@ def as_candidate_preview(proposal: FactCandidateProposal) -> dict[str, Any]:
     return {"version": 1, "user_message": proposal.source, "candidates": candidates}
 
 
+# Proposed v2 model teaching is opt-in and preserves every v1 instruction.
+# A clean local/provider gate must precede changing any runtime default.
+FACT_CANDIDATE_PROMPT_V2_EXTENSION = (
+    " Additional v2 source-semantics rules: Split independent properties "
+    "by their subjects even when one plural verb/predicate is shared: "
+    "each fact must be independently correctable for that subject. "
+    "For example, 'El coche y la moto están en el garaje' expresses two "
+    "independent location properties, each with its own subject source "
+    "anchor and an exact shared predicate source role. By contrast, "
+    "'Ana y Bea se conocieron' expresses ONE mutual relationship event, "
+    "not two independent meeting events. A single coherent action with "
+    "two named participants is ONE occurrence, retaining each separately "
+    "identifiable original name as source evidence; explicit sequencing "
+    "like 'después con' produces TWO occurrences. Never infer simultaneity. "
+    "Use role 'date' for exact lexical calendar days (ayer, hoy, mañana, "
+    "named weekdays or concrete dates), NOT 'time' or 'date_scope'; "
+    "use 'time' for clock/daypart phrases and 'time_approx' for approximate "
+    "times. Never compute or rewrite a date: cite original literal spans. "
+    "Use role 'reference' for pronouns such as él, ella, ellos, ellas "
+    "in source, even when they are grammatical participants; keep "
+    "ambiguous_identity if multiple people remain plausible. Explicit "
+    "named participants retain the 'participants' role and exact original "
+    "name spans, distinct from an unresolved pronoun reference. "
+    "A forthcoming described activity or event ('mañana iré ...') is "
+    "'occurrence' at the source segmentation layer; use 'plan' only when "
+    "the assertion itself describes a proposal, intention, uncertainty "
+    "or a planning decision rather than an event being described. "
+    "Each independent candidate should anchor its own subject, object "
+    "or action span, while shared predicates/dates are cited through "
+    "exact scoped_source or typed inheritance; do not collapse multiple "
+    "subjects into one 'relationship' merely because they share grammar. "
+    "Keep source quotations minimal and contiguous when possible, "
+    "without creating new content, identity links, or Core writing policy."
+)
+
+
 class OpenAIFactCandidateRouter:
     """Opt-in, non-executing Router v1 proposal adapter with an injected provider.
 
@@ -414,9 +450,12 @@ class OpenAIFactCandidateRouter:
     regression and reviewed adapter to Temporal/Core must precede activation.
     """
 
-    def __init__(self, client: Any) -> None:
-        """Accept a caller-supplied SDK-compatible client without credentials or setup."""
+    def __init__(self, client: Any, *, prompt_revision: str = "v1") -> None:
+        """Select a reviewed source-only teaching revision without changing Router v0."""
+        if prompt_revision not in {"v1", "v2"}:
+            raise ValueError("Unknown fact-candidate prompt revision")
         self._client = client
+        self._prompt_revision = prompt_revision
         self.last_usage: Any | None = None
         self.last_error_category: str | None = None
 
@@ -468,6 +507,11 @@ class OpenAIFactCandidateRouter:
                             "cannot be safely established from the source. Do not select NoteSchema "
                             "types, create Notes, plan Core writes, bind identities, execute apps, "
                             "normalize dates, or return Markdown."
+                        )
+                        + (
+                            FACT_CANDIDATE_PROMPT_V2_EXTENSION
+                            if self._prompt_revision == "v2"
+                            else ""
                         ),
                     },
                     {"role": "user", "content": source},
