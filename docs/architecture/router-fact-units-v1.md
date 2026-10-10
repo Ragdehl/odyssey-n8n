@@ -280,6 +280,53 @@ gate. Shared-fact many-to-many grouping, positive/negative/conditional scope,
 identity links, pending clarification continuation and durable replay remain
 out of scope for this pilot and are mandatory before activation.
 
+**Block 4B6 source-to-Core-plan *proposal*, opt-in/inactive:**
+`odyssey_core/candidate_attribution.py` implements a separate, strictly
+non-executing **Core-only Luna attribution reviewer**, injected with a Responses
+client and never connected to runtime. This does not alter the accepted main
+Luna Planner prompt, its original Responses JSON schema or Router v0. The
+reviewer is passed the full original request, already-grounded request-local
+candidates and a **separately computed validated Core RequestPlan**. It can
+suggest `candidate-ID → planned Core atomic-fact ordinal` with a quoted
+**exact original candidate anchor and exact planned fact text**, or explicitly
+mark each candidate pending for a closed reason. A closed output schema and
+independent Core-side postvalidation reject missing/reordered candidates,
+invented source quotations, copied/altered Core fact text, duplicates, changed
+plan/source fingerprints, ambiguous identities incorrectly marked as written,
+negative/conditional/replacement scopes and unsupported reference/CREATE/
+property/migration writes. A conservative unique literal token veto catches
+obvious `pan ↔ leche` swaps; it intentionally rejects paraphrases without
+literal evidence. All model/provider output remains `semantically_verified=false`
+and `may_authorize_writes=false`: same-word evidence can never establish truth,
+negation, participant identity, relative time, action lifecycle or safe
+persistence, and is **not converted into a Core coverage manifest**.
+
+Deterministic injected-provider tests cover F01 (three shared-context
+activities), F11 (one shared purchase with two items), F14 (independent
+Eric/Luis facts plus ambiguous third pronoun), and an F13 pronoun whose
+superficially matching `cine` cannot independently prove the person identity.
+A deliberately contradictory planned fact `No compré pan` can pass the
+*literal* grounding check while remaining **semantically unverified**, making
+that limitation executable rather than an implicit assumption. Vertical tests
+show an injected attributor proposes the mapping with zero Markdown changes;
+ONLY a separate, explicitly reviewed test claim set can pass the existing
+Core coverage gate to invoke actual Core persistence in a disposable vault.
+The result and fact markers are observed independently afterward. An invalid
+model response never touches the vault. No network calls, key access, DEV
+merge, deployment, or real-user note edits occurred in this step.
+
+**Outstanding semantic acceptance:** Real GPT-5.6 Luna/low attribution quality
+on the frozen held-out source→Core facts (and independently verified Core
+identity/reference/time and contradiction rules) has NOT been demonstrated.
+The separate model-facing prompt must have its own reviewed, explicitly
+cost-bounded live evaluation; earlier platform security blocks must not be
+circumvented. In addition, the attribution proposal must not be wired as the
+execution preflight's `candidate_coverage_factory` merely because it has
+grounded literals. A Core-owned semantic decision/review policy for
+positive/negative/conditional assertions, identity, reference/relationship
+writes, broader candidate↔fact cardinality, and durable pending continuation
+remains required. Router v1 is **not ready for DEV activation**.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source
