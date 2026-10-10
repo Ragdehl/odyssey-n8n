@@ -724,6 +724,25 @@ unverified for broader natural language; durable `selected` state is still
 NOT marked completed automatically. No provider calls, model switch, DEV or
 PROD deployment.
 
+**Block 4B17 duplicate source candidate guard (2026-10-10, feature
+branch ONLY, provider-free):** The untrusted Router v1 source validator
+formerly allowed a model to return two otherwise identical candidates with
+different request-local ordinals. A narrow structural guard now rejects
+duplicate kind/state and identical **locally resolved exact source occurrences,
+roles and inheritance edges** before passing anything to Core. It compares
+normalized role ordering, so shuffling model output arrays cannot make an
+identical assertion appear independently grounded. Two legitimate candidates
+that share a predicate but have different subject anchors (F09), two item
+facts in the same purchase (F11), a shared two-participant event (F14), and
+two separate sequential events (F27) still pass. Identical words appearing
+in two distinct physical source occurrences also remain distinct. The
+adapter reports invalid source evidence without making a Temporal/Core call.
+This is **duplicate-structure prevention, not semantic deduplication**: two
+differently anchored candidate proposals may still express the same claim,
+and no local rule has proven complete semantic coverage of arbitrary messages.
+Prompt/schema, identity policy, canonical writes, and live-model configuration
+remain unchanged; tests use fake provider outputs only.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

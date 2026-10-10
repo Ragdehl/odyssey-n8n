@@ -248,6 +248,22 @@ def validate_fact_candidate_proposal(
     units = tuple(
         _anchored_candidate(source, item, index) for index, item in enumerate(rows, start=1)
     )
+    # A model may repeat an identical proposed assertion as a separate unit.
+    # Source sharing is valid (F09/F11), but exact same-kind/state/evidence
+    # repetition has no independently grounded identity and cannot authorize
+    # double accounting downstream. Repeated *source occurrences* stay distinct.
+    signatures = {
+        (
+            unit.kind,
+            unit.state,
+            tuple(sorted((anchor.start, anchor.end) for anchor in unit.anchors)),
+            tuple(sorted((role.role, role.anchor.start, role.anchor.end) for role in unit.scopes)),
+            tuple(sorted((edge.role, edge.from_unit) for edge in unit.inheritance)),
+        )
+        for unit in units
+    }
+    if len(signatures) != len(units):
+        raise RouterError("Duplicate fact candidates for identical source evidence")
     return FactCandidateProposal(source, units)
 
 

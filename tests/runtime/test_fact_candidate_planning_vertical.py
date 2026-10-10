@@ -11,9 +11,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from odyssey_apps.fact_candidate_core import to_core_candidate_context
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.fact_temporal import bind_temporal_to_fact_candidates
+from odyssey_apps.router import RouterError
 from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner, PlannerEscalation
 from odyssey_core.temporal_interpretation import OpenAITemporalInterpreter
 from tests.apps.test_fact_candidates import CASES, _from_design
@@ -49,6 +52,21 @@ def _exact_date(text: str, date: str) -> dict[str, Any]:
             "range_end_exclusive": None,
         },
     }
+
+
+def test_duplicate_router_proposal_fails_at_model_adapter_boundary() -> None:
+    """Malformed model evidence cannot be converted into Core candidate context."""
+    case = next(item for item in CASES if item["id"] == "F14")
+    raw = _from_design(case)
+    raw["units"].append(dict(raw["units"][0]))
+    router_fake, router_calls = _sdk_fake(raw)
+    adapter = OpenAIFactCandidateRouter(router_fake)
+
+    with pytest.raises(RouterError, match="grounded source evidence"):
+        adapter.propose(case["source"])
+
+    assert len(router_calls) == 1
+    assert adapter.last_error_category == "InvalidSourceEvidence"
 
 
 def test_full_source_scoped_fact_flow_to_luna_is_read_only_and_preflighted() -> None:

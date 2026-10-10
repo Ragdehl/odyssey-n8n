@@ -75,6 +75,53 @@ def test_all_twenty_seven_design_oracles_are_grounded_source_only(case: dict[str
         assert not hasattr(plan, "execute")
 
 
+def test_exact_duplicate_fact_candidate_is_rejected_without_forbidding_shared_source() -> None:
+    """One lexical predicate may support two facts; cloning one fact cannot."""
+    for case_id in ("F09", "F11", "F14", "F27"):
+        case = next(item for item in CASES if item["id"] == case_id)
+        payload = _from_design(case)
+        assert len(validate_fact_candidate_proposal(case["source"], payload).candidates) >= 2
+        duplicated = copy.deepcopy(payload)
+        duplicated["units"].append(copy.deepcopy(payload["units"][0]))
+        with pytest.raises(RouterError, match="Duplicate fact candidates"):
+            validate_fact_candidate_proposal(case["source"], duplicated)
+
+
+def test_duplicate_fact_detection_ignores_nonsemantic_role_order() -> None:
+    """Reordering source anchors/roles never makes a duplicate independent."""
+    source = "Marta y Luis se conocieron en Lyon."
+    case = next(item for item in CASES if item["id"] == "F10")
+    payload = _from_design(case)
+    clone = copy.deepcopy(payload["units"][0])
+    clone["scoped_source"].reverse()
+    payload["units"].append(clone)
+    with pytest.raises(RouterError, match="Duplicate fact candidates"):
+        validate_fact_candidate_proposal(source, payload)
+
+
+def test_two_identical_phrases_at_distinct_occurrences_remain_independent() -> None:
+    """Actual repetition in source must not be deduplicated by its text alone."""
+    source = "Llamé a Ana. Llamé a Ana."
+    payload = {
+        "version": 1,
+        "units": [
+            {
+                "kind": "occurrence",
+                "anchors": [{"text": "Llamé a Ana", "occurrence": occurrence}],
+                "scoped_source": [
+                    {"role": "participants", "anchor": {"text": "Ana", "occurrence": occurrence}}
+                ],
+                "inheritance": [],
+                "state": "candidate",
+            }
+            for occurrence in (0, 1)
+        ],
+    }
+    proposal = validate_fact_candidate_proposal(source, payload)
+    assert len(proposal.candidates) == 2
+    assert proposal.candidates[0].anchors[0].start != proposal.candidates[1].anchors[0].start
+
+
 def test_source_scopes_can_appear_after_units_that_use_them() -> None:
     """A shared later time expression is anchored, never normalized or copied."""
     case = next(item for item in CASES if item["id"] == "F21")

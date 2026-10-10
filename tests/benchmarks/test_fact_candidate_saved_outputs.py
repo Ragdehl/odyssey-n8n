@@ -55,7 +55,10 @@ def test_f09_subject_swap_and_f10_missing_participant_are_visible() -> None:
     f10 = _case("F10")
     f10["units"][0]["scoped_source"].pop(0)
     report = compare_saved_proposals({"F09": f09, "F10": f10})
-    assert "candidate_2_anchors" in report["cases"]["F09"]["differences"]
+    # The source validator now rejects identical cloned units before the
+    # offline comparison can mistake them for separate source facts.
+    assert report["cases"]["F09"]["differences"] == ["invalid_output"]
+    assert report["cases"]["F09"]["error_type"] == "RouterError"
     assert "candidate_1_scopes" in report["cases"]["F10"]["differences"]
 
 
