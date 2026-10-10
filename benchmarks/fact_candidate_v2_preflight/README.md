@@ -13,4 +13,21 @@ The 2026-10-10 pinned price snapshot and an intentionally large bound of `2 * se
 
 Nine proposed calls (4 Router, 2 Temporal, 2 Luna Core, 1 attribution) have a static worst-case envelope around **USD 0.0848571**, exceeding the user's USD 0.02 authorization. A staged **six-call Router + Temporal** evaluation would have a static upper envelope of **USD 0.013495**, covering F14, F27, F09, F10. This offline report **does not authorize or implement that live execution**.
 
+The optional **saved-output comparator** `compare_saved_outputs.py` accepts one
+local JSON object mapping a subset of `F09`, `F10`, `F14`, `F27` to already
+obtained Router candidate JSON objects. For example, after results have been
+produced through an **independently permitted** evaluation process:
+
+```bash
+/home/ragdehl/projects/odyssey-dev/.venv/bin/python -m \
+  benchmarks.fact_candidate_v2_preflight.compare_saved_outputs /path/to/reviewed-synthetic-results.json
+```
+
+It compares the closed validated candidate data against the **strict v2 design
+fixture**, reporting field-level differences without printing raw source text.
+This is intentionally an offline **triage tool**, not a live-runner, a model
+client, a live semantic quality verdict, or a license to reissue the blocked
+operation. An exact fixture match still requires manual semantic review: other
+source-anchored decompositions could be valid even if they differ structurally.
+
 No existing reviewed runner covers these exact v2 candidates under the authorized ceiling. The attempted creation of a separate live runner through a large remote shell operation was explicitly **blocked by the platform safety controls**. Do not split/repackage or reroute the rejected operation to bypass that block. Before any live calls, the platform must permit an ordinary reviewed procedure with pre-call budget reservation, no SDK retries, `store=false`, synthetic sources, and the existing sanctioned transient `systemd --user` secret transport. Keep the protected DEV/PROD paths untouched. See [GitHub issue #151](https://github.com/Ragdehl/odyssey-n8n/issues/151).
