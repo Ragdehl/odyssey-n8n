@@ -98,3 +98,59 @@ does not infer identity, authorize a write from Router, or activate any
 normal DEV/PROD path. Isolated vertical replay tests assert that protected
 Core still rejects tampered names, predicates, date scopes, order and
 unverified pronouns before any Markdown write.
+
+
+## Staged evaluation of the remaining 23 GPT-6 Router design cases — 2026-10-10
+
+The four previously completed fixed cases F09/F10/F14/F27 retain their
+frozen real-provider evidence. The remaining **23 IDs** (F01–F08,
+F11–F13, F15–F26) are new, distinct, user-reviewed source sentences
+from `benchmarks/application_router/fact_units_v2.design.json`.
+These are **Router-only** calls: they establish model-generated fact
+segmentation/source roles, not Core/Temporal model acceptance, safe
+mutation, or general release readiness. Core stays GPT-5.6.
+
+The new offline-default versioned `run_remaining.py` uses exactly the
+unchanged GPT-6 Luna/low **Router v3 prompt and strict schema**. Every
+full request is hash-pinned in `reviewed_remaining_requests.json`.
+The source is a fixed synthetic sentence, with `store=false`, output
+cap 4096, SDK automatic retries zero, and NO repository or vault write
+except a synthetic test receipt JSON. All 23 original design oracles
+must remain unchanged; source offsets, semantic count/kind/state,
+roles and inherited scope require independent post-run scrutiny.
+An exact fixture mismatch is a **diagnostic**, not automatic proof of
+a bad interpretation; missing or wrong candidate count is a stronger
+failure. Router candidates NEVER choose canonical Note types/targets.
+
+The user previously explicitly authorized **USD 0.07 cumulative**
+focused Router/Core synthetic testing. The frozen observed standard-
+rate estimate already consumed **USD 0.0259652** (not an invoice).
+Each additional model request reserves its full conservative worst-
+case cost (~USD 0.00368 for first case) and then charges the actual
+provider-reported token counts at *noncached standard rates* before
+any next reservation. If the next complete conservative envelope
+cannot fit USD 0.07, STOP without executing that call. The runner
+fails on duplicate, out-of-order, stale hash, or previously failed
+synthetic receipt, and saves **one distinct JSON per attempted call**
+under `remaining_results`. It cannot retry model calls or mutate a
+note. It may stop before all 23 cases if that conservative budget
+constraint requires it.
+
+Offline:
+```bash
+python -m benchmarks.fact_candidate_v2_live.run_remaining
+python -m pytest -q tests/benchmarks/test_fact_candidate_remaining_live_runner.py
+```
+
+Live, **only within the existing authorized ordinary Pi user service**:
+```bash
+python -m benchmarks.fact_candidate_v2_live.run_remaining --live
+```
+
+The authorized service injects the unchanged fixed `EnvironmentFile`
+and the explicit `ODYSSEY_ROUTER_V2_LIVE_APPROVED=1` flag. The
+diagnostic script never reads credentials. Complete all source-only
+offline contracts and publish the reviewed code BEFORE any live run.
+Save the real provider output verbatim only for these 23 synthetic,
+nonpersonal examples; no DEV/PROD deployment. A model result that
+passes JSON validation still needs separate semantic comparison.
