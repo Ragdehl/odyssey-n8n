@@ -48,6 +48,47 @@ def _has_exact_name(candidate, name: str) -> bool:
     return any(pattern.search(span.text) for span in candidate.anchors)
 
 
+def _reference_is_in_unique_candidate_clause(
+    source: str,
+    context: CoreCandidateContext,
+    referring_candidate_id: str,
+    reference: CoreSourceSpan,
+) -> bool:
+    """Prove that an unquoted role belongs to one original source clause.
+
+    A Router anchor is not required to contain every scoped grammatical
+    role. Source punctuation and the absence of competing candidate
+    anchors, not a guessed antecedent, establish the candidate's clause.
+    No text is rewritten, no identity resolved, and no write authorized.
+    """
+    referring = next(
+        (c for c in context.candidates if c.candidate_id == referring_candidate_id), None
+    )
+    if referring is None:
+        return False
+    boundaries = [0]
+    boundaries.extend(i + 1 for i, symbol in enumerate(source) if symbol in ".;!?\n\r")
+    boundaries.append(len(source))
+    possible = [
+        (left, right)
+        for left, right in zip(boundaries[:-1], boundaries[1:], strict=True)
+        if left <= reference.start < reference.end <= right
+    ]
+    if len(possible) != 1:
+        return False
+    left, right = possible[0]
+    if not referring.anchors or not all(
+        left <= anchor.start and anchor.end <= right for anchor in referring.anchors
+    ):
+        return False
+    return not any(
+        left <= anchor.start and anchor.end <= right
+        for candidate in context.candidates
+        if candidate.candidate_id != referring_candidate_id
+        for anchor in candidate.anchors
+    )
+
+
 def find_single_candidate_canonical_handoff(
     source: str,
     context: CoreCandidateContext,
@@ -110,9 +151,14 @@ def find_single_candidate_canonical_handoff(
             and anchor.end >= antecedent_identity_roles[0].end
             for anchor in preceding.anchors
         )
-        or not any(
-            anchor.start <= pronoun.start and anchor.end >= pronoun.end
-            for anchor in referring.anchors
+        or not (
+            any(
+                anchor.start <= pronoun.start and anchor.end >= pronoun.end
+                for anchor in referring.anchors
+            )
+            or _reference_is_in_unique_candidate_clause(
+                source, context, referring_candidate_id, pronoun
+            )
         )
     ):
         return None

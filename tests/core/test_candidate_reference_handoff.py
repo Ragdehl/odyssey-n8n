@@ -253,3 +253,95 @@ def test_existing_guard_rechecks_staleness_at_the_last_instant(tmp_path: Path) -
     day.write_text(day.read_text() + "\n", encoding="utf-8")
     with pytest.raises(WritePreflightGuardError, match="CANONICAL_EVIDENCE_STALE"):
         proof.write_guard()(plan.actions[0], targets, repo, SCHEMA)
+
+
+def _real_router_f13_context():
+    """Read the frozen REAL GPT-6 Router F13 output, not an oracle fixture."""
+    import json
+
+    from benchmarks.fact_candidate_v2_live import run_remaining
+    from odyssey_apps.fact_candidate_core import to_core_candidate_context
+    from odyssey_apps.fact_candidates import validate_fact_candidate_proposal
+
+    receipt = next(run_remaining.RESULTS.glob("*--F13.json"))
+    observed = json.loads(receipt.read_text(encoding="utf-8"))
+    assert observed["provider_status"] == "completed"
+    assert observed["validation"] == "source_valid"
+    case, _ = _case("F13")
+    context = to_core_candidate_context(
+        validate_fact_candidate_proposal(case["source"], json.loads(observed["raw_model_response"]))
+    )
+    return case["source"], context
+
+
+def test_actual_router_unquoted_reference_role_binds_only_to_its_own_clause(tmp_path):
+    """GPT-6's real F13 lacks an 'él' anchor but supplies a real source role."""
+    _case, _oracle, repo, first = _setup_eric(tmp_path)
+    source, context = _real_router_f13_context()
+    referring = context.candidates[1]
+    assert not any("él" in anchor.text for anchor in referring.anchors)
+    assert [r.span.text for r in referring.roles if r.role == "reference"] == ["él"]
+    proof = find_single_candidate_canonical_handoff(
+        source, context, referring.candidate_id, first, repo, SCHEMA
+    )
+    assert proof is not None
+    assert proof.evidence.stable_note_id == "eric-id"
+    plan = _linked_day_plan(
+        "2026-10-05", "Iré al cine con {{ref:0}}.", "él", "2026-10-05", target_name="Eric"
+    )
+    result = execute_request(
+        "Mañana iré al cine con él.",
+        planner=SimpleNamespace(plan=lambda _: plan),
+        repository=repo,
+        schema=SCHEMA,
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="frozen-real-router-f13-reference-bridge",
+        now=NOW,
+        context_limit=5,
+        request_id_factory=lambda: "real-router-f13-dependent",
+        write_preflight_guard=proof.write_guard(),
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert any("Eric" in fact for fact in _visible_day(_calendar(repo, tmp_path), "2026-10-05"))
+
+
+def test_real_router_reference_in_other_source_clause_fails_closed(tmp_path):
+    from odyssey_core.candidate_context import CoreCandidateRole
+
+    _case, _oracle, repo, first = _setup_eric(tmp_path)
+    source, context = _real_router_f13_context()
+    old = context.candidates[1]
+    unrelated = next(role.span for role in context.candidates[2].roles if role.role == "date")
+    substituted = replace(
+        old,
+        roles=tuple(
+            CoreCandidateRole("reference", unrelated) if r.role == "reference" else r
+            for r in old.roles
+        ),
+    )
+    forged = replace(
+        context, candidates=(context.candidates[0], substituted, context.candidates[2])
+    )
+    forged.validate(source)
+    assert (
+        find_single_candidate_canonical_handoff(source, forged, "candidate-2", first, repo, SCHEMA)
+        is None
+    )
+
+
+def test_real_router_reference_competing_candidate_in_same_clause_fails_closed(tmp_path):
+    _case, _oracle, repo, first = _setup_eric(tmp_path)
+    source, context = _real_router_f13_context()
+    peer = replace(
+        context.candidates[2],
+        anchors=(context.candidates[1].anchors[0],),
+    )
+    forged = replace(context, candidates=(context.candidates[0], context.candidates[1], peer))
+    forged.validate(source)
+    assert (
+        find_single_candidate_canonical_handoff(source, forged, "candidate-2", first, repo, SCHEMA)
+        is None
+    )

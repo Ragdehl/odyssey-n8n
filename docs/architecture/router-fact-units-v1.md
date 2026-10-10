@@ -1168,3 +1168,65 @@ is opt-in and not yet connected to the runtime chat path. The other
 coverage remain untested. Historic unrelated test failures still need
 independent release review. Keep Core GPT-5.6 and Router v0 settings
 unchanged.
+
+
+**Block 4B29 reusable reference/dependency diagnostic (2026-10-11,
+feature branch and test-only):** The real GPT-6 Router v3 responses for
+F08/F13/F23/F26 are already frozen in the PR. Rather than introducing
+individual phrase-specific handlers, Core now has
+`candidate_dependencies.py`: a **read-only, type-agnostic source-role
+dependency trace** that follows only declared source-validated backwards
+inheritance, preserves source span + origin unit + explicit vs inherited,
+allows an explicit same-role override, and fails closed on missing
+inherited evidence. It NEVER decides that a pronoun, "same hour" or
+elliptical "other" denotes a concrete value or identity; that work stays
+with existing Core semantic planning/identity resolution or Temporal.
+
+Observed: F08's Luis already carries exact original `time` phrase
+"a la misma hora" and inherits Marta's *predicate*, not her time;
+Temporal must resolve the relational phrase to 10:00. F23's second
+Odyssey problem inherits the **project subject** and "tiene"
+predicate, but "otro" still requires Core semantic interpretation as
+another failure, without fabricating a direct `object` inheritance.
+F26 has a real `reference` role "lo" referring potentially to the
+original report, but no verified canonical cross-unit object binding;
+the trace preserves it unresolved and does not guess a Note ID.
+
+The existing **Core canonical identity handoff** had a genuine general
+false negative with the real F13 GPT-6 Router result: its original
+reference role "él" is source-grounded but omitted from the event
+*anchor* list. Previously Core required every reference role to be
+inside an anchor, so actual Router v3 evidence was incorrectly rejected.
+Its Core-only preflight now accepts a role proved inside the **single
+source clause containing the candidate anchors**, only if no other
+candidate anchors compete inside that same clause. It still requires
+one predecessor original named identity, an actual currently persisted
+canonical identity reference and existing freshness/time-of-use guards;
+F14/F27 multi-person ambiguity and unrelated clauses abstain. A
+provider-free Markdown integration test confirms real F13 Router input,
+persisted canonical Eric proof and guarded future Eric cinema write,
+plus negative tests for another-clause role and competing anchors.
+
+The existing `bind_temporal_to_fact_candidates` adapter is already
+compatible with independent exact time-value evidence for the real F08
+source phrase; no app-owned identity, time inheritance or write logic
+was introduced. A single frozen, hash-pinned, unchanged GPT-6 Temporal
+model request is prepared in
+`benchmarks/fact_candidate_v2_live/run_temporal_reference.py`
+to determine whether the actual Temporal model normalizes both
+"a las 10" and "a la misma hora" to the same timestamp.
+Its request is restricted to synthetic F08, `store=false`,
+output cap 512, reasoning low, no retries, with one durable attempt
+and original-candidate binding/readback only, **no vault access**.
+Approx. USD 0.0008405 conservative maximum plus USD 0.0337352
+previous observed focused spend, below the already explicitly
+authorized total USD 0.07. Any provider/model failure is evidence, not
+reason to silently retry or invent an hour. New offline focused guards
+include repeated/unaligned references, wrong source roles and date-only
+clock responses.
+
+**Limits:** This is NOT generic production activation or proof that a
+model can semantically resolve F23's "otro" or F26's "lo". Next gate:
+test independently generated per-unit Core GPT-5.6 plans and source
+coverage for those two dependency patterns and explicit ambiguity
+before ever granting write authority.
