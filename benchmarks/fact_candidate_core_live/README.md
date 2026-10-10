@@ -163,3 +163,47 @@ transient Pi `systemd --user` service, using only the fixed
 Run **F14 first**, independently inspect the saved receipt, then recheck
 `--case F27` offline before any second invocation. If a platform safety
 control blocks execution, stop and disclose the refusal.
+
+## Actual F14/F27 GPT-5.6 outcomes and opt-in partial-plan revision
+
+The first staged real GPT-5.6 Luna/low runs, made under the previously
+approved cumulative USD 0.07 ceiling on 2026-10-10, **both completed** with
+valid strict JSON yet chose **ESCALATE** rather than a `PLAN`. Their
+immutable synthetic receipts are
+`results/20261010T202736Z-F14.json` (11,054 input / 362 output tokens)
+and `results/20261010T202803Z-F27.json` (11,131 input / 131 output
+tokens). This **fails the four-case Core acceptance gate** despite
+Router's correct F14/F27 structure and earlier offline write mechanics.
+The response has no diagnostic explanation; the main plausible cause
+is Core's inherited whole-request `PLAN only when every material intent
+is represented` rule, which encourages an all-or-nothing refusal
+when only a future pronoun is ambiguous. No independent cause was
+reported by the provider, so this is a prompt hypothesis to test, not
+a confirmed internal explanation.
+
+A second **opt-in, inheritance-preserving** Core-only teaching revision
+adds one scoped rule: when the original source-candidate context contains
+fully independent, executable facts plus an `ambiguous_identity` candidate,
+plan ONLY those independently safe facts and leave the unresolved source
+entirely unwritten. The candidate's date, identity and content can be
+recorded as pending ONLY if Core's separate source-candidate coverage,
+physical readback, and durable pending checks succeed. Otherwise the
+entire write is rejected. If a fact depends on an unresolved pronoun,
+still ESCALATE. Never infer whom `él` refers to. Calendar dates
+remain entirely Temporal-owned.
+
+The revised source-only prompt is invoked ONLY with
+`partial_candidate_guidance=True`; default legacy Core remains
+byte-for-byte unchanged. Its two exact revised full provider requests
+are hash-pinned in `reviewed_temporal_partial_requests.json`.
+Use `run_temporal_live.py --case F14 --partial` for offline review;
+`--live` only inside the ordinary separately authorized Pi transient
+service. Each stage issues at most one no-retry, `store=false` call,
+writes no Notes and never executes the returned plan. The new F14
+call's conservative reservation is ~USD 0.03379, previous estimated
+focused spend ~USD 0.01325, sum ~USD 0.04704, under the existing
+USD 0.07 authorization. F27 requires a saved, singly identifiable
+revised F14 receipt and is separately blocked unless the revised F14
+observed standard-rate cost plus F27's full conservative reservation
+fits the remaining ceiling. No revised request has yet been made
+at this checkpoint.

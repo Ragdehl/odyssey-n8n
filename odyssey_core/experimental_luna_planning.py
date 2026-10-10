@@ -385,6 +385,7 @@ def render_luna_experimental_prompt(
     size_components: dict[str, int] | None = None,
     domain_interpretation: DomainInterpretation | None = None,
     candidate_context: CoreCandidateContext | None = None,
+    partial_candidate_guidance: bool = False,
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -454,6 +455,33 @@ Presentation tie-breaker:
 Teaching examples (not evaluation cases):
 
 {rendered_examples}
+"""
+    if partial_candidate_guidance:
+        if candidate_context is None or not any(
+            candidate.state == "ambiguous_identity" for candidate in candidate_context.candidates
+        ):
+            raise RequestPlanningError(
+                "Partial-candidate teaching requires explicit ambiguous source evidence"
+            )
+        luna_static += """
+Scoped source-candidate partial-write rule (opt-in pilot; Core still validates):
+When one user message has independently supportable source candidates AND
+separate ambiguous_identity candidates, preserve safe independent facts
+as an ordinary PLAN with only their fully justified WRITE operations.
+Do NOT emit the ambiguous candidate as a fact, identity link, date, task,
+conditional plan, or placeholder. Core's separate mandatory candidate-
+coverage check must explicitly account for every omitted ambiguous candidate
+as pending before any write, and must then durably record its clarification;
+a missing or invalid coverage/pending proof aborts all authorization.
+Thus PLAN here means that all executable facts are represented safely and
+the unresolved source remains explicitly pending, NOT that the unresolved
+assertion has become known or that Router can authorize a write.
+If any apparently safe candidate itself depends on the unresolved
+identity or cannot independently identify its target, ESCALATE instead.
+For dated independent past facts, select ONLY the exact past calendar
+date supplied by Temporal. Never write an unresolved later event to
+that day or invent a date. Preserve coherent vs sequential event count.
+Never use an identity mentioned by the user to fill an unresolved pronoun.
 """
     prompt = luna_static + LUNA_DYNAMIC_CONTEXT_MARKER + semantic_dynamic
     if size_components is not None:
@@ -543,6 +571,7 @@ class OpenAILunaExperimentalPlanner:
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
         candidate_context: CoreCandidateContext | None = None,
+        partial_candidate_guidance: bool = False,
         model: str = LUNA_EXPERIMENT_MODEL,
         reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
         max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -555,6 +584,7 @@ class OpenAILunaExperimentalPlanner:
         )
         self._domain_interpretation = domain_interpretation
         self._candidate_context = candidate_context
+        self._partial_candidate_guidance = partial_candidate_guidance
         self._planning_schema = planning_schema_for_capability(
             schema,
             domain_interpretation.capability_id if domain_interpretation is not None else None,
@@ -596,6 +626,7 @@ class OpenAILunaExperimentalPlanner:
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
         candidate_context: CoreCandidateContext | None = None,
+        partial_candidate_guidance: bool = False,
         model: str = LUNA_EXPERIMENT_MODEL,
         reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
         max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -616,6 +647,7 @@ class OpenAILunaExperimentalPlanner:
             teaching_examples=teaching_examples,
             domain_interpretation=domain_interpretation,
             candidate_context=candidate_context,
+            partial_candidate_guidance=partial_candidate_guidance,
             model=model,
             reasoning_effort=reasoning_effort,
             max_output_tokens=max_output_tokens,
@@ -659,6 +691,7 @@ class OpenAILunaExperimentalPlanner:
                 size_components=sizes,
                 domain_interpretation=self._domain_interpretation,
                 candidate_context=self._candidate_context,
+                partial_candidate_guidance=self._partial_candidate_guidance,
             )
             authorized_calendar_dates = planner_authorized_calendar_dates(
                 self._current_context, self._domain_interpretation

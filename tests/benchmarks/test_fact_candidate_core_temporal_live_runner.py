@@ -162,3 +162,45 @@ def test_pending_temporal_clause_guard_abstains_on_unverified_evidence(
     )
     with pytest.raises(RequestPlanningError, match="required temporal wording"):
         planner.plan(source)
+
+
+def test_scoped_partial_is_opt_in_and_preserves_existing_model_contract() -> None:
+    """Original frozen provider input must remain byte-for-byte unchanged."""
+    for case_id in ("F14", "F27"):
+        _s, _c, _t, original, _upper = gate.reviewed_case(case_id)
+        _s, _c, _t, partial, _upper = gate.reviewed_case(case_id, partial_guidance=True)
+        assert original["model"] == partial["model"] == "gpt-5.6-luna"
+        assert original["text"] == partial["text"]
+        assert original["input"][1] == partial["input"][1]
+        assert {
+            key: val for key, val in original.items() if key not in {"input", "prompt_cache_key"}
+        } == {key: val for key, val in partial.items() if key not in {"input", "prompt_cache_key"}}
+        assert original["prompt_cache_key"] != partial["prompt_cache_key"]
+        old_rules = json.dumps(original["input"][0]["content"], ensure_ascii=False)
+        new_rules = json.dumps(partial["input"][0]["content"], ensure_ascii=False)
+        assert "Scoped source-candidate partial-write rule" not in old_rules
+        assert "Scoped source-candidate partial-write rule" in new_rules
+        assert "Do NOT emit the ambiguous candidate" in new_rules
+        assert "mandatory candidate-" in new_rules
+        assert "Never use an identity mentioned by the user" in new_rules
+    dry = gate.run_case("F14", live=False, partial_guidance=True)
+    assert dry["mode"] == "DRY_RUN_NO_PROVIDER"
+    assert dry["previous_test_estimated_usd"] > gate.BASELINE_ROUTER_AND_CORE_ESTIMATE_USD
+    assert (
+        dry["previous_test_estimated_usd"] + dry["conservative_call_reservation_usd"]
+        < gate.AUTHORIZED_CUMULATIVE_CAP_USD
+    )
+
+
+def test_partial_prompt_revision_fake_produces_core_plan_but_never_writes(
+    monkeypatch,
+) -> None:
+    """A safe Core-shaped positive response is parsable under the new prompt."""
+    monkeypatch.setenv(gate.RUN_ENV, "1")
+    client, calls = _fake_model("F14")
+    result = gate.run_case("F14", live=True, client=client, partial_guidance=True)
+    assert len(calls) == 1
+    assert result["prompt_revision"] == "opt_in_scoped_partial"
+    assert result["outcome"] == "PLAN"
+    assert result["validation"] == "locally_valid"
+    assert result["may_authorize_writes"] is False

@@ -1,0 +1,21 @@
+{
+  "mode": "LIVE_CORE_PLAN_ONLY",
+  "case": "F14",
+  "model": "gpt-5.6-luna",
+  "single_call_only": true,
+  "conservative_call_reservation_usd": 0.0331301,
+  "previous_test_estimated_usd": 0.0082176,
+  "authorized_cumulative_cap_usd": 0.07,
+  "may_authorize_writes": false,
+  "model_semantics_verified": false,
+  "usage": {
+    "input_tokens": 11054,
+    "output_tokens": 362
+  },
+  "provider_status": "completed",
+  "raw_model_response": "{\"result\":{\"outcome\":\"ESCALATE\",\"actions\":null,\"limitations\":null,\"clarification_code\":null}}",
+  "outcome": "ESCALATE",
+  "plan_repr": null,
+  "action_count": 0,
+  "validation": "locally_valid"
+}

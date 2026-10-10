@@ -31,6 +31,7 @@ from tests.runtime.test_fact_candidate_planning_vertical import _exact_date, _sd
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import CLOCK, SCHEMA
 
 SNAPSHOT = HERE / "reviewed_temporal_requests.json"
+PARTIAL_SNAPSHOT = HERE / "reviewed_temporal_partial_requests.json"
 RESULTS = HERE / "results"
 BASELINE_ROUTER_AND_CORE_ESTIMATE_USD = 0.0082176
 FIRST_CASE = "F14"
@@ -48,7 +49,7 @@ def temporal_evidence(source: str):
     return interpreted
 
 
-def reviewed_case(case_id: str):
+def reviewed_case(case_id: str, *, partial_guidance: bool = False):
     """Recover a hash-pinned, production-generated Core call for one synthetic case."""
     if case_id not in {FIRST_CASE, SECOND_CASE}:
         raise ValueError("Only F14/F27 are approved")
@@ -81,11 +82,13 @@ def reviewed_case(case_id: str):
         CLOCK,
         domain_interpretation=temporal.core_domain_interpretation(),
         candidate_context=context,
+        partial_candidate_guidance=partial_guidance,
     ).plan(source)
     if len(calls) != 1:
         raise ValueError("Core planner request drift")
     request = calls[0]
-    frozen = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    snapshot = PARTIAL_SNAPSHOT if partial_guidance else SNAPSHOT
+    frozen = json.loads(snapshot.read_text(encoding="utf-8"))
     encoded = _stable(request)
     if (
         frozen.get("cases") != [FIRST_CASE, SECOND_CASE]
@@ -111,9 +114,9 @@ def reviewed_case(case_id: str):
     return source, context, temporal, request, round(upper, 8)
 
 
-def _observed_first_cost() -> float:
+def _observed_first_cost(*, partial_guidance: bool = False) -> float:
     """Verify exactly one saved real F14 result before charging its token usage."""
-    evidence = sorted(RESULTS.glob("*-F14.json"))
+    evidence = sorted(RESULTS.glob("*-P-F14.json" if partial_guidance else "*-F14.json"))
     if len(evidence) != 1:
         raise ValueError("Exactly one saved F14 live receipt required before F27")
     data = json.loads(evidence[0].read_text(encoding="utf-8"))
@@ -136,20 +139,63 @@ def _observed_first_cost() -> float:
     ) / 1_000_000
 
 
-def preflight(case_id: str):
+def _observed_case_cost(case_id: str) -> float:
+    """Count exactly one frozen original Core result at full standard rates."""
+    if case_id not in {FIRST_CASE, SECOND_CASE}:
+        raise ValueError("Unrecognized historical Core case")
+    files = list(RESULTS.glob(f"*-{case_id}.json"))
+    if len(files) != 1:
+        raise ValueError("Expected one original Core provider receipt")
+    data = json.loads(files[0].read_text(encoding="utf-8"))
+    usage = data.get("usage")
+    if (
+        data.get("case") != case_id
+        or data.get("mode") != "LIVE_CORE_PLAN_ONLY"
+        or not isinstance(usage, dict)
+        or any(
+            not isinstance(usage.get(key), int) or usage[key] < 0
+            for key in ("input_tokens", "output_tokens")
+        )
+    ):
+        raise ValueError("Historical Core receipt is not trustworthy")
+    rates = json.loads((ROOT / "config/runtime-pricing-snapshot.json").read_text())["models"][
+        "gpt-5.6-luna"
+    ]
+    return (
+        usage["input_tokens"] * rates["input_per_million"]
+        + usage["output_tokens"] * rates["output_per_million"]
+    ) / 1_000_000
+
+
+def preflight(case_id: str, *, partial_guidance: bool = False):
     """Fail closed before provider access when the stage cannot fit total budget."""
-    source, context, temporal, request, upper = reviewed_case(case_id)
+    source, context, temporal, request, upper = reviewed_case(
+        case_id, partial_guidance=partial_guidance
+    )
     previous = BASELINE_ROUTER_AND_CORE_ESTIMATE_USD
-    if case_id == SECOND_CASE:
+    if partial_guidance:
+        # Count the original F14/F27 provider runs at their observed standard
+        # noncached rates before reserving a fresh reviewed prompt revision.
         previous += _observed_first_cost()
+        previous += _observed_case_cost("F27")
+    if case_id == SECOND_CASE:
+        previous += _observed_first_cost(partial_guidance=partial_guidance)
     if previous + upper > AUTHORIZED_CUMULATIVE_CAP_USD:
         raise ValueError("Case exceeds previously approved cumulative ceiling")
     return source, context, temporal, request, upper, round(previous, 8)
 
 
-def run_case(case_id: str, *, live: bool, client: Any | None = None) -> dict[str, Any]:
+def run_case(
+    case_id: str,
+    *,
+    live: bool,
+    client: Any | None = None,
+    partial_guidance: bool = False,
+) -> dict[str, Any]:
     """Run at most one source-only model request; never execute its WriteAction."""
-    source, context, temporal, _request, upper, previous = preflight(case_id)
+    source, context, temporal, _request, upper, previous = preflight(
+        case_id, partial_guidance=partial_guidance
+    )
     result: dict[str, Any] = {
         "mode": "LIVE_CORE_PLAN_ONLY" if live else "DRY_RUN_NO_PROVIDER",
         "case": case_id,
@@ -160,11 +206,14 @@ def run_case(case_id: str, *, live: bool, client: Any | None = None) -> dict[str
         "authorized_cumulative_cap_usd": AUTHORIZED_CUMULATIVE_CAP_USD,
         "may_authorize_writes": False,
         "model_semantics_verified": False,
+        "prompt_revision": "opt_in_scoped_partial" if partial_guidance else "original",
     }
     if not live:
         return result
     if os.getenv(RUN_ENV) != "1":
         raise ValueError("Explicit Core live approval flag required")
+    if partial_guidance and list(RESULTS.glob(f"*-P-{case_id}.json")):
+        raise ValueError("This partial Core case has already consumed a live call")
     if client is None:
         from openai import OpenAI
 
@@ -192,6 +241,7 @@ def run_case(case_id: str, *, live: bool, client: Any | None = None) -> dict[str
         CLOCK,
         domain_interpretation=temporal.core_domain_interpretation(),
         candidate_context=context,
+        partial_candidate_guidance=partial_guidance,
     )
     try:
         compiled = planner.plan(source)
@@ -217,11 +267,19 @@ def main():
     parser = argparse.ArgumentParser(description="Staged, bounded F14/F27 Core model test")
     parser.add_argument("--case", required=True, choices=[FIRST_CASE, SECOND_CASE])
     parser.add_argument("--live", action="store_true")
+    parser.add_argument(
+        "--partial",
+        action="store_true",
+        help="Use explicitly reviewed scoped partial-plan guidance",
+    )
     args = parser.parse_args()
-    result = run_case(args.case, live=args.live)
+    result = run_case(args.case, live=args.live, partial_guidance=args.partial)
     if args.live:
         RESULTS.mkdir(exist_ok=True)
-        target = RESULTS / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + f"-{args.case}.json")
+        target = RESULTS / (
+            datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+            + (f"-P-{args.case}.json" if args.partial else f"-{args.case}.json")
+        )
         target.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         print("SYNTHETIC_CORE_RESULT_FILE=" + str(target))
         print(
