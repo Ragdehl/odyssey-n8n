@@ -113,3 +113,53 @@ These are narrowly proven **four focus cases** under seeded/resolvable
 test conditions, **not a new production runtime**, a global relationship
 ontology, the other 23 source cases, or an end-to-end real chat path. No
 new live Core calls or personal vault writes are planned here.
+
+## F14/F27 staged live Core evaluation (2026-10-10)
+
+The Core-only `run_temporal_live.py` diagnostic runs **one synthetic
+GPT-5.6 Luna/low request per invocation**. It uses the exact previously
+saved GPT-6 Router v3 output for F14 or F27 and the *verified, deterministic*
+original-wording Temporal resolution `Ayer→2026-10-03`,
+`Mañana→2026-10-05`, with reference clock 2026-10-04. No new Temporal
+provider call, notes, user-vault files, app deployments, or model changes.
+
+The production-shaped Core request is pinned by full-request SHA-256 and
+byte count in `reviewed_temporal_requests.json`. Reasoning effort low,
+`store=false`, strict schema, output cap 2048, SDK retries zero.
+The source shape is checked with the Router→Temporal adapter before
+provider access. The model's proposed plan is compiled locally but
+**never executed by this live runner**. Its raw synthetic response and token
+usage are saved to a time-stamped file and must be independently evaluated
+through disposable Core Markdown writes and pending-work guards.
+
+**Sequential budget, under the user's existing cumulative USD 0.07
+approval:** The project's pinned upper-bound formula reserves
+USD **0.03313010** for **F14** and USD **0.03329860** for **F27**.
+The prior 3 Router and 2 Core calls were estimated at USD **0.00821760**.
+Reserving BOTH worst-case calls together would exceed USD 0.07, so
+the runner deliberately **refuses F27 until exactly one saved F14 receipt
+exists with validated usage**. Then it counts observed F14 tokens at full
+noncached standard rates and reserves all of F27's conservative upper
+envelope. Neither invocation retries failed calls; the total conservative
+accounting must stay below USD 0.07. Cost estimates are not invoices.
+
+The initial offline-preflight checks plus six altered pending date/reference
+sentinels are provider-free. A source-anchored ambiguous candidate may omit
+a date from Core's WRITE only when its original date role and unresolved
+reference form one bounded, uninterrupted original clause; this removes the
+old false negative for separately quoted `Mañana` without granting Router
+authority to write or guess what `él` means. Independent physical pending
+coverage is still mandatory.
+
+Offline:
+```bash
+python -m benchmarks.fact_candidate_core_live.run_temporal_live --case F14
+python -m pytest -q tests/benchmarks/test_fact_candidate_core_temporal_live_runner.py
+```
+
+The live command is the same with `--live` inside the previously approved
+transient Pi `systemd --user` service, using only the fixed
+`EnvironmentFile` and explicit `ODYSSEY_CORE_FACT_LIVE_APPROVED=1` flag.
+Run **F14 first**, independently inspect the saved receipt, then recheck
+`--case F27` offline before any second invocation. If a platform safety
+control blocks execution, stop and disclose the refusal.

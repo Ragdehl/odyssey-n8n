@@ -328,17 +328,43 @@ def _validate_semantic_temporal_evidence(
             scoped = [
                 candidate
                 for candidate in candidate_context.candidates
-                if any(anchor.start <= start and end <= anchor.end for anchor in candidate.anchors)
+                if any(
+                    role.role in {"date", "date_scope", "time", "time_approx"}
+                    and role.span.start <= start
+                    and end <= role.span.end
+                    for role in candidate.roles
+                )
             ]
             if len(scoped) != 1 or scoped[0].state != "ambiguous_identity":
                 continue
-            if not any(
-                role.role in {"date", "date_scope", "time", "time_approx"}
-                and role.span.start <= start
-                and end <= role.span.end
-                for role in scoped[0].roles
-            ):
-                continue
+            candidate = scoped[0]
+            # An exact source-anchored date role need not itself appear inside
+            # an event anchor: Router may quote predicate and pronoun
+            # separately. It may only exempt a missing date when the source
+            # itself proves that a single unresolved reference shares that
+            # bounded, uninterrupted clause with the date. This grants no
+            # permission to write; Core must still verify the pending claim.
+            if not any(anchor.start <= start and end <= anchor.end for anchor in candidate.anchors):
+                references = [role.span for role in candidate.roles if role.role == "reference"]
+                if len(references) != 1:
+                    continue
+                reference = references[0]
+                if (
+                    not any(
+                        anchor.start <= reference.start and reference.end <= anchor.end
+                        for anchor in candidate.anchors
+                    )
+                    or reference.start <= end
+                    or reference.end - start > 400
+                    or any(mark in source[start : reference.end] for mark in ".;!?\n\r")
+                    or any(
+                        anchor.start < reference.end and anchor.end > start
+                        for other in candidate_context.candidates
+                        if other is not candidate
+                        for anchor in other.anchors
+                    )
+                ):
+                    continue
             excluded[pair] = 1
         missing -= excluded
     if intents and missing:
