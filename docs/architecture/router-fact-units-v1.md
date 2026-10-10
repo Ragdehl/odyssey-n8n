@@ -807,6 +807,54 @@ model-quality gate is **FAIL / NOT READY**, and the explicit normal-user
 service execution here does not retroactively authorize repeating any
 previously blocked remote operation.
 
+**Block 4B20 first reviewed prompt revision — real GPT-6 evidence (2026-10-10,
+feature branch ONLY):** After the original F09/F10/F14/F27 live gate,
+`OpenAIFactCandidateRouter` gained a **v2 prompt extension behind an opt-in
+constructor argument**, inheriting the entire prior v1 prompt unchanged.
+The JSON schema, Core, Temporal, Router v0 and model configuration are
+unchanged. Frozen requests are in
+`benchmarks/fact_candidate_v2_live/prompt_v2_requests.json`.
+A separately reviewed four-call GPT-6 Luna/low gate completed using the
+ordinary existing user service and only synthetic text, with
+`store=false` and SDK retries disabled. Conservative v2 reservation was
+USD 0.01379775; recorded usage was **3,634 input and 1,389 output tokens**
+(USD **0.0010579** estimated at pinned standard rates, not the invoice).
+With first-wave observed cost USD 0.0010009, the two focused runs total
+approximately USD **0.0020588**, within the authorized USD 0.02.
+Raw results are frozen at
+`benchmarks/fact_candidate_v2_live/results/20261010T191859Z.json`.
+
+Compared with the first v1 GPT-6 run:
+- **F09 improved materially:** two independent `property` assertions,
+  anchored to Marta and Luis separately, rather than one `relationship`.
+- **F10 retained one mutual event but REGRESSED its kind:** `occurrence`
+  instead of the approved `relationship` for `se conocieron`. This is a
+  model-facing classification error, not a new duplicated event.
+- **F14 improved:** one grouped contact and an ambiguous future
+  `occurrence`, exact `date` roles for Ayer/Mañana and
+  `reference` for `él`. The first grouped fact cites separate
+  `participants` name spans, which is valid literal evidence, but the
+  narrow opt-in Core pilot currently requires one contiguous `A y B`
+  participant span wholly contained in a source anchor. Core still
+  rejects the offered source shape before writing.
+- **F27 improved:** two ordered contacts and an ambiguous future
+  `occurrence`, an explicit `reference` for `él` and exact
+  `date` roles for the first and third candidates. The middle event
+  inherits the earlier predicate without an explicit `date` role,
+  and the pending candidate uses multiple source anchors rather than
+  one enclosing its pronoun. The narrow opt-in Core pilot rejects this
+  shape before any write.
+
+These results **must not** be described as four passing Core integrations.
+The model understands the principal event distinctions better, while exact
+fixture comparison and Core source-coverage readiness remain **FAIL**.
+Not all exact-span mismatches are semantic misinterpretations: a future
+review should decide whether a general Core-owned source evidence validator
+can safely accept independently grounded equivalent spans/role inheritance,
+rather than prompt-overfitting to narrow handwritten pilot templates.
+Preserve the strong canonical reference/temporal guards. No DEV/PROD
+activation, real Notes, schema or model migrations occurred.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

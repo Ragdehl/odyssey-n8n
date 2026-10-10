@@ -195,6 +195,26 @@ NOT READY for DEV**, pending contract/prompt semantic corrections and a
 reviewed new regression gate. That success does not determine the cause of
 the older rejected remote shell command or authorize bypassing it.
 
+**Second focused GPT-6 Router gate, opt-in prompt v2 (2026-10-10):** The
+entire previous source-only prompt was retained and supplemented with generic
+independent-property, mutual-relation, date, pronoun and future-event rules
+without changing the model/schema or runtime. Four synthetic live calls
+completed with 3,634 input / 1,389 output tokens and an estimated standard
+USD **0.0010579** charge. F09 now separates Marta and Luis into **two**
+independent property candidates; F14/F27 now distinguish exact `date`,
+ambiguous `reference` and future `occurrence` roles. F10's mutual event
+remains **one candidate** but was misclassified `occurrence` instead of
+`relationship`. The F14/F27 model spans are more informative, but the
+current **narrow opt-in Core source-evidence pilots reject their alternative
+anchoring/role inheritance** before writes; this does NOT prove a problem
+with their underlying event segmentation. Preserve these real observed
+outputs offline and review whether Core should accept equivalent proven
+source spans rather than overconstraining GPT-6 to one handwritten template.
+Router v1 remains inactive; focus on **F09/F10/F14/F27 only** until both
+semantic type accuracy and Core-reviewed coverage pass. The remaining 23
+approved design cases are deliberately deferred until this four-case gate
+is settled. No DEV/PROD or vault changes.
+
 **F27 exact sequential-source Core pilot (2026-10-10):** The two separate
 conversation facts for `hablé con Eric y después con Luis` now also pass a
 real (fake-model) semantic Core compilation, source-before-write candidate
