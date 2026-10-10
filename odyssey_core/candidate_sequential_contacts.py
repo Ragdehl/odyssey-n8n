@@ -149,7 +149,11 @@ def validate_two_sequential_contacts(
         or len(unit.facts) != 2
         or len(unit.references) != 2
         or len(action.units) != 3
-        or unit.facts != ("Hablé con {{ref:0}}.", "Después hablé con {{ref:1}}.")
+        or unit.facts
+        not in {
+            ("Hablé con {{ref:0}}.", "Después hablé con {{ref:1}}."),
+            ("Hablé con {{ref:0}}.", "Hablé después con {{ref:1}}."),
+        }
         or len(unit.fact_temporal_anchors) != 2
         or not unit.fact_temporal_anchors[0]
         or unit.fact_temporal_anchors[0] != unit.fact_temporal_anchors[1]

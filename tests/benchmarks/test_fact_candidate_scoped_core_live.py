@@ -11,6 +11,14 @@ from tests.runtime.test_fact_candidate_planning_vertical import _sdk_fake
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import _raw_semantic_plan
 
 
+def _isolated_receipts(monkeypatch, tmp_path):
+    """Keep CI independent of real spent synthetic call receipts."""
+    original = scope.RESULTS
+    for name in scope.HISTORIC:
+        (tmp_path / name).write_bytes((original / name).read_bytes())
+    monkeypatch.setattr(scope, "RESULTS", tmp_path)
+
+
 def test_all_scoped_requests_are_reviewed_and_not_whole_source() -> None:
     for case_id, unit_id in scope.STAGES:
         unit, domain, request, spec = scope._reviewed(case_id, unit_id)
@@ -26,7 +34,8 @@ def test_all_scoped_requests_are_reviewed_and_not_whole_source() -> None:
         assert len(domain.temporal_references()) == 1
 
 
-def test_dry_run_first_unit_is_bounded_without_credentials(monkeypatch):
+def test_dry_run_first_unit_is_bounded_without_credentials(monkeypatch, tmp_path):
+    _isolated_receipts(monkeypatch, tmp_path)
     monkeypatch.delenv(scope.RUN_ENV, raising=False)
     result = scope.run("F14", "candidate-1", live=False)
     assert result["mode"] == "OFFLINE_DRY_RUN"
@@ -44,7 +53,8 @@ def test_second_stage_refuses_unobserved_previous_call(monkeypatch, tmp_path):
         scope.run("F27", "candidate-1", live=True, client=object())
 
 
-def test_missing_approval_flag_blocks_even_fake_provider(monkeypatch):
+def test_missing_approval_flag_blocks_even_fake_provider(monkeypatch, tmp_path):
+    _isolated_receipts(monkeypatch, tmp_path)
     monkeypatch.delenv(scope.RUN_ENV, raising=False)
     fake, calls = _sdk_fake(_raw_semantic_plan())
     with pytest.raises(ValueError, match="explicit approval"):
@@ -62,7 +72,8 @@ def test_reviewed_request_drift_prevents_provider_access(monkeypatch, tmp_path):
         scope.run("F14", "candidate-1", live=True, client=object())
 
 
-def test_scoped_fake_plan_is_one_call_with_no_write_authority(monkeypatch):
+def test_scoped_fake_plan_is_one_call_with_no_write_authority(monkeypatch, tmp_path):
+    _isolated_receipts(monkeypatch, tmp_path)
     monkeypatch.setenv(scope.RUN_ENV, "1")
     fake, calls = _sdk_fake(_raw_semantic_plan())
     result = scope.run("F14", "candidate-1", live=True, client=fake)

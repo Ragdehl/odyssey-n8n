@@ -1,0 +1,20 @@
+{
+  "case": "F14",
+  "unit": "candidate-1",
+  "mode": "LIVE_SCOPED_CORE_PLAN_ONLY",
+  "model": "gpt-5.6-luna",
+  "max_calls": 1,
+  "may_authorize_writes": false,
+  "reservation_usd": 0.0321546,
+  "previous_estimated_usd": 0.0185276,
+  "authorized_total_usd": 0.07,
+  "usage": {
+    "input_tokens": 10603,
+    "output_tokens": 345
+  },
+  "provider_status": "completed",
+  "raw_model_response": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Hablé con \"},{\"kind\":\"identity\",\"text\":\"Eric\",\"identity\":{\"description\":\"Eric\",\"binding\":\"described\",\"direct_name\":\"Eric\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+  "outcome": "PLAN",
+  "plan_repr": "RequestPlan(actions=(WriteAction(units=(KnowledgeUnit(target=SelectionCriteria(entity=None, query='2026-10-03', type='calendar_day', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=('Hablé con {{ref:0}} y {{ref:1}}.',), references=(KnowledgeReference(target_index=1, role='identity', mention='Eric', selection=None), KnowledgeReference(target_index=2, role='identity', mention='Luis', selection=None)), cardinality='one', destination_type=None, reference_lookup_only=False, fact_temporal_anchors=((TemporalAnchor(date='2026-10-03', time=None, offset=None),),), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity='Eric', query='Eric', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=(), references=(), cardinality='one', destination_type=None, reference_lookup_only=True, fact_temporal_anchors=(), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity='Luis', query='Luis', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=(), references=(), cardinality='one', destination_type=None, reference_lookup_only=True, fact_temporal_anchors=(), force_create=False)), kind='write'),), limitations=(), presentation_intent='answer')",
+  "validation": "locally_valid"
+}

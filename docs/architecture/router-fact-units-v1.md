@@ -1108,3 +1108,63 @@ original source candidate and retain full-source coverage plus
 durable pending, before any isolated write can be authorized.
 Do not represent this first slice as completion of that runtime
 handoff or as successful real-model scoped planning.
+
+
+**Block 4B28 real GPT-5.6 per-fact planning and physical Core verification
+(2026-10-10, experimental branch ONLY):** The model invocation path now
+passes independently scoped, Core-owned source-proven facts to the **existing
+unchanged `OpenAILunaExperimentalPlanner`**, exactly one source unit per
+provider call. `candidate_scoped_handoff.py` retains each original source
+quote/role/date/ordinal and an immutable digest of the complete input;
+`candidate_scoped_planning.py` creates a Core-owned, grammatically derived
+single-fact request (not falsely labeled a verbatim user quote) with ONLY
+that fact's already verified original Temporal date. No future unresolved
+pronoun appears in any model request. No new specialized planner or app
+mutator was created.
+
+All **three actual GPT-5.6 Luna/low live calls now return `PLAN`**:
+- F14/candidate-1 -> `Ayer hablé con Eric y Luis.` -> one dated
+  `Hablé con [[Eric]] y [[Luis]].` fact (two separate identity helpers).
+- F27/candidate-1 -> `Ayer hablé con Eric.` -> one dated Eric fact.
+- F27/candidate-2 -> `Ayer hablé después con Luis.` -> one separate
+  dated later Luis fact. Core preserved the explicit ordering.
+
+The three exactly reviewed, hashed, source-only model calls (`store=false`,
+no retries) produced frozen synthetic model receipts under
+`benchmarks/fact_candidate_core_live/results/*--F14--candidate-1.json`,
+`*--F27--candidate-1.json` and `*--F27--candidate-2.json`.
+Observed 10,603/345, 10,601/257, 10,602/295 input/output tokens,
+respectively. At standard pinned rates, all focused live Router/Core
+calls together estimated **USD 0.0259652**, under the existing explicit
+USD 0.07 ceiling (not an invoice). No further paid calls required here.
+
+**Important cross-unit safety:** Core joins F27's two independently
+compiled one-fact `RequestPlan` objects into one ordered canonical
+same-Day action by reindexing the second already-verified identity
+placeholder and moving the original immutable facts/helpers unchanged.
+The original Core-only sequential source coverage now also recognizes
+`Hablé después con` as equivalent to `Después hablé con` for the
+explicitly supported `y después con` user source shape. Both F14 and
+F27 merged plans pass **full original user-source coverage**: one claim
+per real candidate, one claim per persisted fact, and a separate pending
+ambiguity claim for the missing cinema person. These are real model
+responses recompiled through the original Core compiler, not fabricated
+or preselected human plans.
+
+Isolated physical Markdown E2E now proves F14=1 and F27=2 distinct
+original-day linked facts, physically verified readback, distinct Eric
+and Luis canonical references, **durable unresolved `él` pending**, and
+safe later `Con Luis` continuation adding ONLY the future cinema with
+Luis while retaining the original Day without duplication. All writes
+occur in disposable test vaults; **nothing changed in DEV/PROD or any
+real notes**.
+
+**Remaining limitations before activation:** This pilot deliberately
+only understands the exact reviewed two-clause F14/F27 source pattern,
+not arbitrary natural-language splits, conditional negations,
+corrections or cross-clause dependencies. The per-fact orchestration
+is opt-in and not yet connected to the runtime chat path. The other
+23 approved Router design examples and full production-scale semantic
+coverage remain untested. Historic unrelated test failures still need
+independent release review. Keep Core GPT-5.6 and Router v0 settings
+unchanged.

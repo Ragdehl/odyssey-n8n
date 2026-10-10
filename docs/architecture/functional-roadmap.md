@@ -765,3 +765,28 @@ The detailed index is [Future Extension Points](future-extension-points.md). Imp
 ## Roadmap rule
 
 This file records **current status and intended sequencing**, not every implementation detail. When a phase completes, update the status here and leave its detailed contract/evidence in the phase document, ADR, tests, and benchmark records. Do not duplicate those historical narratives back into the roadmap.
+
+
+**F14/F27 real Core per-fact acceptance (2026-10-10, isolated
+opt-in contract, NOT runtime-enabled):** After confirming all four
+earlier full-message GPT-5.6 Core requests escalated, Core now
+constructs exact-source-proven individual tasks from the validated
+GPT-6 Router v3 candidates and separately trusted Temporal date:
+F14 → 1 task, F27 → 2 ordered tasks. **All three real GPT-5.6 Luna/low
+responses returned PLAN**, correctly targeted to the past
+`calendar_day` with Eric/Luis as existing Person identities.
+The original full message is retained out-of-band for Core safety
+but is no longer passed as one all-or-nothing model planning task.
+The F27 one-fact plans are safely joined by a Core-owned mechanical
+same-Day merger (no invented identity/date/fact) and the **full
+original candidate-to-fact/pending coverage guard passes**. Frozen
+real provider JSON is in
+`benchmarks/fact_candidate_core_live/results/*--F14--candidate-1.json`
+and `*--F27--candidate-{1,2}.json`. Offline isolated canonical
+Markdown E2E physically verifies 1/2 past facts, durable `él`
+pending, `Con Luis` follow-up and no Day duplication. Observed
+cumulative focused live GPT-6 Router/GPT-5.6 Core estimated spend
+is **USD 0.0259652**, under the user's existing USD 0.07
+authorization (not an invoice). **The opt-in path has not been
+connected to production/DEV runtime; the other 23 Router cases,
+general cross-clause dependencies and broader release gate remain.**

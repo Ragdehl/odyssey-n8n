@@ -292,3 +292,55 @@ The reviewed live command is the same with `--live`, under the existing
 transient Pi user service with the fixed EnvironmentFile and explicit
 `ODYSSEY_CORE_FACT_LIVE_APPROVED=1`. If any provider stage refuses,
 save it as failure evidence rather than claiming acceptance or retrying.
+
+
+## Real result of the independent Core planner gate (2026-10-10)
+
+All **three reviewed single-fact GPT-5.6 Luna/low model requests**
+returned valid `PLAN` outcomes, unlike four earlier full-message
+F14/F27 `ESCALATE` outcomes. The original, complete synthetic GPT-6
+Router proposals are unchanged; each GPT-5.6 call instead received
+ONE Core-owned independently evidenced unit and its trusted past
+Temporal date only:
+
+- **F14**: `Ayer hablé con Eric y Luis.` → one linked past event.
+  10,603 input / 345 output tokens.
+- **F27/1**: `Ayer hablé con Eric.` → Eric contact.
+  10,601 input / 257 output tokens.
+- **F27/2**: `Ayer hablé después con Luis.` → separate ordered
+  Luis contact. 10,602 input / 295 output tokens.
+
+Frozen real model JSON and usage are under
+`results/*--F14--candidate-1.json`,
+`results/*--F27--candidate-1.json` and
+`results/*--F27--candidate-2.json`. Combined estimated cost of
+**all** focused Router and Core live tests is USD **0.0259652** at
+pinned standard rates (not an invoice), under the explicit approved
+USD 0.07 ceiling. All three calls were executed once, `store=false`,
+no retries and no user-vault access; the gate now explicitly refuses
+duplicate paid execution.
+
+Core's own opt-in `merge_scoped_core_plans_for_review` reconciles
+F27's separately compiled one-fact Day plans into one canonical
+ordered same-Day action by reindexing the second identity placeholder
+only. It does not invent new Core facts, dates or identity targets.
+The existing independent original-source Core coverage now accepts
+`Hablé después con` as a guarded equivalent surface order to
+`Después hablé con` when the user explicitly wrote
+`y después con`. F14/F27 **full ORIGINAL-source candidate coverage**
+passes, including a distinct `ambiguous_identity` pending claim.
+
+The offline, saved-real-model end-to-end vertical test now proves
+physical canonical Markdown write/readback: F14 one past fact, F27
+two separate ordered past facts, exact Eric/Luis canonical links,
+durable future `él` pending, and subsequent user clarification
+`Con Luis` producing only the future cinema fact without
+duplicating or altering previous-day notes. No real user Notes
+were written.
+
+**Not yet production-active:** The new adapter, prompt scoping,
+Core plans and merging are opt-in experimental code only. The
+interactive runtime is not routed to this flow. This is narrowly
+validated on these F14/F27 shapes; arbitrary clauses, conditional
+corrections, references, and the other 23 Router examples have
+not passed this scoped-planner integration gate.
