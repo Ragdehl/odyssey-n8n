@@ -11,11 +11,12 @@ import os
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol
 
+from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.domain_interpretation import DomainInterpretation
 from odyssey_core.observability import (
     OperationalOutcome,
@@ -143,6 +144,7 @@ def validate_luna_experimental_result(
     domain_interpretation: DomainInterpretation | None = None,
     *,
     authorized_calendar_dates: Sequence[str] = (),
+    candidate_context: CoreCandidateContext | None = None,
 ) -> ExperimentalPlannerResult:
     """Validate a Luna result without weakening production planner validation.
 
@@ -169,6 +171,7 @@ def validate_luna_experimental_result(
             schema,
             domain_interpretation,
             authorized_calendar_dates=authorized_calendar_dates,
+            candidate_context=candidate_context,
         )
     if payload.get("outcome") != "ESCALATE":
         return validate_planner_result(payload, schema)
@@ -195,6 +198,7 @@ def _validate_luna_plan(
     domain_interpretation: DomainInterpretation | None = None,
     *,
     authorized_calendar_dates: Sequence[str] = (),
+    candidate_context: CoreCandidateContext | None = None,
 ) -> RequestPlan:
     """Compile semantic writes in provider order and reuse established action/final invariants."""
     required = {"outcome", "actions", "limitations", "clarification_code"}
@@ -239,23 +243,43 @@ def _validate_luna_plan(
                 stage=PlannerValidationStage.WRITE_ACTION,
                 code=PlannerValidationCode.INVALID_MUTATION,
             ) from error
-    _validate_semantic_temporal_evidence(semantic_write_intents, domain_interpretation)
+    excluded_pending_temporals = _validate_semantic_temporal_evidence(
+        semantic_write_intents, domain_interpretation, candidate_context
+    )
+    # Keep Temporal's original evidence immutable. For this opt-in planning
+    # preflight ONLY, drop exactly those mentions which Core has source-located
+    # inside an independently pending ambiguous source candidate. The ordinary
+    # Core temporal validator must still reject every other missing date.
+    scoped_temporal = domain_interpretation
+    if excluded_pending_temporals and domain_interpretation is not None:
+        remainder = excluded_pending_temporals.copy()
+        kept = []
+        for evidence in domain_interpretation.evidence:
+            key = (evidence.source_text, evidence.value)
+            if evidence.kind == "temporal_reference" and remainder[key] > 0:
+                remainder[key] -= 1
+                continue
+            kept.append(evidence)
+        if any(remainder.values()):
+            raise RequestPlanningError("Ambiguous candidate temporal proof is incomplete")
+        scoped_temporal = replace(domain_interpretation, evidence=tuple(kept))
     plan = finalize_request_plan(
         actions,
         payload["limitations"],
         payload.get("presentation_intent", "answer"),
     )
-    validate_plan_against_domain_interpretation(plan, domain_interpretation)
-    return bind_plan_temporal_anchors(plan, domain_interpretation)
+    validate_plan_against_domain_interpretation(plan, scoped_temporal)
+    return bind_plan_temporal_anchors(plan, scoped_temporal)
 
 
 def _validate_semantic_temporal_evidence(
     intents: Sequence[SemanticWriteIntent],
     interpretation: DomainInterpretation | None,
-) -> None:
-    """Bind semantic temporal parts to exact trusted source-text/date evidence pairs."""
+    candidate_context: CoreCandidateContext | None = None,
+) -> Counter[tuple[str, str]]:
+    """Require all non-pending Temporal evidence, returning precisely omitted pending pairs."""
     if interpretation is None:
-        return
+        return Counter()
     allowed = Counter(
         (item.source_text, item.value) for item in interpretation.temporal_references()
     )
@@ -284,12 +308,72 @@ def _validate_semantic_temporal_evidence(
             stage=PlannerValidationStage.WRITE_ACTION,
             code=PlannerValidationCode.INVALID_MUTATION,
         )
-    if intents and required - found:
+    missing = required - found
+    excluded: Counter[tuple[str, str]] = Counter()
+    if missing and candidate_context is not None:
+        # Source candidates are unverified hints; here they may *prevent an
+        # unjustified global temporal-coverage veto*, not grant write authority.
+        # A separate, mandatory Core-owned coverage manifest must still prove
+        # that an omitted ambiguous candidate is explicitly pending.
+        candidate_context.validate(interpretation.source_text)
+        for pair, count in missing.items():
+            mention, _value = pair
+            source = candidate_context.source
+            # Temporal exposes source text, not occurrence offsets. An
+            # ambiguous repeated literal must not be matched to a guessed one.
+            if count != 1 or source.count(mention) != 1:
+                continue
+            start = source.find(mention)
+            end = start + len(mention)
+            scoped = [
+                candidate
+                for candidate in candidate_context.candidates
+                if any(
+                    role.role in {"date", "date_scope", "time", "time_approx"}
+                    and role.span.start <= start
+                    and end <= role.span.end
+                    for role in candidate.roles
+                )
+            ]
+            if len(scoped) != 1 or scoped[0].state != "ambiguous_identity":
+                continue
+            candidate = scoped[0]
+            # An exact source-anchored date role need not itself appear inside
+            # an event anchor: Router may quote predicate and pronoun
+            # separately. It may only exempt a missing date when the source
+            # itself proves that a single unresolved reference shares that
+            # bounded, uninterrupted clause with the date. This grants no
+            # permission to write; Core must still verify the pending claim.
+            if not any(anchor.start <= start and end <= anchor.end for anchor in candidate.anchors):
+                references = [role.span for role in candidate.roles if role.role == "reference"]
+                if len(references) != 1:
+                    continue
+                reference = references[0]
+                if (
+                    not any(
+                        anchor.start <= reference.start and reference.end <= anchor.end
+                        for anchor in candidate.anchors
+                    )
+                    or reference.start <= end
+                    or reference.end - start > 400
+                    or any(mark in source[start : reference.end] for mark in ".;!?\n\r")
+                    or any(
+                        anchor.start < reference.end and anchor.end > start
+                        for other in candidate_context.candidates
+                        if other is not candidate
+                        for anchor in other.anchors
+                    )
+                ):
+                    continue
+            excluded[pair] = 1
+        missing -= excluded
+    if intents and missing:
         raise RequestPlanningError(
             "Luna semantic WRITE omitted required temporal wording/temporal evidence",
             stage=PlannerValidationStage.WRITE_ACTION,
             code=PlannerValidationCode.INVALID_MUTATION,
         )
+    return excluded
 
 
 def render_luna_experimental_prompt(
@@ -300,6 +384,8 @@ def render_luna_experimental_prompt(
     conversation_context: Sequence[Mapping[str, str]] = (),
     size_components: dict[str, int] | None = None,
     domain_interpretation: DomainInterpretation | None = None,
+    candidate_context: CoreCandidateContext | None = None,
+    partial_candidate_guidance: bool = False,
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -343,6 +429,14 @@ def render_luna_experimental_prompt(
     if semantic_prompt.count(LUNA_DYNAMIC_CONTEXT_MARKER) != 1:
         raise RuntimeError("Luna semantic prompt dynamic boundary is invalid")
     semantic_static, semantic_dynamic = semantic_prompt.split(LUNA_DYNAMIC_CONTEXT_MARKER, 1)
+    # Keep request-specific candidate evidence out of Luna's shared cache prefix.
+    if candidate_context is not None:
+        if not isinstance(candidate_context, CoreCandidateContext):
+            raise RequestPlanningError("Core candidate context must be Core-owned")
+        candidate_section = candidate_context.prompt_suffix()
+        semantic_dynamic += candidate_section
+        if size_components is not None:
+            size_components["candidate_context_bytes"] = len(candidate_section.encode("utf-8"))
     luna_static = f"""{semantic_static}
 
 Choose the outcome before drafting fields:
@@ -361,6 +455,33 @@ Presentation tie-breaker:
 Teaching examples (not evaluation cases):
 
 {rendered_examples}
+"""
+    if partial_candidate_guidance:
+        if candidate_context is None or not any(
+            candidate.state == "ambiguous_identity" for candidate in candidate_context.candidates
+        ):
+            raise RequestPlanningError(
+                "Partial-candidate teaching requires explicit ambiguous source evidence"
+            )
+        luna_static += """
+Scoped source-candidate partial-write rule (opt-in pilot; Core still validates):
+When one user message has independently supportable source candidates AND
+separate ambiguous_identity candidates, preserve safe independent facts
+as an ordinary PLAN with only their fully justified WRITE operations.
+Do NOT emit the ambiguous candidate as a fact, identity link, date, task,
+conditional plan, or placeholder. Core's separate mandatory candidate-
+coverage check must explicitly account for every omitted ambiguous candidate
+as pending before any write, and must then durably record its clarification;
+a missing or invalid coverage/pending proof aborts all authorization.
+Thus PLAN here means that all executable facts are represented safely and
+the unresolved source remains explicitly pending, NOT that the unresolved
+assertion has become known or that Router can authorize a write.
+If any apparently safe candidate itself depends on the unresolved
+identity or cannot independently identify its target, ESCALATE instead.
+For dated independent past facts, select ONLY the exact past calendar
+date supplied by Temporal. Never write an unresolved later event to
+that day or invent a date. Preserve coherent vs sequential event count.
+Never use an identity mentioned by the user to fill an unresolved pronoun.
 """
     prompt = luna_static + LUNA_DYNAMIC_CONTEXT_MARKER + semantic_dynamic
     if size_components is not None:
@@ -449,6 +570,8 @@ class OpenAILunaExperimentalPlanner:
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        candidate_context: CoreCandidateContext | None = None,
+        partial_candidate_guidance: bool = False,
         model: str = LUNA_EXPERIMENT_MODEL,
         reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
         max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -460,6 +583,8 @@ class OpenAILunaExperimentalPlanner:
             tuple(teaching_examples) if teaching_examples is not None else None
         )
         self._domain_interpretation = domain_interpretation
+        self._candidate_context = candidate_context
+        self._partial_candidate_guidance = partial_candidate_guidance
         self._planning_schema = planning_schema_for_capability(
             schema,
             domain_interpretation.capability_id if domain_interpretation is not None else None,
@@ -500,6 +625,8 @@ class OpenAILunaExperimentalPlanner:
         *,
         teaching_examples: Sequence[Mapping[str, Any]] | None = None,
         domain_interpretation: DomainInterpretation | None = None,
+        candidate_context: CoreCandidateContext | None = None,
+        partial_candidate_guidance: bool = False,
         model: str = LUNA_EXPERIMENT_MODEL,
         reasoning_effort: str = LUNA_EXPERIMENT_REASONING_EFFORT,
         max_output_tokens: int = LUNA_EXPERIMENT_MAX_OUTPUT_TOKENS,
@@ -519,6 +646,8 @@ class OpenAILunaExperimentalPlanner:
             current_context,
             teaching_examples=teaching_examples,
             domain_interpretation=domain_interpretation,
+            candidate_context=candidate_context,
+            partial_candidate_guidance=partial_candidate_guidance,
             model=model,
             reasoning_effort=reasoning_effort,
             max_output_tokens=max_output_tokens,
@@ -530,6 +659,15 @@ class OpenAILunaExperimentalPlanner:
         """Make exactly one bounded Luna attempt and validate without executing its result."""
         if not isinstance(request, str) or not request.strip():
             raise RequestPlanningError("Request text must be non-empty")
+        if self._candidate_context is not None:
+            if not isinstance(self._candidate_context, CoreCandidateContext):
+                raise RequestPlanningError("Core candidate context must be Core-owned")
+            try:
+                self._candidate_context.validate(request)
+            except ValueError as error:
+                raise RequestPlanningError(
+                    "Core candidate context is not grounded in request"
+                ) from error
         self.last_usage = None
         self.last_response_id = None
         self.last_provider_status = None
@@ -552,6 +690,8 @@ class OpenAILunaExperimentalPlanner:
                 conversation_context=conversation_context,
                 size_components=sizes,
                 domain_interpretation=self._domain_interpretation,
+                candidate_context=self._candidate_context,
+                partial_candidate_guidance=self._partial_candidate_guidance,
             )
             authorized_calendar_dates = planner_authorized_calendar_dates(
                 self._current_context, self._domain_interpretation
@@ -660,6 +800,7 @@ class OpenAILunaExperimentalPlanner:
                 authorized_calendar_dates=planner_authorized_calendar_dates(
                     self._current_context, self._domain_interpretation
                 ),
+                candidate_context=self._candidate_context,
             )
         except RequestPlanningError as error:
             recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)

@@ -24,6 +24,20 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
+## Deferred model consolidation — user decision (2026-10-10)
+
+**Do not change models during the current Router fact-candidate / Temporal / Core work.**
+The user explicitly prefers finishing and validating this functional block
+first, keeping its existing configured models and historical live-gate evidence
+stable. **After this block is closed**, schedule a separate reviewed effort to
+migrate remaining Odyssey components to **GPT-6 Luna** (including Core Planner,
+Core Attribution, Writer, Fact Selector, clarification and contextual reasoning,
+where still on GPT-5.6 Luna). Inventory actual runtime overrides as well as
+code defaults; preserve prompt/contract and cost benchmarks, run focused live
+model-quality gates under separately agreed budgets, then request approval
+for DEV/PROD promotion. This is **deferred work**, not an authorization to
+silently switch models, merge or deploy now.
+
 ## Router parallel preparation (DEV optimization)
 
 [Router parallel preparation, Slices 1–2](router-parallel-preparation.md) allows
@@ -39,6 +53,252 @@ measured latency savings from deterministic concurrence tests alone.
 ## Planned Router fact-candidate segmentation — design review
 
 [Router fact-candidate units v1](router-fact-units-v1.md) records the user-reviewed direction for independent atomic candidate assertions, typed source-context inheritance, and separation from Core-owned persistence. Its 22 user-agreed plus four additional generic-subject future oracles are not a live Router contract, and the current `dev` Router v0 remains unchanged. Frontend Block 3 preparation now makes existing validated v1 route evidence legible, provides an optional read-only renderer for the inactive bounded checkpoint shape, and supplies a local test-only candidate preview; none crosses a product transport or grants write/identity authority. The approved partial-write direction retains validated independent facts while ambiguity remains pending with targeted clarification, not blanket abort. Diagnostic checkpoints/graph come before any v1 provider/runtime activation; product choices about partial writes and conditional/negative persistence remain open.
+
+**Router candidates Block 4A (feature branch, not activated):** the closed
+source-anchored parser and injected one-call proposal adapter are implemented for
+the 26 design cases / 56 candidates. Roles and inheritance remain unverified
+linguistic evidence with no Note type, Core write, runtime dispatch or new
+frontend transport. Read-only Router→Temporal source-scope and Core-owned
+candidate evidence/prompt opt-in are also prepared on the feature branch,
+including one fully injected provider-free F13 vertical planner test. No
+runtime branch uses these new contracts and none executes candidate writes.
+Disposable Markdown tests now exercise existing Core persistence for three
+activities across two dates, one shared two-item purchase, exact-request replay
+and an ambiguous pronoun held out of synthetic writes. A Core-owned read-only
+receipt observer exposes genuine unit statuses but deliberately leaves **all**
+source candidates `unattributed`, since ordinals alone cannot prove a semantic
+candidate was persisted. The existing Core result may say `completed` despite
+an unresolved candidate deliberately omitted by a handwritten test plan; this
+shows why per-candidate Core-verified attribution, pending clarification and
+partial-success/idempotence guards still need implementation before activation.
+Additional bounded readback now checks Core's actual canonical Markdown
+fact markers by request ID, fact ordinal, stable Note ID and exact plan text.
+It distinguishes confirmed physical writes from cross-request duplicate
+suppression, `unproven` source candidates, ambiguous candidates and unknown
+source coverage, and explicitly
+forbids reporting the whole request as complete on Core fact markers alone.
+An **opt-in Core preflight** now rejects missing candidate coverage or
+unreviewed complex writes before any mutation, without touching Router v0.
+If synthetic independent writes succeed while a candidate remains unresolved,
+opt-in Core marks the request `PARTIAL` and explicitly reports that the
+candidate continuation is **not durably resumable yet**. Structural attribution
+is not proof that the right semantic fact was written; the new conservative
+Core preflight now rejects a deliberately swapped pan/milk mapping, but does
+not certify semantics. A Core-owned model-approved
+mapping/semantic proof, safe reference handling, durable partial clarifications,
+new request-detail projections and a true provider→verified attribution→Core
+write vertical path, plus separate final live GPT-6 Router / GPT-5.6 Luna
+semantic gates, remain required. Router v0 remains operational. The
+isolated Core candidate preflight additionally rejects obvious mismatched
+item evidence, a newly invented negation, and unverified source pronoun
+references **before persistence**. Passing these vetoes is not semantic
+attestation: mixed-clause negation, date ownership and grounded canonical
+identity still require independent verification.
+
+The human-approved partial clarification lifecycle now has an isolated v2
+nonknowledge state store under `state/pending/candidates/`, leaving v1 planned
+pending records and all canonical Notes intact. The opt-in Core callback
+records a real pending candidate **only after** verifying written Markdown,
+including original request/ordinal/target/fact digests; selections remain
+Core-grounded, request-ID scoped and replay/staleness guarded. Synthetic
+`Eric y Luis → él` tests now cover `con Luis`, cancellation (including after
+selection), unrelated/multiple clarifications, restart, option changes and
+previous fact changes. A guarded Core continuation with a pre-reviewed plan
+writes only the outstanding cinema Day link, with original capture clock and
+all previously saved facts unchanged. These remain **provider-free fixtures**;
+no live model has produced an accepted continuation, no auto-close-to-resolved
+semantic contract is claimed, and the v2 route is not wired into runtime.
+Final model semantic gates plus the historical release hash/operator blockers
+remain before any DEV activation.
+Initial authorized GPT-6 Router/GPT-5.6 Luna live smoke (2026-10-10):
+4 frozen synthetic source cases, **6** real zero-retry read-only model calls,
+**$0.004006 estimated** standard-rate input/output cost; F11/F01/F13 passed
+Router candidate counts/states, but F14 grouped `hablé con Eric y Luis`
+into one conversation (2 units total), while the frozen oracle requires
+3 independently accounted source facts. Pronoun remained explicitly ambiguous.
+F11 Core attribution passed local source/fact checks and a real Core Luna
+planner returned a nonexecuted validated 1-action plan, without semantic
+execution proof. This is an **evidence-backed readiness FAIL**, not a model-
+quality acceptance gate or permission to silently alter the human fixture.
+The coordinated-participants granularity requires product adjudication; full
+held-out model/continuation gates and historical release failures remain.
+
+**Approved 2026-10-10 candidate granularity:** One coherent event may have
+multiple canonical participants without inventing simultaneity. F14 now has
+one linked Eric+Luis event plus a pending ambiguous `él` (2 source candidates).
+F27 preserves the earlier distinct-conversation/ambiguous-pronoun behavior
+using explicit "después" (3 source candidates). The immutable v1 design matrix and its frozen benchmark test stay at
+26 cases / 56 candidates. The separately versioned approved v2 oracle has
+27 cases / 58 candidates. In the **isolated Core pilot only**, a review-gated
+one-event/two-named-reference plan persists one actual Day fact and two valid
+canonical backlinks; this is also tested for two project Notes. Current guarded
+Core write readback checks real rendered wikilinks and saves their digest for
+pending continuity. A synthetic pre-reviewed follow-up writes only the
+outstanding cinema fact and reuses original captures; no duplicates. The
+user-approved semantics resolved the F14 unit-count disagreement in the prior
+live smoke, not its still-unverified `plan` vs oracle `occurrence` kind,
+or any held-out model quality gate. The separate Core-only Luna-attribution
+proposer now accepts **only the same bounded two-name, two-link Core plan**
+for untrusted source/fact matching; its existing model JSON and instructions
+are unchanged and it cannot authorize a write. Provider-fake negative tests
+prove omitted/swapped/extra helpers still fail closed. No normal runtime or
+DEV activation yet.
+
+**Experimental F14 semantic-plan compilation, 2026-10-10 (feature branch):**
+The Core semantic compiler and Temporal evidence validators now support a
+**strictly source-scoped omitted future date** when and only when an opt-in
+unverified candidate is explicitly ambiguous and uniquely owns that exact
+Temporal text plus original date/time role. The ordinary full-source Temporal
+input remains unchanged; only a non-authoritative, Core-owned validation copy
+excludes the pending mention. Missing safe dates, incorrect target days,
+ambiguous repeated date text and absent scoped role still fail closed.
+A frozen provider-shaped semantic WRITE now passes the actual Luna semantic
+decoder and Core plan compiler and, subject to an **independently reviewed**
+Core coverage manifest, persists one safe Eric+Luis linked Day fact with
+`2026-10-03` anchor while durable v2 pending state retains the cine clause for
+`2026-10-05`. No plan generated by a real provider has passed this new shape
+or its semantic acceptance gate; no DEV activation, provider expense or changes
+to model-facing prompts, output schemas, canonical NoteSchema or Router v0.
+
+**V2 live gate blocker and offline cost decomposition (2026-10-10):**
+The attempted large remote operation to author a second live evaluator was
+blocked by the ChatGPT platform before remote execution; neither API nor Pi
+reported an error. The separate offline-only audit
+`benchmarks/fact_candidate_v2_preflight/check.py` now computes the actual
+provider-request envelopes from fake-client production constructors for
+F14/F27/F09/F10, with no API, secrets, writes or deployment. The conservative
+full 9-call envelope is ~USD 0.0848571, above the user-authorized USD 0.02;
+a potential limited 6-call Router/Temporal wave totals ~USD 0.013495.
+Only an explicitly security-permitted and reviewed live-gate workflow may
+execute that wave; the file is not an alternate live runner or circumvention.
+See issue #151 for the historical blocked inline operation, which was
+not retried.
+
+**Actual v2 Router-only GPT-6 live evidence (2026-10-10):** A separate
+versioned/snapshot-checked runner was accepted through the ordinary Pi user
+service without changing the model, prompt, schema or user vault. Four synthetic
+Router calls F14/F27/F09/F10 completed (2,134 input and 1,575 output tokens;
+pinned standard-rate cost estimate **$0.0010009**, conservative pre-call bound
+**$0.01181875** vs previously approved $0.02). The strict frozen fixture
+comparison failed for all four because of shape differences, **but the
+semantic split itself failed clearly on F09** (two independent residences
+wrongly grouped into one relationship). F10 returned a correct single mutual
+relation with different grounded spans. F14/F27 correctly distinguished one
+coherent vs two sequential contact events and left `él` ambiguous, but
+misclassified the future as `plan`, supplied noncanonical date role labels
+and lacked Core-required participant/reference evidence; offline replay of
+the **real model replies** is rejected by Core's canonical source coverage
+preflight before any write. Saved synthetic responses and regression tests
+are versioned under `benchmarks/fact_candidate_v2_live/`. **The limited
+real-model evaluation is now unblocked and completed; Router v1 is still
+NOT READY for DEV**, pending contract/prompt semantic corrections and a
+reviewed new regression gate. That success does not determine the cause of
+the older rejected remote shell command or authorize bypassing it.
+
+**Second focused GPT-6 Router gate, opt-in prompt v2 (2026-10-10):** The
+entire previous source-only prompt was retained and supplemented with generic
+independent-property, mutual-relation, date, pronoun and future-event rules
+without changing the model/schema or runtime. Four synthetic live calls
+completed with 3,634 input / 1,389 output tokens and an estimated standard
+USD **0.0010579** charge. F09 now separates Marta and Luis into **two**
+independent property candidates; F14/F27 now distinguish exact `date`,
+ambiguous `reference` and future `occurrence` roles. F10's mutual event
+remains **one candidate** but was misclassified `occurrence` instead of
+`relationship`. The F14/F27 model spans are more informative, but the
+current **narrow opt-in Core source-evidence pilots reject their alternative
+anchoring/role inheritance** before writes; this does NOT prove a problem
+with their underlying event segmentation. Preserve these real observed
+outputs offline and review whether Core should accept equivalent proven
+source spans rather than overconstraining GPT-6 to one handwritten template.
+Router v1 remains inactive; focus on **F09/F10/F14/F27 only** until both
+semantic type accuracy and Core-reviewed coverage pass. The remaining 23
+approved design cases are deliberately deferred until this four-case gate
+is settled. No DEV/PROD or vault changes.
+
+**Third focused real Router-only gate (2026-10-10):** With v3's opt-in
+general distinction for reciprocal relationships, **all four actual GPT-6
+responses now have the approved semantic candidate counts, core kinds
+and ambiguity**: F09=two `property`; F10=one `relationship`;
+F14=two `occurrence` (second pending); F27=three `occurrence`
+(third pending). Strict exact-fragment comparison remains non-identical,
+but each shown source role is grounded. Saved v3 synthetic responses:
+`benchmarks/fact_candidate_v2_live/results/20261010T193754Z.json`.
+Pinned-rate estimated total for **three** four-call Router-only gates:
+USD **0.0032356** (not billed total). Tested general, Core-owned source-span
+guards now safely admit alternate original reference/participant/event
+spans with reviewed lexical/date/sequence evidence. **Actual v2/v3 saved
+Router outputs** complete disposable Core write/readback, durable pending
+and the guarded `Con Luis` continuation for F14/F27, using the existing
+provider-shaped *fake* GPT-5.6 Core planner output; F10's link source proof
+also passes but its full Core planning/persistence is untested. This is
+**focused Router success, not production activation or complete Core live
+model acceptance**. Keep normal Core GPT-5.6 and Router v0 unchanged.
+
+**F09/F10 separate Core model gate preflight (2026-10-10):** The saved
+GPT-6 v3 F09 response now exercises real Core coverage and physically
+writes **two distinct Person facts** to two pre-seeded synthetic Markdown
+notes. Each candidate receives its own readback-confirmed fact; swapped,
+duplicated or omitted writes are rejected before mutation. F10's single
+mutual relationship passes the literal source/participant guard, but the
+undated target and real Core-chosen write plan remain to be demonstrated.
+A separate offline-by-default GPT-5.6 Luna/low Core-only two-call
+evaluation is pinned at `benchmarks/fact_candidate_core_live/`. It
+preserves the production planner prompt and JSON schema and cannot read
+personal notes or execute write actions. The conservative two-call cost
+envelope is **USD 0.06344020**, requiring **explicit new cumulative
+approval of USD 0.07**, beyond the historical USD 0.02 Router test
+authorization. **No real GPT-5.6 Core provider calls have yet run**;
+do not infer model readiness from offline preflight. After approval,
+evaluate its actual two Core plans/clarifications without assuming an
+undated event belongs to today's Calendar Day. Leave F14/F27 and the
+23 other Router design cases untouched for this distinct Core gate.
+
+**F09/F10 real-model Core acceptance after explicit new budget approval
+(2026-10-10):** The pinned, unchanged experimental **GPT-5.6 Luna/low**
+Core planner returned two locally valid real `PLAN` outcomes for the
+saved GPT-6 v3 Router sources: F09 chose two different existing
+`person` targets and one `Vive en Lyon.` fact each; F10 chose
+**one linked fact** on Marta's Person Note and one canonical
+reference-only lookup to Luis. No invented historical date and no
+duplicate reciprocal fact. The user explicitly expanded the cumulative
+focused-testing authorization to **USD 0.07**. Core calls used
+**21,004 input / 651 output tokens**, estimated **USD 0.0049820**
+at pinned standard rates; including previous three Router gates, the
+estimated focused-testing total is **USD 0.0082176** (not an
+invoice). Core's narrow source evidence guards initially rejected
+the valid implicit-subject F09 and one-reference mutual F10 plans;
+they now require an exact source subject-to-target link plus original
+location proof for independent properties, or exact two-party reciprocal
+source evidence, one directed Person write and one immutable-reference
+helper for F10. Full **offline replay of real provider-generated**
+F09/F10 plans now physically writes the correct facts to two isolated
+seeded Person Markdown Notes / one isolated Marta Note with a Luis
+wikilink, verifies physical fact readback and the **backlink visible
+from Luis**, and rejects wrong targets, other subjects, negation,
+invented location/date, duplicate relationship facts and helper
+mutations. This validates only **these four already-agreed
+synthetic Router cases**, not the remaining 23 or a live request
+pipeline; no normal Router activation, real vault write, model
+migration or consent to additional spending is implied.
+
+**F27 exact sequential-source Core pilot (2026-10-10):** The two separate
+conversation facts for `hablé con Eric y después con Luis` now also pass a
+real (fake-model) semantic Core compilation, source-before-write candidate
+coverage, per-fact canonical reference verification, two true Markdown
+backlinks, durable pending state and a guarded `Con Luis` continuation.
+Core checks the explicit "después" distinction and two independent dated
+atomic facts; F14 continues using the different one-event/two-participant
+contract. Incorrect order/name/helper/time and invented pending pronoun scope
+fail closed. This is a narrow regression with injected frozen model responses;
+no provider-quality proof or DEV activation is claimed.
+
+**Request-wide F14/F27 continuation safety (2026-10-10):** Added an
+opt-in before-any-action Core guard for the selected `Con Luis` continuation.
+A single source-anchored cinema fact, the original `mañana` date and one
+existing canonical helper are required; extra RequestPlan actions and
+mismatched event/date are rejected without writing. Last-moment identity
+checks remain intact. This is a narrow disposable-vault pilot with synthetic
+planner outputs, not general semantic certification or live activation.
 
 ## Current functional work — explainable clarification
 

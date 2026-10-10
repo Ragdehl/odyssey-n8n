@@ -2,6 +2,17 @@
 
 Status: **implemented; deterministic verification passed**
 
+**Compatibility note (Router fact-unit v1 experimental branch):** Phase-17B
+`state/pending/<request_id>.json` format v1 remains unchanged and retains
+sole authority over incomplete *planned* Core actions. The opt-in, separately
+versioned `state/pending/candidates/<request_id>.json` v2 workflow state is a
+nonknowledge sibling for unplanned source candidates; it cannot be read,
+executed, or counted as a pending `RequestPlan` by the Phase-17B repository.
+Its explicit selection and bounded facts/readback are not yet a production
+replay mechanism. Human approval covered the user-facing pending lifecycle;
+model semantics and real DEV deployment gates remain open. See
+[Router fact-candidate units v1](router-fact-units-v1.md).
+
 This document is the canonical contract for Phase 17B. Phase 17A can now execute one validated
 `RequestPlan` and return typed deferred/failed/delegated evidence, but that evidence disappears when
 the process ends. Phase 17B makes only actionable incomplete work durable so later HITL or retry logic

@@ -1,0 +1,819 @@
+{
+  "mode": "MANUAL_PLAYGROUND_EXPORT_ONLY",
+  "executes_provider": false,
+  "validated_model_equivalence": false,
+  "note": "For user-operated official Playground, not ChatGPT-hosted tool execution. Use ONLY if exact gpt-6-luna, low reasoning, and strict structured JSON configuration are supported by the Playground; otherwise model parity is UNVERIFIED. Manual outputs still require independent semantic review. Do not use personal vault data or paste API credentials.",
+  "authorized_all_six_router_temporal_upper_usd": 0.013495,
+  "calls": [
+    {
+      "id": "F09",
+      "request": {
+        "model": "gpt-6-luna",
+        "reasoning": {
+          "effort": "low"
+        },
+        "store": false,
+        "max_output_tokens": 4096,
+        "input": [
+          {
+            "role": "system",
+            "content": "Interpret only the original CURRENT request as independently manageable semantic fact candidates. Return strict JSON version 1. Each candidate uses one or more original exact quoted substrings as anchors, with zero-based occurrence indices for duplicate substrings. No rewriting of source, invented text or resolved Note identity. Source roles are only grammatical/context scopes; they are NOT Core targets, canonical fact types, or proof of identity. Preserve shared or omitted source context as typed inheritance from EARLIER semantic units, using one-based unit indices; inherited source context is NOT a Core write dependency. A later source phrase may supply time/date wording to an earlier unit: anchor it to its actual position, never convert it to an ISO date. Keep polarity, condition, correction, modality, transaction, object, and participants independently scoped. Mutual relationships form one unit; independent properties and purchase items may form separate units while sharing a transaction. Mark ambiguous_identity where a referent cannot be safely established from the source. Do not select NoteSchema types, create Notes, plan Core writes, bind identities, execute apps, normalize dates, or return Markdown."
+          },
+          {
+            "role": "user",
+            "content": "Marta y Luis viven en Lyon."
+          }
+        ],
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "odyssey_fact_candidate_proposal_v1",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "enum": [
+                    1
+                  ]
+                },
+                "units": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "conditional",
+                          "negative",
+                          "occurrence",
+                          "plan",
+                          "property",
+                          "purchase_item",
+                          "relationship",
+                          "task"
+                        ]
+                      },
+                      "anchors": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "maxLength": 400
+                            },
+                            "occurrence": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "occurrence"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "scoped_source": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "anchor": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 400
+                                },
+                                "occurrence": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "occurrence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "anchor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "inheritance": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "from_unit": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "from_unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ambiguous_identity",
+                          "candidate"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "anchors",
+                      "scoped_source",
+                      "inheritance",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 26
+                }
+              },
+              "required": [
+                "version",
+                "units"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "F10",
+      "request": {
+        "model": "gpt-6-luna",
+        "reasoning": {
+          "effort": "low"
+        },
+        "store": false,
+        "max_output_tokens": 4096,
+        "input": [
+          {
+            "role": "system",
+            "content": "Interpret only the original CURRENT request as independently manageable semantic fact candidates. Return strict JSON version 1. Each candidate uses one or more original exact quoted substrings as anchors, with zero-based occurrence indices for duplicate substrings. No rewriting of source, invented text or resolved Note identity. Source roles are only grammatical/context scopes; they are NOT Core targets, canonical fact types, or proof of identity. Preserve shared or omitted source context as typed inheritance from EARLIER semantic units, using one-based unit indices; inherited source context is NOT a Core write dependency. A later source phrase may supply time/date wording to an earlier unit: anchor it to its actual position, never convert it to an ISO date. Keep polarity, condition, correction, modality, transaction, object, and participants independently scoped. Mutual relationships form one unit; independent properties and purchase items may form separate units while sharing a transaction. Mark ambiguous_identity where a referent cannot be safely established from the source. Do not select NoteSchema types, create Notes, plan Core writes, bind identities, execute apps, normalize dates, or return Markdown."
+          },
+          {
+            "role": "user",
+            "content": "Marta y Luis se conocieron en Lyon."
+          }
+        ],
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "odyssey_fact_candidate_proposal_v1",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "enum": [
+                    1
+                  ]
+                },
+                "units": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "conditional",
+                          "negative",
+                          "occurrence",
+                          "plan",
+                          "property",
+                          "purchase_item",
+                          "relationship",
+                          "task"
+                        ]
+                      },
+                      "anchors": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "maxLength": 400
+                            },
+                            "occurrence": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "occurrence"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "scoped_source": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "anchor": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 400
+                                },
+                                "occurrence": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "occurrence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "anchor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "inheritance": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "from_unit": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "from_unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ambiguous_identity",
+                          "candidate"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "anchors",
+                      "scoped_source",
+                      "inheritance",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 26
+                }
+              },
+              "required": [
+                "version",
+                "units"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "F14",
+      "request": {
+        "model": "gpt-6-luna",
+        "reasoning": {
+          "effort": "low"
+        },
+        "store": false,
+        "max_output_tokens": 4096,
+        "input": [
+          {
+            "role": "system",
+            "content": "Interpret only the original CURRENT request as independently manageable semantic fact candidates. Return strict JSON version 1. Each candidate uses one or more original exact quoted substrings as anchors, with zero-based occurrence indices for duplicate substrings. No rewriting of source, invented text or resolved Note identity. Source roles are only grammatical/context scopes; they are NOT Core targets, canonical fact types, or proof of identity. Preserve shared or omitted source context as typed inheritance from EARLIER semantic units, using one-based unit indices; inherited source context is NOT a Core write dependency. A later source phrase may supply time/date wording to an earlier unit: anchor it to its actual position, never convert it to an ISO date. Keep polarity, condition, correction, modality, transaction, object, and participants independently scoped. Mutual relationships form one unit; independent properties and purchase items may form separate units while sharing a transaction. Mark ambiguous_identity where a referent cannot be safely established from the source. Do not select NoteSchema types, create Notes, plan Core writes, bind identities, execute apps, normalize dates, or return Markdown."
+          },
+          {
+            "role": "user",
+            "content": "Ayer hablé con Eric y Luis. Mañana iré al cine con él."
+          }
+        ],
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "odyssey_fact_candidate_proposal_v1",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "enum": [
+                    1
+                  ]
+                },
+                "units": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "conditional",
+                          "negative",
+                          "occurrence",
+                          "plan",
+                          "property",
+                          "purchase_item",
+                          "relationship",
+                          "task"
+                        ]
+                      },
+                      "anchors": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "maxLength": 400
+                            },
+                            "occurrence": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "occurrence"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "scoped_source": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "anchor": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 400
+                                },
+                                "occurrence": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "occurrence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "anchor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "inheritance": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "from_unit": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "from_unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ambiguous_identity",
+                          "candidate"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "anchors",
+                      "scoped_source",
+                      "inheritance",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 26
+                }
+              },
+              "required": [
+                "version",
+                "units"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "F27",
+      "request": {
+        "model": "gpt-6-luna",
+        "reasoning": {
+          "effort": "low"
+        },
+        "store": false,
+        "max_output_tokens": 4096,
+        "input": [
+          {
+            "role": "system",
+            "content": "Interpret only the original CURRENT request as independently manageable semantic fact candidates. Return strict JSON version 1. Each candidate uses one or more original exact quoted substrings as anchors, with zero-based occurrence indices for duplicate substrings. No rewriting of source, invented text or resolved Note identity. Source roles are only grammatical/context scopes; they are NOT Core targets, canonical fact types, or proof of identity. Preserve shared or omitted source context as typed inheritance from EARLIER semantic units, using one-based unit indices; inherited source context is NOT a Core write dependency. A later source phrase may supply time/date wording to an earlier unit: anchor it to its actual position, never convert it to an ISO date. Keep polarity, condition, correction, modality, transaction, object, and participants independently scoped. Mutual relationships form one unit; independent properties and purchase items may form separate units while sharing a transaction. Mark ambiguous_identity where a referent cannot be safely established from the source. Do not select NoteSchema types, create Notes, plan Core writes, bind identities, execute apps, normalize dates, or return Markdown."
+          },
+          {
+            "role": "user",
+            "content": "Ayer hablé con Eric y después con Luis. Mañana iré al cine con él."
+          }
+        ],
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "odyssey_fact_candidate_proposal_v1",
+            "strict": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "enum": [
+                    1
+                  ]
+                },
+                "units": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "conditional",
+                          "negative",
+                          "occurrence",
+                          "plan",
+                          "property",
+                          "purchase_item",
+                          "relationship",
+                          "task"
+                        ]
+                      },
+                      "anchors": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "maxLength": 400
+                            },
+                            "occurrence": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "occurrence"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "scoped_source": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "anchor": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 400
+                                },
+                                "occurrence": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "occurrence"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "anchor"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "inheritance": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "condition",
+                                "date",
+                                "date_scope",
+                                "location",
+                                "modality",
+                                "object",
+                                "order",
+                                "participants",
+                                "polarity",
+                                "predicate",
+                                "predicate_relation",
+                                "reference",
+                                "replacement",
+                                "subject",
+                                "time",
+                                "time_approx",
+                                "time_relation",
+                                "transaction"
+                              ]
+                            },
+                            "from_unit": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "from_unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 16
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ambiguous_identity",
+                          "candidate"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "anchors",
+                      "scoped_source",
+                      "inheritance",
+                      "state"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 26
+                }
+              },
+              "required": [
+                "version",
+                "units"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    }
+  ],
+  "result_shape_for_offline_comparison": {
+    "F09": "Paste only the JSON object returned by Router for this case",
+    "F10": "Paste only the JSON object returned by Router for this case",
+    "F14": "Paste only the JSON object returned by Router for this case",
+    "F27": "Paste only the JSON object returned by Router for this case"
+  }
+}
