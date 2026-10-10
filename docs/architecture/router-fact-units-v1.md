@@ -455,6 +455,52 @@ need a separate live model evidence gate and Core review. The v2 state is left
 turns a user reply directly into a `RequestPlan`. No runtime request path
 supplies these experimental arguments; DEV and PROD remain Router v0.
 
+**Initial explicitly authorized live smoke evidence (2026-10-10; NO deployment):**
+The user authorized 3–4 focused synthetic cases, a small measured cost and no
+real-vault writes. A one-shot transient **user systemd** unit loaded only the
+existing fixed `EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env`;
+the remote shell never loaded or printed credentials. The remote shell lacked
+its default `XDG_RUNTIME_DIR` despite the ordinary user bus running; using the
+standard `/run/user/1000` session path restored the **same authorized** user
+service-manager transport. No credential, account/network permission, Docker,
+Cloudflare, NoteSchema, runtime or user-vault changes were made.
+
+A provider-free dry-run first exercised the same bounded input/schema envelope.
+The live gate enforced `store=false`, `low` effort, two exact allowed models,
+SDK automatic retries **zero**, max seven calls and **$0.05 USD** in conservative
+per-call input-bytes/output-token ceilings; it skipped any candidate-provider
+follow-up when Router's actual output did not satisfy the expected unit/state
+cardinality. Actual completed requests: **six** (4 Router GPT-6 Luna/low,
+1 Core-attribution GPT-5.6 Luna/low, 1 Core planning GPT-5.6 Luna/low).
+Recorded model usage: **13,233 input** and **2,606 output tokens**; estimated
+maximum *standard-rate* charge under the 2026-10-09 pinned price snapshot is
+**$0.004006 USD** (cash invoice and caching discounts not measured). The unit
+finished successfully. These are observed *model* results, not code-generated
+fixture answers, and no Core writes or personal data retrieval occurred.
+
+| Frozen case | Live Router v1 result | Independent Core model result |
+| --- | --- | --- |
+| F11 `Hoy compré pan y leche.` | Two purchase items, expected count/state correct | Core-attributor passed local exact source/fact validation; Luna Planner returned structurally valid 1-action `RequestPlan` (not executed or independently checked for semantic correctness) |
+| F14 `Ayer hablé con Eric y Luis. Mañana iré al cine con él.` | **Two** units vs oracle's **three**: grouped Eric+Luis as one occurrence, separately marked `él` as `ambiguous_identity` | Core attribution deliberately **skipped** after unit-count mismatch |
+| F01 park → cinema → concert | Three separate units with distinct lexical temporal scopes, expected states/count correct | Not run in this tiny gate |
+| F13 Eric → `él` → pan | Three units with original reference role, expected states/count correct | Not run in this tiny gate |
+
+**Acceptance verdict: FAIL / insufficient for DEV.** F14 exposes a real
+contract-or-oracle mismatch: the current Router prompt produces one coordinated
+conversation mentioning two people, while the existing design oracle expects
+two independent source candidates. It is *not* a hallucinated Core link—`él`
+remained ambiguous—but its partial success cannot satisfy the existing three-
+candidate coverage and continuation assumptions. Whether a coordinated
+multi-participant *single conversation* ought to be one event with two
+canonical participant references or two independent atomic facts is a **product
+semantics decision**; do not silently change the oracle or overfit the prompt
+to reach three units. If two facts are required, update the model teaching
+contract and run a **new separately reviewed frozen held-out gate**. The tiny
+smoke (4 cases) also does NOT replace the required full 22/26-case model
+regression, real provider-produced continuation, polarity/identity evaluation
+or the existing historical release gates. User-facing tests in DEV remain
+blocked until these are resolved; no more provider calls were attempted.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

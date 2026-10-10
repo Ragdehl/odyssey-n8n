@@ -96,6 +96,18 @@ no live model has produced an accepted continuation, no auto-close-to-resolved
 semantic contract is claimed, and the v2 route is not wired into runtime.
 Final model semantic gates plus the historical release hash/operator blockers
 remain before any DEV activation.
+Initial authorized GPT-6 Router/GPT-5.6 Luna live smoke (2026-10-10):
+4 frozen synthetic source cases, **6** real zero-retry read-only model calls,
+**$0.004006 estimated** standard-rate input/output cost; F11/F01/F13 passed
+Router candidate counts/states, but F14 grouped `hablé con Eric y Luis`
+into one conversation (2 units total), while the frozen oracle requires
+3 independently accounted source facts. Pronoun remained explicitly ambiguous.
+F11 Core attribution passed local source/fact checks and a real Core Luna
+planner returned a nonexecuted validated 1-action plan, without semantic
+execution proof. This is an **evidence-backed readiness FAIL**, not a model-
+quality acceptance gate or permission to silently alter the human fixture.
+The coordinated-participants granularity requires product adjudication; full
+held-out model/continuation gates and historical release failures remain.
 
 ## Current functional work — explainable clarification
 
