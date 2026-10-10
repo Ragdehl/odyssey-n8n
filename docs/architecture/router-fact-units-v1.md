@@ -641,6 +641,32 @@ Core's Temporal proof obligation. Existing source/plan/fact/wiklink proofs,
 polarity and pronoun authority remain mandatory. No paid provider calls,
 DEV/PROD writes or schema migration occurred in this block.
 
+**Block 4B14 provider-free narrow cost preflight (2026-10-10):** A prior
+large inline command trying to author a live provider script was blocked by
+the platform before reaching the Pi; no script was created, provider call
+attempted or cost incurred. This is **not** evidence of an OpenAI API failure,
+and the reason for the platform block is unknown. Without repeating that
+operation through a different transport, a **distinct offline-only** request
+envelope audit now lives at
+[`benchmarks/fact_candidate_v2_preflight/`](../../benchmarks/fact_candidate_v2_preflight/README.md).
+It uses existing Router, Temporal, Luna and candidate-attributor request
+constructors with fake clients on F14/F27/F09/F10 to enumerate exact input
+payload bytes, model, effort, strict-schema setting, `store=false` and output
+limits; it cannot import the SDK or access provider credentials.
+
+Under the pinned 2026-10-09 rate snapshot and a deliberately conservative
+pre-call input envelope (`2 * complete request JSON bytes + 200` tokens,
+maximum input/cache-write rate plus full capped output), **all 9 proposed
+calls have an estimated upper envelope USD 0.0848571** and do not fit the
+previously approved USD 0.02 ceiling. The 6 Router/Temporal calls alone have
+an upper envelope USD 0.013495, leaving the two Core Luna evaluations and
+one attribution outside that conservative first wave. This is a **possible
+reviewed plan**, not a live-model result or an alternate way to bypass the
+blocked platform operation; a distinct security-permitted execution procedure
+is still required. Offline-only tests freeze model settings, call ordering,
+budget arithmetic and the strict no-network/no-credential separation. The
+user's authorized USD 0.02 ceiling is respected; do not silently expand it.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

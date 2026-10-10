@@ -146,6 +146,19 @@ Core coverage manifest, persists one safe Eric+Luis linked Day fact with
 or its semantic acceptance gate; no DEV activation, provider expense or changes
 to model-facing prompts, output schemas, canonical NoteSchema or Router v0.
 
+**V2 live gate blocker and offline cost decomposition (2026-10-10):**
+The attempted large remote operation to author a second live evaluator was
+blocked by the ChatGPT platform before remote execution; neither API nor Pi
+reported an error. The separate offline-only audit
+`benchmarks/fact_candidate_v2_preflight/check.py` now computes the actual
+provider-request envelopes from fake-client production constructors for
+F14/F27/F09/F10, with no API, secrets, writes or deployment. The conservative
+full 9-call envelope is ~USD 0.0848571, above the user-authorized USD 0.02;
+a potential limited 6-call Router/Temporal wave totals ~USD 0.013495.
+Only an explicitly security-permitted and reviewed live-gate workflow may
+execute that wave; the file is not an alternate live runner or circumvention.
+See issue #151. No new live-provider data has been collected.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
