@@ -22,7 +22,7 @@ from odyssey_apps.fact_candidates import (
 from odyssey_apps.router import RouterError
 
 DESIGN = (
-    Path(__file__).resolve().parents[2] / "benchmarks/application_router/fact_units_v1.design.json"
+    Path(__file__).resolve().parents[2] / "benchmarks/application_router/fact_units_v2.design.json"
 )
 
 
@@ -50,7 +50,7 @@ CASES = json.loads(DESIGN.read_text(encoding="utf-8"))["cases"]
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda item: item["id"])
-def test_all_twenty_six_design_oracles_are_grounded_source_only(case: dict[str, Any]) -> None:
+def test_all_twenty_seven_design_oracles_are_grounded_source_only(case: dict[str, Any]) -> None:
     """Ground all 56 accepted design candidates without app, Note, or write authority."""
     payload = _from_design(case)
     plan = validate_fact_candidate_proposal(case["source"], payload)

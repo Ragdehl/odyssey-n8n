@@ -82,7 +82,7 @@ def test_ambiguous_pronoun_must_have_separate_pending_claim_even_if_core_complet
     tmp_path: Path,
 ) -> None:
     """The two written Eric/Luis facts do not claim the independent 'él' proposal."""
-    case, context = _case("F14")
+    case, context = _case("F27")
     repo = _new_repo(tmp_path)
     original = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = original.actions[0].units[0]
@@ -98,7 +98,7 @@ def test_ambiguous_pronoun_must_have_separate_pending_claim_even_if_core_complet
         plan,
         (_claim(1, 0), _claim(2, 1), _pending(3, "ambiguous_identity")),
     )
-    result = _core_with_plan(repo, case["source"], "f14-manifest", plan)
+    result = _core_with_plan(repo, case["source"], "f27-manifest", plan)
     readback = readback_core_facts(case["source"], context, plan, result, repo, SCHEMA)
     review = review_candidate_coverage(case["source"], context, plan, manifest, readback)
     assert readback.core_request_status == "completed"
@@ -153,7 +153,7 @@ def test_stale_or_modified_core_plan_invalidates_previous_candidate_manifest() -
 
 
 def test_ambiguous_identity_may_not_be_declared_saved() -> None:
-    case, context = _case("F14")
+    case, context = _case("F27")
     plan = _three_day_plan()
     with pytest.raises(ValueError, match="Ambiguous identity"):
         build_candidate_coverage_manifest(
@@ -190,7 +190,7 @@ def test_structural_coverage_may_not_be_promoted_on_missing_markdown_marker(tmp_
 
 def test_pending_ambiguity_reason_cannot_be_applied_to_nonambiguous_candidate() -> None:
     """Only genuinely ambiguous source candidates may claim that pending reason."""
-    case, context = _case("F14")
+    case, context = _case("F27")
     with pytest.raises(ValueError, match="compatible unresolved reason"):
         build_candidate_coverage_manifest(
             case["source"],
@@ -201,7 +201,7 @@ def test_pending_ambiguity_reason_cannot_be_applied_to_nonambiguous_candidate() 
 
 
 def test_ambiguous_candidate_cannot_hide_behind_generic_pending_reason() -> None:
-    case, context = _case("F14")
+    case, context = _case("F27")
     with pytest.raises(ValueError, match="compatible unresolved reason"):
         build_candidate_coverage_manifest(
             case["source"],

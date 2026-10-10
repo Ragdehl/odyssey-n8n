@@ -48,7 +48,7 @@ def _schema() -> dict[str, Any]:
 
 @pytest.mark.parametrize("case", CASES, ids=lambda x: x["id"])
 def test_all_26_design_cases_revalidate_at_independent_core_boundary(case: dict[str, Any]) -> None:
-    """Core accepts 56 units as source hints, without trusting app-side validation."""
+    """Core accepts 58 units as source hints, without trusting app-side validation."""
     packet = to_core_candidate_context(
         validate_fact_candidate_proposal(case["source"], _from_design(case))
     )

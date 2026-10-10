@@ -78,8 +78,8 @@ def _f01():
     )
 
 
-def _f14():
-    case, context = _case("F14")
+def _f27():
+    case, context = _case("F27")
     base = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = base.actions[0].units[0]
     plan = RequestPlan(
@@ -111,7 +111,7 @@ def _f14():
 
 
 @pytest.mark.parametrize(
-    "factory", [_f11, _f01, _f14], ids=["one-purchase", "three-events", "ambiguous-pronoun"]
+    "factory", [_f11, _f01, _f27], ids=["one-purchase", "three-events", "ambiguous-pronoun"]
 )
 def test_three_frozen_cases_propose_grounded_but_non_authoritative_pairs(factory) -> None:
     source, context, plan, response = factory()
@@ -184,7 +184,7 @@ def test_mismatched_or_forged_pair_fails_closed_before_any_persistence(mutate, e
 
 
 def test_ambiguous_reference_cannot_be_proposed_as_saved() -> None:
-    source, context, plan, good = _f14()
+    source, context, plan, good = _f27()
     forged = copy.deepcopy(good)
     forged["candidates"][2] = _match(3, "Mañana iré al cine con él", 0, "Hablé con Eric.")
     with pytest.raises(CandidateAttributionError, match="Ambiguous identity"):

@@ -7,11 +7,9 @@ until a separately approved durable state and continuation contract exists.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 
 from .application import ApplicationResult, ApplicationStatus
-from .atomic_facts import normalize_atomic_fact
 from .candidate_context import CoreCandidateContext
 from .candidate_coverage import (
     CoreCandidateCoverageManifest,
@@ -20,7 +18,7 @@ from .candidate_coverage import (
     validate_candidate_coverage_manifest,
 )
 from .candidate_fact_readback import CandidateFactReadback
-from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
+from .request_planning import RequestPlan
 
 
 class CandidatePendingProjectionError(ValueError):
@@ -89,6 +87,13 @@ def project_unresolved_candidate_preview(
         )
         if not review.pending_candidate_ids:
             raise CandidatePendingProjectionError("No pending candidates were observed")
+        if any(
+            claim.disposition == "planned_fact" and item.status != "physically_written_claim"
+            for claim, item in zip(manifest.claims, review.items, strict=True)
+        ):
+            raise CandidatePendingProjectionError(
+                "Cannot record candidate pending work while previous Core writes lack physical proof"
+            )
         pending: list[CandidatePendingItem] = []
         for candidate, claim, progress in zip(
             context.candidates, manifest.claims, review.items, strict=True
@@ -131,26 +136,22 @@ def project_unresolved_candidate_preview(
         raise CandidatePendingProjectionError(
             "Unable to project validated candidate pending evidence"
         ) from error
-    # Preserve exact original successful Core provenance for later staleness
-    # checks. This is not a new knowledge store or a replayable Core plan.
-    fact_texts: dict[int, str] = {}
-    by_unit = iter(plan_fact_ordinals(plan))
-    for action in plan.actions:
-        if isinstance(action, WriteAction):
-            for unit in action.units:
-                for ordinal, fact_text in zip(next(by_unit), unit.facts, strict=True):
-                    fact_texts[ordinal] = fact_text
+    # The trusted readback owns the digest of the fact *actually written*.
+    # For a Core-linked fact that string contains canonical wikilinks rather
+    # than the source plan's transient {{ref:N}} markers.
     confirmed = tuple(
-        (
-            fact.ordinal,
-            fact.note_id,
-            hashlib.sha256(
-                normalize_atomic_fact(fact_texts[fact.ordinal]).encode("utf-8")
-            ).hexdigest(),
-        )
+        (fact.ordinal, fact.note_id, fact.rendered_fact_digest)
         for fact in readback.persisted_facts
-        if fact.status == "verified_in_markdown" and fact.note_id is not None
+        if fact.status == "verified_in_markdown"
+        and fact.note_id is not None
+        and fact.rendered_fact_digest is not None
     )
+    if sum(item.status == "verified_in_markdown" for item in readback.persisted_facts) != len(
+        confirmed
+    ):
+        raise CandidatePendingProjectionError(
+            "Verified Core fact is missing its durable rendered proof"
+        )
     return CandidatePendingPreview(
         request_id=result.request_id,
         original_request=source,

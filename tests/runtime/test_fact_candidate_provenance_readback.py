@@ -107,7 +107,7 @@ def test_marker_corruption_or_duplicate_note_id_blocks_false_physical_proof(
 
 def test_two_safe_facts_do_not_resolve_an_ambiguous_third_candidate(tmp_path: Path) -> None:
     """Markdown proves Eric/Luis facts, but 'él' remains unresolved and unattributed."""
-    case, context = _case("F14")
+    case, context = _case("F27")
     repo = _new_repo(tmp_path)
     one = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = one.actions[0].units[0]
@@ -125,7 +125,7 @@ def test_two_safe_facts_do_not_resolve_an_ambiguous_third_candidate(tmp_path: Pa
         ),
         (),
     )
-    result = _core_with_plan(repo, case["source"], "f14-partial-readback", plan)
+    result = _core_with_plan(repo, case["source"], "f27-partial-readback", plan)
     physical = readback_core_facts(case["source"], context, plan, result, repo, SCHEMA)
     assert [fact.status for fact in physical.persisted_facts] == ["verified_in_markdown"] * 2
     assert physical.unresolved_candidate_ids == ("candidate-3",)

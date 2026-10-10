@@ -132,7 +132,7 @@ def test_ambiguous_candidate_is_explicitly_held_without_blocking_independent_cor
     tmp_path: Path,
 ) -> None:
     """Core can write two separate facts but cannot silently drop the pending pronoun."""
-    case, context = _case("F14")
+    case, context = _case("F27")
     original = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = original.actions[0].units[0]
     unit = replace(

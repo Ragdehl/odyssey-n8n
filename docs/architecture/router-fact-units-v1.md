@@ -39,7 +39,7 @@ Original immutable user message
 
 ## Non-executable fixture and acceptance oracles
 
-The 22 **human-agreed design examples**, plus four additional generic-subject regression examples (F23-F26, proposed for review), live in [`../../benchmarks/application_router/fact_units_v1.design.json`](../../benchmarks/application_router/fact_units_v1.design.json). They are **future expected semantic decompositions**, not predictions of current Router v0 or passing production model tests. Each case defines the source, expected number and meaning of candidate units, context edges, and a safety caveat. Do **not** weaken historical frozen Router v0 regressions to match this unimplemented v1 direction. When implementing, version and test a new model contract, replay the 22 examples with a production-equivalent Luna/low live gate, and add permutations/adversarial probes without overfitting to literal phrases.
+The original 26-case/56-unit [**v1 historical design oracle**](../../benchmarks/application_router/fact_units_v1.design.json) is immutable. The 22 original **human-agreed design examples**, four additional generic-subject cases (F23–F26), and the approved sequential-contacts counterexample F27 now live in a separate [**v2 approved design matrix**](../../benchmarks/application_router/fact_units_v2.design.json). They are **future expected semantic decompositions**, not predictions of current Router v0 or passing production model tests. Each case defines the source, expected number and meaning of candidate units, context edges, and a safety caveat. Do **not** weaken historical frozen Router v0 regressions to match this unimplemented v1 direction. When implementing, version and test a new model contract, replay the 22 examples with a production-equivalent Luna/low live gate, and add permutations/adversarial probes without overfitting to literal phrases.
 
 | ID | Core challenge | Expected candidates | Distinction that must survive |
 | --- | --- | ---: | --- |
@@ -56,7 +56,7 @@ The 22 **human-agreed design examples**, plus four additional generic-subject re
 | F11 | bought bread and milk | 2 | item facts, **one** purchase transaction |
 | F12 | same group cleans then assembles | 2 | activity order and group continuity |
 | F13 | Eric then `él`, unrelated bread | 3 | explicit pronoun needs guarded Core binding |
-| F14 | Eric and Luis, then ambiguous `él` | 3 | identity ambiguity is not permission to guess |
+| F14 | one Eric+Luis conversation statement, then ambiguous `él` | 2 | one event with two canonical participants, no assumption of simultaneity; pronoun remains unresolved |
 | F15 | children, Bea, self actions | 3 | date retained, subjects changed |
 | F16 | Ana purchased and Luis `también` | 2 | shared predicate/object, subject replaced |
 | F17 | did not see either Ana or Luis | 2 | negative polarity on both propositions |
@@ -69,6 +69,7 @@ The 22 **human-agreed design examples**, plus four additional generic-subject re
 | F24 | vehicle in repair shop and passing inspection | 2 | same vehicle subject, date only on second claim |
 | F25 | house has damp and needs a roof repair | 2 | house subject, interior location not another subject |
 | F26 | report arrived yesterday and I sent it today | 2 | report changes from subject to object; speaker becomes actor |
+| F27 | spoke to Eric and **then** Luis; afterward `él` is ambiguous | 3 | explicit sequential source separates conversations; pronoun still unresolved |
 
 ### Design proof obligations for implementation
 
@@ -166,7 +167,7 @@ date/time authority still flows exclusively through the existing Temporal
 One provider-free vertical test injects fixed Router v1, existing Temporal and
 real Luna planner Responses results for F13 and confirms three source candidates,
 three independent Temporal readings, full original user request, and a safe
-Core escalation result with **zero writes**. F14 checks that the ambiguous
+Core escalation result with **zero writes**. F27 checks that the ambiguous
 pronoun remains unverified. Together with 26 Core-side design-fixture checks,
 these are contract/injection tests, **not real model semantic proof, validated
 per-candidate write correlation, or runtime persistence tests**. The new opt-in
@@ -184,7 +185,7 @@ providers and no OpenAI calls. It verifies F01's three activities produce
 three persisted facts across two Day notes (without copying the first clock
 time to the other day), F11's bread and milk remain two item facts in **one**
 Day note rather than duplicated purchases/notes, same-request replay does not
-duplicate their facts, and F14's two resolved source clauses may be written
+duplicate their facts, and F27's two resolved source clauses may be written
 without turning the ambiguous final `él` into a canonical link. These are
 **hand-authored Core plan** scenarios; they do not prove Luna produced such
 plans or that group links/semantic ownership are accepted in production.
@@ -194,7 +195,7 @@ read-only receipt from **actual Core** `ActionResult`/`UnitResult` statuses and
 Core's real write fact ordinals, rejecting mismatched action indices, duplicate
 unit outcomes and a different original user source. It intentionally marks
 **every** source candidate `unattributed`: neither candidate ordering nor
-Core unit/fact counts prove a source candidate was durably persisted. In F14,
+Core unit/fact counts prove a source candidate was durably persisted. In F27,
 although the old Core engine reports `completed` for a manually selected safe
 subset, the diagnostic still exposes `candidate-3` as ambiguous and does NOT
 assert that the full message was handled. This is evidence of a **real remaining
@@ -271,7 +272,7 @@ is active in Runtime/DEV, and it grants no new identity or write authority.
 Deterministic source+plan+Markdown vertical tests prove the simple opt-in
 preflight rejects dropped/duplicate candidates and reference/destructive plans
 before writes, while a valid reviewed synthetic plan still writes canonical
-Markdown through ordinary Core. F14 writes the two independent Eric/Luis facts
+Markdown through ordinary Core. F27 writes the two explicitly sequential Eric/Luis facts
 but reports its third `él` candidate as pending rather than declaring the
 entire message completed. The mapping tests deliberately distinguish Core
 physical fact existence from **independent semantic equivalence**, which
@@ -302,8 +303,8 @@ negation, participant identity, relative time, action lifecycle or safe
 persistence, and is **not converted into a Core coverage manifest**.
 
 Deterministic injected-provider tests cover F01 (three shared-context
-activities), F11 (one shared purchase with two items), F14 (independent
-Eric/Luis facts plus ambiguous third pronoun), and an F13 pronoun whose
+activities), F11 (one shared purchase with two items), F27 (sequential
+Eric/Luis events plus ambiguous third pronoun), and an F13 pronoun whose
 superficially matching `cine` cannot independently prove the person identity.
 The initially accepted opposite-polarity synthetic plan `No compré pan`
 exposed a real missing denial check; the new Core-side negative-only veto now
@@ -397,7 +398,7 @@ request ID, physical fact count, and explicit
 `persisted=false`, `resumable=false`, `candidate_semantics_verified=false`.
 It refuses mismatched request IDs, altered sources, unsupported source shapes,
 or an attempt to reinterpret a plan/fact verification failure as a missing user
-clarification. Tests cover real disposable Markdown from two independent
+clarification. Tests cover real disposable Markdown from F27's two explicitly separate
 written facts and one ambiguous third source candidate, inconsistent evidence,
 no pending candidate, and no accidental durable pending/knowledge writes.
 
@@ -500,6 +501,74 @@ smoke (4 cases) also does NOT replace the required full 22/26-case model
 regression, real provider-produced continuation, polarity/identity evaluation
 or the existing historical release gates. User-facing tests in DEV remain
 blocked until these are resolved; no more provider calls were attempted.
+
+**Block 4B11 approved source granularity and bounded canonical participant pilot
+(2026-10-10, feature branch ONLY):** The user approved the more general
+**one coherent event with multiple participants**, never "one fact per name"
+or "one candidate per verb". In particular, "Ayer hablé con Eric y Luis" is
+one assertion with two independent canonical links; it does NOT imply the
+people were together or conversations happened simultaneously. A true
+source-temporal distinction ("hablé con Eric y **después** con Luis") yields
+two independently managed events. Separate subject properties (F09), tasks,
+negative assertions, purchase-item facts and changed dates/times continue to
+split when their truths/actions are independently manageable. Source sharing
+must not erase independently correctable properties or group-member links.
+
+The **approved v2 F14** has 2 source candidates (one shared event with exact
+`participants` source "Eric y Luis", and a separate ambiguous future cine
+plan). The formerly expected 3-candidate decomposition is preserved as **new
+F27** with **explicitly sequential** wording; no existing split, pronoun or
+pending/replay safety test was deleted to change the oracle. The v1 frozen
+matrix and its benchmark acceptance tests remain entirely unchanged; active
+v2 design tests use **27 cases, 58 candidates**. No prompt, Structured Outputs
+schema, NoteSchema, Router v0, runtime composition or DEV deployment changed.
+
+Core's ordinary canonical writer already supports one fact with two typed
+`KnowledgeReference` helper lookups. `odyssey_core/candidate_multi_participant.py`
+now admits only the narrow source-anchored shape of **two explicit named
+participants joined by ' y '**, with one fact and exactly two non-mutating
+Core reference lookup helpers (including type-generic project Notes). Extra,
+omitted, swapped, duplicate or mutable helpers are rejected **before writes**
+by the opt-in candidate coverage gate. Core still has exclusive canonical
+identity/target/write authority; grouped lexical source alone cannot prove
+identities or event meaning.
+
+`candidate_fact_readback.py` now verifies physical persistence of both
+Core-rendered canonical wikilinks using the **existing Core private
+post-write CanonicalReferenceEvidence dual guards**, exact request ID/fact
+ordinal/note ID/text and canonical target path/name, including stale target
+and tampered Markdown failures. It stores only the digest of the rendered
+verified fact (not transient `{{ref:N}}` input placeholders), allowing the
+already-approved v2 pending workflow to detect later edits without rejecting
+legitimate grouped links. The Core opt-in test can write F14's single linked
+conversation **and** durably preserve its ambiguous second source candidate;
+"Con Luis" is captured and a separately reviewed, narrowly guarded Core
+continuation writes ONLY the future cinema fact. Previously written Markdown
+is unchanged. Graph/Notes backlinks independently confirm exactly one
+conversation occurrence accessible from both Eric and Luis. A parallel
+**project** test links Odyssey and Atlas through the same Core contract.
+
+**Non-authority and rollout boundary:** Only the frozen *reviewed* tests build
+these Core write plans. The separate Core Luna candidate-attribution proposer
+still rejects reference-bearing plans and **cannot automatically certify this
+group mapping**; ordinary runtime does not enable this opt-in path. These tests
+do NOT show that Luna generates grouped canonical links, detects the correct
+pronoun identity, scopes future dates, fixes corrections, or closes the pending
+record on semantic confirmation. The current pilot handles only two explicit
+"A y B" named mentions; relationship-bounded groups such as "mi mujer y mis
+hijos" need ordinary broader Core identity semantics, not simplistic name
+splitting. No live provider calls were made for the approved-oracle update.
+
+**Interpretation of the earlier bounded live gate:** The six real calls and
+measured `$0.004006` estimate are unchanged historical observations. At the
+time, F14 had a **3-candidate** oracle and the GPT-6 Router gave **2** units,
+which was a reported disagreement. After human adjudication, the count and
+ambiguous-identity *state* agree with the new two-candidate oracle; the model
+called its future clause `plan` whereas the current fixture says `occurrence`,
+and the smoke did NOT test its canonical links or semantic Core continuation.
+This is an **oracle correction, not proof of a newly passing live quality
+regression**. F27 has not yet had its own live gate. Re-run the broad frozen
+27-case real-model gate only after final source/plan contracts are reviewed.
 
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that

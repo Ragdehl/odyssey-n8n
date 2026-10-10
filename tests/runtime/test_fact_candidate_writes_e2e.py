@@ -121,11 +121,11 @@ def test_f11_two_purchase_items_reuse_one_disposable_day_note_and_replay_dedupli
     assert sum("Compré leche." in fact for fact in facts) == 1
 
 
-def test_f14_independent_writes_do_not_falsely_verify_ambiguous_third_candidate(
+def test_f27_separate_conversations_independent_writes_do_not_falsely_verify_ambiguous_third_candidate(
     tmp_path: Path,
 ) -> None:
     """Core results cannot claim a pronoun was saved just because other units succeeded."""
-    case, context = _case("F14")
+    case, context = _case("F27")
     repository = _new_repo(tmp_path)
     day = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = day.actions[0].units[0]
@@ -138,7 +138,7 @@ def test_f14_independent_writes_do_not_falsely_verify_ambiguous_third_candidate(
         ),
     )
     plan = RequestPlan((WriteAction((unit,)),), ())
-    result = _core_with_plan(repository, case["source"], "test-f14-safe-only", plan)
+    result = _core_with_plan(repository, case["source"], "test-f27-safe-only", plan)
     observation = observe_candidate_write_outcomes(case["source"], context, plan, result)
     assert result.status is ApplicationStatus.COMPLETED
     assert observation.ambiguous_candidate_ids == ("candidate-3",)

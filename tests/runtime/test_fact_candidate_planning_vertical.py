@@ -119,7 +119,7 @@ def test_full_source_scoped_fact_flow_to_luna_is_read_only_and_preflighted() -> 
 
 def test_router_ambiguous_identity_remains_unverified_in_core_packet() -> None:
     """Do not resolve 'él' when previous sentence names two possible people."""
-    case = next(item for item in CASES if item["id"] == "F14")
+    case = next(item for item in CASES if item["id"] == "F27")
     router_fake, calls = _sdk_fake(_from_design(case))
     proposal = OpenAIFactCandidateRouter(router_fake).propose(case["source"])
     packet = to_core_candidate_context(proposal)

@@ -26,7 +26,7 @@ from odyssey_core.candidate_coverage import (
 )
 from odyssey_core.candidate_fact_readback import readback_core_facts
 from odyssey_core.request_planning import RequestPlan
-from tests.core.test_candidate_attribution import _f01, _f11, _f14
+from tests.core.test_candidate_attribution import _f01, _f11, _f27
 from tests.runtime.test_fact_candidate_writes_e2e import _new_repo
 from tests.runtime.test_temporal_user_path_e2e import SCHEMA
 
@@ -104,7 +104,7 @@ def test_ambiguous_identity_remains_pending_and_partial_even_after_safe_writes(
     tmp_path: Path,
 ) -> None:
     """One omitted ambiguous candidate is visible, not silently marked completed."""
-    source, context, plan, raw = _f14()
+    source, context, plan, raw = _f27()
     fake, calls = _sdk(raw)
     repo = _new_repo(tmp_path)
     proposal = OpenAICoreCandidateAttributor(fake).propose(source, context, plan)

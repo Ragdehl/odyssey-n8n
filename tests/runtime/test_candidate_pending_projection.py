@@ -24,7 +24,7 @@ from tests.runtime.test_temporal_user_path_e2e import SCHEMA, _day_plan
 
 
 def _case_with_pending(tmp_path: Path, *, candidate_pending_recorder=None):
-    case, context = _case("F14")
+    case, context = _case("F27")
     original = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = original.actions[0].units[0]
     plan = RequestPlan(
@@ -139,3 +139,24 @@ def test_preview_is_not_a_durable_phase17b_record(tmp_path: Path) -> None:
     assert not hasattr(projected, "resume")
     assert not any(path.name.startswith("candidate-") for path in repo.root.iterdir())
     assert projected.original_request == case["source"]
+
+
+def test_candidate_pending_rejects_success_receipt_without_real_markdown_proof(
+    tmp_path: Path,
+) -> None:
+    """Never tell the user earlier facts were saved if their markers are absent."""
+    case, context, plan, manifest, result, readback, _repo = _case_with_pending(tmp_path)
+    corrupted = replace(
+        readback,
+        persisted_facts=(
+            replace(readback.persisted_facts[0], status="not_verified", rendered_fact_digest=None),
+            *readback.persisted_facts[1:],
+        ),
+    )
+    with pytest.raises(
+        CandidatePendingProjectionError, match="Unable to project validated"
+    ) as failure:
+        project_unresolved_candidate_preview(
+            case["source"], context, plan, manifest, result, corrupted
+        )
+    assert "lack physical proof" in str(failure.value.__cause__)

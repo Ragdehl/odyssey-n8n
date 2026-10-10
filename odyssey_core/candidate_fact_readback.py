@@ -6,14 +6,20 @@ fact. It never proves which Router candidate was semantically satisfied.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-from .application import ApplicationResult
+from .application import (
+    ApplicationResult,
+    _dependent_evidence_is_current,
+)
 from .atomic_facts import AtomicFactError, normalize_atomic_fact, parse_atomic_facts
 from .candidate_context import CoreCandidateContext
 from .candidate_write_observation import observe_candidate_write_outcomes
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
+from .reference_binding import ReferenceBindingError, _wikilink_target
+from .reference_preflight import ReferencePreflightError, _find_existing_identity
 from .request_planning import RequestPlan, WriteAction
 from .storage import VaultRepository
 
@@ -29,6 +35,7 @@ class PersistedFactEvidence:
     unit_index: int
     status: str  # 'verified_in_markdown' or 'not_verified'
     note_id: str | None
+    rendered_fact_digest: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +58,56 @@ class CandidateFactReadback:
     unresolved_candidate_ids: tuple[str, ...]
     candidate_coverage: str  # always 'unverified' until independent semantic attestation
     safe_to_report_all_candidates_complete: bool
+
+
+def _canonical_rendered_fact_text(
+    source_text: str,
+    *,
+    result: ApplicationResult,
+    action_index: int,
+    unit_index: int,
+    references: tuple,
+    source_note_id: str,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> str | None:
+    """Reconstruct one Core-verified linked fact from current canonical evidence.
+
+    Return None if ANY reference lacks a uniquely guarded canonical target.
+    Do not treat source/fact word overlap or literal wikilink labels as proof.
+    """
+    rendered = source_text
+    if not references or len(references) > 4:
+        return None
+    for reference_index, reference in enumerate(references):
+        proofs = [
+            item
+            for item in result.canonical_reference_evidence
+            if item.action_index == action_index
+            and item.source_unit_index == unit_index
+            and item.source_reference_index == reference_index
+            and item.source_mention == reference.mention
+            and item.source_note_id == source_note_id
+        ]
+        if len(proofs) != 1:
+            return None
+        evidence = proofs[0]
+        if not _dependent_evidence_is_current(evidence, repository, schema):
+            return None
+        try:
+            path, name = _find_existing_identity(repository, schema, evidence.stable_note_id)
+            target = _wikilink_target(path)
+        except (ReferencePreflightError, ReferenceBindingError, ValueError, OSError):
+            return None
+        if name != evidence.canonical_name:
+            return None
+        marker = f"{{{{ref:{reference_index}}}}}"
+        if rendered.count(marker) != 1 or any(char in reference.mention for char in "|[]\n\r"):
+            return None
+        rendered = rendered.replace(marker, f"[[{target}|{reference.mention}]]")
+    if "{{ref" in rendered:
+        return None
+    return rendered
 
 
 def readback_core_facts(
@@ -105,7 +162,7 @@ def readback_core_facts(
 
     # Only inspect original root-bound canonical Markdown; never search an index
     # or infer a fact's existence from unit status or plan count alone.
-    matched: dict[int, list[tuple[str, str]]] = {ordinal: [] for ordinal in expected}
+    matched: dict[int, list[tuple[str, str, str]]] = {ordinal: [] for ordinal in expected}
     note_paths = repository.list_markdown_paths()
     if len(note_paths) > MAX_PROVENANCE_NOTE_SCAN:
         raise ValueError("Canonical fact readback exceeds bounded note scan")
@@ -129,13 +186,40 @@ def readback_core_facts(
         for fact in facts:
             if fact.request_id != result.request_id or fact.ordinal not in expected:
                 continue
-            # Verify the *exact* plan fact; references requiring Core rendering
-            # intentionally do not pass this narrow literal proof.
-            text, stable_id, _, _ = expected[fact.ordinal]
-            if note_id == stable_id and normalize_atomic_fact(fact.text) == normalize_atomic_fact(
-                text
-            ):
-                matched[fact.ordinal].append((note_id, path))
+            # Verify the exact Core plan fact or its completely bound Core
+            # canonical-link rendering; never attribute source semantics here.
+            text, stable_id, action_index, unit_index = expected[fact.ordinal]
+            if note_id != stable_id:
+                continue
+            unit = plan.actions[action_index].units[unit_index]
+            if unit.references:
+                # A real grouped fact has Core-rendered canonical wikilinks,
+                # not literal {{ref:N}} source-plan markers. Verify the whole
+                # rendered string through current dual-guard Core evidence.
+                rendered = _canonical_rendered_fact_text(
+                    text,
+                    result=result,
+                    action_index=action_index,
+                    unit_index=unit_index,
+                    references=unit.references,
+                    source_note_id=stable_id,
+                    repository=repository,
+                    schema=schema,
+                )
+                if rendered is None:
+                    continue
+            else:
+                rendered = text
+            if normalize_atomic_fact(fact.text) == normalize_atomic_fact(rendered):
+                matched[fact.ordinal].append(
+                    (
+                        note_id,
+                        path,
+                        hashlib.sha256(
+                            normalize_atomic_fact(fact.text).encode("utf-8")
+                        ).hexdigest(),
+                    )
+                )
     receipts = []
     for ordinal, (_, stable_id, action_index, unit_index) in sorted(expected.items()):
         candidates = matched[ordinal]
@@ -151,6 +235,7 @@ def readback_core_facts(
                 unit_index,
                 "verified_in_markdown" if unique else "not_verified",
                 stable_id if unique else None,
+                candidates[0][2] if unique else None,
             )
         )
     return CandidateFactReadback(

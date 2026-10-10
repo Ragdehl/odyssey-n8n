@@ -109,6 +109,22 @@ quality acceptance gate or permission to silently alter the human fixture.
 The coordinated-participants granularity requires product adjudication; full
 held-out model/continuation gates and historical release failures remain.
 
+**Approved 2026-10-10 candidate granularity:** One coherent event may have
+multiple canonical participants without inventing simultaneity. F14 now has
+one linked Eric+Luis event plus a pending ambiguous `él` (2 source candidates).
+F27 preserves the earlier distinct-conversation/ambiguous-pronoun behavior
+using explicit "después" (3 source candidates). The immutable v1 design matrix and its frozen benchmark test stay at
+26 cases / 56 candidates. The separately versioned approved v2 oracle has
+27 cases / 58 candidates. In the **isolated Core pilot only**, a review-gated
+one-event/two-named-reference plan persists one actual Day fact and two valid
+canonical backlinks; this is also tested for two project Notes. Current guarded
+Core write readback checks real rendered wikilinks and saves their digest for
+pending continuity. A synthetic pre-reviewed follow-up writes only the
+outstanding cinema fact and reuses original captures; no duplicates. The
+user-approved semantics resolved the F14 unit-count disagreement in the prior
+live smoke, not its still-unverified `plan` vs oracle `occurrence` kind,
+or any held-out model quality gate. No normal runtime or DEV activation yet.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the

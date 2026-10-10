@@ -110,7 +110,7 @@ def test_multi_antecedent_and_ambiguous_pronoun_never_infer_one_from_missing_evi
     tmp_path: Path,
 ) -> None:
     _, _, repo, first = _setup_eric(tmp_path)
-    case, context = _case("F14")
+    case, context = _case("F27")
     assert (
         find_single_candidate_canonical_handoff(
             case["source"], context, "candidate-3", first, repo, SCHEMA
