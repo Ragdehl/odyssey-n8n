@@ -281,6 +281,33 @@ synthetic Router cases**, not the remaining 23 or a live request
 pipeline; no normal Router activation, real vault write, model
 migration or consent to additional spending is implied.
 
+**F14/F27 live Core-model acceptance failed conservatively
+(2026-10-10):** Four real GPT-5.6 Luna/low, strict-schema Core
+calls completed on synthetic F14/F27 source plus actual saved
+GPT-6 Router v3 candidates and deterministic Temporal
+date interpretation: two with the unchanged Core prompt and two
+with a separately hash-pinned, opt-in partial-fact planning
+clarification. **All four returned `ESCALATE` without a plan**.
+This is a Core model semantic refusal, not an API error, wrong
+canonical write or an identity guess. The opt-in prompt did
+not fix it, so stop paid wording tweaks. Frozen synthetic
+responses and 21 provider-free regressions live under
+`benchmarks/fact_candidate_core_live/results/` and
+`tests/benchmarks/test_fact_candidate_core_temporal_observed_live.py`.
+Estimated Router+Core focused-testing spend is USD
+**0.0185276**, under the explicitly authorized USD 0.07;
+these are pinned rate estimates, not billed totals.
+The next design experiment should be **Core-owned scoped
+planning for independently source-proven clauses**, with
+the complete untouched source, context and correction vetoes
+retained, mandatory pre-write candidate coverage and durable
+ambiguous pending. Purely splitting at sentence punctuation
+does not prove semantic independence; no unsafe source
+truncation or Router-provided write authority is allowed.
+**The existing mechanically successful injected-plan F14/F27
+tests do not constitute real GPT-5.6 acceptance.** No DEV/PROD
+activation or personal Notes writes. Keep Core GPT-5.6.
+
 **F27 exact sequential-source Core pilot (2026-10-10):** The two separate
 conversation facts for `hablé con Eric y después con Luis` now also pass a
 real (fake-model) semantic Core compilation, source-before-write candidate

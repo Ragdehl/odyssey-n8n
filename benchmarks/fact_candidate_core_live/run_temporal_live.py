@@ -116,7 +116,9 @@ def reviewed_case(case_id: str, *, partial_guidance: bool = False):
 
 def _observed_first_cost(*, partial_guidance: bool = False) -> float:
     """Verify exactly one saved real F14 result before charging its token usage."""
-    evidence = sorted(RESULTS.glob("*-P-F14.json" if partial_guidance else "*-F14.json"))
+    evidence = sorted(
+        path for path in RESULTS.glob("*-F14.json") if ("-P-" in path.name) == partial_guidance
+    )
     if len(evidence) != 1:
         raise ValueError("Exactly one saved F14 live receipt required before F27")
     data = json.loads(evidence[0].read_text(encoding="utf-8"))
@@ -143,7 +145,7 @@ def _observed_case_cost(case_id: str) -> float:
     """Count exactly one frozen original Core result at full standard rates."""
     if case_id not in {FIRST_CASE, SECOND_CASE}:
         raise ValueError("Unrecognized historical Core case")
-    files = list(RESULTS.glob(f"*-{case_id}.json"))
+    files = [path for path in RESULTS.glob(f"*-{case_id}.json") if "-P-" not in path.name]
     if len(files) != 1:
         raise ValueError("Expected one original Core provider receipt")
     data = json.loads(files[0].read_text(encoding="utf-8"))

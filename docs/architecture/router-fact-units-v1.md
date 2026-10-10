@@ -994,6 +994,63 @@ no model, prompt, schema, SDK retry or production runtime change.
   **other 23 Router cases, full runtime activation and independent
   broader semantic Core gate** are not completed.
 
+**Block 4B26 real F14/F27 Core semantic-refusal diagnosis (2026-10-10,
+feature branch ONLY):** After the live GPT-6 Router v3 success and the
+fully validated synthetic-fake Core write/readback + pending continuation,
+we called the unchanged **real GPT-5.6 Luna/low Core planner** with
+original whole-source F14 and F27 plus exact source-validated candidate
+context and deterministic Temporal `Ayer=2026-10-03`,
+`Mañana=2026-10-05`. Both provider calls completed successfully and
+returned **`ESCALATE` with no actions**, not a partial `PLAN`.
+This is a genuine semantic-acceptance failure, **not** a provider error,
+not a failed write and not evidence that the user vault was changed.
+Frozen original F14/F27 synthetic-only receipts:
+`benchmarks/fact_candidate_core_live/results/20261010T202736Z-F14.json`,
+`.../20261010T202803Z-F27.json`.
+
+The probable conflict is the inherited single-request/all-intents
+planning instruction (PLAN only if every material intent is preserved;
+otherwise ESCALATE), while the product requires independently grounded
+past facts to be saved with an unrelated unresolved future reference
+durably pending. The provider's ESCALATE JSON supplies **no explanation**,
+so the exact internal reason is unknown. A first **opt-in scoped-partial
+prompt extension** was reviewed, hash-pinned, and tested without changing
+existing default prompts, schema, reasoning, model or runtime. It explicitly
+teaches: PLAN only the independently safe actions, do not guess any
+pronoun, and require separate Core coverage+pending recording before
+writes. Real GPT-5.6 **still returned ESCALATE on both** F14 and F27.
+Frozen opt-in results:
+`benchmarks/fact_candidate_core_live/results/20261010T203404Z-P-F14.json`,
+`.../20261010T203640Z-P-F27.json`.
+The four Core-call results are reproducibly checked by offline sentinels.
+The opt-in single-call runner was corrected to distinguish original and
+partial receipts when enforcing cumulative-budget and no-retry controls.
+
+Observed four new calls: initial F14 (11,054 input, 362 output), F27
+(11,131/131), revised F14 (11,290/386), revised F27 (11,367/239).
+Pinned-rate estimated **cumulative focused Router+Core spending:
+USD 0.01852760**, under the user's explicit **USD 0.07** limit;
+not a billed total. **No further paid prompt tweaks are justified by
+these results.** The previous F09/F10 real Core acceptance holds and
+the saved F14/F27 fake-provider physical writes are still valid *only
+as mechanical integration tests*. Router v1 still inactive everywhere.
+
+**Proposed next architecture experiment (not implemented or authorized
+as a production behavior):** Core—not Router or Calendar—may create a
+conservative, read-only source-scope preview for independent original
+clauses, retaining their exact offsets, the complete untouched source,
+Temporal's validated dates and every unresolved candidate. A second
+Core-only planner pass could then consider only the independently
+safe scope, while any correction, negation, conditional, cross-clause
+dependency, shared temporal ambiguity, uncertain identity or insufficient
+provenance must fail closed. The full original candidate-to-plan coverage
+gate remains mandatory, as do physical readback and durable pending
+before claiming partial success. Do **not** simply truncate the prompt
+at the first full stop or treat Router's model classifications as
+write authority. No production source scoping, system prompt rewrite,
+model switch, deployment, schema mutation or real vault write has
+yet occurred.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

@@ -207,3 +207,40 @@ revised F14 receipt and is separately blocked unless the revised F14
 observed standard-rate cost plus F27's full conservative reservation
 fits the remaining ceiling. No revised request has yet been made
 at this checkpoint.
+
+### Final observed staged results: Core acceptance NOT passed (2026-10-10)
+
+With the same authorized cumulative USD 0.07 ceiling, both original
+and inheritance-preserving scoped-partial requests were run exactly once
+for each synthetic case. **All four GPT-5.6 Luna/low responses returned
+`ESCALATE` with zero actions**, while the provider returned completed,
+strict/local-valid results:
+
+| Case | Original input/output tokens | Opt-in partial input/output tokens |
+| --- | --- | --- |
+| F14 | 11,054 / 362 | 11,290 / 386 |
+| F27 | 11,131 / 131 | 11,367 / 239 |
+
+The revised saved model results are
+`results/20261010T203404Z-P-F14.json` and
+`results/20261010T203640Z-P-F27.json`.
+Expected candidate semantics from GPT-6 remain correct. The test
+runner's original-versus-revised receipt glob was fixed, preventing
+double counting and repeated provider calls. The offline regression
+`tests/benchmarks/test_fact_candidate_core_temporal_observed_live.py`
+pins real responses as **failed Core semantic-acceptance evidence**,
+never successful plans.
+
+Observed cumulative focused Router plus Core estimated standard-rate
+spending: **USD 0.0185276** (not a billed cost), below USD 0.07.
+No new Core live calls should be made merely to try another version
+of the same prompt.
+
+The next block is a **Core-owned, explicitly verified source-scoping
+experiment**: plan only independently safe complete source clauses
+and retain all ambiguous clauses in the original full-source
+candidate-coverage and pending checks. This is NOT implemented or
+deployed. Do not naïvely cut strings at punctuation, allow
+cross-clause corrections to be lost, expose Router-supplied canonical
+targets, weaken note resolution, or mark the pending cinema as
+written. Validate provider-free semantics/provenance first.

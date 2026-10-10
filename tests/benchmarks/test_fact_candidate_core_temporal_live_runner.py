@@ -194,8 +194,12 @@ def test_scoped_partial_is_opt_in_and_preserves_existing_model_contract() -> Non
 
 def test_partial_prompt_revision_fake_produces_core_plan_but_never_writes(
     monkeypatch,
+    tmp_path,
 ) -> None:
-    """A safe Core-shaped positive response is parsable under the new prompt."""
+    """A safe synthetic response is parsable in a receipt-isolated test."""
+    monkeypatch.setattr(gate, "RESULTS", tmp_path)
+    monkeypatch.setattr(gate, "_observed_first_cost", lambda **kwargs: 0.00265)
+    monkeypatch.setattr(gate, "_observed_case_cost", lambda case_id: 0.00238)
     monkeypatch.setenv(gate.RUN_ENV, "1")
     client, calls = _fake_model("F14")
     result = gate.run_case("F14", live=True, client=client, partial_guidance=True)
