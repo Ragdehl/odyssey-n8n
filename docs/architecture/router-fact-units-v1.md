@@ -1276,3 +1276,50 @@ New live Temporal cost estimated USD **0.0002136** at pinned standard
 rates; cumulative all focused GPT-6 Router + GPT-5.6 Core estimated
 USD **0.0339488** (not invoice) against prior explicit USD 0.07 cap.
 No new Core paid call was made.
+
+
+**F23/F26 real-model dependent-scoped fact review, 2026-10-11:**
+The previous staged GPT-5.6 Luna/low single-candidate provider diagnostic
+already completed **all four** real calls under the existing authorized
+synthetic budget, and the fourth untouched synthetic JSON is saved in
+`benchmarks/fact_candidate_core_live/dependent_results/`. No need
+to pay for duplicate calls or new Core instructions. Both original
+F23 facts and both F26 facts returned valid `PLAN` from the **unchanged
+existing Core planner**, each in a separately selected source-clause
+request, with the previous clause supplied only as read-only
+linguistic context on dependent second units. The Core model inferred
+"otro fallo" from its previous F23 context and "el informe" from
+the previous F26 context without a string-replacement rule.
+
+Provider-free tests under
+`tests/runtime/test_fact_candidate_dependent_actual_core_vertical.py`
+recompile all four REAL Core responses using the production compiler.
+Against disposable, isolated Markdown identities: F23 physically
+records the Router and Temporal faults on the same canonical Odyssey
+project, with Router linking to an existing project Note. F26
+physically records receipt of the document on the document and
+sending that SAME document to Ana in the current Day, without
+duplicates, both with an existing canonical document and with
+a newly created typed singular document. Normal target selection
+and file write mechanics therefore WORK in these sample conditions.
+
+**Important non-release result:** Both merged actual Core plans
+still **fail the original full-source candidate-coverage semantic
+veto**. F23 has a shared/inherited Project subject and a source
+project-to-component relation that the existing independently-targeted
+property validator does not certify. F26's "lo" needs a
+source-verified unique antecedent/canonical document association even
+though Core produced a plausible exact document reference and the
+disposable Markdown writer resolved it. These are not permissions
+to broaden source comparison to unrelated phrases or to skip
+pre-write coverage. A generic Core-owned identity-and-source
+dependency attestation for shared subjects and unique prior
+antecedents is the actual remaining gate before any chat/runtime
+activation; do not add word-specific F23/F26 exceptions.
+
+Four individual GPT-5.6 real receipts used, respectively,
+10,204/247, 10,296/339, 10,598/261, and 10,695/444
+provider input/output tokens; cumulative focused Router+Core+Temporal
+estimated standard-rate total **USD 0.0438566** (not billed amount),
+under the explicit USD 0.07 cumulative test ceiling. No DEV/PROD
+activation, real Notes access, credential changes or model switch.

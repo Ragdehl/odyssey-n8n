@@ -1,0 +1,23 @@
+{
+  "case": "F26",
+  "unit": "candidate-2",
+  "mode": "LIVE_CORE_DEPENDENT_PLAN_ONLY",
+  "model": "gpt-5.6-luna",
+  "max_calls": 1,
+  "may_write_notes": false,
+  "semantically_authorized": false,
+  "previous_estimated_usd": 0.0411848,
+  "maximum_reserved_usd": 0.01753825,
+  "approved_cumulative_usd": 0.07,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 10695,
+    "output_tokens": 444
+  },
+  "raw_model_response": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Envié \"},{\"kind\":\"identity\",\"text\":\"el informe\",\"identity\":{\"description\":\"el informe\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"document\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+  "outcome": "PLAN",
+  "action_count": 1,
+  "fact_count": 1,
+  "plan_repr": "RequestPlan(actions=(WriteAction(units=(KnowledgeUnit(target=SelectionCriteria(entity=None, query='2026-10-04', type='calendar_day', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=('Envié {{ref:0}} a {{ref:1}}.',), references=(KnowledgeReference(target_index=1, role='identity', mention='el informe', selection=None), KnowledgeReference(target_index=2, role='identity', mention='Ana', selection=None)), cardinality='one', destination_type=None, reference_lookup_only=False, fact_temporal_anchors=((TemporalAnchor(date='2026-10-04', time=None, offset=None),),), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity=None, query='el informe', type='document', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=(), references=(), cardinality='one', destination_type=None, reference_lookup_only=True, fact_temporal_anchors=(), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity='Ana', query='Ana', type='person', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=(), references=(), cardinality='one', destination_type=None, reference_lookup_only=True, fact_temporal_anchors=(), force_create=False)), kind='write'),), limitations=(), presentation_intent='answer')",
+  "validation": "local_compiler_accepted"
+}

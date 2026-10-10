@@ -84,3 +84,84 @@ def test_tampering_scope_roles_cannot_create_an_unauthorized_plan():
     )
     with pytest.raises(CoreDependentScopeError, match="Conditional"):
         preview_dependent_clause_scopes(source, replace(context, candidates=(first, fake)))
+
+
+def _synthetic_role_source(
+    source: str,
+    selected: tuple[tuple[str, str], ...],
+    second: tuple[tuple[str, str], ...],
+    *,
+    inherit: tuple[str, ...] = (),
+):
+    """Construct a new source-proven proposal to check generalization."""
+    from odyssey_core.candidate_context import (
+        CoreCandidate,
+        CoreCandidateContext,
+        CoreCandidateInheritance,
+        CoreCandidateRole,
+        CoreSourceSpan,
+    )
+
+    def span(text):
+        start = source.index(text)
+        return CoreSourceSpan(text, start, start + len(text))
+
+    first = CoreCandidate(
+        "candidate-1",
+        "property" if not any(role == "date" for role, _ in selected) else "occurrence",
+        "candidate",
+        (span(selected[0][1]),),
+        tuple(CoreCandidateRole(role, span(text)) for role, text in selected),
+        (),
+    )
+    last = CoreCandidate(
+        "candidate-2",
+        first.kind,
+        "candidate",
+        (span(second[0][1]),),
+        tuple(CoreCandidateRole(role, span(text)) for role, text in second),
+        tuple(CoreCandidateInheritance(role, 1) for role in inherit),
+    )
+    context = CoreCandidateContext(source, (first, last))
+    context.validate(source)
+    return context
+
+
+def test_new_project_property_and_ellipsis_use_same_provenance_rules():
+    """New vocabulary and new named entities, no case-ID-dependent behavior."""
+    source = "El sistema Nébula presenta un problema en API y otro en interfaz."
+    context = _synthetic_role_source(
+        source,
+        (
+            ("subject", "El sistema Nébula"),
+            ("predicate", "presenta"),
+            ("object", "un problema"),
+            ("location", "API"),
+        ),
+        (("object", "otro"), ("location", "interfaz")),
+        inherit=("subject", "predicate"),
+    )
+    first, second = preview_dependent_clause_scopes(source, context).units
+    assert first.planner_request() == "El sistema Nébula presenta un problema en API."
+    assert "otro en interfaz" in second.planner_request()
+    assert "un problema" in second.planner_request()
+    assert [x.span.text for x in second.inherited_roles] == [
+        "El sistema Nébula",
+        "presenta",
+    ]
+
+
+def test_new_document_and_person_coreference_remain_unbound_not_guessed():
+    source = "El contrato llegó el lunes y ayer lo envié a Marta."
+    context = _synthetic_role_source(
+        source,
+        (("subject", "El contrato"), ("predicate", "llegó"), ("date", "el lunes")),
+        (("date", "ayer"), ("reference", "lo"), ("predicate", "envié"), ("participants", "Marta")),
+    )
+    first, second = preview_dependent_clause_scopes(source, context).units
+    assert first.planner_request() == "El contrato llegó el lunes."
+    assert [item.text for item in second.unresolved_references] == ["lo"]
+    assert second.preceding_quote == "El contrato llegó el lunes"
+    assert "lo envié a Marta" in second.planner_request()
+    assert not first.is_semantically_authorized
+    assert not second.is_semantically_authorized
