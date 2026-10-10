@@ -1,0 +1,23 @@
+{
+  "case": "F23",
+  "unit": "candidate-1",
+  "mode": "LIVE_CORE_DEPENDENT_PLAN_ONLY",
+  "model": "gpt-5.6-luna",
+  "max_calls": 1,
+  "may_write_notes": false,
+  "semantically_authorized": false,
+  "previous_estimated_usd": 0.0339488,
+  "maximum_reserved_usd": 0.0310356,
+  "approved_cumulative_usd": 0.07,
+  "provider_status": "completed",
+  "usage": {
+    "input_tokens": 10204,
+    "output_tokens": 247
+  },
+  "raw_model_response": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"el proyecto Odyssey\",\"binding\":\"described\",\"direct_name\":\"Odyssey\",\"note_type\":\"project\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene un fallo en \"},{\"kind\":\"identity\",\"text\":\"Router\",\"identity\":{\"description\":\"Router\",\"binding\":\"described\",\"direct_name\":\"Router\",\"note_type\":null,\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+  "outcome": "PLAN",
+  "action_count": 1,
+  "fact_count": 1,
+  "plan_repr": "RequestPlan(actions=(WriteAction(units=(KnowledgeUnit(target=SelectionCriteria(entity='Odyssey', query='el proyecto Odyssey', type='project', filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=('Tiene un fallo en {{ref:0}}.',), references=(KnowledgeReference(target_index=1, role='identity', mention='Router', selection=None),), cardinality='one', destination_type=None, reference_lookup_only=False, fact_temporal_anchors=(), force_create=False), KnowledgeUnit(target=SelectionCriteria(entity='Router', query='Router', type=None, filters=(), link_scope=None, self_target=None, relational_reference=None, semantic_set=None, collection_subject=None), intent='record', properties=(), tag_changes=(), facts=(), references=(), cardinality='one', destination_type=None, reference_lookup_only=True, fact_temporal_anchors=(), force_create=False)), kind='write'),), limitations=(), presentation_intent='answer')",
+  "validation": "local_compiler_accepted"
+}

@@ -113,6 +113,10 @@ def _request(case_id: str, unit_id: str):
         }
     )
     planner = OpenAILunaExperimentalPlanner(fake, SCHEMA, CLOCK, domain_interpretation=temporal)
+    # F26's output ceiling is deliberately lower than the previous pilot's;
+    # its full prompt, Core model and strict schema remain unchanged.
+    if case_id == "F26":
+        planner.max_output_tokens = 1280
     planner.plan(request)
     if len(calls) != 1:
         raise ValueError("Existing Core planner must make exactly one call")
@@ -132,7 +136,7 @@ def reviewed(case_id: str, unit_id: str):
         or wire.get("model") != RATE_MODEL
         or wire.get("reasoning") != {"effort": "low"}
         or wire.get("store") is not False
-        or wire.get("max_output_tokens") != 2048
+        or wire.get("max_output_tokens") != (1280 if case_id == "F26" else 2048)
         or wire.get("text", {}).get("format", {}).get("strict") is not True
         or wire["input"][1]["content"] != request
     ):
@@ -239,6 +243,8 @@ def run(case_id, unit_id, *, live=False, client=None):
 
     fake = SimpleNamespace(responses=Recorder(client.responses))
     planner = OpenAILunaExperimentalPlanner(fake, SCHEMA, CLOCK, domain_interpretation=temporal)
+    if case_id == "F26":
+        planner.max_output_tokens = 1280
     try:
         answer = planner.plan(request)
         wrapper["outcome"] = "PLAN" if isinstance(answer, RequestPlan) else type(answer).__name__

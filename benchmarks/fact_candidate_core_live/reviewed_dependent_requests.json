@@ -20,8 +20,8 @@
   "sha256": {
     "F23/candidate-1": "0acf0bdb7af1faecd515d0cf125554e112d35e282ff8173bd66805f15921bc4a",
     "F23/candidate-2": "54db8874fab819b94a1f6fa71c486c13ce11e4e559fdeedffcba7b5b5cbb2390",
-    "F26/candidate-1": "ad982ba3716b7338ec8dd874de45196983a6c8360d8e191ae5d9758c01f64e80",
-    "F26/candidate-2": "c16459acfbeca2fc31c5dea1bbfb0c95a0140fbf26330537931497b6997bd22e"
+    "F26/candidate-1": "0885a65be9a58490f29fda5d25118754ebd1732298d7b2333be15579a4c70bea",
+    "F26/candidate-2": "48d5a110e7ca121a4848f8bba0271a3a8b341b281d4864bcd45d865ef021dbdd"
   },
   "bytes": {
     "F23/candidate-1": 55610,

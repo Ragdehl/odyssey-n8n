@@ -24,7 +24,7 @@ def test_immutable_actual_core_contract_is_separately_scoped():
         assert wire["input"][1]["content"] == task
         assert wire["reasoning"] == {"effort": "low"}
         assert wire["model"] == "gpt-5.6-luna"
-        assert wire["max_output_tokens"] == 2048
+        assert wire["max_output_tokens"] == (1280 if case == "F26" else 2048)
         assert wire["store"] is False
         assert wire["text"]["format"]["strict"] is True
         assert ("CONTEXTO ANTERIOR" in task) == (uid == "candidate-2")
