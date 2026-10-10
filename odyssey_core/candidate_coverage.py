@@ -15,6 +15,7 @@ from typing import Literal
 
 from .candidate_context import CoreCandidateContext
 from .candidate_fact_readback import CandidateFactReadback
+from .candidate_semantic_veto import veto_unsafe_literal_match
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 MAX_COVERAGE_CLAIMS = 26
@@ -135,6 +136,8 @@ def validate_candidate_coverage_manifest(
                     or unit.properties
                     or unit.tag_changes
                     or unit.destination_type is not None
+                    or unit.force_create
+                    or unit.reference_lookup_only
                     or not unit.facts
                     or unit.references
                 ):
@@ -143,6 +146,16 @@ def validate_candidate_coverage_manifest(
         fact_ordinals.update(per_unit)
     if len(fact_ordinals) > MAX_COVERAGE_FACTS:
         raise ValueError("Fact coverage exceeds review budget")
+    facts_by_ordinal: dict[int, str] = {}
+    write_unit_ordinals = iter(ordinals)
+    for action in plan.actions:
+        if isinstance(action, WriteAction):
+            for unit in action.units:
+                numbered = next(write_unit_ordinals)
+                if len(numbered) != len(unit.facts):
+                    raise ValueError("Core fact ordinals do not match plan fact text")
+                for fact_index, ordinal in enumerate(numbered):
+                    facts_by_ordinal[ordinal] = unit.facts[fact_index]
     claimed_ordinals: set[int] = set()
     for candidate, claim in zip(context.candidates, claims, strict=True):
         if not isinstance(claim, CoreCandidateCoverageClaim):
@@ -175,9 +188,19 @@ def validate_candidate_coverage_manifest(
             or claim.pending_reason is not None
         ):
             raise ValueError("Coverage fact ordinal is missing, duplicate or invented")
+        # No review factory, even a human-fixture stub, may bypass basic
+        # negative checks by claiming ordinals that have no lexical provenance.
+        # Passing is NOT semantic certification, nor permission to skip normal
+        # Core identity, date, plan and reference checks.
         claimed_ordinals.add(ordinal)
     if claimed_ordinals != fact_ordinals:
         raise ValueError("Each planned atomic fact must have one explicit source candidate")
+    # Check typed dispositions, negative/sensitive scopes and complete coverage
+    # BEFORE lexical evidence, so a later ambiguous candidate cannot be hidden
+    # behind an earlier unrelated wrong lexical mapping.
+    for index, claim in enumerate(claims):
+        if claim.disposition == "planned_fact":
+            veto_unsafe_literal_match(source, context, index, facts_by_ordinal[claim.fact_ordinal])
 
 
 def review_candidate_coverage(

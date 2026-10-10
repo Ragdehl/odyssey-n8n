@@ -247,9 +247,9 @@ ordinals, stale plan/source and misleading non-pending ambiguous pronouns are
 rejected. This first pilot supports only simple `record` facts with no Core
 references, properties, deletions, migrations, negations, or conditional/
 replacement scope; unsupported semantics must be deferred for review rather
-than silently written. These checks are **structural**: a deliberate F11
-pan/leche claim swap still passes and is therefore reported as **not semantically
-verified**. The mapping is not auto-generated from source order, text overlap
+than silently written. These checks are **structural**: an F11 pan/leche claim swap previously passed the structural check; the
+subsequent conservative lexical veto now **rejects that mismatch before any
+write**, without claiming that matches which pass are semantically verified. The mapping is not auto-generated from source order, text overlap
 or fact counts, and existing Luna's output schema does not yet produce it.
 
 `execute_request()` has a new **default-disabled** pair of Core-only arguments,
@@ -305,9 +305,10 @@ Deterministic injected-provider tests cover F01 (three shared-context
 activities), F11 (one shared purchase with two items), F14 (independent
 Eric/Luis facts plus ambiguous third pronoun), and an F13 pronoun whose
 superficially matching `cine` cannot independently prove the person identity.
-A deliberately contradictory planned fact `No compré pan` can pass the
-*literal* grounding check while remaining **semantically unverified**, making
-that limitation executable rather than an implicit assumption. Vertical tests
+The initially accepted opposite-polarity synthetic plan `No compré pan`
+exposed a real missing denial check; the new Core-side negative-only veto now
+blocks this exact false claim before persistence. Mixed-clause denial scope
+still cannot be resolved by a lexical match and remains unverified. Vertical tests
 show an injected attributor proposes the mapping with zero Markdown changes;
 ONLY a separate, explicitly reviewed test claim set can pass the existing
 Core coverage gate to invoke actual Core persistence in a disposable vault.
@@ -326,6 +327,31 @@ grounded literals. A Core-owned semantic decision/review policy for
 positive/negative/conditional assertions, identity, reference/relationship
 writes, broader candidate↔fact cardinality, and durable pending continuation
 remains required. Router v1 is **not ready for DEV activation**.
+
+**Block 4B7 conservative semantic veto at Core preflight (isolated; NOT active):**
+`odyssey_core/candidate_semantic_veto.py` is now called both by the separate
+attribution proposer validator and by Core's **opt-in** coverage preflight,
+**before** the existing write executor. This closes the demonstrated loophole
+where even an externally/manual-reviewed `candidate-1 → leche` swap could pass
+structural coverage and trigger a write. The bounded Unicode/accent-folded
+lexical veto requires a candidate-distinctive original source token to remain
+in the planned fact, disallows a newly invented denial token (Spanish/French/
+English common `no/nunca/jamás/not/never/ne/pas/jamais`) never present in the
+whole original request, and refuses any candidate whose source context
+includes an unresolved `reference` role until **Core-verified** identity evidence
+is available. Generic subjects (including project/vehicle/document) remain
+eligible; the guard never assumes that subjects must be Person notes.
+
+These checks only **reject** obvious errors. Positive results remain
+`semantically_verified=false`; a negation present in a different original
+clause cannot yet be safely scoped without independent source interpretation,
+so a deliberately constructed cross-clause contradiction can still pass the
+lexical veto. This failure boundary is captured in tests and **does not confer
+write permission from the model proposal**. Stronger polarity, role, temporal
+ownership, pronoun/link and source/fact meaning validation remains necessary.
+The new guard is implemented only in the default-disabled experimental
+Core coverage arguments; ordinary Router v0, the existing Core planner prompt,
+canonical schema, DEV, production and all user notes are unchanged.
 
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that

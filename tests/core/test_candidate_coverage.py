@@ -225,20 +225,15 @@ def test_untyped_mapping_shape_is_not_accepted_as_core_evidence() -> None:
         )
 
 
-def test_structural_claims_do_not_pretend_swapped_semantics_are_verified(tmp_path: Path) -> None:
-    """Swapping pan/leche ordinals passes structure, never grants semantic proof."""
+def test_swapped_claim_is_blocked_before_any_write(tmp_path: Path) -> None:
+    """Even a manually reviewed pan→leche mapping lacks source evidence."""
     case, context = _case("F11")
     repo = _new_repo(tmp_path)
-    plan = _two_items()
-    mismapped = build_candidate_coverage_manifest(
-        case["source"], context, plan, (_claim(1, 1), _claim(2, 0))
-    )
-    result = _core_with_plan(repo, case["source"], "f11-inverted-claim", plan)
-    physical = readback_core_facts(case["source"], context, plan, result, repo, SCHEMA)
-    review = review_candidate_coverage(case["source"], context, plan, mismapped, physical)
-    assert [item.status for item in review.items] == ["physically_written_claim"] * 2
-    assert not review.candidate_semantics_verified
-    assert not review.safe_to_report_all_candidates_complete
+    with pytest.raises(ValueError, match="distinctive original source evidence"):
+        build_candidate_coverage_manifest(
+            case["source"], context, _two_items(), (_claim(1, 1), _claim(2, 0))
+        )
+    assert repo.list_markdown_paths() == []
 
 
 def test_sensitive_source_can_only_be_marked_pending_in_this_pilot() -> None:

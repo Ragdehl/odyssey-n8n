@@ -68,12 +68,18 @@ unreviewed complex writes before any mutation, without touching Router v0.
 If synthetic independent writes succeed while a candidate remains unresolved,
 opt-in Core marks the request `PARTIAL` and explicitly reports that the
 candidate continuation is **not durably resumable yet**. Structural attribution
-is not proof that the right semantic fact was written; a swapped item mapping
-regression deliberately preserves this caveat. A Core-owned model-approved
+is not proof that the right semantic fact was written; the new conservative
+Core preflight now rejects a deliberately swapped pan/milk mapping, but does
+not certify semantics. A Core-owned model-approved
 mapping/semantic proof, safe reference handling, durable partial clarifications,
 new request-detail projections and a true provider→verified attribution→Core
 write vertical path, plus separate final live GPT-6 Router / GPT-5.6 Luna
-semantic gates, remain required. Router v0 remains operational.
+semantic gates, remain required. Router v0 remains operational. The
+isolated Core candidate preflight additionally rejects obvious mismatched
+item evidence, a newly invented negation, and unverified source pronoun
+references **before persistence**. Passing these vetoes is not semantic
+attestation: mixed-clause negation, date ownership and grounded canonical
+identity still require independent verification.
 
 ## Current functional work — explainable clarification
 

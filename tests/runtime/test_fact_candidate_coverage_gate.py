@@ -226,3 +226,32 @@ def test_complex_relational_core_write_stays_out_of_initial_pilot(tmp_path: Path
     )
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert repo.list_markdown_paths() == []
+
+
+@pytest.mark.parametrize("kind", ("swapped_items", "invented_negation"))
+def test_semantic_veto_blocks_an_explicitly_reviewed_bad_plan_before_any_markdown(
+    tmp_path: Path, kind: str
+) -> None:
+    """End-to-end opt-in Core must not write even when someone manually maps all candidates."""
+    case, context = _case("F11")
+    plan = _two_items()
+    if kind == "swapped_items":
+        claims = _claims((1, 1), (2, 0))
+    else:
+        first = plan.actions[0].units[0]
+        altered = replace(first, facts=("No compré pan.", "Compré leche."))
+        plan = RequestPlan((WriteAction((altered,)),), ())
+        claims = _claims((1, 0), (2, 1))
+
+    def reviewed(source, packet, exact_plan):
+        return build_candidate_coverage_manifest(source, packet, exact_plan, claims)
+
+    result, repo = _run(tmp_path, case["source"], context, plan, reviewed)
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "CANDIDATE_COVERAGE_REVIEW_REQUIRED"
+    assert result.action_results == ()
+    assert repo.list_markdown_paths() == []
+    assert any(
+        stage.name == "candidate_coverage" and stage.outcome.value == "failed"
+        for stage in result.operational.stages
+    )

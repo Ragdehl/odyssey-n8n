@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from .candidate_context import CoreCandidateContext
 from .candidate_coverage import MAX_COVERAGE_FACTS
+from .candidate_semantic_veto import CandidateSemanticVeto, veto_unsafe_literal_match
 from .experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
     LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -96,39 +95,6 @@ def _facts(plan: RequestPlan) -> dict[int, str]:
     if len(result) > MAX_COVERAGE_FACTS:
         raise CandidateAttributionError("Core fact attribution exceeds bounded budget")
     return result
-
-
-def _normal_tokens(text: str) -> set[str]:
-    """Collect normalized literal content tokens for a conservative mismatch veto.
-
-    These token checks only reject impossible correspondence; shared tokens
-    never establish fact semantics, negation, temporal ownership or identity.
-    """
-    decomposed = unicodedata.normalize("NFKD", text.casefold())
-    plain = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return {token for token in re.findall(r"[^\W_]+", plain) if len(token) >= 3}
-
-
-def _grounded_distinctive_lexeme(
-    context: CoreCandidateContext,
-    index: int,
-    fact_text: str,
-) -> bool:
-    """Veto proposed matches lacking a distinctive literal from that candidate.
-
-    This conservative pilot may reject valid paraphrases, which stay pending.
-    It must NEVER promote a matched word to semantic proof.
-    """
-    current = set().union(*(_normal_tokens(a.text) for a in context.candidates[index].anchors))
-    others = set().union(
-        *(
-            _normal_tokens(anchor.text)
-            for i, candidate in enumerate(context.candidates)
-            if i != index
-            for anchor in candidate.anchors
-        )
-    )
-    return bool((current - others) & _normal_tokens(fact_text))
 
 
 def candidate_attribution_json_schema() -> dict[str, Any]:
@@ -246,10 +212,10 @@ def validate_candidate_attribution(
                 or reason is not None
             ):
                 raise CandidateAttributionError("Fact ordinal or exact planned text mismatched")
-            if not _grounded_distinctive_lexeme(context, position, planned_text):
-                raise CandidateAttributionError(
-                    "No candidate-distinctive lexical support for proposed fact"
-                )
+            try:
+                veto_unsafe_literal_match(source, context, position, planned_text)
+            except CandidateSemanticVeto as error:
+                raise CandidateAttributionError(str(error)) from error
             consumed.add(ordinal)
         else:
             raise CandidateAttributionError("Unsupported attribution disposition")

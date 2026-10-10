@@ -157,7 +157,7 @@ def test_model_proposer_uses_single_injected_call_and_never_executes_plan() -> N
             lambda p: p["candidates"][0].update(
                 {"fact_ordinal": 1, "planned_fact_text": "Compré leche."}
             ),
-            "lexical",
+            "distinctive",
         ),
         (lambda p: p["candidates"][0].update({"source_quote": "leche"}), "quote"),
         (lambda p: p["candidates"][0].update({"source_quote": "pan inventado"}), "quote"),
@@ -256,11 +256,8 @@ def test_lexical_overlap_cannot_certify_opposite_polarity() -> None:
             _match(2, "leche", 1, "Compré leche."),
         ]
     }
-    checked = validate_candidate_attribution(source, context, opposite_plan, proposed)
-    assert checked.has_grounded_literals  # Quote and fact are real literal text.
-    assert not checked.semantically_verified  # The meaning is OPPOSITE.
-    assert not checked.may_authorize_writes
-    assert not hasattr(checked, "to_execution_manifest")
+    with pytest.raises(CandidateAttributionError, match="unsupported negation"):
+        validate_candidate_attribution(source, context, opposite_plan, proposed)
 
 
 def test_pronoun_resolution_is_not_inferred_from_matching_event_vocabulary() -> None:
@@ -279,10 +276,8 @@ def test_pronoun_resolution_is_not_inferred_from_matching_event_vocabulary() -> 
             _match(3, "Hoy compré pan", 2, "Compré pan."),
         ]
     }
-    proposed = validate_candidate_attribution(case["source"], context, plan, raw)
-    assert len(proposed.candidates) == 3
-    assert not proposed.semantically_verified
-    assert not proposed.may_authorize_writes  # Identity must go through Core selection.
+    with pytest.raises(CandidateAttributionError, match="Core identity evidence"):
+        validate_candidate_attribution(case["source"], context, plan, raw)
 
 
 def test_old_proposal_cannot_be_reused_after_core_plan_fact_change() -> None:
