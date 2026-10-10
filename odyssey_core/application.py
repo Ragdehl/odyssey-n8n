@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from .atomic_facts import AtomicFactError, parse_atomic_facts
 from .bulk_update import BulkUpdateResult, execute_bulk_update
+from .candidate_context import CoreCandidateContext
 from .clarification import ClarificationChoice, evidence_digest
 from .clarification_presentation import ClarificationPresentation
 from .context import ContextPackage, get_context
@@ -334,6 +335,9 @@ def execute_request(
     clarification_choice: ClarificationChoice | None = None,
     write_preflight_guard: WritePreflightGuard | None = None,
     progress_callback: Callable[[str, Mapping[str, object]], None] | None = None,
+    candidate_context: CoreCandidateContext | None = None,
+    candidate_coverage_factory: Callable[[str, CoreCandidateContext, RequestPlan], Any]
+    | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -361,6 +365,10 @@ def execute_request(
         history_recorder: Optional request-level local Git history recorder.
         conversation_context: Bounded visible recent turns used only by the planner to resolve
             continuity; Core never passes this text to canonical retrieval or mutation boundaries.
+        candidate_context: Optional Core-owned request-local source candidates. Disabled normally.
+        candidate_coverage_factory: Optional reviewed Core mapping producer, paired with
+            candidate_context. It MUST account for every candidate and planned atomic fact
+            before any Core action. It does not grant new write or semantic authority.
 
     Returns:
         One stable request result. Clarifications and planning failures perform no actions or writes.
@@ -369,6 +377,10 @@ def execute_request(
         ValueError: If boundary inputs are structurally invalid.
         TypeError: If the planner returns a value other than PlannerResult.
     """
+    if (candidate_context is None) != (candidate_coverage_factory is None):
+        raise ValueError("Candidate coverage requires both Core context and review factory")
+    if candidate_coverage_factory is not None and not callable(candidate_coverage_factory):
+        raise ValueError("Core coverage factory must be callable")
     started = monotonic()
     stages: list[OperationalStage] = []
     if not isinstance(user_request, str) or not user_request.strip():
@@ -471,6 +483,72 @@ def execute_request(
         )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a PlannerResult")
+    pending_candidate_ids: tuple[str, ...] = ()
+    if candidate_context is not None:
+        # Opt-in only. A proposal/partial Core plan must not mutate the vault
+        # before full structural source accounting has passed Core preflight.
+        from .candidate_coverage import validate_candidate_coverage_manifest
+
+        candidate_started = monotonic()
+        try:
+            manifest = candidate_coverage_factory(user_request, candidate_context, plan)
+            validate_candidate_coverage_manifest(user_request, candidate_context, plan, manifest)
+            pending_candidate_ids = tuple(
+                claim.candidate_id for claim in manifest.claims if claim.disposition == "pending"
+            )
+        except Exception:
+            stages.append(
+                OperationalStage(
+                    "planner",
+                    OperationalOutcome.COMPLETED,
+                    planner_duration_ms,
+                    model=getattr(planner, "model", None),
+                    reasoning_effort=getattr(planner, "reasoning_effort", None),
+                    usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+                    provider_calls=_planner_attempts(planner, provider_recorder.calls),
+                    start_offset_ms=_elapsed_ms(started, planner_started),
+                    substeps=getattr(planner, "last_spans", ()),
+                )
+            )
+            stages.append(
+                _stage(
+                    "candidate_coverage",
+                    OperationalOutcome.FAILED,
+                    candidate_started,
+                    monotonic,
+                    None,
+                    started,
+                )
+            )
+            return _with_operational(
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    clarification_code="CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+                    history=(
+                        GitHistoryResult(
+                            HistoryStatus.NOT_ATTEMPTED, reason="coverage review required"
+                        )
+                        if history_recorder is not None
+                        else GitHistoryResult.disabled()
+                    ),
+                ),
+                stages,
+                started,
+                monotonic,
+            )
+        stages.append(
+            _stage(
+                "candidate_coverage",
+                OperationalOutcome.COMPLETED,
+                candidate_started,
+                monotonic,
+                None,
+                started,
+            )
+        )
     references: list[str] = []
     for planned_action in plan.actions:
         for unit in getattr(planned_action, "units", ()):
@@ -665,6 +743,27 @@ def execute_request(
             )
         )
         result = replace(result, history=history)
+    if pending_candidate_ids:
+        # The existing durable PendingWorkRecorder only serializes a RequestPlan.
+        # It cannot safely retain *unplanned* Router candidates for later
+        # clarification, and must not imply a resumable continuation exists.
+        # Preserve completed independent Core writes but surface missing work.
+        result = replace(
+            result,
+            status=(
+                ApplicationStatus.PARTIAL
+                if result.status in {ApplicationStatus.COMPLETED, ApplicationStatus.PARTIAL}
+                else ApplicationStatus.NEEDS_ATTENTION
+            ),
+            clarification_code="CANDIDATE_COVERAGE_PENDING",
+            pending_work=PendingWorkStatus(
+                required=True,
+                persisted=False,
+                error="candidate continuation is not yet implemented",
+            ),
+        )
+        stages.append(OperationalStage("pending", OperationalOutcome.UNAVAILABLE))
+        return _with_operational(result, stages, started, monotonic)
     if not any(action.status is not ActionStatus.COMPLETED for action in actions):
         stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
         return _with_operational(result, stages, started, monotonic)

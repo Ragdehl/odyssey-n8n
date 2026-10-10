@@ -236,6 +236,50 @@ coverage and existing pending-work/clarification machinery can resolve that
 contract. No frontend, runtime, NoteSchema, marker metadata, cache or active
 model prompt changed in this block.
 
+**Block 4B5 (Core coverage preflight, isolated and opt-in):**
+`odyssey_core/candidate_coverage.py` now requires an **explicit reviewed claim
+for every candidate** in the original message and every planned atomic fact
+ordinal, bound to the unchanged original message and exact Core `RequestPlan`
+through source/plan digests. One Core plan unit can cover multiple source items
+using distinct fact ordinals (F11), and independent facts can use different
+Day notes (F01). Invalid or missing claims, duplicate attribution, invented
+ordinals, stale plan/source and misleading non-pending ambiguous pronouns are
+rejected. This first pilot supports only simple `record` facts with no Core
+references, properties, deletions, migrations, negations, or conditional/
+replacement scope; unsupported semantics must be deferred for review rather
+than silently written. These checks are **structural**: a deliberate F11
+pan/leche claim swap still passes and is therefore reported as **not semantically
+verified**. The mapping is not auto-generated from source order, text overlap
+or fact counts, and existing Luna's output schema does not yet produce it.
+
+`execute_request()` has a new **default-disabled** pair of Core-only arguments,
+`candidate_context` and `candidate_coverage_factory`. If both are supplied,
+it calls the explicit review factory **after Core planning and before any
+write**, then revalidates the manifest with Core. A missing, forged, crashing,
+misaligned or incomplete review returns `NEEDS_ATTENTION` with no actions or
+vault mutation and the bounded clarification code
+`CANDIDATE_COVERAGE_REVIEW_REQUIRED`. If independent writes do succeed but
+some source candidates are explicitly pending, the opt-in result is `PARTIAL`
+with `CANDIDATE_COVERAGE_PENDING`; the candidate-aware pending-work recorder
+**does not exist** yet, so `pending_work.required=true`,
+`persisted=false` and a clear bounded continuation-unavailable status are
+returned. The existing plan-only pending recorder is intentionally *not*
+misused to store a partial source-candidate state that it cannot resume. The
+normal Core path remains unchanged without the new arguments. None of this
+is active in Runtime/DEV, and it grants no new identity or write authority.
+
+Deterministic source+plan+Markdown vertical tests prove the simple opt-in
+preflight rejects dropped/duplicate candidates and reference/destructive plans
+before writes, while a valid reviewed synthetic plan still writes canonical
+Markdown through ordinary Core. F14 writes the two independent Eric/Luis facts
+but reports its third `él` candidate as pending rather than declaring the
+entire message completed. The mapping tests deliberately distinguish Core
+physical fact existence from **independent semantic equivalence**, which
+remains unproven without reviewed model-facing attribution and a real-model
+gate. Shared-fact many-to-many grouping, positive/negative/conditional scope,
+identity links, pending clarification continuation and durable replay remain
+out of scope for this pilot and are mandatory before activation.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

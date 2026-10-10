@@ -63,7 +63,15 @@ It distinguishes confirmed physical writes from cross-request duplicate
 suppression, `unproven` source candidates, ambiguous candidates and unknown
 source coverage, and explicitly
 forbids reporting the whole request as complete on Core fact markers alone.
-New request-detail projections and a true provider→verified attribution→Core
+An **opt-in Core preflight** now rejects missing candidate coverage or
+unreviewed complex writes before any mutation, without touching Router v0.
+If synthetic independent writes succeed while a candidate remains unresolved,
+opt-in Core marks the request `PARTIAL` and explicitly reports that the
+candidate continuation is **not durably resumable yet**. Structural attribution
+is not proof that the right semantic fact was written; a swapped item mapping
+regression deliberately preserves this caveat. A Core-owned model-approved
+mapping/semantic proof, safe reference handling, durable partial clarifications,
+new request-detail projections and a true provider→verified attribution→Core
 write vertical path, plus separate final live GPT-6 Router / GPT-5.6 Luna
 semantic gates, remain required. Router v0 remains operational.
 
