@@ -6,13 +6,17 @@ existing provider-shaped fake semantic compiler; no live call or personal vault.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from odyssey_apps.fact_candidate_core import to_core_candidate_context
+from odyssey_apps.fact_candidates import validate_fact_candidate_proposal
 from odyssey_core.application import ApplicationStatus, execute_request
+from odyssey_core.candidate_continuation_guard import build_selected_candidate_guard
 from odyssey_core.candidate_coverage import (
     CoreCandidateCoverageClaim,
     build_candidate_coverage_manifest,
@@ -20,6 +24,7 @@ from odyssey_core.candidate_coverage import (
 from odyssey_core.candidate_fact_readback import readback_core_facts
 from odyssey_core.candidate_pending_state import CandidatePendingRepository
 from odyssey_core.clarification import ClarificationOption
+from tests.apps.test_fact_candidates import CASES
 from tests.benchmarks.test_fact_candidate_prompt_v2_observed import _context
 from tests.runtime.test_candidate_pending_state import NOW
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import _pipeline as f14_pipeline
@@ -30,11 +35,27 @@ from tests.runtime.test_fact_candidate_sequential_vertical import (
     _pipeline as f27_pipeline,
 )
 from tests.runtime.test_fact_multi_participant_event import _vault_with_people
-from tests.runtime.test_temporal_user_path_e2e import SCHEMA
+from tests.runtime.test_temporal_user_path_e2e import SCHEMA, _linked_day_plan
 
 
-def _reviewed(case_id: str):
-    source, context = _context(case_id)
+def _reviewed(case_id: str, *, prompt_revision: str = "v2"):
+    if prompt_revision == "v2":
+        source, context = _context(case_id)
+    elif prompt_revision == "v3":
+        saved = json.loads(
+            (
+                Path(__file__).resolve().parents[2]
+                / "benchmarks/fact_candidate_v2_live/results/20261010T193754Z.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert saved["prompt_revision"] == "v3"
+        case = next(c for c in CASES if c["id"] == case_id)
+        source = case["source"]
+        context = to_core_candidate_context(
+            validate_fact_candidate_proposal(source, saved["raw_router_json"][case_id])
+        )
+    else:
+        raise ValueError("Unknown frozen live evidence revision")
     if case_id == "F14":
         _case, _old_context, _scope, planner, _calls = f14_pipeline()
         plan = planner.plan(source)
@@ -50,12 +71,13 @@ def _reviewed(case_id: str):
     return source, context, plan, claims
 
 
+@pytest.mark.parametrize("prompt_revision", ["v2", "v3"])
 @pytest.mark.parametrize("case_id,expected_count", [("F14", 1), ("F27", 2)])
 def test_real_gpt6_router_evidence_crosses_core_and_verifies_only_safe_facts(
-    tmp_path: Path, case_id: str, expected_count: int
+    tmp_path: Path, case_id: str, expected_count: int, prompt_revision: str
 ) -> None:
     """Actual model source evidence survives Core's canonical/write/readback guards."""
-    source, context, plan, claims = _reviewed(case_id)
+    source, context, plan, claims = _reviewed(case_id, prompt_revision=prompt_revision)
     manifest = build_candidate_coverage_manifest(source, context, plan, claims)
     repo = _vault_with_people(tmp_path)
     (tmp_path / "pending").mkdir()
@@ -107,9 +129,58 @@ def test_real_gpt6_router_evidence_crosses_core_and_verifies_only_safe_facts(
     receipts = readback_core_facts(source, context, plan, result, repo, SCHEMA)
     assert len(receipts.persisted_facts) == expected_count
     assert all(receipt.status == "verified_in_markdown" for receipt in receipts.persisted_facts)
-    assert len(pending.read(result.request_id)["pending"]) == 1
+    pending_item = pending.read(result.request_id)["pending"][0]
+    assert pending_item["reference_text"] == "él"
+    assert pending_item["text"] == "Mañana iré al cine con él"
+    answer = pending.reply(
+        conversation_id=f"observed-{case_id}",
+        reply="Con Luis",
+        answer_id=f"observed-{case_id}-reply",
+        vault=repo,
+        schema=SCHEMA,
+        immediate_followup=True,
+    )
+    assert answer.outcome == "choice_recorded"
+    assert answer.selected_note_id == "luis-id"
+    guard = build_selected_candidate_guard(
+        pending,
+        conversation_id=f"observed-{case_id}",
+        request_id=result.request_id,
+        vault=repo,
+        schema=SCHEMA,
+    )
+    assert guard is not None
+    follow_plan = _linked_day_plan(
+        "2026-10-05",
+        "Iré al cine con {{ref:0}}.",
+        "él",
+        "2026-10-05",
+        target_name="Luis",
+    )
+    follow = execute_request(
+        "Mañana iré al cine con él.",
+        planner=SimpleNamespace(plan=lambda _: follow_plan),
+        repository=repo,
+        schema=SCHEMA,
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="observed-router-v2-isolated",
+        now=guard.original_captured_at,
+        context_limit=5,
+        request_id_factory=lambda: f"observed-{case_id}-reply",
+        write_preflight_guard=guard,
+    )
+    assert follow.status is ApplicationStatus.COMPLETED
+    assert repo.read_text("calendar/days/2026-10-03.md") == text
+    future = repo.read_text("calendar/days/2026-10-05.md")
+    assert "Iré al cine con [[Luis|Luis]]." in future
+    assert "Eric" not in future
+    assert pending.read(result.request_id)["status"] == "selected"
 
 
+@pytest.mark.parametrize("prompt_revision", ["v2", "v3"])
 @pytest.mark.parametrize(
     "case_id,change",
     [
@@ -123,10 +194,10 @@ def test_real_gpt6_router_evidence_crosses_core_and_verifies_only_safe_facts(
     ],
 )
 def test_tampered_actual_router_source_evidence_is_rejected_without_mutation(
-    tmp_path: Path, case_id: str, change: str
+    tmp_path: Path, case_id: str, change: str, prompt_revision: str
 ) -> None:
     """A fake/source-spliced role cannot make Core accept unverified links."""
-    source, context, plan, claims = _reviewed(case_id)
+    source, context, plan, claims = _reviewed(case_id, prompt_revision=prompt_revision)
     repo = _vault_with_people(tmp_path)
     before = tuple(repo.list_markdown_paths())
     first = context.candidates[0]

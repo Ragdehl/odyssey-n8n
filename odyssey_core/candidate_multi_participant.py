@@ -65,8 +65,19 @@ def validate_two_named_participant_fact(
                     anchor.start <= predicate.start and predicate.end <= anchor.end
                     for anchor in candidate.anchors
                 )
-                and predicate.end < first.start
-                and not any(mark in source[predicate.end : first.start] for mark in ".;!?\n\r")
+                and (
+                    (
+                        predicate.end < first.start
+                        and not any(
+                            mark in source[predicate.end : first.start] for mark in ".;!?\n\r"
+                        )
+                    )
+                    or (
+                        candidate.kind == "relationship"
+                        and predicate.text.startswith("se ")
+                        and source[second.end : predicate.start] == " "
+                    )
+                )
                 for predicate in predicate_spans
             )
         )

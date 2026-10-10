@@ -855,6 +855,53 @@ rather than prompt-overfitting to narrow handwritten pilot templates.
 Preserve the strong canonical reference/temporal guards. No DEV/PROD
 activation, real Notes, schema or model migrations occurred.
 
+**Block 4B22 third real focused GPT-6 Router gate and source-safe handoff
+(2026-10-10, feature branch ONLY):** A narrowly opt-in v3 teaching suffix
+preserves the complete prior v2/v1 prompts and gives a general rule distinguishing
+a reciprocal `relationship` from a multi-participant `occurrence`.
+Exactly **four synthetic GPT-6 Luna/low Responses calls** completed with
+`store=false`, no SDK retries or personal data. The exact reviewed input
+snapshot is `benchmarks/fact_candidate_v2_live/prompt_v3_requests.json`
+and saved outputs are `results/20261010T193754Z.json`. Observed usage:
+**4,238 input / 1,506 output tokens**, standard-rate estimated
+**USD 0.0011768** (not invoice). The three focused runs together consumed
+an estimated **USD 0.0032356** under pinned rates; v3's conservative
+pre-call envelope was USD 0.01464675, and its previous-observed-plus-new
+worst-case reservation was USD 0.01670555, below the originally authorized
+USD 0.02 total.
+
+**Meaning-based review of the 4 actual provider responses** now passes:
+F09 yields *two separate property* candidates for Marta and Luis; F10
+yields exactly *one reciprocal relationship*; F14 yields *one two-person
+contact* and an *ambiguous future occurrence*; F27 yields *two separate
+ordered contacts* and an *ambiguous future occurrence*. Exact `date`,
+source-named `participants`, and pending `reference=él` roles remain
+source-grounded. The strict oracle's exact textual-span equality still
+reports mismatches for the four cases; alternative original substrings are
+not automatically semantic mistakes.
+
+The existing **inactive Core-only source evidence guards** were expanded
+conservatively to accept original offsets that independently prove two
+adjacent named participants, and two contacts in one explicitly successive
+dated clause. Core's separate pending-state projection accepts disjoint
+originally anchored fragments **only** when they are all in one bounded
+source clause and include the original unresolved pronoun. Failure/negative
+tests reject missing/swapped names, missing temporal/predicate/ordering
+evidence, ungrounded cross-clause fragments and speculative references.
+Offline replay using real saved GPT-6 **v2 and v3** Router proposals (NOT a
+live GPT-5.6 Core planner) now passes Core coverage, isolated canonical
+Markdown write/readback, linked Eric/Luis identities, durable pending,
+explicit 'Con Luis' choice and guarded continuation, preserving the
+already-written Day without duplicates. F10's separate name-roles before
+a reciprocal predicate are independently source-checked by Core, but its
+complete personal-Note write plan is **not** tested in this slice.
+
+All writes were to disposable test vaults. **Router v1 remains inactive in
+DEV and PROD; Core's production model remains GPT-5.6.** This focused
+four-case gate cannot substitute for a held-out 23-case semantic sweep or
+for a separate real Core planning and acceptance gate. No claim that
+all new user messages or identity resolutions are semantically certified.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

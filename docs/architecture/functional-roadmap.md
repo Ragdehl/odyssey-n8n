@@ -215,6 +215,25 @@ semantic type accuracy and Core-reviewed coverage pass. The remaining 23
 approved design cases are deliberately deferred until this four-case gate
 is settled. No DEV/PROD or vault changes.
 
+**Third focused real Router-only gate (2026-10-10):** With v3's opt-in
+general distinction for reciprocal relationships, **all four actual GPT-6
+responses now have the approved semantic candidate counts, core kinds
+and ambiguity**: F09=two `property`; F10=one `relationship`;
+F14=two `occurrence` (second pending); F27=three `occurrence`
+(third pending). Strict exact-fragment comparison remains non-identical,
+but each shown source role is grounded. Saved v3 synthetic responses:
+`benchmarks/fact_candidate_v2_live/results/20261010T193754Z.json`.
+Pinned-rate estimated total for **three** four-call Router-only gates:
+USD **0.0032356** (not billed total). Tested general, Core-owned source-span
+guards now safely admit alternate original reference/participant/event
+spans with reviewed lexical/date/sequence evidence. **Actual v2/v3 saved
+Router outputs** complete disposable Core write/readback, durable pending
+and the guarded `Con Luis` continuation for F14/F27, using the existing
+provider-shaped *fake* GPT-5.6 Core planner output; F10's link source proof
+also passes but its full Core planning/persistence is untested. This is
+**focused Router success, not production activation or complete Core live
+model acceptance**. Keep normal Core GPT-5.6 and Router v0 unchanged.
+
 **F27 exact sequential-source Core pilot (2026-10-10):** The two separate
 conversation facts for `hablé con Eric y después con Luis` now also pass a
 real (fake-model) semantic Core compilation, source-before-write candidate
